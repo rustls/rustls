@@ -20,10 +20,7 @@ use rustls::internal::msgs::codec::Codec;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 #[cfg(feature = "extract_secrets")]
-use rustls::{
-    internal::msgs::{enums::ContentType, message::BorrowedPlainMessage},
-    ConnectionTrafficSecrets,
-};
+use rustls::ConnectionTrafficSecrets;
 use rustls::{sign, ConnectionCommon, Error, KeyLog, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -4205,16 +4202,15 @@ fn test_no_warning_logging_during_successful_sessions() {
 #[test]
 fn test_extract_secrets() {
     use ring::aead::LessSafeKey;
-    use rustls::BulkAlgorithm;
 
     let kt = KeyType::Rsa;
     for suite in [
         rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
         rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
         rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        // rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        // rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        // rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     ] {
         let version = suite.version();
         println!("Testing suite {:?}", suite.suite().as_str());
@@ -4303,10 +4299,10 @@ fn test_extract_secrets() {
                 }
             }
 
-            fn encrypt(&mut self, plaintext: &[u8]) -> Vec<u8> {
-                let total_len = plaintext.len() + self.key.algorithm().tag_len();
+            fn encrypt(&mut self, plain: &[u8]) -> Vec<u8> {
+                let total_len = plain.len() + self.key.algorithm().tag_len();
                 let mut payload = Vec::with_capacity(total_len);
-                payload.extend_from_slice(plaintext);
+                payload.extend_from_slice(plain);
 
                 let nonce = make_nonce(&self.iv, *self.seq);
                 let aad = make_tls13_aad(total_len);
@@ -4316,81 +4312,43 @@ fn test_extract_secrets() {
                     .unwrap();
 
                 *self.seq += 1;
-
                 payload
+            }
+
+            fn decrypt(&mut self, encrypted: &[u8]) -> Vec<u8> {
+                let mut payload = encrypted.to_vec();
+
+                let nonce = make_nonce(&self.iv, *self.seq);
+                let aad = make_tls13_aad(payload.len());
+
+                let plain = self
+                    .key
+                    .open_in_place(nonce, aad, &mut payload)
+                    .unwrap();
+
+                *self.seq += 1;
+                plain.to_vec()
             }
         }
 
-        match suite {
-            SupportedCipherSuite::Tls12(_suite) => {
-                todo!()
-            }
-            SupportedCipherSuite::Tls13(suite) => {
-                let aead_algorithm = match suite.common.bulk {
-                    BulkAlgorithm::Aes128Gcm => &ring::aead::AES_128_GCM,
-                    BulkAlgorithm::Aes256Gcm => &ring::aead::AES_256_GCM,
-                    BulkAlgorithm::Chacha20Poly1305 => &ring::aead::CHACHA20_POLY1305,
-                };
+        let mut client_tx = EncryptorDecryptor::new(&mut client_secrets.tx);
+        let mut client_rx = EncryptorDecryptor::new(&mut client_secrets.rx);
 
-                let mut client_tx = EncryptorDecryptor::new(&mut client_secrets.tx);
-                let mut client_rx = EncryptorDecryptor::new(&mut client_secrets.rx);
+        let mut server_tx = EncryptorDecryptor::new(&mut server_secrets.tx);
+        let mut server_rx = EncryptorDecryptor::new(&mut server_secrets.rx);
 
-                let mut server_tx = EncryptorDecryptor::new(&mut server_secrets.tx);
-                let mut server_rx = EncryptorDecryptor::new(&mut server_secrets.rx);
+        let original_plain = b"The guardian stands resolute - the Turbofish remains undefeated";
 
-                let plaintext = b"The guardian stands resolute - the Turbofish remains undefeated";
-                let mut payload = client_tx.encrypt(plaintext);
-
-                println!("Encrypted payload: {:x?}", payload);
-
-                let payload = {
-                    // TODO: don't allocate
-                    let out_key: Vec<u8>;
-                    let out_iv: Vec<u8>;
-
-                    match &server_secrets.rx.1 {
-                        ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => {
-                            out_key = key.to_vec();
-                            out_iv = salt
-                                .iter()
-                                .chain(iv.iter())
-                                .copied()
-                                .collect();
-                        }
-                        ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => {
-                            out_key = key.to_vec();
-                            out_iv = salt
-                                .iter()
-                                .chain(iv.iter())
-                                .copied()
-                                .collect();
-                        }
-                        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
-                            out_key = key.to_vec();
-                            out_iv = iv.to_vec();
-                        }
-                        _ => {
-                            panic!("algo not supported")
-                        }
-                    };
-
-                    let nonce = make_nonce(&out_iv, server_secrets.rx.0);
-                    let aad = make_tls13_aad(payload.len());
-
-                    let dec_key = ring::aead::UnboundKey::new(aead_algorithm, &out_key).unwrap();
-                    let dec_key = ring::aead::LessSafeKey::new(dec_key);
-
-                    let plain = dec_key
-                        .open_in_place(nonce, aad, &mut payload)
-                        .unwrap();
-
-                    server_secrets.rx.0 += 1;
-                    plain
-                };
-
-                println!("Decrypted payload: {:x?}", payload);
-
-                assert_eq!(payload, &[1, 2, 3, 4, 5]);
+        for _ in 1..3 {
+            for (tx, rx) in [
+                (&mut client_tx, &mut server_rx),
+                (&mut server_tx, &mut client_rx),
+            ]
+            .iter_mut()
+            {
+                let encrypted = tx.encrypt(original_plain);
+                let decrypted = rx.decrypt(&encrypted);
+                assert_eq!(original_plain, &decrypted[..]);
             }
         }
     }
