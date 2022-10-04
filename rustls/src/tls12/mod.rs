@@ -414,81 +414,56 @@ impl ConnectionSecrets {
         let (client_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
-        let client_secrets;
-        let server_secrets;
+        // A key/IV pair
+        struct Pair<'a> {
+            key: &'a [u8],
+            iv: &'a [u8],
+        }
 
-        if algo == &ring::aead::AES_128_GCM {
-            client_secrets = ConnectionTrafficSecrets::Aes128Gcm {
-                key: client_key.try_into().map_err(|_| {
-                    Error::General("exporting AES_128_GCM: bad key length (client)".into())
-                })?,
-                salt: client_iv.try_into().map_err(|_| {
-                    Error::General("exporting AES_128_GCM: bad iv length (client)".into())
-                })?,
-                iv: extra[..8].try_into().map_err(|_| {
-                    Error::General("exporting AES_128_GCM: bad extra length (client)".into())
-                })?,
+        let client_pair = Pair {
+            key: client_key,
+            iv: client_iv,
+        };
+        let server_pair = Pair {
+            key: server_key,
+            iv: server_iv,
+        };
+
+        let (client_secrets, server_secrets) = if algo == &ring::aead::AES_128_GCM {
+            let extract = |pair: Pair<'_>| -> ConnectionTrafficSecrets {
+                ConnectionTrafficSecrets::Aes128Gcm {
+                    key: pair.key.try_into().unwrap(),
+                    salt: pair.iv.try_into().unwrap(),
+                    iv: extra[..8].try_into().unwrap(),
+                }
             };
 
-            server_secrets = ConnectionTrafficSecrets::Aes128Gcm {
-                key: server_key.try_into().map_err(|_| {
-                    Error::General("exporting AES_128_GCM: bad key length (server)".into())
-                })?,
-                salt: server_iv.try_into().map_err(|_| {
-                    Error::General("exporting AES_128_GCM: bad iv length (server)".into())
-                })?,
-                iv: extra[..8].try_into().map_err(|_| {
-                    Error::General("exporting AES_128_GCM: bad extra length (server)".into())
-                })?,
-            };
+            (extract(client_pair), extract(server_pair))
         } else if algo == &ring::aead::AES_256_GCM {
-            client_secrets = ConnectionTrafficSecrets::Aes256Gcm {
-                key: client_key.try_into().map_err(|_| {
-                    Error::General("exporting AES_256_GCM: bad key length (client)".into())
-                })?,
-                salt: client_iv.try_into().map_err(|_| {
-                    Error::General("exporting AES_256_GCM: bad iv length (client)".into())
-                })?,
-                iv: extra[..8].try_into().map_err(|_| {
-                    Error::General("exporting AES_256_GCM: bad extra length (client)".into())
-                })?,
+            let extract = |pair: Pair<'_>| -> ConnectionTrafficSecrets {
+                ConnectionTrafficSecrets::Aes256Gcm {
+                    key: pair.key.try_into().unwrap(),
+                    salt: pair.iv.try_into().unwrap(),
+                    iv: extra[..8].try_into().unwrap(),
+                }
             };
 
-            server_secrets = ConnectionTrafficSecrets::Aes256Gcm {
-                key: server_key.try_into().map_err(|_| {
-                    Error::General("exporting AES_256_GCM: bad key length (server)".into())
-                })?,
-                salt: server_iv.try_into().map_err(|_| {
-                    Error::General("exporting AES_256_GCM: bad iv length (server)".into())
-                })?,
-                iv: extra[..8].try_into().map_err(|_| {
-                    Error::General("exporting AES_256_GCM: bad extra length (server)".into())
-                })?,
-            };
+            (extract(client_pair), extract(server_pair))
         } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            client_secrets = ConnectionTrafficSecrets::Chacha20Poly1305 {
-                key: client_key.try_into().map_err(|_| {
-                    Error::General("exporting CHACHA20_POLY1305: bad key length (client)".into())
-                })?,
-                iv: client_iv.try_into().map_err(|_| {
-                    Error::General("exporting CHACHA20_POLY1305: bad extra length (client)".into())
-                })?,
+            let extract = |pair: Pair<'_>| -> ConnectionTrafficSecrets {
+                ConnectionTrafficSecrets::Chacha20Poly1305 {
+                    key: pair.key.try_into().unwrap(),
+                    iv: pair.iv.try_into().unwrap(),
+                }
             };
 
-            server_secrets = ConnectionTrafficSecrets::Chacha20Poly1305 {
-                key: server_key.try_into().map_err(|_| {
-                    Error::General("exporting CHACHA20_POLY1305: bad key length (server)".into())
-                })?,
-                iv: server_iv.try_into().map_err(|_| {
-                    Error::General("exporting CHACHA20_POLY1305: bad extra length (server)".into())
-                })?,
-            };
+            (extract(client_pair), extract(server_pair))
         } else {
             return Err(Error::General(format!(
                 "exporting secrets for {:?}: unimplemented",
                 algo
             )));
-        }
+        };
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),
