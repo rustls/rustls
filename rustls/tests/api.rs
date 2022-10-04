@@ -4204,6 +4204,7 @@ fn test_no_warning_logging_during_successful_sessions() {
 #[cfg(feature = "extract_secrets")]
 #[test]
 fn test_extract_secrets() {
+    use ring::aead::LessSafeKey;
     use rustls::BulkAlgorithm;
 
     let kt = KeyType::Rsa;
@@ -4240,6 +4241,19 @@ fn test_extract_secrets() {
         let mut client_secrets = client.extract_secrets().unwrap();
         let mut server_secrets = server.extract_secrets().unwrap();
 
+        // https://datatracker.ietf.org/doc/html/rfc8446#section-5.2
+        const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
+
+        fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
+            ring::aead::Aad::from([
+                0x17, // ContentType::ApplicationData
+                0x3,  // ProtocolVersion (major)
+                0x3,  // ProtocolVersion (minor)
+                (len >> 8) as u8,
+                len as u8,
+            ])
+        }
+
         fn make_nonce(iv: &[u8], seq: u64) -> ring::aead::Nonce {
             let mut nonce = [0u8; ring::aead::NONCE_LEN];
             rustls::internal::msgs::codec::put_u64(seq, &mut nonce[4..]);
@@ -4254,6 +4268,59 @@ fn test_extract_secrets() {
             ring::aead::Nonce::assume_unique_for_key(nonce)
         }
 
+        struct EncryptorDecryptor<'a> {
+            key: ring::aead::LessSafeKey,
+            iv: [u8; 12],
+            seq: &'a mut u64,
+        }
+
+        impl<'a> EncryptorDecryptor<'a> {
+            fn new((seq, cts): &'a mut (u64, ConnectionTrafficSecrets)) -> Self {
+                let mut out_iv = [0u8; 12];
+                let (algo, key) = match cts {
+                    ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => {
+                        out_iv[..4].copy_from_slice(&salt[..]);
+                        out_iv[4..].copy_from_slice(&iv[..]);
+                        (&ring::aead::AES_128_GCM, &key[..])
+                    }
+                    ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => {
+                        out_iv[..4].copy_from_slice(&salt[..]);
+                        out_iv[4..].copy_from_slice(&iv[..]);
+                        (&ring::aead::AES_256_GCM, &key[..])
+                    }
+                    ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
+                        out_iv.copy_from_slice(&iv[..]);
+                        (&ring::aead::CHACHA20_POLY1305, &key[..])
+                    }
+                    _ => {
+                        panic!("algo not supported")
+                    }
+                };
+                Self {
+                    key: LessSafeKey::new(ring::aead::UnboundKey::new(algo, key).unwrap()),
+                    iv: out_iv,
+                    seq,
+                }
+            }
+
+            fn encrypt(&mut self, plaintext: &[u8]) -> Vec<u8> {
+                let total_len = plaintext.len() + self.key.algorithm().tag_len();
+                let mut payload = Vec::with_capacity(total_len);
+                payload.extend_from_slice(plaintext);
+
+                let nonce = make_nonce(&self.iv, *self.seq);
+                let aad = make_tls13_aad(total_len);
+
+                self.key
+                    .seal_in_place_append_tag(nonce, aad, &mut payload)
+                    .unwrap();
+
+                *self.seq += 1;
+
+                payload
+            }
+        }
+
         match suite {
             SupportedCipherSuite::Tls12(_suite) => {
                 todo!()
@@ -4265,67 +4332,14 @@ fn test_extract_secrets() {
                     BulkAlgorithm::Chacha20Poly1305 => &ring::aead::CHACHA20_POLY1305,
                 };
 
-                // https://datatracker.ietf.org/doc/html/rfc8446#section-5.2
-                const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
+                let mut client_tx = EncryptorDecryptor::new(&mut client_secrets.tx);
+                let mut client_rx = EncryptorDecryptor::new(&mut client_secrets.rx);
 
-                fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
-                    ring::aead::Aad::from([
-                        0x17, // ContentType::ApplicationData
-                        0x3,  // ProtocolVersion (major)
-                        0x3,  // ProtocolVersion (minor)
-                        (len >> 8) as u8,
-                        len as u8,
-                    ])
-                }
+                let mut server_tx = EncryptorDecryptor::new(&mut server_secrets.tx);
+                let mut server_rx = EncryptorDecryptor::new(&mut server_secrets.rx);
 
-                let mut payload = {
-                    // TODO: don't allocate
-                    let out_key: Vec<u8>;
-                    let out_iv: Vec<u8>;
-
-                    match &client_secrets.tx.1 {
-                        ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => {
-                            out_key = key.to_vec();
-                            out_iv = salt
-                                .iter()
-                                .chain(iv.iter())
-                                .copied()
-                                .collect();
-                        }
-                        ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => {
-                            out_key = key.to_vec();
-                            out_iv = salt
-                                .iter()
-                                .chain(iv.iter())
-                                .copied()
-                                .collect();
-                        }
-                        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
-                            out_key = key.to_vec();
-                            out_iv = iv.to_vec();
-                        }
-                        _ => {
-                            panic!("algo not supported")
-                        }
-                    };
-
-                    let plaintext = &[1, 2, 3, 4, 5];
-                    let total_len = plaintext.len() + aead_algorithm.tag_len();
-                    let mut payload = Vec::with_capacity(total_len);
-                    payload.extend_from_slice(plaintext);
-
-                    let nonce = make_nonce(&out_iv, client_secrets.tx.0);
-                    let aad = make_tls13_aad(total_len);
-
-                    let enc_key = ring::aead::UnboundKey::new(aead_algorithm, &out_key).unwrap();
-                    let enc_key = ring::aead::LessSafeKey::new(enc_key);
-                    enc_key
-                        .seal_in_place_append_tag(nonce, aad, &mut payload)
-                        .unwrap();
-
-                    client_secrets.tx.0 += 1;
-                    payload
-                };
+                let plaintext = b"The guardian stands resolute - the Turbofish remains undefeated";
+                let mut payload = client_tx.encrypt(plaintext);
 
                 println!("Encrypted payload: {:x?}", payload);
 
