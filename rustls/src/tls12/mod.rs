@@ -5,9 +5,9 @@ use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
-#[cfg(feature = "extract_secrets")]
-use crate::suites::{AlgorithmSecrets, PartiallyExtractedSecrets};
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
+#[cfg(feature = "extract_secrets")]
+use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 use crate::Error;
 
 use ring::aead;
@@ -418,7 +418,7 @@ impl ConnectionSecrets {
         let server_secrets;
 
         if algo == &ring::aead::AES_128_GCM {
-            client_secrets = AlgorithmSecrets::Aes128Gcm {
+            client_secrets = ConnectionTrafficSecrets::Aes128Gcm {
                 key: client_key.try_into().map_err(|_| {
                     Error::General("exporting AES_128_GCM: bad key length (client)".into())
                 })?,
@@ -430,7 +430,7 @@ impl ConnectionSecrets {
                 })?,
             };
 
-            server_secrets = AlgorithmSecrets::Aes128Gcm {
+            server_secrets = ConnectionTrafficSecrets::Aes128Gcm {
                 key: server_key.try_into().map_err(|_| {
                     Error::General("exporting AES_128_GCM: bad key length (server)".into())
                 })?,
@@ -442,7 +442,7 @@ impl ConnectionSecrets {
                 })?,
             };
         } else if algo == &ring::aead::AES_256_GCM {
-            client_secrets = AlgorithmSecrets::Aes256Gcm {
+            client_secrets = ConnectionTrafficSecrets::Aes256Gcm {
                 key: client_key.try_into().map_err(|_| {
                     Error::General("exporting AES_256_GCM: bad key length (client)".into())
                 })?,
@@ -454,7 +454,7 @@ impl ConnectionSecrets {
                 })?,
             };
 
-            server_secrets = AlgorithmSecrets::Aes256Gcm {
+            server_secrets = ConnectionTrafficSecrets::Aes256Gcm {
                 key: server_key.try_into().map_err(|_| {
                     Error::General("exporting AES_256_GCM: bad key length (server)".into())
                 })?,
@@ -466,7 +466,7 @@ impl ConnectionSecrets {
                 })?,
             };
         } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            client_secrets = AlgorithmSecrets::Chacha20Poly1305 {
+            client_secrets = ConnectionTrafficSecrets::Chacha20Poly1305 {
                 key: client_key.try_into().map_err(|_| {
                     Error::General("exporting CHACHA20_POLY1305: bad key length (client)".into())
                 })?,
@@ -475,7 +475,7 @@ impl ConnectionSecrets {
                 })?,
             };
 
-            server_secrets = AlgorithmSecrets::Chacha20Poly1305 {
+            server_secrets = ConnectionTrafficSecrets::Chacha20Poly1305 {
                 key: server_key.try_into().map_err(|_| {
                     Error::General("exporting CHACHA20_POLY1305: bad key length (server)".into())
                 })?,

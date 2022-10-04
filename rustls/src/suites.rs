@@ -214,33 +214,35 @@ pub(crate) fn compatible_sigscheme_for_suites(
         .any(|&suite| suite.usable_for_signature_algorithm(sigalg))
 }
 
-/// Secrets for transmitting/receiving data over a TLS session. These can be
-/// used to configure kTLS for a socket, for example.
+/// Secrets for transmitting/receiving data over a TLS session.
+///
+/// After performing a handshake with rustls, these secrets can be extracted
+/// to configure kTLS for a socket, and have the kernel take over encryption
+/// and/or decryption.
 #[cfg(feature = "extract_secrets")]
 pub struct ExtractedSecrets {
-    /// secrets for the "tx" (transmit) direction
-    pub tx: (u64, AlgorithmSecrets),
+    /// sequence number and secrets for the "tx" (transmit) direction
+    pub tx: (u64, ConnectionTrafficSecrets),
 
-    /// secrets for the "rx" (receive) direction
-    pub rx: (u64, AlgorithmSecrets),
+    /// sequence number and secrets for the "rx" (receive) direction
+    pub rx: (u64, ConnectionTrafficSecrets),
 }
 
-/// Secrets for transmitting/receiving data over a TLS session. These can be
-/// used to configure kTLS for a socket, for example.
+/// [ExtractedSecrets] minus the sequence numbers
 #[cfg(feature = "extract_secrets")]
 pub(crate) struct PartiallyExtractedSecrets {
     /// secrets for the "tx" (transmit) direction
-    pub(crate) tx: AlgorithmSecrets,
+    pub(crate) tx: ConnectionTrafficSecrets,
 
     /// secrets for the "rx" (receive) direction
-    pub(crate) rx: AlgorithmSecrets,
+    pub(crate) rx: ConnectionTrafficSecrets,
 }
 
 /// Secrets specific to an AEAD algorithm. These are traffic secrets,
 /// post-handshake.
 #[cfg(feature = "extract_secrets")]
 #[non_exhaustive]
-pub enum AlgorithmSecrets {
+pub enum ConnectionTrafficSecrets {
     /// Secrets for the AES_128_GCM AEAD algorithm
     Aes128Gcm {
         /// key (16 bytes)

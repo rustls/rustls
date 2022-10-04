@@ -363,12 +363,12 @@ impl KeyScheduleTraffic {
         use std::convert::TryInto;
 
         if algo == &ring::aead::AES_128_GCM {
-            let extract = |secret: &hkdf::Prk| -> Result<crate::AlgorithmSecrets, Error> {
+            let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
                 let mut key = [0u8; 16];
                 let mut iv = [0u8; 12];
                 expand(secret, &mut key, &mut iv)?;
 
-                Ok(crate::AlgorithmSecrets::Aes128Gcm {
+                Ok(crate::ConnectionTrafficSecrets::Aes128Gcm {
                     key,
                     salt: iv[..4].try_into().unwrap(),
                     iv: iv[4..].try_into().unwrap(),
@@ -378,12 +378,12 @@ impl KeyScheduleTraffic {
             client_secrets = extract(&self.current_client_traffic_secret)?;
             server_secrets = extract(&self.current_server_traffic_secret)?;
         } else if algo == &ring::aead::AES_256_GCM {
-            let extract = |secret: &hkdf::Prk| -> Result<crate::AlgorithmSecrets, Error> {
+            let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
                 let mut key = [0u8; 32];
                 let mut iv = [0u8; 12];
                 expand(secret, &mut key, &mut iv)?;
 
-                Ok(crate::AlgorithmSecrets::Aes256Gcm {
+                Ok(crate::ConnectionTrafficSecrets::Aes256Gcm {
                     key,
                     salt: iv[..4].try_into().unwrap(),
                     iv: iv[4..].try_into().unwrap(),
@@ -393,12 +393,12 @@ impl KeyScheduleTraffic {
             client_secrets = extract(&self.current_client_traffic_secret)?;
             server_secrets = extract(&self.current_server_traffic_secret)?;
         } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            let extract = |secret: &hkdf::Prk| -> Result<crate::AlgorithmSecrets, Error> {
+            let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
                 let mut key = [0u8; 32];
                 let mut iv = [0u8; 12];
                 expand(secret, &mut key, &mut iv)?;
 
-                Ok(crate::AlgorithmSecrets::Chacha20Poly1305 { key, iv })
+                Ok(crate::ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
             };
 
             client_secrets = extract(&self.current_client_traffic_secret)?;
