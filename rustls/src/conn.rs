@@ -18,6 +18,8 @@ use crate::msgs::message::{
 use crate::quic;
 use crate::record_layer;
 use crate::suites::SupportedCipherSuite;
+#[cfg(feature = "extract_secrets")]
+use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
@@ -91,7 +93,7 @@ impl Connection {
 
     /// Extract secrets, to set up kTLS for example
     #[cfg(feature = "extract_secrets")]
-    pub fn extract_secrets(&self) -> Result<crate::ExtractedSecrets, Error> {
+    pub fn extract_secrets(&self) -> Result<ExtractedSecrets, Error> {
         match self {
             Self::Client(conn) => conn.extract_secrets(),
             Self::Server(conn) => conn.extract_secrets(),
@@ -763,7 +765,7 @@ impl<Data> ConnectionCommon<Data> {
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     #[cfg(feature = "extract_secrets")]
-    pub fn extract_secrets(&self) -> Result<crate::ExtractedSecrets, Error> {
+    pub fn extract_secrets(&self) -> Result<ExtractedSecrets, Error> {
         if !self.enable_secret_extraction {
             return Err(Error::General("Secret extraction is disabled".into()));
         }
@@ -774,7 +776,11 @@ impl<Data> ConnectionCommon<Data> {
             .map_err(|e| e.clone())?;
 
         let record_layer = &self.common_state.record_layer;
-        st.extract_secrets(record_layer.write_seq(), record_layer.read_seq())
+        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
+        Ok(ExtractedSecrets {
+            tx: (record_layer.write_seq(), tx),
+            rx: (record_layer.read_seq(), rx),
+        })
     }
 }
 
@@ -1394,11 +1400,7 @@ pub(crate) trait State<Data>: Send + Sync {
     }
 
     #[cfg(feature = "extract_secrets")]
-    fn extract_secrets(
-        &self,
-        _tx_seq: u64,
-        _rx_seq: u64,
-    ) -> Result<crate::ExtractedSecrets, Error> {
+    fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         Err(Error::HandshakeNotComplete)
     }
 

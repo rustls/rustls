@@ -225,6 +225,17 @@ pub struct ExtractedSecrets {
     pub rx: (u64, AlgorithmSecrets),
 }
 
+/// Secrets for transmitting/receiving data over a TLS session. These can be
+/// used to configure kTLS for a socket, for example.
+#[cfg(feature = "extract_secrets")]
+pub(crate) struct PartiallyExtractedSecrets {
+    /// secrets for the "tx" (transmit) direction
+    pub(crate) tx: AlgorithmSecrets,
+
+    /// secrets for the "rx" (receive) direction
+    pub(crate) rx: AlgorithmSecrets,
+}
+
 /// Secrets specific to an AEAD algorithm. These are traffic secrets,
 /// post-handshake.
 #[cfg(feature = "extract_secrets")]

@@ -1,6 +1,8 @@
 use crate::cipher::{Iv, IvLen};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
+#[cfg(feature = "extract_secrets")]
+use crate::suites::PartiallyExtractedSecrets;
 use crate::KeyLog;
 
 /// Key schedule maintenance for TLS1.3
@@ -338,11 +340,9 @@ impl KeyScheduleTraffic {
     #[cfg(feature = "extract_secrets")]
     pub(crate) fn extract_secrets(
         &self,
-        tx_seq: u64,
-        rx_seq: u64,
         algo: &ring::aead::Algorithm,
         side: crate::conn::Side,
-    ) -> Result<crate::ExtractedSecrets, Error> {
+    ) -> Result<PartiallyExtractedSecrets, Error> {
         let expand = |secret: &hkdf::Prk, key: &mut [u8], iv: &mut [u8]| -> Result<(), Error> {
             hkdf_expand_info(secret, PayloadU8Len(key.len()), b"key", &[], |okm| {
                 okm.fill(key)
@@ -410,15 +410,11 @@ impl KeyScheduleTraffic {
             )));
         }
 
-        let (tx_secrets, rx_secrets) = match side {
+        let (tx, rx) = match side {
             crate::conn::Side::Client => (client_secrets, server_secrets),
             crate::conn::Side::Server => (server_secrets, client_secrets),
         };
-
-        Ok(crate::ExtractedSecrets {
-            tx: (tx_seq, tx_secrets),
-            rx: (rx_seq, rx_secrets),
-        })
+        Ok(PartiallyExtractedSecrets { tx, rx })
     }
 }
 
