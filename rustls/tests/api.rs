@@ -4237,17 +4237,8 @@ fn test_extract_secrets() {
         let mut client_secrets = client.extract_secrets().unwrap();
         let mut server_secrets = server.extract_secrets().unwrap();
 
-        // https://datatracker.ietf.org/doc/html/rfc8446#section-5.2
-        const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
-
-        fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
-            ring::aead::Aad::from([
-                0x17, // ContentType::ApplicationData
-                0x3,  // ProtocolVersion (major)
-                0x3,  // ProtocolVersion (minor)
-                (len >> 8) as u8,
-                len as u8,
-            ])
+        fn test_aad() -> ring::aead::Aad<[u8; 0]> {
+            ring::aead::Aad::from([])
         }
 
         fn make_nonce(iv: &[u8], seq: u64) -> ring::aead::Nonce {
@@ -4305,7 +4296,7 @@ fn test_extract_secrets() {
                 payload.extend_from_slice(plain);
 
                 let nonce = make_nonce(&self.iv, *self.seq);
-                let aad = make_tls13_aad(total_len);
+                let aad = test_aad();
 
                 self.key
                     .seal_in_place_append_tag(nonce, aad, &mut payload)
@@ -4319,7 +4310,7 @@ fn test_extract_secrets() {
                 let mut payload = encrypted.to_vec();
 
                 let nonce = make_nonce(&self.iv, *self.seq);
-                let aad = make_tls13_aad(payload.len());
+                let aad = test_aad();
 
                 let plain = self
                     .key
