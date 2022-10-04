@@ -376,11 +376,11 @@ pub use crate::msgs::enums::{
 };
 pub use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
 pub use crate::stream::{Stream, StreamOwned};
-#[cfg(feature = "extract_secrets")]
-pub use crate::suites::{AlgorithmSecrets, ExtractedSecrets};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,
 };
+#[cfg(feature = "extract_secrets")]
+pub use crate::suites::{ConnectionTrafficSecrets, ExtractedSecrets};
 pub use crate::ticketer::Ticketer;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
