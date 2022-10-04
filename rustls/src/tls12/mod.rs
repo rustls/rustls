@@ -13,8 +13,6 @@ use crate::Error;
 use ring::aead;
 use ring::digest::Digest;
 
-#[cfg(feature = "extract_secrets")]
-use std::convert::TryInto;
 use std::fmt;
 
 mod cipher;
@@ -414,7 +412,7 @@ impl ConnectionSecrets {
         let (client_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
-        // A key/IV pair
+        // A key/IV offset pair (into the key block)
         struct Pair<'a> {
             key: &'a [u8],
             iv: &'a [u8],
@@ -430,31 +428,44 @@ impl ConnectionSecrets {
         };
 
         let (client_secrets, server_secrets) = if algo == &ring::aead::AES_128_GCM {
-            let extract = |pair: Pair<'_>| -> ConnectionTrafficSecrets {
-                ConnectionTrafficSecrets::Aes128Gcm {
-                    key: pair.key.try_into().unwrap(),
-                    salt: pair.iv.try_into().unwrap(),
-                    iv: extra[..8].try_into().unwrap(),
-                }
+            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
+                let mut key = [0u8; 16];
+                key.copy_from_slice(pair.key);
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(pair.iv);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&extra[..8]);
+
+                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
             };
 
             (extract(client_pair), extract(server_pair))
         } else if algo == &ring::aead::AES_256_GCM {
-            let extract = |pair: Pair<'_>| -> ConnectionTrafficSecrets {
-                ConnectionTrafficSecrets::Aes256Gcm {
-                    key: pair.key.try_into().unwrap(),
-                    salt: pair.iv.try_into().unwrap(),
-                    iv: extra[..8].try_into().unwrap(),
-                }
+            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(pair.key);
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(pair.iv);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&extra[..8]);
+
+                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
             };
 
             (extract(client_pair), extract(server_pair))
         } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            let extract = |pair: Pair<'_>| -> ConnectionTrafficSecrets {
-                ConnectionTrafficSecrets::Chacha20Poly1305 {
-                    key: pair.key.try_into().unwrap(),
-                    iv: pair.iv.try_into().unwrap(),
-                }
+            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(pair.key);
+
+                let mut iv = [0u8; 12];
+                iv.copy_from_slice(pair.iv);
+
+                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
             };
 
             (extract(client_pair), extract(server_pair))
