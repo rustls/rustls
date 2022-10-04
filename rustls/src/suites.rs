@@ -238,8 +238,11 @@ pub(crate) struct PartiallyExtractedSecrets {
     pub(crate) rx: ConnectionTrafficSecrets,
 }
 
-/// Secrets specific to an AEAD algorithm. These are traffic secrets,
-/// post-handshake.
+/// Secrets used to encrypt/decrypt data in a TLS session.
+///
+/// These can be used to configure kTLS for a socket in one direction.
+/// The only other piece of information needed is the sequence number,
+/// which is in [ExtractedSecrets].
 #[cfg(feature = "extract_secrets")]
 #[non_exhaustive]
 pub enum ConnectionTrafficSecrets {
