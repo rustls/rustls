@@ -1,4 +1,6 @@
 use crate::check::inappropriate_handshake_message;
+#[cfg(feature = "extract_secrets")]
+use crate::conn::Side;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -1156,10 +1158,12 @@ impl State<ClientConnectionData> for ExpectTraffic {
 
     #[cfg(feature = "extract_secrets")]
     fn extract_secrets(&self, tx_seq: u64, rx_seq: u64) -> Result<crate::ExtractedSecrets, Error> {
-        let algo = self.suite.common.aead_algorithm;
-
-        self.key_schedule
-            .extract_secrets(tx_seq, rx_seq, algo, crate::conn::Side::Client)
+        self.key_schedule.extract_secrets(
+            tx_seq,
+            rx_seq,
+            self.suite.common.aead_algorithm,
+            Side::Client,
+        )
     }
 }
 
