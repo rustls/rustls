@@ -93,24 +93,8 @@ impl Connection {
     #[cfg(feature = "extract_secrets")]
     pub fn extract_secrets(&self) -> Result<crate::ExtractedSecrets, Error> {
         match self {
-            Self::Client(conn) => {
-                if !conn
-                    .common_state
-                    .enable_secret_extraction
-                {
-                    return Err(Error::General("Secret extraction is disabled".into()));
-                }
-                conn.extract_secrets()
-            }
-            Self::Server(conn) => {
-                if !conn
-                    .common_state
-                    .enable_secret_extraction
-                {
-                    return Err(Error::General("Secret extraction is disabled".into()));
-                }
-                conn.extract_secrets()
-            }
+            Self::Client(conn) => conn.extract_secrets(),
+            Self::Server(conn) => conn.extract_secrets(),
         }
     }
 
@@ -780,6 +764,10 @@ impl<Data> ConnectionCommon<Data> {
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     #[cfg(feature = "extract_secrets")]
     pub fn extract_secrets(&self) -> Result<crate::ExtractedSecrets, Error> {
+        if !self.enable_secret_extraction {
+            return Err(Error::General("Secret extraction is disabled".into()));
+        }
+
         match self.state.as_ref() {
             Ok(st) => {
                 let tx_seq = self
