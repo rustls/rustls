@@ -6,7 +6,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 use crate::Error;
 
@@ -399,7 +399,7 @@ impl ConnectionSecrets {
         )
     }
 
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         // Make a key block, and chop it up
         let key_block = self.make_key_block();

@@ -379,7 +379,7 @@ pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,
 };
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 pub use crate::suites::{ConnectionTrafficSecrets, ExtractedSecrets};
 pub use crate::ticketer::Ticketer;
 #[cfg(feature = "tls12")]

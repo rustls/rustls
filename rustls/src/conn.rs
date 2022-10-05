@@ -18,7 +18,7 @@ use crate::msgs::message::{
 use crate::quic;
 use crate::record_layer;
 use crate::suites::SupportedCipherSuite;
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
@@ -92,7 +92,7 @@ impl Connection {
     }
 
     /// Extract secrets, to set up kTLS for example
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub fn extract_secrets(&self) -> Result<ExtractedSecrets, Error> {
         match self {
             Self::Client(conn) => conn.extract_secrets(),
@@ -764,7 +764,7 @@ impl<Data> ConnectionCommon<Data> {
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub fn extract_secrets(&self) -> Result<ExtractedSecrets, Error> {
         if !self.enable_secret_extraction {
             return Err(Error::General("Secret extraction is disabled".into()));
@@ -855,7 +855,7 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     #[cfg(feature = "quic")]
     pub(crate) quic: Quic,
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub(crate) enable_secret_extraction: bool,
 }
 
@@ -884,7 +884,7 @@ impl CommonState {
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: Quic::new(),
-            #[cfg(feature = "extract_secrets")]
+            #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
         }
     }
@@ -1399,7 +1399,7 @@ pub(crate) trait State<Data>: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         Err(Error::HandshakeNotComplete)
     }

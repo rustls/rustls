@@ -142,7 +142,7 @@ pub struct ClientConfig {
 
     /// Allows traffic secrets to be extracted after the handshake,
     /// e.g. for kTLS setup.
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub enable_secret_extraction: bool,
 
     /// Whether to send data on the first flight ("early data") in
@@ -460,7 +460,7 @@ impl ClientConnection {
         let mut common_state = CommonState::new(Side::Client);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
-        #[cfg(feature = "extract_secrets")]
+        #[cfg(feature = "secret_extraction")]
         {
             common_state.enable_secret_extraction = config.enable_secret_extraction;
         }

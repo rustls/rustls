@@ -52,12 +52,12 @@ impl RecordLayer {
         self.decrypt_state == DirectionState::Active
     }
 
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub(crate) fn write_seq(&self) -> u64 {
         self.write_seq
     }
 
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub(crate) fn read_seq(&self) -> u64 {
         self.read_seq
     }

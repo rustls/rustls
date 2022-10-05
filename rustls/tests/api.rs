@@ -19,7 +19,7 @@ use rustls::internal::msgs::codec::Codec;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
 use rustls::{sign, ConnectionCommon, Error, KeyLog, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -4198,7 +4198,7 @@ fn test_no_warning_logging_during_successful_sessions() {
 }
 
 /// Test that secrets can be extracted.
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 #[test]
 fn test_extract_secrets() {
     use ring::aead::LessSafeKey;
