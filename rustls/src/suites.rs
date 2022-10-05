@@ -245,6 +245,7 @@ pub(crate) struct PartiallyExtractedSecrets {
 /// which is in [ExtractedSecrets].
 #[cfg(feature = "secret_extraction")]
 #[non_exhaustive]
+#[derive(PartialEq, Eq)]
 pub enum ConnectionTrafficSecrets {
     /// Secrets for the AES_128_GCM AEAD algorithm
     Aes128Gcm {
