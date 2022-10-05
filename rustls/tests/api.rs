@@ -4197,12 +4197,21 @@ fn test_no_warning_logging_during_successful_sessions() {
     }
 }
 
-/// Test that secrets can be extracted.
+/// Test that secrets can be extracted and used for encryption/decryption.
 #[cfg(feature = "secret_extraction")]
 #[test]
-fn test_extract_secrets() {
-    use ring::aead::LessSafeKey;
+fn test_secret_extraction_enabled() {
+    use ring::aead;
+    use rustls::internal::msgs::codec;
 
+    // Normally, secret extraction would be used to configure kTLS (TLS offload
+    // to the kernel). We want this test to run on any platform, though, so
+    // instead we use ring to do AEAD.
+
+    // TLS 1.2 and 1.3 have different mechanisms for key exchange and handshake,
+    // and secrets are stored/extracted differently, so we want to test them both.
+    // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
+    // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
     let kt = KeyType::Rsa;
     for suite in [
         rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
@@ -4215,6 +4224,7 @@ fn test_extract_secrets() {
         let version = suite.version();
         println!("Testing suite {:?}", suite.suite().as_str());
 
+        // Only offer the cipher suite (and protocol version) that we're testing
         let mut server_config = ServerConfig::builder()
             .with_cipher_suites(&[suite])
             .with_safe_default_kx_groups()
@@ -4223,6 +4233,7 @@ fn test_extract_secrets() {
             .with_no_client_auth()
             .with_single_cert(kt.get_chain(), kt.get_key())
             .unwrap();
+        // Opt into secret extraction from both sides
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
 
@@ -4234,16 +4245,22 @@ fn test_extract_secrets() {
 
         do_handshake(&mut client, &mut server);
 
+        // The handshake is finished, we're now able to extract traffic secrets
         let mut client_secrets = client.extract_secrets().unwrap();
         let mut server_secrets = server.extract_secrets().unwrap();
 
-        fn test_aad() -> ring::aead::Aad<[u8; 0]> {
-            ring::aead::Aad::from([])
+        // Normally, AAD (additionally authenticated data) contains
+        // version-specific information - since we control both sides
+        // in this test, we don't bother adding any.
+        fn test_aad() -> aead::Aad<[u8; 0]> {
+            aead::Aad::from([])
         }
 
-        fn make_nonce(iv: &[u8], seq: u64) -> ring::aead::Nonce {
-            let mut nonce = [0u8; ring::aead::NONCE_LEN];
-            rustls::internal::msgs::codec::put_u64(seq, &mut nonce[4..]);
+        // Create a unique nonce given an initialization vector and a sequence
+        // number, as required for AEAD.
+        fn make_nonce(iv: &[u8], seq: u64) -> aead::Nonce {
+            let mut nonce = [0u8; aead::NONCE_LEN];
+            codec::put_u64(seq, &mut nonce[4..]);
 
             nonce
                 .iter_mut()
@@ -4252,44 +4269,53 @@ fn test_extract_secrets() {
                     *nonce ^= *iv;
                 });
 
-            ring::aead::Nonce::assume_unique_for_key(nonce)
+            aead::Nonce::assume_unique_for_key(nonce)
         }
 
+        // Helper to encrypt/decrypt payloads with an AEAD algorithm. This
+        // also holds a mutable reference to the sequence number, which actually
+        // lives in [ConnectionTrafficSecrets]
         struct EncryptorDecryptor<'a> {
-            key: ring::aead::LessSafeKey,
+            key: aead::LessSafeKey,
             iv: [u8; 12],
             seq: &'a mut u64,
         }
 
         impl<'a> EncryptorDecryptor<'a> {
+            // Sets up [aead] using the given [ConnectionTrafficSecrets]. Unlike
+            // in rustls proper, there's no type-level separation between
+            // encryption and decryption.
             fn new((seq, cts): &'a mut (u64, ConnectionTrafficSecrets)) -> Self {
                 let mut out_iv = [0u8; 12];
                 let (algo, key) = match cts {
                     ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => {
                         out_iv[..4].copy_from_slice(&salt[..]);
                         out_iv[4..].copy_from_slice(&iv[..]);
-                        (&ring::aead::AES_128_GCM, &key[..])
+                        (&aead::AES_128_GCM, &key[..])
                     }
                     ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => {
                         out_iv[..4].copy_from_slice(&salt[..]);
                         out_iv[4..].copy_from_slice(&iv[..]);
-                        (&ring::aead::AES_256_GCM, &key[..])
+                        (&aead::AES_256_GCM, &key[..])
                     }
                     ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
                         out_iv.copy_from_slice(&iv[..]);
-                        (&ring::aead::CHACHA20_POLY1305, &key[..])
+                        (&aead::CHACHA20_POLY1305, &key[..])
                     }
                     _ => {
                         panic!("algo not supported")
                     }
                 };
                 Self {
-                    key: LessSafeKey::new(ring::aead::UnboundKey::new(algo, key).unwrap()),
+                    key: aead::LessSafeKey::new(aead::UnboundKey::new(algo, key).unwrap()),
                     iv: out_iv,
                     seq,
                 }
             }
 
+            // Encrypts the given plaintext, incrementing the sequence number.
+            // This does unnecessary allocations and can panic, which is fine in
+            // tests.
             fn encrypt(&mut self, plain: &[u8]) -> Vec<u8> {
                 let total_len = plain.len() + self.key.algorithm().tag_len();
                 let mut payload = Vec::with_capacity(total_len);
@@ -4306,6 +4332,9 @@ fn test_extract_secrets() {
                 payload
             }
 
+            // Decrypt the given payload, incrementing the sequence number.
+            // This does unnecessary allocations and can panic, which is fine in
+            // tests.
             fn decrypt(&mut self, encrypted: &[u8]) -> Vec<u8> {
                 let mut payload = encrypted.to_vec();
 
@@ -4328,6 +4357,7 @@ fn test_extract_secrets() {
         let mut server_tx = EncryptorDecryptor::new(&mut server_secrets.tx);
         let mut server_rx = EncryptorDecryptor::new(&mut server_secrets.rx);
 
+        // This sample plaintext is a memorial to Anna Harren, from the bastion of the Turbofish.
         let original_plain = b"The guardian stands resolute - the Turbofish remains undefeated";
 
         for _ in 1..3 {
@@ -4342,5 +4372,47 @@ fn test_extract_secrets() {
                 assert_eq!(original_plain, &decrypted[..]);
             }
         }
+    }
+}
+
+/// Test that secrets cannot be extracted unless explicitly enabled, and until
+/// the handshake is done.
+#[cfg(feature = "secret_extraction")]
+#[test]
+fn test_secret_extraction_disabled_or_too_early() {
+    let suite = rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
+    let kt = KeyType::Rsa;
+
+    for (server_enable, client_enable) in [(true, false), (false, true)] {
+        let mut server_config = ServerConfig::builder()
+            .with_cipher_suites(&[suite])
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(kt.get_chain(), kt.get_key())
+            .unwrap();
+        server_config.enable_secret_extraction = server_enable;
+        let server_config = Arc::new(server_config);
+
+        let mut client_config = make_client_config(kt);
+        client_config.enable_secret_extraction = client_enable;
+
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+
+        assert!(
+            client.extract_secrets().is_err(),
+            "extraction should fail until handshake completes"
+        );
+        assert!(
+            server.extract_secrets().is_err(),
+            "extraction should fail until handshake completes"
+        );
+
+        do_handshake(&mut client, &mut server);
+
+        assert_eq!(server_enable, server.extract_secrets().is_ok());
+        assert_eq!(client_enable, client.extract_secrets().is_ok());
     }
 }
