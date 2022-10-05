@@ -412,7 +412,7 @@ impl ConnectionSecrets {
         let (client_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
-        // A key/IV offset pair (into the key block)
+        // A key/IV pair (fixed IV len is 4 for GCM, 12 for Chacha)
         struct Pair<'a> {
             key: &'a [u8],
             iv: &'a [u8],
