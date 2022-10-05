@@ -1,9 +1,12 @@
 use crate::cipher::{Iv, IvLen};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
-#[cfg(feature = "secret_extraction")]
-use crate::suites::PartiallyExtractedSecrets;
 use crate::KeyLog;
+#[cfg(feature = "secret_extraction")]
+use crate::{
+    conn::Side,
+    suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets},
+};
 
 /// Key schedule maintenance for TLS1.3
 use ring::{
@@ -341,7 +344,7 @@ impl KeyScheduleTraffic {
     pub(crate) fn extract_secrets(
         &self,
         algo: &ring::aead::Algorithm,
-        side: crate::conn::Side,
+        side: Side,
     ) -> Result<PartiallyExtractedSecrets, Error> {
         fn expand<const KEY_LEN: usize, const IV_LEN: usize>(
             secret: &hkdf::Prk,
@@ -366,7 +369,7 @@ impl KeyScheduleTraffic {
         let server_secrets;
 
         if algo == &ring::aead::AES_128_GCM {
-            let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
+            let extract = |secret: &hkdf::Prk| -> Result<ConnectionTrafficSecrets, Error> {
                 let (key, iv_in) = expand::<16, 12>(secret)?;
 
                 let mut salt = [0u8; 4];
@@ -375,13 +378,13 @@ impl KeyScheduleTraffic {
                 let mut iv = [0u8; 8];
                 iv.copy_from_slice(&iv_in[4..]);
 
-                Ok(crate::ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv })
+                Ok(ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv })
             };
 
             client_secrets = extract(&self.current_client_traffic_secret)?;
             server_secrets = extract(&self.current_server_traffic_secret)?;
         } else if algo == &ring::aead::AES_256_GCM {
-            let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
+            let extract = |secret: &hkdf::Prk| -> Result<ConnectionTrafficSecrets, Error> {
                 let (key, iv_in) = expand::<32, 12>(secret)?;
 
                 let mut salt = [0u8; 4];
@@ -390,15 +393,15 @@ impl KeyScheduleTraffic {
                 let mut iv = [0u8; 8];
                 iv.copy_from_slice(&iv_in[4..]);
 
-                Ok(crate::ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv })
+                Ok(ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv })
             };
 
             client_secrets = extract(&self.current_client_traffic_secret)?;
             server_secrets = extract(&self.current_server_traffic_secret)?;
         } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            let extract = |secret: &hkdf::Prk| -> Result<crate::ConnectionTrafficSecrets, Error> {
+            let extract = |secret: &hkdf::Prk| -> Result<ConnectionTrafficSecrets, Error> {
                 let (key, iv) = expand::<32, 12>(secret)?;
-                Ok(crate::ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
+                Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
             };
 
             client_secrets = extract(&self.current_client_traffic_secret)?;
