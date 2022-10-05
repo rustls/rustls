@@ -4203,7 +4203,7 @@ fn test_no_warning_logging_during_successful_sessions() {
 fn test_secret_extraction_enabled() {
     // Normally, secret extraction would be used to configure kTLS (TLS offload
     // to the kernel). We want this test to run on any platform, though, so
-    // instead we use ring to do AEAD.
+    // instead we just compare secrets for equality.
 
     // TLS 1.2 and 1.3 have different mechanisms for key exchange and handshake,
     // and secrets are stored/extracted differently, so we want to test them both.
@@ -4246,6 +4246,9 @@ fn test_secret_extraction_enabled() {
         let client_secrets = client.extract_secrets().unwrap();
         let server_secrets = server.extract_secrets().unwrap();
 
+        // Comparing secrets for equality is something you should never have to
+        // do in production code, so ConnectionTrafficSecrets doesn't implement
+        // PartialEq/Eq on purpose. Instead, we have to get creative.
         fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8], &[u8]) {
             match s {
                 ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => (key, salt, iv),
