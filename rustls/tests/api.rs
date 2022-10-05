@@ -4272,19 +4272,26 @@ fn test_secret_extraction_enabled() {
             aead::Nonce::assume_unique_for_key(nonce)
         }
 
-        // Helper to encrypt/decrypt payloads with an AEAD algorithm. This
-        // also holds a mutable reference to the sequence number, which actually
+        // State for encryption/decryption with an AEAD algorithm. This also
+        // holds a mutable reference to the sequence number, which actually
         // lives in [ConnectionTrafficSecrets]
-        struct EncryptorDecryptor<'a> {
+        struct State<'a> {
             key: aead::LessSafeKey,
             iv: [u8; 12],
             seq: &'a mut u64,
         }
 
-        impl<'a> EncryptorDecryptor<'a> {
-            // Sets up [aead] using the given [ConnectionTrafficSecrets]. Unlike
-            // in rustls proper, there's no type-level separation between
-            // encryption and decryption.
+        struct Decrypter<'a> {
+            state: State<'a>,
+        }
+
+        struct Encrypter<'a> {
+            state: State<'a>,
+        }
+
+        impl<'a> State<'a> {
+            // Sets up [aead] using the given [ConnectionTrafficSecrets], so that
+            // it's ready for encryption/decryption
             fn new((seq, cts): &'a mut (u64, ConnectionTrafficSecrets)) -> Self {
                 let mut out_iv = [0u8; 12];
                 let (algo, key) = match cts {
@@ -4312,24 +4319,41 @@ fn test_secret_extraction_enabled() {
                     seq,
                 }
             }
+        }
+
+        impl<'a> Encrypter<'a> {
+            fn new(pair: &'a mut (u64, ConnectionTrafficSecrets)) -> Self {
+                Self {
+                    state: State::new(pair),
+                }
+            }
 
             // Encrypts the given plaintext, incrementing the sequence number.
             // This does unnecessary allocations and can panic, which is fine in
             // tests.
             fn encrypt(&mut self, plain: &[u8]) -> Vec<u8> {
-                let total_len = plain.len() + self.key.algorithm().tag_len();
+                let total_len = plain.len() + self.state.key.algorithm().tag_len();
                 let mut payload = Vec::with_capacity(total_len);
                 payload.extend_from_slice(plain);
 
-                let nonce = make_nonce(&self.iv, *self.seq);
+                let nonce = make_nonce(&self.state.iv, *self.state.seq);
                 let aad = test_aad();
 
-                self.key
+                self.state
+                    .key
                     .seal_in_place_append_tag(nonce, aad, &mut payload)
                     .unwrap();
 
-                *self.seq += 1;
+                *self.state.seq += 1;
                 payload
+            }
+        }
+
+        impl<'a> Decrypter<'a> {
+            fn new(pair: &'a mut (u64, ConnectionTrafficSecrets)) -> Self {
+                Self {
+                    state: State::new(pair),
+                }
             }
 
             // Decrypt the given payload, incrementing the sequence number.
@@ -4338,28 +4362,30 @@ fn test_secret_extraction_enabled() {
             fn decrypt(&mut self, encrypted: &[u8]) -> Vec<u8> {
                 let mut payload = encrypted.to_vec();
 
-                let nonce = make_nonce(&self.iv, *self.seq);
+                let nonce = make_nonce(&self.state.iv, *self.state.seq);
                 let aad = test_aad();
 
                 let plain = self
+                    .state
                     .key
                     .open_in_place(nonce, aad, &mut payload)
                     .unwrap();
 
-                *self.seq += 1;
+                *self.state.seq += 1;
                 plain.to_vec()
             }
         }
 
-        let mut client_tx = EncryptorDecryptor::new(&mut client_secrets.tx);
-        let mut client_rx = EncryptorDecryptor::new(&mut client_secrets.rx);
+        let mut client_tx = Encrypter::new(&mut client_secrets.tx);
+        let mut client_rx = Decrypter::new(&mut client_secrets.rx);
 
-        let mut server_tx = EncryptorDecryptor::new(&mut server_secrets.tx);
-        let mut server_rx = EncryptorDecryptor::new(&mut server_secrets.rx);
+        let mut server_tx = Encrypter::new(&mut server_secrets.tx);
+        let mut server_rx = Decrypter::new(&mut server_secrets.rx);
 
         // This sample plaintext is a memorial to Anna Harren, from the bastion of the Turbofish.
         let original_plain = b"The guardian stands resolute - the Turbofish remains undefeated";
 
+        // We do three separate sets of reads/writes, to help test sequence numbers.
         for _ in 1..3 {
             for (tx, rx) in [
                 (&mut client_tx, &mut server_rx),
