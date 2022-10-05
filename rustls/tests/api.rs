@@ -4328,7 +4328,7 @@ fn test_secret_extraction_enabled() {
                 }
             }
 
-            // Encrypts the given plaintext, incrementing the sequence number.
+            // Encrypt the given plaintext, incrementing the sequence number.
             // This does unnecessary allocations and can panic, which is fine in
             // tests.
             fn encrypt(&mut self, plain: &[u8]) -> Vec<u8> {
