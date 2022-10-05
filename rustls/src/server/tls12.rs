@@ -14,7 +14,7 @@ use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, Handshak
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::{kx, ticketer, verify};
@@ -933,7 +933,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
         Ok(())
     }
 
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         self.secrets
             .extract_secrets(Side::Server)

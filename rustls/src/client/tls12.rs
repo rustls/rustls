@@ -17,7 +17,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign::Signer;
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
@@ -1110,7 +1110,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(())
     }
 
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         self.secrets
             .extract_secrets(Side::Client)

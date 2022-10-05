@@ -246,7 +246,7 @@ pub struct ServerConfig {
 
     /// Allows traffic secrets to be extracted after the handshake,
     /// e.g. for kTLS setup.
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub enable_secret_extraction: bool,
 
     /// Amount of early data to accept for sessions created by
@@ -355,7 +355,7 @@ impl ServerConnection {
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
-        #[cfg(feature = "extract_secrets")]
+        #[cfg(feature = "secret_extraction")]
         {
             common.enable_secret_extraction = config.enable_secret_extraction;
         }
@@ -610,7 +610,7 @@ impl Accepted {
             .common_state
             .set_max_fragment_size(config.max_fragment_size)?;
 
-        #[cfg(feature = "extract_secrets")]
+        #[cfg(feature = "secret_extraction")]
         {
             self.connection
                 .common_state

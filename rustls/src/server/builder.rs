@@ -107,7 +107,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             alpn_protocols: Vec::new(),
             versions: self.state.versions,
             key_log: Arc::new(NoKeyLog {}),
-            #[cfg(feature = "extract_secrets")]
+            #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
             max_early_data_size: 0,
             send_half_rtt_data: false,

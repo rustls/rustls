@@ -1,7 +1,7 @@
 use crate::cipher::{Iv, IvLen};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
-#[cfg(feature = "extract_secrets")]
+#[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::KeyLog;
 
@@ -337,7 +337,7 @@ impl KeyScheduleTraffic {
             .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
 
-    #[cfg(feature = "extract_secrets")]
+    #[cfg(feature = "secret_extraction")]
     pub(crate) fn extract_secrets(
         &self,
         algo: &ring::aead::Algorithm,
