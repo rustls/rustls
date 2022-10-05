@@ -4201,9 +4201,6 @@ fn test_no_warning_logging_during_successful_sessions() {
 #[cfg(feature = "secret_extraction")]
 #[test]
 fn test_secret_extraction_enabled() {
-    use ring::aead;
-    use rustls::internal::msgs::codec;
-
     // Normally, secret extraction would be used to configure kTLS (TLS offload
     // to the kernel). We want this test to run on any platform, though, so
     // instead we use ring to do AEAD.
@@ -4249,10 +4246,25 @@ fn test_secret_extraction_enabled() {
         let client_secrets = client.extract_secrets().unwrap();
         let server_secrets = server.extract_secrets().unwrap();
 
-        // Make sure they match. We can't use assert_eq here,
-        // ConnectionTrafficSecrets has no Debug impl on purpose.
-        assert!(client_secrets.tx == server_secrets.rx);
-        assert!(client_secrets.rx == server_secrets.tx);
+        fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8], &[u8]) {
+            match s {
+                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => (key, salt, iv),
+                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => (key, salt, iv),
+                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => (key, &[], iv),
+                _ => panic!("unexpected secret type"),
+            }
+        }
+
+        fn assert_secrets_equal(
+            (l_seq, l_sec): (u64, ConnectionTrafficSecrets),
+            (r_seq, r_sec): (u64, ConnectionTrafficSecrets),
+        ) {
+            assert_eq!(l_seq, r_seq);
+            assert_eq!(explode_secrets(&l_sec), explode_secrets(&r_sec));
+        }
+
+        assert_secrets_equal(client_secrets.tx, server_secrets.rx);
+        assert_secrets_equal(client_secrets.rx, server_secrets.tx);
     }
 }
 
