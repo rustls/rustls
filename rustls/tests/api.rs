@@ -4294,8 +4294,9 @@ fn test_secret_extraction_disabled_or_too_early() {
         let mut client_config = make_client_config(kt);
         client_config.enable_secret_extraction = client_enable;
 
-        let (mut client, mut server) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+        let client_config = Arc::new(client_config);
+
+        let (client, server) = make_pair_for_arc_configs(&client_config, &server_config);
 
         assert!(
             client.extract_secrets().is_err(),
@@ -4305,6 +4306,8 @@ fn test_secret_extraction_disabled_or_too_early() {
             server.extract_secrets().is_err(),
             "extraction should fail until handshake completes"
         );
+
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
 
         do_handshake(&mut client, &mut server);
 
