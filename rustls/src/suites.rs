@@ -38,6 +38,7 @@ pub enum BulkAlgorithm {
 }
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
+#[derive(Debug)]
 pub struct CipherSuiteCommon {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,

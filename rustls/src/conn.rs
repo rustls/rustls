@@ -25,11 +25,13 @@ use crate::vecbuf::ChunkVecBuffer;
 use std::collections::VecDeque;
 
 use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::io;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 
 /// A client or server connection.
+#[derive(Debug)]
 pub enum Connection {
     /// A client connection
     Client(crate::client::ClientConnection),
@@ -354,7 +356,7 @@ impl<'a> io::Write for Writer<'a> {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Protocol {
     Tcp,
     #[cfg(feature = "quic")]

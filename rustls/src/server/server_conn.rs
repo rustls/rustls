@@ -279,6 +279,18 @@ pub struct ServerConfig {
     pub send_half_rtt_data: bool,
 }
 
+impl fmt::Debug for ServerConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ServerConfig")
+            .field("ignore_client_order", &self.ignore_client_order)
+            .field("max_fragment_size", &self.max_fragment_size)
+            .field("alpn_protocols", &self.alpn_protocols)
+            .field("max_early_data_size", &self.max_early_data_size)
+            .field("send_half_rtt_data", &self.send_half_rtt_data)
+            .finish_non_exhaustive()
+    }
+}
+
 impl ServerConfig {
     /// Create builder to build up the server configuration.
     ///
