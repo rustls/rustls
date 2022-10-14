@@ -147,6 +147,18 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
 }
 
+impl fmt::Debug for ClientConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ClientConfig")
+            .field("alpn_protocols", &self.alpn_protocols)
+            .field("max_fragment_size", &self.max_fragment_size)
+            .field("enable_tickets", &self.enable_tickets)
+            .field("enable_sni", &self.enable_sni)
+            .field("enable_early_data", &self.enable_early_data)
+            .finish_non_exhaustive()
+    }
+}
+
 impl ClientConfig {
     /// Create a builder to build up the client configuration.
     ///
@@ -300,6 +312,7 @@ pub(super) mod danger {
     use super::ClientConfig;
 
     /// Accessor for dangerous configuration options.
+    #[derive(Debug)]
     pub struct DangerousClientConfig<'a> {
         /// The underlying ClientConfig
         pub cfg: &'a mut ClientConfig,

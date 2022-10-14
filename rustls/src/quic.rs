@@ -8,6 +8,7 @@ pub use crate::server::ServerQuicExt;
 use crate::suites::BulkAlgorithm;
 use crate::tls13::key_schedule::hkdf_expand;
 use crate::tls13::{Tls13CipherSuite, TLS13_AES_128_GCM_SHA256_INTERNAL};
+use std::fmt::Debug;
 
 use ring::{aead, hkdf};
 
@@ -472,7 +473,7 @@ fn nonce_for(packet_number: u64, iv: &Iv) -> ring::aead::Nonce {
 ///
 /// Governs version-specific behavior in the TLS layer
 #[non_exhaustive]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Version {
     /// Draft versions 29, 30, 31 and 32
     V1Draft,
