@@ -2,6 +2,11 @@ use crate::cipher::{Iv, IvLen};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
 use crate::KeyLog;
+#[cfg(feature = "secret_extraction")]
+use crate::{
+    conn::Side,
+    suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets},
+};
 
 /// Key schedule maintenance for TLS1.3
 use ring::{
@@ -333,6 +338,86 @@ impl KeyScheduleTraffic {
     ) -> Result<(), Error> {
         self.ks
             .export_keying_material(&self.current_exporter_secret, out, label, context)
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    pub(crate) fn extract_secrets(
+        &self,
+        algo: &ring::aead::Algorithm,
+        side: Side,
+    ) -> Result<PartiallyExtractedSecrets, Error> {
+        fn expand<const KEY_LEN: usize, const IV_LEN: usize>(
+            secret: &hkdf::Prk,
+        ) -> Result<([u8; KEY_LEN], [u8; IV_LEN]), Error> {
+            let mut key = [0u8; KEY_LEN];
+            let mut iv = [0u8; IV_LEN];
+
+            hkdf_expand_info(secret, PayloadU8Len(key.len()), b"key", &[], |okm| {
+                okm.fill(&mut key)
+            })
+            .map_err(|_| Error::General("hkdf_expand_info failed".to_string()))?;
+
+            hkdf_expand_info(secret, PayloadU8Len(iv.len()), b"iv", &[], |okm| {
+                okm.fill(&mut iv)
+            })
+            .map_err(|_| Error::General("hkdf_expand_info failed".to_string()))?;
+
+            Ok((key, iv))
+        }
+
+        let client_secrets;
+        let server_secrets;
+
+        if algo == &ring::aead::AES_128_GCM {
+            let extract = |secret: &hkdf::Prk| -> Result<ConnectionTrafficSecrets, Error> {
+                let (key, iv_in) = expand::<16, 12>(secret)?;
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(&iv_in[..4]);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&iv_in[4..]);
+
+                Ok(ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv })
+            };
+
+            client_secrets = extract(&self.current_client_traffic_secret)?;
+            server_secrets = extract(&self.current_server_traffic_secret)?;
+        } else if algo == &ring::aead::AES_256_GCM {
+            let extract = |secret: &hkdf::Prk| -> Result<ConnectionTrafficSecrets, Error> {
+                let (key, iv_in) = expand::<32, 12>(secret)?;
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(&iv_in[..4]);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&iv_in[4..]);
+
+                Ok(ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv })
+            };
+
+            client_secrets = extract(&self.current_client_traffic_secret)?;
+            server_secrets = extract(&self.current_server_traffic_secret)?;
+        } else if algo == &ring::aead::CHACHA20_POLY1305 {
+            let extract = |secret: &hkdf::Prk| -> Result<ConnectionTrafficSecrets, Error> {
+                let (key, iv) = expand::<32, 12>(secret)?;
+                Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
+            };
+
+            client_secrets = extract(&self.current_client_traffic_secret)?;
+            server_secrets = extract(&self.current_server_traffic_secret)?;
+        } else {
+            return Err(Error::General(format!(
+                "exporting secrets for {:?}: unimplemented",
+                algo
+            )));
+        }
+
+        let (tx, rx) = match side {
+            crate::conn::Side::Client => (client_secrets, server_secrets),
+            crate::conn::Side::Server => (server_secrets, client_secrets),
+        };
+        Ok(PartiallyExtractedSecrets { tx, rx })
     }
 }
 

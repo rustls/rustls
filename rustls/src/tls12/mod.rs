@@ -6,6 +6,8 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, ContentType};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
+#[cfg(feature = "secret_extraction")]
+use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 use crate::Error;
 
 use ring::aead;
@@ -395,6 +397,90 @@ impl ConnectionSecrets {
             label,
             &randoms,
         )
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
+        // Make a key block, and chop it up
+        let key_block = self.make_key_block();
+
+        let suite = self.suite;
+        let algo = suite.common.aead_algorithm;
+
+        let (client_key, key_block) = key_block.split_at(algo.key_len());
+        let (server_key, key_block) = key_block.split_at(algo.key_len());
+        let (client_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
+        let (server_iv, extra) = key_block.split_at(suite.fixed_iv_len);
+
+        // A key/IV pair (fixed IV len is 4 for GCM, 12 for Chacha)
+        struct Pair<'a> {
+            key: &'a [u8],
+            iv: &'a [u8],
+        }
+
+        let client_pair = Pair {
+            key: client_key,
+            iv: client_iv,
+        };
+        let server_pair = Pair {
+            key: server_key,
+            iv: server_iv,
+        };
+
+        let (client_secrets, server_secrets) = if algo == &ring::aead::AES_128_GCM {
+            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
+                let mut key = [0u8; 16];
+                key.copy_from_slice(pair.key);
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(pair.iv);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&extra[..8]);
+
+                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
+            };
+
+            (extract(client_pair), extract(server_pair))
+        } else if algo == &ring::aead::AES_256_GCM {
+            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(pair.key);
+
+                let mut salt = [0u8; 4];
+                salt.copy_from_slice(pair.iv);
+
+                let mut iv = [0u8; 8];
+                iv.copy_from_slice(&extra[..8]);
+
+                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
+            };
+
+            (extract(client_pair), extract(server_pair))
+        } else if algo == &ring::aead::CHACHA20_POLY1305 {
+            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(pair.key);
+
+                let mut iv = [0u8; 12];
+                iv.copy_from_slice(pair.iv);
+
+                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
+            };
+
+            (extract(client_pair), extract(server_pair))
+        } else {
+            return Err(Error::General(format!(
+                "exporting secrets for {:?}: unimplemented",
+                algo
+            )));
+        };
+
+        let (tx, rx) = match side {
+            Side::Client => (client_secrets, server_secrets),
+            Side::Server => (server_secrets, client_secrets),
+        };
+        Ok(PartiallyExtractedSecrets { tx, rx })
     }
 }
 

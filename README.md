@@ -26,6 +26,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     SignatureAlgorithm, and NamedGroup as part of the stable API. Previously they
     were part of the unstable internals API, but were referenced by parts of the
     stable API.
+  - Expose secret extraction API under the `secret_extraction` cargo feature.
+    This is designed to enable switching from rustls to kTLS (kernel TLS
+    offload) after a successful TLS 1.2/1.3 handshake, for example.
 * 0.20.6 (2022-05-18)
   - 0.20.5 included a change to track more context for the `Error::CorruptMessage`
     which made API-incompatible changes to the `Error` type. We yanked 0.20.5

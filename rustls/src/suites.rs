@@ -215,6 +215,67 @@ pub(crate) fn compatible_sigscheme_for_suites(
         .any(|&suite| suite.usable_for_signature_algorithm(sigalg))
 }
 
+/// Secrets for transmitting/receiving data over a TLS session.
+///
+/// After performing a handshake with rustls, these secrets can be extracted
+/// to configure kTLS for a socket, and have the kernel take over encryption
+/// and/or decryption.
+#[cfg(feature = "secret_extraction")]
+pub struct ExtractedSecrets {
+    /// sequence number and secrets for the "tx" (transmit) direction
+    pub tx: (u64, ConnectionTrafficSecrets),
+
+    /// sequence number and secrets for the "rx" (receive) direction
+    pub rx: (u64, ConnectionTrafficSecrets),
+}
+
+/// [ExtractedSecrets] minus the sequence numbers
+#[cfg(feature = "secret_extraction")]
+pub(crate) struct PartiallyExtractedSecrets {
+    /// secrets for the "tx" (transmit) direction
+    pub(crate) tx: ConnectionTrafficSecrets,
+
+    /// secrets for the "rx" (receive) direction
+    pub(crate) rx: ConnectionTrafficSecrets,
+}
+
+/// Secrets used to encrypt/decrypt data in a TLS session.
+///
+/// These can be used to configure kTLS for a socket in one direction.
+/// The only other piece of information needed is the sequence number,
+/// which is in [ExtractedSecrets].
+#[cfg(feature = "secret_extraction")]
+#[non_exhaustive]
+pub enum ConnectionTrafficSecrets {
+    /// Secrets for the AES_128_GCM AEAD algorithm
+    Aes128Gcm {
+        /// key (16 bytes)
+        key: [u8; 16],
+        /// salt (4 bytes)
+        salt: [u8; 4],
+        /// initialization vector (8 bytes, chopped from key block)
+        iv: [u8; 8],
+    },
+
+    /// Secrets for the AES_256_GCM AEAD algorithm
+    Aes256Gcm {
+        /// key (32 bytes)
+        key: [u8; 32],
+        /// salt (4 bytes)
+        salt: [u8; 4],
+        /// initialization vector (8 bytes, chopped from key block)
+        iv: [u8; 8],
+    },
+
+    /// Secrets for the CHACHA20_POLY1305 AEAD algorithm
+    Chacha20Poly1305 {
+        /// key (32 bytes)
+        key: [u8; 32],
+        /// initialization vector (12 bytes)
+        iv: [u8; 12],
+    },
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

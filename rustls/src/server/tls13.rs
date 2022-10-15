@@ -22,6 +22,8 @@ use crate::tls13::Tls13CipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{check::inappropriate_message, conn::Protocol};
+#[cfg(feature = "secret_extraction")]
+use crate::{conn::Side, suites::PartiallyExtractedSecrets};
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
@@ -1350,6 +1352,12 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 .record_layer
                 .set_message_encrypter(self.suite.derive_encrypter(&write_key));
         }
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
+        self.key_schedule
+            .extract_secrets(self.suite.common.aead_algorithm, Side::Server)
     }
 }
 

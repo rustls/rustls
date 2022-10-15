@@ -29,6 +29,8 @@ use crate::tls13::Tls13CipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, msgs::base::PayloadU16, quic};
+#[cfg(feature = "secret_extraction")]
+use crate::{conn::Side, suites::PartiallyExtractedSecrets};
 use crate::{sign, KeyLog};
 
 use super::client_conn::ClientConnectionData;
@@ -1152,6 +1154,12 @@ impl State<ClientConnectionData> for ExpectTraffic {
                 .record_layer
                 .set_message_encrypter(self.suite.derive_encrypter(&write_key));
         }
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
+        self.key_schedule
+            .extract_secrets(self.suite.common.aead_algorithm, Side::Client)
     }
 }
 

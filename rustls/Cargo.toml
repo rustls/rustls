@@ -26,6 +26,7 @@ webpki = { version = "0.22.0", features = ["alloc", "std"] }
 default = ["logging", "tls12"]
 logging = ["log"]
 dangerous_configuration = []
+secret_extraction = []
 quic = []
 tls12 = []
 read_buf = ["rustversion"]

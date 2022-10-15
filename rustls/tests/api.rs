@@ -19,6 +19,8 @@ use rustls::internal::msgs::codec::Codec;
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
+#[cfg(feature = "secret_extraction")]
+use rustls::ConnectionTrafficSecrets;
 use rustls::{sign, ConnectionCommon, Error, KeyLog, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -4192,5 +4194,124 @@ fn test_no_warning_logging_during_successful_sessions() {
             assert_eq!(c.borrow().trace, 0);
             assert_eq!(c.borrow().debug, 0);
         });
+    }
+}
+
+/// Test that secrets can be extracted and used for encryption/decryption.
+#[cfg(feature = "secret_extraction")]
+#[test]
+fn test_secret_extraction_enabled() {
+    // Normally, secret extraction would be used to configure kTLS (TLS offload
+    // to the kernel). We want this test to run on any platform, though, so
+    // instead we just compare secrets for equality.
+
+    // TLS 1.2 and 1.3 have different mechanisms for key exchange and handshake,
+    // and secrets are stored/extracted differently, so we want to test them both.
+    // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
+    // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
+    let kt = KeyType::Rsa;
+    for suite in [
+        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    ] {
+        let version = suite.version();
+        println!("Testing suite {:?}", suite.suite().as_str());
+
+        // Only offer the cipher suite (and protocol version) that we're testing
+        let mut server_config = ServerConfig::builder()
+            .with_cipher_suites(&[suite])
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[version])
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(kt.get_chain(), kt.get_key())
+            .unwrap();
+        // Opt into secret extraction from both sides
+        server_config.enable_secret_extraction = true;
+        let server_config = Arc::new(server_config);
+
+        let mut client_config = make_client_config(kt);
+        client_config.enable_secret_extraction = true;
+
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+
+        do_handshake(&mut client, &mut server);
+
+        // The handshake is finished, we're now able to extract traffic secrets
+        let client_secrets = client.extract_secrets().unwrap();
+        let server_secrets = server.extract_secrets().unwrap();
+
+        // Comparing secrets for equality is something you should never have to
+        // do in production code, so ConnectionTrafficSecrets doesn't implement
+        // PartialEq/Eq on purpose. Instead, we have to get creative.
+        fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8], &[u8]) {
+            match s {
+                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => (key, salt, iv),
+                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => (key, salt, iv),
+                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => (key, &[], iv),
+                _ => panic!("unexpected secret type"),
+            }
+        }
+
+        fn assert_secrets_equal(
+            (l_seq, l_sec): (u64, ConnectionTrafficSecrets),
+            (r_seq, r_sec): (u64, ConnectionTrafficSecrets),
+        ) {
+            assert_eq!(l_seq, r_seq);
+            assert_eq!(explode_secrets(&l_sec), explode_secrets(&r_sec));
+        }
+
+        assert_secrets_equal(client_secrets.tx, server_secrets.rx);
+        assert_secrets_equal(client_secrets.rx, server_secrets.tx);
+    }
+}
+
+/// Test that secrets cannot be extracted unless explicitly enabled, and until
+/// the handshake is done.
+#[cfg(feature = "secret_extraction")]
+#[test]
+fn test_secret_extraction_disabled_or_too_early() {
+    let suite = rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
+    let kt = KeyType::Rsa;
+
+    for (server_enable, client_enable) in [(true, false), (false, true)] {
+        let mut server_config = ServerConfig::builder()
+            .with_cipher_suites(&[suite])
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(kt.get_chain(), kt.get_key())
+            .unwrap();
+        server_config.enable_secret_extraction = server_enable;
+        let server_config = Arc::new(server_config);
+
+        let mut client_config = make_client_config(kt);
+        client_config.enable_secret_extraction = client_enable;
+
+        let client_config = Arc::new(client_config);
+
+        let (client, server) = make_pair_for_arc_configs(&client_config, &server_config);
+
+        assert!(
+            client.extract_secrets().is_err(),
+            "extraction should fail until handshake completes"
+        );
+        assert!(
+            server.extract_secrets().is_err(),
+            "extraction should fail until handshake completes"
+        );
+
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+
+        do_handshake(&mut client, &mut server);
+
+        assert_eq!(server_enable, server.extract_secrets().is_ok());
+        assert_eq!(client_enable, client.extract_secrets().is_ok());
     }
 }

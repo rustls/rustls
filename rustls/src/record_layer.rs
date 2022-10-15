@@ -52,6 +52,16 @@ impl RecordLayer {
         self.decrypt_state == DirectionState::Active
     }
 
+    #[cfg(feature = "secret_extraction")]
+    pub(crate) fn write_seq(&self) -> u64 {
+        self.write_seq
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    pub(crate) fn read_seq(&self) -> u64 {
+        self.read_seq
+    }
+
     pub(crate) fn doing_trial_decryption(&mut self, requested: usize) -> bool {
         match self
             .trial_decryption_len

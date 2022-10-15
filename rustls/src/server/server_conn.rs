@@ -14,6 +14,8 @@ use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
+#[cfg(feature = "secret_extraction")]
+use crate::ExtractedSecrets;
 use crate::KeyLog;
 #[cfg(feature = "quic")]
 use crate::{conn::Protocol, quic};
@@ -244,6 +246,11 @@ pub struct ServerConfig {
     /// does nothing.
     pub key_log: Arc<dyn KeyLog>,
 
+    /// Allows traffic secrets to be extracted after the handshake,
+    /// e.g. for kTLS setup.
+    #[cfg(feature = "secret_extraction")]
+    pub enable_secret_extraction: bool,
+
     /// Amount of early data to accept for sessions created by
     /// this config.  Specify 0 to disable early data.  The
     /// default is 0.
@@ -362,6 +369,10 @@ impl ServerConnection {
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
+        #[cfg(feature = "secret_extraction")]
+        {
+            common.enable_secret_extraction = config.enable_secret_extraction;
+        }
         Ok(Self {
             inner: ConnectionCommon::new(
                 Box::new(hs::ExpectClientHello::new(config, extra_exts)),
@@ -451,6 +462,12 @@ impl ServerConnection {
         } else {
             None
         }
+    }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    #[cfg(feature = "secret_extraction")]
+    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.extract_secrets()
     }
 }
 
@@ -612,6 +629,14 @@ impl Accepted {
         self.connection
             .common_state
             .set_max_fragment_size(config.max_fragment_size)?;
+
+        #[cfg(feature = "secret_extraction")]
+        {
+            self.connection
+                .common_state
+                .enable_secret_extraction = config.enable_secret_extraction;
+        }
+
         let state = hs::ExpectClientHello::new(config, Vec::new());
         let mut cx = hs::ServerContext {
             common: &mut self.connection.common_state,

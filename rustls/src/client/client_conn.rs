@@ -12,6 +12,8 @@ use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
 use crate::versions;
+#[cfg(feature = "secret_extraction")]
+use crate::ExtractedSecrets;
 use crate::KeyLog;
 
 use super::hs;
@@ -139,6 +141,11 @@ pub struct ClientConfig {
     /// How to output key material for debugging.  The default
     /// does nothing.
     pub key_log: Arc<dyn KeyLog>,
+
+    /// Allows traffic secrets to be extracted after the handshake,
+    /// e.g. for kTLS setup.
+    #[cfg(feature = "secret_extraction")]
+    pub enable_secret_extraction: bool,
 
     /// Whether to send data on the first flight ("early data") in
     /// TLS 1.3 handshakes.
@@ -468,6 +475,10 @@ impl ClientConnection {
         let mut common_state = CommonState::new(Side::Client);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
+        #[cfg(feature = "secret_extraction")]
+        {
+            common_state.enable_secret_extraction = config.enable_secret_extraction;
+        }
         let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {
@@ -526,6 +537,12 @@ impl ClientConnection {
                     .common_state
                     .send_early_plaintext(&data[..sz])
             })
+    }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    #[cfg(feature = "secret_extraction")]
+    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.extract_secrets()
     }
 }
 
