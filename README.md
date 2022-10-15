@@ -22,13 +22,21 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release
   - Planned: removal of unused signature verification schemes at link-time.
+* 0.20.7 (2022-10-18)
+  - Expose secret extraction API under the `secret_extraction` cargo feature.
+    This is designed to enable switching from rustls to kTLS (kernel TLS
+    offload) after a successful TLS 1.2/1.3 handshake, for example.
+  - Move filtering of signature schemes after config selection, avoiding the need
+    for linking in encryption/decryption code for all cipher suites at the cost of
+    exposing more signature schemes in the `ClientHello` emitted by the `Acceptor`.
   - Expose AlertDescription, ContentType, and HandshakeType,
     SignatureAlgorithm, and NamedGroup as part of the stable API. Previously they
     were part of the unstable internals API, but were referenced by parts of the
     stable API.
-  - Expose secret extraction API under the `secret_extraction` cargo feature.
-    This is designed to enable switching from rustls to kTLS (kernel TLS
-    offload) after a successful TLS 1.2/1.3 handshake, for example.
+  - We now have a [Discord channel](https://discord.gg/MCSB76RU96) for community
+    discussions.
+  - The minimum supported Rust version is now 1.56.0 due to several dependencies
+    requiring it.
 * 0.20.6 (2022-05-18)
   - 0.20.5 included a change to track more context for the `Error::CorruptMessage`
     which made API-incompatible changes to the `Error` type. We yanked 0.20.5
