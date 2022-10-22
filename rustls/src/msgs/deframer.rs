@@ -46,25 +46,12 @@ impl MessageDeframer {
     /// Returns an `Error` if the deframer failed to parse some message contents,
     /// `Ok(None)` if no full message is buffered, and `Ok(Some(_))` if a valid message was found.
     pub fn pop(&mut self) -> Result<Option<OpaqueMessage>, Error> {
-        match self.desynced {
-            false => Ok(self.frames.pop_front()),
-            true => Err(Error::CorruptMessage),
+        if self.desynced {
+            return Err(Error::CorruptMessage);
+        } else if let Some(msg) = self.frames.pop_front() {
+            return Ok(Some(msg));
         }
-    }
 
-    /// Read some bytes from `rd`, and add them to our internal
-    /// buffer.  If this means our internal buffer contains
-    /// full messages, decode them all.
-    #[allow(clippy::comparison_chain)]
-    pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
-        // Try to do the largest reads possible.  Note that if
-        // we get a message with a length field out of range here,
-        // we do a zero length read.  That looks like an EOF to
-        // the next layer up, which is fine.
-        debug_assert!(self.used <= OpaqueMessage::MAX_WIRE_SIZE);
-        let new_bytes = rd.read(&mut self.buf[self.used..])?;
-
-        self.used += new_bytes;
         let mut taken = 0;
         loop {
             // Does our `buf` contain a full message?  It does if it is big enough to
@@ -73,12 +60,10 @@ impl MessageDeframer {
             let mut rd = codec::Reader::init(&self.buf[taken..self.used]);
             let m = match OpaqueMessage::read(&mut rd) {
                 Ok(m) => m,
-                Err(e) => {
-                    use MessageError::*;
-                    if !matches!(e, TooShortForHeader | TooShortForLength) {
-                        self.desynced = true;
-                    }
-                    break;
+                Err(MessageError::TooShortForHeader | MessageError::TooShortForLength) => break,
+                Err(_) => {
+                    self.desynced = true;
+                    return Err(Error::CorruptMessage);
                 }
             };
 
@@ -86,6 +71,7 @@ impl MessageDeframer {
             self.frames.push_back(m);
         }
 
+        #[allow(clippy::comparison_chain)]
         if taken < self.used {
             /* Before:
              * +----------+----------+----------+
@@ -107,6 +93,23 @@ impl MessageDeframer {
             self.used = 0;
         }
 
+        Ok(self.frames.pop_front())
+    }
+
+    /// Read some bytes from `rd`, and add them to our internal buffer.
+    #[allow(clippy::comparison_chain)]
+    pub fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
+        if self.used == OpaqueMessage::MAX_WIRE_SIZE {
+            return Err(io::Error::new(io::ErrorKind::Other, "message buffer full"));
+        }
+
+        // Try to do the largest reads possible.  Note that if
+        // we get a message with a length field out of range here,
+        // we do a zero length read.  That looks like an EOF to
+        // the next layer up, which is fine.
+        debug_assert!(self.used <= OpaqueMessage::MAX_WIRE_SIZE);
+        let new_bytes = rd.read(&mut self.buf[self.used..])?;
+        self.used += new_bytes;
         Ok(new_bytes)
     }
 
@@ -121,8 +124,8 @@ impl MessageDeframer {
 #[cfg(test)]
 mod tests {
     use super::MessageDeframer;
-    use crate::msgs;
     use crate::msgs::message::Message;
+    use crate::{msgs, Error};
     use std::convert::TryFrom;
     use std::io;
 
@@ -214,18 +217,14 @@ mod tests {
     }
 
     fn input_whole_incremental(d: &mut MessageDeframer, bytes: &[u8]) {
-        let frames_before = d.frames.len();
+        let before = d.used;
 
         for i in 0..bytes.len() {
             assert_len(1, input_bytes(d, &bytes[i..i + 1]));
             assert!(d.has_pending());
-
-            if i < bytes.len() - 1 {
-                assert_eq!(frames_before, d.frames.len());
-            }
         }
 
-        assert_eq!(frames_before + 1, d.frames.len());
+        assert_eq!(before + bytes.len(), d.used);
     }
 
     fn assert_len(want: usize, got: io::Result<usize>) {
@@ -237,13 +236,13 @@ mod tests {
     }
 
     fn pop_first(d: &mut MessageDeframer) {
-        let m = d.frames.pop_front().unwrap();
+        let m = d.pop().unwrap().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::Handshake);
         Message::try_from(m.into_plain_message()).unwrap();
     }
 
     fn pop_second(d: &mut MessageDeframer) {
-        let m = d.frames.pop_front().unwrap();
+        let m = d.pop().unwrap().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::Alert);
         Message::try_from(m.into_plain_message()).unwrap();
     }
@@ -254,7 +253,7 @@ mod tests {
         assert!(!d.has_pending());
         input_whole_incremental(&mut d, FIRST_MESSAGE);
         assert!(d.has_pending());
-        assert_eq!(1, d.frames.len());
+        assert_eq!(0, d.frames.len());
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -268,9 +267,10 @@ mod tests {
         assert!(d.has_pending());
         input_whole_incremental(&mut d, SECOND_MESSAGE);
         assert!(d.has_pending());
-        assert_eq!(2, d.frames.len());
+        assert_eq!(0, d.frames.len());
         pop_first(&mut d);
         assert!(d.has_pending());
+        assert_eq!(1, d.frames.len());
         pop_second(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -282,7 +282,7 @@ mod tests {
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert!(d.has_pending());
-        assert_eq!(d.frames.len(), 1);
+        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -294,8 +294,9 @@ mod tests {
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert_len(SECOND_MESSAGE.len(), input_bytes(&mut d, SECOND_MESSAGE));
-        assert_eq!(d.frames.len(), 2);
+        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
+        assert_eq!(d.frames.len(), 1);
         pop_second(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -309,8 +310,9 @@ mod tests {
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, FIRST_MESSAGE, SECOND_MESSAGE),
         );
-        assert_eq!(d.frames.len(), 2);
+        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
+        assert_eq!(d.frames.len(), 1);
         pop_second(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -324,8 +326,9 @@ mod tests {
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, SECOND_MESSAGE, FIRST_MESSAGE),
         );
-        assert_eq!(d.frames.len(), 2);
+        assert_eq!(d.frames.len(), 0);
         pop_second(&mut d);
+        assert_eq!(d.frames.len(), 1);
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -340,7 +343,7 @@ mod tests {
             FIRST_MESSAGE.len() - 3,
             input_bytes(&mut d, &FIRST_MESSAGE[3..]),
         );
-        assert_eq!(d.frames.len(), 1);
+        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -353,7 +356,7 @@ mod tests {
             INVALID_CONTENTTYPE_MESSAGE.len(),
             input_bytes(&mut d, INVALID_CONTENTTYPE_MESSAGE),
         );
-        assert!(d.desynced);
+        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]
@@ -363,7 +366,7 @@ mod tests {
             INVALID_VERSION_MESSAGE.len(),
             input_bytes(&mut d, INVALID_VERSION_MESSAGE),
         );
-        assert!(d.desynced);
+        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]
@@ -373,7 +376,7 @@ mod tests {
             INVALID_LENGTH_MESSAGE.len(),
             input_bytes(&mut d, INVALID_LENGTH_MESSAGE),
         );
-        assert!(d.desynced);
+        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]
@@ -383,7 +386,7 @@ mod tests {
             EMPTY_APPLICATIONDATA_MESSAGE.len(),
             input_bytes(&mut d, EMPTY_APPLICATIONDATA_MESSAGE),
         );
-        let m = d.frames.pop_front().unwrap();
+        let m = d.pop().unwrap().unwrap();
         assert_eq!(m.typ, msgs::enums::ContentType::ApplicationData);
         assert_eq!(m.payload.0.len(), 0);
         assert!(!d.has_pending());
@@ -397,6 +400,6 @@ mod tests {
             INVALID_EMPTY_MESSAGE.len(),
             input_bytes(&mut d, INVALID_EMPTY_MESSAGE),
         );
-        assert!(d.desynced);
+        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
     }
 }
