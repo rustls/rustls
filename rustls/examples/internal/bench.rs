@@ -85,9 +85,16 @@ where
         let mut offs = 0;
         loop {
             let start = Instant::now();
-            offs += right
-                .read_tls(&mut buf[offs..sz].as_ref())
-                .unwrap();
+            match right.read_tls(&mut buf[offs..sz].as_ref()) {
+                Ok(read) => {
+                    right.process_new_packets().unwrap();
+                    offs += read;
+                }
+                Err(err) => {
+                    panic!("error on transfer {}..{}: {}", offs, sz, err);
+                }
+            }
+
             let end = Instant::now();
             read_time += duration_nanos(end.duration_since(start));
             if sz == offs {
@@ -387,19 +394,15 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
 
         server_time += time(|| {
             transfer(&mut client, &mut server);
-            server.process_new_packets().unwrap();
         });
         client_time += time(|| {
             transfer(&mut server, &mut client);
-            client.process_new_packets().unwrap();
         });
         server_time += time(|| {
             transfer(&mut client, &mut server);
-            server.process_new_packets().unwrap();
         });
         client_time += time(|| {
             transfer(&mut server, &mut client);
-            client.process_new_packets().unwrap();
         });
     }
 
@@ -434,9 +437,7 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
 fn do_handshake_step(client: &mut ClientConnection, server: &mut ServerConnection) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
         transfer(client, server);
-        server.process_new_packets().unwrap();
         transfer(server, client);
-        client.process_new_packets().unwrap();
         true
     } else {
         false
@@ -482,10 +483,6 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
         });
 
         time_recv += transfer(&mut server, &mut client);
-
-        time_recv += time(|| {
-            client.process_new_packets().unwrap();
-        });
         drain(&mut client, buf.len());
     }
 
