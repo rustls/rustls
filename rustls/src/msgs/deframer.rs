@@ -124,7 +124,7 @@ impl MessageDeframer {
 #[cfg(test)]
 mod tests {
     use super::MessageDeframer;
-    use crate::msgs::message::Message;
+    use crate::msgs::message::{Message, OpaqueMessage};
     use crate::{msgs, Error};
     use std::convert::TryFrom;
     use std::io;
@@ -401,5 +401,23 @@ mod tests {
             input_bytes(&mut d, INVALID_EMPTY_MESSAGE),
         );
         assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
+    }
+
+    #[test]
+    fn test_limited_buffer() {
+        const PAYLOAD_LEN: usize = 16_384;
+        let mut message = Vec::with_capacity(8192);
+        message.push(0x17); // ApplicationData
+        message.extend(&[0x03, 0x04]); // ProtocolVersion
+        message.extend((PAYLOAD_LEN as u16).to_be_bytes()); // payload length
+        message.extend(&[0; PAYLOAD_LEN]);
+
+        let mut d = MessageDeframer::new();
+        assert_len(message.len(), input_bytes(&mut d, &message));
+        assert_len(
+            OpaqueMessage::MAX_WIRE_SIZE - 16_389,
+            input_bytes(&mut d, &message),
+        );
+        assert!(input_bytes(&mut d, &message).is_err());
     }
 }
