@@ -401,6 +401,8 @@ mod tests {
             input_bytes(&mut d, INVALID_EMPTY_MESSAGE),
         );
         assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
+        // CorruptMessage has been fused
+        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]
