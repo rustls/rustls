@@ -718,12 +718,24 @@ impl<Data> ConnectionCommon<Data> {
     /// to empty the incoming TLS data buffer.
     ///
     /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
-    /// a socket is cleanly closed, or a file is at EOF. If the incoming TLS data buffer is full,
-    /// `read_tls()` will yield an `Err(io::Error)` with `ErrorKind::Other`. Other errors originate
-    /// from the IO done through `rd`; TLS-level errors are emitted from [`process_new_packets()`].
+    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
+    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
     ///
-    /// [`process_new_packets()`]: Connection::process_new_packets
+    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
+    ///   each time a call to this function succeeds.
+    /// * In order to empty the incoming plaintext data buffer, you should empty it through
+    ///   the [`reader()`] after the call to [`process_new_packets()`].
+    ///
+    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
+    /// [`reader()`]: ConnectionCommon::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+        if self.received_plaintext.is_full() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "received plaintext buffer full",
+            ));
+        }
+
         let res = self.message_deframer.read(rd);
         if let Ok(0) = res {
             self.common_state.has_seen_eof = true;
@@ -867,7 +879,7 @@ impl CommonState {
             received_middlebox_ccs: 0,
             peer_certificates: None,
             message_fragmenter: MessageFragmenter::default(),
-            received_plaintext: ChunkVecBuffer::new(Some(0)),
+            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
 
@@ -1439,4 +1451,5 @@ pub(crate) enum Side {
 /// Data specific to the peer's side (client or server).
 pub trait SideData {}
 
+const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
 const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
