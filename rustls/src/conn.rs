@@ -709,21 +709,20 @@ impl<Data> ConnectionCommon<Data> {
             .send_some_plaintext(buf)
     }
 
-    /// Read TLS content from `rd`.  This method does internal
-    /// buffering, so `rd` can supply TLS messages in arbitrary-
-    /// sized chunks (like a socket or pipe might).
+    /// Read TLS content from `rd` into the internal buffer.
     ///
-    /// You should call [`process_new_packets`] each time a call to
-    /// this function succeeds.
+    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
+    /// a socket or pipe might).
     ///
-    /// The returned error only relates to IO on `rd`.  TLS-level
-    /// errors are emitted from [`process_new_packets`].
+    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
+    /// to empty the incoming TLS data buffer.
     ///
-    /// This function returns `Ok(0)` when the underlying `rd` does
-    /// so.  This typically happens when a socket is cleanly closed,
-    /// or a file is at EOF.
+    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
+    /// a socket is cleanly closed, or a file is at EOF. If the incoming TLS data buffer is full,
+    /// `read_tls()` will yield an `Err(io::Error)` with `ErrorKind::Other`. Other errors originate
+    /// from the IO done through `rd`; TLS-level errors are emitted from [`process_new_packets()`].
     ///
-    /// [`process_new_packets`]: Connection::process_new_packets
+    /// [`process_new_packets()`]: Connection::process_new_packets
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         let res = self.message_deframer.read(rd);
         if let Ok(0) = res {
