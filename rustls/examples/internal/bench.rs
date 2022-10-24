@@ -54,22 +54,24 @@ where
     duration_nanos(end.duration_since(start))
 }
 
-fn transfer<L, R, LS, RS>(left: &mut L, right: &mut R) -> f64
+fn transfer<L, R, LS, RS>(left: &mut L, right: &mut R, expect_data: Option<usize>) -> f64
 where
     L: DerefMut + Deref<Target = ConnectionCommon<LS>>,
     R: DerefMut + Deref<Target = ConnectionCommon<RS>>,
     LS: SideData,
     RS: SideData,
 {
-    let mut buf = [0u8; 262144];
+    let mut tls_buf = [0u8; 262144];
     let mut read_time = 0f64;
+    let mut data_left = expect_data;
+    let mut data_buf = [0u8; 8192];
 
     loop {
         let mut sz = 0;
 
         while left.wants_write() {
             let written = left
-                .write_tls(&mut buf[sz..].as_mut())
+                .write_tls(&mut tls_buf[sz..].as_mut())
                 .unwrap();
             if written == 0 {
                 break;
@@ -85,7 +87,7 @@ where
         let mut offs = 0;
         loop {
             let start = Instant::now();
-            match right.read_tls(&mut buf[offs..sz].as_ref()) {
+            match right.read_tls(&mut tls_buf[offs..sz].as_ref()) {
                 Ok(read) => {
                     right.process_new_packets().unwrap();
                     offs += read;
@@ -95,27 +97,26 @@ where
                 }
             }
 
+            if let Some(left) = &mut data_left {
+                loop {
+                    let sz = match right.reader().read(&mut data_buf) {
+                        Ok(sz) => sz,
+                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
+                        Err(err) => panic!("failed to read data: {}", err),
+                    };
+
+                    *left -= sz;
+                    if *left == 0 {
+                        break;
+                    }
+                }
+            }
+
             let end = Instant::now();
             read_time += duration_nanos(end.duration_since(start));
             if sz == offs {
                 break;
             }
-        }
-    }
-}
-
-fn drain<C, S>(d: &mut C, expect_len: usize)
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
-    let mut left = expect_len;
-    let mut buf = [0u8; 8192];
-    loop {
-        let sz = d.reader().read(&mut buf).unwrap();
-        left -= sz;
-        if left == 0 {
-            break;
         }
     }
 }
@@ -393,16 +394,16 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
         let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
         server_time += time(|| {
-            transfer(&mut client, &mut server);
+            transfer(&mut client, &mut server, None);
         });
         client_time += time(|| {
-            transfer(&mut server, &mut client);
+            transfer(&mut server, &mut client, None);
         });
         server_time += time(|| {
-            transfer(&mut client, &mut server);
+            transfer(&mut client, &mut server, None);
         });
         client_time += time(|| {
-            transfer(&mut server, &mut client);
+            transfer(&mut server, &mut client, None);
         });
     }
 
@@ -436,8 +437,8 @@ fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: Resu
 
 fn do_handshake_step(client: &mut ClientConnection, server: &mut ServerConnection) -> bool {
     if server.is_handshaking() || client.is_handshaking() {
-        transfer(client, server);
-        transfer(server, client);
+        transfer(client, server, None);
+        transfer(server, client, None);
         true
     } else {
         false
@@ -482,8 +483,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
             server.writer().write_all(&buf).unwrap();
         });
 
-        time_recv += transfer(&mut server, &mut client);
-        drain(&mut client, buf.len());
+        time_recv += transfer(&mut server, &mut client, Some(buf.len()));
     }
 
     let mfs_str = format!(
@@ -550,12 +550,7 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
         .iter_mut()
         .zip(servers.iter_mut())
     {
-        transfer(client, server);
-        let mut buf = [0u8; 1024];
-        server
-            .reader()
-            .read_exact(&mut buf)
-            .unwrap();
+        transfer(client, server, Some(1024));
     }
 }
 
