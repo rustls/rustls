@@ -265,7 +265,7 @@
     trivial_casts,
     trivial_numeric_casts,
     missing_docs,
-    //unreachable_pub, https://github.com/rust-lang/rust/issues/102352
+    unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
     unused_qualifications
