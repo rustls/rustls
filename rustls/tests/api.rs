@@ -4315,3 +4315,70 @@ fn test_secret_extraction_disabled_or_too_early() {
         assert_eq!(client_enable, client.extract_secrets().is_ok());
     }
 }
+
+#[test]
+fn test_received_plaintext_backpressure() {
+    let suite = rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
+    let kt = KeyType::Rsa;
+
+    let server_config = Arc::new(
+        ServerConfig::builder()
+            .with_cipher_suites(&[suite])
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(kt.get_chain(), kt.get_key())
+            .unwrap(),
+    );
+
+    let client_config = Arc::new(make_client_config(kt));
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    // Fill the server's received plaintext buffer with 16k bytes
+    let client_buf = [0; 16_385];
+    dbg!(client
+        .writer()
+        .write(&client_buf)
+        .unwrap());
+    let mut network_buf = Vec::with_capacity(32_768);
+    let sent = dbg!(client
+        .write_tls(&mut network_buf)
+        .unwrap());
+    assert_eq!(
+        sent,
+        dbg!(server
+            .read_tls(&mut &network_buf[..sent])
+            .unwrap())
+    );
+    server.process_new_packets().unwrap();
+
+    // Send two more bytes from client to server
+    dbg!(client
+        .writer()
+        .write(&client_buf[..2])
+        .unwrap());
+    let sent = dbg!(client
+        .write_tls(&mut network_buf)
+        .unwrap());
+
+    // Get an error because the received plaintext buffer is full
+    assert!(server
+        .read_tls(&mut &network_buf[..sent])
+        .is_err());
+
+    // Read out some of the plaintext
+    server
+        .reader()
+        .read_exact(&mut [0; 2])
+        .unwrap();
+
+    // Now there's room again in the plaintext buffer
+    assert_eq!(
+        server
+            .read_tls(&mut &network_buf[..sent])
+            .unwrap(),
+        24
+    );
+}
