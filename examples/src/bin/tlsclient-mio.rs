@@ -291,9 +291,9 @@ If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient [options] [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] <hostname>
-  tlsclient (--version | -v)
-  tlsclient (--help | -h)
+  tlsclient-mio [options] [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] <hostname>
+  tlsclient-mio (--version | -v)
+  tlsclient-mio (--help | -h)
 
 Options:
     -p, --port PORT     Connect to PORT [default: 443].
