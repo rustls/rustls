@@ -159,7 +159,7 @@ If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient-mio [options] [--suite SUITE ...] [--proto PROTO ...] <hostname>
+  tlsclient-mio [options] [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] <hostname>
   tlsclient-mio (--version | -v)
   tlsclient-mio (--help | -h)
 
@@ -224,9 +224,9 @@ localhost:fport.
 RSA private key.
 
 Usage:
-  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] echo
-  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] http
-  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] forward <fport>
+  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] [options] echo
+  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] [options] http
+  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] [options] forward <fport>
   tlsserver-mio (--version | -v)
   tlsserver-mio (--help | -h)
 
