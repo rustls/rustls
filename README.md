@@ -207,9 +207,9 @@ Connection closed
 ```
 
 ## Server example program
-The server example program is named `tlsserver`.  The interface looks like:
+The server example program is named `tlsserver-mio`.  The interface looks like:
 
-```tlsserver
+```tlsserver-mio
 Runs a TLS server on :PORT.  The default PORT is 443.
 
 `echo' mode means the server echoes received data on each connection.
@@ -224,11 +224,11 @@ localhost:fport.
 RSA private key.
 
 Usage:
-  tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] echo
-  tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] http
-  tlsserver --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] forward <fport>
-  tlsserver (--version | -v)
-  tlsserver (--help | -h)
+  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] echo
+  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] http
+  tlsserver-mio --certs CERTFILE --key KEYFILE [--suite SUITE ...] [--proto PROTO ...] [options] forward <fport>
+  tlsserver-mio (--version | -v)
+  tlsserver-mio (--help | -h)
 
 Options:
     -p, --port PORT     Listen on PORT [default: 443].
@@ -261,7 +261,7 @@ Here's a sample run; we start a TLS echo server, then connect to it with
 `openssl` and `tlsclient-mio`:
 
 ```
-$ cargo run --example tlsserver -- --certs test-ca/rsa/end.fullchain --key test-ca/rsa/end.rsa -p 8443 echo &
+$ cargo run --bin tlsserver-mio -- --certs test-ca/rsa/end.fullchain --key test-ca/rsa/end.rsa -p 8443 echo &
 $ echo hello world | openssl s_client -ign_eof -quiet -connect localhost:8443
 depth=2 CN = ponytown RSA CA
 verify error:num=19:self signed certificate in certificate chain
