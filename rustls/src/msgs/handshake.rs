@@ -1595,7 +1595,7 @@ impl Codec for ECParameters {
 #[derive(Debug, Clone)]
 pub struct DigitallySignedStruct {
     pub scheme: SignatureScheme,
-    #[deprecated(since = "0.20.7", note = "Use sig() accessor")]
+    #[deprecated(since = "0.20.7", note = "Use signature() accessor")]
     pub sig: PayloadU16,
 }
 
