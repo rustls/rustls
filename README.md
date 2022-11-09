@@ -142,6 +142,9 @@ At the time of writing this means x86, x86-64, armv7, and aarch64.
 
 Rustls requires Rust 1.56 or later.
 
+# Migrating from OpenSSL
+See [OpenSSL migration guide](./OPENSSL.md).
+
 # Example code
 There are two example programs which use
 [mio](https://github.com/carllerche/mio) to do asynchronous IO.
