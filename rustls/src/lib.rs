@@ -355,6 +355,10 @@ pub mod internal {
     pub mod cipher {
         pub use crate::cipher::MessageDecrypter;
     }
+    /// Low-level TLS state machine types.
+    pub mod state {
+        pub use crate::conn::{Context, State};
+    }
 }
 
 // The public interface is:

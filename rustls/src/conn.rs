@@ -1374,13 +1374,16 @@ impl CommonState {
     }
 }
 
-pub(crate) trait State<Data>: Send + Sync {
+/// The TLS state machine
+pub trait State<Data>: Send + Sync {
+    /// Handle a message from the state machine
     fn handle(
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
         message: Message,
     ) -> Result<Box<dyn State<Data>>, Error>;
 
+    /// Export keying material to `output`, according to a `label`, together with a `context`
     fn export_keying_material(
         &self,
         _output: &mut [u8],
@@ -1395,10 +1398,12 @@ pub(crate) trait State<Data>: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
+    /// Used in TLS 1.3 to write key updates into the state
     fn perhaps_write_key_update(&mut self, _cx: &mut CommonState) {}
 }
 
-pub(crate) struct Context<'a, Data> {
+/// Context common to TLS state machines
+pub struct Context<'a, Data> {
     pub(crate) common: &'a mut CommonState,
     pub(crate) data: &'a mut Data,
 }
