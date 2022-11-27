@@ -471,7 +471,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     if args.flag_cafile.is_some() {
         let cafile = args.flag_cafile.as_ref().unwrap();
 
-        let certfile = fs::File::open(&cafile).expect("Cannot open CA file");
+        let certfile = fs::File::open(cafile).expect("Cannot open CA file");
         let mut reader = BufReader::new(certfile);
         root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
     } else {
