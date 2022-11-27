@@ -541,7 +541,7 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
 fn load_ocsp(filename: &Option<String>) -> Vec<u8> {
     let mut ret = Vec::new();
 
-    if let &Some(ref name) = filename {
+    if let Some(name) = filename {
         fs::File::open(name)
             .expect("cannot open ocsp file")
             .read_to_end(&mut ret)

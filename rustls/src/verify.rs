@@ -619,7 +619,7 @@ pub struct NoClientAuth;
 impl NoClientAuth {
     /// Constructs a `NoClientAuth` and wraps it in an `Arc`.
     pub fn new() -> Arc<dyn ClientCertVerifier> {
-        Arc::new(NoClientAuth)
+        Arc::new(Self)
     }
 }
 
