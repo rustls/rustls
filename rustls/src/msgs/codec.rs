@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 use std::fmt::Debug;
 
 /// Wrapper over a slice of bytes that allows reading chunks from

@@ -15,7 +15,6 @@ use rustls::server::ClientHello;
 use rustls::{CipherSuite, ProtocolVersion};
 use rustls::{ClientConnection, Connection, ServerConnection};
 
-use std::convert::TryInto;
 use std::env;
 use std::fs;
 use std::io;

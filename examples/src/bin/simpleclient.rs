@@ -9,7 +9,6 @@
 /// that is sensible outside of example code.
 use std::sync::Arc;
 
-use std::convert::TryInto;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 

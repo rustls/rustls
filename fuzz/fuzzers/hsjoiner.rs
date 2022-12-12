@@ -2,7 +2,6 @@
 #[macro_use] extern crate libfuzzer_sys;
 extern crate rustls;
 
-use std::convert::TryFrom;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::hsjoiner;
 use rustls::internal::msgs::message;

@@ -20,7 +20,6 @@ use super::hs;
 #[cfg(feature = "quic")]
 use crate::quic;
 
-use std::convert::TryFrom;
 use std::error::Error as StdError;
 use std::marker::PhantomData;
 use std::net::IpAddr;
@@ -216,7 +215,6 @@ impl ClientConfig {
 /// so you can do:
 ///
 /// ```
-/// # use std::convert::{TryInto, TryFrom};
 /// # use rustls::ServerName;
 /// ServerName::try_from("example.com").expect("invalid DNS name");
 ///

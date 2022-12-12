@@ -126,7 +126,6 @@ mod tests {
     use super::MessageDeframer;
     use crate::msgs::message::{Message, OpaqueMessage};
     use crate::{msgs, Error};
-    use std::convert::TryFrom;
     use std::io;
 
     const FIRST_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.1.bin");

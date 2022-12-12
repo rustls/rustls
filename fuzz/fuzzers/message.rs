@@ -5,7 +5,6 @@ extern crate rustls;
 
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, PlainMessage, OpaqueMessage};
-use std::convert::TryFrom;
 
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);

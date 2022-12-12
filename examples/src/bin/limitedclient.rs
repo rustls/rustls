@@ -3,7 +3,6 @@
 /// observe using `nm` that the binary of this program does not contain any AES code.
 use std::sync::Arc;
 
-use std::convert::TryInto;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 

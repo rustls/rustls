@@ -9,7 +9,6 @@ use rustls::{
     ClientConnection,
     RootCertStore
 };
-use std::convert::TryInto;
 use std::io;
 use std::sync::Arc;
 
