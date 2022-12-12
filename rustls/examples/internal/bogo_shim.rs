@@ -4,7 +4,7 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use base64;
+use base64::prelude::{Engine, BASE64_STANDARD};
 use env_logger;
 use rustls;
 
@@ -945,20 +945,20 @@ fn main() {
                 opts.export_keying_material_context_used = true;
             }
             "-quic-transport-params" => {
-                opts.quic_transport_params = base64::decode(args.remove(0).as_bytes())
+                opts.quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
             }
             "-expect-quic-transport-params" => {
-                opts.expect_quic_transport_params = base64::decode(args.remove(0).as_bytes())
+                opts.expect_quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
             }
 
             "-ocsp-response" => {
-                opts.server_ocsp_response = base64::decode(args.remove(0).as_bytes())
+                opts.server_ocsp_response = BASE64_STANDARD.decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
             }
             "-signed-cert-timestamps" => {
-                opts.server_sct_list = base64::decode(args.remove(0).as_bytes())
+                opts.server_sct_list = BASE64_STANDARD.decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
 
                 if opts.server_sct_list.len() == 2 &&
