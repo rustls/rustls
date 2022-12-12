@@ -1,8 +1,5 @@
 //! Assorted public API tests.
 use std::cell::RefCell;
-use std::convert::TryFrom;
-#[cfg(feature = "tls12")]
-use std::convert::TryInto;
 use std::fmt;
 use std::io::{self, IoSlice, Read, Write};
 use std::mem;

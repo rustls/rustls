@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use mio::net::TcpStream;
 
 use std::collections;
-use std::convert::TryInto;
 use std::fs;
 use std::io;
 use std::io::{BufReader, Read, Write};

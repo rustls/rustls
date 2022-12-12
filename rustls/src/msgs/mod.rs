@@ -30,8 +30,6 @@ mod message_test;
 
 #[cfg(test)]
 mod test {
-    use std::convert::TryFrom;
-
     #[test]
     fn smoketest() {
         use super::codec::Reader;

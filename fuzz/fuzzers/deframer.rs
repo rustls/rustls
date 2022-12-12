@@ -5,7 +5,6 @@ extern crate rustls;
 
 use rustls::internal::msgs::deframer;
 use rustls::internal::msgs::message::Message;
-use std::convert::TryFrom;
 use std::io;
 
 fuzz_target!(|data: &[u8]| {

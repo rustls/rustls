@@ -7,7 +7,6 @@ use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::fragmenter::MessageFragmenter;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
-use std::convert::TryFrom;
 
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);

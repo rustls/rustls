@@ -4,7 +4,7 @@ name = "rustls-fuzz"
 version = "0.0.1"
 authors = ["Automatically generated"]
 publish = false
-resolver = "2"
+edition = "2021"
 
 [package.metadata]
 cargo-fuzz = true

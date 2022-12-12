@@ -5,7 +5,6 @@ use super::codec::Reader;
 use super::enums::{AlertDescription, AlertLevel, HandshakeType};
 use super::message::{Message, OpaqueMessage, PlainMessage};
 
-use std::convert::TryFrom;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};

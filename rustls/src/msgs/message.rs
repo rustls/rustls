@@ -7,8 +7,6 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, HandshakeType};
 use crate::msgs::handshake::HandshakeMessagePayload;
 
-use std::convert::TryFrom;
-
 #[derive(Debug)]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),

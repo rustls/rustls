@@ -6,8 +6,6 @@ use crate::key::Certificate;
 use crate::ticketer::TimeBase;
 use crate::tls13::TLS13_AES_128_GCM_SHA256;
 
-use std::convert::TryInto;
-
 #[test]
 fn clientsessionkey_is_debug() {
     let name = "hello".try_into().unwrap();

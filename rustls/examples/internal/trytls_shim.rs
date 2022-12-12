@@ -5,7 +5,6 @@
 //
 
 use rustls::{ClientConfig, ClientConnection, Error, OwnedTrustAnchor, RootCertStore};
-use std::convert::TryInto;
 use std::env;
 use std::error::Error as StdError;
 use std::fs::File;

@@ -133,7 +133,6 @@
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # use std::convert::TryInto;
 //! # let mut root_store = rustls::RootCertStore::empty();
 //! # root_store.add_server_trust_anchors(
 //! #  webpki_roots::TLS_SERVER_ROOTS
