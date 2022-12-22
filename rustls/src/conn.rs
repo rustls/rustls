@@ -10,7 +10,7 @@ use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::Random;
-use crate::msgs::hsjoiner::HandshakeJoiner;
+use crate::msgs::hsjoiner::{HandshakeJoiner, JoinerError};
 use crate::msgs::message::{
     BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, PlainMessage,
 };
@@ -544,12 +544,8 @@ impl<Data> ConnectionCommon<Data> {
         };
 
         let msg = msg.into_plain_message();
-        if !self.handshake_joiner.want_message(&msg) {
-            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
-        }
-
         self.handshake_joiner
-            .take_message(msg)
+            .push(msg)
             .and_then(|aligned| {
                 self.common_state.aligned_handshake = aligned;
                 self.handshake_joiner.pop()
@@ -614,25 +610,28 @@ impl<Data> ConnectionCommon<Data> {
             false => msg.into_plain_message(),
         };
 
-        // For handshake messages, we need to join them before parsing
-        // and processing.
-        if self.handshake_joiner.want_message(&msg) {
-            // First decryptable handshake message concludes trial decryption
-            self.common_state
-                .record_layer
-                .finish_trial_decryption();
+        // For handshake messages, we need to join them before parsing and processing.
+        let msg = match self.handshake_joiner.push(msg) {
+            // Handshake message, we handle these in another method.
+            Ok(aligned) => {
+                self.common_state.aligned_handshake = aligned;
 
-            self.common_state.aligned_handshake = self
-                .handshake_joiner
-                .take_message(msg)
-                .map_err(|_| {
-                    self.common_state
-                        .send_fatal_alert(AlertDescription::DecodeError);
-                    Error::CorruptMessagePayload(ContentType::Handshake)
-                })?;
+                // First decryptable handshake message concludes trial decryption
+                self.common_state
+                    .record_layer
+                    .finish_trial_decryption();
 
-            return self.process_new_handshake_messages(state);
-        }
+                return self.process_new_handshake_messages(state);
+            }
+            // Not a handshake message, continue to handle it here.
+            Err(JoinerError::Unwanted(msg)) => msg,
+            // Decoding the handshake message failed, yield an error.
+            Err(JoinerError::Decode) => {
+                self.common_state
+                    .send_fatal_alert(AlertDescription::DecodeError);
+                return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+            }
+        };
 
         // Now we can fully parse the message payload.
         let msg = Message::try_from(msg)?;
@@ -819,11 +818,7 @@ impl<Data> ConnectionCommon<Data> {
             payload: Payload::new(plaintext.to_vec()),
         };
 
-        if self
-            .handshake_joiner
-            .take_message(msg)
-            .is_err()
-        {
+        if self.handshake_joiner.push(msg).is_err() {
             self.common_state.quic.alert = Some(AlertDescription::DecodeError);
             return Err(Error::CorruptMessage);
         }
