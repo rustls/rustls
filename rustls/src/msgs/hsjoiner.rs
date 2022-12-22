@@ -113,25 +113,22 @@ impl HandshakeJoiner {
     ///
     /// Returns false if the stream is desynchronised beyond repair.
     fn deframe_one(&mut self, version: ProtocolVersion) -> bool {
-        let used = {
-            let mut rd = codec::Reader::init(&self.buf);
-            let parsed = match HandshakeMessagePayload::read_version(&mut rd, version) {
-                Some(p) => p,
-                None => return false,
-            };
-
-            let m = Message {
-                version,
-                payload: MessagePayload::Handshake {
-                    parsed,
-                    encoded: Payload::new(&self.buf[..rd.used()]),
-                },
-            };
-
-            self.frames.push_back(m);
-            rd.used()
+        let mut rd = codec::Reader::init(&self.buf);
+        let parsed = match HandshakeMessagePayload::read_version(&mut rd, version) {
+            Some(p) => p,
+            None => return false,
         };
-        self.buf = self.buf.split_off(used);
+
+        let m = Message {
+            version,
+            payload: MessagePayload::Handshake {
+                parsed,
+                encoded: Payload::new(&self.buf[..rd.used()]),
+            },
+        };
+
+        self.frames.push_back(m);
+        self.buf = self.buf.split_off(rd.used());
         true
     }
 }
