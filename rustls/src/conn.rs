@@ -559,7 +559,7 @@ impl<Data> ConnectionCommon<Data> {
         }
 
         self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
-        Ok(self.handshake_joiner.frames.pop_front())
+        Ok(self.handshake_joiner.pop())
     }
 
     pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
@@ -692,7 +692,7 @@ impl<Data> ConnectionCommon<Data> {
         mut state: Box<dyn State<Data>>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
-        while let Some(msg) = self.handshake_joiner.frames.pop_front() {
+        while let Some(msg) = self.handshake_joiner.pop() {
             state = self
                 .common_state
                 .process_main_protocol(msg, state, &mut self.data)?;
