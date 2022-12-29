@@ -19,19 +19,26 @@ const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
 /// TLS messages output from this layer contain precisely
 /// one handshake payload.
 pub struct HandshakeJoiner {
-    /// Completed handshake frames for output.
-    frames: VecDeque<Message>,
-
-    /// The message payload we're currently accumulating.
+    /// The message payload(s) we're currently accumulating.
     buf: Vec<u8>,
+
+    /// Sizes of messages currently in the buffer.
+    ///
+    /// The buffer can be larger than the sum of the sizes in this queue, because it might contain
+    /// the start of a message that hasn't fully been received yet as its suffix.
+    sizes: VecDeque<usize>,
+
+    /// Version of the protocol we're currently parsing.
+    version: ProtocolVersion,
 }
 
 impl HandshakeJoiner {
     /// Make a new HandshakeJoiner.
     pub fn new() -> Self {
         Self {
-            frames: VecDeque::new(),
             buf: Vec::new(),
+            sizes: VecDeque::new(),
+            version: ProtocolVersion::TLSv1_2,
         }
     }
 
@@ -40,16 +47,12 @@ impl HandshakeJoiner {
         msg.typ == ContentType::Handshake
     }
 
-    /// Do we have any buffered data?
-    pub fn is_empty(&self) -> bool {
-        self.buf.is_empty()
-    }
-
     /// Take the message, and join/split it as needed.
     ///
-    /// Returns a `JoinerError` if `msg` or a preceding message was corrupt.
-    /// You cannot recover from this situation.
-    pub fn take_message(&mut self, msg: PlainMessage) -> Result<(), JoinerError> {
+    /// Returns an `Err` if a received payload has an advertised size larger than we accept,
+    /// or a `bool` to indicate whether the handshake is "aligned": if the buffer currently
+    /// only contains complete payloads (that is, no incomplete message in the suffix).
+    pub fn take_message(&mut self, msg: PlainMessage) -> Result<bool, JoinerError> {
         // The vast majority of the time `self.buf` will be empty since most
         // handshake messages arrive in a single fragment. Avoid allocating and
         // copying in that common case.
@@ -60,22 +63,36 @@ impl HandshakeJoiner {
                 .extend_from_slice(&msg.payload.0[..]);
         }
 
-        loop {
-            let len = match payload_size(&self.buf)? {
-                Some(len) => len,
-                None => break,
-            };
-
-            let msg = parse_message(&self.buf[..len], msg.version)?;
-            self.buf.drain(..len);
-            self.frames.push_back(msg);
+        if msg.version == ProtocolVersion::TLSv1_3 {
+            self.version = msg.version;
         }
 
-        Ok(())
+        // Check the suffix of the buffer that hasn't been covered by `sizes` so far
+        // for complete messages. If we find any, update `self.sizes` and `complete`.
+        let mut complete = self.sizes.iter().copied().sum();
+        while let Some(size) = payload_size(&self.buf[complete..])? {
+            self.sizes.push_back(size);
+            complete += size;
+        }
+
+        // Use the value of `complete` to determine if the buffer currently contains any
+        // incomplete messages. If not, an incoming message is said to be "aligned".
+        Ok(complete == self.buf.len())
     }
 
-    pub fn pop(&mut self) -> Option<Message> {
-        self.frames.pop_front()
+    /// Parse the first received message out of the buffer.
+    ///
+    /// Returns `Ok(None)` if we don't have a complete message in the buffer, or `Err` if we
+    /// fail to parse the first message in the buffer.
+    pub fn pop(&mut self) -> Result<Option<Message>, JoinerError> {
+        let len = match self.sizes.pop_front() {
+            Some(len) => len,
+            None => return Ok(None),
+        };
+
+        let msg = parse_message(&self.buf[..len], self.version)?;
+        self.buf.drain(..len);
+        Ok(Some(msg))
     }
 }
 
@@ -136,7 +153,6 @@ mod tests {
     #[test]
     fn want() {
         let hj = HandshakeJoiner::new();
-        assert!(hj.is_empty());
 
         let wanted = PlainMessage {
             typ: ContentType::Handshake,
@@ -155,7 +171,7 @@ mod tests {
     }
 
     fn pop_eq(expect: &PlainMessage, hj: &mut HandshakeJoiner) {
-        let got = hj.frames.pop_front().unwrap();
+        let got = hj.pop().unwrap().unwrap();
         assert_eq!(got.payload.content_type(), expect.typ);
         assert_eq!(got.version, expect.version);
 
@@ -179,8 +195,7 @@ mod tests {
         };
 
         assert!(hj.want_message(&msg));
-        hj.take_message(msg).unwrap();
-        assert!(hj.is_empty());
+        assert!(hj.take_message(msg).unwrap());
 
         let expect = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -208,14 +223,14 @@ mod tests {
         };
 
         assert!(hj.want_message(&msg));
-        hj.take_message(msg).unwrap_err();
+        hj.take_message(msg).unwrap();
+        hj.pop().unwrap_err();
     }
 
     #[test]
     fn join() {
         // Check we join one handshake message split over two PDUs.
         let mut hj = HandshakeJoiner::new();
-        assert!(hj.is_empty());
 
         // Introduce Finished of 16 bytes, providing 4.
         let mut msg = PlainMessage {
@@ -226,7 +241,6 @@ mod tests {
 
         assert!(hj.want_message(&msg));
         hj.take_message(msg).unwrap();
-        assert!(!hj.is_empty());
 
         // 11 more bytes.
         msg = PlainMessage {
@@ -236,8 +250,7 @@ mod tests {
         };
 
         assert!(hj.want_message(&msg));
-        hj.take_message(msg).unwrap();
-        assert!(!hj.is_empty());
+        assert!(!hj.take_message(msg).unwrap());
 
         // Final 1 byte.
         msg = PlainMessage {
@@ -247,8 +260,7 @@ mod tests {
         };
 
         assert!(hj.want_message(&msg));
-        hj.take_message(msg).unwrap();
-        assert!(hj.is_empty());
+        assert!(hj.take_message(msg).unwrap());
 
         let payload = b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f".to_vec();
         let expect = Message {
@@ -274,6 +286,5 @@ mod tests {
 
         assert!(hj.want_message(&msg));
         hj.take_message(msg).unwrap_err();
-        assert!(!hj.is_empty());
     }
 }

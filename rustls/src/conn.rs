@@ -548,18 +548,17 @@ impl<Data> ConnectionCommon<Data> {
             return Err(Error::CorruptMessagePayload(ContentType::Handshake));
         }
 
-        if self
-            .handshake_joiner
+        self.handshake_joiner
             .take_message(msg)
-            .is_err()
-        {
-            self.common_state
-                .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
-        }
-
-        self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
-        Ok(self.handshake_joiner.pop())
+            .and_then(|aligned| {
+                self.common_state.aligned_handshake = aligned;
+                self.handshake_joiner.pop()
+            })
+            .map_err(|_| {
+                self.common_state
+                    .send_fatal_alert(AlertDescription::DecodeError);
+                Error::CorruptMessagePayload(ContentType::Handshake)
+            })
     }
 
     pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
@@ -623,13 +622,15 @@ impl<Data> ConnectionCommon<Data> {
                 .record_layer
                 .finish_trial_decryption();
 
-            self.handshake_joiner
+            self.common_state.aligned_handshake = self
+                .handshake_joiner
                 .take_message(msg)
                 .map_err(|_| {
                     self.common_state
                         .send_fatal_alert(AlertDescription::DecodeError);
                     Error::CorruptMessagePayload(ContentType::Handshake)
                 })?;
+
             return self.process_new_handshake_messages(state);
         }
 
@@ -691,14 +692,29 @@ impl<Data> ConnectionCommon<Data> {
         &mut self,
         mut state: Box<dyn State<Data>>,
     ) -> Result<Box<dyn State<Data>>, Error> {
-        self.common_state.aligned_handshake = self.handshake_joiner.is_empty();
-        while let Some(msg) = self.handshake_joiner.pop() {
-            state = self
-                .common_state
-                .process_main_protocol(msg, state, &mut self.data)?;
-        }
+        loop {
+            match self.handshake_joiner.pop() {
+                Ok(Some(msg)) => {
+                    state = self
+                        .common_state
+                        .process_main_protocol(msg, state, &mut self.data)?;
+                }
+                Ok(None) => return Ok(state),
+                Err(_) => {
+                    #[cfg(feature = "quic")]
+                    if self.common_state.is_quic() {
+                        self.common_state.quic.alert = Some(AlertDescription::DecodeError);
+                    }
 
-        Ok(state)
+                    if !self.common_state.is_quic() {
+                        self.common_state
+                            .send_fatal_alert(AlertDescription::DecodeError);
+                    }
+
+                    return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+                }
+            }
+        }
     }
 
     pub(crate) fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {

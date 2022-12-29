@@ -19,7 +19,7 @@ fuzz_target!(|data: &[u8]| {
         let _ = jnr.take_message(msg);
     }
 
-    while let Some(msg) = jnr.pop() {
+    while let Ok(Some(msg)) = jnr.pop() {
         message::Message::try_from(msg).unwrap();
     }
 });
