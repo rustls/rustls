@@ -67,42 +67,38 @@ impl HandshakeJoiner {
         }
 
         loop {
-            match payload_size(&self.buf)? {
-                Some(_) => {}
+            let len = match payload_size(&self.buf)? {
+                Some(len) => len,
                 None => break,
-            }
+            };
 
-            if !self.deframe_one(msg.version) {
-                return Err(JoinerError::Decode);
-            }
+            let msg = parse_message(&self.buf[..len], msg.version)?;
+            self.buf.drain(..len);
+            self.frames.push_back(msg);
         }
 
         Ok(())
     }
+}
 
-    /// Take a TLS handshake payload off the front of `buf`, and put it onto
-    /// the back of our `frames` deque inside a normal `Message`.
-    ///
-    /// Returns false if the stream is desynchronised beyond repair.
-    fn deframe_one(&mut self, version: ProtocolVersion) -> bool {
-        let mut rd = codec::Reader::init(&self.buf);
-        let parsed = match HandshakeMessagePayload::read_version(&mut rd, version) {
-            Some(p) => p,
-            None => return false,
-        };
+/// Try to parse a TLS handshake payload from `buf` according to the given `version`.
+///
+/// Returns `Err` if we failed to parse the payload, including if the `buf` contains data after
+/// the payload: we have to consume all of `buf` for this function to succeed.
+fn parse_message(buf: &[u8], version: ProtocolVersion) -> Result<Message, JoinerError> {
+    let mut rd = codec::Reader::init(buf);
+    let parsed = match HandshakeMessagePayload::read_version(&mut rd, version) {
+        Some(p) => p,
+        None => return Err(JoinerError::Decode),
+    };
 
-        let m = Message {
-            version,
-            payload: MessagePayload::Handshake {
-                parsed,
-                encoded: Payload::new(&self.buf[..rd.used()]),
-            },
-        };
-
-        self.frames.push_back(m);
-        self.buf = self.buf.split_off(rd.used());
-        true
-    }
+    Ok(Message {
+        version,
+        payload: MessagePayload::Handshake {
+            parsed,
+            encoded: Payload::new(buf),
+        },
+    })
 }
 
 /// Does `buf` contain a full handshake payload?
