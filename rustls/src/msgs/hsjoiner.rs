@@ -91,30 +91,28 @@ impl HandshakeJoiner {
             None => return Ok(None),
         };
 
-        let msg = parse_message(&self.buf[..len], self.version)?;
+        // Parse the first part of the buffer as a handshake buffer.
+        // If we get `None` back, we've failed to parse the message.
+        // If we succeed, drain the relevant bytes from the buffer.
+
+        let buf = &self.buf[..len];
+        let mut rd = codec::Reader::init(buf);
+        let parsed = match HandshakeMessagePayload::read_version(&mut rd, self.version) {
+            Some(p) => p,
+            None => return Err(JoinerError::Decode),
+        };
+
+        let message = Message {
+            version: self.version,
+            payload: MessagePayload::Handshake {
+                parsed,
+                encoded: Payload::new(buf),
+            },
+        };
+
         self.buf.drain(..len);
-        Ok(Some(msg))
+        Ok(Some(message))
     }
-}
-
-/// Try to parse a TLS handshake payload from `buf` according to the given `version`.
-///
-/// Returns `Err` if we failed to parse the payload, including if the `buf` contains data after
-/// the payload: we have to consume all of `buf` for this function to succeed.
-fn parse_message(buf: &[u8], version: ProtocolVersion) -> Result<Message, JoinerError> {
-    let mut rd = codec::Reader::init(buf);
-    let parsed = match HandshakeMessagePayload::read_version(&mut rd, version) {
-        Some(p) => p,
-        None => return Err(JoinerError::Decode),
-    };
-
-    Ok(Message {
-        version,
-        payload: MessagePayload::Handshake {
-            parsed,
-            encoded: Payload::new(buf),
-        },
-    })
 }
 
 /// Does `buf` contain a full handshake payload?
