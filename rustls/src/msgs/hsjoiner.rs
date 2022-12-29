@@ -32,17 +32,6 @@ impl Default for HandshakeJoiner {
     }
 }
 
-enum BufferState {
-    /// Buffer contains a header that introduces a message that is too long.
-    MessageTooLarge,
-
-    /// Buffer contains a full header and body.
-    OneMessage,
-
-    /// We need more data to see a header and complete body.
-    NeedsMoreData,
-}
-
 impl HandshakeJoiner {
     /// Make a new HandshakeJoiner.
     pub fn new() -> Self {
@@ -78,34 +67,17 @@ impl HandshakeJoiner {
         }
 
         loop {
-            match self.buf_contains_message() {
-                BufferState::MessageTooLarge => return Err(JoinerError::Decode),
-                BufferState::NeedsMoreData => break,
-                BufferState::OneMessage => {
-                    if !self.deframe_one(msg.version) {
-                        return Err(JoinerError::Decode);
-                    }
-                }
+            match payload_size(&self.buf)? {
+                Some(_) => {}
+                None => break,
+            }
+
+            if !self.deframe_one(msg.version) {
+                return Err(JoinerError::Decode);
             }
         }
 
         Ok(())
-    }
-
-    /// Does our `buf` contain a full handshake payload?  It does if it is big
-    /// enough to contain a header, and that header has a length which falls
-    /// within `buf`.
-    fn buf_contains_message(&self) -> BufferState {
-        if self.buf.len() < HEADER_SIZE {
-            return BufferState::NeedsMoreData;
-        }
-
-        let (header, rest) = self.buf.split_at(HEADER_SIZE);
-        match codec::u24::decode(&header[1..]) {
-            Some(len) if len.0 > MAX_HANDSHAKE_SIZE => BufferState::MessageTooLarge,
-            Some(len) if rest.get(..len.into()).is_some() => BufferState::OneMessage,
-            _ => BufferState::NeedsMoreData,
-        }
     }
 
     /// Take a TLS handshake payload off the front of `buf`, and put it onto
@@ -130,6 +102,25 @@ impl HandshakeJoiner {
         self.frames.push_back(m);
         self.buf = self.buf.split_off(rd.used());
         true
+    }
+}
+
+/// Does `buf` contain a full handshake payload?
+///
+/// Returns `Ok(Some(_))` with the length of the payload (including header) if it does,
+/// `Ok(None)` if the buffer is too small to contain a message with the length advertised in the
+/// header, or `Err` if the advertised length is larger than what we want to accept
+/// (`MAX_HANDSHAKE_SIZE`).
+fn payload_size(buf: &[u8]) -> Result<Option<usize>, JoinerError> {
+    if buf.len() < HEADER_SIZE {
+        return Ok(None);
+    }
+
+    let (header, rest) = buf.split_at(HEADER_SIZE);
+    match codec::u24::decode(&header[1..]) {
+        Some(len) if len.0 > MAX_HANDSHAKE_SIZE => Err(JoinerError::Decode),
+        Some(len) if rest.get(..len.into()).is_some() => Ok(Some(HEADER_SIZE + usize::from(len))),
+        _ => Ok(None),
     }
 }
 
