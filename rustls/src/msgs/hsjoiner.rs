@@ -26,12 +26,6 @@ pub struct HandshakeJoiner {
     buf: Vec<u8>,
 }
 
-impl Default for HandshakeJoiner {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl HandshakeJoiner {
     /// Make a new HandshakeJoiner.
     pub fn new() -> Self {
