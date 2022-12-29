@@ -20,7 +20,7 @@ const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
 /// one handshake payload.
 pub struct HandshakeJoiner {
     /// Completed handshake frames for output.
-    pub frames: VecDeque<Message>,
+    frames: VecDeque<Message>,
 
     /// The message payload we're currently accumulating.
     buf: Vec<u8>,
@@ -78,6 +78,10 @@ impl HandshakeJoiner {
         }
 
         Ok(())
+    }
+
+    pub fn pop(&mut self) -> Option<Message> {
+        self.frames.pop_front()
     }
 }
 
