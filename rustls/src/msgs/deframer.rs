@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::io;
 
 use crate::error::Error;
@@ -9,9 +8,6 @@ use crate::msgs::message::{MessageError, OpaqueMessage};
 /// from arbitrary-sized reads, buffering as necessary.
 /// The input is `read()`, get the output from `pop()`.
 pub struct MessageDeframer {
-    /// Completed frames for output.
-    frames: VecDeque<OpaqueMessage>,
-
     /// Set to true if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
     /// the deframer cannot recover.
@@ -34,7 +30,6 @@ impl Default for MessageDeframer {
 impl MessageDeframer {
     pub fn new() -> Self {
         Self {
-            frames: VecDeque::new(),
             desynced: false,
             buf: Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]),
             used: 0,
@@ -48,29 +43,22 @@ impl MessageDeframer {
     pub fn pop(&mut self) -> Result<Option<OpaqueMessage>, Error> {
         if self.desynced {
             return Err(Error::CorruptMessage);
-        } else if let Some(msg) = self.frames.pop_front() {
-            return Ok(Some(msg));
         }
 
-        let mut taken = 0;
-        loop {
-            // Does our `buf` contain a full message?  It does if it is big enough to
-            // contain a header, and that header has a length which falls within `buf`.
-            // If so, deframe it and place the message onto the frames output queue.
-            let mut rd = codec::Reader::init(&self.buf[taken..self.used]);
-            let m = match OpaqueMessage::read(&mut rd) {
-                Ok(m) => m,
-                Err(MessageError::TooShortForHeader | MessageError::TooShortForLength) => break,
-                Err(_) => {
-                    self.desynced = true;
-                    return Err(Error::CorruptMessage);
-                }
-            };
+        // Does our `buf` contain a full message?  It does if it is big enough to
+        // contain a header, and that header has a length which falls within `buf`.
+        // If so, deframe it and place the message onto the frames output queue.
+        let mut rd = codec::Reader::init(&self.buf[..self.used]);
+        let m = match OpaqueMessage::read(&mut rd) {
+            Ok(m) => m,
+            Err(MessageError::TooShortForHeader | MessageError::TooShortForLength) => return Ok(None),
+            Err(_) => {
+                self.desynced = true;
+                return Err(Error::CorruptMessage);
+            }
+        };
 
-            taken += rd.used();
-            self.frames.push_back(m);
-        }
-
+        let taken = rd.used();
         #[allow(clippy::comparison_chain)]
         if taken < self.used {
             /* Before:
@@ -93,7 +81,7 @@ impl MessageDeframer {
             self.used = 0;
         }
 
-        Ok(self.frames.pop_front())
+        Ok(Some(m))
     }
 
     /// Read some bytes from `rd`, and add them to our internal buffer.
@@ -117,7 +105,7 @@ impl MessageDeframer {
     /// to process, either whole messages in our output
     /// queue or partial messages in our buffer.
     pub fn has_pending(&self) -> bool {
-        !self.frames.is_empty() || self.used > 0
+        self.used > 0
     }
 }
 
@@ -252,7 +240,6 @@ mod tests {
         assert!(!d.has_pending());
         input_whole_incremental(&mut d, FIRST_MESSAGE);
         assert!(d.has_pending());
-        assert_eq!(0, d.frames.len());
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -266,10 +253,8 @@ mod tests {
         assert!(d.has_pending());
         input_whole_incremental(&mut d, SECOND_MESSAGE);
         assert!(d.has_pending());
-        assert_eq!(0, d.frames.len());
         pop_first(&mut d);
         assert!(d.has_pending());
-        assert_eq!(1, d.frames.len());
         pop_second(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -281,7 +266,6 @@ mod tests {
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert!(d.has_pending());
-        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -293,9 +277,7 @@ mod tests {
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert_len(SECOND_MESSAGE.len(), input_bytes(&mut d, SECOND_MESSAGE));
-        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
-        assert_eq!(d.frames.len(), 1);
         pop_second(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -309,9 +291,7 @@ mod tests {
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, FIRST_MESSAGE, SECOND_MESSAGE),
         );
-        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
-        assert_eq!(d.frames.len(), 1);
         pop_second(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -325,9 +305,7 @@ mod tests {
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, SECOND_MESSAGE, FIRST_MESSAGE),
         );
-        assert_eq!(d.frames.len(), 0);
         pop_second(&mut d);
-        assert_eq!(d.frames.len(), 1);
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
@@ -342,7 +320,6 @@ mod tests {
             FIRST_MESSAGE.len() - 3,
             input_bytes(&mut d, &FIRST_MESSAGE[3..]),
         );
-        assert_eq!(d.frames.len(), 0);
         pop_first(&mut d);
         assert!(!d.has_pending());
         assert!(!d.desynced);
