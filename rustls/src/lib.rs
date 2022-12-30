@@ -356,6 +356,10 @@ pub mod internal {
     pub mod cipher {
         pub use crate::cipher::MessageDecrypter;
     }
+    /// Low-level TLS record layer functions.
+    pub mod record_layer {
+        pub use crate::record_layer::RecordLayer;
+    }
 }
 
 // The public interface is:
