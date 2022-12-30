@@ -16,7 +16,7 @@ use crate::msgs::message::{
 };
 #[cfg(feature = "quic")]
 use crate::quic;
-use crate::record_layer;
+use crate::record_layer::{self, Decrypted};
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
@@ -593,19 +593,30 @@ impl<Data> ConnectionCommon<Data> {
         let msg = match self
             .common_state
             .record_layer
-            .is_decrypting()
+            .decrypt_incoming(msg)
         {
-            true => match self.common_state.decrypt_incoming(msg) {
-                Ok(None) => {
-                    // message dropped
-                    return Ok(state);
+            Ok(Some(Decrypted {
+                want_close_before_decrypt,
+                plaintext,
+            })) => {
+                if want_close_before_decrypt {
+                    self.common_state.send_close_notify();
                 }
-                Err(e) => {
-                    return Err(e);
-                }
-                Ok(Some(msg)) => msg,
-            },
-            false => msg.into_plain_message(),
+
+                plaintext
+            }
+            Ok(None) => return Ok(state),
+            Err(Error::PeerSentOversizedRecord) => {
+                self.common_state
+                    .send_fatal_alert(AlertDescription::RecordOverflow);
+                return Err(Error::PeerSentOversizedRecord);
+            }
+            Err(Error::DecryptError) => {
+                self.common_state
+                    .send_fatal_alert(AlertDescription::BadRecordMac);
+                return Err(Error::DecryptError);
+            }
+            Err(e) => return Err(e),
         };
 
         // For handshake messages, we need to join them before parsing and processing.
@@ -1034,42 +1045,6 @@ impl CommonState {
     pub(crate) fn illegal_param(&mut self, why: &str) -> Error {
         self.send_fatal_alert(AlertDescription::IllegalParameter);
         Error::PeerMisbehavedError(why.to_string())
-    }
-
-    pub(crate) fn decrypt_incoming(
-        &mut self,
-        encr: OpaqueMessage,
-    ) -> Result<Option<PlainMessage>, Error> {
-        if self
-            .record_layer
-            .wants_close_before_decrypt()
-        {
-            self.send_close_notify();
-        }
-
-        let encrypted_len = encr.payload.0.len();
-        let plain = self.record_layer.decrypt_incoming(encr);
-
-        match plain {
-            Err(Error::PeerSentOversizedRecord) => {
-                self.send_fatal_alert(AlertDescription::RecordOverflow);
-                Err(Error::PeerSentOversizedRecord)
-            }
-            Err(Error::DecryptError)
-                if self
-                    .record_layer
-                    .doing_trial_decryption(encrypted_len) =>
-            {
-                trace!("Dropping undecryptable message after aborted early_data");
-                Ok(None)
-            }
-            Err(Error::DecryptError) => {
-                self.send_fatal_alert(AlertDescription::BadRecordMac);
-                Err(Error::DecryptError)
-            }
-            Err(e) => Err(e),
-            Ok(plain) => Ok(Some(plain)),
-        }
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
