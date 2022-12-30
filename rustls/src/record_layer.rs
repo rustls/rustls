@@ -2,6 +2,9 @@ use crate::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 
+#[cfg(feature = "logging")]
+use crate::log::trace;
+
 static SEQ_SOFT_LIMIT: u64 = 0xffff_ffff_ffff_0000u64;
 static SEQ_HARD_LIMIT: u64 = 0xffff_ffff_ffff_fffeu64;
 
@@ -48,10 +51,6 @@ impl RecordLayer {
         self.encrypt_state == DirectionState::Active
     }
 
-    pub(crate) fn is_decrypting(&self) -> bool {
-        self.decrypt_state == DirectionState::Active
-    }
-
     #[cfg(feature = "secret_extraction")]
     pub(crate) fn write_seq(&self) -> u64 {
         self.write_seq
@@ -62,7 +61,7 @@ impl RecordLayer {
         self.read_seq
     }
 
-    pub(crate) fn doing_trial_decryption(&mut self, requested: usize) -> bool {
+    fn doing_trial_decryption(&mut self, requested: usize) -> bool {
         match self
             .trial_decryption_len
             .and_then(|value| value.checked_sub(requested))
@@ -137,18 +136,6 @@ impl RecordLayer {
         self.trial_decryption_len = None;
     }
 
-    /// Return true if the peer appears to getting close to encrypting
-    /// too many messages with this key.
-    ///
-    /// Perhaps if we send an alert well before their counter wraps, a
-    /// buggy peer won't make a terrible mistake here?
-    ///
-    /// Note that there's no reason to refuse to decrypt: the security
-    /// failure has already happened.
-    pub(crate) fn wants_close_before_decrypt(&self) -> bool {
-        self.read_seq == SEQ_SOFT_LIMIT
-    }
-
     /// Return true if we are getting close to encrypting too many
     /// messages with our encryption key.
     pub(crate) fn wants_close_before_encrypt(&self) -> bool {
@@ -166,14 +153,45 @@ impl RecordLayer {
     /// `encr` is a decoded message allegedly received from the peer.
     /// If it can be decrypted, its decryption is returned.  Otherwise,
     /// an error is returned.
-    pub(crate) fn decrypt_incoming(&mut self, encr: OpaqueMessage) -> Result<PlainMessage, Error> {
-        debug_assert!(self.is_decrypting());
-        let seq = self.read_seq;
-        let msg = self
+    pub(crate) fn decrypt_incoming(
+        &mut self,
+        encr: OpaqueMessage,
+    ) -> Result<Option<Decrypted>, Error> {
+        if self.decrypt_state != DirectionState::Active {
+            return Ok(Some(Decrypted {
+                want_close_before_decrypt: false,
+                plaintext: encr.into_plain_message(),
+            }));
+        }
+
+        // Set to `true` if the peer appears to getting close to encrypting
+        // too many messages with this key.
+        //
+        // Perhaps if we send an alert well before their counter wraps, a
+        // buggy peer won't make a terrible mistake here?
+        //
+        // Note that there's no reason to refuse to decrypt: the security
+        // failure has already happened.
+        let want_close_before_decrypt = self.read_seq == SEQ_SOFT_LIMIT;
+
+        let encrypted_len = encr.payload.0.len();
+        match self
             .message_decrypter
-            .decrypt(encr, seq)?;
-        self.read_seq += 1;
-        Ok(msg)
+            .decrypt(encr, self.read_seq)
+        {
+            Ok(plaintext) => {
+                self.read_seq += 1;
+                Ok(Some(Decrypted {
+                    want_close_before_decrypt,
+                    plaintext,
+                }))
+            }
+            Err(Error::DecryptError) if self.doing_trial_decryption(encrypted_len) => {
+                trace!("Dropping undecryptable message after aborted early_data");
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Encrypt a TLS message.
@@ -189,4 +207,9 @@ impl RecordLayer {
             .encrypt(plain, seq)
             .unwrap()
     }
+}
+
+pub(crate) struct Decrypted {
+    pub(crate) want_close_before_decrypt: bool,
+    pub(crate) plaintext: PlainMessage,
 }
