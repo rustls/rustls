@@ -1,8 +1,10 @@
 use std::io;
 
+use super::enums::ContentType;
 use crate::error::Error;
 use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};
+use crate::record_layer::{Decrypted, RecordLayer};
 
 /// This deframer works to reconstruct TLS messages
 /// from arbitrary-sized reads, buffering as necessary.
@@ -36,11 +38,12 @@ impl MessageDeframer {
         }
     }
 
-    /// Return any complete messages that the deframer has been able to parse.
+    /// Return any decrypted messages that the deframer has been able to parse.
     ///
-    /// Returns an `Error` if the deframer failed to parse some message contents,
-    /// `Ok(None)` if no full message is buffered, and `Ok(Some(_))` if a valid message was found.
-    pub fn pop(&mut self) -> Result<Option<OpaqueMessage>, Error> {
+    /// Returns an `Error` if the deframer failed to parse some message contents or if decryption
+    /// failed, `Ok(None)` if no full message is buffered or if trial decryption failed, and
+    /// `Ok(Some(_))` if a valid message was found and decrypted successfully.
+    pub fn pop(&mut self, record_layer: &mut RecordLayer) -> Result<Option<Decrypted>, Error> {
         if self.desynced {
             return Err(Error::CorruptMessage);
         }
@@ -83,7 +86,16 @@ impl MessageDeframer {
             self.used = 0;
         }
 
-        Ok(Some(m))
+        // Return CCS messages immediately without decrypting.
+        if m.typ == ContentType::ChangeCipherSpec {
+            // This is unencrypted. We check the contents later.
+            return Ok(Some(Decrypted {
+                want_close_before_decrypt: false,
+                plaintext: m.into_plain_message(),
+            }));
+        }
+
+        record_layer.decrypt_incoming(m)
     }
 
     /// Read some bytes from `rd`, and add them to our internal buffer.
@@ -119,7 +131,9 @@ const READ_SIZE: usize = 4096;
 mod tests {
     use super::MessageDeframer;
     use crate::msgs::message::{Message, OpaqueMessage};
+    use crate::record_layer::RecordLayer;
     use crate::{msgs, Error};
+
     use std::io;
 
     const FIRST_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.1.bin");
@@ -228,16 +242,16 @@ mod tests {
         }
     }
 
-    fn pop_first(d: &mut MessageDeframer) {
-        let m = d.pop().unwrap().unwrap();
+    fn pop_first(d: &mut MessageDeframer, rl: &mut RecordLayer) {
+        let m = d.pop(rl).unwrap().unwrap().plaintext;
         assert_eq!(m.typ, msgs::enums::ContentType::Handshake);
-        Message::try_from(m.into_plain_message()).unwrap();
+        Message::try_from(m).unwrap();
     }
 
-    fn pop_second(d: &mut MessageDeframer) {
-        let m = d.pop().unwrap().unwrap();
+    fn pop_second(d: &mut MessageDeframer, rl: &mut RecordLayer) {
+        let m = d.pop(rl).unwrap().unwrap().plaintext;
         assert_eq!(m.typ, msgs::enums::ContentType::Alert);
-        Message::try_from(m.into_plain_message()).unwrap();
+        Message::try_from(m).unwrap();
     }
 
     #[test]
@@ -246,7 +260,9 @@ mod tests {
         assert!(!d.has_pending());
         input_whole_incremental(&mut d, FIRST_MESSAGE);
         assert!(d.has_pending());
-        pop_first(&mut d);
+
+        let mut rl = RecordLayer::new();
+        pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
         assert!(!d.desynced);
     }
@@ -259,9 +275,11 @@ mod tests {
         assert!(d.has_pending());
         input_whole_incremental(&mut d, SECOND_MESSAGE);
         assert!(d.has_pending());
-        pop_first(&mut d);
+
+        let mut rl = RecordLayer::new();
+        pop_first(&mut d, &mut rl);
         assert!(d.has_pending());
-        pop_second(&mut d);
+        pop_second(&mut d, &mut rl);
         assert!(!d.has_pending());
         assert!(!d.desynced);
     }
@@ -272,7 +290,9 @@ mod tests {
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert!(d.has_pending());
-        pop_first(&mut d);
+
+        let mut rl = RecordLayer::new();
+        pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
         assert!(!d.desynced);
     }
@@ -283,8 +303,10 @@ mod tests {
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert_len(SECOND_MESSAGE.len(), input_bytes(&mut d, SECOND_MESSAGE));
-        pop_first(&mut d);
-        pop_second(&mut d);
+
+        let mut rl = RecordLayer::new();
+        pop_first(&mut d, &mut rl);
+        pop_second(&mut d, &mut rl);
         assert!(!d.has_pending());
         assert!(!d.desynced);
     }
@@ -297,8 +319,10 @@ mod tests {
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, FIRST_MESSAGE, SECOND_MESSAGE),
         );
-        pop_first(&mut d);
-        pop_second(&mut d);
+
+        let mut rl = RecordLayer::new();
+        pop_first(&mut d, &mut rl);
+        pop_second(&mut d, &mut rl);
         assert!(!d.has_pending());
         assert!(!d.desynced);
     }
@@ -311,8 +335,10 @@ mod tests {
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
             input_bytes_concat(&mut d, SECOND_MESSAGE, FIRST_MESSAGE),
         );
-        pop_second(&mut d);
-        pop_first(&mut d);
+
+        let mut rl = RecordLayer::new();
+        pop_second(&mut d, &mut rl);
+        pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
         assert!(!d.desynced);
     }
@@ -326,7 +352,9 @@ mod tests {
             FIRST_MESSAGE.len() - 3,
             input_bytes(&mut d, &FIRST_MESSAGE[3..]),
         );
-        pop_first(&mut d);
+
+        let mut rl = RecordLayer::new();
+        pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
         assert!(!d.desynced);
     }
@@ -338,7 +366,9 @@ mod tests {
             INVALID_CONTENTTYPE_MESSAGE.len(),
             input_bytes(&mut d, INVALID_CONTENTTYPE_MESSAGE),
         );
-        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
+
+        let mut rl = RecordLayer::new();
+        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]
@@ -348,7 +378,9 @@ mod tests {
             INVALID_VERSION_MESSAGE.len(),
             input_bytes(&mut d, INVALID_VERSION_MESSAGE),
         );
-        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
+
+        let mut rl = RecordLayer::new();
+        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]
@@ -358,7 +390,9 @@ mod tests {
             INVALID_LENGTH_MESSAGE.len(),
             input_bytes(&mut d, INVALID_LENGTH_MESSAGE),
         );
-        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
+
+        let mut rl = RecordLayer::new();
+        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]
@@ -368,7 +402,9 @@ mod tests {
             EMPTY_APPLICATIONDATA_MESSAGE.len(),
             input_bytes(&mut d, EMPTY_APPLICATIONDATA_MESSAGE),
         );
-        let m = d.pop().unwrap().unwrap();
+
+        let mut rl = RecordLayer::new();
+        let m = d.pop(&mut rl).unwrap().unwrap().plaintext;
         assert_eq!(m.typ, msgs::enums::ContentType::ApplicationData);
         assert_eq!(m.payload.0.len(), 0);
         assert!(!d.has_pending());
@@ -382,9 +418,11 @@ mod tests {
             INVALID_EMPTY_MESSAGE.len(),
             input_bytes(&mut d, INVALID_EMPTY_MESSAGE),
         );
-        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
+
+        let mut rl = RecordLayer::new();
+        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
         // CorruptMessage has been fused
-        assert_eq!(d.pop().unwrap_err(), Error::CorruptMessage);
+        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
     }
 
     #[test]

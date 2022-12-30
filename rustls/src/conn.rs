@@ -394,7 +394,8 @@ impl ConnectionRandoms {
 
 // --- Common (to client and server) connection functions ---
 
-fn is_valid_ccs(msg: &OpaqueMessage) -> bool {
+fn is_valid_ccs(msg: &PlainMessage) -> bool {
+    // We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
     // nb. this is prior to the record layer, so is unencrypted. see
     // third paragraph of section 5 in RFC8446.
     msg.typ == ContentType::ChangeCipherSpec && msg.payload.0 == [0x01]
@@ -536,12 +537,11 @@ impl<Data> ConnectionCommon<Data> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
-        let msg = match self.message_deframer.pop()? {
+        let msg = match self.deframe()? {
             Some(msg) => msg,
             None => return Ok(None),
         };
 
-        let msg = msg.into_plain_message();
         self.handshake_joiner
             .push(msg)
             .and_then(|aligned| {
@@ -561,7 +561,7 @@ impl<Data> ConnectionCommon<Data> {
 
     fn process_msg(
         &mut self,
-        msg: OpaqueMessage,
+        msg: PlainMessage,
         state: Box<dyn State<Data>>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
@@ -588,36 +588,6 @@ impl<Data> ConnectionCommon<Data> {
                 return Ok(state);
             }
         }
-
-        // Decrypt if demanded by current state.
-        let msg = match self
-            .common_state
-            .record_layer
-            .decrypt_incoming(msg)
-        {
-            Ok(Some(Decrypted {
-                want_close_before_decrypt,
-                plaintext,
-            })) => {
-                if want_close_before_decrypt {
-                    self.common_state.send_close_notify();
-                }
-
-                plaintext
-            }
-            Ok(None) => return Ok(state),
-            Err(Error::PeerSentOversizedRecord) => {
-                self.common_state
-                    .send_fatal_alert(AlertDescription::RecordOverflow);
-                return Err(Error::PeerSentOversizedRecord);
-            }
-            Err(Error::DecryptError) => {
-                self.common_state
-                    .send_fatal_alert(AlertDescription::BadRecordMac);
-                return Err(Error::DecryptError);
-            }
-            Err(e) => return Err(e),
-        };
 
         // For handshake messages, we need to join them before parsing and processing.
         let msg = match self.handshake_joiner.push(msg) {
@@ -682,7 +652,7 @@ impl<Data> ConnectionCommon<Data> {
             }
         };
 
-        while let Some(msg) = self.message_deframer.pop()? {
+        while let Some(msg) = self.deframe()? {
             match self.process_msg(msg, state) {
                 Ok(new) => state = new,
                 Err(e) => {
@@ -694,6 +664,37 @@ impl<Data> ConnectionCommon<Data> {
 
         self.state = Ok(state);
         Ok(self.common_state.current_io_state())
+    }
+
+    /// Pull a message out of the deframer and send any messages that need to be sent as a result.
+    fn deframe(&mut self) -> Result<Option<PlainMessage>, Error> {
+        match self
+            .message_deframer
+            .pop(&mut self.common_state.record_layer)
+        {
+            Ok(Some(Decrypted {
+                want_close_before_decrypt,
+                plaintext,
+            })) => {
+                if want_close_before_decrypt {
+                    self.common_state.send_close_notify();
+                }
+
+                Ok(Some(plaintext))
+            }
+            Ok(None) => Ok(None),
+            Err(Error::PeerSentOversizedRecord) => {
+                self.common_state
+                    .send_fatal_alert(AlertDescription::RecordOverflow);
+                Err(Error::PeerSentOversizedRecord)
+            }
+            Err(Error::DecryptError) => {
+                self.common_state
+                    .send_fatal_alert(AlertDescription::BadRecordMac);
+                Err(Error::DecryptError)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn process_new_handshake_messages(

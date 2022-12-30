@@ -358,7 +358,7 @@ pub mod internal {
     }
     /// Low-level TLS record layer functions.
     pub mod record_layer {
-        pub use crate::record_layer::RecordLayer;
+        pub use crate::record_layer::{Decrypted, RecordLayer};
     }
 }
 

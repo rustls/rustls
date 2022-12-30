@@ -5,6 +5,7 @@ extern crate rustls;
 
 use rustls::internal::msgs::deframer;
 use rustls::internal::msgs::message::Message;
+use rustls::internal::record_layer::RecordLayer;
 use std::io;
 
 fuzz_target!(|data: &[u8]| {
@@ -17,7 +18,8 @@ fuzz_target!(|data: &[u8]| {
     }
     dfm.has_pending();
 
-    while let Ok(Some(msg)) = dfm.pop() {
-        Message::try_from(msg.into_plain_message()).ok();
+    let mut rl = RecordLayer::new();
+    while let Ok(Some(decrypted)) = dfm.pop(&mut rl) {
+        Message::try_from(decrypted.plaintext).ok();
     }
 });
