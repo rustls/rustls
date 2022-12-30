@@ -4342,12 +4342,17 @@ fn test_received_plaintext_backpressure() {
     let sent = dbg!(client
         .write_tls(&mut network_buf)
         .unwrap());
-    assert_eq!(
-        sent,
-        dbg!(server
-            .read_tls(&mut &network_buf[..sent])
-            .unwrap())
-    );
+    let mut read = 0;
+    while read < sent {
+        let new = dbg!(server
+            .read_tls(&mut &network_buf[read..sent])
+            .unwrap());
+        if new == 4096 {
+            read += new;
+        } else {
+            break;
+        }
+    }
     server.process_new_packets().unwrap();
 
     // Send two more bytes from client to server

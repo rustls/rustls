@@ -15,7 +15,7 @@ pub struct MessageDeframer {
 
     /// A fixed-size buffer containing the currently-accumulating
     /// TLS message.
-    buf: Box<[u8; OpaqueMessage::MAX_WIRE_SIZE]>,
+    buf: Vec<u8>,
 
     /// What size prefix of `buf` is used.
     used: usize,
@@ -31,7 +31,7 @@ impl MessageDeframer {
     pub fn new() -> Self {
         Self {
             desynced: false,
-            buf: Box::new([0u8; OpaqueMessage::MAX_WIRE_SIZE]),
+            buf: Vec::with_capacity(READ_SIZE),
             used: 0,
         }
     }
@@ -51,7 +51,9 @@ impl MessageDeframer {
         let mut rd = codec::Reader::init(&self.buf[..self.used]);
         let m = match OpaqueMessage::read(&mut rd) {
             Ok(m) => m,
-            Err(MessageError::TooShortForHeader | MessageError::TooShortForLength) => return Ok(None),
+            Err(MessageError::TooShortForHeader | MessageError::TooShortForLength) => {
+                return Ok(None)
+            }
             Err(_) => {
                 self.desynced = true;
                 return Err(Error::CorruptMessage);
@@ -96,6 +98,8 @@ impl MessageDeframer {
         // we do a zero length read.  That looks like an EOF to
         // the next layer up, which is fine.
         debug_assert!(self.used <= OpaqueMessage::MAX_WIRE_SIZE);
+        let need_capacity = Ord::min(OpaqueMessage::MAX_WIRE_SIZE, self.used + READ_SIZE);
+        self.buf.resize(need_capacity, 0);
         let new_bytes = rd.read(&mut self.buf[self.used..])?;
         self.used += new_bytes;
         Ok(new_bytes)
@@ -108,6 +112,8 @@ impl MessageDeframer {
         self.used > 0
     }
 }
+
+const READ_SIZE: usize = 4096;
 
 #[cfg(test)]
 mod tests {
@@ -384,16 +390,19 @@ mod tests {
     #[test]
     fn test_limited_buffer() {
         const PAYLOAD_LEN: usize = 16_384;
-        let mut message = Vec::with_capacity(8192);
+        let mut message = Vec::with_capacity(16_389);
         message.push(0x17); // ApplicationData
         message.extend(&[0x03, 0x04]); // ProtocolVersion
         message.extend((PAYLOAD_LEN as u16).to_be_bytes()); // payload length
         message.extend(&[0; PAYLOAD_LEN]);
 
         let mut d = MessageDeframer::new();
-        assert_len(message.len(), input_bytes(&mut d, &message));
+        assert_len(4096, input_bytes(&mut d, &message));
+        assert_len(4096, input_bytes(&mut d, &message));
+        assert_len(4096, input_bytes(&mut d, &message));
+        assert_len(4096, input_bytes(&mut d, &message));
         assert_len(
-            OpaqueMessage::MAX_WIRE_SIZE - 16_389,
+            OpaqueMessage::MAX_WIRE_SIZE - 16_384,
             input_bytes(&mut d, &message),
         );
         assert!(input_bytes(&mut d, &message).is_err());
