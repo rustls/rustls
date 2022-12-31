@@ -421,7 +421,7 @@ impl<Data> ConnectionCommon<Data> {
             state: Ok(state),
             data,
             common_state,
-            message_deframer: MessageDeframer::new(),
+            message_deframer: MessageDeframer::default(),
             handshake_joiner: HandshakeJoiner::new(),
         }
     }

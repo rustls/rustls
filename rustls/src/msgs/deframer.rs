@@ -9,6 +9,7 @@ use crate::record_layer::{Decrypted, RecordLayer};
 /// This deframer works to reconstruct TLS messages
 /// from arbitrary-sized reads, buffering as necessary.
 /// The input is `read()`, get the output from `pop()`.
+#[derive(Default)]
 pub struct MessageDeframer {
     /// Set to true if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
@@ -23,21 +24,7 @@ pub struct MessageDeframer {
     used: usize,
 }
 
-impl Default for MessageDeframer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl MessageDeframer {
-    pub fn new() -> Self {
-        Self {
-            desynced: false,
-            buf: Vec::with_capacity(READ_SIZE),
-            used: 0,
-        }
-    }
-
     /// Return any decrypted messages that the deframer has been able to parse.
     ///
     /// Returns an `Error` if the deframer failed to parse some message contents or if decryption
@@ -256,7 +243,7 @@ mod tests {
 
     #[test]
     fn check_incremental() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert!(!d.has_pending());
         input_whole_incremental(&mut d, FIRST_MESSAGE);
         assert!(d.has_pending());
@@ -269,7 +256,7 @@ mod tests {
 
     #[test]
     fn check_incremental_2() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert!(!d.has_pending());
         input_whole_incremental(&mut d, FIRST_MESSAGE);
         assert!(d.has_pending());
@@ -286,7 +273,7 @@ mod tests {
 
     #[test]
     fn check_whole() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert!(d.has_pending());
@@ -299,7 +286,7 @@ mod tests {
 
     #[test]
     fn check_whole_2() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert!(!d.has_pending());
         assert_len(FIRST_MESSAGE.len(), input_bytes(&mut d, FIRST_MESSAGE));
         assert_len(SECOND_MESSAGE.len(), input_bytes(&mut d, SECOND_MESSAGE));
@@ -313,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_two_in_one_read() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert!(!d.has_pending());
         assert_len(
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
@@ -329,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_two_in_one_read_shortest_first() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert!(!d.has_pending());
         assert_len(
             FIRST_MESSAGE.len() + SECOND_MESSAGE.len(),
@@ -345,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_incremental_with_nonfatal_read_error() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert_len(3, input_bytes(&mut d, &FIRST_MESSAGE[..3]));
         input_error(&mut d);
         assert_len(
@@ -361,7 +348,7 @@ mod tests {
 
     #[test]
     fn test_invalid_contenttype_errors() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert_len(
             INVALID_CONTENTTYPE_MESSAGE.len(),
             input_bytes(&mut d, INVALID_CONTENTTYPE_MESSAGE),
@@ -373,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_invalid_version_errors() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert_len(
             INVALID_VERSION_MESSAGE.len(),
             input_bytes(&mut d, INVALID_VERSION_MESSAGE),
@@ -385,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_invalid_length_errors() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert_len(
             INVALID_LENGTH_MESSAGE.len(),
             input_bytes(&mut d, INVALID_LENGTH_MESSAGE),
@@ -397,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_empty_applicationdata() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert_len(
             EMPTY_APPLICATIONDATA_MESSAGE.len(),
             input_bytes(&mut d, EMPTY_APPLICATIONDATA_MESSAGE),
@@ -413,7 +400,7 @@ mod tests {
 
     #[test]
     fn test_invalid_empty_errors() {
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert_len(
             INVALID_EMPTY_MESSAGE.len(),
             input_bytes(&mut d, INVALID_EMPTY_MESSAGE),
@@ -434,7 +421,7 @@ mod tests {
         message.extend((PAYLOAD_LEN as u16).to_be_bytes()); // payload length
         message.extend(&[0; PAYLOAD_LEN]);
 
-        let mut d = MessageDeframer::new();
+        let mut d = MessageDeframer::default();
         assert_len(4096, input_bytes(&mut d, &message));
         assert_len(4096, input_bytes(&mut d, &message));
         assert_len(4096, input_bytes(&mut d, &message));
