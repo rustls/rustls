@@ -9,7 +9,7 @@ use rustls::internal::record_layer::RecordLayer;
 use std::io;
 
 fuzz_target!(|data: &[u8]| {
-    let mut dfm = deframer::MessageDeframer::new();
+    let mut dfm = deframer::MessageDeframer::default();
     if dfm
         .read(&mut io::Cursor::new(data))
         .is_err()
