@@ -5,9 +5,12 @@ use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+use crate::msgs::codec::Codec;
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
+use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
+use crate::msgs::persist;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
@@ -46,6 +49,23 @@ pub trait StoresClientSessions: Send + Sync {
     /// Returns the latest value for `key`.  Returns `None`
     /// if there's no such value.
     fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
+
+    /// Provide a best-effort guess for which `NamedGroup` the given server
+    /// might prefer.  If `None` is returned, the caller chooses the first
+    /// configured group.
+    fn get_kx_hint_for_server(&self, server_name: &ServerName) -> Option<NamedGroup> {
+        let key = persist::ClientSessionKey::hint_for_server_name(server_name);
+        let key_buf = key.get_encoding();
+
+        self.get(&key_buf)
+            .and_then(|enc| NamedGroup::read_bytes(&enc))
+    }
+
+    /// Remember what `NamedGroup` the given server chose.
+    fn put_kx_hint_for_server(&self, server_name: &ServerName, group: NamedGroup) {
+        let key = persist::ClientSessionKey::hint_for_server_name(server_name);
+        self.put(key.get_encoding(), group.get_encoding());
+    }
 }
 
 /// A trait for the ability to choose a certificate chain and

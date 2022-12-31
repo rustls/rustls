@@ -11,8 +11,8 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
+use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::KeyUpdateRequest;
-use crate::msgs::enums::{AlertDescription, NamedGroup};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
@@ -140,7 +140,9 @@ pub(super) fn handle_server_hello(
     })?;
 
     // Remember what KX group the server liked for next time.
-    save_kx_hint(&config, &server_name, their_key_share.group);
+    config
+        .session_storage
+        .put_kx_hint_for_server(&server_name, their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -188,13 +190,9 @@ pub(super) fn initial_key_share(
     config: &ClientConfig,
     server_name: &ServerName,
 ) -> Result<kx::KeyExchange, Error> {
-    let key = persist::ClientSessionKey::hint_for_server_name(server_name);
-    let key_buf = key.get_encoding();
-
-    let maybe_value = config.session_storage.get(&key_buf);
-
-    let group = maybe_value
-        .and_then(|enc| NamedGroup::read_bytes(&enc))
+    let group = config
+        .session_storage
+        .get_kx_hint_for_server(server_name)
         .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
         .unwrap_or_else(|| {
             config
@@ -204,14 +202,6 @@ pub(super) fn initial_key_share(
         });
 
     kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)
-}
-
-fn save_kx_hint(config: &ClientConfig, server_name: &ServerName, group: NamedGroup) {
-    let key = persist::ClientSessionKey::hint_for_server_name(server_name);
-
-    config
-        .session_storage
-        .put(key.get_encoding(), group.get_encoding());
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
