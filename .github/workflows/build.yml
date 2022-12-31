@@ -183,31 +183,24 @@ jobs:
         with:
           persist-credentials: false
 
-      # Install a version of clang that (more or less) has the same coverage
-      # instrumentation format.
-      - name: Install LLVM
-        run: |
-          curl https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo apt-add-repository -y 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main'
-          sudo apt-get install -y clang-15
-
       - name: Install rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
           override: true
           default: true
+          components: llvm-tools
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
 
       - name: Install golang toolchain
         uses: actions/setup-go@v2
         with:
           go-version: "1.17.1"
 
-      - name: Build lcov
-        run: admin/build-lcov
-
       - name: Measure coverage
-        run: admin/coverage
+        run: ./admin/coverage --lcov --output-path final.info
 
       - name: Report to codecov.io
         uses: codecov/codecov-action@v1.0.10

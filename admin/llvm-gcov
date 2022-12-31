@@ -1,2 +1,0 @@
-#!/bin/sh -e
-llvm-cov-15 gcov $*
