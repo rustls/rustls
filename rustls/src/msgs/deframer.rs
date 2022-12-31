@@ -136,37 +136,8 @@ mod tests {
         include_bytes!("../testdata/deframer-invalid-version.bin");
     const INVALID_LENGTH_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-length.bin");
 
-    struct ByteRead<'a> {
-        buf: &'a [u8],
-        offs: usize,
-    }
-
-    impl<'a> ByteRead<'a> {
-        fn new(bytes: &'a [u8]) -> Self {
-            ByteRead {
-                buf: bytes,
-                offs: 0,
-            }
-        }
-    }
-
-    impl<'a> io::Read for ByteRead<'a> {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            let mut len = 0;
-
-            while len < buf.len() && len < self.buf.len() - self.offs {
-                buf[len] = self.buf[self.offs + len];
-                len += 1;
-            }
-
-            self.offs += len;
-
-            Ok(len)
-        }
-    }
-
     fn input_bytes(d: &mut MessageDeframer, bytes: &[u8]) -> io::Result<usize> {
-        let mut rd = ByteRead::new(bytes);
+        let mut rd = io::Cursor::new(bytes);
         d.read(&mut rd)
     }
 
@@ -178,7 +149,7 @@ mod tests {
         let mut bytes = vec![0u8; bytes1.len() + bytes2.len()];
         bytes[..bytes1.len()].clone_from_slice(bytes1);
         bytes[bytes1.len()..].clone_from_slice(bytes2);
-        let mut rd = ByteRead::new(&bytes);
+        let mut rd = io::Cursor::new(&bytes);
         d.read(&mut rd)
     }
 
@@ -391,7 +362,11 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        let m = d.pop(&mut rl).unwrap().unwrap().plaintext;
+        let m = d
+            .pop(&mut rl)
+            .unwrap()
+            .unwrap()
+            .plaintext;
         assert_eq!(m.typ, msgs::enums::ContentType::ApplicationData);
         assert_eq!(m.payload.0.len(), 0);
         assert!(!d.has_pending());
