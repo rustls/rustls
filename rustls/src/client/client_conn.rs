@@ -66,6 +66,45 @@ pub trait StoresClientSessions: Send + Sync {
         let key = persist::ClientSessionKey::hint_for_server_name(server_name);
         self.put(key.get_encoding(), group.get_encoding());
     }
+
+    /// Remember a TLS1.2 session (at most one of these can be remembered at a time).
+    fn put_tls12_session(
+        &self,
+        server_name: &ServerName,
+        value: &persist::Tls12ClientSessionValue,
+    ) {
+        let key = persist::ClientSessionKey::session_for_server_name(server_name);
+        self.put(key.get_encoding(), value.get_encoding());
+    }
+
+    /// Get the most recently saved TLS1.2 session for `server_name` provided to `put_tls12_session`.
+    fn get_tls12_session(&self, server_name: &ServerName) -> Option<Vec<u8>> {
+        let key = persist::ClientSessionKey::session_for_server_name(server_name);
+        self.get(&key.get_encoding())
+    }
+
+    /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
+    /// resumption of this session.  This can be called multiple times for a given session, allowing
+    /// multiple independent tickets to be valid at once.  The number of times this is called
+    /// is controlled by the server, so implementations of this trait should apply a reasonable bound
+    /// of how many items are stored simultaneously.
+    fn add_tls13_ticket(&self, server_name: &ServerName, value: &persist::Tls13ClientSessionValue) {
+        let key = persist::ClientSessionKey::session_for_server_name(server_name);
+        self.put(key.get_encoding(), value.get_encoding());
+    }
+
+    /// Return a TLS1.3 ticket previously provided to `add_tls13_ticket`.
+    ///
+    /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
+    fn take_tls13_ticket(&self, server_name: &ServerName) -> Option<Vec<u8>> {
+        let key = persist::ClientSessionKey::session_for_server_name(server_name).get_encoding();
+
+        let value = self.get(&key);
+        if value.is_some() {
+            self.put(key, Vec::new());
+        }
+        value
+    }
 }
 
 /// A trait for the ability to choose a certificate chain and

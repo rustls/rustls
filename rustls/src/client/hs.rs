@@ -43,12 +43,14 @@ fn find_session(
     config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<persist::ClientSessionValue>> {
-    let key = persist::ClientSessionKey::session_for_server_name(server_name);
-    let key_buf = key.get_encoding();
-
     let value = config
         .session_storage
-        .get(&key_buf)
+        .take_tls13_ticket(server_name)
+        .or_else(|| {
+            config
+                .session_storage
+                .get_tls12_session(server_name)
+        })
         .or_else(|| {
             debug!("No cached session for {:?}", server_name);
             None

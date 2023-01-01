@@ -997,8 +997,7 @@ impl ExpectFinished {
             }
         };
 
-        let key = persist::ClientSessionKey::session_for_server_name(&self.server_name);
-        let value = persist::Tls12ClientSessionValue::new(
+        let stored_value = persist::Tls12ClientSessionValue::new(
             self.secrets.suite(),
             self.session_id,
             ticket,
@@ -1012,16 +1011,9 @@ impl ExpectFinished {
             self.using_ems,
         );
 
-        let worked = self
-            .config
+        self.config
             .session_storage
-            .put(key.get_encoding(), value.get_encoding());
-
-        if worked {
-            debug!("Session saved");
-        } else {
-            debug!("Session not saved");
-        }
+            .put_tls12_session(&self.server_name, &stored_value);
     }
 }
 

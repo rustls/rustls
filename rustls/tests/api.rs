@@ -3705,8 +3705,8 @@ fn test_client_sends_helloretryrequest() {
 
     do_handshake_until_error(&mut client, &mut server).unwrap();
 
-    // client only did two storage queries: one for a session, another for a kx type
-    assert_eq!(storage.gets(), 2);
+    // client only did three storage queries: two for sessions, another for a kx type
+    assert_eq!(storage.gets(), 3);
     assert_eq!(storage.puts(), 2);
 }
 
@@ -4026,7 +4026,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         ClientConnection::new(client_config, "localhost".try_into().unwrap()).unwrap();
     let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
     common::do_handshake(&mut client_2, &mut server_2);
-    assert_eq!(client_storage.puts(), 2);
+    assert_eq!(client_storage.puts(), 3);
 }
 
 #[test]

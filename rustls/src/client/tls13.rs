@@ -12,7 +12,6 @@ use crate::kx;
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::codec::Codec;
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
@@ -970,18 +969,8 @@ impl ExpectTraffic {
             }
         }
 
-        let key = persist::ClientSessionKey::session_for_server_name(&self.server_name);
-        let ticket = value.get_encoding();
-
-        let worked = self
-            .session_storage
-            .put(key.get_encoding(), ticket);
-
-        if worked {
-            debug!("Ticket saved");
-        } else {
-            debug!("Ticket not saved");
-        }
+        self.session_storage
+            .add_tls13_ticket(&self.server_name, &value);
         Ok(())
     }
 
