@@ -9,8 +9,6 @@ use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-#[cfg(feature = "quic")]
-use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, Compression, ContentType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
@@ -73,8 +71,9 @@ fn find_session(
         .and_then(|resuming| {
             #[cfg(feature = "quic")]
             if cx.common.is_quic() {
-                let params = PayloadU16::read(&mut reader)?;
-                cx.common.quic.params = Some(params.0);
+                cx.common.quic.params = resuming
+                    .tls13()
+                    .map(|v| v.quic_params());
             }
             Some(resuming)
         })

@@ -161,6 +161,8 @@ pub struct Tls13ClientSessionValue {
     age_add: u32,
     max_early_data_size: u32,
     pub common: ClientSessionCommon,
+    #[cfg(feature = "quic")]
+    quic_params: PayloadU16,
 }
 
 impl Tls13ClientSessionValue {
@@ -185,6 +187,8 @@ impl Tls13ClientSessionValue {
                 lifetime_secs,
                 server_cert_chain,
             ),
+            #[cfg(feature = "quic")]
+            quic_params: PayloadU16(Vec::new()),
         }
     }
 
@@ -198,6 +202,8 @@ impl Tls13ClientSessionValue {
             age_add: u32::read(r)?,
             max_early_data_size: u32::read(r)?,
             common: ClientSessionCommon::read(r)?,
+            #[cfg(feature = "quic")]
+            quic_params: PayloadU16::read(r)?,
         })
     }
 
@@ -214,6 +220,8 @@ impl Tls13ClientSessionValue {
         self.max_early_data_size
             .encode(&mut bytes);
         self.common.encode(&mut bytes);
+        #[cfg(feature = "quic")]
+        self.quic_params.encode(&mut bytes);
         bytes
     }
 
@@ -223,6 +231,16 @@ impl Tls13ClientSessionValue {
 
     pub fn suite(&self) -> &'static Tls13CipherSuite {
         self.suite
+    }
+
+    #[cfg(feature = "quic")]
+    pub fn set_quic_params(&mut self, quic_params: &[u8]) {
+        self.quic_params = PayloadU16(quic_params.to_vec());
+    }
+
+    #[cfg(feature = "quic")]
+    pub fn quic_params(&self) -> Vec<u8> {
+        self.quic_params.0.clone()
     }
 }
 
