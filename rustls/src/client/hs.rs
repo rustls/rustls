@@ -9,7 +9,6 @@ use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, Compression, ContentType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
 use crate::msgs::enums::{ExtensionType, HandshakeType};
@@ -43,25 +42,16 @@ fn find_session(
     config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<persist::ClientSessionValue>> {
-    let value = config
+    #[allow(clippy::let_and_return)]
+    let found = config
         .session_storage
         .take_tls13_ticket(server_name)
+        .map(persist::ClientSessionValue::from)
         .or_else(|| {
             config
                 .session_storage
                 .get_tls12_session(server_name)
-        })
-        .or_else(|| {
-            debug!("No cached session for {:?}", server_name);
-            None
-        })?;
-
-    #[allow(unused_mut)]
-    let mut reader = Reader::init(&value[2..]);
-    #[allow(clippy::bind_instead_of_map)] // https://github.com/rust-lang/rust-clippy/issues/8082
-    CipherSuite::read_bytes(&value[..2])
-        .and_then(|suite| {
-            persist::ClientSessionValue::read(&mut reader, suite, &config.cipher_suites)
+                .map(persist::ClientSessionValue::from)
         })
         .and_then(|resuming| {
             let retrieved = persist::Retrieved::new(resuming, TimeBase::now().ok()?);
@@ -70,15 +60,21 @@ fn find_session(
                 true => None,
             }
         })
-        .and_then(|resuming| {
-            #[cfg(feature = "quic")]
-            if cx.common.is_quic() {
-                cx.common.quic.params = resuming
-                    .tls13()
-                    .map(|v| v.quic_params());
-            }
-            Some(resuming)
-        })
+        .or_else(|| {
+            debug!("No cached session for {:?}", server_name);
+            None
+        });
+
+    #[cfg(feature = "quic")]
+    if let Some(resuming) = &found {
+        if cx.common.is_quic() {
+            cx.common.quic.params = resuming
+                .tls13()
+                .map(|v| v.quic_params());
+        }
+    }
+
+    found
 }
 
 pub(super) fn start_handshake(

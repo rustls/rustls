@@ -1013,7 +1013,7 @@ impl ExpectFinished {
 
         self.config
             .session_storage
-            .put_tls12_session(&self.server_name, &stored_value);
+            .put_tls12_session(&self.server_name, stored_value);
     }
 }
 

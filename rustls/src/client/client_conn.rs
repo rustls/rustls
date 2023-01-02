@@ -5,7 +5,7 @@ use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
-use crate::msgs::codec::Codec;
+
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::NamedGroup;
@@ -30,81 +30,52 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::{fmt, io, mem};
 
-/// A trait for the ability to store client session data.
-/// The keys and values are opaque.
+/// A trait for the ability to store client session data, so that future
+/// sessions can be resumed.
 ///
 /// Both the keys and values should be treated as
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding session.
 ///
-/// `put` is a mutating operation; this isn't expressed
-/// in the type system to allow implementations freedom in
-/// how to achieve interior mutability.  `Mutex` is a common
-/// choice.
+/// `put_`, `add_` and `take_` operations are mutating; this isn't
+/// expressed in the type system to allow implementations freedom in
+/// how to achieve interior mutability.  `Mutex` is a common choice.
 pub trait StoresClientSessions: Send + Sync {
-    /// Stores a new `value` for `key`.  Returns `true`
-    /// if the value was stored.
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
-
-    /// Returns the latest value for `key`.  Returns `None`
-    /// if there's no such value.
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
-
-    /// Provide a best-effort guess for which `NamedGroup` the given server
-    /// might prefer.  If `None` is returned, the caller chooses the first
-    /// configured group.
-    fn get_kx_hint_for_server(&self, server_name: &ServerName) -> Option<NamedGroup> {
-        let key = persist::ClientSessionKey::hint_for_server_name(server_name);
-        let key_buf = key.get_encoding();
-
-        self.get(&key_buf)
-            .and_then(|enc| NamedGroup::read_bytes(&enc))
-    }
-
     /// Remember what `NamedGroup` the given server chose.
-    fn put_kx_hint_for_server(&self, server_name: &ServerName, group: NamedGroup) {
-        let key = persist::ClientSessionKey::hint_for_server_name(server_name);
-        self.put(key.get_encoding(), group.get_encoding());
-    }
+    fn put_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
 
-    /// Remember a TLS1.2 session (at most one of these can be remembered at a time).
-    fn put_tls12_session(
-        &self,
-        server_name: &ServerName,
-        value: &persist::Tls12ClientSessionValue,
-    ) {
-        let key = persist::ClientSessionKey::session_for_server_name(server_name);
-        self.put(key.get_encoding(), value.get_encoding());
-    }
+    /// This should return the value most recently passed to `put_kx_hint`
+    /// for the given `server_name`.
+    ///
+    /// If `None` is returned, the caller chooses the first configured group,
+    /// and an extra round trip might happen if that choice is unsatisfactory
+    /// to the server.
+    fn get_kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup>;
+
+    /// Remember a TLS1.2 session. At most one of these can be remembered at a time, per
+    /// `server_name`.
+    fn put_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue);
 
     /// Get the most recently saved TLS1.2 session for `server_name` provided to `put_tls12_session`.
-    fn get_tls12_session(&self, server_name: &ServerName) -> Option<Vec<u8>> {
-        let key = persist::ClientSessionKey::session_for_server_name(server_name);
-        self.get(&key.get_encoding())
-    }
+    fn get_tls12_session(
+        &self,
+        server_name: &ServerName,
+    ) -> Option<persist::Tls12ClientSessionValue>;
 
     /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
     /// resumption of this session.  This can be called multiple times for a given session, allowing
     /// multiple independent tickets to be valid at once.  The number of times this is called
     /// is controlled by the server, so implementations of this trait should apply a reasonable bound
     /// of how many items are stored simultaneously.
-    fn add_tls13_ticket(&self, server_name: &ServerName, value: &persist::Tls13ClientSessionValue) {
-        let key = persist::ClientSessionKey::session_for_server_name(server_name);
-        self.put(key.get_encoding(), value.get_encoding());
-    }
+    fn add_tls13_ticket(&self, server_name: &ServerName, value: persist::Tls13ClientSessionValue);
 
     /// Return a TLS1.3 ticket previously provided to `add_tls13_ticket`.
     ///
     /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
-    fn take_tls13_ticket(&self, server_name: &ServerName) -> Option<Vec<u8>> {
-        let key = persist::ClientSessionKey::session_for_server_name(server_name).get_encoding();
-
-        let value = self.get(&key);
-        if value.is_some() {
-            self.put(key, Vec::new());
-        }
-        value
-    }
+    fn take_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+    ) -> Option<persist::Tls13ClientSessionValue>;
 }
 
 /// A trait for the ability to choose a certificate chain and
@@ -302,38 +273,6 @@ impl ServerName {
         match self {
             Self::DnsName(dns_name) => Some(dns_name.0.as_ref()),
             Self::IpAddress(_) => None,
-        }
-    }
-
-    /// Return a prefix-free, unique encoding for the name.
-    pub(crate) fn encode(&self) -> Vec<u8> {
-        enum UniqueTypeCode {
-            DnsName = 0x01,
-            IpAddr = 0x02,
-        }
-
-        match self {
-            Self::DnsName(dns_name) => {
-                let bytes = dns_name.0.as_ref();
-
-                let mut r = Vec::with_capacity(2 + bytes.as_ref().len());
-                r.push(UniqueTypeCode::DnsName as u8);
-                r.push(bytes.as_ref().len() as u8);
-                r.extend_from_slice(bytes.as_ref());
-
-                r
-            }
-            Self::IpAddress(address) => {
-                let string = address.to_string();
-                let bytes = string.as_bytes();
-
-                let mut r = Vec::with_capacity(2 + bytes.len());
-                r.push(UniqueTypeCode::IpAddr as u8);
-                r.push(bytes.len() as u8);
-                r.extend_from_slice(bytes);
-
-                r
-            }
         }
     }
 }

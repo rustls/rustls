@@ -1,11 +1,9 @@
-use crate::client::ServerName;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::key;
 use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionID;
-use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
@@ -15,45 +13,6 @@ use std::cmp;
 #[cfg(feature = "tls12")]
 use std::mem;
 
-// These are the keys and values we store in session storage.
-
-// --- Client types ---
-/// Keys for session resumption and tickets.
-/// Matching value is a `ClientSessionValue`.
-#[derive(Debug)]
-pub struct ClientSessionKey {
-    kind: &'static [u8],
-    name: Vec<u8>,
-}
-
-impl Codec for ClientSessionKey {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(self.kind);
-        bytes.extend_from_slice(&self.name);
-    }
-
-    // Don't need to read these.
-    fn read(_r: &mut Reader) -> Option<Self> {
-        None
-    }
-}
-
-impl ClientSessionKey {
-    pub fn session_for_server_name(server_name: &ServerName) -> Self {
-        Self {
-            kind: b"session",
-            name: server_name.encode(),
-        }
-    }
-
-    pub fn hint_for_server_name(server_name: &ServerName) -> Self {
-        Self {
-            kind: b"kx-hint",
-            name: server_name.encode(),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum ClientSessionValue {
     Tls13(Tls13ClientSessionValue),
@@ -62,25 +21,6 @@ pub enum ClientSessionValue {
 }
 
 impl ClientSessionValue {
-    pub fn read(
-        reader: &mut Reader<'_>,
-        suite: CipherSuite,
-        supported: &[SupportedCipherSuite],
-    ) -> Option<Self> {
-        match supported
-            .iter()
-            .find(|s| s.suite() == suite)?
-        {
-            SupportedCipherSuite::Tls13(inner) => {
-                Tls13ClientSessionValue::read(inner, reader).map(ClientSessionValue::Tls13)
-            }
-            #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(inner) => {
-                Tls12ClientSessionValue::read(inner, reader).map(ClientSessionValue::Tls12)
-            }
-        }
-    }
-
     fn common(&self) -> &ClientSessionCommon {
         match self {
             Self::Tls13(inner) => &inner.common,
@@ -192,39 +132,6 @@ impl Tls13ClientSessionValue {
         }
     }
 
-    /// [`Codec::read()`] with an extra `suite` argument.
-    ///
-    /// We decode the `suite` argument separately because it allows us to
-    /// decide whether we're decoding an 1.2 or 1.3 session value.
-    pub fn read(suite: &'static Tls13CipherSuite, r: &mut Reader) -> Option<Self> {
-        Some(Self {
-            suite,
-            age_add: u32::read(r)?,
-            max_early_data_size: u32::read(r)?,
-            common: ClientSessionCommon::read(r)?,
-            #[cfg(feature = "quic")]
-            quic_params: PayloadU16::read(r)?,
-        })
-    }
-
-    /// Inherent implementation of the [`Codec::get_encoding()`] method.
-    ///
-    /// (See `read()` for why this is inherent here.)
-    pub fn get_encoding(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(16);
-        self.suite
-            .common
-            .suite
-            .encode(&mut bytes);
-        self.age_add.encode(&mut bytes);
-        self.max_early_data_size
-            .encode(&mut bytes);
-        self.common.encode(&mut bytes);
-        #[cfg(feature = "quic")]
-        self.quic_params.encode(&mut bytes);
-        bytes
-    }
-
     pub fn max_early_data_size(&self) -> u32 {
         self.max_early_data_size
     }
@@ -253,7 +160,7 @@ impl std::ops::Deref for Tls13ClientSessionValue {
 }
 
 #[cfg(feature = "tls12")]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Tls12ClientSessionValue {
     suite: &'static Tls12CipherSuite,
     pub session_id: SessionID,
@@ -287,34 +194,6 @@ impl Tls12ClientSessionValue {
         }
     }
 
-    /// [`Codec::read()`] with an extra `suite` argument.
-    ///
-    /// We decode the `suite` argument separately because it allows us to
-    /// decide whether we're decoding an 1.2 or 1.3 session value.
-    fn read(suite: &'static Tls12CipherSuite, r: &mut Reader) -> Option<Self> {
-        Some(Self {
-            suite,
-            session_id: SessionID::read(r)?,
-            extended_ms: u8::read(r)? == 1,
-            common: ClientSessionCommon::read(r)?,
-        })
-    }
-
-    /// Inherent implementation of the [`Codec::get_encoding()`] method.
-    ///
-    /// (See `read()` for why this is inherent here.)
-    pub fn get_encoding(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(16);
-        self.suite
-            .common
-            .suite
-            .encode(&mut bytes);
-        self.session_id.encode(&mut bytes);
-        (u8::from(self.extended_ms)).encode(&mut bytes);
-        self.common.encode(&mut bytes);
-        bytes
-    }
-
     pub fn take_ticket(&mut self) -> Vec<u8> {
         mem::take(&mut self.common.ticket.0)
     }
@@ -337,7 +216,7 @@ impl std::ops::Deref for Tls12ClientSessionValue {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClientSessionCommon {
     ticket: PayloadU16,
     secret: PayloadU8,
@@ -361,30 +240,6 @@ impl ClientSessionCommon {
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
             server_cert_chain,
         }
-    }
-
-    /// [`Codec::read()`] is inherent here to avoid leaking the [`Codec`]
-    /// implementation through [`Deref`] implementations on
-    /// [`Tls12ClientSessionValue`] and [`Tls13ClientSessionValue`].
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self {
-            ticket: PayloadU16::read(r)?,
-            secret: PayloadU8::read(r)?,
-            epoch: u64::read(r)?,
-            lifetime_secs: u32::read(r)?,
-            server_cert_chain: CertificatePayload::read(r)?,
-        })
-    }
-
-    /// [`Codec::encode()`] is inherent here to avoid leaking the [`Codec`]
-    /// implementation through [`Deref`] implementations on
-    /// [`Tls12ClientSessionValue`] and [`Tls13ClientSessionValue`].
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.ticket.encode(bytes);
-        self.secret.encode(bytes);
-        self.epoch.encode(bytes);
-        self.lifetime_secs.encode(bytes);
-        self.server_cert_chain.encode(bytes);
     }
 
     pub fn server_cert_chain(&self) -> &[key::Certificate] {

@@ -7,20 +7,6 @@ use crate::ticketer::TimeBase;
 use crate::tls13::TLS13_AES_128_GCM_SHA256;
 
 #[test]
-fn clientsessionkey_is_debug() {
-    let name = "hello".try_into().unwrap();
-    let csk = ClientSessionKey::session_for_server_name(&name);
-    println!("{:?}", csk);
-}
-
-#[test]
-fn clientsessionkey_cannot_be_read() {
-    let bytes = [0; 1];
-    let mut rd = Reader::init(&bytes);
-    assert!(ClientSessionKey::read(&mut rd).is_none());
-}
-
-#[test]
 fn clientsessionvalue_is_debug() {
     let csv = ClientSessionValue::from(Tls13ClientSessionValue::new(
         TLS13_AES_128_GCM_SHA256
