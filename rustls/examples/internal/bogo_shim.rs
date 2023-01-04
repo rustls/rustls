@@ -502,6 +502,11 @@ impl rustls::client::StoresClientSessions for ClientCacheWithoutKxHints {
             .get_tls12_session(server_name)
     }
 
+    fn forget_tls12_session(&self, server_name: &rustls::ServerName) {
+        self.storage
+            .forget_tls12_session(server_name);
+    }
+
     fn add_tls13_ticket(
         &self,
         server_name: &rustls::ServerName,

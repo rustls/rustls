@@ -2670,6 +2670,7 @@ enum ClientStorageOp {
     GetKxHint(rustls::ServerName, Option<rustls::NamedGroup>),
     PutTls12Session(rustls::ServerName),
     GetTls12Session(rustls::ServerName, bool),
+    ForgetTls12Session(rustls::ServerName),
     AddTls13Ticket(rustls::ServerName),
     TakeTls13Ticket(rustls::ServerName, bool),
 }
@@ -2745,6 +2746,15 @@ impl rustls::client::StoresClientSessions for ClientStorage {
                 rc.is_some(),
             ));
         rc
+    }
+
+    fn forget_tls12_session(&self, server_name: &rustls::ServerName) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::ForgetTls12Session(server_name.clone()));
+        self.storage
+            .forget_tls12_session(server_name);
     }
 
     fn add_tls13_ticket(
@@ -3773,7 +3783,7 @@ fn test_client_sends_helloretryrequest() {
 
     // client only did following storage queries:
     println!("storage {:#?}", storage.ops());
-    assert_eq!(storage.ops().len(), 8);
+    assert_eq!(storage.ops().len(), 9);
     assert!(matches!(
         storage.ops()[0],
         ClientStorageOp::TakeTls13Ticket(_, false)
@@ -3792,7 +3802,7 @@ fn test_client_sends_helloretryrequest() {
     ));
     assert!(matches!(
         storage.ops()[4],
-        ClientStorageOp::AddTls13Ticket(_)
+        ClientStorageOp::ForgetTls12Session(_)
     ));
     assert!(matches!(
         storage.ops()[5],
@@ -3804,6 +3814,10 @@ fn test_client_sends_helloretryrequest() {
     ));
     assert!(matches!(
         storage.ops()[7],
+        ClientStorageOp::AddTls13Ticket(_)
+    ));
+    assert!(matches!(
+        storage.ops()[8],
         ClientStorageOp::AddTls13Ticket(_)
     ));
 }
@@ -4118,7 +4132,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut server_1 = ServerConnection::new(server_config_1).unwrap();
     common::do_handshake(&mut client_1, &mut server_1);
 
-    assert_eq!(client_storage.ops().len(), 8);
+    assert_eq!(client_storage.ops().len(), 9);
     println!("hs1 storage ops: {:#?}", client_storage.ops());
     assert!(matches!(
         client_storage.ops()[3],
@@ -4126,6 +4140,10 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     ));
     assert!(matches!(
         client_storage.ops()[4],
+        ClientStorageOp::ForgetTls12Session(_)
+    ));
+    assert!(matches!(
+        client_storage.ops()[5],
         ClientStorageOp::AddTls13Ticket(_)
     ));
 
@@ -4135,11 +4153,11 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
     common::do_handshake(&mut client_2, &mut server_2);
     println!("hs2 storage ops: {:#?}", client_storage.ops());
-    assert_eq!(client_storage.ops().len(), 10);
+    assert_eq!(client_storage.ops().len(), 11);
 
     // attempt consumes a TLS1.3 ticket
     assert!(matches!(
-        client_storage.ops()[8],
+        client_storage.ops()[9],
         ClientStorageOp::TakeTls13Ticket(_, true)
     ));
 

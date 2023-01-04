@@ -37,7 +37,7 @@ use std::{fmt, io, mem};
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding session.
 ///
-/// `put_`, `add_` and `take_` operations are mutating; this isn't
+/// `put_`, `add_`, `forget_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
 pub trait StoresClientSessions: Send + Sync {
@@ -61,6 +61,9 @@ pub trait StoresClientSessions: Send + Sync {
         &self,
         server_name: &ServerName,
     ) -> Option<persist::Tls12ClientSessionValue>;
+
+    /// Forget any saved TLS1.2 session for `server_name`.
+    fn forget_tls12_session(&self, server_name: &ServerName);
 
     /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
     /// resumption of this session.  This can be called multiple times for a given session, allowing

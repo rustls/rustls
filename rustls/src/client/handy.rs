@@ -27,6 +27,8 @@ impl client::StoresClientSessions for NoClientSessionStorage {
         None
     }
 
+    fn forget_tls12_session(&self, _: &ServerName) {}
+
     fn add_tls13_ticket(&self, _: &ServerName, _: persist::Tls13ClientSessionValue) {}
 
     fn take_tls13_ticket(&self, _: &ServerName) -> Option<persist::Tls13ClientSessionValue> {
@@ -107,6 +109,14 @@ impl client::StoresClientSessions for ClientSessionMemoryCache {
             .unwrap()
             .get(server_name)
             .and_then(|sd| sd.tls12.as_ref().cloned())
+    }
+
+    fn forget_tls12_session(&self, server_name: &ServerName) {
+        self.servers
+            .lock()
+            .unwrap()
+            .get_mut(server_name)
+            .and_then(|data| data.tls12.take());
     }
 
     fn add_tls13_ticket(&self, server_name: &ServerName, value: persist::Tls13ClientSessionValue) {
