@@ -431,6 +431,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
     cfg.max_fragment_size = opts.max_fragment;
+    cfg.send_tls13_tickets = 1;
 
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);

@@ -2467,8 +2467,9 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
     {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
-        assert_eq!(wrlen, 103);
-        assert_eq!(pipe.writevs, vec![vec![103]]);
+        // 4 tickets
+        assert_eq!(wrlen, 103 * 4);
+        assert_eq!(pipe.writevs, vec![vec![103, 103, 103, 103]]);
     }
 
     assert!(!server.is_handshaking());
@@ -2511,8 +2512,8 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
-        assert_eq!(wrlen, 177);
-        assert_eq!(pipe.writevs, vec![vec![103, 42, 32]]);
+        assert_eq!(wrlen, 486);
+        assert_eq!(pipe.writevs, vec![vec![103, 103, 103, 103, 42, 32]]);
     }
 
     assert!(!server.is_handshaking());
@@ -2791,7 +2792,7 @@ fn tls13_stateful_resumption() {
     // full handshake
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     let (full_c2s, full_s2c) = do_handshake(&mut client, &mut server);
-    assert_eq!(storage.puts(), 1);
+    assert_eq!(storage.puts(), 4);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
     assert_eq!(
@@ -2806,7 +2807,7 @@ fn tls13_stateful_resumption() {
     let (resume_c2s, resume_s2c) = do_handshake(&mut client, &mut server);
     assert!(resume_c2s > full_c2s);
     assert!(resume_s2c < full_s2c);
-    assert_eq!(storage.puts(), 2);
+    assert_eq!(storage.puts(), 8);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 1);
     assert_eq!(
@@ -2821,7 +2822,7 @@ fn tls13_stateful_resumption() {
     let (resume2_c2s, resume2_s2c) = do_handshake(&mut client, &mut server);
     assert_eq!(resume_s2c, resume2_s2c);
     assert_eq!(resume_c2s, resume2_c2s);
-    assert_eq!(storage.puts(), 3);
+    assert_eq!(storage.puts(), 12);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 2);
     assert_eq!(
@@ -3772,7 +3773,7 @@ fn test_client_sends_helloretryrequest() {
 
     // client only did following storage queries:
     println!("storage {:#?}", storage.ops());
-    assert_eq!(storage.ops().len(), 5);
+    assert_eq!(storage.ops().len(), 8);
     assert!(matches!(
         storage.ops()[0],
         ClientStorageOp::TakeTls13Ticket(_, false)
@@ -3791,6 +3792,18 @@ fn test_client_sends_helloretryrequest() {
     ));
     assert!(matches!(
         storage.ops()[4],
+        ClientStorageOp::AddTls13Ticket(_)
+    ));
+    assert!(matches!(
+        storage.ops()[5],
+        ClientStorageOp::AddTls13Ticket(_)
+    ));
+    assert!(matches!(
+        storage.ops()[6],
+        ClientStorageOp::AddTls13Ticket(_)
+    ));
+    assert!(matches!(
+        storage.ops()[7],
         ClientStorageOp::AddTls13Ticket(_)
     ));
 }
@@ -4105,7 +4118,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut server_1 = ServerConnection::new(server_config_1).unwrap();
     common::do_handshake(&mut client_1, &mut server_1);
 
-    assert_eq!(client_storage.ops().len(), 5);
+    assert_eq!(client_storage.ops().len(), 8);
     println!("hs1 storage ops: {:#?}", client_storage.ops());
     assert!(matches!(
         client_storage.ops()[3],
@@ -4122,11 +4135,11 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
     common::do_handshake(&mut client_2, &mut server_2);
     println!("hs2 storage ops: {:#?}", client_storage.ops());
-    assert_eq!(client_storage.ops().len(), 7);
+    assert_eq!(client_storage.ops().len(), 10);
 
     // attempt consumes a TLS1.3 ticket
     assert!(matches!(
-        client_storage.ops()[5],
+        client_storage.ops()[8],
         ClientStorageOp::TakeTls13Ticket(_, true)
     ));
 
