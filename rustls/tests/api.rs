@@ -2718,6 +2718,7 @@ impl rustls::client::StoresClientSessions for ClientStorage {
         rc
     }
 
+    #[cfg(feature = "tls12")]
     fn put_tls12_session(
         &self,
         server_name: &rustls::ServerName,
@@ -2731,6 +2732,7 @@ impl rustls::client::StoresClientSessions for ClientStorage {
             .put_tls12_session(server_name, value)
     }
 
+    #[cfg(feature = "tls12")]
     fn get_tls12_session(
         &self,
         server_name: &rustls::ServerName,
@@ -2748,6 +2750,7 @@ impl rustls::client::StoresClientSessions for ClientStorage {
         rc
     }
 
+    #[cfg(feature = "tls12")]
     fn forget_tls12_session(&self, server_name: &rustls::ServerName) {
         self.ops
             .lock()
@@ -3726,6 +3729,7 @@ fn test_client_config_keyshare_mismatch() {
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }
 
+#[cfg(feature = "tls12")]
 #[test]
 fn test_client_sends_helloretryrequest() {
     // client sends a secp384r1 key share

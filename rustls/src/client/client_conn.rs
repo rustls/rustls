@@ -54,16 +54,23 @@ pub trait StoresClientSessions: Send + Sync {
 
     /// Remember a TLS1.2 session. At most one of these can be remembered at a time, per
     /// `server_name`.
+    #[cfg(feature = "tls12")]
     fn put_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue);
 
     /// Get the most recently saved TLS1.2 session for `server_name` provided to `put_tls12_session`.
+    #[cfg(feature = "tls12")]
     fn get_tls12_session(
         &self,
         server_name: &ServerName,
     ) -> Option<persist::Tls12ClientSessionValue>;
 
     /// Forget any saved TLS1.2 session for `server_name`.
+    #[cfg(feature = "tls12")]
     fn forget_tls12_session(&self, server_name: &ServerName);
+
+    /// Forget any saved TLS1.2 session for `server_name`.
+    #[cfg(not(feature = "tls12"))]
+    fn forget_tls12_session(&self, _: &ServerName) {}
 
     /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
     /// resumption of this session.  This can be called multiple times for a given session, allowing

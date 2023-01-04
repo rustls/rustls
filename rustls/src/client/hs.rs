@@ -48,10 +48,16 @@ fn find_session(
         .take_tls13_ticket(server_name)
         .map(persist::ClientSessionValue::from)
         .or_else(|| {
-            config
-                .session_storage
-                .get_tls12_session(server_name)
-                .map(persist::ClientSessionValue::from)
+            #[cfg(feature = "tls12")]
+            {
+                config
+                    .session_storage
+                    .get_tls12_session(server_name)
+                    .map(persist::ClientSessionValue::from)
+            }
+
+            #[cfg(not(feature = "tls12"))]
+            None
         })
         .and_then(|resuming| {
             let retrieved = persist::Retrieved::new(resuming, TimeBase::now().ok()?);
