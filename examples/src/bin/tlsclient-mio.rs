@@ -1,9 +1,8 @@
 use std::process;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use mio::net::TcpStream;
 
-use std::collections;
 use std::fs;
 use std::io;
 use std::io::{BufReader, Read, Write};
@@ -188,98 +187,6 @@ impl io::Read for TlsClient {
     }
 }
 
-/// This is an example cache for client session data.
-/// It optionally dumps cached data to a file, but otherwise
-/// is just in-memory.
-///
-/// Note that the contents of such a file are extremely sensitive.
-/// Don't write this stuff to disk in production code.
-struct PersistCache {
-    cache: Mutex<collections::HashMap<Vec<u8>, Vec<u8>>>,
-    filename: Option<String>,
-}
-
-impl PersistCache {
-    /// Make a new cache.  If filename is Some, load the cache
-    /// from it and flush changes back to that file.
-    fn new(filename: &Option<String>) -> Self {
-        let cache = PersistCache {
-            cache: Mutex::new(collections::HashMap::new()),
-            filename: filename.clone(),
-        };
-        if cache.filename.is_some() {
-            cache.load();
-        }
-        cache
-    }
-
-    /// If we have a filename, save the cache contents to it.
-    fn save(&self) {
-        use rustls::internal::msgs::base::PayloadU16;
-        use rustls::internal::msgs::codec::Codec;
-
-        if self.filename.is_none() {
-            return;
-        }
-
-        let mut file =
-            fs::File::create(self.filename.as_ref().unwrap()).expect("cannot open cache file");
-
-        for (key, val) in self.cache.lock().unwrap().iter() {
-            let mut item = Vec::new();
-            let key_pl = PayloadU16::new(key.clone());
-            let val_pl = PayloadU16::new(val.clone());
-            key_pl.encode(&mut item);
-            val_pl.encode(&mut item);
-            file.write_all(&item).unwrap();
-        }
-    }
-
-    /// We have a filename, so replace the cache contents from it.
-    fn load(&self) {
-        use rustls::internal::msgs::base::PayloadU16;
-        use rustls::internal::msgs::codec::{Codec, Reader};
-
-        let mut file = match fs::File::open(self.filename.as_ref().unwrap()) {
-            Ok(f) => f,
-            Err(_) => return,
-        };
-        let mut data = Vec::new();
-        file.read_to_end(&mut data).unwrap();
-
-        let mut cache = self.cache.lock().unwrap();
-        cache.clear();
-        let mut rd = Reader::init(&data);
-
-        while rd.any_left() {
-            let key_pl = PayloadU16::read(&mut rd).unwrap();
-            let val_pl = PayloadU16::read(&mut rd).unwrap();
-            cache.insert(key_pl.0, val_pl.0);
-        }
-    }
-}
-
-impl rustls::client::StoresClientSessions for PersistCache {
-    /// put: insert into in-memory cache, and perhaps persist to disk.
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.cache
-            .lock()
-            .unwrap()
-            .insert(key, value);
-        self.save();
-        true
-    }
-
-    /// get: from in-memory cache
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache
-            .lock()
-            .unwrap()
-            .get(key)
-            .cloned()
-    }
-}
-
 const USAGE: &str = "
 Connects to the TLS server at hostname:PORT.  The default PORT
 is 443.  By default, this reads a request from stdin (to EOF)
@@ -307,7 +214,6 @@ Options:
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
                         May be used multiple times to offer several protocols.
-    --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
     --no-sni            Disable server name indication support.
     --insecure          Disable certificate verification.
@@ -327,7 +233,6 @@ struct Args {
     flag_proto: Vec<String>,
     flag_max_frag_size: Option<usize>,
     flag_cafile: Option<String>,
-    flag_cache: Option<String>,
     flag_no_tickets: bool,
     flag_no_sni: bool,
     flag_insecure: bool,
@@ -530,8 +435,6 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     if args.flag_no_sni {
         config.enable_sni = false;
     }
-
-    config.session_storage = Arc::new(PersistCache::new(&args.flag_cache));
 
     config.alpn_protocols = args
         .flag_proto

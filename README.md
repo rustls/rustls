@@ -188,7 +188,6 @@ Options:
                         SUITE instead.  May be used multiple times.
     --proto PROTOCOL    Send ALPN extension containing PROTOCOL.
                         May be used multiple times to offer several protocols.
-    --cache CACHE       Save session cache to file CACHE.
     --no-tickets        Disable session ticket support.
     --no-sni            Disable server name indication support.
     --insecure          Disable certificate verification.
