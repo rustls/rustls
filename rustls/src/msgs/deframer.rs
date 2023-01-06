@@ -50,28 +50,7 @@ impl MessageDeframer {
             }
         };
 
-        let taken = rd.used();
-        #[allow(clippy::comparison_chain)]
-        if taken < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
-            self.buf
-                .copy_within(taken..self.used, 0);
-            self.used -= taken;
-        } else if taken == self.used {
-            self.used = 0;
-        }
+        self.discard(rd.used());
 
         // Return CCS messages immediately without decrypting.
         if m.typ == ContentType::ChangeCipherSpec {
@@ -109,6 +88,31 @@ impl MessageDeframer {
     /// queue or partial messages in our buffer.
     pub fn has_pending(&self) -> bool {
         self.used > 0
+    }
+
+    /// Discard `taken` bytes from the start of our buffer.
+    fn discard(&mut self, taken: usize) {
+        #[allow(clippy::comparison_chain)]
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken == self.used {
+            self.used = 0;
+        }
     }
 }
 
