@@ -54,7 +54,7 @@ path = "examples/internal/bench.rs"
 
 [[bench]]
 name = "benchmarks"
-path = "tests/benchmarks.rs"
+path = "benches/benchmarks.rs"
 harness = false
 
 [package.metadata.docs.rs]
