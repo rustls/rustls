@@ -4,9 +4,9 @@ use criterion::criterion_main;
 /// performance go in examples/internal/bench.rs.
 use criterion::Criterion;
 
-#[allow(dead_code)]
-mod common;
-use crate::common::*;
+#[path = "../tests/common/mod.rs"]
+mod test_utils;
+use test_utils::*;
 
 use rustls::ServerConnection;
 
