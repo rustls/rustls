@@ -20,6 +20,6 @@ fuzz_target!(|data: &[u8]| {
 
     let mut rl = RecordLayer::new();
     while let Ok(Some(decrypted)) = dfm.pop(&mut rl) {
-        Message::try_from(decrypted.plaintext).ok();
+        Message::try_from(decrypted.message).ok();
     }
 });

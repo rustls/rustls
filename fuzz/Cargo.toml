@@ -34,10 +34,6 @@ name = "fragment"
 path = "fuzzers/fragment.rs"
 
 [[bin]]
-name = "hsjoiner"
-path = "fuzzers/hsjoiner.rs"
-
-[[bin]]
 name = "persist"
 path = "fuzzers/persist.rs"
 
