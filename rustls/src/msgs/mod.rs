@@ -12,7 +12,6 @@ pub mod deframer;
 pub mod enums;
 pub mod fragmenter;
 pub mod handshake;
-pub mod hsjoiner;
 pub mod message;
 pub mod persist;
 

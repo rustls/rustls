@@ -367,9 +367,10 @@
     "EarlyDataWithoutResume-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyData-SkipEndOfEarlyData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
+    "SkipEarlyData-Interleaved-TLS13": ":PEER_MISBEHAVIOUR:",
     "SkipEarlyData-TooMuchData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "SkipEarlyData-HRR-FatalAlert-TLS13": ":HANDSHAKE_FAILURE:",
-    "SkipEarlyData-HRR-Interleaved-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
+    "SkipEarlyData-HRR-Interleaved-TLS13": ":PEER_MISBEHAVIOUR:",
     "SkipEarlyData-HRR-TooMuchData-TLS13": ":UNEXPECTED_MESSAGE:",
     "SkipEarlyData-SecondClientHelloEarlyData-TLS13": ":PEER_MISBEHAVIOUR:"
   },
