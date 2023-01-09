@@ -37,7 +37,7 @@ log = "0.4.4"
 webpki-roots = "0.22.0"
 criterion = "0.3.0"
 rustls-pemfile = "1.0.0"
-base64 = "0.13.0"
+base64 = "0.21.0"
 
 [[example]]
 name = "bogo_shim"
