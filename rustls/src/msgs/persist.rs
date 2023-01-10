@@ -140,7 +140,10 @@ impl Retrieved<ClientSessionValue> {
     pub fn has_expired(&self) -> bool {
         let common = self.value.common();
         common.lifetime_secs != 0
-            && common.epoch + u64::from(common.lifetime_secs) < self.retrieved_at.as_secs()
+            && common
+                .epoch
+                .saturating_add(u64::from(common.lifetime_secs))
+                < self.retrieved_at.as_secs()
     }
 }
 

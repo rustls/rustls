@@ -139,7 +139,9 @@ impl TicketSwitcher {
                 next: Some(generator()?),
                 current: generator()?,
                 previous: None,
-                next_switch_time: now.as_secs() + u64::from(lifetime),
+                next_switch_time: now
+                    .as_secs()
+                    .saturating_add(u64::from(lifetime)),
             }),
         })
     }
@@ -196,7 +198,7 @@ impl TicketSwitcher {
             // Make the switch, or mark for recovery if not possible
             if let Some(next) = state.next.take() {
                 state.previous = Some(mem::replace(&mut state.current, next));
-                state.next_switch_time = now + u64::from(self.lifetime);
+                state.next_switch_time = now.saturating_add(u64::from(self.lifetime));
             } else {
                 are_recovering = true;
             }
@@ -218,7 +220,7 @@ impl TicketSwitcher {
             state.next = Some(next);
             if now > state.next_switch_time {
                 state.previous = Some(mem::replace(&mut state.current, new_current));
-                state.next_switch_time = now + u64::from(self.lifetime);
+                state.next_switch_time = now.saturating_add(u64::from(self.lifetime));
             }
             Some(state)
         }
