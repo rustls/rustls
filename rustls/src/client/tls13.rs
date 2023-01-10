@@ -889,7 +889,6 @@ impl State<ClientConnectionData> for ExpectFinished {
             suite: st.suite,
             transcript: st.transcript,
             key_schedule: key_schedule_traffic,
-            want_write_key_update: false,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
             _fin_verified: fin,
@@ -913,7 +912,6 @@ struct ExpectTraffic {
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,
-    want_write_key_update: bool,
     _cert_verified: verify::ServerCertVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
@@ -983,7 +981,7 @@ impl ExpectTraffic {
     fn handle_key_update(
         &mut self,
         common: &mut CommonState,
-        kur: &KeyUpdateRequest,
+        key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
         {
@@ -997,15 +995,9 @@ impl ExpectTraffic {
         // Mustn't be interleaved with other handshake messages.
         common.check_aligned_handshake()?;
 
-        match kur {
-            KeyUpdateRequest::UpdateNotRequested => {}
-            KeyUpdateRequest::UpdateRequested => {
-                self.want_write_key_update = true;
-            }
-            _ => {
-                common.send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(Error::CorruptMessagePayload(ContentType::Handshake));
-            }
+        if common.should_update_key(key_update_request)? {
+            self.key_schedule
+                .update_encrypter_and_notify(common);
         }
 
         // Update our read-side keys.
@@ -1057,14 +1049,6 @@ impl State<ClientConnectionData> for ExpectTraffic {
     ) -> Result<(), Error> {
         self.key_schedule
             .export_keying_material(output, label, context)
-    }
-
-    fn perhaps_write_key_update(&mut self, common: &mut CommonState) {
-        if self.want_write_key_update {
-            self.want_write_key_update = false;
-            self.key_schedule
-                .update_encrypter_and_notify(common);
-        }
     }
 
     #[cfg(feature = "secret_extraction")]
