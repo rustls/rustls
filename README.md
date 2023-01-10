@@ -27,6 +27,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
     Both a full deframer buffer and a full incoming plaintext buffer will
     now cause an error to be returned. Callers should call `process_new_packets()`
     and read out the `writer()` after each successful call to `read_tls()`.
+  - The minimum supported Rust version is now 1.57.0 due to some dependencies
+    requiring it.
 * 0.20.7 (2022-10-18)
   - Expose secret extraction API under the `secret_extraction` cargo feature.
     This is designed to enable switching from rustls to kTLS (kernel TLS

@@ -2,7 +2,7 @@
 name = "rustls"
 version = "0.20.7"
 edition = "2018"
-rust-version = "1.56"
+rust-version = "1.57"
 license = "Apache-2.0/ISC/MIT"
 readme = "../README.md"
 description = "Rustls is a modern TLS library written in Rust."

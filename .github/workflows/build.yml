@@ -20,7 +20,7 @@ jobs:
           - stable
           - beta
           - nightly
-          - 1.56 # MSRV
+          - 1.57 # MSRV
         os: [ubuntu-20.04]
         # but only stable on macos/windows (slower platforms)
         include:
