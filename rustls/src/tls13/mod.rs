@@ -181,7 +181,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 
         Ok(OpaqueMessage {
             typ: ContentType::ApplicationData,
-            version: ProtocolVersion::TLSv1_2,
+            version: ProtocolVersion::TLSv1_3,
             payload: Payload::new(payload),
         })
     }
