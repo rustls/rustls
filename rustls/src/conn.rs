@@ -6,8 +6,8 @@ use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::deframer::{Deframed, MessageDeframer};
-use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType};
+use crate::msgs::enums::{HandshakeType, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{
@@ -694,9 +694,8 @@ impl<Data> ConnectionCommon<Data> {
     }
 
     pub(crate) fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        if let Ok(st) = &mut self.state {
-            st.perhaps_write_key_update(&mut self.common_state);
-        }
+        self.common_state
+            .perhaps_write_key_update();
         self.common_state
             .send_some_plaintext(buf)
     }
@@ -823,6 +822,8 @@ pub struct CommonState {
     received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
+    queued_key_update_message: Option<Vec<u8>>,
+
     #[allow(dead_code)] // only read for QUIC
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,
@@ -853,6 +854,7 @@ impl CommonState {
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            queued_key_update_message: None,
 
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
@@ -1317,6 +1319,35 @@ impl CommonState {
         #[cfg(not(feature = "quic"))]
         false
     }
+
+    pub(crate) fn should_update_key(
+        &mut self,
+        key_update_request: &KeyUpdateRequest,
+    ) -> Result<bool, Error> {
+        match key_update_request {
+            KeyUpdateRequest::UpdateNotRequested => Ok(false),
+            KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
+            _ => {
+                self.send_fatal_alert(AlertDescription::IllegalParameter);
+                Err(Error::CorruptMessagePayload(ContentType::Handshake))
+            }
+        }
+    }
+
+    pub(crate) fn enqueue_key_update_notification(&mut self) {
+        let message = PlainMessage::from(Message::build_key_update_notify());
+        self.queued_key_update_message = Some(
+            self.record_layer
+                .encrypt_outgoing(message.borrow())
+                .encode(),
+        );
+    }
+
+    fn perhaps_write_key_update(&mut self) {
+        if let Some(message) = self.queued_key_update_message.take() {
+            self.sendable_tls.append(message);
+        }
+    }
 }
 
 pub(crate) trait State<Data>: Send + Sync {
@@ -1339,8 +1370,6 @@ pub(crate) trait State<Data>: Send + Sync {
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         Err(Error::HandshakeNotComplete)
     }
-
-    fn perhaps_write_key_update(&mut self, _cx: &mut CommonState) {}
 }
 
 pub(crate) struct Context<'a, Data> {
