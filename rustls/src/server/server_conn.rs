@@ -813,6 +813,7 @@ impl quic::QuicExt for ServerConnection {
 
 /// Methods specific to QUIC server sessions
 #[cfg(feature = "quic")]
+#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
 pub trait ServerQuicExt {
     /// Make a new QUIC ServerConnection. This differs from `ServerConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the

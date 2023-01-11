@@ -320,6 +320,7 @@ pub(super) mod danger {
 
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
+    #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
     pub struct DangerousClientConfig<'a> {
         /// The underlying ClientConfig
         pub cfg: &'a mut ClientConfig,
@@ -636,6 +637,7 @@ impl quic::QuicExt for ClientConnection {
 
 /// Methods specific to QUIC client sessions
 #[cfg(feature = "quic")]
+#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
 pub trait ClientQuicExt {
     /// Make a new QUIC ClientConnection. This differs from `ClientConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the
