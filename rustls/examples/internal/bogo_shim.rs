@@ -252,7 +252,7 @@ impl rustls::sign::SigningKey for FixedSignatureSchemeSigningKey {
             self.key.choose_scheme(&[])
         }
     }
-    fn algorithm(&self) -> rustls::internal::msgs::enums::SignatureAlgorithm {
+    fn algorithm(&self) -> rustls::SignatureAlgorithm {
         self.key.algorithm()
     }
 }
@@ -576,8 +576,8 @@ fn quit_err(why: &str) -> ! {
 }
 
 fn handle_err(err: rustls::Error) -> ! {
-    use rustls::internal::msgs::enums::{AlertDescription, ContentType};
     use rustls::Error;
+    use rustls::{AlertDescription, ContentType};
     use std::{thread, time};
 
     println!("TLS error: {:?}", err);

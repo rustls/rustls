@@ -3145,7 +3145,7 @@ mod test_quic {
         assert!(step(&mut server, &mut client).is_err());
         assert_eq!(
             client.alert(),
-            Some(rustls::internal::msgs::enums::AlertDescription::BadCertificate)
+            Some(rustls::AlertDescription::BadCertificate)
         );
 
         // Key updates
@@ -3202,7 +3202,7 @@ mod test_quic {
 
             assert_eq!(
                 server.alert(),
-                Some(rustls::internal::msgs::enums::AlertDescription::NoApplicationProtocol)
+                Some(rustls::AlertDescription::NoApplicationProtocol)
             );
         }
     }

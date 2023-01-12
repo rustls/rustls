@@ -11,9 +11,9 @@ use crate::common::{
 };
 use rustls::client::WebPkiVerifier;
 use rustls::internal::msgs::base::PayloadU16;
-use rustls::internal::msgs::enums::AlertDescription;
-use rustls::internal::msgs::enums::ContentType;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
+use rustls::AlertDescription;
+use rustls::ContentType;
 use rustls::{
     Certificate, ClientConnection, DistinguishedNames, Error, ServerConfig, ServerConnection,
     SignatureScheme,
