@@ -79,15 +79,14 @@ impl Connection {
     /// Derives key material from the agreed connection secrets.
     ///
     /// See [`ConnectionCommon::export_keying_material()`] for more information.
-    pub fn export_keying_material(
+    pub fn export_keying_material<const N: usize>(
         &self,
-        output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), Error> {
+    ) -> Result<[u8; N], Error> {
         match self {
-            Self::Client(conn) => conn.export_keying_material(output, label, context),
-            Self::Server(conn) => conn.export_keying_material(output, label, context),
+            Self::Client(conn) => conn.export_keying_material(label, context),
+            Self::Server(conn) => conn.export_keying_material(label, context),
         }
     }
 
@@ -748,14 +747,16 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This function fails if called prior to the handshake completing;
     /// check with [`CommonState::is_handshaking`] first.
-    pub fn export_keying_material(
+    pub fn export_keying_material<const N: usize>(
         &self,
-        output: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), Error> {
+    ) -> Result<[u8; N], Error> {
+        let mut output = [0; N];
         match self.state.as_ref() {
-            Ok(st) => st.export_keying_material(output, label, context),
+            Ok(st) => st
+                .export_keying_material(&mut output, label, context)
+                .map(|_| output),
             Err(e) => Err(e.clone()),
         }
     }

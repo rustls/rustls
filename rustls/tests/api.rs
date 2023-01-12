@@ -2016,40 +2016,34 @@ fn sni_resolver_rejects_bad_certs() {
 }
 
 fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
-    let mut client_secret = [0u8; 64];
-    let mut server_secret = [0u8; 64];
-
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
     assert_debug_eq(
-        client.export_keying_material(&mut client_secret, b"label", Some(b"context")),
+        client.export_keying_material::<64>(b"label", Some(b"context")),
         Err(Error::HandshakeNotComplete),
     );
     assert_debug_eq(
-        server.export_keying_material(&mut server_secret, b"label", Some(b"context")),
+        server.export_keying_material::<64>(b"label", Some(b"context")),
         Err(Error::HandshakeNotComplete),
     );
     do_handshake(&mut client, &mut server);
 
-    assert_debug_eq(
-        client.export_keying_material(&mut client_secret, b"label", Some(b"context")),
-        Ok(()),
-    );
-    assert_debug_eq(
-        server.export_keying_material(&mut server_secret, b"label", Some(b"context")),
-        Ok(()),
-    );
+    let client_secret = client
+        .export_keying_material::<64>(b"label", Some(b"context"))
+        .unwrap();
+    let server_secret = server
+        .export_keying_material::<64>(b"label", Some(b"context"))
+        .unwrap();
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 
-    assert_debug_eq(
-        client.export_keying_material(&mut client_secret, b"label", None),
-        Ok(()),
-    );
+    let client_secret = client
+        .export_keying_material::<64>(b"label", None)
+        .unwrap();
     assert_ne!(client_secret.to_vec(), server_secret.to_vec());
-    assert_debug_eq(
-        server.export_keying_material(&mut server_secret, b"label", None),
-        Ok(()),
-    );
+
+    let server_secret = server
+        .export_keying_material::<64>(b"label", None)
+        .unwrap();
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 }
 

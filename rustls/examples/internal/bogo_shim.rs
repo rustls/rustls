@@ -730,22 +730,39 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
         }
 
         if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
-            let mut export = Vec::new();
-            export.resize(opts.export_keying_material, 0u8);
-            sess.export_keying_material(
-                &mut export,
-                opts.export_keying_material_label
-                    .as_bytes(),
-                if opts.export_keying_material_context_used {
-                    Some(
-                        opts.export_keying_material_context
+            let export = match opts.export_keying_material {
+                1 => sess
+                    .export_keying_material::<1>(
+                        opts.export_keying_material_label
                             .as_bytes(),
+                        if opts.export_keying_material_context_used {
+                            Some(
+                                opts.export_keying_material_context
+                                    .as_bytes(),
+                            )
+                        } else {
+                            None
+                        },
                     )
-                } else {
-                    None
-                },
-            )
-            .unwrap();
+                    .unwrap()
+                    .to_vec(),
+                1024 => sess
+                    .export_keying_material::<1024>(
+                        opts.export_keying_material_label
+                            .as_bytes(),
+                        if opts.export_keying_material_context_used {
+                            Some(
+                                opts.export_keying_material_context
+                                    .as_bytes(),
+                            )
+                        } else {
+                            None
+                        },
+                    )
+                    .unwrap()
+                    .to_vec(),
+                _ => panic!("Unsupported export length {}", opts.export_keying_material),
+            };
             sess.writer()
                 .write_all(&export)
                 .unwrap();
