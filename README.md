@@ -22,11 +22,11 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 * Next release
   - Planned: removal of unused signature verification schemes at link-time.
-* 0.20.8 (TBD)
+* 0.20.8 (2023-01-12)
   - Yield an error from `ConnectionCommon::read_tls()` if buffers are full.
     Both a full deframer buffer and a full incoming plaintext buffer will
     now cause an error to be returned. Callers should call `process_new_packets()`
-    and read out the `writer()` after each successful call to `read_tls()`.
+    and read out the plaintext data from `reader()` after each successful call to `read_tls()`.
   - The minimum supported Rust version is now 1.57.0 due to some dependencies
     requiring it.
 * 0.20.7 (2022-10-18)
