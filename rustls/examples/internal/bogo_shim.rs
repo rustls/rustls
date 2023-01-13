@@ -13,7 +13,7 @@ use rustls::internal::msgs::persist;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::ClientHello;
 use rustls::{CipherSuite, ProtocolVersion};
-use rustls::{ClientConnection, Connection, ServerConnection};
+use rustls::{ClientConnection, Connection, ServerConnection, Side};
 
 use std::env;
 use std::fs;
@@ -36,7 +36,7 @@ macro_rules! println_err(
 #[derive(Debug)]
 struct Options {
     port: u16,
-    server: bool,
+    side: Side,
     max_fragment: Option<usize>,
     resumes: usize,
     verify_peer: bool,
@@ -83,7 +83,7 @@ impl Options {
     fn new() -> Self {
         Options {
             port: 0,
-            server: false,
+            side: Side::Client,
             max_fragment: None,
             resumes: 0,
             verify_peer: false,
@@ -694,7 +694,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             }
         }
 
-        if opts.server && opts.enable_early_data {
+        if opts.side == Side::Server && opts.enable_early_data {
             if let Some(ref mut ed) = server(&mut sess).early_data() {
                 let mut data = Vec::new();
                 let data_len = ed
@@ -751,7 +751,11 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             quench_writes = true;
         }
 
-        if opts.enable_early_data && !opts.server && !sess.is_handshaking() && count > 0 {
+        if opts.enable_early_data
+            && opts.side == Side::Client
+            && !sess.is_handshaking()
+            && count > 0
+        {
             if opts.expect_accept_early_data && !client(&mut sess).is_early_data_accepted() {
                 quit_err("Early data was not accepted, but we expect the opposite");
             } else if opts.expect_reject_early_data && client(&mut sess).is_early_data_accepted() {
@@ -841,7 +845,7 @@ fn main() {
                 opts.port = args.remove(0).parse::<u16>().unwrap();
             }
             "-server" => {
-                opts.server = true;
+                opts.side = Side::Server;
             }
             "-key-file" => {
                 opts.key_file = args.remove(0);
@@ -1131,15 +1135,9 @@ fn main() {
 
     println!("opts {:?}", opts);
 
-    let mut server_cfg = if opts.server {
-        Some(make_server_cfg(&opts))
-    } else {
-        None
-    };
-    let client_cfg = if !opts.server {
-        Some(make_client_cfg(&opts))
-    } else {
-        None
+    let (client_cfg, mut server_cfg) = match opts.side {
+        Side::Client => (Some(make_client_cfg(&opts)), None),
+        Side::Server => (None, Some(make_server_cfg(&opts))),
     };
 
     fn make_session(
@@ -1147,7 +1145,7 @@ fn main() {
         scfg: &Option<Arc<rustls::ServerConfig>>,
         ccfg: &Option<Arc<rustls::ClientConfig>>,
     ) -> Connection {
-        if opts.server {
+        if opts.side == Side::Server {
             let scfg = Arc::clone(scfg.as_ref().unwrap());
             let s = if opts.quic_transport_params.is_empty() {
                 rustls::ServerConnection::new(scfg).unwrap()
