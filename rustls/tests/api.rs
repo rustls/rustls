@@ -3396,6 +3396,7 @@ mod test_quic {
     #[test]
     fn packet_key_api() {
         use rustls::quic::{Keys, Version};
+        use rustls::Side;
 
         // Test vectors: https://www.rfc-editor.org/rfc/rfc9001.html#name-client-initial
         const CONNECTION_ID: &[u8] = &[0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
@@ -3426,7 +3427,7 @@ mod test_quic {
             0x08, 0x06, 0x04, 0x80, 0x00, 0xff, 0xff,
         ];
 
-        let client_keys = Keys::initial(Version::V1, &CONNECTION_ID, true);
+        let client_keys = Keys::initial(Version::V1, &CONNECTION_ID, Side::Client);
         assert_eq!(
             client_keys
                 .local
@@ -3562,7 +3563,7 @@ mod test_quic {
         let (first, rest) = header.split_at_mut(1);
         let sample = &payload[..sample_len];
 
-        let server_keys = Keys::initial(Version::V1, &CONNECTION_ID, false);
+        let server_keys = Keys::initial(Version::V1, &CONNECTION_ID, Side::Server);
         server_keys
             .remote
             .header

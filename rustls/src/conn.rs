@@ -1452,9 +1452,12 @@ impl Quic {
     }
 }
 
+/// Side of the connection.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum Side {
+pub enum Side {
+    /// A client initiates the connection.
     Client,
+    /// A server waits for a client to connect.
     Server,
 }
 
