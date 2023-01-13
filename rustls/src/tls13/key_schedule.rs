@@ -305,6 +305,13 @@ impl KeyScheduleTraffic {
             .set_message_encrypter(self.ks.suite.derive_encrypter(&secret));
     }
 
+    pub(crate) fn update_decrypter(&mut self, common: &mut CommonState) {
+        let secret = self.next_application_traffic_secret(common.side.peer());
+        common
+            .record_layer
+            .set_message_decrypter(self.ks.suite.derive_decrypter(&secret));
+    }
+
     pub(crate) fn next_application_traffic_secret(&mut self, side: Side) -> hkdf::Prk {
         let current = match side {
             Side::Client => &mut self.current_client_traffic_secret,
