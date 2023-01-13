@@ -2,6 +2,8 @@ use crate::cipher::{Iv, IvLen};
 use crate::conn::{CommonState, Side};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
+#[cfg(feature = "quic")]
+use crate::quic;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 use crate::{KeyLog, Tls13CipherSuite};
@@ -91,13 +93,38 @@ impl KeyScheduleEarly {
         hs_hash: &Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-    ) -> hkdf::Prk {
-        self.ks.derive_logged_secret(
+        common: &mut CommonState,
+    ) {
+        let client_early_traffic_secret = self.ks.derive_logged_secret(
             SecretKind::ClientEarlyTrafficSecret,
             hs_hash.as_ref(),
             key_log,
             client_random,
-        )
+        );
+
+        match common.side {
+            Side::Client => common
+                .record_layer
+                .set_message_encrypter(
+                    self.ks
+                        .suite
+                        .derive_encrypter(&client_early_traffic_secret),
+                ),
+            Side::Server => common
+                .record_layer
+                .set_message_decrypter(
+                    self.ks
+                        .suite
+                        .derive_decrypter(&client_early_traffic_secret),
+                ),
+        }
+
+        #[cfg(feature = "quic")]
+        if common.is_quic() {
+            // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
+            // before the application can see.
+            common.quic.early_secret = Some(client_early_traffic_secret);
+        }
     }
 
     pub(crate) fn resumption_psk_binder_key_and_sign_verify_data(
@@ -145,12 +172,74 @@ pub(crate) struct KeyScheduleHandshakeStart {
 }
 
 impl KeyScheduleHandshakeStart {
-    pub(crate) fn derive_handshake_secrets(
+    pub(crate) fn derive_client_handshake_secrets(
+        mut self,
+        early_data_enabled: bool,
+        hs_hash: Digest,
+        suite: &'static Tls13CipherSuite,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+        common: &mut CommonState,
+    ) -> KeyScheduleHandshake {
+        debug_assert_eq!(common.side, Side::Client);
+        // Suite might have changed due to resumption
+        self.ks.suite = suite;
+        let new = self.into_handshake(hs_hash, key_log, client_random, common);
+
+        // Decrypt with the peer's key, encrypt with our own key
+        common
+            .record_layer
+            .set_message_decrypter(
+                new.ks
+                    .suite
+                    .derive_decrypter(&new.server_handshake_traffic_secret),
+            );
+
+        if !early_data_enabled {
+            // Set the client encryption key for handshakes if early data is not used
+            common
+                .record_layer
+                .set_message_encrypter(
+                    new.ks
+                        .suite
+                        .derive_encrypter(&new.client_handshake_traffic_secret),
+                );
+        }
+
+        new
+    }
+
+    pub(crate) fn derive_server_handshake_secrets(
         self,
         hs_hash: Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-    ) -> (KeyScheduleHandshake, hkdf::Prk, hkdf::Prk) {
+        common: &mut CommonState,
+    ) -> KeyScheduleHandshake {
+        debug_assert_eq!(common.side, Side::Server);
+        let new = self.into_handshake(hs_hash, key_log, client_random, common);
+
+        // Set up to encrypt with handshake secrets, but decrypt with early_data keys.
+        // If not doing early_data after all, this is corrected later to the handshake
+        // keys (now stored in key_schedule).
+        common
+            .record_layer
+            .set_message_encrypter(
+                new.ks
+                    .suite
+                    .derive_encrypter(&new.server_handshake_traffic_secret),
+            );
+
+        new
+    }
+
+    fn into_handshake(
+        self,
+        hs_hash: Digest,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+        _common: &mut CommonState,
+    ) -> KeyScheduleHandshake {
         // Use an empty handshake hash for the initial handshake.
         let client_secret = self.ks.derive_logged_secret(
             SecretKind::ClientHandshakeTrafficSecret,
@@ -166,13 +255,21 @@ impl KeyScheduleHandshakeStart {
             client_random,
         );
 
-        let new = KeyScheduleHandshake {
-            ks: self.ks,
-            client_handshake_traffic_secret: client_secret.clone(),
-            server_handshake_traffic_secret: server_secret.clone(),
-        };
+        #[cfg(feature = "quic")]
+        if _common.is_quic() {
+            _common.quic.hs_secrets = Some(quic::Secrets::new(
+                client_secret.clone(),
+                server_secret.clone(),
+                self.ks.suite,
+                _common.side,
+            ));
+        }
 
-        (new, client_secret, server_secret)
+        KeyScheduleHandshake {
+            ks: self.ks,
+            client_handshake_traffic_secret: client_secret,
+            server_handshake_traffic_secret: server_secret,
+        }
     }
 }
 
@@ -188,8 +285,39 @@ impl KeyScheduleHandshake {
             .sign_finish(&self.server_handshake_traffic_secret, hs_hash)
     }
 
-    pub(crate) fn client_key(&self) -> &hkdf::Prk {
-        &self.client_handshake_traffic_secret
+    pub(crate) fn set_handshake_encrypter(&self, common: &mut CommonState) {
+        debug_assert_eq!(common.side, Side::Client);
+        common
+            .record_layer
+            .set_message_encrypter(
+                self.ks
+                    .suite
+                    .derive_encrypter(&self.client_handshake_traffic_secret),
+            );
+    }
+
+    pub(crate) fn set_handshake_decrypter(
+        &self,
+        skip_requested: Option<usize>,
+        common: &mut CommonState,
+    ) {
+        match skip_requested {
+            None => common
+                .record_layer
+                .set_message_decrypter(
+                    self.ks
+                        .suite
+                        .derive_decrypter(&self.client_handshake_traffic_secret),
+                ),
+            Some(max_early_data_size) => common
+                .record_layer
+                .set_message_decrypter_with_trial_decryption(
+                    self.ks
+                        .suite
+                        .derive_decrypter(&self.client_handshake_traffic_secret),
+                    max_early_data_size,
+                ),
+        }
     }
 
     pub(crate) fn into_traffic_with_client_finished_pending(
@@ -197,26 +325,88 @@ impl KeyScheduleHandshake {
         hs_hash: Digest,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-    ) -> (
-        KeyScheduleTrafficWithClientFinishedPending,
-        hkdf::Prk,
-        hkdf::Prk,
-    ) {
+        common: &mut CommonState,
+    ) -> KeyScheduleTrafficWithClientFinishedPending {
+        debug_assert_eq!(common.side, Side::Server);
+
         let traffic = KeyScheduleTraffic::new(self.ks, hs_hash, key_log, client_random);
+        let (suite, _client_secret, server_secret) = (
+            traffic.ks.suite,
+            &traffic.current_client_traffic_secret,
+            &traffic.current_server_traffic_secret,
+        );
 
-        let client_secret = traffic
-            .current_client_traffic_secret
-            .clone();
-        let server_secret = traffic
-            .current_server_traffic_secret
-            .clone();
+        common
+            .record_layer
+            .set_message_encrypter(suite.derive_encrypter(server_secret));
 
-        let new = KeyScheduleTrafficWithClientFinishedPending {
+        #[cfg(feature = "quic")]
+        if common.is_quic() {
+            common.quic.traffic_secrets = Some(quic::Secrets::new(
+                _client_secret.clone(),
+                server_secret.clone(),
+                suite,
+                common.side,
+            ));
+        }
+
+        KeyScheduleTrafficWithClientFinishedPending {
             handshake_client_traffic_secret: self.client_handshake_traffic_secret,
             traffic,
-        };
+        }
+    }
 
-        (new, client_secret, server_secret)
+    pub(crate) fn into_pre_finished_client_traffic(
+        self,
+        pre_finished_hash: Digest,
+        handshake_hash: Digest,
+        key_log: &dyn KeyLog,
+        client_random: &[u8; 32],
+    ) -> (KeyScheduleClientBeforeFinished, hmac::Tag) {
+        let traffic = KeyScheduleTraffic::new(self.ks, pre_finished_hash, key_log, client_random);
+        let tag = traffic
+            .ks
+            .sign_finish(&self.client_handshake_traffic_secret, &handshake_hash);
+        (KeyScheduleClientBeforeFinished { traffic }, tag)
+    }
+}
+
+pub(crate) struct KeyScheduleClientBeforeFinished {
+    traffic: KeyScheduleTraffic,
+}
+
+impl KeyScheduleClientBeforeFinished {
+    pub(crate) fn into_traffic(self, common: &mut CommonState) -> KeyScheduleTraffic {
+        debug_assert_eq!(common.side, Side::Client);
+        let (suite, client_secret, server_secret) = (
+            self.traffic.ks.suite,
+            &self
+                .traffic
+                .current_client_traffic_secret,
+            &self
+                .traffic
+                .current_server_traffic_secret,
+        );
+
+        common
+            .record_layer
+            .set_message_decrypter(suite.derive_decrypter(server_secret));
+
+        common
+            .record_layer
+            .set_message_encrypter(suite.derive_encrypter(client_secret));
+
+        #[cfg(feature = "quic")]
+        if common.is_quic() {
+            common.quic.traffic_secrets = Some(quic::Secrets::new(
+                client_secret.clone(),
+                server_secret.clone(),
+                suite,
+                common.side,
+            ));
+        }
+
+        self.traffic
     }
 }
 
@@ -229,25 +419,41 @@ pub(crate) struct KeyScheduleTrafficWithClientFinishedPending {
 }
 
 impl KeyScheduleTrafficWithClientFinishedPending {
-    pub(crate) fn client_key(&self) -> &hkdf::Prk {
-        &self.handshake_client_traffic_secret
+    pub(crate) fn update_decrypter(&self, common: &mut CommonState) {
+        debug_assert_eq!(common.side, Side::Server);
+        common
+            .record_layer
+            .set_message_decrypter(
+                self.traffic
+                    .ks
+                    .suite
+                    .derive_decrypter(&self.handshake_client_traffic_secret),
+            );
     }
 
     pub(crate) fn sign_client_finish(
         self,
         hs_hash: &Digest,
-    ) -> (KeyScheduleTraffic, hmac::Tag, hkdf::Prk) {
+        common: &mut CommonState,
+    ) -> (KeyScheduleTraffic, hmac::Tag) {
+        debug_assert_eq!(common.side, Side::Server);
         let tag = self
             .traffic
             .ks
             .sign_finish(&self.handshake_client_traffic_secret, hs_hash);
 
-        let client_secret = self
-            .traffic
-            .current_client_traffic_secret
-            .clone();
+        // Install keying to read future messages.
+        common
+            .record_layer
+            .set_message_decrypter(
+                self.traffic.ks.suite.derive_decrypter(
+                    &self
+                        .traffic
+                        .current_client_traffic_secret,
+                ),
+            );
 
-        (self.traffic, tag, client_secret)
+        (self.traffic, tag)
     }
 }
 
