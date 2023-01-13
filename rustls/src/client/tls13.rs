@@ -1098,9 +1098,8 @@ impl State<ClientConnectionData> for ExpectTraffic {
     fn perhaps_write_key_update(&mut self, common: &mut CommonState) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            common.send_msg_encrypt(Message::build_key_update_notify().into());
             self.key_schedule
-                .update_encrypter(common);
+                .update_encrypter_and_notify(common);
         }
     }
 

@@ -1019,7 +1019,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 ..
             } => {
                 self.key_schedule
-                    .update_decrypter(&mut cx.common);
+                    .update_decrypter(cx.common);
                 self.transcript.add_message(&m);
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
@@ -1278,9 +1278,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
     fn perhaps_write_key_update(&mut self, common: &mut CommonState) {
         if self.want_write_key_update {
             self.want_write_key_update = false;
-            common.send_msg_encrypt(Message::build_key_update_notify().into());
             self.key_schedule
-                .update_encrypter(common);
+                .update_encrypter_and_notify(common);
         }
     }
 
