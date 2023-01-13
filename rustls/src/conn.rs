@@ -1386,6 +1386,15 @@ pub enum Side {
     Server,
 }
 
+impl Side {
+    pub(crate) fn peer(&self) -> Self {
+        match self {
+            Self::Client => Self::Server,
+            Self::Server => Self::Client,
+        }
+    }
+}
+
 /// Data specific to the peer's side (client or server).
 pub trait SideData {}
 

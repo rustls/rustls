@@ -1,5 +1,7 @@
 use crate::check::inappropriate_handshake_message;
-use crate::conn::{CommonState, ConnectionRandoms, Side, State};
+#[cfg(feature = "secret_extraction")]
+use crate::conn::Side;
+use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -1252,7 +1254,6 @@ impl State<ServerConnectionData> for ExpectFinished {
         }
 
         Ok(Box::new(ExpectTraffic {
-            suite: self.suite,
             key_schedule: key_schedule_traffic,
             want_write_key_update: false,
             _fin_verified: fin,
@@ -1262,7 +1263,6 @@ impl State<ServerConnectionData> for ExpectFinished {
 
 // --- Process traffic ---
 struct ExpectTraffic {
-    suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTraffic,
     want_write_key_update: bool,
     _fin_verified: verify::FinishedMessageVerified,
@@ -1298,16 +1298,8 @@ impl ExpectTraffic {
         }
 
         // Update our read-side keys.
-        let new_read_key = self
-            .key_schedule
-            .next_application_traffic_secret(Side::Client);
-        common
-            .record_layer
-            .set_message_decrypter(
-                self.suite
-                    .derive_decrypter(&new_read_key),
-            );
-
+        self.key_schedule
+            .update_decrypter(common);
         Ok(())
     }
 }

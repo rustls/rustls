@@ -1,5 +1,7 @@
 use crate::check::inappropriate_handshake_message;
-use crate::conn::{CommonState, ConnectionRandoms, Side, State};
+#[cfg(feature = "secret_extraction")]
+use crate::conn::Side;
+use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -1093,16 +1095,8 @@ impl ExpectTraffic {
         }
 
         // Update our read-side keys.
-        let new_read_key = self
-            .key_schedule
-            .next_application_traffic_secret(Side::Server);
-        common
-            .record_layer
-            .set_message_decrypter(
-                self.suite
-                    .derive_decrypter(&new_read_key),
-            );
-
+        self.key_schedule
+            .update_decrypter(common);
         Ok(())
     }
 }
