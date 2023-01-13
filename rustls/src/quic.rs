@@ -373,7 +373,7 @@ pub struct Keys {
 
 impl Keys {
     /// Construct keys for use with initial packets
-    pub fn initial(version: Version, client_dst_connection_id: &[u8], is_client: bool) -> Self {
+    pub fn initial(version: Version, client_dst_connection_id: &[u8], side: Side) -> Self {
         const CLIENT_LABEL: &[u8] = b"client in";
         const SERVER_LABEL: &[u8] = b"server in";
         let salt = version.initial_salt();
@@ -383,10 +383,7 @@ impl Keys {
             client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
             server: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, SERVER_LABEL, &[]),
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
-            side: match is_client {
-                true => Side::Client,
-                false => Side::Server,
-            },
+            side,
         };
         Self::new(&secrets)
     }
