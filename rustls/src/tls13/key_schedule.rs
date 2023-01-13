@@ -1,12 +1,10 @@
 use crate::cipher::{Iv, IvLen};
+use crate::conn::Side;
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
-use crate::KeyLog;
 #[cfg(feature = "secret_extraction")]
-use crate::{
-    conn::Side,
-    suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets},
-};
+use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
+use crate::KeyLog;
 
 /// Key schedule maintenance for TLS1.3
 use ring::{
@@ -300,19 +298,14 @@ impl KeyScheduleTraffic {
         }
     }
 
-    pub(crate) fn next_server_application_traffic_secret(&mut self) -> hkdf::Prk {
-        let secret = self
-            .ks
-            .derive_next(&self.current_server_traffic_secret);
-        self.current_server_traffic_secret = secret.clone();
-        secret
-    }
+    pub(crate) fn next_application_traffic_secret(&mut self, side: Side) -> hkdf::Prk {
+        let current = match side {
+            Side::Client => &mut self.current_client_traffic_secret,
+            Side::Server => &mut self.current_server_traffic_secret,
+        };
 
-    pub(crate) fn next_client_application_traffic_secret(&mut self) -> hkdf::Prk {
-        let secret = self
-            .ks
-            .derive_next(&self.current_client_traffic_secret);
-        self.current_client_traffic_secret = secret.clone();
+        let secret = self.ks.derive_next(current);
+        *current = secret.clone();
         secret
     }
 
