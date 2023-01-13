@@ -117,7 +117,7 @@ mod client_hello {
                 .transcript
                 .get_hash_given(&binder_plaintext);
 
-            let key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
+            let key_schedule = KeyScheduleEarly::new(suite, psk);
             let real_binder =
                 key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
@@ -502,7 +502,7 @@ mod client_hello {
 
         // Start key schedule
         let (key_schedule_pre_handshake, early_data_client_key) = if let Some(psk) = resuming_psk {
-            let early_key_schedule = KeyScheduleEarly::new(suite.hkdf_algorithm, psk);
+            let early_key_schedule = KeyScheduleEarly::new(suite, psk);
             let client_early_traffic_secret = early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -514,7 +514,7 @@ mod client_hello {
                 Some(client_early_traffic_secret),
             )
         } else {
-            (KeySchedulePreHandshake::new(suite.hkdf_algorithm), None)
+            (KeySchedulePreHandshake::new(suite), None)
         };
 
         // Do key exchange
@@ -1365,7 +1365,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
     #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         self.key_schedule
-            .extract_secrets(self.suite.common.aead_algorithm, Side::Server)
+            .extract_secrets(Side::Server)
     }
 }
 

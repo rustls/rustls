@@ -132,7 +132,7 @@ pub(super) fn handle_server_hello(
         cx.data.early_data.rejected();
         cx.common.early_traffic = false;
         resuming_session.take();
-        KeySchedulePreHandshake::new(suite.hkdf_algorithm)
+        KeySchedulePreHandshake::new(suite)
     };
 
     let key_schedule = our_key_share.complete(&their_key_share.payload.0, |secret| {
@@ -244,8 +244,8 @@ pub(super) fn fill_in_psk_binder(
     hmp: &mut HandshakeMessagePayload,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
-    let hkdf_alg = resuming.suite().hkdf_algorithm;
-    let suite_hash = resuming.suite().hash_algorithm();
+    let suite = resuming.suite();
+    let suite_hash = suite.hash_algorithm();
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
@@ -254,7 +254,7 @@ pub(super) fn fill_in_psk_binder(
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
-    let key_schedule = KeyScheduleEarly::new(hkdf_alg, resuming.secret());
+    let key_schedule = KeyScheduleEarly::new(suite, resuming.secret());
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
     if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
@@ -1168,7 +1168,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
     #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         self.key_schedule
-            .extract_secrets(self.suite.common.aead_algorithm, Side::Client)
+            .extract_secrets(Side::Client)
     }
 }
 
