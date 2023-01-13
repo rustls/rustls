@@ -1352,13 +1352,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
         if self.want_write_key_update {
             self.want_write_key_update = false;
             common.send_msg_encrypt(Message::build_key_update_notify().into());
-
-            let write_key = self
-                .key_schedule
-                .next_application_traffic_secret(Side::Server);
-            common
-                .record_layer
-                .set_message_encrypter(self.suite.derive_encrypter(&write_key));
+            self.key_schedule
+                .update_encrypter(common);
         }
     }
 
