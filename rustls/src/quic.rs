@@ -1,7 +1,7 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::cipher::{Iv, IvLen};
 pub use crate::client::ClientQuicExt;
-use crate::conn::CommonState;
+use crate::conn::{CommonState, Side};
 use crate::error::Error;
 use crate::msgs::enums::AlertDescription;
 pub use crate::server::ServerQuicExt;
@@ -21,7 +21,7 @@ pub struct Secrets {
     server: hkdf::Prk,
     /// Cipher suite used with these secrets
     suite: &'static Tls13CipherSuite,
-    is_client: bool,
+    side: Side,
 }
 
 impl Secrets {
@@ -29,13 +29,13 @@ impl Secrets {
         client: hkdf::Prk,
         server: hkdf::Prk,
         suite: &'static Tls13CipherSuite,
-        is_client: bool,
+        side: Side,
     ) -> Self {
         Self {
             client,
             server,
             suite,
-            is_client,
+            side,
         }
     }
 
@@ -53,10 +53,9 @@ impl Secrets {
     }
 
     fn local_remote(&self) -> (&hkdf::Prk, &hkdf::Prk) {
-        if self.is_client {
-            (&self.client, &self.server)
-        } else {
-            (&self.server, &self.client)
+        match self.side {
+            Side::Client => (&self.client, &self.server),
+            Side::Server => (&self.server, &self.client),
         }
     }
 }
@@ -384,7 +383,10 @@ impl Keys {
             client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
             server: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, SERVER_LABEL, &[]),
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
-            is_client,
+            side: match is_client {
+                true => Side::Client,
+                false => Side::Server,
+            },
         };
         Self::new(&secrets)
     }
@@ -590,7 +592,7 @@ mod test {
                 ],
             ),
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
-            is_client: true,
+            side: Side::Client,
         };
         secrets.update();
 

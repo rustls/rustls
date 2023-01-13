@@ -547,8 +547,12 @@ mod client_hello {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
             cx.common.quic.early_secret = early_data_client_key;
-            cx.common.quic.hs_secrets =
-                Some(quic::Secrets::new(_client_key, server_key, suite, false));
+            cx.common.quic.hs_secrets = Some(quic::Secrets::new(
+                _client_key,
+                server_key,
+                suite,
+                cx.common.side,
+            ));
         }
 
         Ok(key_schedule)
@@ -868,8 +872,12 @@ mod client_hello {
 
         #[cfg(feature = "quic")]
         {
-            cx.common.quic.traffic_secrets =
-                Some(quic::Secrets::new(_client_key, server_key, suite, false));
+            cx.common.quic.traffic_secrets = Some(quic::Secrets::new(
+                _client_key,
+                server_key,
+                suite,
+                cx.common.side,
+            ));
         }
 
         key_schedule_traffic
