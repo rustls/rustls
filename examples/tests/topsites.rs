@@ -75,4 +75,9 @@ mod online {
     fn apple() {
         check("www.apple.com")
     }
+
+    #[test]
+    fn cloudflare_1_1_1_1_dns() {
+        check("1.1.1.1")
+    }
 }

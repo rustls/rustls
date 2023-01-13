@@ -20,8 +20,13 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
-* Next release
+* Future release
   - Planned: removal of unused signature verification schemes at link-time.
+  - Planned: removal of unused protocol versions at link-time.
+* Next release: 0.21.0 (2023-xx-xx)
+  - Support for connecting to peers named with IP addresses.  This means
+    rustls now depends on a fork of webpki - `rustls-webpki` - with a suitably
+    extended API.
 * 0.20.8 (2023-01-12)
   - Yield an error from `ConnectionCommon::read_tls()` if buffers are full.
     Both a full deframer buffer and a full incoming plaintext buffer will

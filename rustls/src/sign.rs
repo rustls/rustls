@@ -107,7 +107,7 @@ impl CertifiedKey {
             // that the certificate is valid for, if the certificate is
             // valid.
             if end_entity_cert
-                .verify_is_valid_for_dns_name(name)
+                .verify_is_valid_for_subject_name(webpki::SubjectNameRef::DnsName(name))
                 .is_err()
             {
                 return Err(Error::General(
