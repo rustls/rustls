@@ -1,5 +1,5 @@
 use crate::cipher::{Iv, IvLen};
-use crate::conn::Side;
+use crate::conn::{CommonState, Side};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
 #[cfg(feature = "secret_extraction")]
@@ -296,6 +296,13 @@ impl KeyScheduleTraffic {
             current_server_traffic_secret,
             current_exporter_secret,
         }
+    }
+
+    pub(crate) fn update_encrypter(&mut self, common: &mut CommonState) {
+        let secret = self.next_application_traffic_secret(common.side);
+        common
+            .record_layer
+            .set_message_encrypter(self.ks.suite.derive_encrypter(&secret));
     }
 
     pub(crate) fn next_application_traffic_secret(&mut self, side: Side) -> hkdf::Prk {
