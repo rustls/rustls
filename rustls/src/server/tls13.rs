@@ -1,5 +1,5 @@
 use crate::check::inappropriate_handshake_message;
-use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
 use crate::error::Error;
 use crate::hash_hs::HandshakeHash;
@@ -16,14 +16,14 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
 use crate::server::ServerConfig;
+#[cfg(feature = "secret_extraction")]
+use crate::suites::PartiallyExtractedSecrets;
 use crate::ticketer;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
 #[cfg(feature = "quic")]
 use crate::{check::inappropriate_message, conn::Protocol};
-#[cfg(feature = "secret_extraction")]
-use crate::{conn::Side, suites::PartiallyExtractedSecrets};
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
@@ -1300,7 +1300,7 @@ impl ExpectTraffic {
         // Update our read-side keys.
         let new_read_key = self
             .key_schedule
-            .next_client_application_traffic_secret();
+            .next_application_traffic_secret(Side::Client);
         common
             .record_layer
             .set_message_decrypter(
@@ -1355,7 +1355,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
 
             let write_key = self
                 .key_schedule
-                .next_server_application_traffic_secret();
+                .next_application_traffic_secret(Side::Server);
             common
                 .record_layer
                 .set_message_encrypter(self.suite.derive_encrypter(&write_key));
