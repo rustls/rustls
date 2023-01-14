@@ -25,6 +25,7 @@ Some ideas and guidelines for contributions:
 - Try to keep code formatting commits separate from functional commits.
 - See [`.github/workflows/build.yml`](.github/workflows/build.yml) for
   how to run the various test suites, and how to make coverage measurements.
+  - `cargo clippy-rustls` can be used to perform most of the same checks CI will also do.
 - I run `cargo outdated` prior to major releases; but PRs to update specific
   dependencies are welcome.
 
