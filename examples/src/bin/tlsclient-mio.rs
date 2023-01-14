@@ -56,7 +56,7 @@ impl TlsClient {
 
         if self.is_closed() {
             println!("Connection closed");
-            process::exit(if self.clean_closure { 0 } else { 1 });
+            process::exit(i32::from(!self.clean_closure));
         }
     }
 
