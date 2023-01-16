@@ -2,6 +2,7 @@
 name = "rustls-examples"
 version = "0.0.1"
 edition = "2021"
+rust-version = "1.57"
 authors = ["Joseph Birr-Pixton <jpixton@gmail.com>"]
 license = "Apache-2.0/ISC/MIT"
 description = "Rustls example code and tests."
