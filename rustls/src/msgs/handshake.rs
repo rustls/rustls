@@ -5,8 +5,7 @@ use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
-use crate::msgs::codec;
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{self, Codec, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
     ExtensionType, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
@@ -20,32 +19,12 @@ use std::fmt;
 macro_rules! declare_u8_vec(
   ($name:ident, $itemtype:ty) => {
     pub type $name = Vec<$itemtype>;
-
-    impl Codec for $name {
-      fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u8(bytes, self);
-      }
-
-      fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        codec::read_vec_u8::<$itemtype>(r)
-      }
-    }
   }
 );
 
 macro_rules! declare_u16_vec(
   ($name:ident, $itemtype:ty) => {
     pub type $name = Vec<$itemtype>;
-
-    impl Codec for $name {
-      fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u16(bytes, self);
-      }
-
-      fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        codec::read_vec_u16::<$itemtype>(r)
-      }
-    }
   }
 );
 
@@ -230,6 +209,10 @@ impl UnknownExtension {
 
 declare_u8_vec!(ECPointFormatList, ECPointFormat);
 
+impl TlsListElement for ECPointFormat {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
+
 pub trait SupportedPointFormats {
     fn supported() -> ECPointFormatList;
 }
@@ -242,7 +225,15 @@ impl SupportedPointFormats for ECPointFormatList {
 
 declare_u16_vec!(NamedGroups, NamedGroup);
 
+impl TlsListElement for NamedGroup {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 declare_u16_vec!(SupportedSignatureSchemes, SignatureScheme);
+
+impl TlsListElement for SignatureScheme {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
 
 #[derive(Clone, Debug)]
 pub enum ServerNamePayload {
@@ -309,6 +300,10 @@ impl Codec for ServerName {
 
 declare_u16_vec!(ServerNameRequest, ServerName);
 
+impl TlsListElement for ServerName {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 pub trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
     fn get_single_hostname(&self) -> Option<webpki::DnsNameRef>;
@@ -344,6 +339,10 @@ impl ConvertServerNameList for ServerNameRequest {
 }
 
 wrapped_payload!(ProtocolName, PayloadU8,);
+
+impl TlsListElement for ProtocolName {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
 
 declare_u16_vec!(ProtocolNameList, ProtocolName);
 
@@ -439,11 +438,19 @@ impl Codec for PresharedKeyIdentity {
     }
 }
 
+impl TlsListElement for PresharedKeyIdentity {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
 
 wrapped_payload!(PresharedKeyBinder, PayloadU8,);
 
 declare_u16_vec!(PresharedKeyBinders, PresharedKeyBinder);
+
+impl TlsListElement for PresharedKeyBinder {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
 
 #[derive(Clone, Debug)]
 pub struct PresharedKeyOffer {
@@ -479,6 +486,10 @@ impl Codec for PresharedKeyOffer {
 wrapped_payload!(ResponderId, PayloadU16,);
 
 declare_u16_vec!(ResponderIDs, ResponderId);
+
+impl TlsListElement for ResponderId {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
 
 #[derive(Clone, Debug)]
 pub struct OCSPCertificateStatusRequest {
@@ -549,13 +560,31 @@ impl CertificateStatusRequest {
 
 wrapped_payload!(Sct, PayloadU16,);
 
+impl TlsListElement for Sct {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 declare_u16_vec!(SCTList, Sct);
 
 // ---
 
 declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
+
+impl TlsListElement for PSKKeyExchangeMode {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
+
 declare_u16_vec!(KeyShareEntries, KeyShareEntry);
+
+impl TlsListElement for KeyShareEntry {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 declare_u8_vec!(ProtocolVersions, ProtocolVersion);
+
+impl TlsListElement for ProtocolVersion {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
@@ -864,11 +893,11 @@ impl Codec for ClientHelloPayload {
         self.client_version.encode(bytes);
         self.random.encode(bytes);
         self.session_id.encode(bytes);
-        codec::encode_vec_u16(bytes, &self.cipher_suites);
-        codec::encode_vec_u8(bytes, &self.compression_methods);
+        self.cipher_suites.encode(bytes);
+        self.compression_methods.encode(bytes);
 
         if !self.extensions.is_empty() {
-            codec::encode_vec_u16(bytes, &self.extensions);
+            self.extensions.encode(bytes);
         }
     }
 
@@ -877,13 +906,13 @@ impl Codec for ClientHelloPayload {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
             session_id: SessionID::read(r)?,
-            cipher_suites: codec::read_vec_u16::<CipherSuite>(r)?,
-            compression_methods: codec::read_vec_u8::<Compression>(r)?,
+            cipher_suites: Vec::read(r)?,
+            compression_methods: Vec::read(r)?,
             extensions: Vec::new(),
         };
 
         if r.any_left() {
-            ret.extensions = codec::read_vec_u16::<ClientExtension>(r)?;
+            ret.extensions = Vec::read(r)?;
         }
 
         match (r.any_left(), ret.extensions.is_empty()) {
@@ -892,6 +921,18 @@ impl Codec for ClientHelloPayload {
             _ => Ok(ret),
         }
     }
+}
+
+impl TlsListElement for CipherSuite {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+impl TlsListElement for Compression {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
+
+impl TlsListElement for ClientExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 impl ClientHelloPayload {
@@ -1105,6 +1146,10 @@ impl Codec for HelloRetryExtension {
     }
 }
 
+impl TlsListElement for HelloRetryExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 #[derive(Debug)]
 pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
@@ -1120,7 +1165,7 @@ impl Codec for HelloRetryRequest {
         self.session_id.encode(bytes);
         self.cipher_suite.encode(bytes);
         Compression::Null.encode(bytes);
-        codec::encode_vec_u16(bytes, &self.extensions);
+        self.extensions.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1136,7 +1181,7 @@ impl Codec for HelloRetryRequest {
             legacy_version: ProtocolVersion::Unknown(0),
             session_id,
             cipher_suite,
-            extensions: codec::read_vec_u16::<HelloRetryExtension>(r)?,
+            extensions: Vec::read(r)?,
         })
     }
 }
@@ -1218,7 +1263,7 @@ impl Codec for ServerHelloPayload {
         self.compression_method.encode(bytes);
 
         if !self.extensions.is_empty() {
-            codec::encode_vec_u16(bytes, &self.extensions);
+            self.extensions.encode(bytes);
         }
     }
 
@@ -1232,11 +1277,7 @@ impl Codec for ServerHelloPayload {
         // "The presence of extensions can be detected by determining whether
         //  there are bytes following the compression_method field at the end of
         //  the ServerHello."
-        let extensions = if r.any_left() {
-            codec::read_vec_u16::<ServerExtension>(r)?
-        } else {
-            vec![]
-        };
+        let extensions = if r.any_left() { Vec::read(r)? } else { vec![] };
 
         let ret = Self {
             legacy_version: ProtocolVersion::Unknown(0),
@@ -1307,15 +1348,8 @@ impl ServerHelloPayload {
 
 pub type CertificatePayload = Vec<key::Certificate>;
 
-impl Codec for CertificatePayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::encode_vec_u24(bytes, self);
-    }
-
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        // 64KB of certificates is plenty, 16MB is obviously silly
-        codec::read_vec_u24_limited(r, 0x10000)
-    }
+impl TlsListElement for key::Certificate {
+    const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
 }
 
 // TLS1.3 changes the Certificate payload encoding.
@@ -1397,6 +1431,10 @@ impl Codec for CertificateExtension {
 
 declare_u16_vec!(CertificateExtensions, CertificateExtension);
 
+impl TlsListElement for CertificateExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 #[derive(Debug)]
 pub struct CertificateEntry {
     pub cert: key::Certificate,
@@ -1461,6 +1499,10 @@ impl CertificateEntry {
     }
 }
 
+impl TlsListElement for CertificateEntry {
+    const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
+}
+
 #[derive(Debug)]
 pub struct CertificatePayloadTLS13 {
     pub context: PayloadU8,
@@ -1470,13 +1512,13 @@ pub struct CertificatePayloadTLS13 {
 impl Codec for CertificatePayloadTLS13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
-        codec::encode_vec_u24(bytes, &self.entries);
+        self.entries.encode(bytes);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         Ok(Self {
             context: PayloadU8::read(r)?,
-            entries: codec::read_vec_u24_limited::<CertificateEntry>(r, 0x10000)?,
+            entries: Vec::read(r)?,
         })
     }
 }
@@ -1697,6 +1739,10 @@ impl ServerKeyExchangePayload {
 // -- EncryptedExtensions (TLS1.3 only) --
 declare_u16_vec!(EncryptedExtensions, ServerExtension);
 
+impl TlsListElement for ServerExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
 pub trait HasServerExtensions {
     fn get_extensions(&self) -> &[ServerExtension];
 
@@ -1757,6 +1803,10 @@ impl HasServerExtensions for EncryptedExtensions {
 // -- CertificateRequest and sundries --
 declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
 
+impl TlsListElement for ClientCertificateType {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
+
 wrapped_payload!(
     /// A `DistinguishedName` is a `Vec<u8>` wrapped in internal types.
     ///
@@ -1773,6 +1823,10 @@ wrapped_payload!(
     DistinguishedName,
     PayloadU16,
 );
+
+impl TlsListElement for DistinguishedName {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
 
 declare_u16_vec!(DistinguishedNames, DistinguishedName);
 
@@ -1866,6 +1920,10 @@ impl Codec for CertReqExtension {
 }
 
 declare_u16_vec!(CertReqExtensions, CertReqExtension);
+
+impl TlsListElement for CertReqExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
 
 #[derive(Debug)]
 pub struct CertificateRequestPayloadTLS13 {
@@ -1993,6 +2051,10 @@ impl Codec for NewSessionTicketExtension {
 }
 
 declare_u16_vec!(NewSessionTicketExtensions, NewSessionTicketExtension);
+
+impl TlsListElement for NewSessionTicketExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
 
 #[derive(Debug)]
 pub struct NewSessionTicketPayloadTLS13 {

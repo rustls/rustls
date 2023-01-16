@@ -205,91 +205,86 @@ impl Codec for u64 {
     }
 }
 
-pub fn encode_vec_u8<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let len_offset = bytes.len();
-    bytes.push(0);
+/// Implement `Codec` for lists of elements that implement `TlsListElement`.
+///
+/// `TlsListElement` provides the size of the length prefix for the list.
+impl<T: Codec + TlsListElement + Debug> Codec for Vec<T> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let len_offset = bytes.len();
+        bytes.extend(match T::SIZE_LEN {
+            ListLength::U8 => &[0][..],
+            ListLength::U16 => &[0, 0],
+            ListLength::U24 { .. } => &[0, 0, 0],
+        });
 
-    for i in items {
-        i.encode(bytes);
+        for i in self {
+            i.encode(bytes);
+        }
+
+        match T::SIZE_LEN {
+            ListLength::U8 => {
+                let len = bytes.len() - len_offset - 1;
+                debug_assert!(len <= 0xff);
+                bytes[len_offset] = len as u8;
+            }
+            ListLength::U16 => {
+                let len = bytes.len() - len_offset - 2;
+                debug_assert!(len <= 0xffff);
+                let out: &mut [u8; 2] = (&mut bytes[len_offset..len_offset + 2])
+                    .try_into()
+                    .unwrap();
+                *out = u16::to_be_bytes(len as u16);
+            }
+            ListLength::U24 { .. } => {
+                let len = bytes.len() - len_offset - 3;
+                debug_assert!(len <= 0xff_ffff);
+                let len_bytes = u32::to_be_bytes(len as u32);
+                let out: &mut [u8; 3] = (&mut bytes[len_offset..len_offset + 3])
+                    .try_into()
+                    .unwrap();
+                out.copy_from_slice(&len_bytes[1..]);
+            }
+        }
     }
 
-    let len = bytes.len() - len_offset - 1;
-    debug_assert!(len <= 0xff);
-    bytes[len_offset] = len as u8;
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        let len = match T::SIZE_LEN {
+            ListLength::U8 => usize::from(u8::read(r)?),
+            ListLength::U16 => usize::from(u16::read(r)?),
+            ListLength::U24 { max } => Ord::min(usize::from(u24::read(r)?), max),
+        };
+
+        let mut sub = r.sub(len)?;
+        let mut ret = Self::new();
+        while sub.any_left() {
+            ret.push(T::read(&mut sub)?);
+        }
+
+        Ok(ret)
+    }
 }
 
-pub fn encode_vec_u16<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let len_offset = bytes.len();
-    bytes.extend([0, 0]);
-
-    for i in items {
-        i.encode(bytes);
-    }
-
-    let len = bytes.len() - len_offset - 2;
-    debug_assert!(len <= 0xffff);
-    let out: &mut [u8; 2] = (&mut bytes[len_offset..len_offset + 2])
-        .try_into()
-        .unwrap();
-    *out = u16::to_be_bytes(len as u16);
+/// A trait for types that can be encoded and decoded in a list.
+///
+/// This trait is used to implement `Codec` for `Vec<T>`. Lists in the TLS wire format are
+/// prefixed with a length, the size of which depends on the type of the list elements.
+/// As such, the `Codec` implementation for `Vec<T>` requires an implementation of this trait
+/// for its element type `T`.
+///
+// TODO: make this `pub(crate)` once our MSRV allows it?
+pub trait TlsListElement {
+    const SIZE_LEN: ListLength;
 }
 
-pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
-    let len_offset = bytes.len();
-    bytes.extend([0, 0, 0]);
-
-    for i in items {
-        i.encode(bytes);
-    }
-
-    let len = bytes.len() - len_offset - 3;
-    debug_assert!(len <= 0xff_ffff);
-    let len_bytes = u32::to_be_bytes(len as u32);
-    let out: &mut [u8; 3] = (&mut bytes[len_offset..len_offset + 3])
-        .try_into()
-        .unwrap();
-    out.copy_from_slice(&len_bytes[1..]);
-}
-
-pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Result<Vec<T>, InvalidMessage> {
-    let mut ret: Vec<T> = Vec::new();
-    let len = usize::from(u8::read(r)?);
-    let mut sub = r.sub(len)?;
-
-    while sub.any_left() {
-        ret.push(T::read(&mut sub)?);
-    }
-
-    Ok(ret)
-}
-
-pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Result<Vec<T>, InvalidMessage> {
-    let mut ret: Vec<T> = Vec::new();
-    let len = usize::from(u16::read(r)?);
-    let mut sub = r.sub(len)?;
-
-    while sub.any_left() {
-        ret.push(T::read(&mut sub)?);
-    }
-
-    Ok(ret)
-}
-
-pub fn read_vec_u24_limited<T: Codec>(
-    r: &mut Reader,
-    max_bytes: usize,
-) -> Result<Vec<T>, InvalidMessage> {
-    let mut ret: Vec<T> = Vec::new();
-    let len = u24::read(r)?.0 as usize;
-    if len > max_bytes {
-        return Err(InvalidMessage::MessageTooLarge);
-    }
-
-    let mut sub = r.sub(len)?;
-
-    while sub.any_left() {
-        ret.push(T::read(&mut sub)?);
-    }
-
-    Ok(ret)
+/// The length of the length prefix for a list.
+///
+/// The types that appear in lists are limited to three kinds of length prefixes:
+/// 1, 2, and 3 bytes. For the latter kind, we require a `TlsListElement` implementer
+/// to specify a maximum length.
+///
+// TODO: make this `pub(crate)` once our MSRV allows it?
+pub enum ListLength {
+    U8,
+    U16,
+    U24 { max: usize },
 }
