@@ -478,7 +478,7 @@ impl ClientCacheWithoutKxHints {
     }
 }
 
-impl rustls::client::StoresClientSessions for ClientCacheWithoutKxHints {
+impl rustls::client::ClientSessionStore for ClientCacheWithoutKxHints {
     fn put_kx_hint(&self, _: &rustls::ServerName, _: rustls::NamedGroup) {}
     fn get_kx_hint(&self, _: &rustls::ServerName) -> Option<rustls::NamedGroup> {
         None

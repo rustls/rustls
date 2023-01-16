@@ -406,10 +406,10 @@ pub mod client {
     pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
     #[cfg(feature = "quic")]
     pub use client_conn::ClientQuicExt;
+    pub use client_conn::ClientSessionStore;
     pub use client_conn::InvalidDnsNameError;
     pub use client_conn::ResolvesClientCert;
     pub use client_conn::ServerName;
-    pub use client_conn::StoresClientSessions;
     pub use client_conn::{ClientConfig, ClientConnection, ClientConnectionData, WriteEarlyData};
     pub use handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 

@@ -11,10 +11,10 @@ use crate::ServerName;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-/// An implementer of `StoresClientSessions` which does nothing.
+/// An implementer of `ClientSessionStore` which does nothing.
 pub struct NoClientSessionStorage {}
 
-impl client::StoresClientSessions for NoClientSessionStorage {
+impl client::ClientSessionStore for NoClientSessionStorage {
     fn put_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
 
     fn get_kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
@@ -63,9 +63,10 @@ impl Default for ServerData {
     }
 }
 
-/// An implementer of `StoresClientSessions` that stores everything
-/// in memory.  It enforces a limit on the number of entries
-/// to bound memory usage.
+/// An implementer of `ClientSessionStore` that stores everything
+/// in memory.
+///
+/// It enforces a limit on the number of entries to bound memory usage.
 pub struct ClientSessionMemoryCache {
     servers: Mutex<limited_cache::LimitedCache<ServerName, ServerData>>,
 }
@@ -82,7 +83,7 @@ impl ClientSessionMemoryCache {
     }
 }
 
-impl client::StoresClientSessions for ClientSessionMemoryCache {
+impl client::ClientSessionStore for ClientSessionMemoryCache {
     fn put_kx_hint(&self, server_name: &ServerName, group: NamedGroup) {
         self.servers
             .lock()

@@ -38,7 +38,7 @@ use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::{hs, ClientConfig, ServerName, StoresClientSessions};
+use crate::client::{hs, ClientConfig, ClientSessionStore, ServerName};
 
 use crate::ticketer::TimeBase;
 use ring::constant_time;
@@ -908,7 +908,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 // In this state we can be sent tickets, key updates,
 // and application data.
 struct ExpectTraffic {
-    session_storage: Arc<dyn StoresClientSessions>,
+    session_storage: Arc<dyn ClientSessionStore>,
     server_name: ServerName,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,

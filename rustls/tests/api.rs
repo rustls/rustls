@@ -2676,7 +2676,7 @@ enum ClientStorageOp {
 }
 
 struct ClientStorage {
-    storage: Arc<dyn rustls::client::StoresClientSessions>,
+    storage: Arc<dyn rustls::client::ClientSessionStore>,
     ops: Mutex<Vec<ClientStorageOp>>,
 }
 
@@ -2699,7 +2699,7 @@ impl fmt::Debug for ClientStorage {
     }
 }
 
-impl rustls::client::StoresClientSessions for ClientStorage {
+impl rustls::client::ClientSessionStore for ClientStorage {
     fn put_kx_hint(&self, server_name: &rustls::ServerName, group: rustls::NamedGroup) {
         self.ops
             .lock()

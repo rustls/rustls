@@ -30,17 +30,17 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::{fmt, io, mem};
 
-/// A trait for the ability to store client session data, so that future
-/// sessions can be resumed.
+/// A trait for the ability to store client session data, so that sessions
+/// can be resumed in future connections.
 ///
-/// Both the keys and values should be treated as
-/// **highly sensitive data**, containing enough key material
-/// to break all security of the corresponding session.
+/// Generally all data in this interface should be treated as
+/// **highly sensitive**, containing enough key material to break all security
+/// of the corresponding session.
 ///
 /// `put_`, `add_`, `forget_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
-pub trait StoresClientSessions: Send + Sync {
+pub trait ClientSessionStore: Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
     fn put_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
 
@@ -143,7 +143,7 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How we store session data or tickets.
-    pub session_storage: Arc<dyn StoresClientSessions>,
+    pub session_storage: Arc<dyn ClientSessionStore>,
 
     /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
     /// message lengths except to the 2**16 limit specified in the standard.
