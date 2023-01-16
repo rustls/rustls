@@ -79,10 +79,7 @@ impl TlsServer {
                 }
                 Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
                 Err(err) => {
-                    println!(
-                        "encountered error while accepting connection; err={:?}",
-                        err
-                    );
+                    println!("encountered error while accepting connection; err={err:?}",);
                     return Err(err);
                 }
             }
@@ -497,10 +494,7 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
         let version = match vname.as_ref() {
             "1.2" => &rustls::version::TLS12,
             "1.3" => &rustls::version::TLS13,
-            _ => panic!(
-                "cannot look up version '{}', valid are '1.2' and '1.3'",
-                vname
-            ),
+            _ => panic!("cannot look up version '{vname}', valid are '1.2' and '1.3'",),
         };
         out.push(version);
     }

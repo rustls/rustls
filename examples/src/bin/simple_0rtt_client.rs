@@ -10,15 +10,14 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
         .try_into()
         .expect("invalid DNS name");
     let mut conn = rustls::ClientConnection::new(Arc::clone(config), server_name).unwrap();
-    let mut sock = TcpStream::connect(format!("{}:443", domain_name)).unwrap();
+    let mut sock = TcpStream::connect(format!("{domain_name}:443")).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(
         "GET / HTTP/1.1\r\n\
-         Host: {}\r\n\
+         Host: {domain_name}\r\n\
          Connection: close\r\n\
          Accept-Encoding: identity\r\n\
          \r\n",
-        domain_name
     );
 
     // If early data is available with this server, then early_data()

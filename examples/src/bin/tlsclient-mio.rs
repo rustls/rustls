@@ -101,7 +101,7 @@ impl TlsClient {
         let io_state = match self.tls_conn.process_new_packets() {
             Ok(io_state) => io_state,
             Err(err) => {
-                println!("TLS error: {:?}", err);
+                println!("TLS error: {err:?}");
                 self.closing = true;
                 return;
             }
@@ -373,7 +373,7 @@ fn lookup_suites(suites: &[String]) -> Vec<rustls::SupportedCipherSuite> {
         let scs = find_suite(csname);
         match scs {
             Some(s) => out.push(s),
-            None => panic!("cannot look up ciphersuite '{}'", csname),
+            None => panic!("cannot look up ciphersuite '{csname}'"),
         }
     }
 
@@ -388,10 +388,7 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
         let version = match vname.as_ref() {
             "1.2" => &rustls::version::TLS12,
             "1.3" => &rustls::version::TLS13,
-            _ => panic!(
-                "cannot look up version '{}', valid are '1.2' and '1.3'",
-                vname
-            ),
+            _ => panic!("cannot look up version '{vname}', valid are '1.2' and '1.3'",),
         };
         out.push(version);
     }
@@ -423,10 +420,7 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
         }
     }
 
-    panic!(
-        "no keys found in {:?} (encrypted keys not supported)",
-        filename
-    );
+    panic!("no keys found in {filename:?} (encrypted keys not supported)",);
 }
 
 #[cfg(feature = "dangerous_configuration")]
