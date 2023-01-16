@@ -52,7 +52,7 @@ fn find_session(
             {
                 config
                     .session_storage
-                    .get_tls12_session(server_name)
+                    .tls12_session(server_name)
                     .map(persist::ClientSessionValue::from)
             }
 

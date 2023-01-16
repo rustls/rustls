@@ -479,42 +479,41 @@ impl ClientCacheWithoutKxHints {
 }
 
 impl rustls::client::ClientSessionStore for ClientCacheWithoutKxHints {
-    fn put_kx_hint(&self, _: &rustls::ServerName, _: rustls::NamedGroup) {}
-    fn get_kx_hint(&self, _: &rustls::ServerName) -> Option<rustls::NamedGroup> {
+    fn set_kx_hint(&self, _: &rustls::ServerName, _: rustls::NamedGroup) {}
+    fn kx_hint(&self, _: &rustls::ServerName) -> Option<rustls::NamedGroup> {
         None
     }
 
-    fn put_tls12_session(
+    fn set_tls12_session(
         &self,
         server_name: &rustls::ServerName,
         mut value: rustls::client::Tls12ClientSessionValue,
     ) {
         value.common.rewind_epoch(self.delay);
         self.storage
-            .put_tls12_session(server_name, value);
+            .set_tls12_session(server_name, value);
     }
 
-    fn get_tls12_session(
+    fn tls12_session(
         &self,
         server_name: &rustls::ServerName,
     ) -> Option<rustls::client::Tls12ClientSessionValue> {
-        self.storage
-            .get_tls12_session(server_name)
+        self.storage.tls12_session(server_name)
     }
 
-    fn forget_tls12_session(&self, server_name: &rustls::ServerName) {
+    fn remove_tls12_session(&self, server_name: &rustls::ServerName) {
         self.storage
-            .forget_tls12_session(server_name);
+            .remove_tls12_session(server_name);
     }
 
-    fn add_tls13_ticket(
+    fn insert_tls13_ticket(
         &self,
         server_name: &rustls::ServerName,
         mut value: rustls::client::Tls13ClientSessionValue,
     ) {
         value.common.rewind_epoch(self.delay);
         self.storage
-            .add_tls13_ticket(server_name, value);
+            .insert_tls13_ticket(server_name, value);
     }
 
     fn take_tls13_ticket(

@@ -997,7 +997,7 @@ impl ExpectFinished {
             }
         };
 
-        let stored_value = persist::Tls12ClientSessionValue::new(
+        let session_value = persist::Tls12ClientSessionValue::new(
             self.secrets.suite(),
             self.session_id,
             ticket,
@@ -1013,7 +1013,7 @@ impl ExpectFinished {
 
         self.config
             .session_storage
-            .put_tls12_session(&self.server_name, stored_value);
+            .set_tls12_session(&self.server_name, session_value);
     }
 }
 

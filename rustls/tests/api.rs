@@ -2666,12 +2666,12 @@ impl rustls::server::StoresServerSessions for ServerStorage {
 
 #[derive(Debug, Clone)]
 enum ClientStorageOp {
-    PutKxHint(rustls::ServerName, rustls::NamedGroup),
+    SetKxHint(rustls::ServerName, rustls::NamedGroup),
     GetKxHint(rustls::ServerName, Option<rustls::NamedGroup>),
-    PutTls12Session(rustls::ServerName),
+    SetTls12Session(rustls::ServerName),
     GetTls12Session(rustls::ServerName, bool),
-    ForgetTls12Session(rustls::ServerName),
-    AddTls13Ticket(rustls::ServerName),
+    RemoveTls12Session(rustls::ServerName),
+    InsertTls13Ticket(rustls::ServerName),
     TakeTls13Ticket(rustls::ServerName, bool),
 }
 
@@ -2700,17 +2700,17 @@ impl fmt::Debug for ClientStorage {
 }
 
 impl rustls::client::ClientSessionStore for ClientStorage {
-    fn put_kx_hint(&self, server_name: &rustls::ServerName, group: rustls::NamedGroup) {
+    fn set_kx_hint(&self, server_name: &rustls::ServerName, group: rustls::NamedGroup) {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::PutKxHint(server_name.clone(), group));
+            .push(ClientStorageOp::SetKxHint(server_name.clone(), group));
         self.storage
-            .put_kx_hint(server_name, group)
+            .set_kx_hint(server_name, group)
     }
 
-    fn get_kx_hint(&self, server_name: &rustls::ServerName) -> Option<rustls::NamedGroup> {
-        let rc = self.storage.get_kx_hint(server_name);
+    fn kx_hint(&self, server_name: &rustls::ServerName) -> Option<rustls::NamedGroup> {
+        let rc = self.storage.kx_hint(server_name);
         self.ops
             .lock()
             .unwrap()
@@ -2719,7 +2719,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
     }
 
     #[cfg(feature = "tls12")]
-    fn put_tls12_session(
+    fn set_tls12_session(
         &self,
         server_name: &rustls::ServerName,
         value: rustls::client::Tls12ClientSessionValue,
@@ -2727,19 +2727,17 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::PutTls12Session(server_name.clone()));
+            .push(ClientStorageOp::SetTls12Session(server_name.clone()));
         self.storage
-            .put_tls12_session(server_name, value)
+            .set_tls12_session(server_name, value)
     }
 
     #[cfg(feature = "tls12")]
-    fn get_tls12_session(
+    fn tls12_session(
         &self,
         server_name: &rustls::ServerName,
     ) -> Option<rustls::client::Tls12ClientSessionValue> {
-        let rc = self
-            .storage
-            .get_tls12_session(server_name);
+        let rc = self.storage.tls12_session(server_name);
         self.ops
             .lock()
             .unwrap()
@@ -2751,16 +2749,16 @@ impl rustls::client::ClientSessionStore for ClientStorage {
     }
 
     #[cfg(feature = "tls12")]
-    fn forget_tls12_session(&self, server_name: &rustls::ServerName) {
+    fn remove_tls12_session(&self, server_name: &rustls::ServerName) {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::ForgetTls12Session(server_name.clone()));
+            .push(ClientStorageOp::RemoveTls12Session(server_name.clone()));
         self.storage
-            .forget_tls12_session(server_name);
+            .remove_tls12_session(server_name);
     }
 
-    fn add_tls13_ticket(
+    fn insert_tls13_ticket(
         &self,
         server_name: &rustls::ServerName,
         value: rustls::client::Tls13ClientSessionValue,
@@ -2768,9 +2766,9 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::AddTls13Ticket(server_name.clone()));
+            .push(ClientStorageOp::InsertTls13Ticket(server_name.clone()));
         self.storage
-            .add_tls13_ticket(server_name, value);
+            .insert_tls13_ticket(server_name, value);
     }
 
     fn take_tls13_ticket(
@@ -3802,27 +3800,28 @@ fn test_client_sends_helloretryrequest() {
     ));
     assert!(matches!(
         storage.ops()[3],
-        ClientStorageOp::PutKxHint(_, rustls::NamedGroup::X25519)
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::X25519)
     ));
     assert!(matches!(
         storage.ops()[4],
-        ClientStorageOp::ForgetTls12Session(_)
+        ClientStorageOp::RemoveTls12Session(_)
     ));
+    // server sends 4 tickets by default
     assert!(matches!(
         storage.ops()[5],
-        ClientStorageOp::AddTls13Ticket(_)
+        ClientStorageOp::InsertTls13Ticket(_)
     ));
     assert!(matches!(
         storage.ops()[6],
-        ClientStorageOp::AddTls13Ticket(_)
+        ClientStorageOp::InsertTls13Ticket(_)
     ));
     assert!(matches!(
         storage.ops()[7],
-        ClientStorageOp::AddTls13Ticket(_)
+        ClientStorageOp::InsertTls13Ticket(_)
     ));
     assert!(matches!(
         storage.ops()[8],
-        ClientStorageOp::AddTls13Ticket(_)
+        ClientStorageOp::InsertTls13Ticket(_)
     ));
 }
 
@@ -4140,15 +4139,15 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     println!("hs1 storage ops: {:#?}", client_storage.ops());
     assert!(matches!(
         client_storage.ops()[3],
-        ClientStorageOp::PutKxHint(_, _)
+        ClientStorageOp::SetKxHint(_, _)
     ));
     assert!(matches!(
         client_storage.ops()[4],
-        ClientStorageOp::ForgetTls12Session(_)
+        ClientStorageOp::RemoveTls12Session(_)
     ));
     assert!(matches!(
         client_storage.ops()[5],
-        ClientStorageOp::AddTls13Ticket(_)
+        ClientStorageOp::InsertTls13Ticket(_)
     ));
 
     dbg!("handshake 2");

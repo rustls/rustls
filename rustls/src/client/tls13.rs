@@ -141,7 +141,7 @@ pub(super) fn handle_server_hello(
     // Remember what KX group the server liked for next time.
     config
         .session_storage
-        .put_kx_hint(&server_name, their_key_share.group);
+        .set_kx_hint(&server_name, their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -191,7 +191,7 @@ pub(super) fn initial_key_share(
 ) -> Result<kx::KeyExchange, Error> {
     let group = config
         .session_storage
-        .get_kx_hint(server_name)
+        .kx_hint(server_name)
         .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
         .unwrap_or_else(|| {
             config
@@ -876,7 +876,7 @@ impl State<ClientConnectionData> for ExpectFinished {
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
         st.config
             .session_storage
-            .forget_tls12_session(&st.server_name);
+            .remove_tls12_session(&st.server_name);
 
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
@@ -976,7 +976,7 @@ impl ExpectTraffic {
         }
 
         self.session_storage
-            .add_tls13_ticket(&self.server_name, value);
+            .insert_tls13_ticket(&self.server_name, value);
         Ok(())
     }
 

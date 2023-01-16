@@ -37,47 +37,51 @@ use std::{fmt, io, mem};
 /// **highly sensitive**, containing enough key material to break all security
 /// of the corresponding session.
 ///
-/// `put_`, `add_`, `forget_` and `take_` operations are mutating; this isn't
+/// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
 pub trait ClientSessionStore: Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
-    fn put_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
+    fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
 
-    /// This should return the value most recently passed to `put_kx_hint`
+    /// This should return the value most recently passed to `set_kx_hint`
     /// for the given `server_name`.
     ///
     /// If `None` is returned, the caller chooses the first configured group,
     /// and an extra round trip might happen if that choice is unsatisfactory
     /// to the server.
-    fn get_kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup>;
+    fn kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup>;
 
-    /// Remember a TLS1.2 session. At most one of these can be remembered at a time, per
-    /// `server_name`.
+    /// Remember a TLS1.2 session.
+    ///
+    /// At most one of these can be remembered at a time, per `server_name`.
     #[cfg(feature = "tls12")]
-    fn put_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue);
+    fn set_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue);
 
-    /// Get the most recently saved TLS1.2 session for `server_name` provided to `put_tls12_session`.
+    /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
     #[cfg(feature = "tls12")]
-    fn get_tls12_session(
-        &self,
-        server_name: &ServerName,
-    ) -> Option<persist::Tls12ClientSessionValue>;
+    fn tls12_session(&self, server_name: &ServerName) -> Option<persist::Tls12ClientSessionValue>;
 
-    /// Forget any saved TLS1.2 session for `server_name`.
+    /// Remove and forget any saved TLS1.2 session for `server_name`.
     #[cfg(feature = "tls12")]
-    fn forget_tls12_session(&self, server_name: &ServerName);
+    fn remove_tls12_session(&self, server_name: &ServerName);
 
-    /// Forget any saved TLS1.2 session for `server_name`.
+    /// Remove and forget any saved TLS1.2 session for `server_name`.
     #[cfg(not(feature = "tls12"))]
-    fn forget_tls12_session(&self, _: &ServerName) {}
+    fn remove_tls12_session(&self, _: &ServerName) {}
 
     /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
-    /// resumption of this session.  This can be called multiple times for a given session, allowing
-    /// multiple independent tickets to be valid at once.  The number of times this is called
-    /// is controlled by the server, so implementations of this trait should apply a reasonable bound
-    /// of how many items are stored simultaneously.
-    fn add_tls13_ticket(&self, server_name: &ServerName, value: persist::Tls13ClientSessionValue);
+    /// resumption of this session.
+    ///
+    /// This can be called multiple times for a given session, allowing multiple independent tickets
+    /// to be valid at once.  The number of times this is called is controlled by the server, so
+    /// implementations of this trait should apply a reasonable bound of how many items are stored
+    /// simultaneously.
+    fn insert_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+        value: persist::Tls13ClientSessionValue,
+    );
 
     /// Return a TLS1.3 ticket previously provided to `add_tls13_ticket`.
     ///

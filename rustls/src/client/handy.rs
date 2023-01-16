@@ -15,24 +15,24 @@ use std::sync::{Arc, Mutex};
 pub struct NoClientSessionStorage {}
 
 impl client::ClientSessionStore for NoClientSessionStorage {
-    fn put_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
+    fn set_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
 
-    fn get_kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
+    fn kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
         None
     }
 
     #[cfg(feature = "tls12")]
-    fn put_tls12_session(&self, _: &ServerName, _: persist::Tls12ClientSessionValue) {}
+    fn set_tls12_session(&self, _: &ServerName, _: persist::Tls12ClientSessionValue) {}
 
     #[cfg(feature = "tls12")]
-    fn get_tls12_session(&self, _: &ServerName) -> Option<persist::Tls12ClientSessionValue> {
+    fn tls12_session(&self, _: &ServerName) -> Option<persist::Tls12ClientSessionValue> {
         None
     }
 
     #[cfg(feature = "tls12")]
-    fn forget_tls12_session(&self, _: &ServerName) {}
+    fn remove_tls12_session(&self, _: &ServerName) {}
 
-    fn add_tls13_ticket(&self, _: &ServerName, _: persist::Tls13ClientSessionValue) {}
+    fn insert_tls13_ticket(&self, _: &ServerName, _: persist::Tls13ClientSessionValue) {}
 
     fn take_tls13_ticket(&self, _: &ServerName) -> Option<persist::Tls13ClientSessionValue> {
         None
@@ -84,14 +84,14 @@ impl ClientSessionMemoryCache {
 }
 
 impl client::ClientSessionStore for ClientSessionMemoryCache {
-    fn put_kx_hint(&self, server_name: &ServerName, group: NamedGroup) {
+    fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup) {
         self.servers
             .lock()
             .unwrap()
             .get_or_insert_default_and_edit(server_name.clone(), |data| data.kx_hint = Some(group));
     }
 
-    fn get_kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup> {
+    fn kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup> {
         self.servers
             .lock()
             .unwrap()
@@ -100,7 +100,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
     }
 
     #[cfg(feature = "tls12")]
-    fn put_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue) {
+    fn set_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue) {
         self.servers
             .lock()
             .unwrap()
@@ -108,10 +108,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
     }
 
     #[cfg(feature = "tls12")]
-    fn get_tls12_session(
-        &self,
-        server_name: &ServerName,
-    ) -> Option<persist::Tls12ClientSessionValue> {
+    fn tls12_session(&self, server_name: &ServerName) -> Option<persist::Tls12ClientSessionValue> {
         self.servers
             .lock()
             .unwrap()
@@ -120,7 +117,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
     }
 
     #[cfg(feature = "tls12")]
-    fn forget_tls12_session(&self, server_name: &ServerName) {
+    fn remove_tls12_session(&self, server_name: &ServerName) {
         self.servers
             .lock()
             .unwrap()
@@ -128,7 +125,11 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
             .and_then(|data| data.tls12.take());
     }
 
-    fn add_tls13_ticket(&self, server_name: &ServerName, value: persist::Tls13ClientSessionValue) {
+    fn insert_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+        value: persist::Tls13ClientSessionValue,
+    ) {
         self.servers
             .lock()
             .unwrap()
