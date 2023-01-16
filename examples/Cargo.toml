@@ -3,7 +3,7 @@ name = "rustls-examples"
 version = "0.0.1"
 edition = "2021"
 rust-version = "1.57"
-license = "Apache-2.0/ISC/MIT"
+license = "Apache-2.0 OR ISC OR MIT"
 description = "Rustls example code and tests."
 publish = false
 
