@@ -534,14 +534,25 @@ impl<Data> ConnectionCommon<Data> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
-        match self.deframe()?.map(Message::try_from) {
-            Some(Ok(msg)) => Ok(Some(msg)),
-            Some(Err(err)) => {
-                self.common_state
-                    .send_fatal_alert(AlertDescription::DecodeError);
-                Err(err)
+        let result = self
+            .message_deframer
+            .pop(&mut self.common_state.record_layer);
+
+        match self.common_state.deframed(result) {
+            Ok(Some(msg)) => match Message::try_from(msg) {
+                Ok(msg) => Ok(Some(msg)),
+                Err(err) => {
+                    self.common_state
+                        .send_fatal_alert(AlertDescription::DecodeError);
+                    self.state = Err(err.clone());
+                    Err(err)
+                }
+            },
+            Ok(None) => Ok(None),
+            Err(err) => {
+                self.state = Err(err.clone());
+                return Err(err);
             }
-            None => Ok(None),
         }
     }
 
@@ -626,7 +637,19 @@ impl<Data> ConnectionCommon<Data> {
             }
         };
 
-        while let Some(msg) = self.deframe()? {
+        loop {
+            let result = self
+                .message_deframer
+                .pop(&mut self.common_state.record_layer);
+            let msg = match self.common_state.deframed(result) {
+                Ok(Some(msg)) => msg,
+                Ok(None) => break,
+                Err(e) => {
+                    self.state = Err(e.clone());
+                    return Err(e);
+                }
+            };
+
             match self.process_msg(msg, state) {
                 Ok(new) => state = new,
                 Err(e) => {
@@ -638,59 +661,6 @@ impl<Data> ConnectionCommon<Data> {
 
         self.state = Ok(state);
         Ok(self.common_state.current_io_state())
-    }
-
-    /// Pull a message out of the deframer and send any messages that need to be sent as a result.
-    fn deframe(&mut self) -> Result<Option<PlainMessage>, Error> {
-        match self
-            .message_deframer
-            .pop(&mut self.common_state.record_layer)
-        {
-            Ok(Some(Deframed {
-                want_close_before_decrypt,
-                aligned,
-                trial_decryption_finished,
-                message,
-            })) => {
-                if want_close_before_decrypt {
-                    self.common_state.send_close_notify();
-                }
-
-                if trial_decryption_finished {
-                    self.common_state
-                        .record_layer
-                        .finish_trial_decryption();
-                }
-
-                self.common_state.aligned_handshake = aligned;
-                Ok(Some(message))
-            }
-            Ok(None) => Ok(None),
-            Err(err @ Error::CorruptMessage | err @ Error::CorruptMessagePayload(_)) => {
-                #[cfg(feature = "quic")]
-                if self.common_state.is_quic() {
-                    self.common_state.quic.alert = Some(AlertDescription::DecodeError);
-                }
-
-                if !self.common_state.is_quic() {
-                    self.common_state
-                        .send_fatal_alert(AlertDescription::DecodeError);
-                }
-
-                Err(err)
-            }
-            Err(Error::PeerSentOversizedRecord) => {
-                self.common_state
-                    .send_fatal_alert(AlertDescription::RecordOverflow);
-                Err(Error::PeerSentOversizedRecord)
-            }
-            Err(Error::DecryptError) => {
-                self.common_state
-                    .send_fatal_alert(AlertDescription::BadRecordMac);
-                Err(Error::DecryptError)
-            }
-            Err(e) => Err(e),
-        }
     }
 
     pub(crate) fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
@@ -921,6 +891,55 @@ impl CommonState {
 
     pub(crate) fn is_tls13(&self) -> bool {
         matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+    }
+
+    /// Handle state changes from deframed messages.
+    fn deframed(
+        &mut self,
+        result: Result<Option<Deframed>, Error>,
+    ) -> Result<Option<PlainMessage>, Error> {
+        match result {
+            Ok(Some(Deframed {
+                want_close_before_decrypt,
+                aligned,
+                trial_decryption_finished,
+                message,
+            })) => {
+                if want_close_before_decrypt {
+                    self.send_close_notify();
+                }
+
+                if trial_decryption_finished {
+                    self.record_layer
+                        .finish_trial_decryption();
+                }
+
+                self.aligned_handshake = aligned;
+                Ok(Some(message))
+            }
+            Ok(None) => Ok(None),
+            Err(err @ Error::CorruptMessage | err @ Error::CorruptMessagePayload(_)) => {
+                #[cfg(feature = "quic")]
+                if self.is_quic() {
+                    self.quic.alert = Some(AlertDescription::DecodeError);
+                }
+
+                if !self.is_quic() {
+                    self.send_fatal_alert(AlertDescription::DecodeError);
+                }
+
+                Err(err)
+            }
+            Err(Error::PeerSentOversizedRecord) => {
+                self.send_fatal_alert(AlertDescription::RecordOverflow);
+                Err(Error::PeerSentOversizedRecord)
+            }
+            Err(Error::DecryptError) => {
+                self.send_fatal_alert(AlertDescription::BadRecordMac);
+                Err(Error::DecryptError)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn process_main_protocol<Data>(
