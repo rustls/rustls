@@ -55,7 +55,7 @@ pub enum Error {
 
     /// The peer deviated from the standard TLS protocol.
     /// The parameter gives a hint where.
-    PeerMisbehavedError(String),
+    PeerMisbehaved(PeerMisbehaved),
 
     /// We received a fatal alert.  This means the peer is unhappy.
     AlertReceived(AlertDescription),
@@ -99,6 +99,91 @@ pub enum Error {
     BadMaxFragmentSize,
 }
 
+#[non_exhaustive]
+#[allow(missing_docs)]
+#[derive(Debug, PartialEq, Clone)]
+/// The set of cases where we failed to make a connection because we thought
+/// the peer was misbehaving.
+///
+/// This is `non_exhaustive`: we might add or stop using items here in minor
+/// versions.  We also don't document what they mean.  Generally a user of
+/// rustls shouldn't vary its behaviour on these error codes, and there is
+/// nothing it can do to improve matters.
+///
+/// Please file a bug against rustls if you see `Error::PeerMisbehaved` in
+/// the wild.
+pub enum PeerMisbehaved {
+    AttemptedDowngradeToTls12WhenTls13IsSupported,
+    BadCertChainExtensions,
+    DisallowedEncryptedExtension,
+    DuplicateClientHelloExtensions,
+    DuplicateEncryptedExtensions,
+    DuplicateHelloRetryRequestExtensions,
+    DuplicateNewSessionTicketExtensions,
+    DuplicateServerHelloExtensions,
+    DuplicateServerNameTypes,
+    EarlyDataAttemptedInSecondClientHello,
+    EarlyDataExtensionWithoutResumption,
+    EarlyDataOfferedWithVariedCipherSuite,
+    HandshakeHashVariedAfterRetry,
+    IllegalHelloRetryRequestWithEmptyCookie,
+    IllegalHelloRetryRequestWithNoChanges,
+    IllegalHelloRetryRequestWithOfferedGroup,
+    IllegalHelloRetryRequestWithUnofferedCipherSuite,
+    IllegalHelloRetryRequestWithUnofferedNamedGroup,
+    IllegalHelloRetryRequestWithUnsupportedVersion,
+    IllegalMiddleboxChangeCipherSpec,
+    IllegalTlsInnerPlaintext,
+    IncorrectBinder,
+    InvalidMaxEarlyDataSize,
+    InvalidKeyShare,
+    InvalidSctList,
+    KeyEpochWithPendingFragment,
+    KeyUpdateReceivedInQuicConnection,
+    MessageInterleavedWithHandshakeMessage,
+    MissingBinderInPskExtension,
+    MissingKeyShare,
+    MissingQuicTransportParameters,
+    OfferedDuplicateKeyShares,
+    OfferedEarlyDataWithOldProtocolVersion,
+    OfferedEmptyApplicationProtocol,
+    OfferedIncorrectCompressions,
+    PskExtensionMustBeLast,
+    PskExtensionWithMismatchedIdsAndBinders,
+    RefusedToFollowHelloRetryRequest,
+    RejectedEarlyDataInterleavedWithHandshakeMessage,
+    ResumptionAttemptedWithVariedEms,
+    ResumptionOfferedWithVariedCipherSuite,
+    ResumptionOfferedWithVariedEms,
+    ResumptionOfferedWithIncompatibleCipherSuite,
+    SelectedDifferentCipherSuiteAfterRetry,
+    SelectedInvalidPsk,
+    SelectedTls12UsingTls13VersionExtension,
+    SelectedUnofferedApplicationProtocol,
+    SelectedUnofferedCipherSuite,
+    SelectedUnofferedCompression,
+    SelectedUnofferedKxGroup,
+    SelectedUnofferedPsk,
+    SelectedUnusableCipherSuiteForVersion,
+    ServerHelloMustOfferUncompressedEcPoints,
+    SignedKxWithWrongAlgorithm,
+    SignedHandshakeWithUnadvertisedSigScheme,
+    TooMuchEarlyDataReceived,
+    UnexpectedCleartextExtension,
+    UnsolicitedCertExtension,
+    UnsolicitedEncryptedExtension,
+    UnsolicitedSctList,
+    UnsolicitedServerHelloExtension,
+    WrongGroupForKeyShare,
+}
+
+impl From<PeerMisbehaved> for Error {
+    #[inline]
+    fn from(e: PeerMisbehaved) -> Self {
+        Self::PeerMisbehaved(e)
+    }
+}
+
 fn join<T: fmt::Debug>(items: &[T]) -> String {
     items
         .iter()
@@ -132,7 +217,7 @@ impl fmt::Display for Error {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
             Self::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
-            Self::PeerMisbehavedError(ref why) => write!(f, "peer misbehaved: {}", why),
+            Self::PeerMisbehaved(ref why) => write!(f, "peer misbehaved: {:?}", why),
             Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
             Self::InvalidCertificateEncoding => {
                 write!(f, "invalid peer certificate encoding")
@@ -203,7 +288,7 @@ mod tests {
             Error::NoCertificatesPresented,
             Error::DecryptError,
             Error::PeerIncompatibleError("no tls1.2".to_string()),
-            Error::PeerMisbehavedError("inconsistent something".to_string()),
+            super::PeerMisbehaved::UnsolicitedCertExtension.into(),
             Error::AlertReceived(AlertDescription::ExportRestriction),
             Error::InvalidCertificateEncoding,
             Error::InvalidCertificateSignatureType,

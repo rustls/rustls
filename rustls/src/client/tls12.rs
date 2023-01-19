@@ -1,7 +1,7 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -72,7 +72,7 @@ mod server_hello {
             if tls13_supported && has_downgrade_marker {
                 return Err(cx
                     .common
-                    .illegal_param("downgrade to TLS1.2 when TLS1.3 is supported"));
+                    .illegal_param(PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported));
             }
 
             // Doing EMS?
@@ -103,8 +103,7 @@ mod server_hello {
                 debug!("Server sent {:?} SCTs", sct_list.len());
 
                 if hs::sct_list_is_invalid(sct_list) {
-                    let error_msg = "server sent invalid SCT list".to_string();
-                    return Err(Error::PeerMisbehavedError(error_msg));
+                    return Err(PeerMisbehaved::InvalidSctList.into());
                 }
                 Some(sct_list.clone())
             } else {
@@ -118,15 +117,12 @@ mod server_hello {
 
                     // Is the server telling lies about the ciphersuite?
                     if resuming.suite() != suite {
-                        let error_msg =
-                            "abbreviated handshake offered, but with varied cs".to_string();
-                        return Err(Error::PeerMisbehavedError(error_msg));
+                        return Err(PeerMisbehaved::ResumptionOfferedWithVariedCipherSuite.into());
                     }
 
                     // And about EMS support?
                     if resuming.extended_ms() != self.using_ems {
-                        let error_msg = "server varied ems support over resume".to_string();
-                        return Err(Error::PeerMisbehavedError(error_msg));
+                        return Err(PeerMisbehaved::ResumptionOfferedWithVariedEms.into());
                     }
 
                     let secrets =
@@ -759,12 +755,12 @@ impl State<ClientConnectionData> for ExpectServerDone {
             let sig = &st.server_kx.kx_sig;
             if !SupportedCipherSuite::from(suite).usable_for_signature_algorithm(sig.scheme.sign())
             {
-                let error_message = format!(
+                crate::log::warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.sign(),
                     suite.sign
                 );
-                return Err(Error::PeerMisbehavedError(error_message));
+                return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
             }
 
             st.config
@@ -788,9 +784,9 @@ impl State<ClientConnectionData> for ExpectServerDone {
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
         let group =
             kx::KeyExchange::choose(ecdh_params.curve_params.named_group, &st.config.kx_groups)
-                .ok_or_else(|| {
-                    Error::PeerMisbehavedError("peer chose an unsupported group".to_string())
-                })?;
+                .ok_or(Error::PeerMisbehaved(
+                    PeerMisbehaved::SelectedUnofferedKxGroup,
+                ))?;
         let kx = kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?;
 
         // 5b.

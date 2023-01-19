@@ -2,7 +2,7 @@ use crate::conn::{CommonState, ConnectionRandoms, State};
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
 use crate::enums::{ProtocolVersion, SignatureScheme};
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -40,9 +40,9 @@ fn bad_version(common: &mut CommonState, why: &str) -> Error {
     Error::PeerIncompatibleError(why.to_string())
 }
 
-pub(super) fn decode_error(common: &mut CommonState, why: &str) -> Error {
+pub(super) fn decode_error(common: &mut CommonState, why: PeerMisbehaved) -> Error {
     common.send_fatal_alert(AlertDescription::DecodeError);
-    Error::PeerMisbehavedError(why.to_string())
+    Error::PeerMisbehaved(why)
 }
 
 pub(super) fn can_resume(
@@ -96,9 +96,7 @@ impl ExtensionProcessing {
                 .iter()
                 .any(|protocol| protocol.is_empty())
             {
-                return Err(Error::PeerMisbehavedError(
-                    "client offered empty ALPN protocol".to_string(),
-                ));
+                return Err(PeerMisbehaved::OfferedEmptyApplicationProtocol.into());
             }
 
             cx.common.alpn_protocol = our_protocols
@@ -139,7 +137,7 @@ impl ExtensionProcessing {
                     None => {
                         return Err(cx
                             .common
-                            .missing_extension("QUIC transport parameters not found"));
+                            .missing_extension(PeerMisbehaved::MissingQuicTransportParameters));
                     }
                 }
             }
@@ -390,7 +388,7 @@ impl ExpectClientHello {
             _ => {
                 return Err(cx
                     .common
-                    .illegal_param("hash differed on retry"));
+                    .illegal_param(PeerMisbehaved::HandshakeHashVariedAfterRetry));
             }
         };
 
@@ -466,7 +464,10 @@ pub(super) fn process_client_hello<'a>(
     }
 
     if client_hello.has_duplicate_extension() {
-        return Err(decode_error(common, "client sent duplicate extensions"));
+        return Err(decode_error(
+            common,
+            PeerMisbehaved::DuplicateClientHelloExtensions,
+        ));
     }
 
     // No handshake messages should follow this one in this flight.
@@ -482,14 +483,14 @@ pub(super) fn process_client_hello<'a>(
             if sni.has_duplicate_names_for_type() {
                 return Err(decode_error(
                     common,
-                    "ClientHello SNI contains duplicate name types",
+                    PeerMisbehaved::DuplicateServerNameTypes,
                 ));
             }
 
             if let Some(hostname) = sni.get_single_hostname() {
                 Some(hostname.into())
             } else {
-                return Err(common.illegal_param("ClientHello SNI did not contain a hostname"));
+                return Err(common.illegal_param(PeerMisbehaved::ServerNameMustContainOneHostName));
             }
         }
         None => None,

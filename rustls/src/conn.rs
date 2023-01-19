@@ -1,5 +1,5 @@
 use crate::enums::ProtocolVersion;
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
@@ -569,8 +569,8 @@ impl<Data> ConnectionCommon<Data> {
                 //  handshake with an "unexpected_message" alert."
                 self.common_state
                     .send_fatal_alert(AlertDescription::UnexpectedMessage);
-                return Err(Error::PeerMisbehavedError(
-                    "illegal middlebox CCS received".into(),
+                return Err(Error::PeerMisbehaved(
+                    PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
                 ));
             } else {
                 self.common_state.received_middlebox_ccs += 1;
@@ -985,17 +985,15 @@ impl CommonState {
     pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
         if !self.aligned_handshake {
             self.send_fatal_alert(AlertDescription::UnexpectedMessage);
-            Err(Error::PeerMisbehavedError(
-                "key epoch or handshake flight with pending fragment".to_string(),
-            ))
+            Err(PeerMisbehaved::KeyEpochWithPendingFragment.into())
         } else {
             Ok(())
         }
     }
 
-    pub(crate) fn illegal_param(&mut self, why: &str) -> Error {
+    pub(crate) fn illegal_param(&mut self, why: PeerMisbehaved) -> Error {
         self.send_fatal_alert(AlertDescription::IllegalParameter);
-        Error::PeerMisbehavedError(why.to_string())
+        Error::PeerMisbehaved(why)
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
@@ -1214,9 +1212,9 @@ impl CommonState {
     }
 
     #[cfg(feature = "quic")]
-    pub(crate) fn missing_extension(&mut self, why: &str) -> Error {
+    pub(crate) fn missing_extension(&mut self, why: PeerMisbehaved) -> Error {
         self.send_fatal_alert(AlertDescription::MissingExtension);
-        Error::PeerMisbehavedError(why.to_string())
+        Error::PeerMisbehaved(why)
     }
 
     fn send_warning_alert(&mut self, desc: AlertDescription) {

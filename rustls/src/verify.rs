@@ -3,7 +3,7 @@ use std::fmt;
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
@@ -686,10 +686,7 @@ fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, Error>
         SignatureScheme::RSA_PSS_SHA384 => Ok(RSA_PSS_SHA384),
         SignatureScheme::RSA_PSS_SHA512 => Ok(RSA_PSS_SHA512),
 
-        _ => {
-            let error_msg = format!("received unadvertised sig scheme {:?}", scheme);
-            Err(Error::PeerMisbehavedError(error_msg))
-        }
+        _ => Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into()),
     }
 }
 
@@ -736,10 +733,7 @@ fn convert_alg_tls13(
         RSA_PSS_SHA256 => Ok(&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
         RSA_PSS_SHA384 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
         RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
-        _ => {
-            let error_msg = format!("received unsupported sig scheme {:?}", scheme);
-            Err(Error::PeerMisbehavedError(error_msg))
-        }
+        _ => Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into()),
     }
 }
 
