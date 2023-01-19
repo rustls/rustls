@@ -2691,6 +2691,10 @@ impl ClientStorage {
     fn ops(&self) -> Vec<ClientStorageOp> {
         self.ops.lock().unwrap().clone()
     }
+
+    fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
+        std::mem::take(&mut self.ops.lock().unwrap())
+    }
 }
 
 impl fmt::Debug for ClientStorage {
@@ -3825,6 +3829,7 @@ fn test_client_sends_helloretryrequest() {
     ));
 }
 
+#[cfg(feature = "tls12")]
 #[test]
 fn test_client_attempts_to_use_unsupported_kx_group() {
     // common to both client configs
@@ -3840,7 +3845,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     //   contains an unusable value.
     let mut client_config_2 =
         make_client_config_with_kx_groups(KeyType::Rsa, &[&rustls::kx_group::SECP384R1]);
-    client_config_2.session_storage = shared_storage;
+    client_config_2.session_storage = shared_storage.clone();
 
     let server_config = make_server_config(KeyType::Rsa);
 
@@ -3848,9 +3853,83 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
     do_handshake_until_error(&mut client_1, &mut server).unwrap();
 
+    let ops = shared_storage.ops();
+    println!("storage {:#?}", ops);
+    assert_eq!(ops.len(), 9);
+    assert!(matches!(
+        ops[3],
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::X25519)
+    ));
+
     // second handshake
     let (mut client_2, mut server) = make_pair_for_configs(client_config_2, server_config);
     do_handshake_until_error(&mut client_2, &mut server).unwrap();
+
+    let ops = shared_storage.ops();
+    println!("storage {:?} {:#?}", ops.len(), ops);
+    assert_eq!(ops.len(), 17);
+    assert!(matches!(ops[9], ClientStorageOp::TakeTls13Ticket(_, true)));
+    assert!(matches!(
+        ops[10],
+        ClientStorageOp::GetKxHint(_, Some(rustls::NamedGroup::X25519))
+    ));
+    assert!(matches!(
+        ops[11],
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::secp384r1)
+    ));
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn test_tls13_client_resumption_does_not_reuse_tickets() {
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    let mut client_config = make_client_config(KeyType::Rsa);
+    client_config.session_storage = shared_storage.clone();
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(KeyType::Rsa);
+    server_config.send_tls13_tickets = 5;
+    let server_config = Arc::new(server_config);
+
+    // first handshake: client obtains 5 tickets from server.
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake_until_error(&mut client, &mut server).unwrap();
+
+    let ops = shared_storage.ops_and_reset();
+    println!("storage {:#?}", ops);
+    assert_eq!(ops.len(), 10);
+    assert!(matches!(ops[5], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[6], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[7], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[8], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[9], ClientStorageOp::InsertTls13Ticket(_)));
+
+    // 5 subsequent handshakes: all are resumptions
+
+    // Note: we don't do complete the handshakes, because that means
+    // we get five additional tickets per connection which is unhelpful
+    // in this test.  It also acts to record a "Happy Eyeballs"-type use
+    // case, where a client speculatively makes many connection attempts
+    // in parallel without knowledge of which will work due to underlying
+    // connectivity uncertainty.
+    for _ in 0..5 {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+
+        let ops = shared_storage.ops_and_reset();
+        assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, true)));
+    }
+
+    // 6th subsequent handshake: cannot be resumed; we ran out of tickets
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    let ops = shared_storage.ops_and_reset();
+    println!("last {:?}", ops);
+    assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, false)));
 }
 
 #[test]
