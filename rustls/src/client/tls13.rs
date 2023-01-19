@@ -3,7 +3,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::conn::Side;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{ProtocolVersion, SignatureScheme};
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -84,13 +84,13 @@ pub(super) fn handle_server_hello(
         .ok_or_else(|| {
             cx.common
                 .send_fatal_alert(AlertDescription::MissingExtension);
-            Error::PeerMisbehavedError("missing key share".to_string())
+            Error::PeerMisbehaved(PeerMisbehaved::MissingKeyShare)
         })?;
 
     if our_key_share.group() != their_key_share.group {
         return Err(cx
             .common
-            .illegal_param("wrong group for key share"));
+            .illegal_param(PeerMisbehaved::WrongGroupForKeyShare));
     }
 
     let key_schedule_pre_handshake = if let (Some(selected_psk), Some(early_key_schedule)) =
@@ -100,9 +100,9 @@ pub(super) fn handle_server_hello(
             let resuming_suite = match suite.can_resume_from(resuming.suite()) {
                 Some(resuming) => resuming,
                 None => {
-                    return Err(cx
-                        .common
-                        .illegal_param("server resuming incompatible suite"));
+                    return Err(cx.common.illegal_param(
+                        PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
+                    ));
                 }
             };
 
@@ -111,21 +111,19 @@ pub(super) fn handle_server_hello(
             if cx.data.early_data.is_enabled() && resuming_suite != suite {
                 return Err(cx
                     .common
-                    .illegal_param("server varied suite with early data"));
+                    .illegal_param(PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite));
             }
 
             if selected_psk != 0 {
                 return Err(cx
                     .common
-                    .illegal_param("server selected invalid psk"));
+                    .illegal_param(PeerMisbehaved::SelectedInvalidPsk));
             }
 
             debug!("Resuming using PSK");
             // The key schedule has been initialized and set in fill_in_psk_binder()
         } else {
-            return Err(Error::PeerMisbehavedError(
-                "server selected unoffered psk".to_string(),
-            ));
+            return Err(PeerMisbehaved::SelectedUnofferedPsk.into());
         }
         KeySchedulePreHandshake::from(early_key_schedule)
     } else {
@@ -179,9 +177,7 @@ fn validate_server_hello(
     for ext in &server_hello.extensions {
         if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
             common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(Error::PeerMisbehavedError(
-                "server sent unexpected cleartext ext".to_string(),
-            ));
+            return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
         }
     }
 
@@ -332,15 +328,12 @@ fn validate_encrypted_extensions(
 ) -> Result<(), Error> {
     if exts.has_duplicate_extension() {
         common.send_fatal_alert(AlertDescription::DecodeError);
-        return Err(Error::PeerMisbehavedError(
-            "server sent duplicate encrypted extensions".to_string(),
-        ));
+        return Err(PeerMisbehaved::DuplicateEncryptedExtensions.into());
     }
 
     if hello.server_sent_unsolicited_extensions(exts, &[]) {
         common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-        let msg = "server sent unsolicited encrypted extension".to_string();
-        return Err(Error::PeerMisbehavedError(msg));
+        return Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into());
     }
 
     for ext in exts {
@@ -348,8 +341,7 @@ fn validate_encrypted_extensions(
             || DISALLOWED_TLS13_EXTS.contains(&ext.get_type())
         {
             common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-            let msg = "server sent inappropriate encrypted extension".to_string();
-            return Err(Error::PeerMisbehavedError(msg));
+            return Err(PeerMisbehaved::DisallowedEncryptedExtension.into());
         }
     }
 
@@ -389,7 +381,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     None => {
                         return Err(cx
                             .common
-                            .missing_extension("QUIC transport parameters not found"));
+                            .missing_extension(PeerMisbehaved::MissingQuicTransportParameters));
                     }
                 }
             }
@@ -435,8 +427,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             }))
         } else {
             if exts.early_data_extension_offered() {
-                let msg = "server sent early data extension without resumption".to_string();
-                return Err(Error::PeerMisbehavedError(msg));
+                return Err(PeerMisbehaved::EarlyDataExtensionWithoutResumption.into());
             }
             Ok(Box::new(ExpectCertificateOrCertReq {
                 config: self.config,
@@ -619,9 +610,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             warn!("certificate chain contains unsolicited/unknown extension");
             cx.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(Error::PeerMisbehavedError(
-                "bad cert chain extensions".to_string(),
-            ));
+            return Err(PeerMisbehaved::BadCertChainExtensions.into());
         }
 
         let server_cert = ServerCertDetails::new(
@@ -632,13 +621,11 @@ impl State<ClientConnectionData> for ExpectCertificate {
 
         if let Some(sct_list) = server_cert.scts.as_ref() {
             if hs::sct_list_is_invalid(sct_list) {
-                let error_msg = "server sent invalid SCT list".to_string();
-                return Err(Error::PeerMisbehavedError(error_msg));
+                return Err(PeerMisbehaved::InvalidSctList.into());
             }
 
             if !self.may_send_sct_list {
-                let error_msg = "server sent unsolicited SCT list".to_string();
-                return Err(Error::PeerMisbehavedError(error_msg));
+                return Err(PeerMisbehaved::UnsolicitedSctList.into());
             }
         }
 
@@ -949,9 +936,7 @@ impl ExpectTraffic {
         if nst.has_duplicate_extension() {
             cx.common
                 .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(Error::PeerMisbehavedError(
-                "peer sent duplicate NewSessionTicket extensions".into(),
-            ));
+            return Err(PeerMisbehaved::DuplicateNewSessionTicketExtensions.into());
         }
 
         let handshake_hash = self.transcript.get_current_hash();
@@ -986,9 +971,7 @@ impl ExpectTraffic {
         #[cfg(feature = "quic")]
         if let Some(sz) = nst.get_max_early_data_size() {
             if cx.common.protocol == Protocol::Quic && sz != 0 && sz != 0xffff_ffff {
-                return Err(Error::PeerMisbehavedError(
-                    "invalid max_early_data_size".into(),
-                ));
+                return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
             }
         }
 
@@ -1024,9 +1007,8 @@ impl ExpectTraffic {
         {
             if let Protocol::Quic = common.protocol {
                 common.send_fatal_alert(AlertDescription::UnexpectedMessage);
-                let msg = "KeyUpdate received in QUIC connection".to_string();
-                warn!("{}", msg);
-                return Err(Error::PeerMisbehavedError(msg));
+                warn!("KeyUpdate received in QUIC connection");
+                return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
             }
         }
 

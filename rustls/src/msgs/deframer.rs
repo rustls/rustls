@@ -4,7 +4,7 @@ use std::ops::Range;
 use super::base::Payload;
 use super::enums::ContentType;
 use super::message::PlainMessage;
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};
 use crate::record_layer::{Decrypted, RecordLayer};
@@ -107,7 +107,9 @@ impl MessageDeframer {
                 // payload in progress, this counts as interleaved, so we error out.
                 Ok(None) if self.joining_hs.is_some() => {
                     self.desynced = true;
-                    return Err(Error::PeerMisbehavedError(INTERLEAVED_ERROR.into()));
+                    return Err(
+                        PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
+                    );
                 }
                 Ok(None) => {
                     self.discard(end);
@@ -122,7 +124,7 @@ impl MessageDeframer {
                 // records, there MUST NOT be any other records between them."
                 // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
                 self.desynced = true;
-                return Err(Error::PeerMisbehavedError(INTERLEAVED_ERROR.into()));
+                return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
             }
 
             // If it's not a handshake message, just return it -- no joining necessary.
@@ -407,8 +409,6 @@ const HEADER_SIZE: usize = 1 + 3;
 const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
 
 const READ_SIZE: usize = 4096;
-
-const INTERLEAVED_ERROR: &str = "";
 
 #[cfg(test)]
 mod tests {

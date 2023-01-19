@@ -18,7 +18,7 @@ use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
-use rustls::{sign, ConnectionCommon, Error, KeyLog, SideData};
+use rustls::{sign, ConnectionCommon, Error, KeyLog, PeerMisbehaved, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ServerConfig, ServerConnection};
@@ -3321,9 +3321,9 @@ mod test_quic {
             .unwrap();
         assert_eq!(
             server.process_new_packets().err(),
-            Some(Error::PeerMisbehavedError(
-                "QUIC transport parameters not found".into(),
-            )),
+            Some(Error::PeerMisbehaved(
+                PeerMisbehaved::MissingQuicTransportParameters
+            ))
         );
     }
 
@@ -3895,8 +3895,8 @@ fn test_server_rejects_duplicate_sni_names() {
     transfer_altered(&mut client, duplicate_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(Error::PeerMisbehavedError(
-            "ClientHello SNI contains duplicate name types".into()
+        Err(Error::PeerMisbehaved(
+            PeerMisbehaved::DuplicateServerNameTypes
         ))
     );
 }
@@ -3924,8 +3924,8 @@ fn test_server_rejects_empty_sni_extension() {
     transfer_altered(&mut client, empty_sni_payload, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(Error::PeerMisbehavedError(
-            "ClientHello SNI did not contain a hostname".into()
+        Err(Error::PeerMisbehaved(
+            PeerMisbehaved::ServerNameMustContainOneHostName
         ))
     );
 }
@@ -3980,8 +3980,8 @@ fn test_client_rejects_illegal_tls13_ccs() {
     transfer_altered(&mut server, corrupt_ccs, &mut client);
     assert_eq!(
         client.process_new_packets(),
-        Err(Error::PeerMisbehavedError(
-            "illegal middlebox CCS received".into()
+        Err(Error::PeerMisbehaved(
+            PeerMisbehaved::IllegalMiddleboxChangeCipherSpec
         ))
     );
 }

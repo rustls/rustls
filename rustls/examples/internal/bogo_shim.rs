@@ -575,8 +575,8 @@ fn quit_err(why: &str) -> ! {
 }
 
 fn handle_err(err: rustls::Error) -> ! {
-    use rustls::Error;
     use rustls::{AlertDescription, ContentType};
+    use rustls::{Error, PeerMisbehaved};
     use std::{thread, time};
 
     println!("TLS error: {:?}", err);
@@ -603,10 +603,10 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::CorruptMessage => quit(":GARBAGE:"),
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         Error::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
-        Error::PeerMisbehavedError(s) if s == "too much early_data received" => {
+        Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
         }
-        Error::PeerMisbehavedError(_) => quit(":PEER_MISBEHAVIOUR:"),
+        Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {

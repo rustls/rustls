@@ -3,7 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{CipherSuite, ProtocolVersion};
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -431,7 +431,7 @@ pub(super) fn process_alpn_protocol(
             .alpn_protocols
             .contains(alpn_protocol)
         {
-            return Err(common.illegal_param("server sent non-offered ALPN protocol"));
+            return Err(common.illegal_param(PeerMisbehaved::SelectedUnofferedApplicationProtocol));
         }
     }
 
@@ -486,9 +486,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 if cx.data.early_data.is_enabled() && cx.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
-                    return Err(Error::PeerMisbehavedError(
-                        "server chose v1.2 when offering 0-rtt".to_string(),
-                    ));
+                    return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
                 }
 
                 if server_hello
@@ -497,7 +495,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 {
                     return Err(cx
                         .common
-                        .illegal_param("server chose v1.2 using v1.3 extension"));
+                        .illegal_param(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension));
                 }
 
                 TLSv1_2
@@ -516,15 +514,13 @@ impl State<ClientConnectionData> for ExpectServerHello {
         if server_hello.compression_method != Compression::Null {
             return Err(cx
                 .common
-                .illegal_param("server chose non-Null compression"));
+                .illegal_param(PeerMisbehaved::SelectedUnofferedCompression));
         }
 
         if server_hello.has_duplicate_extension() {
             cx.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::PeerMisbehavedError(
-                "server sent duplicate extensions".to_string(),
-            ));
+            return Err(PeerMisbehaved::DuplicateServerHelloExtensions.into());
         }
 
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
@@ -534,9 +530,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         {
             cx.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(Error::PeerMisbehavedError(
-                "server sent unsolicited extension".to_string(),
-            ));
+            return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
         }
 
         cx.common.negotiated_version = Some(version);
@@ -552,9 +546,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
                 cx.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure);
-                return Err(Error::PeerMisbehavedError(
-                    "server does not support uncompressed points".to_string(),
-                ));
+                return Err(PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints.into());
             }
         }
 
@@ -564,20 +556,20 @@ impl State<ClientConnectionData> for ExpectServerHello {
             .ok_or_else(|| {
                 cx.common
                     .send_fatal_alert(AlertDescription::HandshakeFailure);
-                Error::PeerMisbehavedError("server chose non-offered ciphersuite".to_string())
+                Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedCipherSuite)
             })?;
 
         if version != suite.version().version {
             return Err(cx
                 .common
-                .illegal_param("server chose unusable ciphersuite for version"));
+                .illegal_param(PeerMisbehaved::SelectedUnusableCipherSuiteForVersion));
         }
 
         match self.suite {
             Some(prev_suite) if prev_suite != suite => {
                 return Err(cx
                     .common
-                    .illegal_param("server varied selected ciphersuite"));
+                    .illegal_param(PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry));
             }
             _ => {
                 debug!("Using ciphersuite {:?}", suite);
@@ -674,7 +666,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         if cookie.is_none() && req_group == Some(offered_key_share.group()) {
             return Err(cx
                 .common
-                .illegal_param("server requested hrr with our group"));
+                .illegal_param(PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup));
         }
 
         // Or has an empty cookie.
@@ -682,7 +674,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             if cookie.0.is_empty() {
                 return Err(cx
                     .common
-                    .illegal_param("server requested hrr with empty cookie"));
+                    .illegal_param(PeerMisbehaved::IllegalHelloRetryRequestWithEmptyCookie));
             }
         }
 
@@ -699,14 +691,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
         if hrr.has_duplicate_extension() {
             return Err(cx
                 .common
-                .illegal_param("server send duplicate hrr extensions"));
+                .illegal_param(PeerMisbehaved::DuplicateHelloRetryRequestExtensions));
         }
 
         // Or asks us to change nothing.
         if cookie.is_none() && req_group.is_none() {
             return Err(cx
                 .common
-                .illegal_param("server requested hrr with no changes"));
+                .illegal_param(PeerMisbehaved::IllegalHelloRetryRequestWithNoChanges));
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
@@ -715,9 +707,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
             _ => {
-                return Err(cx
-                    .common
-                    .illegal_param("server requested unsupported version in hrr"));
+                return Err(cx.common.illegal_param(
+                    PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion,
+                ));
             }
         }
 
@@ -729,9 +721,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
         let cs = match maybe_cs {
             Some(cs) => cs,
             None => {
-                return Err(cx
-                    .common
-                    .illegal_param("server requested unsupported cs in hrr"));
+                return Err(cx.common.illegal_param(
+                    PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
+                ));
             }
         };
 
@@ -760,8 +752,9 @@ impl ExpectServerHelloOrHelloRetryRequest {
             Some(group) if group != offered_key_share.group() => {
                 let group = kx::KeyExchange::choose(group, &self.next.config.kx_groups)
                     .ok_or_else(|| {
-                        cx.common
-                            .illegal_param("server requested hrr with bad group")
+                        cx.common.illegal_param(
+                            PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
+                        )
                     })?;
                 kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?
             }
@@ -823,7 +816,7 @@ pub(super) fn send_cert_error_alert(common: &mut CommonState, err: Error) -> Err
         Error::InvalidCertificateEncoding => {
             common.send_fatal_alert(AlertDescription::DecodeError);
         }
-        Error::PeerMisbehavedError(_) => {
+        Error::PeerMisbehaved(_) => {
             common.send_fatal_alert(AlertDescription::IllegalParameter);
         }
         _ => {

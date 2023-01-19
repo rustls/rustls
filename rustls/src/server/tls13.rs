@@ -3,7 +3,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::conn::Side;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::ProtocolVersion;
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
@@ -152,7 +152,7 @@ mod client_hello {
             if client_hello.compression_methods.len() != 1 {
                 return Err(cx
                     .common
-                    .illegal_param("client offered wrong compressions"));
+                    .illegal_param(PeerMisbehaved::OfferedIncorrectCompressions));
             }
 
             let groups_ext = client_hello
@@ -169,7 +169,7 @@ mod client_hello {
             if client_hello.has_keyshare_extension_with_duplicates() {
                 return Err(cx
                     .common
-                    .illegal_param("client sent duplicate keyshares"));
+                    .illegal_param(PeerMisbehaved::OfferedDuplicateKeyShares));
             }
 
             let early_data_requested = client_hello.early_data_extension_offered();
@@ -178,7 +178,7 @@ mod client_hello {
             if self.done_retry && early_data_requested {
                 return Err(cx
                     .common
-                    .illegal_param("client sent EarlyData in second ClientHello"));
+                    .illegal_param(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello));
             }
 
             // choose a share that we support
@@ -210,7 +210,7 @@ mod client_hello {
                         if self.done_retry {
                             return Err(cx
                                 .common
-                                .illegal_param("did not follow retry request"));
+                                .illegal_param(PeerMisbehaved::RefusedToFollowHelloRetryRequest));
                         }
 
                         emit_hello_retry_request(
@@ -260,17 +260,20 @@ mod client_hello {
                 if !client_hello.check_psk_ext_is_last() {
                     return Err(cx
                         .common
-                        .illegal_param("psk extension in wrong position"));
+                        .illegal_param(PeerMisbehaved::PskExtensionMustBeLast));
                 }
 
                 if psk_offer.binders.is_empty() {
-                    return Err(hs::decode_error(cx.common, "psk extension missing binder"));
+                    return Err(hs::decode_error(
+                        cx.common,
+                        PeerMisbehaved::MissingBinderInPskExtension,
+                    ));
                 }
 
                 if psk_offer.binders.len() != psk_offer.identities.len() {
                     return Err(cx
                         .common
-                        .illegal_param("psk extension mismatched ids/binders"));
+                        .illegal_param(PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders));
                 }
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
@@ -294,9 +297,7 @@ mod client_hello {
                     ) {
                         cx.common
                             .send_fatal_alert(AlertDescription::DecryptError);
-                        return Err(Error::PeerMisbehavedError(
-                            "client sent wrong binder".to_string(),
-                        ));
+                        return Err(PeerMisbehaved::IncorrectBinder.into());
                     }
 
                     chosen_psk_index = Some(i);
@@ -874,9 +875,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
         if certp.any_entry_has_extension() {
-            return Err(Error::PeerMisbehavedError(
-                "client sent unsolicited cert extension".to_string(),
-            ));
+            return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
         }
 
         let client_cert = certp.convert();
@@ -1004,9 +1003,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     false => {
                         cx.common
                             .send_fatal_alert(AlertDescription::UnexpectedMessage);
-                        Err(Error::PeerMisbehavedError(
-                            "too much early_data received".into(),
-                        ))
+                        Err(PeerMisbehaved::TooMuchEarlyDataReceived.into())
                     }
                 }
             }
@@ -1213,9 +1210,8 @@ impl ExpectTraffic {
         {
             if let Protocol::Quic = common.protocol {
                 common.send_fatal_alert(AlertDescription::UnexpectedMessage);
-                let msg = "KeyUpdate received in QUIC connection".to_string();
-                warn!("{}", msg);
-                return Err(Error::PeerMisbehavedError(msg));
+                warn!("KeyUpdate received in QUIC connection");
+                return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
             }
         }
 

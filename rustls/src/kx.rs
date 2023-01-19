@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 
 /// An in-progress key exchange.  This has the algorithm,
@@ -56,7 +56,7 @@ impl KeyExchange {
     ) -> Result<T, Error> {
         let peer_key = ring::agreement::UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
         ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), f)
-            .map_err(|()| Error::PeerMisbehavedError("key agreement failed".to_string()))
+            .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::check::inappropriate_message;
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
@@ -248,7 +248,7 @@ mod client_hello {
             if resumedata.extended_ms && !self.using_ems {
                 return Err(cx
                     .common
-                    .illegal_param("refusing to resume without ems"));
+                    .illegal_param(PeerMisbehaved::ResumptionAttemptedWithVariedEms));
             }
 
             self.session_id = *id;

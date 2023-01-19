@@ -1,6 +1,6 @@
 use crate::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
 use crate::enums::{CipherSuite, ProtocolVersion};
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::ContentType;
@@ -187,8 +187,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         msg.typ = unpad_tls13(payload);
         if msg.typ == ContentType::Unknown(0) {
-            let msg = "peer sent bad TLSInnerPlaintext".to_string();
-            return Err(Error::PeerMisbehavedError(msg));
+            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
         }
 
         if payload.len() > MAX_FRAGMENT_LEN {
