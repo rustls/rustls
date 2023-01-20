@@ -51,7 +51,7 @@ pub enum Error {
 
     /// The peer doesn't support a protocol version/feature we require.
     /// The parameter gives a hint as to what version/feature it is.
-    PeerIncompatibleError(String),
+    PeerIncompatible(PeerIncompatible),
 
     /// The peer deviated from the standard TLS protocol.
     /// The parameter gives a hint where.
@@ -166,6 +166,8 @@ pub enum PeerMisbehaved {
     SelectedUnofferedPsk,
     SelectedUnusableCipherSuiteForVersion,
     ServerHelloMustOfferUncompressedEcPoints,
+    ServerNameDifferedOnRetry,
+    ServerNameMustContainOneHostName,
     SignedKxWithWrongAlgorithm,
     SignedHandshakeWithUnadvertisedSigScheme,
     TooMuchEarlyDataReceived,
@@ -181,6 +183,42 @@ impl From<PeerMisbehaved> for Error {
     #[inline]
     fn from(e: PeerMisbehaved) -> Self {
         Self::PeerMisbehaved(e)
+    }
+}
+
+#[non_exhaustive]
+#[allow(missing_docs)]
+#[derive(Debug, PartialEq, Clone)]
+/// The set of cases where we failed to make a connection because a peer
+/// doesn't support a TLS version/feature we require.
+///
+/// This is `non_exhaustive`: we might add or stop using items here in minor
+/// versions.
+pub enum PeerIncompatible {
+    EcPointsExtensionRequired,
+    KeyShareExtensionRequired,
+    NamedGroupsExtensionRequired,
+    NoCertificateRequestSignatureSchemesInCommon,
+    NoCipherSuitesInCommon,
+    NoEcPointFormatsInCommon,
+    NoKxGroupsInCommon,
+    NoSignatureSchemesInCommon,
+    NullCompressionRequired,
+    ServerDoesNotSupportTls12Or13,
+    ServerSentHelloRetryRequestWithUnknownExtension,
+    ServerTlsVersionIsDisabledByOurConfig,
+    SignatureAlgorithmsExtensionRequired,
+    SupportedVersionsExtensionRequired,
+    Tls12NotOffered,
+    Tls12NotOfferedOrEnabled,
+    Tls13RequiredForQuic,
+    UncompressedEcPointsRequired,
+}
+
+impl From<PeerIncompatible> for Error {
+    #[inline]
+    fn from(e: PeerIncompatible) -> Self {
+        Self::PeerIncompatible(e)
     }
 }
 
@@ -216,7 +254,7 @@ impl fmt::Display for Error {
             Self::CorruptMessagePayload(ref typ) => {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
-            Self::PeerIncompatibleError(ref why) => write!(f, "peer is incompatible: {}", why),
+            Self::PeerIncompatible(ref why) => write!(f, "peer is incompatible: {:?}", why),
             Self::PeerMisbehaved(ref why) => write!(f, "peer misbehaved: {:?}", why),
             Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
             Self::InvalidCertificateEncoding => {
@@ -287,7 +325,7 @@ mod tests {
             Error::CorruptMessagePayload(ContentType::Alert),
             Error::NoCertificatesPresented,
             Error::DecryptError,
-            Error::PeerIncompatibleError("no tls1.2".to_string()),
+            super::PeerIncompatible::Tls12NotOffered.into(),
             super::PeerMisbehaved::UnsolicitedCertExtension.into(),
             Error::AlertReceived(AlertDescription::ExportRestriction),
             Error::InvalidCertificateEncoding,

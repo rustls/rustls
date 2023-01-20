@@ -2,7 +2,7 @@ use crate::conn::{CommonState, ConnectionRandoms, State};
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
 use crate::enums::{ProtocolVersion, SignatureScheme};
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -30,14 +30,14 @@ pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) type ServerContext<'a> = crate::conn::Context<'a, ServerConnectionData>;
 
-pub(super) fn incompatible(common: &mut CommonState, why: &str) -> Error {
+pub(super) fn incompatible(common: &mut CommonState, why: PeerIncompatible) -> Error {
     common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    Error::PeerIncompatibleError(why.to_string())
+    Error::PeerIncompatible(why)
 }
 
-fn bad_version(common: &mut CommonState, why: &str) -> Error {
+fn bad_version(common: &mut CommonState, why: PeerIncompatible) -> Error {
     common.send_fatal_alert(AlertDescription::ProtocolVersion);
-    Error::PeerIncompatibleError(why.to_string())
+    Error::PeerIncompatible(why)
 }
 
 pub(super) fn decode_error(common: &mut CommonState, why: PeerMisbehaved) -> Error {
@@ -287,26 +287,29 @@ impl ExpectClientHello {
             if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
-                return Err(bad_version(cx.common, "TLS1.2 not offered/enabled"));
+                return Err(bad_version(
+                    cx.common,
+                    PeerIncompatible::Tls12NotOfferedOrEnabled,
+                ));
             } else if cx.common.is_quic() {
                 return Err(bad_version(
                     cx.common,
-                    "Expecting QUIC connection, but client does not support TLSv1_3",
+                    PeerIncompatible::Tls13RequiredForQuic,
                 ));
             } else {
                 ProtocolVersion::TLSv1_2
             }
         } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
-            return Err(bad_version(cx.common, "Client does not support TLSv1_2"));
+            return Err(bad_version(cx.common, PeerIncompatible::Tls12NotOffered));
         } else if !tls12_enabled && tls13_enabled {
             return Err(bad_version(
                 cx.common,
-                "Server requires TLS1.3, but client omitted versions ext",
+                PeerIncompatible::SupportedVersionsExtensionRequired,
             ));
         } else if cx.common.is_quic() {
             return Err(bad_version(
                 cx.common,
-                "Expecting QUIC connection, but client does not support TLSv1_3",
+                PeerIncompatible::Tls13RequiredForQuic,
             ));
         } else {
             ProtocolVersion::TLSv1_2
@@ -375,7 +378,7 @@ impl ExpectClientHello {
                 &suitable_suites,
             )
         }
-        .ok_or_else(|| incompatible(cx.common, "no ciphersuites in common"))?;
+        .ok_or_else(|| incompatible(cx.common, PeerIncompatible::NoCipherSuitesInCommon))?;
 
         debug!("decided upon suite {:?}", suite);
         cx.common.suite = Some(suite);
@@ -458,9 +461,7 @@ pub(super) fn process_client_hello<'a>(
         .contains(&Compression::Null)
     {
         common.send_fatal_alert(AlertDescription::IllegalParameter);
-        return Err(Error::PeerIncompatibleError(
-            "client did not offer Null compression".to_string(),
-        ));
+        return Err(PeerIncompatible::NullCompressionRequired.into());
     }
 
     if client_hello.has_duplicate_extension() {
@@ -503,14 +504,17 @@ pub(super) fn process_client_hello<'a>(
         assert!(data.sni.is_none());
         data.sni = Some(sni.clone())
     } else if data.sni != sni {
-        return Err(Error::PeerIncompatibleError(
-            "SNI differed on retry".to_string(),
-        ));
+        return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
     }
 
     let sig_schemes = client_hello
         .get_sigalgs_extension()
-        .ok_or_else(|| incompatible(common, "client didn't describe signature schemes"))?
+        .ok_or_else(|| {
+            incompatible(
+                common,
+                PeerIncompatible::SignatureAlgorithmsExtensionRequired,
+            )
+        })?
         .clone();
 
     Ok((client_hello, sig_schemes))

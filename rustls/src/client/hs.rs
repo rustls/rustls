@@ -3,7 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{CipherSuite, ProtocolVersion};
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -503,11 +503,11 @@ impl State<ClientConnectionData> for ExpectServerHello {
             _ => {
                 cx.common
                     .send_fatal_alert(AlertDescription::ProtocolVersion);
-                let msg = match server_version {
-                    TLSv1_2 | TLSv1_3 => "server's TLS version is disabled in client",
-                    _ => "server does not support TLS v1.2/v1.3",
+                let reason = match server_version {
+                    TLSv1_2 | TLSv1_3 => PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig,
+                    _ => PeerIncompatible::ServerDoesNotSupportTls12Or13,
                 };
-                return Err(Error::PeerIncompatibleError(msg.to_string()));
+                return Err(reason.into());
             }
         };
 
@@ -682,9 +682,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         if hrr.has_unknown_extension() {
             cx.common
                 .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(Error::PeerIncompatibleError(
-                "server sent hrr with unhandled extension".to_string(),
-            ));
+            return Err(PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension.into());
         }
 
         // Or has the same extensions more than once

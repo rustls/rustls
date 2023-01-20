@@ -3,7 +3,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::conn::Side;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::ProtocolVersion;
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
@@ -157,14 +157,18 @@ mod client_hello {
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
-                .ok_or_else(|| hs::incompatible(cx.common, "client didn't describe groups"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(cx.common, PeerIncompatible::NamedGroupsExtensionRequired)
+                })?;
 
             let tls13_schemes = sign::supported_sign_tls13();
             sigschemes_ext.retain(|scheme| tls13_schemes.contains(scheme));
 
             let shares_ext = client_hello
                 .get_keyshare_extension()
-                .ok_or_else(|| hs::incompatible(cx.common, "client didn't send keyshares"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(cx.common, PeerIncompatible::KeyShareExtensionRequired)
+                })?;
 
             if client_hello.has_keyshare_extension_with_duplicates() {
                 return Err(cx
@@ -247,7 +251,7 @@ mod client_hello {
 
                     return Err(hs::incompatible(
                         cx.common,
-                        "no kx group overlap with client",
+                        PeerIncompatible::NoKxGroupsInCommon,
                     ));
                 }
             };
@@ -777,7 +781,9 @@ mod client_hello {
 
         let signer = signing_key
             .choose_scheme(schemes)
-            .ok_or_else(|| hs::incompatible(common, "no overlapping sigschemes"))?;
+            .ok_or_else(|| {
+                hs::incompatible(common, PeerIncompatible::NoSignatureSchemesInCommon)
+            })?;
 
         let scheme = signer.scheme();
         let sig = signer.sign(&message)?;
@@ -917,7 +923,8 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verifier
             .verify_client_cert(end_entity, intermediates, now)
             .map_err(|err| {
-                hs::incompatible(cx.common, "certificate invalid");
+                cx.common
+                    .send_fatal_alert(AlertDescription::BadCertificate);
                 err
             })?;
 

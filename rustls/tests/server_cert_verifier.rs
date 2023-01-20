@@ -138,8 +138,8 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
             assert_eq!(
                 errs,
                 Err(vec![
-                    ErrorFromPeer::Server(Error::PeerIncompatibleError(
-                        "no overlapping sigschemes".into()
+                    ErrorFromPeer::Server(Error::PeerIncompatible(
+                        rustls::PeerIncompatible::NoSignatureSchemesInCommon
                     )),
                     ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::HandshakeFailure)),
                 ])

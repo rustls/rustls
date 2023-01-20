@@ -602,7 +602,7 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::CorruptMessagePayload(ContentType::Unknown(42)) => quit(":GARBAGE:"),
         Error::CorruptMessage => quit(":GARBAGE:"),
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
-        Error::PeerIncompatibleError(_) => quit(":INCOMPATIBLE:"),
+        Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
         }
