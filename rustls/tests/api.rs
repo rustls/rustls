@@ -18,7 +18,7 @@ use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
-use rustls::{sign, ConnectionCommon, Error, KeyLog, PeerMisbehaved, SideData};
+use rustls::{sign, ConnectionCommon, Error, KeyLog, PeerIncompatible, PeerMisbehaved, SideData};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ServerConfig, ServerConnection};
@@ -1732,7 +1732,7 @@ fn server_stream_handshake_error() {
         assert!(rc.is_err());
         assert_eq!(
             format!("{:?}", rc),
-            "Err(Custom { kind: InvalidData, error: PeerIncompatibleError(\"no ciphersuites in common\") })"
+            "Err(Custom { kind: InvalidData, error: PeerIncompatible(NoCipherSuitesInCommon) })"
         );
     }
 }
@@ -1754,7 +1754,7 @@ fn server_streamowned_handshake_error() {
     assert!(rc.is_err());
     assert_eq!(
         format!("{:?}", rc),
-        "Err(Custom { kind: InvalidData, error: PeerIncompatibleError(\"no ciphersuites in common\") })"
+        "Err(Custom { kind: InvalidData, error: PeerIncompatible(NoCipherSuitesInCommon) })"
     );
 }
 
@@ -3387,8 +3387,8 @@ mod test_quic {
             .unwrap();
         assert_eq!(
             server.process_new_packets().err(),
-            Some(Error::PeerIncompatibleError(
-                "Server requires TLS1.3, but client omitted versions ext".into(),
+            Some(Error::PeerIncompatible(
+                PeerIncompatible::SupportedVersionsExtensionRequired
             )),
         );
     }
@@ -3955,8 +3955,8 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
     transfer_altered(&mut client, different_kx_group, &mut server);
     assert_eq!(
         server.process_new_packets(),
-        Err(Error::PeerIncompatibleError(
-            "no kx group overlap with client".into()
+        Err(Error::PeerIncompatible(
+            PeerIncompatible::NoKxGroupsInCommon
         ))
     );
 }

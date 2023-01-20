@@ -1,7 +1,7 @@
 use crate::check::inappropriate_message;
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
@@ -75,10 +75,14 @@ mod client_hello {
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
-                .ok_or_else(|| hs::incompatible(cx.common, "client didn't describe groups"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(cx.common, PeerIncompatible::NamedGroupsExtensionRequired)
+                })?;
             let ecpoints_ext = client_hello
                 .get_ecpoints_extension()
-                .ok_or_else(|| hs::incompatible(cx.common, "client didn't describe ec points"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(cx.common, PeerIncompatible::EcPointsExtensionRequired)
+                })?;
 
             trace!("namedgroups {:?}", groups_ext);
             trace!("ecpoints {:?}", ecpoints_ext);
@@ -86,9 +90,7 @@ mod client_hello {
             if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
                 cx.common
                     .send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(Error::PeerIncompatibleError(
-                    "client didn't support uncompressed ec points".to_string(),
-                ));
+                return Err(PeerIncompatible::UncompressedEcPointsRequired.into());
             }
 
             // -- If TLS1.3 is enabled, signal the downgrade in the server random
@@ -152,7 +154,10 @@ mod client_hello {
                 .resolve_sig_schemes(&sigschemes_ext);
 
             if sigschemes.is_empty() {
-                return Err(hs::incompatible(cx.common, "no overlapping sigschemes"));
+                return Err(hs::incompatible(
+                    cx.common,
+                    PeerIncompatible::NoSignatureSchemesInCommon,
+                ));
             }
 
             let group = self
@@ -161,13 +166,15 @@ mod client_hello {
                 .iter()
                 .find(|skxg| groups_ext.contains(&skxg.name))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(cx.common, "no supported group"))?;
+                .ok_or_else(|| hs::incompatible(cx.common, PeerIncompatible::NoKxGroupsInCommon))?;
 
             let ecpoint = ECPointFormatList::supported()
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(cx.common, "no supported point format"))?;
+                .ok_or_else(|| {
+                    hs::incompatible(cx.common, PeerIncompatible::NoEcPointFormatsInCommon)
+                })?;
 
             debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
@@ -538,7 +545,8 @@ impl State<ServerConnectionData> for ExpectCertificate {
                     .verifier
                     .verify_client_cert(end_entity, intermediates, now)
                     .map_err(|err| {
-                        hs::incompatible(cx.common, "certificate invalid");
+                        cx.common
+                            .send_fatal_alert(AlertDescription::BadCertificate);
                         err
                     })?;
 

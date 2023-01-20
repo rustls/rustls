@@ -3,7 +3,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::conn::Side;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{ProtocolVersion, SignatureScheme};
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -549,9 +549,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         if compat_sigschemes.is_empty() {
             cx.common
                 .send_fatal_alert(AlertDescription::HandshakeFailure);
-            return Err(Error::PeerIncompatibleError(
-                "server sent bad certreq schemes".to_string(),
-            ));
+            return Err(PeerIncompatible::NoCertificateRequestSignatureSchemesInCommon.into());
         }
 
         let client_auth = ClientAuthDetails::resolve(
