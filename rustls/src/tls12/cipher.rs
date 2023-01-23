@@ -155,7 +155,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         self.enc_key
             .seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
             .map(|tag| payload.extend(tag.as_ref()))
-            .map_err(|_| Error::General("encrypt failed".to_string()))?;
+            .map_err(|_| Error::EncryptError)?;
 
         Ok(OpaqueMessage {
             typ: msg.typ,
@@ -225,7 +225,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         self.enc_key
             .seal_in_place_append_tag(nonce, aad, &mut buf)
-            .map_err(|_| Error::General("encrypt failed".to_string()))?;
+            .map_err(|_| Error::EncryptError)?;
 
         Ok(OpaqueMessage {
             typ: msg.typ,

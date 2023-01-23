@@ -87,7 +87,7 @@ struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
     fn encrypt(&self, _m: BorrowedPlainMessage, _seq: u64) -> Result<OpaqueMessage, Error> {
-        Err(Error::General("encrypt not yet available".to_string()))
+        Err(Error::EncryptError)
     }
 }
 
