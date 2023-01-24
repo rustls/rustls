@@ -8,11 +8,11 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use env_logger;
 use rustls;
 
-use rustls::internal::msgs::codec::{Codec, Reader};
+use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::ClientHello;
-use rustls::{CipherSuite, ProtocolVersion};
+use rustls::ProtocolVersion;
 use rustls::{ClientConnection, Connection, ServerConnection, Side};
 
 use std::env;
@@ -431,6 +431,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
     cfg.max_fragment_size = opts.max_fragment;
+    cfg.send_tls13_tickets = 1;
 
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
@@ -477,35 +478,50 @@ impl ClientCacheWithoutKxHints {
     }
 }
 
-impl rustls::client::StoresClientSessions for ClientCacheWithoutKxHints {
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        if key.len() > 2 && key[0] == b'k' && key[1] == b'x' {
-            return true;
-        }
-
-        let mut reader = Reader::init(&value[2..]);
-        let csv = CipherSuite::read_bytes(&value[..2])
-            .and_then(|suite| {
-                persist::ClientSessionValue::read(&mut reader, suite, &rustls::ALL_CIPHER_SUITES)
-            })
-            .unwrap();
-
-        let value = match csv {
-            persist::ClientSessionValue::Tls13(mut tls13) => {
-                tls13.common.rewind_epoch(self.delay);
-                tls13.get_encoding()
-            }
-            persist::ClientSessionValue::Tls12(mut tls12) => {
-                tls12.common.rewind_epoch(self.delay);
-                tls12.get_encoding()
-            }
-        };
-
-        self.storage.put(key, value)
+impl rustls::client::ClientSessionStore for ClientCacheWithoutKxHints {
+    fn set_kx_hint(&self, _: &rustls::ServerName, _: rustls::NamedGroup) {}
+    fn kx_hint(&self, _: &rustls::ServerName) -> Option<rustls::NamedGroup> {
+        None
     }
 
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.storage.get(key)
+    fn set_tls12_session(
+        &self,
+        server_name: &rustls::ServerName,
+        mut value: rustls::client::Tls12ClientSessionValue,
+    ) {
+        value.common.rewind_epoch(self.delay);
+        self.storage
+            .set_tls12_session(server_name, value);
+    }
+
+    fn tls12_session(
+        &self,
+        server_name: &rustls::ServerName,
+    ) -> Option<rustls::client::Tls12ClientSessionValue> {
+        self.storage.tls12_session(server_name)
+    }
+
+    fn remove_tls12_session(&self, server_name: &rustls::ServerName) {
+        self.storage
+            .remove_tls12_session(server_name);
+    }
+
+    fn insert_tls13_ticket(
+        &self,
+        server_name: &rustls::ServerName,
+        mut value: rustls::client::Tls13ClientSessionValue,
+    ) {
+        value.common.rewind_epoch(self.delay);
+        self.storage
+            .insert_tls13_ticket(server_name, value);
+    }
+
+    fn take_tls13_ticket(
+        &self,
+        server_name: &rustls::ServerName,
+    ) -> Option<rustls::client::Tls13ClientSessionValue> {
+        self.storage
+            .take_tls13_ticket(server_name)
     }
 }
 

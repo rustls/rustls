@@ -2467,8 +2467,9 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
     {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
-        assert_eq!(wrlen, 103);
-        assert_eq!(pipe.writevs, vec![vec![103]]);
+        // 4 tickets
+        assert_eq!(wrlen, 103 * 4);
+        assert_eq!(pipe.writevs, vec![vec![103, 103, 103, 103]]);
     }
 
     assert!(!server.is_handshaking());
@@ -2511,8 +2512,8 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
-        assert_eq!(wrlen, 177);
-        assert_eq!(pipe.writevs, vec![vec![103, 42, 32]]);
+        assert_eq!(wrlen, 486);
+        assert_eq!(pipe.writevs, vec![vec![103, 103, 103, 103, 42, 32]]);
     }
 
     assert!(!server.is_handshaking());
@@ -2663,53 +2664,132 @@ impl rustls::server::StoresServerSessions for ServerStorage {
     }
 }
 
+#[derive(Debug, Clone)]
+enum ClientStorageOp {
+    SetKxHint(rustls::ServerName, rustls::NamedGroup),
+    GetKxHint(rustls::ServerName, Option<rustls::NamedGroup>),
+    SetTls12Session(rustls::ServerName),
+    GetTls12Session(rustls::ServerName, bool),
+    RemoveTls12Session(rustls::ServerName),
+    InsertTls13Ticket(rustls::ServerName),
+    TakeTls13Ticket(rustls::ServerName, bool),
+}
+
 struct ClientStorage {
-    storage: Arc<dyn rustls::client::StoresClientSessions>,
-    put_count: AtomicUsize,
-    get_count: AtomicUsize,
-    last_put_key: Mutex<Option<Vec<u8>>>,
+    storage: Arc<dyn rustls::client::ClientSessionStore>,
+    ops: Mutex<Vec<ClientStorageOp>>,
 }
 
 impl ClientStorage {
     fn new() -> Self {
         ClientStorage {
             storage: rustls::client::ClientSessionMemoryCache::new(1024),
-            put_count: AtomicUsize::new(0),
-            get_count: AtomicUsize::new(0),
-            last_put_key: Mutex::new(None),
+            ops: Mutex::new(Vec::new()),
         }
     }
 
-    fn puts(&self) -> usize {
-        self.put_count.load(Ordering::SeqCst)
+    fn ops(&self) -> Vec<ClientStorageOp> {
+        self.ops.lock().unwrap().clone()
     }
-    fn gets(&self) -> usize {
-        self.get_count.load(Ordering::SeqCst)
+
+    fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
+        std::mem::take(&mut self.ops.lock().unwrap())
     }
 }
 
 impl fmt::Debug for ClientStorage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "(puts: {:?}, gets: {:?} )",
-            self.put_count, self.get_count
-        )
+        write!(f, "(ops: {:?})", self.ops.lock().unwrap())
     }
 }
 
-impl rustls::client::StoresClientSessions for ClientStorage {
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.put_count
-            .fetch_add(1, Ordering::SeqCst);
-        *self.last_put_key.lock().unwrap() = Some(key.clone());
-        self.storage.put(key, value)
+impl rustls::client::ClientSessionStore for ClientStorage {
+    fn set_kx_hint(&self, server_name: &rustls::ServerName, group: rustls::NamedGroup) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetKxHint(server_name.clone(), group));
+        self.storage
+            .set_kx_hint(server_name, group)
     }
 
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.get_count
-            .fetch_add(1, Ordering::SeqCst);
-        self.storage.get(key)
+    fn kx_hint(&self, server_name: &rustls::ServerName) -> Option<rustls::NamedGroup> {
+        let rc = self.storage.kx_hint(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetKxHint(server_name.clone(), rc));
+        rc
+    }
+
+    #[cfg(feature = "tls12")]
+    fn set_tls12_session(
+        &self,
+        server_name: &rustls::ServerName,
+        value: rustls::client::Tls12ClientSessionValue,
+    ) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetTls12Session(server_name.clone()));
+        self.storage
+            .set_tls12_session(server_name, value)
+    }
+
+    #[cfg(feature = "tls12")]
+    fn tls12_session(
+        &self,
+        server_name: &rustls::ServerName,
+    ) -> Option<rustls::client::Tls12ClientSessionValue> {
+        let rc = self.storage.tls12_session(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetTls12Session(
+                server_name.clone(),
+                rc.is_some(),
+            ));
+        rc
+    }
+
+    #[cfg(feature = "tls12")]
+    fn remove_tls12_session(&self, server_name: &rustls::ServerName) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::RemoveTls12Session(server_name.clone()));
+        self.storage
+            .remove_tls12_session(server_name);
+    }
+
+    fn insert_tls13_ticket(
+        &self,
+        server_name: &rustls::ServerName,
+        value: rustls::client::Tls13ClientSessionValue,
+    ) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::InsertTls13Ticket(server_name.clone()));
+        self.storage
+            .insert_tls13_ticket(server_name, value);
+    }
+
+    fn take_tls13_ticket(
+        &self,
+        server_name: &rustls::ServerName,
+    ) -> Option<rustls::client::Tls13ClientSessionValue> {
+        let rc = self
+            .storage
+            .take_tls13_ticket(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::TakeTls13Ticket(
+                server_name.clone(),
+                rc.is_some(),
+            ));
+        rc
     }
 }
 
@@ -2727,7 +2807,7 @@ fn tls13_stateful_resumption() {
     // full handshake
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     let (full_c2s, full_s2c) = do_handshake(&mut client, &mut server);
-    assert_eq!(storage.puts(), 1);
+    assert_eq!(storage.puts(), 4);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
     assert_eq!(
@@ -2742,7 +2822,7 @@ fn tls13_stateful_resumption() {
     let (resume_c2s, resume_s2c) = do_handshake(&mut client, &mut server);
     assert!(resume_c2s > full_c2s);
     assert!(resume_s2c < full_s2c);
-    assert_eq!(storage.puts(), 2);
+    assert_eq!(storage.puts(), 8);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 1);
     assert_eq!(
@@ -2757,7 +2837,7 @@ fn tls13_stateful_resumption() {
     let (resume2_c2s, resume2_s2c) = do_handshake(&mut client, &mut server);
     assert_eq!(resume_s2c, resume2_s2c);
     assert_eq!(resume_c2s, resume2_c2s);
-    assert_eq!(storage.puts(), 3);
+    assert_eq!(storage.puts(), 12);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 2);
     assert_eq!(
@@ -3105,6 +3185,7 @@ mod test_quic {
                 server_params.into(),
             )
             .unwrap();
+            server.reject_early_data();
 
             step(&mut client, &mut server).unwrap();
             assert_eq!(client.quic_transport_parameters(), Some(server_params));
@@ -3650,6 +3731,7 @@ fn test_client_config_keyshare_mismatch() {
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }
 
+#[cfg(feature = "tls12")]
 #[test]
 fn test_client_sends_helloretryrequest() {
     // client sends a secp384r1 key share
@@ -3705,11 +3787,49 @@ fn test_client_sends_helloretryrequest() {
 
     do_handshake_until_error(&mut client, &mut server).unwrap();
 
-    // client only did two storage queries: one for a session, another for a kx type
-    assert_eq!(storage.gets(), 2);
-    assert_eq!(storage.puts(), 2);
+    // client only did following storage queries:
+    println!("storage {:#?}", storage.ops());
+    assert_eq!(storage.ops().len(), 9);
+    assert!(matches!(
+        storage.ops()[0],
+        ClientStorageOp::TakeTls13Ticket(_, false)
+    ));
+    assert!(matches!(
+        storage.ops()[1],
+        ClientStorageOp::GetTls12Session(_, false)
+    ));
+    assert!(matches!(
+        storage.ops()[2],
+        ClientStorageOp::GetKxHint(_, None)
+    ));
+    assert!(matches!(
+        storage.ops()[3],
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::X25519)
+    ));
+    assert!(matches!(
+        storage.ops()[4],
+        ClientStorageOp::RemoveTls12Session(_)
+    ));
+    // server sends 4 tickets by default
+    assert!(matches!(
+        storage.ops()[5],
+        ClientStorageOp::InsertTls13Ticket(_)
+    ));
+    assert!(matches!(
+        storage.ops()[6],
+        ClientStorageOp::InsertTls13Ticket(_)
+    ));
+    assert!(matches!(
+        storage.ops()[7],
+        ClientStorageOp::InsertTls13Ticket(_)
+    ));
+    assert!(matches!(
+        storage.ops()[8],
+        ClientStorageOp::InsertTls13Ticket(_)
+    ));
 }
 
+#[cfg(feature = "tls12")]
 #[test]
 fn test_client_attempts_to_use_unsupported_kx_group() {
     // common to both client configs
@@ -3725,7 +3845,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     //   contains an unusable value.
     let mut client_config_2 =
         make_client_config_with_kx_groups(KeyType::Rsa, &[&rustls::kx_group::SECP384R1]);
-    client_config_2.session_storage = shared_storage;
+    client_config_2.session_storage = shared_storage.clone();
 
     let server_config = make_server_config(KeyType::Rsa);
 
@@ -3733,9 +3853,83 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
     do_handshake_until_error(&mut client_1, &mut server).unwrap();
 
+    let ops = shared_storage.ops();
+    println!("storage {:#?}", ops);
+    assert_eq!(ops.len(), 9);
+    assert!(matches!(
+        ops[3],
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::X25519)
+    ));
+
     // second handshake
     let (mut client_2, mut server) = make_pair_for_configs(client_config_2, server_config);
     do_handshake_until_error(&mut client_2, &mut server).unwrap();
+
+    let ops = shared_storage.ops();
+    println!("storage {:?} {:#?}", ops.len(), ops);
+    assert_eq!(ops.len(), 17);
+    assert!(matches!(ops[9], ClientStorageOp::TakeTls13Ticket(_, true)));
+    assert!(matches!(
+        ops[10],
+        ClientStorageOp::GetKxHint(_, Some(rustls::NamedGroup::X25519))
+    ));
+    assert!(matches!(
+        ops[11],
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::secp384r1)
+    ));
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn test_tls13_client_resumption_does_not_reuse_tickets() {
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    let mut client_config = make_client_config(KeyType::Rsa);
+    client_config.session_storage = shared_storage.clone();
+    let client_config = Arc::new(client_config);
+
+    let mut server_config = make_server_config(KeyType::Rsa);
+    server_config.send_tls13_tickets = 5;
+    let server_config = Arc::new(server_config);
+
+    // first handshake: client obtains 5 tickets from server.
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake_until_error(&mut client, &mut server).unwrap();
+
+    let ops = shared_storage.ops_and_reset();
+    println!("storage {:#?}", ops);
+    assert_eq!(ops.len(), 10);
+    assert!(matches!(ops[5], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[6], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[7], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[8], ClientStorageOp::InsertTls13Ticket(_)));
+    assert!(matches!(ops[9], ClientStorageOp::InsertTls13Ticket(_)));
+
+    // 5 subsequent handshakes: all are resumptions
+
+    // Note: we don't do complete the handshakes, because that means
+    // we get five additional tickets per connection which is unhelpful
+    // in this test.  It also acts to record a "Happy Eyeballs"-type use
+    // case, where a client speculatively makes many connection attempts
+    // in parallel without knowledge of which will work due to underlying
+    // connectivity uncertainty.
+    for _ in 0..5 {
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+
+        let ops = shared_storage.ops_and_reset();
+        assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, true)));
+    }
+
+    // 6th subsequent handshake: cannot be resumed; we ran out of tickets
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    let ops = shared_storage.ops_and_reset();
+    println!("last {:?}", ops);
+    assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, false)));
 }
 
 #[test]
@@ -4019,14 +4213,41 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         ClientConnection::new(client_config.clone(), "localhost".try_into().unwrap()).unwrap();
     let mut server_1 = ServerConnection::new(server_config_1).unwrap();
     common::do_handshake(&mut client_1, &mut server_1);
-    assert_eq!(client_storage.puts(), 2);
+
+    assert_eq!(client_storage.ops().len(), 9);
+    println!("hs1 storage ops: {:#?}", client_storage.ops());
+    assert!(matches!(
+        client_storage.ops()[3],
+        ClientStorageOp::SetKxHint(_, _)
+    ));
+    assert!(matches!(
+        client_storage.ops()[4],
+        ClientStorageOp::RemoveTls12Session(_)
+    ));
+    assert!(matches!(
+        client_storage.ops()[5],
+        ClientStorageOp::InsertTls13Ticket(_)
+    ));
 
     dbg!("handshake 2");
     let mut client_2 =
         ClientConnection::new(client_config, "localhost".try_into().unwrap()).unwrap();
     let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
     common::do_handshake(&mut client_2, &mut server_2);
-    assert_eq!(client_storage.puts(), 2);
+    println!("hs2 storage ops: {:#?}", client_storage.ops());
+    assert_eq!(client_storage.ops().len(), 11);
+
+    // attempt consumes a TLS1.3 ticket
+    assert!(matches!(
+        client_storage.ops()[9],
+        ClientStorageOp::TakeTls13Ticket(_, true)
+    ));
+
+    // but ends up with TLS1.2
+    assert_eq!(
+        client_2.protocol_version(),
+        Some(rustls::ProtocolVersion::TLSv1_2)
+    );
 }
 
 #[test]

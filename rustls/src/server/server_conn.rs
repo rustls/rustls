@@ -197,6 +197,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
+/// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
 #[derive(Clone)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
@@ -284,6 +285,18 @@ pub struct ServerConfig {
     /// sent by the server comes after receiving and validating the client's
     /// handshake up to the `Finished` message.  This is the safest option.
     pub send_half_rtt_data: bool,
+
+    /// How many TLS1.3 tickets to send immediately after a successful
+    /// handshake.
+    ///
+    /// Because TLS1.3 tickets are single-use, this allows
+    /// a client to perform multiple resumptions.
+    ///
+    /// The default is 4.
+    ///
+    /// If this is 0, no tickets are sent and clients will not be able to
+    /// do any resumption.
+    pub send_tls13_tickets: usize,
 }
 
 impl fmt::Debug for ServerConfig {
@@ -294,6 +307,7 @@ impl fmt::Debug for ServerConfig {
             .field("alpn_protocols", &self.alpn_protocols)
             .field("max_early_data_size", &self.max_early_data_size)
             .field("send_half_rtt_data", &self.send_half_rtt_data)
+            .field("send_tls13_tickets", &self.send_tls13_tickets)
             .finish_non_exhaustive()
     }
 }

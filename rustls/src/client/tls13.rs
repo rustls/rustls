@@ -1,4 +1,6 @@
 use crate::check::inappropriate_handshake_message;
+#[cfg(feature = "quic")]
+use crate::conn::Protocol;
 #[cfg(feature = "secret_extraction")]
 use crate::conn::Side;
 use crate::conn::{CommonState, ConnectionRandoms, State};
@@ -10,9 +12,8 @@ use crate::kx;
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::codec::Codec;
+use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::KeyUpdateRequest;
-use crate::msgs::enums::{AlertDescription, NamedGroup};
 use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
@@ -31,15 +32,13 @@ use crate::tls13::key_schedule::{
 };
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
-#[cfg(feature = "quic")]
-use crate::{conn::Protocol, msgs::base::PayloadU16};
 use crate::{sign, KeyLog};
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::{hs, ClientConfig, ServerName, StoresClientSessions};
+use crate::client::{hs, ClientConfig, ClientSessionStore, ServerName};
 
 use crate::ticketer::TimeBase;
 use ring::constant_time;
@@ -140,7 +139,9 @@ pub(super) fn handle_server_hello(
     })?;
 
     // Remember what KX group the server liked for next time.
-    save_kx_hint(&config, &server_name, their_key_share.group);
+    config
+        .session_storage
+        .set_kx_hint(&server_name, their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -188,13 +189,9 @@ pub(super) fn initial_key_share(
     config: &ClientConfig,
     server_name: &ServerName,
 ) -> Result<kx::KeyExchange, Error> {
-    let key = persist::ClientSessionKey::hint_for_server_name(server_name);
-    let key_buf = key.get_encoding();
-
-    let maybe_value = config.session_storage.get(&key_buf);
-
-    let group = maybe_value
-        .and_then(|enc| NamedGroup::read_bytes(&enc))
+    let group = config
+        .session_storage
+        .kx_hint(server_name)
         .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
         .unwrap_or_else(|| {
             config
@@ -204,14 +201,6 @@ pub(super) fn initial_key_share(
         });
 
     kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)
-}
-
-fn save_kx_hint(config: &ClientConfig, server_name: &ServerName, group: NamedGroup) {
-    let key = persist::ClientSessionKey::hint_for_server_name(server_name);
-
-    config
-        .session_storage
-        .put(key.get_encoding(), group.get_encoding());
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
@@ -883,6 +872,12 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         emit_finished_tls13(&mut st.transcript, verify_data, cx.common);
 
+        /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
+         * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
+        st.config
+            .session_storage
+            .remove_tls12_session(&st.server_name);
+
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
         let key_schedule_traffic = key_schedule_pre_finished.into_traffic(cx.common);
@@ -913,7 +908,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 // In this state we can be sent tickets, key updates,
 // and application data.
 struct ExpectTraffic {
-    session_storage: Arc<dyn StoresClientSessions>,
+    session_storage: Arc<dyn ClientSessionStore>,
     server_name: ServerName,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -951,7 +946,8 @@ impl ExpectTraffic {
             }
         };
 
-        let value = persist::Tls13ClientSessionValue::new(
+        #[allow(unused_mut)]
+        let mut value = persist::Tls13ClientSessionValue::new(
             self.suite,
             nst.ticket.0.clone(),
             secret,
@@ -967,32 +963,20 @@ impl ExpectTraffic {
         );
 
         #[cfg(feature = "quic")]
-        if let Some(sz) = nst.get_max_early_data_size() {
-            if cx.common.protocol == Protocol::Quic && sz != 0 && sz != 0xffff_ffff {
-                return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
+        if cx.common.is_quic() {
+            if let Some(sz) = nst.get_max_early_data_size() {
+                if sz != 0 && sz != 0xffff_ffff {
+                    return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
+                }
+            }
+
+            if let Some(ref quic_params) = &cx.common.quic.params {
+                value.set_quic_params(quic_params);
             }
         }
 
-        let key = persist::ClientSessionKey::session_for_server_name(&self.server_name);
-        #[allow(unused_mut)]
-        let mut ticket = value.get_encoding();
-
-        #[cfg(feature = "quic")]
-        if let (Protocol::Quic, Some(ref quic_params)) =
-            (cx.common.protocol, &cx.common.quic.params)
-        {
-            PayloadU16::encode_slice(quic_params, &mut ticket);
-        }
-
-        let worked = self
-            .session_storage
-            .put(key.get_encoding(), ticket);
-
-        if worked {
-            debug!("Ticket saved");
-        } else {
-            debug!("Ticket not saved");
-        }
+        self.session_storage
+            .insert_tls13_ticket(&self.server_name, value);
         Ok(())
     }
 

@@ -5,9 +5,12 @@ use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+
 #[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
+use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
+use crate::msgs::persist;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::verify;
@@ -27,25 +30,66 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::{fmt, io, mem};
 
-/// A trait for the ability to store client session data.
-/// The keys and values are opaque.
+/// A trait for the ability to store client session data, so that sessions
+/// can be resumed in future connections.
 ///
-/// Both the keys and values should be treated as
-/// **highly sensitive data**, containing enough key material
-/// to break all security of the corresponding session.
+/// Generally all data in this interface should be treated as
+/// **highly sensitive**, containing enough key material to break all security
+/// of the corresponding session.
 ///
-/// `put` is a mutating operation; this isn't expressed
-/// in the type system to allow implementations freedom in
-/// how to achieve interior mutability.  `Mutex` is a common
-/// choice.
-pub trait StoresClientSessions: Send + Sync {
-    /// Stores a new `value` for `key`.  Returns `true`
-    /// if the value was stored.
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
+/// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
+/// expressed in the type system to allow implementations freedom in
+/// how to achieve interior mutability.  `Mutex` is a common choice.
+pub trait ClientSessionStore: Send + Sync {
+    /// Remember what `NamedGroup` the given server chose.
+    fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
 
-    /// Returns the latest value for `key`.  Returns `None`
-    /// if there's no such value.
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
+    /// This should return the value most recently passed to `set_kx_hint`
+    /// for the given `server_name`.
+    ///
+    /// If `None` is returned, the caller chooses the first configured group,
+    /// and an extra round trip might happen if that choice is unsatisfactory
+    /// to the server.
+    fn kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup>;
+
+    /// Remember a TLS1.2 session.
+    ///
+    /// At most one of these can be remembered at a time, per `server_name`.
+    #[cfg(feature = "tls12")]
+    fn set_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue);
+
+    /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
+    #[cfg(feature = "tls12")]
+    fn tls12_session(&self, server_name: &ServerName) -> Option<persist::Tls12ClientSessionValue>;
+
+    /// Remove and forget any saved TLS1.2 session for `server_name`.
+    #[cfg(feature = "tls12")]
+    fn remove_tls12_session(&self, server_name: &ServerName);
+
+    /// Remove and forget any saved TLS1.2 session for `server_name`.
+    #[cfg(not(feature = "tls12"))]
+    fn remove_tls12_session(&self, _: &ServerName) {}
+
+    /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
+    /// resumption of this session.
+    ///
+    /// This can be called multiple times for a given session, allowing multiple independent tickets
+    /// to be valid at once.  The number of times this is called is controlled by the server, so
+    /// implementations of this trait should apply a reasonable bound of how many items are stored
+    /// simultaneously.
+    fn insert_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+        value: persist::Tls13ClientSessionValue,
+    );
+
+    /// Return a TLS1.3 ticket previously provided to `add_tls13_ticket`.
+    ///
+    /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
+    fn take_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+    ) -> Option<persist::Tls13ClientSessionValue>;
 }
 
 /// A trait for the ability to choose a certificate chain and
@@ -103,7 +147,7 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How we store session data or tickets.
-    pub session_storage: Arc<dyn StoresClientSessions>,
+    pub session_storage: Arc<dyn ClientSessionStore>,
 
     /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
     /// message lengths except to the 2**16 limit specified in the standard.
@@ -243,38 +287,6 @@ impl ServerName {
         match self {
             Self::DnsName(dns_name) => Some(dns_name.0.as_ref()),
             Self::IpAddress(_) => None,
-        }
-    }
-
-    /// Return a prefix-free, unique encoding for the name.
-    pub(crate) fn encode(&self) -> Vec<u8> {
-        enum UniqueTypeCode {
-            DnsName = 0x01,
-            IpAddr = 0x02,
-        }
-
-        match self {
-            Self::DnsName(dns_name) => {
-                let bytes = dns_name.0.as_ref();
-
-                let mut r = Vec::with_capacity(2 + bytes.as_ref().len());
-                r.push(UniqueTypeCode::DnsName as u8);
-                r.push(bytes.as_ref().len() as u8);
-                r.extend_from_slice(bytes.as_ref());
-
-                r
-            }
-            Self::IpAddress(address) => {
-                let string = address.to_string();
-                let bytes = string.as_bytes();
-
-                let mut r = Vec::with_capacity(2 + bytes.len());
-                r.push(UniqueTypeCode::IpAddr as u8);
-                r.push(bytes.len() as u8);
-                r.extend_from_slice(bytes);
-
-                r
-            }
         }
     }
 }

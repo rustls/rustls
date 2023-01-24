@@ -242,7 +242,7 @@ pub(super) struct ExpectClientHello {
     #[cfg(feature = "tls12")]
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
-    pub(super) send_ticket: bool,
+    pub(super) send_tickets: usize,
 }
 
 impl ExpectClientHello {
@@ -262,7 +262,7 @@ impl ExpectClientHello {
             #[cfg(feature = "tls12")]
             using_ems: false,
             done_retry: false,
-            send_ticket: false,
+            send_tickets: 0,
         }
     }
 
@@ -404,7 +404,7 @@ impl ExpectClientHello {
                 suite,
                 randoms,
                 done_retry: self.done_retry,
-                send_ticket: self.send_ticket,
+                send_tickets: self.send_tickets,
                 extra_exts: self.extra_exts,
             }
             .handle_client_hello(cx, certkey, m, client_hello, sig_schemes),
@@ -416,7 +416,7 @@ impl ExpectClientHello {
                 suite,
                 using_ems: self.using_ems,
                 randoms,
-                send_ticket: self.send_ticket,
+                send_ticket: self.send_tickets > 0,
                 extra_exts: self.extra_exts,
             }
             .handle_client_hello(

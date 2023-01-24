@@ -79,7 +79,7 @@ mod client_hello {
         pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) done_retry: bool,
-        pub(in crate::server) send_ticket: bool,
+        pub(in crate::server) send_tickets: usize,
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
     }
 
@@ -235,7 +235,7 @@ mod client_hello {
                             #[cfg(feature = "tls12")]
                             using_ems: false,
                             done_retry: true,
-                            send_ticket: self.send_ticket,
+                            send_tickets: self.send_tickets,
                             extra_exts: self.extra_exts,
                         });
 
@@ -312,11 +312,11 @@ mod client_hello {
 
             if !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE) {
                 debug!("Client unwilling to resume, DHE_KE not offered");
-                self.send_ticket = false;
+                self.send_tickets = 0;
                 chosen_psk_index = None;
                 resumedata = None;
             } else {
-                self.send_ticket = true;
+                self.send_tickets = self.config.send_tls13_tickets;
             }
 
             if let Some(ref resume) = resumedata {
@@ -422,7 +422,7 @@ mod client_hello {
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: key_schedule_traffic,
-                    send_ticket: self.send_ticket,
+                    send_tickets: self.send_tickets,
                 }))
             } else if doing_early_data == EarlyDataDecision::Accepted && !cx.common.is_quic() {
                 // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
@@ -433,7 +433,7 @@ mod client_hello {
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: key_schedule_traffic,
-                    send_ticket: self.send_ticket,
+                    send_tickets: self.send_tickets,
                 }))
             } else {
                 Ok(Box::new(ExpectFinished {
@@ -441,7 +441,7 @@ mod client_hello {
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: key_schedule_traffic,
-                    send_ticket: self.send_ticket,
+                    send_tickets: self.send_tickets,
                 }))
             }
         }
@@ -866,7 +866,7 @@ struct ExpectCertificate {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    send_ticket: bool,
+    send_tickets: usize,
 }
 
 impl State<ServerConnectionData> for ExpectCertificate {
@@ -907,7 +907,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                         suite: self.suite,
                         key_schedule: self.key_schedule,
                         transcript: self.transcript,
-                        send_ticket: self.send_ticket,
+                        send_tickets: self.send_tickets,
                     }));
                 }
 
@@ -934,7 +934,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_cert,
-            send_ticket: self.send_ticket,
+            send_tickets: self.send_tickets,
         }))
     }
 }
@@ -945,7 +945,7 @@ struct ExpectCertificateVerify {
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
     client_cert: Vec<Certificate>,
-    send_ticket: bool,
+    send_tickets: usize,
 }
 
 impl State<ServerConnectionData> for ExpectCertificateVerify {
@@ -981,7 +981,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             suite: self.suite,
             key_schedule: self.key_schedule,
             transcript: self.transcript,
-            send_ticket: self.send_ticket,
+            send_tickets: self.send_tickets,
         }))
     }
 }
@@ -994,7 +994,7 @@ struct ExpectEarlyData {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    send_ticket: bool,
+    send_tickets: usize,
 }
 
 impl State<ServerConnectionData> for ExpectEarlyData {
@@ -1030,7 +1030,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     suite: self.suite,
                     key_schedule: self.key_schedule,
                     transcript: self.transcript,
-                    send_ticket: self.send_ticket,
+                    send_tickets: self.send_tickets,
                 }))
             }
             payload => Err(inappropriate_handshake_message(
@@ -1044,7 +1044,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
 
 // --- Process client's Finished ---
 fn get_server_session_value(
-    transcript: &mut HandshakeHash,
+    transcript: &HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: &KeyScheduleTraffic,
     cx: &ServerContext<'_>,
@@ -1076,12 +1076,12 @@ struct ExpectFinished {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    send_ticket: bool,
+    send_tickets: usize,
 }
 
 impl ExpectFinished {
     fn emit_ticket(
-        transcript: &mut HandshakeHash,
+        transcript: &HandshakeHash,
         suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         key_schedule: &KeyScheduleTraffic,
@@ -1139,7 +1139,6 @@ impl ExpectFinished {
         };
 
         trace!("sending new ticket {:?} (stateless: {})", m, stateless);
-        transcript.add_message(&m);
         cx.common.send_msg(m, true);
         Ok(())
     }
@@ -1169,9 +1168,10 @@ impl State<ServerConnectionData> for ExpectFinished {
         self.transcript.add_message(&m);
 
         cx.common.check_aligned_handshake()?;
-        if self.send_ticket {
+
+        for _ in 0..self.send_tickets {
             Self::emit_ticket(
-                &mut self.transcript,
+                &self.transcript,
                 self.suite,
                 cx,
                 &key_schedule_traffic,
