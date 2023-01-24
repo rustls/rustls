@@ -166,7 +166,7 @@
 //! therefore call `client.process_new_packets()` which parses and processes the messages.
 //! Any error returned from `process_new_packets` is fatal to the connection, and will tell you
 //! why.  For example, if the server's certificate is expired `process_new_packets` will
-//! return `Err(WebPkiError(CertExpired, ValidateServerCert))`.  From this point on,
+//! return `Err(InvalidCertificate(Expired))`.  From this point on,
 //! `process_new_packets` will not do any new work and will return that error continually.
 //!
 //! You can extract newly received data by calling `client.reader()` (which implements the
@@ -371,7 +371,7 @@ pub use crate::conn::{
     CommonState, Connection, ConnectionCommon, IoState, Reader, Side, SideData, Writer,
 };
 pub use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
-pub use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+pub use crate::error::{CertificateError, Error, PeerIncompatible, PeerMisbehaved};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;

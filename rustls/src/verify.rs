@@ -3,7 +3,7 @@ use std::fmt;
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{CertificateError, Error, PeerMisbehaved};
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
@@ -104,7 +104,7 @@ pub trait ServerCertVerifier: Send + Sync {
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
     /// the implementor to handle invalid data. It is recommended that the implementor returns
-    /// [`Error::InvalidCertificateEncoding`] when these cases are encountered.
+    /// [`Error::InvalidCertificate(CertificateError::BadEncoding)`] when these cases are encountered.
     ///
     /// `scts` contains the Signed Certificate Timestamps (SCTs) the server
     /// sent with the end-entity certificate, if any.
@@ -254,7 +254,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
     /// the implementor to handle invalid data. It is recommended that the implementor returns
-    /// [`Error::InvalidCertificateEncoding`] when these cases are encountered.
+    /// [`Error::InvalidCertificate(CertificateError::BadEncoding)`] when these cases are encountered.
     fn verify_client_cert(
         &self,
         end_entity: &Certificate,
@@ -617,12 +617,22 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
 fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;
     match error {
-        BadDer | BadDerTime => Error::InvalidCertificateEncoding,
-        InvalidSignatureForPublicKey => Error::InvalidCertificateSignature,
-        UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
-            Error::InvalidCertificateSignatureType
+        BadDer | BadDerTime => CertificateError::BadEncoding.into(),
+        CertNotValidYet => CertificateError::NotValidYet.into(),
+        CertExpired | InvalidCertValidity => CertificateError::Expired.into(),
+        UnknownIssuer => CertificateError::UnknownIssuer.into(),
+        CertNotValidForName => CertificateError::NotValidForName.into(),
+
+        InvalidSignatureForPublicKey
+        | UnsupportedSignatureAlgorithm
+        | UnsupportedSignatureAlgorithmForPublicKey => CertificateError::BadSignature.into(),
+        e => {
+            crate::log::warn!(
+                "webpki error {:?} being converted to CertificateError::Other",
+                e
+            );
+            CertificateError::Other.into()
         }
-        e => Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
     }
 }
 

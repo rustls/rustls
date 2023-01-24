@@ -18,7 +18,10 @@ use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
-use rustls::{sign, ConnectionCommon, Error, KeyLog, PeerIncompatible, PeerMisbehaved, SideData};
+use rustls::{
+    sign, CertificateError, ConnectionCommon, Error, KeyLog, PeerIncompatible, PeerMisbehaved,
+    SideData,
+};
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ServerConfig, ServerConnection};
@@ -875,8 +878,8 @@ fn client_checks_server_certificate_with_given_name() {
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
-                Err(ErrorFromPeer::Client(Error::InvalidCertificateData(
-                    "invalid peer certificate: CertNotValidForName".into(),
+                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                    CertificateError::NotValidForName
                 )))
             );
         }
