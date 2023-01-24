@@ -293,10 +293,12 @@ impl MessageDeframer {
         // If we can and need to increase the buffer size to allow a 4k read, do so. After
         // dealing with a large handshake message (exceeding `OpaqueMessage::MAX_WIRE_SIZE`),
         // make sure to reduce the buffer size again (large messages should be rare).
+        // Also, reduce the buffer size if there are neither full nor partial messages in it,
+        // which usually means that the other side suspended sending data.
         let need_capacity = Ord::min(allow_max, self.used + READ_SIZE);
         if need_capacity > self.buf.len() {
             self.buf.resize(need_capacity, 0);
-        } else if self.buf.len() > allow_max {
+        } else if self.used == 0 || self.buf.len() > allow_max {
             self.buf.resize(need_capacity, 0);
             self.buf.shrink_to(need_capacity);
         }
