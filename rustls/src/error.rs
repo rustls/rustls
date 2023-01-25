@@ -3,10 +3,11 @@ use crate::rand;
 
 use std::error::Error as StdError;
 use std::fmt;
+use std::sync::Arc;
 use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// We received a TLS message that isn't valid right now.
     /// `expect_types` lists the message types we can expect right now.
@@ -60,17 +61,11 @@ pub enum Error {
     /// We received a fatal alert.  This means the peer is unhappy.
     AlertReceived(AlertDescription),
 
-    /// We received an invalidly encoded certificate from the peer.
-    InvalidCertificateEncoding,
-
-    /// We received a certificate with invalid signature type.
-    InvalidCertificateSignatureType,
-
-    /// We received a certificate with invalid signature.
-    InvalidCertificateSignature,
-
-    /// We received a certificate which includes invalid data.
-    InvalidCertificateData(String),
+    /// We saw an invalid certificate.
+    ///
+    /// The contained error is from the certificate validation trait
+    /// implementation.
+    InvalidCertificate(CertificateError),
 
     /// The presented SCT(s) were invalid.
     InvalidSct(sct::Error),
@@ -188,7 +183,7 @@ impl From<PeerMisbehaved> for Error {
 
 #[non_exhaustive]
 #[allow(missing_docs)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 /// The set of cases where we failed to make a connection because a peer
 /// doesn't support a TLS version/feature we require.
 ///
@@ -219,6 +214,58 @@ impl From<PeerIncompatible> for Error {
     #[inline]
     fn from(e: PeerIncompatible) -> Self {
         Self::PeerIncompatible(e)
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+/// The ways in which certificate validators can express errors.
+///
+/// Note that the rustls TLS protocol code interprets specifically these
+/// error codes to send specific TLS alerts.  Therefore, if a
+/// custom certificate validator uses incorrect errors the library as
+/// a whole will send alerts that do not match the standard (this is usually
+/// a minor issue, but could be misleading).
+pub enum CertificateError {
+    /// The certificate is not correctly encoded.
+    BadEncoding,
+
+    /// The current time is after the `notAfter` time in the certificate.
+    Expired,
+
+    /// The current time is before the `notBefore` time in the certificate.
+    NotValidYet,
+
+    /// The certificate contains an extension marked critical, but it was
+    /// not processed by the certificate validator.
+    UnhandledCriticalExtension,
+
+    /// The certificate chain is not issued by a known root certificate.
+    UnknownIssuer,
+
+    /// A certificate is not correctly signed by the key of its alleged
+    /// issuer.
+    BadSignature,
+
+    /// The subject names in an end-entity certificate do not include
+    /// the expected name.
+    NotValidForName,
+
+    /// Any other error.
+    ///
+    /// This can be used by custom verifiers to expose the underlying error
+    /// (where they are not better described by the more specific errors
+    /// above).
+    ///
+    /// It is also used by the default verifier in case its error is
+    /// not covered by the above common cases.
+    Other(Arc<dyn StdError + Send + Sync>),
+}
+
+impl From<CertificateError> for Error {
+    #[inline]
+    fn from(e: CertificateError) -> Self {
+        Self::InvalidCertificate(e)
     }
 }
 
@@ -257,17 +304,8 @@ impl fmt::Display for Error {
             Self::PeerIncompatible(ref why) => write!(f, "peer is incompatible: {:?}", why),
             Self::PeerMisbehaved(ref why) => write!(f, "peer misbehaved: {:?}", why),
             Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            Self::InvalidCertificateEncoding => {
-                write!(f, "invalid peer certificate encoding")
-            }
-            Self::InvalidCertificateSignatureType => {
-                write!(f, "invalid peer certificate signature type")
-            }
-            Self::InvalidCertificateSignature => {
-                write!(f, "invalid peer certificate signature")
-            }
-            Self::InvalidCertificateData(ref reason) => {
-                write!(f, "invalid peer certificate contents: {}", reason)
+            Self::InvalidCertificate(ref err) => {
+                write!(f, "invalid peer certificate: {:?}", err)
             }
             Self::CorruptMessage => write!(f, "received corrupt message"),
             Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
@@ -328,10 +366,7 @@ mod tests {
             super::PeerIncompatible::Tls12NotOffered.into(),
             super::PeerMisbehaved::UnsolicitedCertExtension.into(),
             Error::AlertReceived(AlertDescription::ExportRestriction),
-            Error::InvalidCertificateEncoding,
-            Error::InvalidCertificateSignatureType,
-            Error::InvalidCertificateSignature,
-            Error::InvalidCertificateData("Data".into()),
+            super::CertificateError::Expired.into(),
             Error::InvalidSct(sct::Error::MalformedSct),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
@@ -352,7 +387,7 @@ mod tests {
     fn rand_error_mapping() {
         use super::rand;
         let err: Error = rand::GetRandomFailed.into();
-        assert_eq!(err, Error::FailedToGetRandomBytes);
+        assert!(matches!(err, Error::FailedToGetRandomBytes));
     }
 
     #[test]
@@ -363,6 +398,6 @@ mod tests {
             .duration_since(SystemTime::now())
             .unwrap_err();
         let err: Error = time_error.into();
-        assert_eq!(err, Error::FailedToGetCurrentTime);
+        assert!(matches!(err, Error::FailedToGetCurrentTime));
     }
 }

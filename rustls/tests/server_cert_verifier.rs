@@ -4,7 +4,7 @@
 
 mod common;
 use crate::common::{
-    do_handshake, do_handshake_until_both_error, make_client_config_with_versions,
+    assert_debug_eq, do_handshake, do_handshake_until_both_error, make_client_config_with_versions,
     make_pair_for_arc_configs, make_server_config, ErrorFromPeer, ALL_KEY_TYPES,
 };
 use rustls::client::{
@@ -53,12 +53,12 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             let errs = do_handshake_until_both_error(&mut client, &mut server);
-            assert_eq!(
+            assert_debug_eq(
                 errs,
                 Err(vec![
                     ErrorFromPeer::Client(Error::CorruptMessage),
-                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate))
-                ])
+                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate)),
+                ]),
             );
         }
     }
@@ -82,12 +82,12 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let errs = do_handshake_until_both_error(&mut client, &mut server);
-        assert_eq!(
+        assert_debug_eq(
             errs,
             Err(vec![
                 ErrorFromPeer::Client(Error::CorruptMessage),
-                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate))
-            ])
+                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate)),
+            ]),
         );
     }
 }
@@ -109,12 +109,12 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
         let errs = do_handshake_until_both_error(&mut client, &mut server);
-        assert_eq!(
+        assert_debug_eq(
             errs,
             Err(vec![
                 ErrorFromPeer::Client(Error::CorruptMessage),
-                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate))
-            ])
+                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate)),
+            ]),
         );
     }
 }
@@ -135,14 +135,14 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
             let errs = do_handshake_until_both_error(&mut client, &mut server);
-            assert_eq!(
+            assert_debug_eq(
                 errs,
                 Err(vec![
                     ErrorFromPeer::Server(Error::PeerIncompatible(
-                        rustls::PeerIncompatible::NoSignatureSchemesInCommon
+                        rustls::PeerIncompatible::NoSignatureSchemesInCommon,
                     )),
                     ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::HandshakeFailure)),
-                ])
+                ]),
             );
         }
     }

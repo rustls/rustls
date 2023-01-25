@@ -3,7 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{CipherSuite, ProtocolVersion};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{CertificateError, Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -814,7 +814,7 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
 
 pub(super) fn send_cert_error_alert(common: &mut CommonState, err: Error) -> Error {
     match err {
-        Error::InvalidCertificateEncoding => {
+        Error::InvalidCertificate(CertificateError::BadEncoding) => {
             common.send_fatal_alert(AlertDescription::DecodeError);
         }
         Error::PeerMisbehaved(_) => {

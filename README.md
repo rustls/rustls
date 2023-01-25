@@ -213,7 +213,7 @@ or
 
 ```
 $ cargo run --bin tlsclient-mio -- --http expired.badssl.com
-TLS error: WebPkiError(CertExpired, ValidateServerCert)
+TLS error: InvalidCertificate(Expired)
 Connection closed
 ```
 

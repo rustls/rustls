@@ -624,7 +624,7 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
+        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
     }
 
     #[test]
@@ -636,7 +636,7 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
+        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
     }
 
     #[test]
@@ -648,7 +648,7 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
+        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
     }
 
     #[test]
@@ -676,9 +676,9 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
+        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
         // CorruptMessage has been fused
-        assert_eq!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage);
+        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
     }
 
     #[test]

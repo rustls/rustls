@@ -3,6 +3,7 @@ use crate::key;
 use crate::log::{debug, trace};
 use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
 use crate::x509;
+use crate::{CertificateError, Error};
 
 /// A trust anchor, commonly known as a "Root Certificate."
 #[derive(Debug, Clone)]
@@ -101,8 +102,9 @@ impl RootCertStore {
     }
 
     /// Add a single DER-encoded certificate to the store.
-    pub fn add(&mut self, der: &key::Certificate) -> Result<(), webpki::Error> {
-        let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)?;
+    pub fn add(&mut self, der: &key::Certificate) -> Result<(), Error> {
+        let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)
+            .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
         let ota = OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,

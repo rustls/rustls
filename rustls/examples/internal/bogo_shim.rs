@@ -13,7 +13,7 @@ use rustls::internal::msgs::persist;
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::ClientHello;
 use rustls::ProtocolVersion;
-use rustls::{ClientConnection, Connection, ServerConnection, Side};
+use rustls::{CertificateError, ClientConnection, Connection, ServerConnection, Side};
 
 use std::env;
 use std::fs;
@@ -628,9 +628,11 @@ fn handle_err(err: rustls::Error) -> ! {
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
             quit_err(":SSLV3_ALERT_DECOMPRESSION_FAILURE:")
         }
-        Error::InvalidCertificateEncoding => quit(":CANNOT_PARSE_LEAF_CERT:"),
-        Error::InvalidCertificateSignature => quit(":BAD_SIGNATURE:"),
-        Error::InvalidCertificateSignatureType => quit(":WRONG_SIGNATURE_TYPE:"),
+        Error::InvalidCertificate(CertificateError::BadEncoding) => {
+            quit(":CANNOT_PARSE_LEAF_CERT:")
+        }
+        Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
+        Error::InvalidCertificate(e) => quit(&format!(":BAD_CERT: ({:?})", e)),
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
         _ => {
             println_err!("unhandled error: {:?}", err);
