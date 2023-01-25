@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use rustls::internal::msgs::codec::Reader;
-use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
+use rustls::internal::msgs::message::{Message, OpaqueMessageRecv, PlainMessage};
 use rustls::server::AllowAnyAuthenticatedClient;
 use rustls::Connection;
 use rustls::Error;
@@ -156,7 +156,7 @@ where
 
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
-            let message = OpaqueMessage::read(&mut reader).unwrap();
+            let message = OpaqueMessageRecv::read(&mut reader).unwrap();
             let mut message = Message::try_from(message.into_plain_message()).unwrap();
             let message_enc = match filter(&mut message) {
                 Altered::InPlace => PlainMessage::from(message)

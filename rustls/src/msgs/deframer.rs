@@ -3,10 +3,10 @@ use std::ops::Range;
 
 use super::base::Payload;
 use super::enums::ContentType;
-use super::message::PlainMessage;
+use super::message::{OpaqueMessageRecv, PlainMessage};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::codec;
-use crate::msgs::message::{MessageError, OpaqueMessage};
+use crate::msgs::message::MessageError;
 use crate::record_layer::{Decrypted, RecordLayer};
 use crate::ProtocolVersion;
 
@@ -71,7 +71,7 @@ impl MessageDeframer {
             // contain a header, and that header has a length which falls within `buf`.
             // If so, deframe it and place the message onto the frames output queue.
             let mut rd = codec::Reader::init(&self.buf[start..self.used]);
-            let m = match OpaqueMessage::read(&mut rd) {
+            let m = match OpaqueMessageRecv::read(&mut rd) {
                 Ok(m) => m,
                 Err(MessageError::TooShortForHeader | MessageError::TooShortForLength) => {
                     return Ok(None)
@@ -312,7 +312,7 @@ impl MessageDeframer {
         // At this point, the buffer resizing logic below should reduce the buffer size.
         let allow_max = match self.joining_hs {
             Some(_) => MAX_HANDSHAKE_SIZE as usize,
-            None => OpaqueMessage::MAX_WIRE_SIZE,
+            None => OpaqueMessageRecv::MAX_WIRE_SIZE,
         };
 
         if self.used >= allow_max {
@@ -419,7 +419,7 @@ const READ_SIZE: usize = 4096;
 #[cfg(test)]
 mod tests {
     use super::MessageDeframer;
-    use crate::msgs::message::{Message, OpaqueMessage};
+    use crate::msgs::message::{Message, OpaqueMessageRecv};
     use crate::record_layer::RecordLayer;
     use crate::{ContentType, Error};
 
@@ -700,7 +700,7 @@ mod tests {
         assert_len(4096, input_bytes(&mut d, &message));
         assert_len(4096, input_bytes(&mut d, &message));
         assert_len(
-            OpaqueMessage::MAX_WIRE_SIZE - 16_384,
+            OpaqueMessageRecv::MAX_WIRE_SIZE - 16_384,
             input_bytes(&mut d, &message),
         );
         assert!(input_bytes(&mut d, &message).is_err());

@@ -11,7 +11,7 @@ use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{
-    BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, PlainMessage,
+    BorrowedPlainMessage, Message, MessagePayload, OpaqueMessageSend, PlainMessage,
 };
 #[cfg(feature = "quic")]
 use crate::quic;
@@ -1166,7 +1166,7 @@ impl CommonState {
     }
 
     // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: OpaqueMessage) {
+    fn queue_tls_message(&mut self, m: OpaqueMessageSend) {
         self.sendable_tls.append(m.encode());
     }
 

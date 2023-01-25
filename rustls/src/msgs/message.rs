@@ -73,13 +73,13 @@ impl MessagePayload {
 /// buffers as well as for fragmenting, joining and encryption/decryption. It can be converted
 /// into a `Message` by decoding the payload.
 #[derive(Clone, Debug)]
-pub struct OpaqueMessage {
+pub struct OpaqueMessageRecv {
     pub typ: ContentType,
     pub version: ProtocolVersion,
     pub payload: Payload,
 }
 
-impl OpaqueMessage {
+impl OpaqueMessageRecv {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
     pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
@@ -124,15 +124,6 @@ impl OpaqueMessage {
         })
     }
 
-    pub fn encode(self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        self.typ.encode(&mut buf);
-        self.version.encode(&mut buf);
-        (self.payload.0.len() as u16).encode(&mut buf);
-        self.payload.encode(&mut buf);
-        buf
-    }
-
     /// Force conversion into a plaintext message.
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
@@ -155,6 +146,23 @@ impl OpaqueMessage {
 
     /// Maximum on-wire message size.
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
+}
+
+pub struct OpaqueMessageSend {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: Payload,
+}
+
+impl OpaqueMessageSend {
+    pub fn encode(self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        self.typ.encode(&mut buf);
+        self.version.encode(&mut buf);
+        (self.payload.0.len() as u16).encode(&mut buf);
+        self.payload.encode(&mut buf);
+        buf
+    }
 }
 
 impl From<Message> for PlainMessage {
@@ -189,8 +197,8 @@ pub struct PlainMessage {
 }
 
 impl PlainMessage {
-    pub fn into_unencrypted_opaque(self) -> OpaqueMessage {
-        OpaqueMessage {
+    pub fn into_unencrypted_opaque(self) -> OpaqueMessageSend {
+        OpaqueMessageSend {
             version: self.version,
             typ: self.typ,
             payload: self.payload,
@@ -271,8 +279,8 @@ pub struct BorrowedPlainMessage<'a> {
 }
 
 impl<'a> BorrowedPlainMessage<'a> {
-    pub fn to_unencrypted_opaque(&self) -> OpaqueMessage {
-        OpaqueMessage {
+    pub fn to_unencrypted_opaque(&self) -> OpaqueMessageSend {
+        OpaqueMessageSend {
             version: self.version,
             typ: self.typ,
             payload: Payload(self.payload.to_vec()),

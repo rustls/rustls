@@ -3682,7 +3682,7 @@ mod test_quic {
 fn test_client_does_not_offer_sha1() {
     use rustls::internal::msgs::{
         codec::Reader, enums::HandshakeType, handshake::HandshakePayload, message::MessagePayload,
-        message::OpaqueMessage,
+        message::OpaqueMessageRecv,
     };
 
     for kt in ALL_KEY_TYPES.iter() {
@@ -3695,7 +3695,7 @@ fn test_client_does_not_offer_sha1() {
             let sz = client
                 .write_tls(&mut buf.as_mut())
                 .unwrap();
-            let msg = OpaqueMessage::read(&mut Reader::init(&buf[..sz])).unwrap();
+            let msg = OpaqueMessageRecv::read(&mut Reader::init(&buf[..sz])).unwrap();
             let msg = Message::try_from(msg.into_plain_message()).unwrap();
             assert!(msg.is_handshake_type(HandshakeType::ClientHello));
 

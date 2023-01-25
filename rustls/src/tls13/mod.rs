@@ -5,7 +5,9 @@ use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::ContentType;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+use crate::msgs::message::{
+    BorrowedPlainMessage, OpaqueMessageRecv, OpaqueMessageSend, PlainMessage,
+};
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 
 use ring::aead;
@@ -143,7 +145,7 @@ fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
 const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
 
 impl MessageEncrypter for Tls13MessageEncrypter {
-    fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessageSend, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(msg.payload);
@@ -156,7 +158,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::General("encrypt failed".to_string()))?;
 
-        Ok(OpaqueMessage {
+        Ok(OpaqueMessageSend {
             typ: ContentType::ApplicationData,
             version: ProtocolVersion::TLSv1_2,
             payload: Payload::new(payload),
@@ -165,7 +167,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
+    fn decrypt(&self, mut msg: OpaqueMessageRecv, seq: u64) -> Result<PlainMessage, Error> {
         let payload = &mut msg.payload.0;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
