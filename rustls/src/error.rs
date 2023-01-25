@@ -3,6 +3,7 @@ use crate::rand;
 
 use std::error::Error as StdError;
 use std::fmt;
+use std::sync::Arc;
 use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
@@ -251,7 +252,14 @@ pub enum CertificateError {
     NotValidForName,
 
     /// Any other error.
-    Other,
+    ///
+    /// This can be used by custom verifiers to expose the underlying error
+    /// (where they are not better described by the more specific errors
+    /// above).
+    ///
+    /// It is also used by the default verifier in case its error is
+    /// not covered by the above common cases.
+    Other(Arc<dyn StdError + Send + Sync>),
 }
 
 impl From<CertificateError> for Error {

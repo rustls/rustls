@@ -626,13 +626,7 @@ fn pki_error(error: webpki::Error) -> Error {
         InvalidSignatureForPublicKey
         | UnsupportedSignatureAlgorithm
         | UnsupportedSignatureAlgorithmForPublicKey => CertificateError::BadSignature.into(),
-        e => {
-            crate::log::warn!(
-                "webpki error {:?} being converted to CertificateError::Other",
-                e
-            );
-            CertificateError::Other.into()
-        }
+        _ => CertificateError::Other(Arc::new(error)).into(),
     }
 }
 
