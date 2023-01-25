@@ -31,6 +31,9 @@ pub struct MessageDeframer {
 
     /// What size prefix of `buf` is used.
     used: usize,
+
+    /// Bytes that have already been parsed into messages.
+    discard: usize,
 }
 
 impl MessageDeframer {
@@ -42,7 +45,7 @@ impl MessageDeframer {
     pub fn pop(&mut self, record_layer: &mut RecordLayer) -> Result<Option<Deframed>, Error> {
         if self.desynced {
             return Err(Error::CorruptMessage);
-        } else if self.used == 0 {
+        } else if self.used == self.discard {
             return Ok(None);
         }
 
@@ -61,7 +64,7 @@ impl MessageDeframer {
                         _ => meta.message.end,
                     }
                 }
-                None => 0,
+                None => self.discard,
             };
 
             // Does our `buf` contain a full message?  It does if it is big enough to
@@ -84,7 +87,7 @@ impl MessageDeframer {
             let end = start + rd.used();
             if m.typ == ContentType::ChangeCipherSpec && self.joining_hs.is_none() {
                 // This is unencrypted. We check the contents later.
-                self.discard(end);
+                self.discard = end;
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -112,7 +115,7 @@ impl MessageDeframer {
                     );
                 }
                 Ok(None) => {
-                    self.discard(end);
+                    self.discard = end;
                     continue;
                 }
                 Err(e) => return Err(e),
@@ -129,7 +132,7 @@ impl MessageDeframer {
 
             // If it's not a handshake message, just return it -- no joining necessary.
             if msg.typ != ContentType::Handshake {
-                self.discard(start + rd.used());
+                self.discard = end;
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -166,9 +169,8 @@ impl MessageDeframer {
         } else {
             // Otherwise, we've yielded the last handshake payload in the buffer, so we can
             // discard all of the bytes that we're previously buffered as handshake data.
-            let end = meta.message.end;
+            self.discard = meta.message.end;
             self.joining_hs = None;
-            self.discard(end);
         }
 
         Ok(Some(Deframed {
@@ -182,7 +184,7 @@ impl MessageDeframer {
     /// Allow pushing handshake messages directly into the buffer.
     #[cfg(feature = "quic")]
     pub fn push(&mut self, version: ProtocolVersion, payload: &[u8]) -> Result<(), Error> {
-        if self.used > 0 && self.joining_hs.is_none() {
+        if self.used > self.discard && self.joining_hs.is_none() {
             return Err(Error::General(
                 "cannot push QUIC messages into unrelated connection".into(),
             ));
@@ -274,6 +276,33 @@ impl MessageDeframer {
 
     /// Resize the internal `buf` if necessary for reading more bytes.
     fn prepare_read(&mut self) -> Result<(), &'static str> {
+        if self.joining_hs.is_none() {
+            // If we're no longer joining a handshake payload and some bytes have already been
+            // parsed, discard them by moving the unparsed bytes within `buf` to the beginning.
+            if self.discard == self.used {
+                self.used = 0;
+                self.discard = 0;
+            } else if self.discard > 0 {
+                /* Before:
+                 * +----------+----------+----------+
+                 * | taken    | pending  |xxxxxxxxxx|
+                 * +----------+----------+----------+
+                 * 0          ^ taken    ^ self.used
+                 *
+                 * After:
+                 * +----------+----------+----------+
+                 * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+                 * +----------+----------+----------+
+                 * 0          ^ self.used
+                 */
+
+                self.buf
+                    .copy_within(self.discard..self.used, 0);
+                self.used -= self.discard;
+                self.discard = 0;
+            }
+        }
+
         // We allow a maximum of 64k of buffered data for handshake messages only. Enforce this
         // by varying the maximum allowed buffer size here based on whether a prefix of a
         // handshake payload is currently being buffered. Given that the first read of such a
@@ -310,32 +339,7 @@ impl MessageDeframer {
     /// to process, either whole messages in our output
     /// queue or partial messages in our buffer.
     pub fn has_pending(&self) -> bool {
-        self.used > 0
-    }
-
-    /// Discard `taken` bytes from the start of our buffer.
-    fn discard(&mut self, taken: usize) {
-        #[allow(clippy::comparison_chain)]
-        if taken < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
-            self.buf
-                .copy_within(taken..self.used, 0);
-            self.used -= taken;
-        } else if taken == self.used {
-            self.used = 0;
-        }
+        self.used > self.discard
     }
 }
 
