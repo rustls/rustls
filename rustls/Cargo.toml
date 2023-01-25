@@ -17,7 +17,7 @@ rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
 log = { version = "0.4.4", optional = true }
-ring = "0.16.20"
+rustls-backend = { path = "../rustls-backend" }
 sct = "0.7.0"
 webpki = { package = "rustls-webpki", version = "0.100.0-alpha.2", features = ["alloc", "std"] }
 

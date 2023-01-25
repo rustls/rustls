@@ -9,7 +9,7 @@ use crate::key::Certificate;
 use crate::log::{debug, trace, warn};
 use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
 
-use ring::digest::Digest;
+use rustls_backend::digest::Digest;
 
 use std::sync::Arc;
 use std::time::SystemTime;

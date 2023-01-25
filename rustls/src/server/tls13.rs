@@ -32,7 +32,7 @@ use super::server_conn::ServerConnectionData;
 
 use std::sync::Arc;
 
-use ring::constant_time;
+use rustls_backend::constant_time;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
 

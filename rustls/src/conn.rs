@@ -1353,7 +1353,7 @@ pub(crate) struct Quic {
     pub(crate) params: Option<Vec<u8>>,
     pub(crate) alert: Option<AlertDescription>,
     pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub(crate) early_secret: Option<ring::hkdf::Prk>,
+    pub(crate) early_secret: Option<rustls_backend::hkdf::Prk>,
     pub(crate) hs_secrets: Option<quic::Secrets>,
     pub(crate) traffic_secrets: Option<quic::Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation

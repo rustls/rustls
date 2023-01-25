@@ -1,7 +1,7 @@
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
-use ring::digest;
+use rustls_backend::digest;
 use std::mem;
 
 /// Early stage buffering of handshake payloads.
@@ -164,7 +164,7 @@ impl HandshakeHash {
 #[cfg(test)]
 mod test {
     use super::HandshakeHashBuffer;
-    use ring::digest;
+    use rustls_backend::digest;
 
     #[test]
     fn hashes_correctly() {

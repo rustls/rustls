@@ -46,7 +46,7 @@ pub struct CipherSuiteCommon {
     /// How to do bulk encryption.
     pub bulk: BulkAlgorithm,
 
-    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
+    pub(crate) aead_algorithm: &'static rustls_backend::aead::Algorithm,
 }
 
 /// A cipher suite supported by rustls.
@@ -70,7 +70,7 @@ impl fmt::Debug for SupportedCipherSuite {
 
 impl SupportedCipherSuite {
     /// Which hash function to use with this suite.
-    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
+    pub fn hash_algorithm(&self) -> &'static rustls_backend::digest::Algorithm {
         match self {
             #[cfg(feature = "tls12")]
             Self::Tls12(inner) => inner.hash_algorithm(),

@@ -23,7 +23,7 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
-use ring::constant_time;
+use rustls_backend::constant_time;
 
 use std::sync::Arc;
 

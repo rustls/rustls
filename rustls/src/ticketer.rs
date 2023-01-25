@@ -2,7 +2,7 @@ use crate::rand;
 use crate::server::ProducesTickets;
 use crate::Error;
 
-use ring::aead;
+use rustls_backend::aead;
 use std::mem;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time;
@@ -68,8 +68,8 @@ impl ProducesTickets for AeadTicketer {
         // Random nonce, because a counter is a privacy leak.
         let mut nonce_buf = [0u8; 12];
         rand::fill_random(&mut nonce_buf).ok()?;
-        let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_buf);
-        let aad = ring::aead::Aad::empty();
+        let nonce = rustls_backend::aead::Nonce::assume_unique_for_key(nonce_buf);
+        let aad = rustls_backend::aead::Aad::empty();
 
         let mut ciphertext =
             Vec::with_capacity(nonce_buf.len() + message.len() + self.key.algorithm().tag_len());
@@ -91,7 +91,7 @@ impl ProducesTickets for AeadTicketer {
         let ciphertext = ciphertext.get(nonce.len()..)?;
 
         // This won't fail since `nonce` has the required length.
-        let nonce = ring::aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
+        let nonce = rustls_backend::aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
 
         let mut out = Vec::from(ciphertext);
 

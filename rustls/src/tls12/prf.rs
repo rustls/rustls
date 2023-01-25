@@ -1,4 +1,4 @@
-use ring::hmac;
+use rustls_backend::hmac;
 
 fn concat_sign(key: &hmac::Key, a: &[u8], b: &[u8]) -> hmac::Tag {
     let mut ctx = hmac::Context::with_key(key);
@@ -37,7 +37,7 @@ pub(crate) fn prf(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], label: &[
 
 #[cfg(test)]
 mod tests {
-    use ring::hmac::{HMAC_SHA256, HMAC_SHA512};
+    use rustls_backend::hmac::{HMAC_SHA256, HMAC_SHA512};
 
     #[test]
     fn check_sha256() {

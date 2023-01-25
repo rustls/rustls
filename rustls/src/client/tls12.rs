@@ -30,8 +30,8 @@ use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 
-use ring::agreement::PublicKey;
-use ring::constant_time;
+use rustls_backend::agreement::PublicKey;
+use rustls_backend::constant_time;
 
 use std::sync::Arc;
 

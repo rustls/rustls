@@ -3352,7 +3352,6 @@ mod test_quic {
             ServerConnection::new_quic(server_config, quic::Version::V1, b"server params".to_vec())
                 .unwrap();
 
-        use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{Compression, HandshakeType, NamedGroup};
         use rustls::internal::msgs::handshake::{
@@ -3360,16 +3359,20 @@ mod test_quic {
         };
         use rustls::internal::msgs::message::PlainMessage;
         use rustls::{CipherSuite, SignatureScheme};
+        use rustls_backend::rand::SecureRandom;
 
-        let rng = ring::rand::SystemRandom::new();
+        let rng = rustls_backend::rand::SystemRandom::new();
         let mut random = [0; 32];
         rng.fill(&mut random).unwrap();
         let random = Random::from(random);
 
-        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::X25519, &rng)
-            .unwrap()
-            .compute_public_key()
-            .unwrap();
+        let kx = rustls_backend::agreement::EphemeralPrivateKey::generate(
+            &rustls_backend::agreement::X25519,
+            &rng,
+        )
+        .unwrap()
+        .compute_public_key()
+        .unwrap();
 
         let client_hello = Message {
             version: ProtocolVersion::TLSv1_3,
@@ -3415,7 +3418,6 @@ mod test_quic {
         server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
 
-        use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{Compression, HandshakeType, NamedGroup};
         use rustls::internal::msgs::handshake::{
@@ -3423,16 +3425,20 @@ mod test_quic {
         };
         use rustls::internal::msgs::message::PlainMessage;
         use rustls::{CipherSuite, SignatureScheme};
+        use rustls_backend::rand::SecureRandom;
 
-        let rng = ring::rand::SystemRandom::new();
+        let rng = rustls_backend::rand::SystemRandom::new();
         let mut random = [0; 32];
         rng.fill(&mut random).unwrap();
         let random = Random::from(random);
 
-        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::X25519, &rng)
-            .unwrap()
-            .compute_public_key()
-            .unwrap();
+        let kx = rustls_backend::agreement::EphemeralPrivateKey::generate(
+            &rustls_backend::agreement::X25519,
+            &rng,
+        )
+        .unwrap()
+        .compute_public_key()
+        .unwrap();
 
         let mut server =
             ServerConnection::new_quic(server_config, quic::Version::V1, b"server params".to_vec())

@@ -1,0 +1,7 @@
+[package]
+name = "rustls-backend"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+ring = "0.16.20"
