@@ -31,14 +31,14 @@ mod message_test;
 mod test {
     #[test]
     fn smoketest() {
-        use super::codec::Reader;
         use super::message::{Message, OpaqueMessageRecv};
-        let bytes = include_bytes!("handshake-test.1.bin");
-        let mut r = Reader::init(bytes);
+        let mut bytes = include_bytes!("handshake-test.1.bin").to_vec();
 
-        while r.any_left() {
-            let m = OpaqueMessageRecv::read(&mut r).unwrap();
+        let (mut cur, full_len) = (0, bytes.len());
+        while cur < full_len {
+            let (m, rest) = OpaqueMessageRecv::read(&mut bytes[cur..]).unwrap();
             Message::try_from(m.into_plain_message()).unwrap();
+            cur = full_len - rest.len();
         }
     }
 }

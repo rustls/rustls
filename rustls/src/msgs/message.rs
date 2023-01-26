@@ -82,10 +82,11 @@ pub struct OpaqueMessageRecv {
 impl OpaqueMessageRecv {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
-        let typ = ContentType::read(r).ok_or(MessageError::TooShortForHeader)?;
-        let version = ProtocolVersion::read(r).ok_or(MessageError::TooShortForHeader)?;
-        let len = u16::read(r).ok_or(MessageError::TooShortForHeader)?;
+    pub fn read(buf: &mut [u8]) -> Result<(Self, &mut [u8]), MessageError> {
+        let mut r = Reader::init(buf);
+        let typ = ContentType::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
+        let version = ProtocolVersion::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
+        let len = u16::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
 
         // Reject undersize messages
         //  implemented per section 5.1 of RFC8446 (TLSv1.3)
@@ -117,11 +118,16 @@ impl OpaqueMessageRecv {
             .ok_or(MessageError::TooShortForLength)?;
         let payload = Payload::read(&mut sub);
 
-        Ok(Self {
-            typ,
-            version,
-            payload,
-        })
+        let end = (Self::HEADER_SIZE + len) as usize;
+        let (_, rest) = buf.split_at_mut(end);
+        Ok((
+            Self {
+                typ,
+                version,
+                payload,
+            },
+            rest,
+        ))
     }
 
     /// Force conversion into a plaintext message.
