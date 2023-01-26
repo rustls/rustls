@@ -1,7 +1,6 @@
+//! The single place where we generate random material for our own use.
+
 use crate::msgs::codec;
-/// The single place where we generate random material
-/// for our own use.  These functions never fail,
-/// they panic on error.
 use ring::rand::{SecureRandom, SystemRandom};
 
 /// Fill the whole slice with random material.
