@@ -121,14 +121,15 @@ struct Tls13MessageDecrypter {
     iv: Iv,
 }
 
-fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
-    loop {
-        match v.pop() {
-            Some(0) => {}
-            Some(content_type) => return ContentType::from(content_type),
-            None => return ContentType::Unknown(0),
+fn unpad_tls13(v: &mut [u8]) -> (ContentType, &mut [u8]) {
+    let pos = match v.iter().rposition(|&b| b != 0) {
+        Some(b) => b,
+        None => {
+            return (ContentType::Unknown(0), v.split_at_mut(0).0);
         }
-    }
+    };
+
+    (ContentType::from(v[pos]), v.split_at_mut(pos).0)
 }
 
 fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
@@ -167,32 +168,33 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessageRecv, seq: u64) -> Result<PlainMessage, Error> {
-        let payload = &mut msg.payload.0;
-        if payload.len() < self.dec_key.algorithm().tag_len() {
+    fn decrypt(&self, mut msg: OpaqueMessageRecv<'_>, seq: u64) -> Result<PlainMessage, Error> {
+        if msg.payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
 
         let nonce = make_nonce(&self.iv, seq);
-        let aad = make_tls13_aad(payload.len());
+        let aad = make_tls13_aad(msg.payload.len());
         let plain_len = self
             .dec_key
-            .open_in_place(nonce, aad, payload)
+            .open_in_place(nonce, aad, msg.payload)
             .map_err(|_| Error::DecryptError)?
             .len();
 
-        payload.truncate(plain_len);
-
-        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+        msg.payload = &mut msg.payload[..plain_len];
+        if msg.payload.len() > MAX_FRAGMENT_LEN + 1 {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        msg.typ = unpad_tls13(payload);
+        let (typ, unpadded) = unpad_tls13(msg.payload);
+        msg.typ = typ;
+        msg.payload = unpadded;
+
         if msg.typ == ContentType::Unknown(0) {
             return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
         }
 
-        if payload.len() > MAX_FRAGMENT_LEN {
+        if msg.payload.len() > MAX_FRAGMENT_LEN {
             return Err(Error::PeerSentOversizedRecord);
         }
 

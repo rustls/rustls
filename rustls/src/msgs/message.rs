@@ -72,17 +72,17 @@ impl MessagePayload {
 /// This type owns all memory for its interior parts. It is used to read/write from/to I/O
 /// buffers as well as for fragmenting, joining and encryption/decryption. It can be converted
 /// into a `Message` by decoding the payload.
-#[derive(Clone, Debug)]
-pub struct OpaqueMessageRecv {
+#[derive(Debug)]
+pub struct OpaqueMessageRecv<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    pub payload: Payload,
+    pub payload: &'a mut [u8],
 }
 
-impl OpaqueMessageRecv {
+impl<'a> OpaqueMessageRecv<'a> {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub fn read(buf: &mut [u8]) -> Result<(Self, &mut [u8]), MessageError> {
+    pub fn read(buf: &'a mut [u8]) -> Result<(Self, &'a mut [u8]), MessageError> {
         let mut r = Reader::init(buf);
         let typ = ContentType::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
         let version = ProtocolVersion::read(&mut r).ok_or(MessageError::TooShortForHeader)?;
@@ -113,13 +113,13 @@ impl OpaqueMessageRecv {
             _ => {}
         };
 
-        let mut sub = r
-            .sub(len as usize)
-            .ok_or(MessageError::TooShortForLength)?;
-        let payload = Payload::read(&mut sub);
+        if r.left() < len as usize {
+            return Err(MessageError::TooShortForLength);
+        }
 
         let end = (Self::HEADER_SIZE + len) as usize;
-        let (_, rest) = buf.split_at_mut(end);
+        let (this, rest) = buf.split_at_mut(end);
+        let (_, payload) = this.split_at_mut(Self::HEADER_SIZE as usize);
         Ok((
             Self {
                 typ,
@@ -138,7 +138,7 @@ impl OpaqueMessageRecv {
         PlainMessage {
             version: self.version,
             typ: self.typ,
-            payload: self.payload,
+            payload: Payload::new(self.payload),
         }
     }
 

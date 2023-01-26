@@ -178,7 +178,7 @@ impl RecordLayer {
         // failure has already happened.
         let want_close_before_decrypt = self.read_seq == SEQ_SOFT_LIMIT;
 
-        let encrypted_len = encr.payload.0.len();
+        let encrypted_len = encr.payload.len();
         match self
             .message_decrypter
             .decrypt(encr, self.read_seq)

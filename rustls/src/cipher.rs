@@ -10,7 +10,7 @@ use ring::{aead, hkdf};
 pub trait MessageDecrypter: Send + Sync {
     /// Perform the decryption over the concerned TLS message.
 
-    fn decrypt(&self, m: OpaqueMessageRecv, seq: u64) -> Result<PlainMessage, Error>;
+    fn decrypt(&self, m: OpaqueMessageRecv<'_>, seq: u64) -> Result<PlainMessage, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
