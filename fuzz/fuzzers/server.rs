@@ -29,4 +29,5 @@ fuzz_target!(|data: &[u8]| {
     );
     let mut server = ServerConnection::new(config).unwrap();
     let _ = server.read_tls(&mut io::Cursor::new(data));
+    let _ = server.process_new_packets();
 });
