@@ -1226,6 +1226,7 @@ impl CommonState {
         // Reject unknown AlertLevels.
         if let AlertLevel::Unknown(_) = alert.level {
             self.send_fatal_alert(AlertDescription::IllegalParameter);
+            return Err(Error::AlertReceived(alert.description));
         }
 
         // If we get a CloseNotify, make a note to declare EOF to our
