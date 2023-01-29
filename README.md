@@ -27,6 +27,19 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - Support for connecting to peers named with IP addresses.  This means
     rustls now depends on a fork of webpki - `rustls-webpki` - with a suitably
     extended API.
+  - *Breaking change*: `StoresClientSessions` trait renamed to `ClientSessionStore` and
+    reworked to allow storage of multiple TLS1.3 tickets and avoid reuse of them.
+    This is a privacy improvement, see RFC8446 appendix C.4.
+  - *Breaking change*: `rustls::Error` is no longer `PartialEq`.
+  - *Breaking change*: rework `rustls::Error` to avoid String usage in
+    `PeerMisbehavedError`, `PeerIncompatibleError` and certificate errors.
+    Especially note that custom certificate verifiers should move to use the
+    new certificate errors.
+  - *Breaking change*: replace `webpki::Error` appearing in the public API
+    in `RootCertStore::add`.
+  - The number of tickets sent by a TLS1.3 server is now configurable via
+    `ServerConfig::send_tls13_tickets`.  Previously one ticket was sent, now
+    the default is four.
 * 0.20.8 (2023-01-12)
   - Yield an error from `ConnectionCommon::read_tls()` if buffers are full.
     Both a full deframer buffer and a full incoming plaintext buffer will
