@@ -535,8 +535,16 @@ impl AllowAnyAuthenticatedClient {
     /// Construct a new `AllowAnyAuthenticatedClient`.
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn new(roots: RootCertStore) -> Arc<dyn ClientCertVerifier> {
-        Arc::new(Self { roots })
+    pub fn new(roots: RootCertStore) -> Self {
+        Self { roots }
+    }
+
+    /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
+    #[inline(always)]
+    pub fn coerce(self) -> Arc<dyn ClientCertVerifier> {
+        // This function is needed because `ClientCertVerifier` is only reachable if the
+        // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
+        Arc::new(self)
     }
 }
 
@@ -583,10 +591,18 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
     /// Construct a new `AllowAnyAnonymousOrAuthenticatedClient`.
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn new(roots: RootCertStore) -> Arc<dyn ClientCertVerifier> {
-        Arc::new(Self {
+    pub fn new(roots: RootCertStore) -> Self {
+        Self {
             inner: AllowAnyAuthenticatedClient { roots },
-        })
+        }
+    }
+
+    /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
+    #[inline(always)]
+    pub fn coerce(self) -> Arc<dyn ClientCertVerifier> {
+        // This function is needed because `ClientCertVerifier` is only reachable if the
+        // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
+        Arc::new(self)
     }
 }
 
@@ -634,8 +650,12 @@ fn pki_error(error: webpki::Error) -> Error {
 pub struct NoClientAuth;
 
 impl NoClientAuth {
-    /// Constructs a `NoClientAuth` and wraps it in an `Arc`.
-    pub fn new() -> Arc<dyn ClientCertVerifier> {
+    /// Constructs a [`NoClientAuth`], wraps it in an [`Arc`] and coerces it to
+    /// `dyn ClientCertVerifier`.
+    #[inline(always)]
+    pub fn new_coerced() -> Arc<dyn ClientCertVerifier> {
+        // This function is needed because `ClientCertVerifier` is only reachable if the
+        // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
         Arc::new(Self)
     }
 }

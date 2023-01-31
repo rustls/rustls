@@ -304,9 +304,9 @@ fn make_server_config(
             for root in roots {
                 client_auth_roots.add(&root).unwrap();
             }
-            AllowAnyAuthenticatedClient::new(client_auth_roots)
+            AllowAnyAuthenticatedClient::new(client_auth_roots).coerce()
         }
-        ClientAuth::No => NoClientAuth::new(),
+        ClientAuth::No => NoClientAuth::new_coerced(),
     };
 
     let mut cfg = ServerConfig::builder()

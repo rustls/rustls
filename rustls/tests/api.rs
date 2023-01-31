@@ -454,7 +454,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
     let kt = KeyType::Rsa;
     for client_cert_chain in [None, Some(kt.get_client_chain())].iter() {
         let client_auth_roots = get_client_root_store(kt);
-        let client_auth = AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots);
+        let client_auth = AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots).coerce();
 
         let server_config = ServerConfig::builder()
             .with_safe_defaults()
