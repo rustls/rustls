@@ -339,6 +339,12 @@ fn emit_client_hello_for_retry(
         .collect();
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+    cipher_suites.extend(
+        config
+            .unsupported_suites
+            .iter()
+            .copied(),
+    );
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
@@ -555,12 +561,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let suite = self
             .config
-            .find_cipher_suite(server_hello.cipher_suite)
-            .ok_or_else(|| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::HandshakeFailure);
-                Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedCipherSuite)
-            })?;
+            .find_cipher_suite(server_hello.cipher_suite, false, cx.common)?;
 
         if version != suite.version().version {
             return Err(cx
@@ -715,18 +716,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to use a ciphersuite we didn't offer.
-        let maybe_cs = self
+        let cs = self
             .next
             .config
-            .find_cipher_suite(hrr.cipher_suite);
-        let cs = match maybe_cs {
-            Some(cs) => cs,
-            None => {
-                return Err(cx.common.illegal_param(
-                    PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
-                ));
-            }
-        };
+            .find_cipher_suite(hrr.cipher_suite, true, cx.common)?;
 
         // HRR selects the ciphersuite.
         cx.common.suite = Some(cs);

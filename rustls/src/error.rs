@@ -92,6 +92,9 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+
+    /// The peer selected a unsupported cipher suite that we configured.
+    UnsupportedSuiteSelected,
 }
 
 #[non_exhaustive]
@@ -320,6 +323,9 @@ impl fmt::Display for Error {
             Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
             Self::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
+            }
+            Self::UnsupportedSuiteSelected => {
+                write!(f, "configured unsupported cipher suite selected")
             }
             Self::General(ref err) => write!(f, "unexpected error: {}", err),
         }

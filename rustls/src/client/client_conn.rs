@@ -1,12 +1,10 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Protocol, Side};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
-use crate::error::Error;
+use crate::error::{Error, PeerMisbehaved};
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
-
-#[cfg(feature = "quic")]
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
@@ -195,6 +193,11 @@ pub struct ClientConfig {
     ///
     /// The default is false.
     pub enable_early_data: bool,
+
+    /// Send unsupported cipher suites to appease fingerprinting servers.
+    ///
+    /// Note: if the server selects one of these suites, the connection will fail.
+    pub unsupported_suites: Vec<CipherSuite>,
 }
 
 impl fmt::Debug for ClientConfig {
@@ -238,11 +241,31 @@ impl ClientConfig {
         danger::DangerousClientConfig { cfg: self }
     }
 
-    pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
-        self.cipher_suites
+    pub(super) fn find_cipher_suite(
+        &self,
+        suite: CipherSuite,
+        retried: bool,
+        common: &mut CommonState,
+    ) -> Result<SupportedCipherSuite, Error> {
+        let supported = self
+            .cipher_suites
             .iter()
             .copied()
-            .find(|&scs| scs.suite() == suite)
+            .find(|&scs| scs.suite() == suite);
+
+        if let Some(supported) = supported {
+            Ok(supported)
+        } else if self.unsupported_suites.contains(&suite) {
+            Err(Error::UnsupportedSuiteSelected)
+        } else if retried {
+            Err(common
+                .illegal_param(PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite))
+        } else {
+            common.send_fatal_alert(AlertDescription::HandshakeFailure);
+            Err(Error::PeerMisbehaved(
+                PeerMisbehaved::SelectedUnofferedCipherSuite,
+            ))
+        }
     }
 }
 
