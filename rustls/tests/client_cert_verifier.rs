@@ -13,11 +13,9 @@ use crate::common::{
 use rustls::client::WebPkiVerifier;
 use rustls::internal::msgs::base::PayloadU16;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
-use rustls::AlertDescription;
-use rustls::ContentType;
 use rustls::{
-    Certificate, ClientConnection, DistinguishedNames, Error, ServerConfig, ServerConnection,
-    SignatureScheme,
+    AlertDescription, Certificate, ClientConnection, ContentType, DistinguishedNames, Error,
+    InvalidMessage, ServerConfig, ServerConnection, SignatureScheme,
 };
 use std::sync::Arc;
 
@@ -104,8 +102,8 @@ fn client_verifier_no_schemes() {
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_debug_eq(
                 err,
-                Err(ErrorFromPeer::Client(Error::CorruptMessagePayload(
-                    ContentType::Handshake,
+                Err(ErrorFromPeer::Client(Error::InvalidMessage(
+                    InvalidMessage::MissingPayload(ContentType::Handshake),
                 ))),
             );
         }

@@ -6,6 +6,7 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType, HandshakeType};
 use crate::msgs::handshake::HandshakeMessagePayload;
+use crate::InvalidMessage;
 
 #[derive(Debug)]
 pub enum MessagePayload {
@@ -54,7 +55,7 @@ impl MessagePayload {
             _ => None,
         };
 
-        parsed.ok_or(Error::CorruptMessagePayload(typ))
+        parsed.ok_or(InvalidMessage::MissingPayload(typ).into())
     }
 
     pub fn content_type(&self) -> ContentType {
@@ -91,23 +92,23 @@ impl OpaqueMessage {
         //  implemented per section 5.1 of RFC8446 (TLSv1.3)
         //              per section 6.2.1 of RFC5246 (TLSv1.2)
         if typ != ContentType::ApplicationData && len == 0 {
-            return Err(MessageError::IllegalLength);
+            return Err(MessageError::EmptyDataForDisallowedRecord);
         }
 
         // Reject oversize messages
         if len >= Self::MAX_PAYLOAD {
-            return Err(MessageError::IllegalLength);
+            return Err(MessageError::MessageTooLarge);
         }
 
         // Don't accept any new content-types.
         if let ContentType::Unknown(_) = typ {
-            return Err(MessageError::IllegalContentType);
+            return Err(MessageError::InvalidContentType);
         }
 
         // Accept only versions 0x03XX for any XX.
         match version {
             ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
-                return Err(MessageError::IllegalProtocolVersion);
+                return Err(MessageError::UnknownProtocolVersion);
             }
             _ => {}
         };
@@ -284,7 +285,8 @@ impl<'a> BorrowedPlainMessage<'a> {
 pub enum MessageError {
     TooShortForHeader,
     TooShortForLength,
-    IllegalLength,
-    IllegalContentType,
-    IllegalProtocolVersion,
+    EmptyDataForDisallowedRecord,
+    MessageTooLarge,
+    InvalidContentType,
+    UnknownProtocolVersion,
 }

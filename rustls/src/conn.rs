@@ -1,6 +1,5 @@
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, PeerMisbehaved};
-use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -22,6 +21,7 @@ use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
+use crate::{key, InvalidMessage};
 #[cfg(feature = "quic")]
 use std::collections::VecDeque;
 
@@ -666,7 +666,7 @@ impl<Data> ConnectionCommon<Data> {
                 Ok(Some(message))
             }
             Ok(None) => Ok(None),
-            Err(err @ Error::CorruptMessage | err @ Error::CorruptMessagePayload(_)) => {
+            Err(err @ Error::InvalidMessage(_)) => {
                 #[cfg(feature = "quic")]
                 if self.common_state.is_quic() {
                     self.common_state.quic.alert = Some(AlertDescription::DecodeError);
@@ -1329,7 +1329,7 @@ impl CommonState {
             KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
             _ => {
                 self.send_fatal_alert(AlertDescription::IllegalParameter);
-                Err(Error::CorruptMessagePayload(ContentType::Handshake))
+                Err(InvalidMessage::InvalidKeyUpdate(*key_update_request).into())
             }
         }
     }
