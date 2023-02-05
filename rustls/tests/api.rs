@@ -4627,6 +4627,6 @@ fn test_debug_server_name_from_ip() {
 fn test_debug_server_name_from_string() {
     assert_eq!(
         format!("{:?}", rustls::ServerName::try_from("a.com")),
-        "Ok(DnsName(DnsName(DnsName(\"a.com\"))))"
+        "Ok(DnsName(DnsName(\"a.com\")))"
     )
 }

@@ -272,7 +272,7 @@ pub enum ServerName {
     /// The server is identified by a DNS name.  The name
     /// is sent in the TLS Server Name Indication (SNI)
     /// extension.
-    DnsName(verify::DnsName),
+    DnsName(webpki::DnsName),
 
     /// The server is identified by an IP address. SNI is not
     /// done.
@@ -285,7 +285,7 @@ impl ServerName {
     /// in the handshake.
     pub(crate) fn for_sni(&self) -> Option<webpki::DnsNameRef> {
         match self {
-            Self::DnsName(dns_name) => Some(dns_name.0.as_ref()),
+            Self::DnsName(dns_name) => Some(dns_name.as_ref()),
             Self::IpAddress(_) => None,
         }
     }
@@ -297,7 +297,7 @@ impl TryFrom<&str> for ServerName {
     type Error = InvalidDnsNameError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         match webpki::DnsNameRef::try_from_ascii_str(s) {
-            Ok(dns) => Ok(Self::DnsName(verify::DnsName(dns.into()))),
+            Ok(dns) => Ok(Self::DnsName(dns.to_owned())),
             Err(webpki::InvalidDnsNameError) => match s.parse() {
                 Ok(ip) => Ok(Self::IpAddress(ip)),
                 Err(_) => Err(InvalidDnsNameError),

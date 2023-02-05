@@ -201,17 +201,6 @@ impl fmt::Debug for dyn ServerCertVerifier {
     }
 }
 
-/// A type which encapsulates a string that is a syntactically valid DNS name.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-pub struct DnsName(pub(crate) webpki::DnsName);
-
-impl AsRef<str> for DnsName {
-    fn as_ref(&self) -> &str {
-        AsRef::<str>::as_ref(&self.0)
-    }
-}
-
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
@@ -365,7 +354,7 @@ impl ServerCertVerifier for WebPkiVerifier {
 
         match server_name {
             ServerName::DnsName(dns_name) => {
-                let name = webpki::SubjectNameRef::DnsName(dns_name.0.as_ref());
+                let name = webpki::SubjectNameRef::DnsName(dns_name.as_ref());
                 cert.verify_is_valid_for_subject_name(name)
                     .map_err(pki_error)
                     .map(|_| ServerCertVerified::assertion())
