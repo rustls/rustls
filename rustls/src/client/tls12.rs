@@ -1,8 +1,9 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
+use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -22,7 +23,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::{kx, verify};
+use crate::verify;
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
@@ -405,7 +406,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
             .ok_or_else(|| {
                 cx.common
                     .send_fatal_alert(AlertDescription::DecodeError);
-                Error::CorruptMessagePayload(ContentType::Handshake)
+                InvalidMessage::MissingKeyExchange
             })?;
 
         // Save the signature and signed parameters for later verification.

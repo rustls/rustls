@@ -8,7 +8,7 @@ use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};
 use crate::record_layer::{Decrypted, RecordLayer};
-use crate::ProtocolVersion;
+use crate::{InvalidMessage, ProtocolVersion};
 
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
 ///
@@ -41,7 +41,7 @@ impl MessageDeframer {
     /// `Ok(Some(_))` if a valid message was found and decrypted successfully.
     pub fn pop(&mut self, record_layer: &mut RecordLayer) -> Result<Option<Deframed>, Error> {
         if self.desynced {
-            return Err(Error::CorruptMessage);
+            return Err(InvalidMessage::IncorrectFrame.into());
         } else if self.used == 0 {
             return Ok(None);
         }
@@ -70,12 +70,22 @@ impl MessageDeframer {
             let mut rd = codec::Reader::init(&self.buf[start..self.used]);
             let m = match OpaqueMessage::read(&mut rd) {
                 Ok(m) => m,
-                Err(MessageError::TooShortForHeader | MessageError::TooShortForLength) => {
-                    return Ok(None)
-                }
-                Err(_) => {
+                Err(msg_err) => {
+                    let err_kind = match msg_err {
+                        MessageError::TooShortForHeader | MessageError::TooShortForLength => {
+                            return Ok(None)
+                        }
+                        MessageError::EmptyDataForDisallowedRecord => {
+                            InvalidMessage::InvalidEmptyPayload
+                        }
+                        MessageError::MessageTooLarge => InvalidMessage::MessageTooLarge,
+                        MessageError::InvalidContentType => InvalidMessage::InvalidContentType,
+                        MessageError::UnknownProtocolVersion => {
+                            InvalidMessage::UnknownProtocolVersion
+                        }
+                    };
                     self.desynced = true;
-                    return Err(Error::CorruptMessage);
+                    return Err(Error::InvalidMessage(err_kind));
                 }
             };
 
@@ -383,7 +393,7 @@ fn payload_size(buf: &[u8]) -> Result<Option<usize>, Error> {
     let (header, _) = buf.split_at(HEADER_SIZE);
     match codec::u24::decode(&header[1..]) {
         Some(len) if len.0 > MAX_HANDSHAKE_SIZE => {
-            Err(Error::CorruptMessagePayload(ContentType::Handshake))
+            Err(InvalidMessage::HandshakePayloadTooLarge.into())
         }
         Some(len) => Ok(Some(HEADER_SIZE + usize::from(len))),
         _ => Ok(None),
@@ -417,7 +427,7 @@ mod tests {
     use super::MessageDeframer;
     use crate::msgs::message::{Message, OpaqueMessage};
     use crate::record_layer::RecordLayer;
-    use crate::{ContentType, Error};
+    use crate::{ContentType, Error, InvalidMessage};
 
     use std::io;
 
@@ -624,7 +634,10 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
+        assert!(matches!(
+            d.pop(&mut rl).unwrap_err(),
+            Error::InvalidMessage(InvalidMessage::InvalidContentType)
+        ));
     }
 
     #[test]
@@ -636,7 +649,10 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
+        assert!(matches!(
+            d.pop(&mut rl).unwrap_err(),
+            Error::InvalidMessage(InvalidMessage::UnknownProtocolVersion)
+        ));
     }
 
     #[test]
@@ -648,7 +664,10 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
+        assert!(matches!(
+            d.pop(&mut rl).unwrap_err(),
+            Error::InvalidMessage(InvalidMessage::MessageTooLarge)
+        ));
     }
 
     #[test]
@@ -676,9 +695,15 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
+        assert!(matches!(
+            d.pop(&mut rl).unwrap_err(),
+            Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
+        ));
         // CorruptMessage has been fused
-        assert!(matches!(d.pop(&mut rl).unwrap_err(), Error::CorruptMessage));
+        assert!(matches!(
+            d.pop(&mut rl).unwrap_err(),
+            Error::InvalidMessage(InvalidMessage::IncorrectFrame)
+        ));
     }
 
     #[test]

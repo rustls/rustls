@@ -101,7 +101,7 @@ mod online {
     fn too_many_sans() {
         connect("10000-sans.badssl.com")
             .fails()
-            .expect(r"TLS error: CorruptMessagePayload\(Handshake\)")
+            .expect(r"TLS error: InvalidMessage\(HandshakePayloadTooLarge\)")
             .go()
             .unwrap();
     }

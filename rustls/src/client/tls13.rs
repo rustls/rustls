@@ -5,7 +5,7 @@ use crate::conn::Protocol;
 use crate::conn::Side;
 use crate::conn::{CommonState, ConnectionRandoms, State};
 use crate::enums::{ProtocolVersion, SignatureScheme};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -522,7 +522,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             warn!("Server sent non-empty certreq context");
             cx.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+            return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
         let tls13_sign_schemes = sign::supported_sign_tls13();
@@ -588,7 +588,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             warn!("certificate with non-empty context during handshake");
             cx.common
                 .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(Error::CorruptMessagePayload(ContentType::Handshake));
+            return Err(InvalidMessage::InvalidCertRequest.into());
         }
 
         if cert_chain.any_entry_has_duplicate_extension()

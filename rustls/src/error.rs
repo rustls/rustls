@@ -1,4 +1,4 @@
-use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType, KeyUpdateRequest};
 use crate::rand;
 
 use std::error::Error as StdError;
@@ -31,11 +31,8 @@ pub enum Error {
         got_type: HandshakeType,
     },
 
-    /// The peer sent us a syntactically incorrect TLS message.
-    CorruptMessage,
-
     /// The peer sent us a TLS message with invalid contents.
-    CorruptMessagePayload(ContentType),
+    InvalidMessage(InvalidMessage),
 
     /// The peer didn't give us any certificates.
     NoCertificatesPresented,
@@ -92,6 +89,42 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+}
+
+/// A corrupt TLS message payload that resulted in an error.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
+pub enum InvalidMessage {
+    /// The peer sent us a syntactically incorrect TLS message.
+    IncorrectFrame,
+    /// An advertised message was larger then expected.
+    HandshakePayloadTooLarge,
+    /// A message was zero-length when its record kind forbids it.
+    InvalidEmptyPayload,
+    /// A TLS message payload was larger then allowed by the specification.
+    MessageTooLarge,
+    /// An unknown content type was encountered during message decoding.
+    InvalidContentType,
+    /// An unknown TLS protocol was encountered during message decoding.
+    UnknownProtocolVersion,
+    /// Decoding a message payload for a [ContentType] failed because a different
+    /// type was encountered.
+    MissingPayload(ContentType),
+    /// A peer did not advertise its supported key exchange groups.
+    MissingKeyExchange,
+    /// Context was incorrectly attached to a certificate request during a handshake.
+    InvalidCertRequest,
+    /// A peer sent an unexpected key update request.
+    InvalidKeyUpdate(KeyUpdateRequest),
+    /// A peer's DH params could not be decoded
+    InvalidDhParams,
+}
+
+impl From<InvalidMessage> for Error {
+    #[inline]
+    fn from(e: InvalidMessage) -> Self {
+        Self::InvalidMessage(e)
+    }
 }
 
 #[non_exhaustive]
@@ -298,7 +331,7 @@ impl fmt::Display for Error {
                 got_type,
                 join::<HandshakeType>(expect_types)
             ),
-            Self::CorruptMessagePayload(ref typ) => {
+            Self::InvalidMessage(ref typ) => {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
             Self::PeerIncompatible(ref why) => write!(f, "peer is incompatible: {:?}", why),
@@ -307,7 +340,6 @@ impl fmt::Display for Error {
             Self::InvalidCertificate(ref err) => {
                 write!(f, "invalid peer certificate: {:?}", err)
             }
-            Self::CorruptMessage => write!(f, "received corrupt message"),
             Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
             Self::DecryptError => write!(f, "cannot decrypt peer's message"),
@@ -343,7 +375,7 @@ impl From<rand::GetRandomFailed> for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::Error;
+    use super::{Error, InvalidMessage};
 
     #[test]
     fn smoke() {
@@ -359,8 +391,7 @@ mod tests {
                 expect_types: vec![HandshakeType::ClientHello, HandshakeType::Finished],
                 got_type: HandshakeType::ServerHello,
             },
-            Error::CorruptMessage,
-            Error::CorruptMessagePayload(ContentType::Alert),
+            Error::InvalidMessage(InvalidMessage::IncorrectFrame),
             Error::NoCertificatesPresented,
             Error::DecryptError,
             super::PeerIncompatible::Tls12NotOffered.into(),
