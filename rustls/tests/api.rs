@@ -4611,3 +4611,22 @@ fn test_received_plaintext_backpressure() {
         24
     );
 }
+
+#[test]
+fn test_debug_server_name_from_ip() {
+    assert_eq!(
+        format!(
+            "{:?}",
+            rustls::ServerName::IpAddress("127.0.0.1".parse().unwrap())
+        ),
+        "IpAddress(127.0.0.1)"
+    )
+}
+
+#[test]
+fn test_debug_server_name_from_string() {
+    assert_eq!(
+        format!("{:?}", rustls::ServerName::try_from("a.com").unwrap()),
+        "DnsName(\"a.com\")"
+    )
+}
