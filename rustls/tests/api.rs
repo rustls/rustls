@@ -4619,7 +4619,7 @@ fn test_debug_server_name_from_ip() {
             "{:?}",
             rustls::ServerName::IpAddress("127.0.0.1".parse().unwrap())
         ),
-        "IpAddress(127.0.0.1)"
+        "ServerName::IpAddress(127.0.0.1)"
     )
 }
 
@@ -4627,6 +4627,6 @@ fn test_debug_server_name_from_ip() {
 fn test_debug_server_name_from_string() {
     assert_eq!(
         format!("{:?}", rustls::ServerName::try_from("a.com")),
-        "Ok(DnsName(DnsName(\"a.com\")))"
+        "Ok(ServerName::DnsName(\"a.com\"))"
     )
 }

@@ -267,7 +267,7 @@ impl ClientConfig {
 /// # let _: ServerName = x;
 /// ```
 #[non_exhaustive]
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub enum ServerName {
     /// The server is identified by a DNS name.  The name
     /// is sent in the TLS Server Name Indication (SNI)
@@ -302,6 +302,21 @@ impl TryFrom<&str> for ServerName {
                 Ok(ip) => Ok(Self::IpAddress(ip)),
                 Err(_) => Err(InvalidDnsNameError),
             },
+        }
+    }
+}
+
+impl fmt::Debug for ServerName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            Self::DnsName(name) => f
+                .debug_tuple("ServerName::DnsName")
+                .field(&std::str::from_utf8(&name.as_ref().as_ref()).unwrap())
+                .finish(),
+            Self::IpAddress(ip) => f
+                .debug_tuple("ServerName::IpAddress")
+                .field(ip)
+                .finish(),
         }
     }
 }
