@@ -3,6 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
+use crate::crypto::CryptoProvider;
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -40,7 +41,7 @@ pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConne
 
 fn find_session(
     server_name: &ServerName,
-    config: &ClientConfig,
+    config: &ClientConfig<impl CryptoProvider>,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
     #[allow(clippy::let_and_return, clippy::unnecessary_lazy_evaluations)]
@@ -89,7 +90,7 @@ fn find_session(
 pub(super) fn start_handshake(
     server_name: ServerName,
     extra_exts: Vec<ClientExtension>,
-    config: Arc<ClientConfig>,
+    config: Arc<ClientConfig<impl CryptoProvider>>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
     let mut transcript_buffer = HandshakeHashBuffer::new();
@@ -162,21 +163,21 @@ pub(super) fn start_handshake(
     ))
 }
 
-struct ExpectServerHello {
-    input: ClientHelloInput,
+struct ExpectServerHello<C> {
+    input: ClientHelloInput<C>,
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
     offered_key_share: Option<kx::KeyExchange>,
     suite: Option<SupportedCipherSuite>,
 }
 
-struct ExpectServerHelloOrHelloRetryRequest {
-    next: ExpectServerHello,
+struct ExpectServerHelloOrHelloRetryRequest<C> {
+    next: ExpectServerHello<C>,
     extra_exts: Vec<ClientExtension>,
 }
 
-struct ClientHelloInput {
-    config: Arc<ClientConfig>,
+struct ClientHelloInput<C> {
+    config: Arc<ClientConfig<C>>,
     resuming: Option<persist::Retrieved<ClientSessionValue>>,
     random: Random,
     #[cfg(feature = "tls12")]
@@ -193,7 +194,7 @@ fn emit_client_hello_for_retry(
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
-    mut input: ClientHelloInput,
+    mut input: ClientHelloInput<impl CryptoProvider>,
     cx: &mut ClientContext<'_>,
 ) -> NextState {
     let config = &input.config;
@@ -375,7 +376,7 @@ fn prepare_resumption<'a>(
     exts: &mut Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
-    config: &ClientConfig,
+    config: &ClientConfig<impl CryptoProvider>,
 ) -> Option<persist::Retrieved<&'a persist::Tls13ClientSessionValue>> {
     // Check whether we're resuming with a non-empty ticket.
     let resuming = match resuming {
@@ -429,7 +430,7 @@ fn prepare_resumption<'a>(
 
 pub(super) fn process_alpn_protocol(
     common: &mut CommonState,
-    config: &ClientConfig,
+    config: &ClientConfig<impl CryptoProvider>,
     proto: Option<&[u8]>,
 ) -> Result<(), Error> {
     common.alpn_protocol = proto.map(ToOwned::to_owned);
@@ -472,7 +473,7 @@ pub(super) fn process_alpn_protocol(
     Ok(())
 }
 
-impl State<ClientConnectionData> for ExpectServerHello {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerHello<C> {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
@@ -665,7 +666,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
     }
 }
 
-impl ExpectServerHelloOrHelloRetryRequest {
+impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
     fn into_expect_server_hello(self) -> NextState {
         Box::new(self.next)
     }
@@ -811,7 +812,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
-impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest<C> {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {

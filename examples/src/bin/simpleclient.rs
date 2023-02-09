@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
+use rustls::crypto::Ring;
 use rustls::{OwnedTrustAnchor, RootCertStore};
 
 fn main() {
@@ -28,7 +29,7 @@ fn main() {
                 )
             }),
     );
-    let config = rustls::ClientConfig::builder()
+    let config = rustls::ClientConfig::<Ring>::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();

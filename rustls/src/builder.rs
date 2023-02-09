@@ -1,3 +1,4 @@
+use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHER_SUITES};
@@ -20,9 +21,10 @@ use std::marker::PhantomData;
 ///
 /// ```no_run
 /// # use rustls::ServerConfig;
+/// # use rustls::crypto::Ring;
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// ServerConfig::builder()
+/// ServerConfig::<Ring>::builder()
 ///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
 ///     .with_safe_default_protocol_versions()
@@ -36,9 +38,10 @@ use std::marker::PhantomData;
 ///
 /// ```no_run
 /// # use rustls::ServerConfig;
+/// # use rustls::crypto::Ring;
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// ServerConfig::builder()
+/// ServerConfig::<Ring>::builder()
 ///     .with_safe_defaults()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
@@ -49,10 +52,11 @@ use std::marker::PhantomData;
 ///
 /// ```no_run
 /// # use rustls::ClientConfig;
+/// # use rustls::crypto::Ring;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
-/// ClientConfig::builder()
+/// ClientConfig::<Ring>::builder()
 ///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
 ///     .with_safe_default_protocol_versions()
@@ -66,8 +70,9 @@ use std::marker::PhantomData;
 ///
 /// ```
 /// # use rustls::ClientConfig;
+/// # use rustls::crypto::Ring;
 /// # let root_certs = rustls::RootCertStore::empty();
-/// ClientConfig::builder()
+/// ClientConfig::<Ring>::builder()
 ///     .with_safe_defaults()
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth();
@@ -102,13 +107,21 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
 impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let side_name = std::any::type_name::<Side>();
-        let side_name = side_name
-            .split("::")
-            .last()
-            .unwrap_or(side_name);
-        f.debug_struct(&format!("ConfigBuilder<{}, _>", side_name))
-            .field("state", &self.state)
-            .finish()
+        let (ty, param) = side_name
+            .split_once('<')
+            .unwrap_or((side_name, ""));
+        let (_, name) = ty.rsplit_once("::").unwrap_or(("", ty));
+        let (_, param) = param
+            .rsplit_once("::")
+            .unwrap_or(("", param));
+
+        f.debug_struct(&format!(
+            "ConfigBuilder<{}<{}>, _>",
+            name,
+            param.trim_end_matches('>')
+        ))
+        .field("state", &self.state)
+        .finish()
     }
 }
 
@@ -258,11 +271,13 @@ pub struct WantsVerifier {
 /// [`ServerConfig`]: crate::ServerConfig
 pub trait ConfigSide: sealed::Sealed {}
 
-impl ConfigSide for crate::ClientConfig {}
-impl ConfigSide for crate::ServerConfig {}
+impl<C: CryptoProvider> ConfigSide for crate::ClientConfig<C> {}
+impl<C: CryptoProvider> ConfigSide for crate::ServerConfig<C> {}
 
 mod sealed {
+    use crate::crypto::CryptoProvider;
+
     pub trait Sealed {}
-    impl Sealed for crate::ClientConfig {}
-    impl Sealed for crate::ServerConfig {}
+    impl<C: CryptoProvider> Sealed for crate::ClientConfig<C> {}
+    impl<C: CryptoProvider> Sealed for crate::ServerConfig<C> {}
 }

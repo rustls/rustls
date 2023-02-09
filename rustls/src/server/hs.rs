@@ -1,5 +1,6 @@
 use crate::common_state::State;
 use crate::conn::ConnectionRandoms;
+use crate::crypto::CryptoProvider;
 use crate::dns_name::DnsName;
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
@@ -62,9 +63,9 @@ impl ExtensionProcessing {
         Default::default()
     }
 
-    pub(super) fn process_common(
+    pub(super) fn process_common<C>(
         &mut self,
-        config: &ServerConfig,
+        config: &ServerConfig<C>,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -161,9 +162,9 @@ impl ExtensionProcessing {
     }
 
     #[cfg(feature = "tls12")]
-    pub(super) fn process_tls12(
+    pub(super) fn process_tls12<C>(
         &mut self,
-        config: &ServerConfig,
+        config: &ServerConfig<C>,
         hello: &ClientHelloPayload,
         using_ems: bool,
     ) {
@@ -202,8 +203,8 @@ impl ExtensionProcessing {
     }
 }
 
-pub(super) struct ExpectClientHello {
-    pub(super) config: Arc<ServerConfig>,
+pub(super) struct ExpectClientHello<C> {
+    pub(super) config: Arc<ServerConfig<C>>,
     pub(super) extra_exts: Vec<ServerExtension>,
     pub(super) transcript: HandshakeHashOrBuffer,
     #[cfg(feature = "tls12")]
@@ -214,8 +215,8 @@ pub(super) struct ExpectClientHello {
     pub(super) send_tickets: usize,
 }
 
-impl ExpectClientHello {
-    pub(super) fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+impl<C: CryptoProvider> ExpectClientHello<C> {
+    pub(super) fn new(config: Arc<ServerConfig<C>>, extra_exts: Vec<ServerExtension>) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {
@@ -410,7 +411,7 @@ impl ExpectClientHello {
     }
 }
 
-impl State<ServerConnectionData> for ExpectClientHello {
+impl<C: CryptoProvider> State<ServerConnectionData> for ExpectClientHello<C> {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
         let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
