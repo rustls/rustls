@@ -1,7 +1,5 @@
 // Additional x509/asn1 functions to those provided in webpki/ring.
 
-use ring::io::der;
-
 pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
     let len = bytes.len();
 
@@ -22,8 +20,10 @@ pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
 /// Prepend stuff to `bytes` to put it in a DER SEQUENCE.
 pub(crate) fn wrap_in_sequence(bytes: &mut Vec<u8>) {
     wrap_in_asn1_len(bytes);
-    bytes.insert(0, der::Tag::Sequence as u8);
+    bytes.insert(0, DER_SEQUENCE_TAG);
 }
+
+const DER_SEQUENCE_TAG: u8 = 0x30;
 
 #[test]
 fn test_empty() {
