@@ -26,8 +26,10 @@ use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sign::{CertifiedKey, Signer};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
+use crate::ticketer::TimeBase;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleTraffic,
 };
@@ -41,10 +43,6 @@ use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::{hs, ClientConfig, ClientSessionStore, ServerName};
 
-use crate::ticketer::TimeBase;
-use ring::constant_time;
-
-use crate::sign::{CertifiedKey, Signer};
 use std::sync::Arc;
 
 // Extensions we expect in plaintext in the ServerHello.
@@ -816,13 +814,14 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectFinished<C> {
             .key_schedule
             .sign_server_finish(&handshake_hash);
 
-        let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
-            .map_err(|_| {
+        let fin = match C::verify_equal_ct(expect_verify_data.as_ref(), &finished.0) {
+            true => verify::FinishedMessageVerified::assertion(),
+            false => {
                 cx.common
                     .send_fatal_alert(AlertDescription::DecryptError);
-                Error::DecryptError
-            })
-            .map(|_| verify::FinishedMessageVerified::assertion())?;
+                return Err(Error::DecryptError);
+            }
+        };
 
         st.transcript.add_message(&m);
 

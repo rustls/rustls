@@ -24,8 +24,6 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
-use ring::constant_time;
-
 use std::sync::Arc;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
@@ -848,14 +846,14 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectFinished<C> {
         let vh = self.transcript.get_current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
-        let _fin_verified =
-            constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-                .map_err(|_| {
-                    cx.common
-                        .send_fatal_alert(AlertDescription::DecryptError);
-                    Error::DecryptError
-                })
-                .map(|_| verify::FinishedMessageVerified::assertion())?;
+        let _fin_verified = match C::verify_equal_ct(&expect_verify_data, &finished.0) {
+            true => verify::FinishedMessageVerified::assertion(),
+            false => {
+                cx.common
+                    .send_fatal_alert(AlertDescription::DecryptError);
+                return Err(Error::DecryptError);
+            }
+        };
 
         // Save connection, perhaps
         if !self.resuming && !self.session_id.is_empty() {
