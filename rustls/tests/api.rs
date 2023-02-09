@@ -3576,7 +3576,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_3,
                 random,
-                session_id: SessionId::random().unwrap(),
+                session_id: SessionId::random::<Ring>().unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![
@@ -3640,7 +3640,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_2,
                 random: random.clone(),
-                session_id: SessionId::random().unwrap(),
+                session_id: SessionId::random::<Ring>().unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![

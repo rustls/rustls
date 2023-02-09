@@ -87,10 +87,10 @@ fn find_session(
     found
 }
 
-pub(super) fn start_handshake(
+pub(super) fn start_handshake<C: CryptoProvider>(
     server_name: ServerName,
     extra_exts: Vec<ClientExtension>,
-    config: Arc<ClientConfig<impl CryptoProvider>>,
+    config: Arc<ClientConfig<C>>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
     let mut transcript_buffer = HandshakeHashBuffer::new();
@@ -123,7 +123,7 @@ pub(super) fn start_handshake(
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
             if !inner.ticket().is_empty() {
-                inner.session_id = SessionId::random()?;
+                inner.session_id = SessionId::random::<C>()?;
             }
             session_id = Some(inner.session_id);
         }
@@ -139,8 +139,10 @@ pub(super) fn start_handshake(
         Some(session_id) => session_id,
         None if cx.common.is_quic() => SessionId::empty(),
         None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-        None => SessionId::random()?,
+        None => SessionId::random::<C>()?,
     };
+
+    let random = Random::new::<C>()?;
 
     Ok(emit_client_hello_for_retry(
         transcript_buffer,
@@ -151,7 +153,7 @@ pub(super) fn start_handshake(
         ClientHelloInput {
             config,
             resuming,
-            random: Random::new()?,
+            random,
             #[cfg(feature = "tls12")]
             using_ems: false,
             sent_tls13_fake_ccs: false,

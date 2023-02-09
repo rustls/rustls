@@ -1,8 +1,10 @@
+use crate::crypto::{CryptoProvider, Ring};
 use crate::rand;
 use crate::server::ProducesTickets;
 use crate::Error;
 
 use ring::aead;
+
 use std::mem;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time;
@@ -42,7 +44,7 @@ impl AeadTicketer {
     /// Make a ticketer with recommended configuration and a random key.
     fn new() -> Result<Self, rand::GetRandomFailed> {
         let mut key = [0u8; 32];
-        rand::fill_random(&mut key)?;
+        Ring::fill_random(&mut key)?;
 
         let alg = &aead::CHACHA20_POLY1305;
         let key = aead::UnboundKey::new(alg, &key).unwrap();
@@ -67,7 +69,7 @@ impl ProducesTickets for AeadTicketer {
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Random nonce, because a counter is a privacy leak.
         let mut nonce_buf = [0u8; 12];
-        rand::fill_random(&mut nonce_buf).ok()?;
+        Ring::fill_random(&mut nonce_buf).ok()?;
         let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_buf);
         let aad = ring::aead::Aad::empty();
 
