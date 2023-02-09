@@ -425,7 +425,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig<Ring>> {
     }
 
     if opts.tickets {
-        cfg.ticketer = Ticketer::new().unwrap();
+        cfg.ticketer = Ticketer::new::<Ring>().unwrap();
     } else if opts.resumes == 0 {
         cfg.session_storage = Arc::new(server::NoServerSessionStorage {});
     }
