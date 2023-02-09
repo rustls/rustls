@@ -608,7 +608,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig<Ring>> {
     }
 
     if args.flag_tickets {
-        config.ticketer = rustls::Ticketer::new().unwrap();
+        config.ticketer = rustls::Ticketer::new::<Ring>().unwrap();
     }
 
     config.alpn_protocols = args

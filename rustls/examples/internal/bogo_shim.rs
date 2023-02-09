@@ -444,7 +444,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig<Ring>> {
     }
 
     if opts.tickets {
-        cfg.ticketer = rustls::Ticketer::new().unwrap();
+        cfg.ticketer = rustls::Ticketer::new::<Ring>().unwrap();
     } else if opts.resumes == 0 {
         cfg.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
     }

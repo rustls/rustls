@@ -322,7 +322,7 @@ fn make_server_config(
     if resume == Resumption::SessionID {
         cfg.session_storage = ServerSessionMemoryCache::new(128);
     } else if resume == Resumption::Tickets {
-        cfg.ticketer = Ticketer::new().unwrap();
+        cfg.ticketer = Ticketer::new::<Ring>().unwrap();
     } else {
         cfg.session_storage = Arc::new(NoServerSessionStorage {});
     }
