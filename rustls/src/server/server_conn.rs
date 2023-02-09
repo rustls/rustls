@@ -1,6 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Context, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::crypto::CryptoProvider;
 use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -196,8 +197,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
-#[derive(Clone)]
-pub struct ServerConfig {
+pub struct ServerConfig<C> {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
@@ -296,9 +296,36 @@ pub struct ServerConfig {
     /// If this is 0, no tickets are sent and clients will not be able to
     /// do any resumption.
     pub send_tls13_tickets: usize,
+
+    pub(crate) provider: PhantomData<C>,
 }
 
-impl fmt::Debug for ServerConfig {
+// Avoid a `Clone` bound on `C`.
+impl<C> Clone for ServerConfig<C> {
+    fn clone(&self) -> Self {
+        Self {
+            cipher_suites: self.cipher_suites.clone(),
+            kx_groups: self.kx_groups.clone(),
+            ignore_client_order: self.ignore_client_order,
+            max_fragment_size: self.max_fragment_size,
+            session_storage: Arc::clone(&self.session_storage),
+            ticketer: Arc::clone(&self.ticketer),
+            cert_resolver: Arc::clone(&self.cert_resolver),
+            alpn_protocols: self.alpn_protocols.clone(),
+            versions: self.versions,
+            verifier: Arc::clone(&self.verifier),
+            key_log: Arc::clone(&self.key_log),
+            #[cfg(feature = "secret_extraction")]
+            enable_secret_extraction: self.enable_secret_extraction,
+            max_early_data_size: self.max_early_data_size,
+            send_half_rtt_data: self.send_half_rtt_data,
+            send_tls13_tickets: self.send_tls13_tickets,
+            provider: PhantomData,
+        }
+    }
+}
+
+impl<C> fmt::Debug for ServerConfig<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerConfig")
             .field("ignore_client_order", &self.ignore_client_order)
@@ -311,7 +338,7 @@ impl fmt::Debug for ServerConfig {
     }
 }
 
-impl ServerConfig {
+impl<C: CryptoProvider> ServerConfig<C> {
     /// Create builder to build up the server configuration.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
@@ -371,7 +398,13 @@ pub struct ServerConnection {
 impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
-    pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
+    pub fn new<C: CryptoProvider>(config: Arc<ServerConfig<C>>) -> Result<Self, Error> {
+        let mut common = CommonState::new(Side::Server);
+        common.set_max_fragment_size(config.max_fragment_size)?;
+        #[cfg(feature = "secret_extraction")]
+        {
+            common.enable_secret_extraction = config.enable_secret_extraction;
+        }
         Ok(Self {
             inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
         })
@@ -501,9 +534,9 @@ impl From<ServerConnection> for crate::Connection {
 /// # Example
 ///
 /// ```no_run
-/// # fn choose_server_config(
+/// # fn choose_server_config<C: rustls::crypto::CryptoProvider>(
 /// #     _: rustls::server::ClientHello,
-/// # ) -> std::sync::Arc<rustls::ServerConfig> {
+/// # ) -> std::sync::Arc<rustls::ServerConfig<C>> {
 /// #     unimplemented!();
 /// # }
 /// # #[allow(unused_variables)]
@@ -521,7 +554,7 @@ impl From<ServerConnection> for crate::Connection {
 ///     };
 ///
 ///     // For some user-defined choose_server_config:
-///     let config = choose_server_config(accepted.client_hello());
+///     let config = choose_server_config::<rustls::crypto::Ring>(accepted.client_hello());
 ///     let conn = accepted
 ///         .into_connection(config)
 ///         .unwrap();
@@ -629,7 +662,10 @@ impl Accepted {
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
-    pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
+    pub fn into_connection<C: CryptoProvider>(
+        mut self,
+        config: Arc<ServerConfig<C>>,
+    ) -> Result<ServerConnection, Error> {
         self.connection
             .set_max_fragment_size(config.max_fragment_size)?;
 
@@ -757,8 +793,8 @@ fn test_read_buf_in_new_state() {
 }
 
 impl ConnectionCore<ServerConnectionData> {
-    pub(crate) fn for_server(
-        config: Arc<ServerConfig>,
+    pub(crate) fn for_server<C: CryptoProvider>(
+        config: Arc<ServerConfig<C>>,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);

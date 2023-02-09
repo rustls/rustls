@@ -3,6 +3,7 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
+use rustls::crypto::Ring;
 use rustls::server::ResolvesServerCert;
 use rustls::{ServerConfig, ServerConnection};
 
@@ -22,7 +23,7 @@ impl ResolvesServerCert for Fail {
 
 fuzz_target!(|data: &[u8]| {
     let config = Arc::new(
-        ServerConfig::builder()
+        ServerConfig::<Ring>::builder()
             .with_safe_defaults()
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(Fail)),

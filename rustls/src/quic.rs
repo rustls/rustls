@@ -3,6 +3,7 @@ use crate::cipher::{Iv, IvLen};
 use crate::client::{ClientConfig, ClientConnectionData, ServerName};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
+use crate::crypto::CryptoProvider;
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
@@ -138,8 +139,8 @@ impl ClientConnection {
     /// Make a new QUIC ClientConnection. This differs from `ClientConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
-    pub fn new(
-        config: Arc<ClientConfig>,
+    pub fn new<C: CryptoProvider>(
+        config: Arc<ClientConfig<C>>,
         quic_version: Version,
         name: ServerName,
         params: Vec<u8>,
@@ -208,8 +209,8 @@ impl ServerConnection {
     /// Make a new QUIC ServerConnection. This differs from `ServerConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
-    pub fn new(
-        config: Arc<ServerConfig>,
+    pub fn new<C: CryptoProvider>(
+        config: Arc<ServerConfig<C>>,
         quic_version: Version,
         params: Vec<u8>,
     ) -> Result<Self, Error> {

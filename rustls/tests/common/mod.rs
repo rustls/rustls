@@ -4,6 +4,7 @@ use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
+use rustls::crypto::{CryptoProvider, Ring};
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
 use rustls::server::{
@@ -246,23 +247,23 @@ impl KeyType {
     }
 }
 
-pub fn finish_server_config(
+pub fn finish_server_config<C: CryptoProvider>(
     kt: KeyType,
-    conf: rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier>,
-) -> ServerConfig {
+    conf: rustls::ConfigBuilder<ServerConfig<C>, rustls::WantsVerifier>,
+) -> ServerConfig<C> {
     conf.with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
 }
 
-pub fn make_server_config(kt: KeyType) -> ServerConfig {
+pub fn make_server_config(kt: KeyType) -> ServerConfig<Ring> {
     finish_server_config(kt, ServerConfig::builder().with_safe_defaults())
 }
 
 pub fn make_server_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
-) -> ServerConfig {
+) -> ServerConfig<Ring> {
     finish_server_config(
         kt,
         ServerConfig::builder()
@@ -276,7 +277,7 @@ pub fn make_server_config_with_versions(
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
     kx_groups: &[&'static rustls::SupportedKxGroup],
-) -> ServerConfig {
+) -> ServerConfig<Ring> {
     finish_server_config(
         kt,
         ServerConfig::builder()
@@ -301,7 +302,7 @@ pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
 pub fn make_server_config_with_mandatory_client_auth_crls(
     kt: KeyType,
     crls: Vec<UnparsedCertRevocationList>,
-) -> ServerConfig {
+) -> ServerConfig<Ring> {
     let client_auth_roots = get_client_root_store(kt);
 
     let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots)
@@ -315,14 +316,14 @@ pub fn make_server_config_with_mandatory_client_auth_crls(
         .unwrap()
 }
 
-pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
+pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig<Ring> {
     make_server_config_with_mandatory_client_auth_crls(kt, Vec::new())
 }
 
 pub fn make_server_config_with_optional_client_auth(
     kt: KeyType,
     crls: Vec<UnparsedCertRevocationList>,
-) -> ServerConfig {
+) -> ServerConfig<Ring> {
     let client_auth_roots = get_client_root_store(kt);
 
     let client_auth = AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots)
@@ -336,10 +337,10 @@ pub fn make_server_config_with_optional_client_auth(
         .unwrap()
 }
 
-pub fn finish_client_config(
+pub fn finish_client_config<C: CryptoProvider>(
     kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
-) -> ClientConfig {
+    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier>,
+) -> ClientConfig<C> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     root_store.add_parsable_certificates(rustls_pemfile::certs(&mut rootbuf).unwrap());
@@ -349,10 +350,10 @@ pub fn finish_client_config(
         .with_no_client_auth()
 }
 
-pub fn finish_client_config_with_creds(
+pub fn finish_client_config_with_creds<C: CryptoProvider>(
     kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
-) -> ClientConfig {
+    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier>,
+) -> ClientConfig<C> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     // Passing a reference here just for testing.
@@ -364,14 +365,14 @@ pub fn finish_client_config_with_creds(
         .unwrap()
 }
 
-pub fn make_client_config(kt: KeyType) -> ClientConfig {
-    finish_client_config(kt, ClientConfig::builder().with_safe_defaults())
+pub fn make_client_config(kt: KeyType) -> ClientConfig<Ring> {
+    finish_client_config(kt, ClientConfig::<Ring>::builder().with_safe_defaults())
 }
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
     kx_groups: &[&'static rustls::SupportedKxGroup],
-) -> ClientConfig {
+) -> ClientConfig<Ring> {
     let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_kx_groups(kx_groups)
@@ -383,7 +384,7 @@ pub fn make_client_config_with_kx_groups(
 pub fn make_client_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
-) -> ClientConfig {
+) -> ClientConfig<Ring> {
     let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
@@ -392,14 +393,14 @@ pub fn make_client_config_with_versions(
     finish_client_config(kt, builder)
 }
 
-pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    finish_client_config_with_creds(kt, ClientConfig::builder().with_safe_defaults())
+pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig<impl CryptoProvider> {
+    finish_client_config_with_creds(kt, ClientConfig::<Ring>::builder().with_safe_defaults())
 }
 
 pub fn make_client_config_with_versions_with_auth(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
-) -> ClientConfig {
+) -> ClientConfig<Ring> {
     let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
@@ -413,15 +414,15 @@ pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection) {
 }
 
 pub fn make_pair_for_configs(
-    client_config: ClientConfig,
-    server_config: ServerConfig,
+    client_config: ClientConfig<impl CryptoProvider>,
+    server_config: ServerConfig<impl CryptoProvider>,
 ) -> (ClientConnection, ServerConnection) {
     make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
 
 pub fn make_pair_for_arc_configs(
-    client_config: &Arc<ClientConfig>,
-    server_config: &Arc<ServerConfig>,
+    client_config: &Arc<ClientConfig<impl CryptoProvider>>,
+    server_config: &Arc<ServerConfig<impl CryptoProvider>>,
 ) -> (ClientConnection, ServerConnection) {
     (
         ClientConnection::new(Arc::clone(client_config), server_name("localhost")).unwrap(),
