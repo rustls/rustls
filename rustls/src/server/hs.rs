@@ -397,7 +397,7 @@ impl<C: CryptoProvider> ExpectClientHello<C> {
         };
 
         // Save their Random.
-        let randoms = ConnectionRandoms::new(client_hello.random, Random::new()?);
+        let randoms = ConnectionRandoms::new(client_hello.random, Random::new::<C>()?);
         match suite {
             SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
                 config: self.config,

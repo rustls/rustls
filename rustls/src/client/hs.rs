@@ -84,10 +84,10 @@ fn find_session(
     found
 }
 
-pub(super) fn start_handshake(
+pub(super) fn start_handshake<C: CryptoProvider>(
     server_name: ServerName,
     extra_exts: Vec<ClientExtension>,
-    config: Arc<ClientConfig<impl CryptoProvider>>,
+    config: Arc<ClientConfig<C>>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
     let mut transcript_buffer = HandshakeHashBuffer::new();
@@ -121,7 +121,7 @@ pub(super) fn start_handshake(
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
             if !inner.ticket().is_empty() {
-                inner.session_id = SessionID::random()?;
+                inner.session_id = SessionID::random::<C>()?;
             }
             session_id = Some(inner.session_id);
         }
@@ -134,10 +134,10 @@ pub(super) fn start_handshake(
     // https://tools.ietf.org/html/rfc8446#appendix-D.4
     // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
     if session_id.is_none() && !cx.common.is_quic() {
-        session_id = Some(SessionID::random()?);
+        session_id = Some(SessionID::random::<C>()?);
     }
 
-    let random = Random::new()?;
+    let random = Random::new::<C>()?;
     let hello_details = ClientHelloDetails::new();
     let sent_tls13_fake_ccs = false;
     let may_send_sct_list = config.verifier.request_scts();
