@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustls::client::{ClientSessionMemoryCache, NoClientSessionStorage};
+use rustls::crypto::Ring;
 use rustls::server::{
     AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, ServerSessionMemoryCache,
 };
@@ -296,7 +297,7 @@ fn make_server_config(
     client_auth: ClientAuth,
     resume: Resumption,
     max_fragment_size: Option<usize>,
-) -> ServerConfig {
+) -> ServerConfig<Ring> {
     let client_auth = match client_auth {
         ClientAuth::Yes => {
             let roots = params.key_type.get_chain();
@@ -334,7 +335,7 @@ fn make_client_config(
     params: &BenchmarkParam,
     clientauth: ClientAuth,
     resume: Resumption,
-) -> ClientConfig {
+) -> ClientConfig<Ring> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());

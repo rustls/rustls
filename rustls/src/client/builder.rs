@@ -2,6 +2,7 @@ use crate::anchors;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
+use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::key;
 use crate::kx::SupportedKxGroup;
@@ -14,12 +15,12 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-impl ConfigBuilder<ClientConfig, WantsVerifier> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier> {
     /// Choose how to verify client certificates.
     pub fn with_root_certificates(
         self,
         root_store: anchors::RootCertStore,
-    ) -> ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOrClientCert> {
         ConfigBuilder {
             state: WantsTransparencyPolicyOrClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -36,7 +37,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     pub fn with_custom_certificate_verifier(
         self,
         verifier: Arc<dyn verify::ServerCertVerifier>,
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -64,7 +65,7 @@ pub struct WantsTransparencyPolicyOrClientCert {
     root_store: anchors::RootCertStore,
 }
 
-impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOrClientCert> {
     /// Set Certificate Transparency logs to use for server certificate validation.
     ///
     /// Because Certificate Transparency logs are sharded on a per-year basis and can be trusted or
@@ -76,7 +77,7 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
         self,
         logs: &'static [&'static sct::Log],
         validation_deadline: SystemTime,
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
         self.with_logs(Some(CertificateTransparencyPolicy::new(
             logs,
             validation_deadline,
@@ -94,13 +95,13 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
         self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
-    ) -> Result<ClientConfig, Error> {
+    ) -> Result<ClientConfig<C>, Error> {
         self.with_logs(None)
             .with_single_cert(cert_chain, key_der)
     }
 
     /// Do not support client auth.
-    pub fn with_no_client_auth(self) -> ClientConfig {
+    pub fn with_no_client_auth(self) -> ClientConfig<C> {
         self.with_logs(None)
             .with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
     }
@@ -109,7 +110,7 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
     pub fn with_client_cert_resolver(
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
-    ) -> ClientConfig {
+    ) -> ClientConfig<C> {
         self.with_logs(None)
             .with_client_cert_resolver(client_auth_cert_resolver)
     }
@@ -117,7 +118,7 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
     fn with_logs(
         self,
         ct_policy: Option<CertificateTransparencyPolicy>,
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -145,7 +146,7 @@ pub struct WantsClientCert {
     verifier: Arc<dyn verify::ServerCertVerifier>,
 }
 
-impl ConfigBuilder<ClientConfig, WantsClientCert> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
@@ -157,13 +158,13 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
-    ) -> Result<ClientConfig, Error> {
+    ) -> Result<ClientConfig<C>, Error> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
     }
 
     /// Do not support client auth.
-    pub fn with_no_client_auth(self) -> ClientConfig {
+    pub fn with_no_client_auth(self) -> ClientConfig<C> {
         self.with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
     }
 
@@ -171,7 +172,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     pub fn with_client_cert_resolver(
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
-    ) -> ClientConfig {
+    ) -> ClientConfig<C> {
         ClientConfig {
             cipher_suites: self.state.cipher_suites,
             kx_groups: self.state.kx_groups,
@@ -187,6 +188,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
             enable_early_data: false,
+            provider: PhantomData,
         }
     }
 }

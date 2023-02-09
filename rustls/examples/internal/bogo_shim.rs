@@ -8,6 +8,7 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use env_logger;
 use rustls;
 
+use rustls::crypto::{CryptoProvider, Ring};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::KeyUpdateRequest;
 use rustls::internal::msgs::persist;
@@ -394,7 +395,7 @@ impl rustls::server::StoresServerSessions for ServerCacheWithResumptionDelay {
     }
 }
 
-fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
+fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig<Ring>> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
             Arc::new(DummyClientAuth {
@@ -526,7 +527,7 @@ impl rustls::client::ClientSessionStore for ClientCacheWithoutKxHints {
     }
 }
 
-fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig> {
+fn make_client_cfg(opts: &Options) -> Arc<rustls::ClientConfig<Ring>> {
     let kx_groups = if let Some(curves) = &opts.curves {
         curves
             .iter()
@@ -1178,8 +1179,8 @@ fn main() {
 
     fn make_session(
         opts: &Options,
-        scfg: &Option<Arc<rustls::ServerConfig>>,
-        ccfg: &Option<Arc<rustls::ClientConfig>>,
+        scfg: &Option<Arc<rustls::ServerConfig<impl CryptoProvider>>>,
+        ccfg: &Option<Arc<rustls::ClientConfig<impl CryptoProvider>>>,
     ) -> Connection {
         if opts.side == Side::Server {
             let scfg = Arc::clone(scfg.as_ref().unwrap());

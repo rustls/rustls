@@ -1,5 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Protocol, Side};
+use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
@@ -130,8 +131,7 @@ pub trait ResolvesClientCert: Send + Sync {
 /// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
-#[derive(Clone)]
-pub struct ClientConfig {
+pub struct ClientConfig<C> {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
@@ -195,9 +195,33 @@ pub struct ClientConfig {
     ///
     /// The default is false.
     pub enable_early_data: bool,
+
+    pub(crate) provider: PhantomData<C>,
 }
 
-impl fmt::Debug for ClientConfig {
+impl<C> Clone for ClientConfig<C> {
+    fn clone(&self) -> Self {
+        Self {
+            cipher_suites: self.cipher_suites.clone(),
+            kx_groups: self.kx_groups.clone(),
+            alpn_protocols: self.alpn_protocols.clone(),
+            session_storage: Arc::clone(&self.session_storage),
+            max_fragment_size: self.max_fragment_size,
+            client_auth_cert_resolver: Arc::clone(&self.client_auth_cert_resolver),
+            enable_tickets: self.enable_tickets,
+            versions: self.versions,
+            enable_sni: self.enable_sni,
+            verifier: Arc::clone(&self.verifier),
+            key_log: Arc::clone(&self.key_log),
+            #[cfg(feature = "secret_extraction")]
+            enable_secret_extraction: self.enable_secret_extraction,
+            enable_early_data: self.enable_early_data,
+            provider: PhantomData,
+        }
+    }
+}
+
+impl<C> fmt::Debug for ClientConfig<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientConfig")
             .field("alpn_protocols", &self.alpn_protocols)
@@ -209,7 +233,7 @@ impl fmt::Debug for ClientConfig {
     }
 }
 
-impl ClientConfig {
+impl<C: CryptoProvider> ClientConfig<C> {
     /// Create a builder to build up the client configuration.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
@@ -234,7 +258,7 @@ impl ClientConfig {
     /// Access configuration options whose use is dangerous and requires
     /// extra care.
     #[cfg(feature = "dangerous_configuration")]
-    pub fn dangerous(&mut self) -> danger::DangerousClientConfig {
+    pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_, C> {
         danger::DangerousClientConfig { cfg: self }
     }
 
@@ -330,12 +354,12 @@ pub(super) mod danger {
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
     #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-    pub struct DangerousClientConfig<'a> {
+    pub struct DangerousClientConfig<'a, C> {
         /// The underlying ClientConfig
-        pub cfg: &'a mut ClientConfig,
+        pub cfg: &'a mut ClientConfig<C>,
     }
 
-    impl<'a> DangerousClientConfig<'a> {
+    impl<'a, C> DangerousClientConfig<'a, C> {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
@@ -472,12 +496,15 @@ impl ClientConnection {
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `name` is the
     /// name of the server we want to talk to.
-    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
+    pub fn new<C: CryptoProvider>(
+        config: Arc<ClientConfig<C>>,
+        name: ServerName,
+    ) -> Result<Self, Error> {
         Self::new_inner(config, name, Vec::new(), Protocol::Tcp)
     }
 
-    fn new_inner(
-        config: Arc<ClientConfig>,
+    fn new_inner<C: CryptoProvider>(
+        config: Arc<ClientConfig<C>>,
         name: ServerName,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
@@ -651,8 +678,8 @@ pub trait ClientQuicExt {
     /// Make a new QUIC ClientConnection. This differs from `ClientConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
-    fn new_quic(
-        config: Arc<ClientConfig>,
+    fn new_quic<C: CryptoProvider>(
+        config: Arc<ClientConfig<C>>,
         quic_version: quic::Version,
         name: ServerName,
         params: Vec<u8>,

@@ -3,9 +3,10 @@ use std::sync::Arc;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
+use rustls::crypto::{CryptoProvider, Ring};
 use rustls::{OwnedTrustAnchor, RootCertStore};
 
-fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
+fn start_connection(config: &Arc<rustls::ClientConfig<impl CryptoProvider>>, domain_name: &str) {
     let server_name = domain_name
         .try_into()
         .expect("invalid DNS name");
@@ -67,7 +68,7 @@ fn main() {
             }),
     );
 
-    let mut config = rustls::ClientConfig::builder()
+    let mut config = rustls::ClientConfig::<Ring>::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();

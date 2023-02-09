@@ -1,5 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Side, State};
+use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
@@ -198,8 +199,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
-#[derive(Clone)]
-pub struct ServerConfig {
+pub struct ServerConfig<C> {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
@@ -297,9 +297,36 @@ pub struct ServerConfig {
     /// If this is 0, no tickets are sent and clients will not be able to
     /// do any resumption.
     pub send_tls13_tickets: usize,
+
+    pub(crate) provider: PhantomData<C>,
 }
 
-impl fmt::Debug for ServerConfig {
+// Avoid a `Clone` bound on `C`.
+impl<C> Clone for ServerConfig<C> {
+    fn clone(&self) -> Self {
+        Self {
+            cipher_suites: self.cipher_suites.clone(),
+            kx_groups: self.kx_groups.clone(),
+            ignore_client_order: self.ignore_client_order,
+            max_fragment_size: self.max_fragment_size,
+            session_storage: Arc::clone(&self.session_storage),
+            ticketer: Arc::clone(&self.ticketer),
+            cert_resolver: Arc::clone(&self.cert_resolver),
+            alpn_protocols: self.alpn_protocols.clone(),
+            versions: self.versions,
+            verifier: Arc::clone(&self.verifier),
+            key_log: Arc::clone(&self.key_log),
+            #[cfg(feature = "secret_extraction")]
+            enable_secret_extraction: self.enable_secret_extraction,
+            max_early_data_size: self.max_early_data_size,
+            send_half_rtt_data: self.send_half_rtt_data,
+            send_tls13_tickets: self.send_tls13_tickets,
+            provider: PhantomData,
+        }
+    }
+}
+
+impl<C> fmt::Debug for ServerConfig<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerConfig")
             .field("ignore_client_order", &self.ignore_client_order)
@@ -312,7 +339,7 @@ impl fmt::Debug for ServerConfig {
     }
 }
 
-impl ServerConfig {
+impl<C: CryptoProvider> ServerConfig<C> {
     /// Create builder to build up the server configuration.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
@@ -372,12 +399,12 @@ pub struct ServerConnection {
 impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
-    pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
+    pub fn new<C: CryptoProvider>(config: Arc<ServerConfig<C>>) -> Result<Self, Error> {
         Self::from_config(config, vec![])
     }
 
-    fn from_config(
-        config: Arc<ServerConfig>,
+    fn from_config<C: CryptoProvider>(
+        config: Arc<ServerConfig<C>>,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
@@ -636,7 +663,10 @@ impl Accepted {
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
-    pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
+    pub fn into_connection<C: CryptoProvider>(
+        mut self,
+        config: Arc<ServerConfig<C>>,
+    ) -> Result<ServerConnection, Error> {
         self.connection
             .common_state
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -831,8 +861,8 @@ pub trait ServerQuicExt {
     /// Make a new QUIC ServerConnection. This differs from `ServerConnection::new()`
     /// in that it takes an extra argument, `params`, which contains the
     /// TLS-encoded transport parameters to send.
-    fn new_quic(
-        config: Arc<ServerConfig>,
+    fn new_quic<C: CryptoProvider>(
+        config: Arc<ServerConfig<C>>,
         quic_version: quic::Version,
         params: Vec<u8>,
     ) -> Result<ServerConnection, Error> {

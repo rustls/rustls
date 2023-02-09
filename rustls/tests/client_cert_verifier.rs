@@ -11,6 +11,7 @@ use crate::common::{
     ALL_KEY_TYPES,
 };
 use rustls::client::WebPkiVerifier;
+use rustls::crypto::Ring;
 use rustls::internal::msgs::base::PayloadU16;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
@@ -37,7 +38,7 @@ fn ver_err() -> Result<ClientCertVerified, Error> {
 fn server_config_with_verifier(
     kt: KeyType,
     client_cert_verifier: MockClientVerifier,
-) -> ServerConfig {
+) -> ServerConfig<Ring> {
     ServerConfig::builder()
         .with_safe_defaults()
         .with_client_cert_verifier(Arc::new(client_cert_verifier))

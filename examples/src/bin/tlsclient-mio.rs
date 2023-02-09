@@ -2,6 +2,8 @@ use std::process;
 use std::sync::Arc;
 
 use mio::net::TcpStream;
+use rustls::crypto::CryptoProvider;
+use rustls::crypto::Ring;
 
 use std::fs;
 use std::io;
@@ -31,7 +33,7 @@ impl TlsClient {
     fn new(
         sock: TcpStream,
         server_name: rustls::ServerName,
-        cfg: Arc<rustls::ClientConfig>,
+        cfg: Arc<rustls::ClientConfig<impl CryptoProvider>>,
     ) -> Self {
         Self {
             socket: sock,
@@ -354,7 +356,7 @@ mod danger {
 }
 
 #[cfg(feature = "dangerous_configuration")]
-fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig) {
+fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig<impl CryptoProvider>) {
     if args.flag_insecure {
         cfg.dangerous()
             .set_certificate_verifier(Arc::new(danger::NoCertificateVerification {}));
@@ -362,14 +364,14 @@ fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig) {
 }
 
 #[cfg(not(feature = "dangerous_configuration"))]
-fn apply_dangerous_options(args: &Args, _: &mut rustls::ClientConfig) {
+fn apply_dangerous_options<C>(args: &Args, _: &mut rustls::ClientConfig<C>) {
     if args.flag_insecure {
         panic!("This build does not support --insecure.");
     }
 }
 
 /// Build a `ClientConfig` from our arguments
-fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
+fn make_config(args: &Args) -> Arc<rustls::ClientConfig<Ring>> {
     let mut root_store = RootCertStore::empty();
 
     if args.flag_cafile.is_some() {

@@ -47,7 +47,7 @@ pub static ALL_VERSIONS: &[&SupportedProtocolVersion] = &[
 /// versions.
 pub static DEFAULT_VERSIONS: &[&SupportedProtocolVersion] = ALL_VERSIONS;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(crate) struct EnabledVersions {
     #[cfg(feature = "tls12")]
     tls12: Option<&'static SupportedProtocolVersion>,

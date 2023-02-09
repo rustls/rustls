@@ -1,5 +1,6 @@
 use crate::check::inappropriate_message;
 use crate::conn::{send_cert_verify_error_alert, CommonState, ConnectionRandoms, Side, State};
+use crate::crypto::CryptoProvider;
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -45,8 +46,8 @@ mod client_hello {
 
     use super::*;
 
-    pub(in crate::server) struct CompleteClientHelloHandling {
-        pub(in crate::server) config: Arc<ServerConfig>,
+    pub(in crate::server) struct CompleteClientHelloHandling<C> {
+        pub(in crate::server) config: Arc<ServerConfig<C>>,
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) session_id: SessionID,
         pub(in crate::server) suite: &'static Tls12CipherSuite,
@@ -56,7 +57,7 @@ mod client_hello {
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
     }
 
-    impl CompleteClientHelloHandling {
+    impl<C: CryptoProvider> CompleteClientHelloHandling<C> {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             cx: &mut ServerContext<'_>,
@@ -315,8 +316,8 @@ mod client_hello {
         }
     }
 
-    fn emit_server_hello(
-        config: &ServerConfig,
+    fn emit_server_hello<C>(
+        config: &ServerConfig<C>,
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
         session_id: SessionID,
@@ -434,8 +435,8 @@ mod client_hello {
         Ok(kx)
     }
 
-    fn emit_certificate_req(
-        config: &ServerConfig,
+    fn emit_certificate_req<C>(
+        config: &ServerConfig<C>,
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
@@ -494,8 +495,8 @@ mod client_hello {
 }
 
 // --- Process client's Certificate for client auth ---
-struct ExpectCertificate {
-    config: Arc<ServerConfig>,
+struct ExpectCertificate<C> {
+    config: Arc<ServerConfig<C>>,
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
@@ -505,7 +506,7 @@ struct ExpectCertificate {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCertificate {
+impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificate<C> {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let cert_chain = require_handshake_msg_move!(
@@ -565,8 +566,8 @@ impl State<ServerConnectionData> for ExpectCertificate {
 }
 
 // --- Process client's KeyExchange ---
-struct ExpectClientKx {
-    config: Arc<ServerConfig>,
+struct ExpectClientKx<C> {
+    config: Arc<ServerConfig<C>>,
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionID,
@@ -577,7 +578,7 @@ struct ExpectClientKx {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectClientKx {
+impl<C: CryptoProvider> State<ServerConnectionData> for ExpectClientKx<C> {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             m,
@@ -634,8 +635,8 @@ impl State<ServerConnectionData> for ExpectClientKx {
 }
 
 // --- Process client's certificate proof ---
-struct ExpectCertificateVerify {
-    config: Arc<ServerConfig>,
+struct ExpectCertificateVerify<C> {
+    config: Arc<ServerConfig<C>>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionID,
@@ -644,7 +645,7 @@ struct ExpectCertificateVerify {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificateVerify<C> {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
@@ -694,8 +695,8 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
 }
 
 // --- Process client's ChangeCipherSpec ---
-struct ExpectCcs {
-    config: Arc<ServerConfig>,
+struct ExpectCcs<C> {
+    config: Arc<ServerConfig<C>>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionID,
@@ -704,7 +705,7 @@ struct ExpectCcs {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCcs {
+impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCcs<C> {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
@@ -827,8 +828,8 @@ fn emit_finished(
     common.send_msg(f, true);
 }
 
-struct ExpectFinished {
-    config: Arc<ServerConfig>,
+struct ExpectFinished<C> {
+    config: Arc<ServerConfig<C>>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionID,
@@ -837,7 +838,7 @@ struct ExpectFinished {
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectFinished {
+impl<C: CryptoProvider> State<ServerConnectionData> for ExpectFinished<C> {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;

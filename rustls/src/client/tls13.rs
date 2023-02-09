@@ -4,6 +4,7 @@ use crate::conn::Protocol;
 #[cfg(feature = "secret_extraction")]
 use crate::conn::Side;
 use crate::conn::{self, CommonState, ConnectionRandoms, State};
+use crate::crypto::CryptoProvider;
 use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -63,7 +64,7 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 ];
 
 pub(super) fn handle_server_hello(
-    config: Arc<ClientConfig>,
+    config: Arc<ClientConfig<impl CryptoProvider>>,
     cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::Tls13ClientSessionValue>,
@@ -186,7 +187,7 @@ fn validate_server_hello(
 }
 
 pub(super) fn initial_key_share(
-    config: &ClientConfig,
+    config: &ClientConfig<impl CryptoProvider>,
     server_name: &ServerName,
 ) -> Result<kx::KeyExchange, Error> {
     let group = config
@@ -232,7 +233,7 @@ pub(super) fn fill_in_psk_binder(
 }
 
 pub(super) fn prepare_resumption(
-    config: &ClientConfig,
+    config: &ClientConfig<impl CryptoProvider>,
     cx: &mut ClientContext<'_>,
     ticket: Vec<u8>,
     resuming_session: &persist::Retrieved<&persist::Tls13ClientSessionValue>,
@@ -337,8 +338,8 @@ fn validate_encrypted_extensions(
     Ok(())
 }
 
-struct ExpectEncryptedExtensions {
-    config: Arc<ClientConfig>,
+struct ExpectEncryptedExtensions<C> {
+    config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -348,7 +349,7 @@ struct ExpectEncryptedExtensions {
     hello: ClientHelloDetails,
 }
 
-impl State<ClientConnectionData> for ExpectEncryptedExtensions {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectEncryptedExtensions<C> {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let exts = require_handshake_msg!(
             m,
@@ -431,8 +432,8 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
     }
 }
 
-struct ExpectCertificateOrCertReq {
-    config: Arc<ClientConfig>,
+struct ExpectCertificateOrCertReq<C> {
+    config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -441,7 +442,7 @@ struct ExpectCertificateOrCertReq {
     may_send_sct_list: bool,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateOrCertReq<C> {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {
@@ -494,8 +495,8 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
 // TLS1.3 version of CertificateRequest handling.  We then move to expecting the server
 // Certificate. Unfortunately the CertificateRequest type changed in an annoying way
 // in TLS1.3.
-struct ExpectCertificateRequest {
-    config: Arc<ClientConfig>,
+struct ExpectCertificateRequest<C> {
+    config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -504,7 +505,7 @@ struct ExpectCertificateRequest {
     may_send_sct_list: bool,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateRequest {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateRequest<C> {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let certreq = &require_handshake_msg!(
             m,
@@ -563,8 +564,8 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
     }
 }
 
-struct ExpectCertificate {
-    config: Arc<ClientConfig>,
+struct ExpectCertificate<C> {
+    config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -574,7 +575,7 @@ struct ExpectCertificate {
     client_auth: Option<ClientAuthDetails>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificate {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificate<C> {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let cert_chain = require_handshake_msg!(
             m,
@@ -630,8 +631,8 @@ impl State<ClientConnectionData> for ExpectCertificate {
 }
 
 // --- TLS1.3 CertificateVerify ---
-struct ExpectCertificateVerify {
-    config: Arc<ClientConfig>,
+struct ExpectCertificateVerify<C> {
+    config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -641,7 +642,7 @@ struct ExpectCertificateVerify {
     client_auth: Option<ClientAuthDetails>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateVerify {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateVerify<C> {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let cert_verify = require_handshake_msg!(
             m,
@@ -792,8 +793,8 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Com
     common.send_msg(m, true);
 }
 
-struct ExpectFinished {
-    config: Arc<ClientConfig>,
+struct ExpectFinished<C> {
+    config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -804,7 +805,7 @@ struct ExpectFinished {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl State<ClientConnectionData> for ExpectFinished {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectFinished<C> {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         let finished =
