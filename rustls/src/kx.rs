@@ -2,40 +2,50 @@ use std::fmt;
 
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
+use crate::rand::GetRandomFailed;
+
+use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, UnparsedPublicKey};
+use ring::rand::SystemRandom;
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
 pub(crate) struct KeyExchange {
     skxg: &'static SupportedKxGroup,
-    privkey: ring::agreement::EphemeralPrivateKey,
+    privkey: EphemeralPrivateKey,
     pub(crate) pubkey: ring::agreement::PublicKey,
 }
 
 impl KeyExchange {
-    /// Choose a SupportedKxGroup by name, from a list of supported groups.
     pub(crate) fn choose(
         name: NamedGroup,
         supported: &[&'static SupportedKxGroup],
-    ) -> Option<&'static SupportedKxGroup> {
-        supported
+    ) -> Result<Self, KeyExchangeError> {
+        let skxg = match supported
             .iter()
             .find(|skxg| skxg.name == name)
-            .cloned()
+        {
+            Some(skxg) => skxg,
+            None => return Err(KeyExchangeError::UnsupportedGroup),
+        };
+
+        Self::start(skxg).map_err(KeyExchangeError::KeyExchangeFailed)
     }
 
-    /// Start a key exchange, using the given SupportedKxGroup.
-    ///
-    /// This generates an ephemeral key pair and stores it in the returned KeyExchange object.
-    pub(crate) fn start(skxg: &'static SupportedKxGroup) -> Option<Self> {
-        let rng = ring::rand::SystemRandom::new();
-        let ours =
-            ring::agreement::EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng).ok()?;
+    pub(crate) fn start(skxg: &'static SupportedKxGroup) -> Result<Self, GetRandomFailed> {
+        let rng = SystemRandom::new();
+        let privkey = match EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng) {
+            Ok(privkey) => privkey,
+            Err(_) => return Err(GetRandomFailed),
+        };
 
-        let pubkey = ours.compute_public_key().ok()?;
+        let pubkey = match privkey.compute_public_key() {
+            Ok(pubkey) => pubkey,
+            Err(_) => return Err(GetRandomFailed),
+        };
 
-        Some(Self {
+        Ok(Self {
             skxg,
-            privkey: ours,
+            privkey,
             pubkey,
         })
     }
@@ -54,10 +64,15 @@ impl KeyExchange {
         peer: &[u8],
         f: impl FnOnce(&[u8]) -> Result<T, ()>,
     ) -> Result<T, Error> {
-        let peer_key = ring::agreement::UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
-        ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), f)
+        let peer_key = UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
+        agree_ephemeral(self.privkey, &peer_key, (), f)
             .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
     }
+}
+
+pub(crate) enum KeyExchangeError {
+    UnsupportedGroup,
+    KeyExchangeFailed(GetRandomFailed),
 }
 
 /// A key-exchange group supported by rustls.
