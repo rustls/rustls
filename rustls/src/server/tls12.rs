@@ -401,7 +401,7 @@ mod client_hello {
         signing_key: &dyn sign::SigningKey,
         randoms: &ConnectionRandoms,
     ) -> Result<kx::KeyExchange, Error> {
-        let kx = kx::KeyExchange::start(skxg).ok_or(Error::FailedToGetRandomBytes)?;
+        let kx = kx::KeyExchange::start(skxg)?;
         let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
 
         let mut msg = Vec::new();

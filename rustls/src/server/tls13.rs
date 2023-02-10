@@ -459,10 +459,9 @@ mod client_hello {
     ) -> Result<KeyScheduleHandshake, Error> {
         let mut extensions = Vec::new();
 
-        // Prepare key exchange
+        // Prepare key exchange; the caller ascertained that the `share.group` is supported
         let kx = kx::KeyExchange::choose(share.group, &config.kx_groups)
-            .and_then(kx::KeyExchange::start)
-            .ok_or(Error::FailedToGetRandomBytes)?;
+            .map_err(|_| Error::FailedToGetRandomBytes)?;
 
         let kse = KeyShareEntry::new(share.group, kx.pubkey.as_ref());
         extensions.push(ServerExtension::KeyShare(kse));

@@ -188,18 +188,21 @@ pub(super) fn initial_key_share(
     config: &ClientConfig<impl CryptoProvider>,
     server_name: &ServerName,
 ) -> Result<kx::KeyExchange, Error> {
-    let group = config
+    let group = match config
         .session_storage
         .kx_hint(server_name)
-        .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
-        .unwrap_or_else(|| {
+    {
+        Some(group) => group,
+        None => {
             config
                 .kx_groups
                 .first()
                 .expect("No kx groups configured")
-        });
+                .name
+        }
+    };
 
-    kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)
+    kx::KeyExchange::choose(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a

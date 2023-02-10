@@ -6,7 +6,7 @@ use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
-use crate::kx;
+use crate::kx::{self, KeyExchangeError};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -752,13 +752,15 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                let group = kx::KeyExchange::choose(group, &self.next.config.kx_groups)
-                    .ok_or_else(|| {
-                        cx.common.illegal_param(
+                match kx::KeyExchange::choose(group, &self.next.config.kx_groups) {
+                    Ok(kx) => kx,
+                    Err(KeyExchangeError::UnsupportedGroup) => {
+                        return Err(cx.common.illegal_param(
                             PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
-                        )
-                    })?;
-                kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?
+                        ))
+                    }
+                    Err(KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
+                }
             }
             _ => offered_key_share,
         };

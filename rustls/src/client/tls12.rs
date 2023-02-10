@@ -4,6 +4,7 @@ use crate::crypto::CryptoProvider;
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
+use crate::kx::KeyExchangeError;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -783,12 +784,14 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
         // 5a.
         let ecdh_params =
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
-        let group =
-            kx::KeyExchange::choose(ecdh_params.curve_params.named_group, &st.config.kx_groups)
-                .ok_or(Error::PeerMisbehaved(
-                    PeerMisbehaved::SelectedUnofferedKxGroup,
-                ))?;
-        let kx = kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?;
+        let named_group = ecdh_params.curve_params.named_group;
+        let kx = match kx::KeyExchange::choose(named_group, &st.config.kx_groups) {
+            Ok(kx) => kx,
+            Err(KeyExchangeError::UnsupportedGroup) => {
+                return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into())
+            }
+            Err(KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
+        };
 
         // 5b.
         let mut transcript = st.transcript;
