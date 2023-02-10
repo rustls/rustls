@@ -8,8 +8,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use log;
-
 use rustls::client::ResolvesClientCert;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
@@ -103,12 +101,12 @@ fn version_test(
     result: Option<ProtocolVersion>,
 ) {
     let client_versions = if client_versions.is_empty() {
-        &rustls::ALL_VERSIONS
+        rustls::ALL_VERSIONS
     } else {
         client_versions
     };
     let server_versions = if server_versions.is_empty() {
-        &rustls::ALL_VERSIONS
+        rustls::ALL_VERSIONS
     } else {
         server_versions
     };
@@ -893,7 +891,7 @@ struct ClientCheckCertResolve {
 
 impl ClientCheckCertResolve {
     fn new(expect_queries: usize) -> Self {
-        ClientCheckCertResolve {
+        Self {
             query_count: AtomicUsize::new(0),
             expect_queries,
         }
@@ -2254,7 +2252,7 @@ struct KeyLogToVec {
 
 impl KeyLogToVec {
     fn new(who: &'static str) -> Self {
-        KeyLogToVec {
+        Self {
             label: who,
             items: Mutex::new(vec![]),
         }
@@ -2618,7 +2616,7 @@ struct ServerStorage {
 
 impl ServerStorage {
     fn new() -> Self {
-        ServerStorage {
+        Self {
             storage: rustls::server::ServerSessionMemoryCache::new(1024),
             put_count: AtomicUsize::new(0),
             get_count: AtomicUsize::new(0),
@@ -2689,7 +2687,7 @@ struct ClientStorage {
 
 impl ClientStorage {
     fn new() -> Self {
-        ClientStorage {
+        Self {
             storage: rustls::client::ClientSessionMemoryCache::new(1024),
             ops: Mutex::new(Vec::new()),
         }

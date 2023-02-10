@@ -120,7 +120,7 @@ impl RootCertStore {
         &mut self,
         trust_anchors: impl Iterator<Item = OwnedTrustAnchor>,
     ) {
-        self.roots.extend(trust_anchors)
+        self.roots.extend(trust_anchors);
     }
 
     /// Parse the given DER-encoded certificates and add all that can be parsed
@@ -141,7 +141,7 @@ impl RootCertStore {
                 Err(err) => {
                     trace!("invalid cert der {:?}", der_cert);
                     debug!("certificate parsing failed: {:?}", err);
-                    invalid_count += 1
+                    invalid_count += 1;
                 }
             }
         }

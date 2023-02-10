@@ -59,10 +59,10 @@ impl fmt::Debug for EnabledVersions {
         let mut list = &mut f.debug_list();
         #[cfg(feature = "tls12")]
         if let Some(v) = self.tls12 {
-            list = list.entry(v)
+            list = list.entry(v);
         }
         if let Some(v) = self.tls13 {
-            list = list.entry(v)
+            list = list.entry(v);
         }
         list.finish()
     }

@@ -50,7 +50,7 @@ struct TlsServer {
 
 impl TlsServer {
     fn new(server: TcpListener, mode: ServerMode, cfg: Arc<rustls::ServerConfig>) -> Self {
-        TlsServer {
+        Self {
             server,
             connections: HashMap::new(),
             next_id: 2,
@@ -154,9 +154,9 @@ impl OpenConnection {
         token: mio::Token,
         mode: ServerMode,
         tls_conn: rustls::ServerConnection,
-    ) -> OpenConnection {
+    ) -> Self {
         let back = open_back(&mode);
-        OpenConnection {
+        Self {
             socket,
             token,
             closing: false,

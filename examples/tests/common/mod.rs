@@ -188,7 +188,7 @@ pub struct TlsClient {
 
 impl TlsClient {
     pub fn new(hostname: &str) -> Self {
-        TlsClient {
+        Self {
             hostname: hostname.to_string(),
             port: 443,
             http: true,
@@ -205,59 +205,59 @@ impl TlsClient {
         }
     }
 
-    pub fn cafile(&mut self, cafile: &Path) -> &mut TlsClient {
+    pub fn cafile(&mut self, cafile: &Path) -> &mut Self {
         self.cafile = Some(cafile.to_path_buf());
         self
     }
 
-    pub fn cache(&mut self, cache: &str) -> &mut TlsClient {
+    pub fn cache(&mut self, cache: &str) -> &mut Self {
         self.cache = Some(cache.to_string());
         self
     }
 
-    pub fn no_sni(&mut self) -> &mut TlsClient {
+    pub fn no_sni(&mut self) -> &mut Self {
         self.no_sni = true;
         self
     }
 
-    pub fn insecure(&mut self) -> &mut TlsClient {
+    pub fn insecure(&mut self) -> &mut Self {
         self.insecure = true;
         self
     }
 
-    pub fn verbose(&mut self) -> &mut TlsClient {
+    pub fn verbose(&mut self) -> &mut Self {
         self.verbose = true;
         self
     }
 
-    pub fn max_fragment_size(&mut self, max_fragment_size: usize) -> &mut TlsClient {
+    pub fn max_fragment_size(&mut self, max_fragment_size: usize) -> &mut Self {
         self.max_fragment_size = Some(max_fragment_size);
         self
     }
 
-    pub fn port(&mut self, port: u16) -> &mut TlsClient {
+    pub fn port(&mut self, port: u16) -> &mut Self {
         self.port = port;
         self
     }
 
-    pub fn expect(&mut self, expect: &str) -> &mut TlsClient {
+    pub fn expect(&mut self, expect: &str) -> &mut Self {
         self.expect_output
             .push(expect.to_string());
         self
     }
 
-    pub fn expect_log(&mut self, expect: &str) -> &mut TlsClient {
+    pub fn expect_log(&mut self, expect: &str) -> &mut Self {
         self.verbose = true;
         self.expect_log.push(expect.to_string());
         self
     }
 
-    pub fn suite(&mut self, suite: &str) -> &mut TlsClient {
+    pub fn suite(&mut self, suite: &str) -> &mut Self {
         self.suites.push(suite.to_string());
         self
     }
 
-    pub fn fails(&mut self) -> &mut TlsClient {
+    pub fn fails(&mut self) -> &mut Self {
         self.expect_fails = true;
         self
     }

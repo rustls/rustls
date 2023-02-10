@@ -502,7 +502,7 @@ pub(super) fn process_client_hello<'a>(
         // Save the SNI into the session.
         // The SNI hostname is immutable once set.
         assert!(data.sni.is_none());
-        data.sni = Some(sni.clone())
+        data.sni = Some(sni.clone());
     } else if data.sni != sni {
         return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
     }

@@ -159,7 +159,7 @@ impl From<u24> for usize {
 impl Codec for u24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let be_bytes = u32::to_be_bytes(self.0);
-        bytes.extend_from_slice(&be_bytes[1..])
+        bytes.extend_from_slice(&be_bytes[1..]);
     }
 
     fn read(r: &mut Reader) -> Option<Self> {
@@ -173,7 +173,7 @@ pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
 
 impl Codec for u32 {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend(Self::to_be_bytes(*self))
+        bytes.extend(Self::to_be_bytes(*self));
     }
 
     fn read(r: &mut Reader) -> Option<Self> {
@@ -183,7 +183,7 @@ impl Codec for u32 {
 
 pub fn put_u64(v: u64, bytes: &mut [u8]) {
     let bytes: &mut [u8; 8] = (&mut bytes[..8]).try_into().unwrap();
-    *bytes = u64::to_be_bytes(v)
+    *bytes = u64::to_be_bytes(v);
 }
 
 pub fn decode_u64(bytes: &[u8]) -> Option<u64> {
