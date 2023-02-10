@@ -136,9 +136,9 @@ enum Resumption {
 impl Resumption {
     fn label(&self) -> &'static str {
         match *self {
-            Resumption::No => "no-resume",
-            Resumption::SessionID => "sessionid",
-            Resumption::Tickets => "tickets",
+            Self::No => "no-resume",
+            Self::SessionID => "sessionid",
+            Self::Tickets => "tickets",
         }
     }
 }
@@ -162,8 +162,8 @@ impl BenchmarkParam {
         key_type: KeyType,
         ciphersuite: rustls::SupportedCipherSuite,
         version: &'static rustls::SupportedProtocolVersion,
-    ) -> BenchmarkParam {
-        BenchmarkParam {
+    ) -> Self {
+        Self {
             key_type,
             ciphersuite,
             version,
@@ -244,9 +244,9 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
 impl KeyType {
     fn path_for(&self, part: &str) -> String {
         match self {
-            KeyType::Rsa => format!("test-ca/rsa/{}", part),
-            KeyType::Ecdsa => format!("test-ca/ecdsa/{}", part),
-            KeyType::Ed25519 => format!("test-ca/eddsa/{}", part),
+            Self::Rsa => format!("test-ca/rsa/{}", part),
+            Self::Ecdsa => format!("test-ca/ecdsa/{}", part),
+            Self::Ed25519 => format!("test-ca/eddsa/{}", part),
         }
     }
 

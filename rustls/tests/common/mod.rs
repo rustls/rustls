@@ -188,9 +188,9 @@ pub static ALL_KEY_TYPES: [KeyType; 3] = [KeyType::Rsa, KeyType::Ecdsa, KeyType:
 impl KeyType {
     fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
-            KeyType::Rsa => bytes_for("rsa", part),
-            KeyType::Ecdsa => bytes_for("ecdsa", part),
-            KeyType::Ed25519 => bytes_for("eddsa", part),
+            Self::Rsa => bytes_for("rsa", part),
+            Self::Ecdsa => bytes_for("ecdsa", part),
+            Self::Ed25519 => bytes_for("eddsa", part),
         }
     }
 
@@ -462,7 +462,7 @@ pub struct FailsReads {
 
 impl FailsReads {
     pub fn new(errkind: io::ErrorKind) -> Self {
-        FailsReads { errkind }
+        Self { errkind }
     }
 }
 

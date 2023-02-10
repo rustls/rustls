@@ -605,13 +605,13 @@ impl KeySchedule {
             .set_message_encrypter(Box::new(Tls13MessageEncrypter {
                 enc_key: aead::LessSafeKey::new(key),
                 iv,
-            }))
+            }));
     }
 
     fn set_decrypter(&self, secret: &hkdf::Prk, common: &mut CommonState) {
         common
             .record_layer
-            .set_message_decrypter(self.derive_decrypter(secret))
+            .set_message_decrypter(self.derive_decrypter(secret));
     }
 
     fn derive_decrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageDecrypter> {

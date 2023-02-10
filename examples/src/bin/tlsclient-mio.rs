@@ -32,8 +32,8 @@ impl TlsClient {
         sock: TcpStream,
         server_name: rustls::ServerName,
         cfg: Arc<rustls::ClientConfig>,
-    ) -> TlsClient {
-        TlsClient {
+    ) -> Self {
+        Self {
             socket: sock,
             closing: false,
             clean_closure: false,

@@ -383,7 +383,7 @@ impl ConnectionSecrets {
             &self.master_secret,
             label,
             &randoms,
-        )
+        );
     }
 
     #[cfg(feature = "secret_extraction")]

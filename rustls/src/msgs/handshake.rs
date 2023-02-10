@@ -122,7 +122,7 @@ impl PartialEq for SessionID {
 
         let mut diff = 0u8;
         for i in 0..self.len {
-            diff |= self.data[i] ^ other.data[i]
+            diff |= self.data[i] ^ other.data[i];
         }
 
         diff == 0u8
@@ -620,7 +620,7 @@ impl Codec for ClientExtension {
             Self::Cookie(ref r) => r.encode(&mut sub),
             Self::CertificateStatusRequest(ref r) => r.encode(&mut sub),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                sub.extend_from_slice(r)
+                sub.extend_from_slice(r);
             }
             Self::Unknown(ref r) => r.encode(&mut sub),
         }
@@ -781,7 +781,7 @@ impl Codec for ServerExtension {
             Self::SignedCertificateTimestamp(ref r) => r.encode(&mut sub),
             Self::SupportedVersions(ref r) => r.encode(&mut sub),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                sub.extend_from_slice(r)
+                sub.extend_from_slice(r);
             }
             Self::Unknown(ref r) => r.encode(&mut sub),
         }

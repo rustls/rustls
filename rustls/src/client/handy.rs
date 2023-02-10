@@ -138,7 +138,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
                     data.tls13.pop_front();
                 }
                 data.tls13.push_back(value);
-            })
+            });
     }
 
     fn take_tls13_ticket(
@@ -224,7 +224,7 @@ mod test {
         c.set_tls12_session(
             &name,
             persist::Tls12ClientSessionValue::new(
-                &tls12_suite,
+                tls12_suite,
                 SessionID::empty(),
                 Vec::new(),
                 Vec::new(),
@@ -240,7 +240,7 @@ mod test {
         c.insert_tls13_ticket(
             &name,
             persist::Tls13ClientSessionValue::new(
-                &tls13_suite,
+                tls13_suite,
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),
