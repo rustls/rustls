@@ -210,15 +210,21 @@ pub(super) fn initial_key_share(
         .resumption
         .store
         .kx_hint(server_name)
-        .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
-        .unwrap_or_else(|| {
+        .filter(|hint_group| {
+            config
+                .kx_groups
+                .iter()
+                .any(|supported_group| supported_group.name == *hint_group)
+        })
+        .unwrap_or(
             config
                 .kx_groups
                 .first()
                 .expect("No kx groups configured")
-        });
+                .name,
+        );
 
-    kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)
+    kx::KeyExchange::choose(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
