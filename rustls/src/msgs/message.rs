@@ -92,7 +92,7 @@ impl OpaqueMessage {
         //  implemented per section 5.1 of RFC8446 (TLSv1.3)
         //              per section 6.2.1 of RFC5246 (TLSv1.2)
         if typ != ContentType::ApplicationData && len == 0 {
-            return Err(MessageError::EmptyDataForDisallowedRecord);
+            return Err(MessageError::InvalidEmptyPayload);
         }
 
         // Reject oversize messages
@@ -285,7 +285,7 @@ impl<'a> BorrowedPlainMessage<'a> {
 pub enum MessageError {
     TooShortForHeader,
     TooShortForLength,
-    EmptyDataForDisallowedRecord,
+    InvalidEmptyPayload,
     MessageTooLarge,
     InvalidContentType,
     UnknownProtocolVersion,
