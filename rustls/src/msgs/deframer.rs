@@ -16,10 +16,10 @@ use crate::{InvalidMessage, ProtocolVersion};
 /// QUIC connections will call `push()` to append handshake payload data directly.
 #[derive(Default)]
 pub struct MessageDeframer {
-    /// Set to true if the peer is not talking TLS, but some other
+    /// Set if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
     /// the deframer cannot recover.
-    desynced: bool,
+    last_error: Option<Error>,
 
     /// Buffer of data read from the socket, in the process of being parsed into messages.
     ///
@@ -40,8 +40,8 @@ impl MessageDeframer {
     /// failed, `Ok(None)` if no full message is buffered or if trial decryption failed, and
     /// `Ok(Some(_))` if a valid message was found and decrypted successfully.
     pub fn pop(&mut self, record_layer: &mut RecordLayer) -> Result<Option<Deframed>, Error> {
-        if self.desynced {
-            return Err(InvalidMessage::IncorrectFrame.into());
+        if let Some(last_err) = self.last_error.clone() {
+            return Err(last_err);
         } else if self.used == 0 {
             return Ok(None);
         }
@@ -75,17 +75,15 @@ impl MessageDeframer {
                         MessageError::TooShortForHeader | MessageError::TooShortForLength => {
                             return Ok(None)
                         }
-                        MessageError::EmptyDataForDisallowedRecord => {
-                            InvalidMessage::InvalidEmptyPayload
-                        }
+                        MessageError::InvalidEmptyPayload => InvalidMessage::InvalidEmptyPayload,
                         MessageError::MessageTooLarge => InvalidMessage::MessageTooLarge,
                         MessageError::InvalidContentType => InvalidMessage::InvalidContentType,
                         MessageError::UnknownProtocolVersion => {
                             InvalidMessage::UnknownProtocolVersion
                         }
                     };
-                    self.desynced = true;
-                    return Err(Error::InvalidMessage(err_kind));
+
+                    return Err(self.set_err(err_kind));
                 }
             };
 
@@ -116,10 +114,9 @@ impl MessageDeframer {
                 // This was rejected early data, discard it. If we currently have a handshake
                 // payload in progress, this counts as interleaved, so we error out.
                 Ok(None) if self.joining_hs.is_some() => {
-                    self.desynced = true;
-                    return Err(
-                        PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
-                    );
+                    return Err(self.set_err(
+                        PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage,
+                    ));
                 }
                 Ok(None) => {
                     self.discard(end);
@@ -133,8 +130,7 @@ impl MessageDeframer {
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
                 // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
-                self.desynced = true;
-                return Err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage.into());
+                return Err(self.set_err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage));
             }
 
             // If it's not a handshake message, just return it -- no joining necessary.
@@ -187,6 +183,15 @@ impl MessageDeframer {
             trial_decryption_finished: true,
             message,
         }))
+    }
+
+    /// Fuses this deframer's error and returns the set value.
+    ///
+    /// Any future calls to `pop` will return `err` again.
+    fn set_err(&mut self, err: impl Into<Error>) -> Error {
+        let err = err.into();
+        self.last_error = Some(err.clone());
+        err
     }
 
     /// Allow pushing handshake messages directly into the buffer.
@@ -530,7 +535,7 @@ mod tests {
         let mut rl = RecordLayer::new();
         pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -547,7 +552,7 @@ mod tests {
         assert!(d.has_pending());
         pop_second(&mut d, &mut rl);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -560,7 +565,7 @@ mod tests {
         let mut rl = RecordLayer::new();
         pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -574,7 +579,7 @@ mod tests {
         pop_first(&mut d, &mut rl);
         pop_second(&mut d, &mut rl);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -590,7 +595,7 @@ mod tests {
         pop_first(&mut d, &mut rl);
         pop_second(&mut d, &mut rl);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -606,7 +611,7 @@ mod tests {
         pop_second(&mut d, &mut rl);
         pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -622,7 +627,7 @@ mod tests {
         let mut rl = RecordLayer::new();
         pop_first(&mut d, &mut rl);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -683,7 +688,7 @@ mod tests {
         assert_eq!(m.typ, ContentType::ApplicationData);
         assert_eq!(m.payload.0.len(), 0);
         assert!(!d.has_pending());
-        assert!(!d.desynced);
+        assert!(d.last_error.is_none());
     }
 
     #[test]
@@ -699,10 +704,11 @@ mod tests {
             d.pop(&mut rl).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
         ));
-        // CorruptMessage has been fused
+        // CorruptMessage has been fused, and returns the same error upon every read
+        // afterwards.
         assert!(matches!(
             d.pop(&mut rl).unwrap_err(),
-            Error::InvalidMessage(InvalidMessage::IncorrectFrame)
+            Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
         ));
     }
 
