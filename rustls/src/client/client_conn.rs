@@ -327,6 +327,28 @@ pub(super) mod danger {
     use super::verify::ServerCertVerifier;
     use super::ClientConfig;
 
+    /// Private no-certificate verifier. Usage example:
+    /// ```ignore
+    /// client_config
+    ///     .dangerous()
+    ///     .set_certificate_verifier(rustls::client::DangerousClientConfig::new_allow_all_verifier());
+    /// ```
+    struct NoCertificateVerification {}
+
+    impl ServerCertVerifier for NoCertificateVerification {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &crate::Certificate,
+            _intermediates: &[crate::Certificate],
+            _server_name: &crate::ServerName,
+            _scts: &mut dyn Iterator<Item = &[u8]>,
+            _ocsp: &[u8],
+            _now: std::time::SystemTime,
+        ) -> Result<crate::client::ServerCertVerified, crate::Error> {
+            Ok(crate::client::ServerCertVerified::assertion())
+        }
+    }
+
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
     #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
@@ -339,6 +361,36 @@ pub(super) mod danger {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
+        }
+
+        /// Create a new dangerous verifier that skips all certificate verification.
+        /// This verifier would only encrypt connection to prevent eavesdropping,
+        /// but will still allow a man-in-the-middle attacks and connections to unverified
+        /// counterparties - i.e. you trust the network not to be compromised.
+        pub fn new_allow_all_verifier() -> Arc<dyn ServerCertVerifier> {
+            Arc::new(NoCertificateVerification {})
+        }
+
+        /// Create a new dangerous verifier that skips certificate verification.
+        /// Will verify the certificate is valid in the following ways:
+        /// - Signed by a valid root
+        /// - Not Expired
+        ///
+        /// TODO: describe dangers of this verification method, possibly adapting
+        /// from the PostgreSQL SSL info page <https://www.postgresql.org/docs/15/libpq-ssl.html>
+        /// > The difference between verify-ca and verify-full depends on the policy of the root CA.
+        /// > If a public CA is used, verify-ca allows connections to a server that somebody else
+        /// > may have registered with the CA.
+        ///
+        /// In PG, verify-full implies hostname is matched against SAN, or CN if no SAN of type dNSName is present,
+        /// but verify-full is less commonly used, so this verifier would skip this verification.
+        ///
+        /// TODO: The above description is only for the PR discussion, and should be fixed before merging.
+        ///
+        pub fn new_ignore_hostname_verifier() -> Arc<dyn ServerCertVerifier> {
+            // TODO: replace this with a different verifier, possibly based on
+            // https://github.com/rustls/rustls/issues/578#issuecomment-816712636
+            Arc::new(NoCertificateVerification {})
         }
     }
 }
