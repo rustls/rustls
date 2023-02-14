@@ -282,11 +282,11 @@ pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
 pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
     let client_auth_roots = get_client_root_store(kt);
 
-    let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots).coerce();
+    let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
 
     ServerConfig::builder()
         .with_safe_defaults()
-        .with_client_cert_verifier(client_auth)
+        .with_client_cert_verifier(Arc::new(client_auth))
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
 }

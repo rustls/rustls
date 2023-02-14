@@ -541,7 +541,7 @@ impl AllowAnyAuthenticatedClient {
 
     /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
     #[inline(always)]
-    pub fn coerce(self) -> Arc<dyn ClientCertVerifier> {
+    pub fn boxed(self) -> Arc<dyn ClientCertVerifier> {
         // This function is needed because `ClientCertVerifier` is only reachable if the
         // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
         Arc::new(self)
@@ -599,7 +599,7 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
 
     /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
     #[inline(always)]
-    pub fn coerce(self) -> Arc<dyn ClientCertVerifier> {
+    pub fn boxed(self) -> Arc<dyn ClientCertVerifier> {
         // This function is needed because `ClientCertVerifier` is only reachable if the
         // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
         Arc::new(self)
@@ -653,7 +653,7 @@ impl NoClientAuth {
     /// Constructs a [`NoClientAuth`], wraps it in an [`Arc`] and coerces it to
     /// `dyn ClientCertVerifier`.
     #[inline(always)]
-    pub fn new_coerced() -> Arc<dyn ClientCertVerifier> {
+    pub fn boxed() -> Arc<dyn ClientCertVerifier> {
         // This function is needed because `ClientCertVerifier` is only reachable if the
         // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
         Arc::new(Self)
