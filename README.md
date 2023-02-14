@@ -40,6 +40,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - The number of tickets sent by a TLS1.3 server is now configurable via
     `ServerConfig::send_tls13_tickets`.  Previously one ticket was sent, now
     the default is four.
+  - *Breaking change*: `AllowAnyAuthenticatedClient` and `AllowAnyAnonymousOrAuthenticatedClient`
+    `new` functions now return `Self`. A `boxed` function was added to both types to easily acquire
+    an `Arc<dyn ClientCertVerifier>`.
+  - *Breaking change*: `NoClientAuth::new` was renamed to `boxed`.
 * 0.20.8 (2023-01-12)
   - Yield an error from `ConnectionCommon::read_tls()` if buffers are full.
     Both a full deframer buffer and a full incoming plaintext buffer will
