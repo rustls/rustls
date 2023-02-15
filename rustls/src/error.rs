@@ -1,4 +1,8 @@
-use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType, KeyUpdateRequest};
+use crate::msgs::enums::{
+    AlertDescription, CertificateStatusType, ContentType, ECCurveType, HandshakeType,
+    KeyUpdateRequest,
+};
+use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::rand;
 
 use std::error::Error as StdError;
@@ -94,30 +98,48 @@ pub enum Error {
 /// A corrupt TLS message payload that resulted in an error.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
+
 pub enum InvalidMessage {
-    /// The peer sent us a syntactically incorrect TLS message.
-    IncorrectFrame,
     /// An advertised message was larger then expected.
     HandshakePayloadTooLarge,
-    /// A message was zero-length when its record kind forbids it.
-    InvalidEmptyPayload,
-    /// A TLS message payload was larger then allowed by the specification.
-    MessageTooLarge,
+    /// The peer sent us a syntactically incorrect ChangeCipherSpec payload.
+    InvalidCcs,
     /// An unknown content type was encountered during message decoding.
     InvalidContentType,
-    /// An unknown TLS protocol was encountered during message decoding.
-    UnknownProtocolVersion,
-    /// Decoding a message payload for a [ContentType] failed because a different
-    /// type was encountered.
-    MissingPayload(ContentType),
-    /// A peer did not advertise its supported key exchange groups.
-    MissingKeyExchange,
+    /// A peer sent an invalid certificate status type
+    InvalidCertificateStatusType(CertificateStatusType),
     /// Context was incorrectly attached to a certificate request during a handshake.
     InvalidCertRequest,
-    /// A peer sent an unexpected key update request.
-    InvalidKeyUpdate(KeyUpdateRequest),
     /// A peer's DH params could not be decoded
     InvalidDhParams,
+    /// A message was zero-length when its record kind forbids it.
+    InvalidEmptyPayload,
+    /// A peer sent an unexpected key update request.
+    InvalidKeyUpdate(KeyUpdateRequest),
+    /// A peer's server name could not be decoded
+    InvalidServerName,
+    /// A TLS message payload was larger then allowed by the specification.
+    MessageTooLarge,
+    /// Message is shorter than the expected length
+    MessageTooShort,
+    /// Missing data for the named handshake payload value
+    MissingData(&'static str),
+    /// A peer did not advertise its supported key exchange groups.
+    MissingKeyExchange,
+    /// A peer sent an empty list of signature schemes
+    NoSignatureSchemes,
+    /// Trailing data found for the named handshake payload value
+    TrailingData(&'static str),
+    /// A peer sent an unexpected message type.
+    UnexpectedMessage(&'static str),
+    /// An unknown TLS protocol was encountered during message decoding.
+    UnknownProtocolVersion,
+    /// A peer sent a non-null compression method.
+    UnsupportedCompression,
+    /// A peer sent an unknown elliptic curve type.
+    UnsupportedCurve(ECCurveType),
+    /// A peer sent an unsupported key exchange algorithm.
+    UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
 }
 
 impl From<InvalidMessage> for Error {
@@ -391,7 +413,7 @@ mod tests {
                 expect_types: vec![HandshakeType::ClientHello, HandshakeType::Finished],
                 got_type: HandshakeType::ServerHello,
             },
-            Error::InvalidMessage(InvalidMessage::IncorrectFrame),
+            Error::InvalidMessage(InvalidMessage::InvalidCcs),
             Error::NoCertificatesPresented,
             Error::DecryptError,
             super::PeerIncompatible::Tls12NotOffered.into(),

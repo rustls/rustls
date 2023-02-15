@@ -139,7 +139,7 @@ mod client_hello {
                         .session_storage
                         .get(&client_hello.session_id.get_encoding())
                 })
-                .and_then(|x| persist::ServerSessionValue::read_bytes(&x))
+                .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
                 .filter(|resumedata| {
                     hs::can_resume(self.suite.into(), &cx.data.sni, self.using_ems, resumedata)
                 });

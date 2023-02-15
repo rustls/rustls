@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use crate::error::InvalidMessage;
+
 /// Wrapper over a slice of bytes that allows reading chunks from
 /// with the current position state held using a cursor.
 ///
@@ -26,8 +28,11 @@ impl<'a> Reader<'a> {
     /// Attempts to create a new Reader on a sub section of this
     /// readers bytes by taking a slice of the provided `length`
     /// will return None if there is not enough bytes
-    pub fn sub(&mut self, length: usize) -> Option<Reader> {
-        self.take(length).map(Reader::init)
+    pub fn sub(&mut self, length: usize) -> Result<Reader, InvalidMessage> {
+        match self.take(length) {
+            Some(bytes) => Ok(Reader::init(bytes)),
+            None => Err(InvalidMessage::MessageTooShort),
+        }
     }
 
     /// Borrows a slice of all the remaining bytes
@@ -59,6 +64,13 @@ impl<'a> Reader<'a> {
         self.cursor < self.buffer.len()
     }
 
+    pub fn expect_empty(&self, name: &'static str) -> Result<(), InvalidMessage> {
+        match self.any_left() {
+            true => Err(InvalidMessage::TrailingData(name)),
+            false => Ok(()),
+        }
+    }
+
     /// Returns the cursor position which is also the number
     /// of bytes that have been read from the buffer.
     pub fn used(&self) -> usize {
@@ -82,7 +94,7 @@ pub trait Codec: Debug + Sized {
     /// Function for decoding itself from the provided reader
     /// will return Some if the decoding was successful or
     /// None if it was not.
-    fn read(_: &mut Reader) -> Option<Self>;
+    fn read(_: &mut Reader) -> Result<Self, InvalidMessage>;
 
     /// Convenience function for encoding the implementation
     /// into a vec and returning it
@@ -94,15 +106,10 @@ pub trait Codec: Debug + Sized {
 
     /// Function for wrapping a call to the read function in
     /// a Reader for the slice of bytes provided
-    fn read_bytes(bytes: &[u8]) -> Option<Self> {
+    fn read_bytes(bytes: &[u8]) -> Result<Self, InvalidMessage> {
         let mut reader = Reader::init(bytes);
         Self::read(&mut reader)
     }
-}
-
-fn decode_u8(bytes: &[u8]) -> Option<u8> {
-    let [value]: [u8; 1] = bytes.try_into().ok()?;
-    Some(value)
 }
 
 impl Codec for u8 {
@@ -110,18 +117,17 @@ impl Codec for u8 {
         bytes.push(*self);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        r.take(1).and_then(decode_u8)
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        match r.take(1) {
+            Some(&[byte]) => Ok(byte),
+            _ => Err(InvalidMessage::MissingData("u8")),
+        }
     }
 }
 
 pub fn put_u16(v: u16, out: &mut [u8]) {
     let out: &mut [u8; 2] = (&mut out[..2]).try_into().unwrap();
     *out = u16::to_be_bytes(v);
-}
-
-pub fn decode_u16(bytes: &[u8]) -> Option<u16> {
-    Some(u16::from_be_bytes(bytes.try_into().ok()?))
 }
 
 impl Codec for u16 {
@@ -131,8 +137,11 @@ impl Codec for u16 {
         bytes.extend_from_slice(&b16);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        r.take(2).and_then(decode_u16)
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        match r.take(2) {
+            Some(&[b1, b2]) => Ok(Self::from_be_bytes([b1, b2])),
+            _ => Err(InvalidMessage::MissingData("u8")),
+        }
     }
 }
 
@@ -140,13 +149,6 @@ impl Codec for u16 {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone)]
 pub struct u24(pub u32);
-
-impl u24 {
-    pub fn decode(bytes: &[u8]) -> Option<Self> {
-        let [a, b, c]: [u8; 3] = bytes.try_into().ok()?;
-        Some(Self(u32::from_be_bytes([0, a, b, c])))
-    }
-}
 
 #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
 impl From<u24> for usize {
@@ -162,13 +164,12 @@ impl Codec for u24 {
         bytes.extend_from_slice(&be_bytes[1..]);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        r.take(3).and_then(Self::decode)
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        match r.take(3) {
+            Some(&[a, b, c]) => Ok(Self(u32::from_be_bytes([0, a, b, c]))),
+            _ => Err(InvalidMessage::MissingData("u24")),
+        }
     }
-}
-
-pub fn decode_u32(bytes: &[u8]) -> Option<u32> {
-    Some(u32::from_be_bytes(bytes.try_into().ok()?))
 }
 
 impl Codec for u32 {
@@ -176,18 +177,17 @@ impl Codec for u32 {
         bytes.extend(Self::to_be_bytes(*self));
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        r.take(4).and_then(decode_u32)
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        match r.take(4) {
+            Some(&[a, b, c, d]) => Ok(Self::from_be_bytes([a, b, c, d])),
+            _ => Err(InvalidMessage::MissingData("u32")),
+        }
     }
 }
 
 pub fn put_u64(v: u64, bytes: &mut [u8]) {
     let bytes: &mut [u8; 8] = (&mut bytes[..8]).try_into().unwrap();
     *bytes = u64::to_be_bytes(v);
-}
-
-pub fn decode_u64(bytes: &[u8]) -> Option<u64> {
-    Some(u64::from_be_bytes(bytes.try_into().ok()?))
 }
 
 impl Codec for u64 {
@@ -197,8 +197,11 @@ impl Codec for u64 {
         bytes.extend_from_slice(&b64);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        r.take(8).and_then(decode_u64)
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        match r.take(8) {
+            Some(&[a, b, c, d, e, f, g, h]) => Ok(Self::from_be_bytes([a, b, c, d, e, f, g, h])),
+            _ => Err(InvalidMessage::MissingData("u64")),
+        }
     }
 }
 
@@ -248,7 +251,7 @@ pub fn encode_vec_u24<T: Codec>(bytes: &mut Vec<u8>, items: &[T]) {
     out.copy_from_slice(&len_bytes[1..]);
 }
 
-pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
+pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Result<Vec<T>, InvalidMessage> {
     let mut ret: Vec<T> = Vec::new();
     let len = usize::from(u8::read(r)?);
     let mut sub = r.sub(len)?;
@@ -257,10 +260,10 @@ pub fn read_vec_u8<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
         ret.push(T::read(&mut sub)?);
     }
 
-    Some(ret)
+    Ok(ret)
 }
 
-pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
+pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Result<Vec<T>, InvalidMessage> {
     let mut ret: Vec<T> = Vec::new();
     let len = usize::from(u16::read(r)?);
     let mut sub = r.sub(len)?;
@@ -269,14 +272,17 @@ pub fn read_vec_u16<T: Codec>(r: &mut Reader) -> Option<Vec<T>> {
         ret.push(T::read(&mut sub)?);
     }
 
-    Some(ret)
+    Ok(ret)
 }
 
-pub fn read_vec_u24_limited<T: Codec>(r: &mut Reader, max_bytes: usize) -> Option<Vec<T>> {
+pub fn read_vec_u24_limited<T: Codec>(
+    r: &mut Reader,
+    max_bytes: usize,
+) -> Result<Vec<T>, InvalidMessage> {
     let mut ret: Vec<T> = Vec::new();
     let len = u24::read(r)?.0 as usize;
     if len > max_bytes {
-        return None;
+        return Err(InvalidMessage::MessageTooLarge);
     }
 
     let mut sub = r.sub(len)?;
@@ -285,5 +291,5 @@ pub fn read_vec_u24_limited<T: Codec>(r: &mut Reader, max_bytes: usize) -> Optio
         ret.push(T::read(&mut sub)?);
     }
 
-    Some(ret)
+    Ok(ret)
 }

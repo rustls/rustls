@@ -14,8 +14,8 @@ use rustls::client::WebPkiVerifier;
 use rustls::internal::msgs::base::PayloadU16;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
-    AlertDescription, Certificate, ClientConnection, ContentType, DistinguishedNames, Error,
-    InvalidMessage, ServerConfig, ServerConnection, SignatureScheme,
+    AlertDescription, Certificate, ClientConnection, DistinguishedNames, Error, InvalidMessage,
+    ServerConfig, ServerConnection, SignatureScheme,
 };
 use std::sync::Arc;
 
@@ -103,7 +103,7 @@ fn client_verifier_no_schemes() {
             assert_debug_eq(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidMessage(
-                    InvalidMessage::MissingPayload(ContentType::Handshake),
+                    InvalidMessage::NoSignatureSchemes,
                 ))),
             );
         }

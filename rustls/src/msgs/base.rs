@@ -1,5 +1,6 @@
 use std::fmt;
 
+use crate::error::InvalidMessage;
 use crate::key;
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
@@ -13,8 +14,8 @@ impl Codec for Payload {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self::read(r))
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self::read(r))
     }
 }
 
@@ -38,11 +39,11 @@ impl Codec for key::Certificate {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(Self(body))
+        Ok(Self(body))
     }
 }
 
@@ -68,11 +69,11 @@ impl Codec for PayloadU24 {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(Self(body))
+        Ok(Self(body))
     }
 }
 
@@ -106,11 +107,11 @@ impl Codec for PayloadU16 {
         Self::encode_slice(&self.0, bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(Self(body))
+        Ok(Self(body))
     }
 }
 
@@ -144,11 +145,11 @@ impl Codec for PayloadU8 {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let len = u8::read(r)? as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Some(Self(body))
+        Ok(Self(body))
     }
 }
 

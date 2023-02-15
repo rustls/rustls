@@ -1,6 +1,5 @@
 //! The single place where we generate random material for our own use.
 
-use crate::msgs::codec;
 use ring::rand::{SecureRandom, SystemRandom};
 
 /// Fill the whole slice with random material.
@@ -22,7 +21,7 @@ pub(crate) fn random_vec(len: usize) -> Result<Vec<u8>, GetRandomFailed> {
 pub(crate) fn random_u32() -> Result<u32, GetRandomFailed> {
     let mut buf = [0u8; 4];
     fill_random(&mut buf)?;
-    codec::decode_u32(&buf).ok_or(GetRandomFailed)
+    Ok(u32::from_be_bytes(buf))
 }
 
 #[derive(Debug)]

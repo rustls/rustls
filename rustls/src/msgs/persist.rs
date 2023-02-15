@@ -1,4 +1,5 @@
 use crate::enums::{CipherSuite, ProtocolVersion};
+use crate::error::InvalidMessage;
 use crate::key;
 use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
@@ -317,15 +318,20 @@ impl Codec for ServerSessionValue {
             .encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
-            let dns_name = webpki::DnsNameRef::try_from_ascii(&dns_name.0).ok()?;
+            let dns_name = match webpki::DnsNameRef::try_from_ascii(&dns_name.0) {
+                Ok(dns_name) => dns_name,
+                Err(_) => return Err(InvalidMessage::InvalidServerName),
+            };
+
             Some(dns_name.into())
         } else {
             None
         };
+
         let v = ProtocolVersion::read(r)?;
         let cs = CipherSuite::read(r)?;
         let ms = PayloadU8::read(r)?;
@@ -346,7 +352,7 @@ impl Codec for ServerSessionValue {
         let creation_time_sec = u64::read(r)?;
         let age_obfuscation_offset = u32::read(r)?;
 
-        Some(Self {
+        Ok(Self {
             sni,
             version: v,
             cipher_suite: cs,

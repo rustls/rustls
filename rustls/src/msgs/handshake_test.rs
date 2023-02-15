@@ -25,7 +25,7 @@ use webpki::DnsNameRef;
 fn rejects_short_random() {
     let bytes = [0x01; 31];
     let mut rd = Reader::init(&bytes);
-    assert_eq!(Random::read(&mut rd), None);
+    assert!(Random::read(&mut rd).is_err());
 }
 
 #[test]
@@ -50,14 +50,14 @@ fn debug_random() {
 fn rejects_truncated_sessionid() {
     let bytes = [32; 32];
     let mut rd = Reader::init(&bytes);
-    assert_eq!(SessionID::read(&mut rd), None);
+    assert!(SessionID::read(&mut rd).is_err());
 }
 
 #[test]
 fn rejects_sessionid_with_bad_length() {
     let bytes = [33; 33];
     let mut rd = Reader::init(&bytes);
-    assert_eq!(SessionID::read(&mut rd), None);
+    assert!(SessionID::read(&mut rd).is_err());
 }
 
 #[test]
@@ -120,42 +120,42 @@ fn can_roundtrip_unknown_client_ext() {
 fn refuses_client_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
     let mut rd = Reader::init(&bytes);
-    assert!(ClientExtension::read(&mut rd).is_none());
+    assert!(ClientExtension::read(&mut rd).is_err());
 }
 
 #[test]
 fn refuses_server_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
     let mut rd = Reader::init(&bytes);
-    assert!(ServerExtension::read(&mut rd).is_none());
+    assert!(ServerExtension::read(&mut rd).is_err());
 }
 
 #[test]
 fn refuses_certificate_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x12, 0x00, 0x03, 0x00, 0x00, 0x01];
     let mut rd = Reader::init(&bytes);
-    assert!(CertificateExtension::read(&mut rd).is_none());
+    assert!(CertificateExtension::read(&mut rd).is_err());
 }
 
 #[test]
 fn refuses_certificate_req_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x0d, 0x00, 0x05, 0x00, 0x02, 0x01, 0x02, 0xff];
     let mut rd = Reader::init(&bytes);
-    assert!(CertReqExtension::read(&mut rd).is_none());
+    assert!(CertReqExtension::read(&mut rd).is_err());
 }
 
 #[test]
 fn refuses_helloreq_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x2b, 0x00, 0x03, 0x00, 0x00, 0x01];
     let mut rd = Reader::init(&bytes);
-    assert!(HelloRetryExtension::read(&mut rd).is_none());
+    assert!(HelloRetryExtension::read(&mut rd).is_err());
 }
 
 #[test]
 fn refuses_newsessionticket_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x2a, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01];
     let mut rd = Reader::init(&bytes);
-    assert!(NewSessionTicketExtension::read(&mut rd).is_none());
+    assert!(NewSessionTicketExtension::read(&mut rd).is_err());
 }
 
 #[test]
@@ -238,25 +238,25 @@ fn can_roundtrip_multiname_sni() {
 #[test]
 fn rejects_truncated_sni() {
     let bytes = [0, 0, 0, 1, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_none());
+    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 0, 0, 2, 0, 1];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_none());
+    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 0, 0, 3, 0, 1, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_none());
+    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 0, 0, 4, 0, 2, 0, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_none());
+    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 0, 0, 5, 0, 3, 0, 0, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_none());
+    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 0, 0, 5, 0, 3, 0, 0, 1];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_none());
+    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 0, 0, 6, 0, 4, 0, 0, 2, 0x68];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_none());
+    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
 }
 
 #[test]
@@ -469,7 +469,7 @@ fn test_truncated_psk_offer() {
         }
         put_u16(l as u16, &mut enc[4..]);
         let rc = ClientExtension::read_bytes(&enc);
-        assert!(rc.is_none());
+        assert!(rc.is_err());
     }
 }
 
@@ -484,7 +484,7 @@ fn test_truncated_client_hello_is_detected() {
         if l == 41 {
             continue; // where extensions are empty
         }
-        assert!(ClientHelloPayload::read_bytes(&enc[..l]).is_none());
+        assert!(ClientHelloPayload::read_bytes(&enc[..l]).is_err());
     }
 }
 
@@ -499,7 +499,7 @@ fn test_truncated_client_extension_is_detected() {
         // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
-            assert!(ClientExtension::read_bytes(&enc[..l]).is_none());
+            assert!(ClientExtension::read_bytes(&enc[..l]).is_err());
         }
 
         // these extension types don't have any internal encoding that rustls validates:
@@ -515,7 +515,7 @@ fn test_truncated_client_extension_is_detected() {
         for l in 0..(enc.len() - 4) {
             put_u16(l as u16, &mut enc[2..]);
             println!("  encoding {:?} len {:?}", enc, l);
-            assert!(ClientExtension::read_bytes(&enc).is_none());
+            assert!(ClientExtension::read_bytes(&enc).is_err());
         }
     }
 }
@@ -618,7 +618,7 @@ fn test_truncated_helloretry_extension_is_detected() {
         // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
-            assert!(HelloRetryExtension::read_bytes(&enc[..l]).is_none());
+            assert!(HelloRetryExtension::read_bytes(&enc[..l]).is_err());
         }
 
         // these extension types don't have any internal encoding that rustls validates:
@@ -631,7 +631,7 @@ fn test_truncated_helloretry_extension_is_detected() {
         for l in 0..(enc.len() - 4) {
             put_u16(l as u16, &mut enc[2..]);
             println!("  encoding {:?} len {:?}", enc, l);
-            assert!(HelloRetryExtension::read_bytes(&enc).is_none());
+            assert!(HelloRetryExtension::read_bytes(&enc).is_err());
         }
     }
 }
@@ -684,7 +684,7 @@ fn test_truncated_server_extension_is_detected() {
         // "outer" truncation, i.e., where the extension-level length is longer than
         // the input
         for l in 0..enc.len() {
-            assert!(ServerExtension::read_bytes(&enc[..l]).is_none());
+            assert!(ServerExtension::read_bytes(&enc[..l]).is_err());
         }
 
         // these extension types don't have any internal encoding that rustls validates:
@@ -700,7 +700,7 @@ fn test_truncated_server_extension_is_detected() {
         for l in 0..(enc.len() - 4) {
             put_u16(l as u16, &mut enc[2..]);
             println!("  encoding {:?} len {:?}", enc, l);
-            assert!(ServerExtension::read_bytes(&enc).is_none());
+            assert!(ServerExtension::read_bytes(&enc).is_err());
         }
     }
 }
@@ -1027,7 +1027,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
 
         // outer truncation
         for l in 0..enc.len() {
-            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_none())
+            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_err())
         }
 
         // inner truncation
@@ -1049,8 +1049,8 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
                 &mut Reader::init(&enc),
                 ProtocolVersion::TLSv1_2
             )
-            .is_none());
-            assert!(HandshakeMessagePayload::read_bytes(&enc).is_none());
+            .is_err());
+            assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
         }
     }
 }
@@ -1174,7 +1174,7 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
 
         // outer truncation
         for l in 0..enc.len() {
-            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_none())
+            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_err())
         }
 
         // inner truncation
@@ -1196,7 +1196,7 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
                 &mut Reader::init(&enc),
                 ProtocolVersion::TLSv1_3
             )
-            .is_none());
+            .is_err());
         }
     }
 }
@@ -1209,7 +1209,7 @@ fn cannot_read_messagehash_from_network() {
     };
     println!("mh {:?}", mh);
     let enc = mh.get_encoding();
-    assert!(HandshakeMessagePayload::read_bytes(&enc).is_none());
+    assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
 }
 
 #[test]
@@ -1235,7 +1235,7 @@ fn cannot_decode_huge_certificate() {
     buf[4] = 0x01;
     buf[5] = 0x00;
     buf[6] = 0x01;
-    assert!(HandshakeMessagePayload::read_bytes(&buf).is_none());
+    assert!(HandshakeMessagePayload::read_bytes(&buf).is_err());
 }
 
 #[test]
