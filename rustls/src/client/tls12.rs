@@ -401,7 +401,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
         self.transcript.add_message(&m);
 
         let ecdhe = opaque_kx
-            .unwrap_given_kxa(&self.suite.kx)
+            .unwrap_given_kxa(self.suite.kx)
             .ok_or_else(|| {
                 cx.common
                     .send_fatal_alert(AlertDescription::DecodeError);

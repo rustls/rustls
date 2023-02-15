@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types)]
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::error::InvalidMessage;
 use crate::key;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec;
@@ -26,7 +27,7 @@ macro_rules! declare_u8_vec(
         codec::encode_vec_u8(bytes, self);
       }
 
-      fn read(r: &mut Reader) -> Option<Self> {
+      fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         codec::read_vec_u8::<$itemtype>(r)
       }
     }
@@ -42,7 +43,7 @@ macro_rules! declare_u16_vec(
         codec::encode_vec_u16(bytes, self);
       }
 
-      fn read(r: &mut Reader) -> Option<Self> {
+      fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         codec::read_vec_u16::<$itemtype>(r)
       }
     }
@@ -73,12 +74,15 @@ impl Codec for Random {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        let bytes = r.take(32)?;
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        let bytes = match r.take(32) {
+            Some(bytes) => bytes,
+            None => return Err(InvalidMessage::MissingData("Random")),
+        };
+
         let mut opaque = [0; 32];
         opaque.clone_from_slice(bytes);
-
-        Some(Self(opaque))
+        Ok(Self(opaque))
     }
 }
 
@@ -136,17 +140,20 @@ impl Codec for SessionID {
         bytes.extend_from_slice(&self.data[..self.len]);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let len = u8::read(r)? as usize;
         if len > 32 {
-            return None;
+            return Err(InvalidMessage::TrailingData("SessionID"));
         }
 
-        let bytes = r.take(len)?;
+        let bytes = match r.take(len) {
+            Some(bytes) => bytes,
+            None => return Err(InvalidMessage::MissingData("SessionID")),
+        };
+
         let mut out = [0u8; 32];
         out[..len].clone_from_slice(&bytes[..len]);
-
-        Some(Self { data: out, len })
+        Ok(Self { data: out, len })
     }
 }
 
@@ -261,19 +268,19 @@ impl ServerNamePayload {
         Self::HostName((raw, hostname))
     }
 
-    fn read_hostname(r: &mut Reader) -> Option<Self> {
+    fn read_hostname(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let raw = PayloadU16::read(r)?;
-
         let dns_name = {
             match webpki::DnsNameRef::try_from_ascii(&raw.0) {
                 Ok(dns_name) => dns_name.into(),
                 Err(_) => {
                     warn!("Illegal SNI hostname received {:?}", raw.0);
-                    return None;
+                    return Err(InvalidMessage::InvalidServerName);
                 }
             }
         };
-        Some(Self::HostName((raw, dns_name)))
+
+        Ok(Self::HostName((raw, dns_name)))
     }
 
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -296,7 +303,7 @@ impl Codec for ServerName {
         self.payload.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = ServerNameType::read(r)?;
 
         let payload = match typ {
@@ -304,7 +311,7 @@ impl Codec for ServerName {
             _ => ServerNamePayload::Unknown(Payload::read(r)),
         };
 
-        Some(Self { typ, payload })
+        Ok(Self { typ, payload })
     }
 }
 
@@ -400,11 +407,11 @@ impl Codec for KeyShareEntry {
         self.payload.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let group = NamedGroup::read(r)?;
         let payload = PayloadU16::read(r)?;
 
-        Some(Self { group, payload })
+        Ok(Self { group, payload })
     }
 }
 
@@ -430,8 +437,8 @@ impl Codec for PresharedKeyIdentity {
         self.obfuscated_ticket_age.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
             identity: PayloadU16::read(r)?,
             obfuscated_ticket_age: u32::read(r)?,
         })
@@ -464,8 +471,8 @@ impl Codec for PresharedKeyOffer {
         self.binders.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
             identities: PresharedKeyIdentities::read(r)?,
             binders: PresharedKeyBinders::read(r)?,
         })
@@ -488,8 +495,8 @@ impl Codec for OCSPCertificateStatusRequest {
         self.extensions.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
             responder_ids: ResponderIDs::read(r)?,
             extensions: PayloadU16::read(r)?,
         })
@@ -513,17 +520,17 @@ impl Codec for CertificateStatusRequest {
         }
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = CertificateStatusType::read(r)?;
 
         match typ {
             CertificateStatusType::OCSP => {
                 let ocsp_req = OCSPCertificateStatusRequest::read(r)?;
-                Some(Self::OCSP(ocsp_req))
+                Ok(Self::OCSP(ocsp_req))
             }
             _ => {
                 let data = Payload::read(r);
-                Some(Self::Unknown((typ, data)))
+                Ok(Self::Unknown((typ, data)))
             }
         }
     }
@@ -629,7 +636,7 @@ impl Codec for ClientExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -680,11 +687,8 @@ impl Codec for ClientExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        sub.expect_empty("ClientExtension")
+            .map(|_| ext)
     }
 }
 
@@ -790,7 +794,7 @@ impl Codec for ServerExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -824,11 +828,8 @@ impl Codec for ServerExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        sub.expect_empty("ServerExtension")
+            .map(|_| ext)
     }
 }
 
@@ -871,7 +872,7 @@ impl Codec for ClientHelloPayload {
         }
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let mut ret = Self {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
@@ -885,10 +886,10 @@ impl Codec for ClientHelloPayload {
             ret.extensions = codec::read_vec_u16::<ClientExtension>(r)?;
         }
 
-        if r.any_left() || ret.extensions.is_empty() {
-            None
-        } else {
-            Some(ret)
+        match (r.any_left(), ret.extensions.is_empty()) {
+            (true, _) => Err(InvalidMessage::TrailingData("ClientHelloPayload")),
+            (_, true) => Err(InvalidMessage::MissingData("ClientHelloPayload")),
+            _ => Ok(ret),
         }
     }
 }
@@ -1085,7 +1086,7 @@ impl Codec for HelloRetryExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1099,11 +1100,8 @@ impl Codec for HelloRetryExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        sub.expect_empty("HelloRetryExtension")
+            .map(|_| ext)
     }
 }
 
@@ -1125,16 +1123,16 @@ impl Codec for HelloRetryRequest {
         codec::encode_vec_u16(bytes, &self.extensions);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let session_id = SessionID::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 
         if compression != Compression::Null {
-            return None;
+            return Err(InvalidMessage::UnsupportedCompression);
         }
 
-        Some(Self {
+        Ok(Self {
             legacy_version: ProtocolVersion::Unknown(0),
             session_id,
             cipher_suite,
@@ -1225,7 +1223,7 @@ impl Codec for ServerHelloPayload {
     }
 
     // minus version and random, which have already been read.
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let session_id = SessionID::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
@@ -1249,11 +1247,8 @@ impl Codec for ServerHelloPayload {
             extensions,
         };
 
-        if r.any_left() {
-            None
-        } else {
-            Some(ret)
-        }
+        r.expect_empty("ServerHelloPayload")
+            .map(|_| ret)
     }
 }
 
@@ -1317,7 +1312,7 @@ impl Codec for CertificatePayload {
         codec::encode_vec_u24(bytes, self);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         // 64KB of certificates is plenty, 16MB is obviously silly
         codec::read_vec_u24_limited(r, 0x10000)
     }
@@ -1378,7 +1373,7 @@ impl Codec for CertificateExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1395,11 +1390,8 @@ impl Codec for CertificateExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        sub.expect_empty("CertificateExtension")
+            .map(|_| ext)
     }
 }
 
@@ -1417,8 +1409,8 @@ impl Codec for CertificateEntry {
         self.exts.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
             cert: key::Certificate::read(r)?,
             exts: CertificateExtensions::read(r)?,
         })
@@ -1481,8 +1473,8 @@ impl Codec for CertificatePayloadTLS13 {
         codec::encode_vec_u24(bytes, &self.entries);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
-        Some(Self {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
             context: PayloadU8::read(r)?,
             entries: codec::read_vec_u24_limited::<CertificateEntry>(r, 0x10000)?,
         })
@@ -1551,7 +1543,7 @@ impl CertificatePayloadTLS13 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum KeyExchangeAlgorithm {
     BulkOnly,
     DH,
@@ -1576,16 +1568,15 @@ impl Codec for ECParameters {
         self.named_group.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let ct = ECCurveType::read(r)?;
-
         if ct != ECCurveType::NamedCurve {
-            return None;
+            return Err(InvalidMessage::UnsupportedCurve(ct));
         }
 
         let grp = NamedGroup::read(r)?;
 
-        Some(Self {
+        Ok(Self {
             curve_type: ct,
             named_group: grp,
         })
@@ -1621,11 +1612,11 @@ impl Codec for DigitallySignedStruct {
         self.sig.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let scheme = SignatureScheme::read(r)?;
         let sig = PayloadU16::read(r)?;
 
-        Some(Self { scheme, sig })
+        Ok(Self { scheme, sig })
     }
 }
 
@@ -1639,9 +1630,9 @@ impl Codec for ClientECDHParams {
         self.public.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let pb = PayloadU8::read(r)?;
-        Some(Self { public: pb })
+        Ok(Self { public: pb })
     }
 }
 
@@ -1669,11 +1660,11 @@ impl Codec for ServerECDHParams {
         self.public.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let cp = ECParameters::read(r)?;
         let pb = PayloadU8::read(r)?;
 
-        Some(Self {
+        Ok(Self {
             curve_params: cp,
             public: pb,
         })
@@ -1692,11 +1683,11 @@ impl Codec for ECDHEServerKeyExchange {
         self.dss.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let params = ServerECDHParams::read(r)?;
         let dss = DigitallySignedStruct::read(r)?;
 
-        Some(Self { params, dss })
+        Ok(Self { params, dss })
     }
 }
 
@@ -1714,25 +1705,25 @@ impl Codec for ServerKeyExchangePayload {
         }
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         // read as Unknown, fully parse when we know the
         // KeyExchangeAlgorithm
-        Some(Self::Unknown(Payload::read(r)))
+        Ok(Self::Unknown(Payload::read(r)))
     }
 }
 
 impl ServerKeyExchangePayload {
-    pub fn unwrap_given_kxa(&self, kxa: &KeyExchangeAlgorithm) -> Option<ECDHEServerKeyExchange> {
+    pub fn unwrap_given_kxa(&self, kxa: KeyExchangeAlgorithm) -> Option<ECDHEServerKeyExchange> {
         if let Self::Unknown(ref unk) = *self {
             let mut rd = Reader::init(&unk.0);
 
-            let result = match *kxa {
+            let result = match kxa {
                 KeyExchangeAlgorithm::ECDHE => ECDHEServerKeyExchange::read(&mut rd),
-                _ => None,
+                _ => return None,
             };
 
             if !rd.any_left() {
-                return result;
+                return result.ok();
             };
         }
 
@@ -1831,16 +1822,16 @@ impl Codec for CertificateRequestPayload {
         self.canames.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let certtypes = ClientCertificateTypes::read(r)?;
         let sigschemes = SupportedSignatureSchemes::read(r)?;
         let canames = DistinguishedNames::read(r)?;
 
         if sigschemes.is_empty() {
             warn!("meaningless CertificateRequest message");
-            None
+            Err(InvalidMessage::NoSignatureSchemes)
         } else {
-            Some(Self {
+            Ok(Self {
                 certtypes,
                 sigschemes,
                 canames,
@@ -1881,7 +1872,7 @@ impl Codec for CertReqExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1890,7 +1881,7 @@ impl Codec for CertReqExtension {
             ExtensionType::SignatureAlgorithms => {
                 let schemes = SupportedSignatureSchemes::read(&mut sub)?;
                 if schemes.is_empty() {
-                    return None;
+                    return Err(InvalidMessage::NoSignatureSchemes);
                 }
                 Self::SignatureAlgorithms(schemes)
             }
@@ -1901,11 +1892,8 @@ impl Codec for CertReqExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        sub.expect_empty("CertReqExtension")
+            .map(|_| ext)
     }
 }
 
@@ -1923,11 +1911,11 @@ impl Codec for CertificateRequestPayloadTLS13 {
         self.extensions.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let context = PayloadU8::read(r)?;
         let extensions = CertReqExtensions::read(r)?;
 
-        Some(Self {
+        Ok(Self {
             context,
             extensions,
         })
@@ -1980,11 +1968,11 @@ impl Codec for NewSessionTicketPayload {
         self.ticket.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let lifetime = u32::read(r)?;
         let ticket = PayloadU16::read(r)?;
 
-        Some(Self {
+        Ok(Self {
             lifetime_hint: lifetime,
             ticket,
         })
@@ -2021,7 +2009,7 @@ impl Codec for NewSessionTicketExtension {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -2031,11 +2019,8 @@ impl Codec for NewSessionTicketExtension {
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(ext)
-        }
+        sub.expect_empty("NewSessionTicketExtension")
+            .map(|_| ext)
     }
 }
 
@@ -2100,14 +2085,14 @@ impl Codec for NewSessionTicketPayloadTLS13 {
         self.exts.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let lifetime = u32::read(r)?;
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
         let ticket = PayloadU16::read(r)?;
         let exts = NewSessionTicketExtensions::read(r)?;
 
-        Some(Self {
+        Ok(Self {
             lifetime,
             age_add,
             nonce,
@@ -2131,14 +2116,14 @@ impl Codec for CertificateStatus {
         self.ocsp_response.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let typ = CertificateStatusType::read(r)?;
 
         match typ {
-            CertificateStatusType::OCSP => Some(Self {
+            CertificateStatusType::OCSP => Ok(Self {
                 ocsp_response: PayloadU24::read(r)?,
             }),
-            _ => None,
+            _ => Err(InvalidMessage::InvalidCertificateStatusType(typ)),
         }
     }
 }
@@ -2229,13 +2214,13 @@ impl Codec for HandshakeMessagePayload {
         bytes.append(&mut sub);
     }
 
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         Self::read_version(r, ProtocolVersion::TLSv1_2)
     }
 }
 
 impl HandshakeMessagePayload {
-    pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Option<Self> {
+    pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Result<Self, InvalidMessage> {
         let mut typ = HandshakeType::read(r)?;
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
@@ -2273,9 +2258,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::ServerKeyExchange(p)
             }
             HandshakeType::ServerHelloDone => {
-                if sub.any_left() {
-                    return None;
-                }
+                sub.expect_empty("ServerHelloDone")?;
                 HandshakePayload::ServerHelloDone
             }
             HandshakeType::ClientKeyExchange => {
@@ -2307,9 +2290,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)
             }
             HandshakeType::EndOfEarlyData => {
-                if sub.any_left() {
-                    return None;
-                }
+                sub.expect_empty("EndOfEarlyData")?;
                 HandshakePayload::EndOfEarlyData
             }
             HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
@@ -2318,20 +2299,17 @@ impl HandshakeMessagePayload {
             }
             HandshakeType::MessageHash => {
                 // does not appear on the wire
-                return None;
+                return Err(InvalidMessage::UnexpectedMessage("MessageHash"));
             }
             HandshakeType::HelloRetryRequest => {
                 // not legal on wire
-                return None;
+                return Err(InvalidMessage::UnexpectedMessage("HelloRetryRequest"));
             }
             _ => HandshakePayload::Unknown(Payload::read(&mut sub)),
         };
 
-        if sub.any_left() {
-            None
-        } else {
-            Some(Self { typ, payload })
-        }
+        sub.expect_empty("HandshakeMessagePayload")
+            .map(|_| Self { typ, payload })
     }
 
     pub fn build_key_update_notify() -> Self {

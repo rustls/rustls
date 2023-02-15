@@ -132,12 +132,12 @@ mod client_hello {
                 self.config
                     .ticketer
                     .decrypt(ticket)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
+                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
             } else {
                 self.config
                     .session_storage
                     .take(ticket)
-                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain))
+                    .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
             }
         }
 
