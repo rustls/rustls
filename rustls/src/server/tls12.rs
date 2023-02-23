@@ -1,5 +1,5 @@
 use crate::check::inappropriate_message;
-use crate::conn::{CommonState, ConnectionRandoms, Side, State};
+use crate::conn::{send_cert_verify_error_alert, CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -544,11 +544,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                 self.config
                     .verifier
                     .verify_client_cert(end_entity, intermediates, now)
-                    .map_err(|err| {
-                        cx.common
-                            .send_fatal_alert(AlertDescription::BadCertificate);
-                        err
-                    })?;
+                    .map_err(|err| send_cert_verify_error_alert(cx.common, err))?;
 
                 Some(cert_chain)
             }
@@ -678,9 +674,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         };
 
         if let Err(e) = rc {
-            cx.common
-                .send_fatal_alert(AlertDescription::AccessDenied);
-            return Err(e);
+            return Err(send_cert_verify_error_alert(cx.common, e));
         }
 
         trace!("client CertificateVerify OK");
