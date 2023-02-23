@@ -1,6 +1,6 @@
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::key;
+use crate::{key, CertificateError};
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -1432,3 +1432,19 @@ pub trait SideData {}
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
 const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
+
+pub(crate) fn send_cert_error_alert(common: &mut CommonState, err: Error) -> Error {
+    match err {
+        Error::InvalidCertificate(CertificateError::BadEncoding) => {
+            common.send_fatal_alert(AlertDescription::DecodeError);
+        }
+        Error::PeerMisbehaved(_) => {
+            common.send_fatal_alert(AlertDescription::IllegalParameter);
+        }
+        _ => {
+            common.send_fatal_alert(AlertDescription::BadCertificate);
+        }
+    };
+
+    err
+}
