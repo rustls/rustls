@@ -1,6 +1,6 @@
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::{key, CertificateError};
+use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -1435,11 +1435,9 @@ const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
 
 pub(crate) fn send_cert_verify_error_alert(common: &mut CommonState, err: Error) -> Error {
     match err {
-        Error::InvalidCertificate(CertificateError::BadEncoding) => {
-            common.send_fatal_alert(AlertDescription::DecodeError);
-        }
-        Error::InvalidCertificate(_) => {
-            common.send_fatal_alert(AlertDescription::BadCertificate);
+        Error::InvalidCertificate(ref e) => {
+            // the clone focus on the `Arc` wrapped error in `CertificateError`
+            common.send_fatal_alert(e.clone().into());
         }
         Error::PeerMisbehaved(_) => {
             common.send_fatal_alert(AlertDescription::IllegalParameter);
