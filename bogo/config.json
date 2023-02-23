@@ -380,8 +380,10 @@
   },
   "TestLocalErrorMap": {
     "SendServerHelloAsHelloRetryRequest": "remote error: error decoding message",
-    "GarbageCertificate-Server-TLS12": "remote error: access denied",
-    "GarbageCertificate-Server-TLS13": "remote error: access denied",
+    "GarbageCertificate-Server-TLS12": "remote error: bad certificate",
+    "GarbageCertificate-Server-TLS13": "remote error: bad certificate",
+    "GarbageCertificate-Client-TLS12": "remote error: bad certificate",
+    "GarbageCertificate-Client-TLS13": "remote error: bad certificate",
     "Client-VerifyDefault-RSA_PKCS1_SHA1-TLS12": "tls: no common signature algorithms",
     "Server-VerifyDefault-RSA_PKCS1_SHA1-TLS12": "tls: no common signature algorithms",
     "Downgrade-TLS10-Client": "tls: no cipher suite supported by both client and server",

@@ -669,7 +669,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 &self.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| conn::send_cert_error_alert(cx.common, err))?;
+            .map_err(|err| conn::send_cert_verify_error_alert(cx.common, err))?;
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.transcript.get_current_hash();
@@ -681,7 +681,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 &self.server_cert.cert_chain[0],
                 cert_verify,
             )
-            .map_err(|err| conn::send_cert_error_alert(cx.common, err))?;
+            .map_err(|err| conn::send_cert_verify_error_alert(cx.common, err))?;
 
         cx.common.peer_certificates = Some(self.server_cert.cert_chain);
         self.transcript.add_message(&m);
