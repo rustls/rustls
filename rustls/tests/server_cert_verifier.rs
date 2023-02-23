@@ -58,7 +58,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
                     ErrorFromPeer::Client(Error::InvalidMessage(
                         InvalidMessage::HandshakePayloadTooLarge,
                     )),
-                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate)),
+                    ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::HandshakeFailure)),
                 ]),
             );
         }
@@ -89,7 +89,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
                 ErrorFromPeer::Client(Error::InvalidMessage(
                     InvalidMessage::HandshakePayloadTooLarge,
                 )),
-                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate)),
+                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::HandshakeFailure)),
             ]),
         );
     }
@@ -118,7 +118,7 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
                 ErrorFromPeer::Client(Error::InvalidMessage(
                     InvalidMessage::HandshakePayloadTooLarge,
                 )),
-                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::BadCertificate)),
+                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::HandshakeFailure)),
             ]),
         );
     }

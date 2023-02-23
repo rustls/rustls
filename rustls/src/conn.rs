@@ -1433,16 +1433,19 @@ pub trait SideData {}
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
 const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
 
-pub(crate) fn send_cert_error_alert(common: &mut CommonState, err: Error) -> Error {
+pub(crate) fn send_cert_verify_error_alert(common: &mut CommonState, err: Error) -> Error {
     match err {
         Error::InvalidCertificate(CertificateError::BadEncoding) => {
             common.send_fatal_alert(AlertDescription::DecodeError);
+        }
+        Error::InvalidCertificate(_) => {
+            common.send_fatal_alert(AlertDescription::BadCertificate);
         }
         Error::PeerMisbehaved(_) => {
             common.send_fatal_alert(AlertDescription::IllegalParameter);
         }
         _ => {
-            common.send_fatal_alert(AlertDescription::BadCertificate);
+            common.send_fatal_alert(AlertDescription::HandshakeFailure);
         }
     };
 
