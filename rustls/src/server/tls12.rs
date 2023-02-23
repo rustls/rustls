@@ -668,7 +668,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
                     // impossible to reach this state.
                     cx.common
                         .send_fatal_alert(AlertDescription::AccessDenied);
-                    Err(Error::General("client authentication not set up".into()))
+                    return Err(Error::General("client authentication not set up".into()));
                 }
             }
         };
