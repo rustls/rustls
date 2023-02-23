@@ -3,7 +3,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::conn::Protocol;
 #[cfg(feature = "secret_extraction")]
 use crate::conn::Side;
-use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::conn::{self, CommonState, ConnectionRandoms, State};
 use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -669,7 +669,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 &self.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
+            .map_err(|err| conn::send_cert_error_alert(cx.common, err))?;
 
         // 2. Verify their signature on the handshake.
         let handshake_hash = self.transcript.get_current_hash();
@@ -681,7 +681,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 &self.server_cert.cert_chain[0],
                 cert_verify,
             )
-            .map_err(|err| hs::send_cert_error_alert(cx.common, err))?;
+            .map_err(|err| conn::send_cert_error_alert(cx.common, err))?;
 
         cx.common.peer_certificates = Some(self.server_cert.cert_chain);
         self.transcript.add_message(&m);
