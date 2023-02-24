@@ -650,7 +650,7 @@ fn pki_error(error: webpki::Error) -> Error {
 pub struct NoClientAuth;
 
 impl NoClientAuth {
-    /// Constructs a [`NoClientAuth`], wraps it in an [`Arc`] and coerces it to
+    /// Construct a [`NoClientAuth`], wrap it in an [`Arc`] and coerce it to
     /// `dyn ClientCertVerifier`.
     #[inline(always)]
     pub fn boxed() -> Arc<dyn ClientCertVerifier> {
