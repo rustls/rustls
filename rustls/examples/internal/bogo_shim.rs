@@ -400,7 +400,7 @@ fn make_server_cfg(opts: &Options) -> Arc<rustls::ServerConfig> {
                 mandatory: opts.require_any_client_cert,
             })
         } else {
-            rustls::server::NoClientAuth::new()
+            rustls::server::NoClientAuth::boxed()
         };
 
     let cert = load_cert(&opts.cert_file);

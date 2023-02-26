@@ -559,12 +559,12 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
             client_auth_roots.add(&root).unwrap();
         }
         if args.flag_require_auth {
-            AllowAnyAuthenticatedClient::new(client_auth_roots)
+            AllowAnyAuthenticatedClient::new(client_auth_roots).boxed()
         } else {
-            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots)
+            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots).boxed()
         }
     } else {
-        NoClientAuth::new()
+        NoClientAuth::boxed()
     };
 
     let suites = if !args.flag_suite.is_empty() {

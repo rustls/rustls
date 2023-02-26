@@ -31,7 +31,7 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
 
     /// Disable client authentication.
     pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig, WantsServerCert> {
-        self.with_client_cert_verifier(verify::NoClientAuth::new())
+        self.with_client_cert_verifier(verify::NoClientAuth::boxed())
     }
 }
 

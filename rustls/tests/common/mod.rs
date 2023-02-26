@@ -286,7 +286,7 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 
     ServerConfig::builder()
         .with_safe_defaults()
-        .with_client_cert_verifier(client_auth)
+        .with_client_cert_verifier(Arc::new(client_auth))
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
 }
