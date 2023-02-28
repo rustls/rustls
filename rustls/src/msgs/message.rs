@@ -85,7 +85,20 @@ impl OpaqueMessage {
     /// become valid if we read more data) and invalid data.
     pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
         let typ = ContentType::read(r).ok_or(MessageError::TooShortForHeader)?;
+        // Don't accept any new content-types.
+        if let ContentType::Unknown(_) = typ {
+            return Err(MessageError::InvalidContentType);
+        }
+
         let version = ProtocolVersion::read(r).ok_or(MessageError::TooShortForHeader)?;
+        // Accept only versions 0x03XX for any XX.
+        match version {
+            ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
+                return Err(MessageError::UnknownProtocolVersion);
+            }
+            _ => {}
+        };
+
         let len = u16::read(r).ok_or(MessageError::TooShortForHeader)?;
 
         // Reject undersize messages
@@ -99,19 +112,6 @@ impl OpaqueMessage {
         if len >= Self::MAX_PAYLOAD {
             return Err(MessageError::MessageTooLarge);
         }
-
-        // Don't accept any new content-types.
-        if let ContentType::Unknown(_) = typ {
-            return Err(MessageError::InvalidContentType);
-        }
-
-        // Accept only versions 0x03XX for any XX.
-        match version {
-            ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
-                return Err(MessageError::UnknownProtocolVersion);
-            }
-            _ => {}
-        };
 
         let mut sub = r
             .sub(len as usize)
