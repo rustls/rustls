@@ -4,11 +4,11 @@ use std::ops::Range;
 use super::base::Payload;
 use super::enums::ContentType;
 use super::message::PlainMessage;
-use crate::error::{Error, PeerMisbehaved};
+use crate::enums::ProtocolVersion;
+use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};
 use crate::record_layer::{Decrypted, RecordLayer};
-use crate::{InvalidMessage, ProtocolVersion};
 
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
 ///

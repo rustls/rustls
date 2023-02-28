@@ -3,7 +3,6 @@ use crate::conn::{CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -23,7 +22,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify;
+use crate::{kx, verify};
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
