@@ -67,7 +67,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - The minimum supported Rust version is now 1.56.0 due to several dependencies
     requiring it.
 * 0.20.6 (2022-05-18)
-  - 0.20.5 included a change to track more context for the `Error::InvalidMessage`
+  - 0.20.5 included a change to track more context for the `Error::CorruptMessage`
     which made API-incompatible changes to the `Error` type. We yanked 0.20.5
     and have reverted that change as part of 0.20.6.
 * 0.20.5 (2022-05-14)
