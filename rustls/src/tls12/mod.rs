@@ -1,14 +1,14 @@
 use crate::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::conn::{CommonState, ConnectionRandoms, Side};
 use crate::enums::{CipherSuite, SignatureScheme};
+use crate::error::{Error, InvalidMessage};
+use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::AlertDescription;
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
-use crate::Error;
-use crate::{kx, InvalidMessage};
 
 use ring::aead;
 use ring::digest::Digest;

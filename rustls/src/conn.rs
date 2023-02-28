@@ -1,5 +1,6 @@
 use crate::enums::ProtocolVersion;
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -21,7 +22,6 @@ use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{key, InvalidMessage};
 #[cfg(feature = "quic")]
 use std::collections::VecDeque;
 
