@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 import sys
 
@@ -24,9 +24,9 @@ for line in sys.stdin:
         handshakes.append((suite, role, auth, resumed, float(rate), unit))
 
 for suite, direction, rate, unit in sorted(bulks):
-    print '`%s` | %s | %g %s' % (suite, direction, rate, unit)
+    print('`%s` | %s | %g %s' % (suite, direction, rate, unit))
 
 for suite, role, auth, resumed, rate, unit in sorted(handshakes):
-    print '`%s` <br> %s, %s, %s | %g %s' % (suite, role,
+    print('`%s` <br> %s, %s, %s | %g %s' % (suite, role,
             auth if auth == 'server-auth' else 'mutual-auth',
-            translate_resume(resumed), rate, unit)
+            translate_resume(resumed), rate, unit))
