@@ -7,8 +7,18 @@
 set -xe
 
 if [ ! -e trytls/ ] ; then
-  pip install --prefix trytls/ trytls
+  # NOTE: Upstream 'trytls' breaks on Python3.8. Once a fix PR[0] lands
+  # we can remove this 'git+ssh' dependency in favour of upstream 'trytls'.
+  #
+  # [0]: https://github.com/ouspg/trytls/pull/314
+  pip install \
+    --prefix trytls/ \
+    setuptools \
+    git+ssh://git@github.com/cpu/trytls.git@cpu-python3.8-fix
 fi
 
-export PYTHONPATH=trytls/lib/python2.7/site-packages/
-./trytls/bin/trytls https ../target/${RELEASE:-debug}/examples/trytls_shim
+LIB_VERSIONS=(trytls/lib/*)
+LIB_VERSION=$(basename "${LIB_VERSIONS[0]:-python-310}")
+
+export PYTHONPATH=trytls/lib/"$LIB_VERSION"/site-packages/
+./trytls/bin/trytls https "../target/${RELEASE:-debug}/examples/trytls_shim"
