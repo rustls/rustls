@@ -5,7 +5,7 @@ set -ex
 mkdir -p bogo
 pushd bogo
 
-git init
+git init --initial-branch main
 git config core.sparsecheckout 1
 cat << EOF > .git/info/sparse-checkout
 go.mod
