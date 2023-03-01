@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env sh
 # Extract the example usage into README.md
 
 set -e

@@ -1,6 +1,6 @@
 RECORD=perf record -F2000 --call-graph dwarf,16000 --
 FLAMEGRAPH=perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl >
-MEMUSAGE=/usr/bin/time -f %M
+MEMUSAGE=/usr/bin/env time -f %M
 
 perf: ./target/release/examples/bench
 	$(RECORD) ./target/release/examples/bench bulk TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
