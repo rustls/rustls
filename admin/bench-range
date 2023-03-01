@@ -1,18 +1,23 @@
 import subprocess
+import os
 
 suite = 'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256'
 
-print 'len,send,recv'
+print('len,send,recv')
 
-for len in [16, 32, 64, 128, 512, 1024, 4096, 8192, 32768, 65536, 131072, 262144, 1048576]:
-    out = subprocess.check_output(['./target/release/examples/bench', 'bulk', suite, str(len)])
+for bitlen in [16, 32, 64, 128, 512, 1024, 4096, 8192, 32768, 65536, 131072, 262144, 1048576]:
+    out = subprocess.check_output(['./target/release/examples/bench', 'bulk', suite, str(bitlen)])
     lines = out.splitlines()
 
-    for l in out.splitlines():
+    send = recv = 0.0
+    for l in lines:
         items = l.split()
-        if items[3] == 'send':
-            send = float(items[4])
-        if items[3] == 'recv':
-            recv = float(items[4])
+        if len(items) < 6:
+            print("output of bench target has changed. Please update script.")
+            os.exit(1)
+        if items[4] == b'send':
+            send = float(items[5])
+        if items[4] == b'recv':
+            recv = float(items[5])
 
-    print '%d,%g,%g' % (len, send, recv)
+    print('%d,%g,%g' % (bitlen, send, recv))
