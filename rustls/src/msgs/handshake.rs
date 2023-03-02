@@ -1592,6 +1592,7 @@ impl Codec for ECParameters {
     }
 }
 
+/// This type combines a [`SignatureScheme`] and a signature payload produced with that scheme.
 #[derive(Debug, Clone)]
 pub struct DigitallySignedStruct {
     pub scheme: SignatureScheme,
