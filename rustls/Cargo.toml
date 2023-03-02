@@ -44,10 +44,6 @@ path = "examples/internal/bogo_shim.rs"
 required-features = ["dangerous_configuration", "quic"]
 
 [[example]]
-name = "trytls_shim"
-path = "examples/internal/trytls_shim.rs"
-
-[[example]]
 name = "bench"
 path = "examples/internal/bench.rs"
 
