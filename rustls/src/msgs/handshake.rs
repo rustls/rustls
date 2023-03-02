@@ -1806,11 +1806,11 @@ pub type DistinguishedName = PayloadU16;
 /// DER or BER encoded [`Subject` field from RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6)
 /// for a single certificate. The Subject field is
 /// [encoded as an RFC 5280 `Name`](https://datatracker.ietf.org/doc/html/rfc5280#page-116).
-/// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/traits/trait.FromDer.html).
+/// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
 ///
 /// ```ignore
 /// for name in distinguished_names {
-///     use x509_parser::traits::FromDer;
+///     use x509_parser::prelude::FromDer;
 ///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
 /// }
 /// ```
