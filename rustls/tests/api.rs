@@ -2029,25 +2029,21 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
     );
     do_handshake(&mut client, &mut server);
 
-    assert_debug_eq(
-        client.export_keying_material(&mut client_secret, b"label", Some(b"context")),
-        Ok(()),
-    );
-    assert_debug_eq(
-        server.export_keying_material(&mut server_secret, b"label", Some(b"context")),
-        Ok(()),
-    );
+    assert!(client
+        .export_keying_material(&mut client_secret, b"label", Some(b"context"))
+        .is_ok());
+    assert!(server
+        .export_keying_material(&mut server_secret, b"label", Some(b"context"))
+        .is_ok());
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 
-    assert_debug_eq(
-        client.export_keying_material(&mut client_secret, b"label", None),
-        Ok(()),
-    );
+    assert!(client
+        .export_keying_material(&mut client_secret, b"label", None)
+        .is_ok());
     assert_ne!(client_secret.to_vec(), server_secret.to_vec());
-    assert_debug_eq(
-        server.export_keying_material(&mut server_secret, b"label", None),
-        Ok(()),
-    );
+    assert!(server
+        .export_keying_material(&mut server_secret, b"label", None)
+        .is_ok(),);
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 }
 

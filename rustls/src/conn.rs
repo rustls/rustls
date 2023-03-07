@@ -79,12 +79,12 @@ impl Connection {
     /// Derives key material from the agreed connection secrets.
     ///
     /// See [`ConnectionCommon::export_keying_material()`] for more information.
-    pub fn export_keying_material(
+    pub fn export_keying_material<T: AsMut<[u8]>>(
         &self,
-        output: &mut [u8],
+        output: T,
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), Error> {
+    ) -> Result<T, Error> {
         match self {
             Self::Client(conn) => conn.export_keying_material(output, label, context),
             Self::Server(conn) => conn.export_keying_material(output, label, context),
@@ -738,7 +738,9 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This function fills in `output` with `output.len()` bytes of key
     /// material derived from the master session secret using `label`
-    /// and `context` for diversification.
+    /// and `context` for diversification. Ownership of the buffer is taken
+    /// by the function and returned via the Ok result to ensure no key
+    /// material leaks if the function fails.
     ///
     /// See RFC5705 for more details on what this does and is for.
     ///
@@ -747,14 +749,16 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This function fails if called prior to the handshake completing;
     /// check with [`CommonState::is_handshaking`] first.
-    pub fn export_keying_material(
+    pub fn export_keying_material<T: AsMut<[u8]>>(
         &self,
-        output: &mut [u8],
+        mut output: T,
         label: &[u8],
         context: Option<&[u8]>,
-    ) -> Result<(), Error> {
+    ) -> Result<T, Error> {
         match self.state.as_ref() {
-            Ok(st) => st.export_keying_material(output, label, context),
+            Ok(st) => st
+                .export_keying_material(output.as_mut(), label, context)
+                .map(|_| output),
             Err(e) => Err(e.clone()),
         }
     }
