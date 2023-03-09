@@ -4,7 +4,7 @@ use crate::enums::ProtocolVersion;
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
-use crate::log::{debug, trace};
+use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
@@ -755,7 +755,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             let sig = &st.server_kx.kx_sig;
             if !SupportedCipherSuite::from(suite).usable_for_signature_algorithm(sig.scheme.sign())
             {
-                crate::log::warn!(
+                warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
                     sig.scheme.sign(),
                     suite.sign
