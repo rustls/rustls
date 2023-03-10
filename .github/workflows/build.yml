@@ -73,11 +73,11 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: cargo build (debug; no default features)
-        run: cargo build --no-default-features
+        run: cargo test --no-default-features
         working-directory: rustls
 
-      - name: cargo test (debug; no default features)
-        run: cargo test --no-default-features
+      - name: cargo test (debug; no default features; tls12)
+        run: cargo test --no-default-features --features tls12
         working-directory: rustls
 
       - name: cargo test (release; no run)
