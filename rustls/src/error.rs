@@ -291,6 +291,9 @@ pub enum CertificateError {
     /// The current time is before the `notBefore` time in the certificate.
     NotValidYet,
 
+    /// The certificate has been revoked.
+    Revoked,
+
     /// The certificate contains an extension marked critical, but it was
     /// not processed by the certificate validator.
     UnhandledCriticalExtension,
@@ -305,6 +308,13 @@ pub enum CertificateError {
     /// The subject names in an end-entity certificate do not include
     /// the expected name.
     NotValidForName,
+
+    /// The certificate is being used for a different purpose than allowed.
+    InvalidPurpose,
+
+    /// The certificate is valid, but the handshake is rejected for other
+    /// reasons.
+    ApplicationVerificationFailure,
 
     /// Any other error.
     ///
@@ -329,8 +339,11 @@ impl From<CertificateError> for AlertDescription {
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
             Expired | NotValidYet => Self::CertificateExpired,
+            Revoked => Self::CertificateRevoked,
             UnknownIssuer => Self::UnknownCA,
             BadSignature => Self::DecryptError,
+            InvalidPurpose => Self::UnsupportedCertificate,
+            ApplicationVerificationFailure => Self::AccessDenied,
             // RFC 5246/RFC 8446
             // certificate_unknown
             //  Some other (unspecified) issue arose in processing the
