@@ -325,9 +325,16 @@ impl From<CertificateError> for AlertDescription {
         use CertificateError::*;
         match e {
             BadEncoding | UnhandledCriticalExtension | NotValidForName => Self::BadCertificate,
+            // RFC 5246/RFC 8446
+            // certificate_expired
+            //  A certificate has expired or **is not currently valid**.
             Expired | NotValidYet => Self::CertificateExpired,
             UnknownIssuer => Self::UnknownCA,
             BadSignature => Self::DecryptError,
+            // RFC 5246/RFC 8446
+            // certificate_unknown
+            //  Some other (unspecified) issue arose in processing the
+            //  certificate, rendering it unacceptable.
             Other(_) => Self::CertificateUnknown,
         }
     }
