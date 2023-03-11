@@ -1,6 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Protocol, Side};
-use crate::conn::ConnectionCommon;
+use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
@@ -434,6 +434,7 @@ impl<'a> WriteEarlyData<'a> {
     pub fn bytes_left(&self) -> usize {
         self.sess
             .inner
+            .core
             .data
             .early_data
             .bytes_left()
@@ -467,33 +468,9 @@ impl ClientConnection {
     /// we behave in the TLS protocol, `name` is the
     /// name of the server we want to talk to.
     pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
-        Self::new_inner(config, name, Vec::new(), Protocol::Tcp)
-    }
-
-    fn new_inner(
-        config: Arc<ClientConfig>,
-        name: ServerName,
-        extra_exts: Vec<ClientExtension>,
-        proto: Protocol,
-    ) -> Result<Self, Error> {
-        let mut common_state = CommonState::new(Side::Client);
-        common_state.set_max_fragment_size(config.max_fragment_size)?;
-        common_state.protocol = proto;
-        #[cfg(feature = "secret_extraction")]
-        {
-            common_state.enable_secret_extraction = config.enable_secret_extraction;
-        }
-        let mut data = ClientConnectionData::new();
-
-        let mut cx = hs::ClientContext {
-            common: &mut common_state,
-            data: &mut data,
-        };
-
-        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
-        let inner = ConnectionCommon::new(state, data, common_state);
-
-        Ok(Self { inner })
+        Ok(Self {
+            inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
+        })
     }
 
     /// Returns an `io::Write` implementer you can write bytes to
@@ -515,7 +492,13 @@ impl ClientConnection {
     /// in this case the data is lost but the connection continues.  You
     /// can tell this happened using `is_early_data_accepted`.
     pub fn early_data(&mut self) -> Option<WriteEarlyData> {
-        if self.inner.data.early_data.is_enabled() {
+        if self
+            .inner
+            .core
+            .data
+            .early_data
+            .is_enabled()
+        {
             Some(WriteEarlyData::new(self))
         } else {
             None
@@ -528,17 +511,17 @@ impl ClientConnection {
     /// handshake then the server will not process the data.  This
     /// is not an error, but you may wish to resend the data.
     pub fn is_early_data_accepted(&self) -> bool {
-        self.inner.data.early_data.is_accepted()
+        self.inner.core.is_early_data_accepted()
     }
 
     fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
         self.inner
+            .core
             .data
             .early_data
             .check_write(data.len())
             .map(|sz| {
                 self.inner
-                    .common_state
                     .send_early_plaintext(&data[..sz])
             })
     }
@@ -583,6 +566,36 @@ impl From<ClientConnection> for crate::Connection {
     }
 }
 
+impl ConnectionCore<ClientConnectionData> {
+    pub(crate) fn for_client(
+        config: Arc<ClientConfig>,
+        name: ServerName,
+        extra_exts: Vec<ClientExtension>,
+        proto: Protocol,
+    ) -> Result<Self, Error> {
+        let mut common_state = CommonState::new(Side::Client);
+        common_state.set_max_fragment_size(config.max_fragment_size)?;
+        common_state.protocol = proto;
+        #[cfg(feature = "secret_extraction")]
+        {
+            common_state.enable_secret_extraction = config.enable_secret_extraction;
+        }
+        let mut data = ClientConnectionData::new();
+
+        let mut cx = hs::ClientContext {
+            common: &mut common_state,
+            data: &mut data,
+        };
+
+        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        Ok(Self::new(state, data, common_state))
+    }
+
+    pub(crate) fn is_early_data_accepted(&self) -> bool {
+        self.data.early_data.is_accepted()
+    }
+}
+
 /// State associated with a client connection.
 pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
@@ -604,7 +617,6 @@ impl crate::conn::SideData for ClientConnectionData {}
 impl quic::QuicExt for ClientConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.inner
-            .common_state
             .quic
             .params
             .as_ref()
@@ -614,14 +626,11 @@ impl quic::QuicExt for ClientConnection {
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.inner
+                .core
                 .data
                 .resumption_ciphersuite
                 .and_then(|suite| suite.tls13())?,
-            self.inner
-                .common_state
-                .quic
-                .early_secret
-                .as_ref()?,
+            self.inner.quic.early_secret.as_ref()?,
         ))
     }
 
@@ -634,7 +643,7 @@ impl quic::QuicExt for ClientConnection {
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.inner.common_state.quic.alert
+        self.inner.quic.alert
     }
 }
 
@@ -662,7 +671,9 @@ pub trait ClientQuicExt {
             quic::Version::V1 => ClientExtension::TransportParameters(params),
         };
 
-        ClientConnection::new_inner(config, name, vec![ext], Protocol::Quic)
+        Ok(ClientConnection {
+            inner: ConnectionCore::for_client(config, name, vec![ext], Protocol::Quic)?.into(),
+        })
     }
 }
 
