@@ -1,4 +1,4 @@
-use crate::common_state::{CommonState, IoState, State};
+use crate::common_state::{CommonState, Context, IoState, State};
 #[cfg(feature = "quic")]
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType};
@@ -147,8 +147,8 @@ impl Deref for Connection {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Self::Client(conn) => &conn.common_state,
-            Self::Server(conn) => &conn.common_state,
+            Self::Client(conn) => &conn.core.common_state,
+            Self::Server(conn) => &conn.core.common_state,
         }
     }
 }
@@ -156,8 +156,8 @@ impl Deref for Connection {
 impl DerefMut for Connection {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            Self::Client(conn) => &mut conn.common_state,
-            Self::Server(conn) => &mut conn.common_state,
+            Self::Client(conn) => &mut conn.core.common_state,
+            Self::Server(conn) => &mut conn.core.common_state,
         }
     }
 }
@@ -349,33 +349,20 @@ fn is_valid_ccs(msg: &PlainMessage) -> bool {
 
 /// Interface shared by client and server connections.
 pub struct ConnectionCommon<Data> {
-    state: Result<Box<dyn State<Data>>, Error>,
-    pub(crate) data: Data,
-    pub(crate) common_state: CommonState,
-    message_deframer: MessageDeframer,
+    pub(crate) core: ConnectionCore<Data>,
 }
 
 impl<Data> ConnectionCommon<Data> {
-    pub(crate) fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
-        Self {
-            state: Ok(state),
-            data,
-            common_state,
-            message_deframer: MessageDeframer::default(),
-        }
-    }
-
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader {
+        let common = &mut self.core.common_state;
         Reader {
-            received_plaintext: &mut self.common_state.received_plaintext,
+            received_plaintext: &mut common.received_plaintext,
             /// Are we done? i.e., have we processed all received messages, and received a
             /// close_notify to indicate that no new messages will arrive?
-            peer_cleanly_closed: self
-                .common_state
-                .has_received_close_notify
-                && !self.message_deframer.has_pending(),
-            has_seen_eof: self.common_state.has_seen_eof,
+            peer_cleanly_closed: common.has_received_close_notify
+                && !self.core.message_deframer.has_pending(),
+            has_seen_eof: common.has_seen_eof,
         }
     }
 
@@ -476,11 +463,14 @@ impl<Data> ConnectionCommon<Data> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
-        match self.deframe()?.map(Message::try_from) {
+        match self
+            .core
+            .deframe()?
+            .map(Message::try_from)
+        {
             Some(Ok(msg)) => Ok(Some(msg)),
             Some(Err(err)) => {
-                self.common_state
-                    .send_fatal_alert(AlertDescription::DecodeError);
+                self.send_fatal_alert(AlertDescription::DecodeError);
                 Err(err)
             }
             None => Ok(None),
@@ -488,57 +478,7 @@ impl<Data> ConnectionCommon<Data> {
     }
 
     pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
-        self.state = Ok(new);
-    }
-
-    fn process_msg(
-        &mut self,
-        msg: PlainMessage,
-        state: Box<dyn State<Data>>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
-        // Drop CCS messages during handshake in TLS1.3
-        if msg.typ == ContentType::ChangeCipherSpec
-            && !self
-                .common_state
-                .may_receive_application_data
-            && self.common_state.is_tls13()
-        {
-            if !is_valid_ccs(&msg)
-                || self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS
-            {
-                // "An implementation which receives any other change_cipher_spec value or
-                //  which receives a protected change_cipher_spec record MUST abort the
-                //  handshake with an "unexpected_message" alert."
-                self.common_state
-                    .send_fatal_alert(AlertDescription::UnexpectedMessage);
-                return Err(Error::PeerMisbehaved(
-                    PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
-                ));
-            } else {
-                self.common_state.received_middlebox_ccs += 1;
-                trace!("Dropping CCS");
-                return Ok(state);
-            }
-        }
-
-        // Now we can fully parse the message payload.
-        let msg = match Message::try_from(msg) {
-            Ok(msg) => msg,
-            Err(err) => {
-                self.common_state
-                    .send_fatal_alert(AlertDescription::DecodeError);
-                return Err(err);
-            }
-        };
-
-        // For alerts, we have separate logic.
-        if let MessagePayload::Alert(alert) = &msg.payload {
-            self.common_state.process_alert(alert)?;
-            return Ok(state);
-        }
-
-        self.common_state
-            .process_main_protocol(msg, state, &mut self.data)
+        self.core.state = Ok(new);
     }
 
     /// Processes any new packets read by a previous call to
@@ -559,7 +499,147 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// [`read_tls`]: Connection::read_tls
     /// [`process_new_packets`]: Connection::process_new_packets
+    #[inline]
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        self.core.process_new_packets()
+    }
+
+    /// Read TLS content from `rd` into the internal buffer.
+    ///
+    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
+    /// a socket or pipe might).
+    ///
+    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
+    /// to empty the incoming TLS data buffer.
+    ///
+    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
+    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
+    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
+    ///
+    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
+    ///   each time a call to this function succeeds.
+    /// * In order to empty the incoming plaintext data buffer, you should empty it through
+    ///   the [`reader()`] after the call to [`process_new_packets()`].
+    ///
+    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
+    /// [`reader()`]: ConnectionCommon::reader
+    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+        if self.received_plaintext.is_full() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "received plaintext buffer full",
+            ));
+        }
+
+        let res = self.core.message_deframer.read(rd);
+        if let Ok(0) = res {
+            self.has_seen_eof = true;
+        }
+        res
+    }
+
+    /// Derives key material from the agreed connection secrets.
+    ///
+    /// This function fills in `output` with `output.len()` bytes of key
+    /// material derived from the master session secret using `label`
+    /// and `context` for diversification. Ownership of the buffer is taken
+    /// by the function and returned via the Ok result to ensure no key
+    /// material leaks if the function fails.
+    ///
+    /// See RFC5705 for more details on what this does and is for.
+    ///
+    /// For TLS1.3 connections, this function does not use the
+    /// "early" exporter at any point.
+    ///
+    /// This function fails if called prior to the handshake completing;
+    /// check with [`CommonState::is_handshaking`] first.
+    #[inline]
+    pub fn export_keying_material<T: AsMut<[u8]>>(
+        &self,
+        output: T,
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<T, Error> {
+        self.core
+            .export_keying_material(output, label, context)
+    }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    #[cfg(feature = "secret_extraction")]
+    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        if !self.enable_secret_extraction {
+            return Err(Error::General("Secret extraction is disabled".into()));
+        }
+
+        let st = self.core.state?;
+
+        let record_layer = self.core.common_state.record_layer;
+        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
+        Ok(ExtractedSecrets {
+            tx: (record_layer.write_seq(), tx),
+            rx: (record_layer.read_seq(), rx),
+        })
+    }
+}
+
+#[cfg(feature = "quic")]
+impl<Data> ConnectionCommon<Data> {
+    pub(crate) fn read_quic_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        self.core
+            .message_deframer
+            .push(ProtocolVersion::TLSv1_3, plaintext)?;
+        self.process_new_packets()?;
+        Ok(())
+    }
+}
+
+impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
+    fn from(conn: &'a mut ConnectionCommon<Data>) -> Self {
+        Self {
+            common: &mut conn.core.common_state,
+            data: &mut conn.core.data,
+        }
+    }
+}
+
+impl<T> Deref for ConnectionCommon<T> {
+    type Target = CommonState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core.common_state
+    }
+}
+
+impl<T> DerefMut for ConnectionCommon<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.core.common_state
+    }
+}
+
+impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
+    fn from(core: ConnectionCore<Data>) -> Self {
+        Self { core }
+    }
+}
+
+pub(crate) struct ConnectionCore<Data> {
+    state: Result<Box<dyn State<Data>>, Error>,
+    pub(crate) data: Data,
+    pub(crate) common_state: CommonState,
+    message_deframer: MessageDeframer,
+}
+
+impl<Data> ConnectionCore<Data> {
+    pub(crate) fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
+        Self {
+            state: Ok(state),
+            data,
+            common_state,
+            message_deframer: MessageDeframer::default(),
+        }
+    }
+
+    pub(crate) fn process_new_packets(&mut self) -> Result<IoState, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
             Err(e) => {
@@ -635,56 +715,57 @@ impl<Data> ConnectionCommon<Data> {
         }
     }
 
-    /// Read TLS content from `rd` into the internal buffer.
-    ///
-    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
-    /// a socket or pipe might).
-    ///
-    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
-    /// to empty the incoming TLS data buffer.
-    ///
-    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
-    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
-    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
-    ///
-    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
-    ///   each time a call to this function succeeds.
-    /// * In order to empty the incoming plaintext data buffer, you should empty it through
-    ///   the [`reader()`] after the call to [`process_new_packets()`].
-    ///
-    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
-    /// [`reader()`]: ConnectionCommon::reader
-    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        if self.received_plaintext.is_full() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "received plaintext buffer full",
-            ));
+    fn process_msg(
+        &mut self,
+        msg: PlainMessage,
+        state: Box<dyn State<Data>>,
+    ) -> Result<Box<dyn State<Data>>, Error> {
+        // Drop CCS messages during handshake in TLS1.3
+        if msg.typ == ContentType::ChangeCipherSpec
+            && !self
+                .common_state
+                .may_receive_application_data
+            && self.common_state.is_tls13()
+        {
+            if !is_valid_ccs(&msg)
+                || self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS
+            {
+                // "An implementation which receives any other change_cipher_spec value or
+                //  which receives a protected change_cipher_spec record MUST abort the
+                //  handshake with an "unexpected_message" alert."
+                self.common_state
+                    .send_fatal_alert(AlertDescription::UnexpectedMessage);
+                return Err(Error::PeerMisbehaved(
+                    PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
+                ));
+            } else {
+                self.common_state.received_middlebox_ccs += 1;
+                trace!("Dropping CCS");
+                return Ok(state);
+            }
         }
 
-        let res = self.message_deframer.read(rd);
-        if let Ok(0) = res {
-            self.common_state.has_seen_eof = true;
+        // Now we can fully parse the message payload.
+        let msg = match Message::try_from(msg) {
+            Ok(msg) => msg,
+            Err(err) => {
+                self.common_state
+                    .send_fatal_alert(AlertDescription::DecodeError);
+                return Err(err);
+            }
+        };
+
+        // For alerts, we have separate logic.
+        if let MessagePayload::Alert(alert) = &msg.payload {
+            self.common_state.process_alert(alert)?;
+            return Ok(state);
         }
-        res
+
+        self.common_state
+            .process_main_protocol(msg, state, &mut self.data)
     }
 
-    /// Derives key material from the agreed connection secrets.
-    ///
-    /// This function fills in `output` with `output.len()` bytes of key
-    /// material derived from the master session secret using `label`
-    /// and `context` for diversification. Ownership of the buffer is taken
-    /// by the function and returned via the Ok result to ensure no key
-    /// material leaks if the function fails.
-    ///
-    /// See RFC5705 for more details on what this does and is for.
-    ///
-    /// For TLS1.3 connections, this function does not use the
-    /// "early" exporter at any point.
-    ///
-    /// This function fails if called prior to the handshake completing;
-    /// check with [`CommonState::is_handshaking`] first.
-    pub fn export_keying_material<T: AsMut<[u8]>>(
+    pub(crate) fn export_keying_material<T: AsMut<[u8]>>(
         &self,
         mut output: T,
         label: &[u8],
@@ -696,47 +777,6 @@ impl<Data> ConnectionCommon<Data> {
                 .map(|_| output),
             Err(e) => Err(e.clone()),
         }
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    #[cfg(feature = "secret_extraction")]
-    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        if !self.enable_secret_extraction {
-            return Err(Error::General("Secret extraction is disabled".into()));
-        }
-
-        let st = self.state?;
-
-        let record_layer = self.common_state.record_layer;
-        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
-        Ok(ExtractedSecrets {
-            tx: (record_layer.write_seq(), tx),
-            rx: (record_layer.read_seq(), rx),
-        })
-    }
-}
-
-#[cfg(feature = "quic")]
-impl<Data> ConnectionCommon<Data> {
-    pub(crate) fn read_quic_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        self.message_deframer
-            .push(ProtocolVersion::TLSv1_3, plaintext)?;
-        self.process_new_packets()?;
-        Ok(())
-    }
-}
-
-impl<T> Deref for ConnectionCommon<T> {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.common_state
-    }
-}
-
-impl<T> DerefMut for ConnectionCommon<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.common_state
     }
 }
 

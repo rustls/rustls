@@ -433,8 +433,7 @@ impl ExpectClientHello {
 
 impl State<ServerConnectionData> for ExpectClientHello {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
-        let (client_hello, sig_schemes) =
-            process_client_hello(&m, self.done_retry, cx.common, cx.data)?;
+        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 }
@@ -449,8 +448,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
 pub(super) fn process_client_hello<'a>(
     m: &'a Message,
     done_retry: bool,
-    common: &mut CommonState,
-    data: &mut ServerConnectionData,
+    cx: &mut ServerContext,
 ) -> Result<(&'a ClientHelloPayload, Vec<SignatureScheme>), Error> {
     let client_hello =
         require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
@@ -460,19 +458,20 @@ pub(super) fn process_client_hello<'a>(
         .compression_methods
         .contains(&Compression::Null)
     {
-        common.send_fatal_alert(AlertDescription::IllegalParameter);
+        cx.common
+            .send_fatal_alert(AlertDescription::IllegalParameter);
         return Err(PeerIncompatible::NullCompressionRequired.into());
     }
 
     if client_hello.has_duplicate_extension() {
         return Err(decode_error(
-            common,
+            cx.common,
             PeerMisbehaved::DuplicateClientHelloExtensions,
         ));
     }
 
     // No handshake messages should follow this one in this flight.
-    common.check_aligned_handshake()?;
+    cx.common.check_aligned_handshake()?;
 
     // Extract and validate the SNI DNS name, if any, before giving it to
     // the cert resolver. In particular, if it is invalid then we should
@@ -483,7 +482,7 @@ pub(super) fn process_client_hello<'a>(
         Some(sni) => {
             if sni.has_duplicate_names_for_type() {
                 return Err(decode_error(
-                    common,
+                    cx.common,
                     PeerMisbehaved::DuplicateServerNameTypes,
                 ));
             }
@@ -491,7 +490,9 @@ pub(super) fn process_client_hello<'a>(
             if let Some(hostname) = sni.get_single_hostname() {
                 Some(hostname.into())
             } else {
-                return Err(common.illegal_param(PeerMisbehaved::ServerNameMustContainOneHostName));
+                return Err(cx
+                    .common
+                    .illegal_param(PeerMisbehaved::ServerNameMustContainOneHostName));
             }
         }
         None => None,
@@ -501,9 +502,9 @@ pub(super) fn process_client_hello<'a>(
     if let (Some(sni), false) = (&sni, done_retry) {
         // Save the SNI into the session.
         // The SNI hostname is immutable once set.
-        assert!(data.sni.is_none());
-        data.sni = Some(sni.clone());
-    } else if data.sni != sni {
+        assert!(cx.data.sni.is_none());
+        cx.data.sni = Some(sni.clone());
+    } else if cx.data.sni != sni {
         return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
     }
 
@@ -511,7 +512,7 @@ pub(super) fn process_client_hello<'a>(
         .get_sigalgs_extension()
         .ok_or_else(|| {
             incompatible(
-                common,
+                cx.common,
                 PeerIncompatible::SignatureAlgorithmsExtensionRequired,
             )
         })?

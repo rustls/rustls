@@ -1,8 +1,8 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 #[cfg(feature = "quic")]
 use crate::common_state::Protocol;
-use crate::common_state::{CommonState, Side, State};
-use crate::conn::ConnectionCommon;
+use crate::common_state::{CommonState, Context, Side, State};
+use crate::conn::{ConnectionCommon, ConnectionCore};
 #[cfg(feature = "quic")]
 use crate::enums::AlertDescription;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -376,25 +376,8 @@ impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-        Self::from_config(config, vec![])
-    }
-
-    fn from_config(
-        config: Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
-    ) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server);
-        common.set_max_fragment_size(config.max_fragment_size)?;
-        #[cfg(feature = "secret_extraction")]
-        {
-            common.enable_secret_extraction = config.enable_secret_extraction;
-        }
         Ok(Self {
-            inner: ConnectionCommon::new(
-                Box::new(hs::ExpectClientHello::new(config, extra_exts)),
-                ServerConnectionData::default(),
-                common,
-            ),
+            inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
         })
     }
 
@@ -415,7 +398,7 @@ impl ServerConnection {
     /// The SNI hostname is also used to match sessions during session
     /// resumption.
     pub fn sni_hostname(&self) -> Option<&str> {
-        self.inner.data.get_sni_str()
+        self.inner.core.data.get_sni_str()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -425,6 +408,7 @@ impl ServerConnection {
     /// Returns `Some` iff a valid resumption ticket has been received from the client.
     pub fn received_resumption_data(&self) -> Option<&[u8]> {
         self.inner
+            .core
             .data
             .received_resumption_data
             .as_ref()
@@ -441,7 +425,7 @@ impl ServerConnection {
     /// from the client is desired, encrypt the data separately.
     pub fn set_resumption_data(&mut self, data: &[u8]) {
         assert!(data.len() < 2usize.pow(15));
-        self.inner.data.resumption_data = data.into();
+        self.inner.core.data.resumption_data = data.into();
     }
 
     /// Explicitly discard early data, notifying the client
@@ -450,11 +434,7 @@ impl ServerConnection {
     ///
     /// Must be called while `is_handshaking` is true.
     pub fn reject_early_data(&mut self) {
-        assert!(
-            self.is_handshaking(),
-            "cannot retroactively reject early data"
-        );
-        self.inner.data.early_data.reject();
+        self.inner.core.reject_early_data()
     }
 
     /// Returns an `io::Read` implementer you can read bytes from that are
@@ -468,13 +448,9 @@ impl ServerConnection {
     /// - The connection doesn't resume an existing session.
     /// - The client hasn't sent a full ClientHello yet.
     pub fn early_data(&mut self) -> Option<ReadEarlyData> {
-        if self
-            .inner
-            .data
-            .early_data
-            .was_accepted()
-        {
-            Some(ReadEarlyData::new(&mut self.inner.data.early_data))
+        let data = &mut self.inner.core.data;
+        if data.early_data.was_accepted() {
+            Some(ReadEarlyData::new(&mut data.early_data))
         } else {
             None
         }
@@ -525,11 +501,14 @@ pub struct Acceptor {
 impl Default for Acceptor {
     fn default() -> Self {
         Self {
-            inner: Some(ConnectionCommon::new(
-                Box::new(Accepting),
-                ServerConnectionData::default(),
-                CommonState::new(Side::Server),
-            )),
+            inner: Some(
+                ConnectionCore::new(
+                    Box::new(Accepting),
+                    ServerConnectionData::default(),
+                    CommonState::new(Side::Server),
+                )
+                .into(),
+            ),
         }
     }
 }
@@ -553,7 +532,7 @@ impl Acceptor {
     pub fn wants_read(&self) -> bool {
         self.inner
             .as_ref()
-            .map(|conn| conn.common_state.wants_read())
+            .map(|conn| conn.wants_read())
             .unwrap_or(false)
     }
 
@@ -598,12 +577,8 @@ impl Acceptor {
             }
         };
 
-        let (_, sig_schemes) = hs::process_client_hello(
-            &message,
-            false,
-            &mut connection.common_state,
-            &mut connection.data,
-        )?;
+        let (_, sig_schemes) =
+            hs::process_client_hello(&message, false, &mut Context::from(&mut connection))?;
 
         Ok(Some(Accepted {
             connection,
@@ -627,7 +602,7 @@ impl Accepted {
     pub fn client_hello(&self) -> ClientHello<'_> {
         let payload = Self::client_hello_payload(&self.message);
         ClientHello::new(
-            &self.connection.data.sni,
+            &self.connection.core.data.sni,
             &self.sig_schemes,
             payload.get_alpn_extension(),
             &payload.cipher_suites,
@@ -641,21 +616,15 @@ impl Accepted {
     /// configuration-dependent validation of the received `ClientHello` message fails.
     pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
         self.connection
-            .common_state
             .set_max_fragment_size(config.max_fragment_size)?;
 
         #[cfg(feature = "secret_extraction")]
         {
-            self.connection
-                .common_state
-                .enable_secret_extraction = config.enable_secret_extraction;
+            self.connection.enable_secret_extraction = config.enable_secret_extraction;
         }
 
         let state = hs::ExpectClientHello::new(config, Vec::new());
-        let mut cx = hs::ServerContext {
-            common: &mut self.connection.common_state,
-            data: &mut self.connection.data,
-        };
+        let mut cx = hs::ServerContext::from(&mut self.connection);
 
         let new = state.with_certified_key(
             self.sig_schemes,
@@ -772,6 +741,33 @@ fn test_read_buf_in_new_state() {
     );
 }
 
+impl ConnectionCore<ServerConnectionData> {
+    pub(crate) fn for_server(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+    ) -> Result<Self, Error> {
+        let mut common = CommonState::new(Side::Server);
+        common.set_max_fragment_size(config.max_fragment_size)?;
+        #[cfg(feature = "secret_extraction")]
+        {
+            common.enable_secret_extraction = config.enable_secret_extraction;
+        }
+        Ok(Self::new(
+            Box::new(hs::ExpectClientHello::new(config, extra_exts)),
+            ServerConnectionData::default(),
+            common,
+        ))
+    }
+
+    pub(crate) fn reject_early_data(&mut self) {
+        assert!(
+            self.common_state.is_handshaking(),
+            "cannot retroactively reject early data"
+        );
+        self.data.early_data.reject();
+    }
+}
+
 /// State associated with a server connection.
 #[derive(Default)]
 pub struct ServerConnectionData {
@@ -793,7 +789,6 @@ impl crate::conn::SideData for ServerConnectionData {}
 impl quic::QuicExt for ServerConnection {
     fn quic_transport_parameters(&self) -> Option<&[u8]> {
         self.inner
-            .common_state
             .quic
             .params
             .as_ref()
@@ -803,14 +798,9 @@ impl quic::QuicExt for ServerConnection {
     fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
         Some(quic::DirectionalKeys::new(
             self.inner
-                .common_state
                 .suite
                 .and_then(|suite| suite.tls13())?,
-            self.inner
-                .common_state
-                .quic
-                .early_secret
-                .as_ref()?,
+            self.inner.quic.early_secret.as_ref()?,
         ))
     }
 
@@ -823,7 +813,7 @@ impl quic::QuicExt for ServerConnection {
     }
 
     fn alert(&self) -> Option<AlertDescription> {
-        self.inner.common_state.quic.alert
+        self.inner.quic.alert
     }
 }
 
@@ -855,9 +845,10 @@ pub trait ServerQuicExt {
             quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
             quic::Version::V1 => ServerExtension::TransportParameters(params),
         };
-        let mut new = ServerConnection::from_config(config, vec![ext])?;
-        new.inner.common_state.protocol = Protocol::Quic;
-        Ok(new)
+
+        let mut core = ConnectionCore::for_server(config, vec![ext])?;
+        core.common_state.protocol = Protocol::Quic;
+        Ok(ServerConnection { inner: core.into() })
     }
 }
 
