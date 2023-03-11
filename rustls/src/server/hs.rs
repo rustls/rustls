@@ -1,4 +1,5 @@
-use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::common_state::{CommonState, State};
+use crate::conn::ConnectionRandoms;
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
 use crate::enums::{AlertDescription, HandshakeType, ProtocolVersion, SignatureScheme};
@@ -27,7 +28,7 @@ use std::sync::Arc;
 
 pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
-pub(super) type ServerContext<'a> = crate::conn::Context<'a, ServerConnectionData>;
+pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
 pub(super) fn incompatible(common: &mut CommonState, why: PeerIncompatible) -> Error {
     common.send_fatal_alert(AlertDescription::HandshakeFailure);

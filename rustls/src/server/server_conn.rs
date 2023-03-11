@@ -1,5 +1,8 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{CommonState, ConnectionCommon, Side, State};
+#[cfg(feature = "quic")]
+use crate::common_state::Protocol;
+use crate::common_state::{CommonState, Side, State};
+use crate::conn::ConnectionCommon;
 #[cfg(feature = "quic")]
 use crate::enums::AlertDescription;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -10,6 +13,8 @@ use crate::log::trace;
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
 use crate::msgs::message::Message;
+#[cfg(feature = "quic")]
+use crate::quic;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::vecbuf::ChunkVecBuffer;
@@ -17,8 +22,6 @@ use crate::verify;
 #[cfg(feature = "secret_extraction")]
 use crate::ExtractedSecrets;
 use crate::KeyLog;
-#[cfg(feature = "quic")]
-use crate::{conn::Protocol, quic};
 
 use super::hs;
 

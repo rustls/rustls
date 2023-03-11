@@ -1,7 +1,12 @@
 use crate::check::inappropriate_handshake_message;
+#[cfg(feature = "quic")]
+use crate::check::inappropriate_message;
+#[cfg(feature = "quic")]
+use crate::common_state::Protocol;
 #[cfg(feature = "secret_extraction")]
-use crate::conn::Side;
-use crate::conn::{send_cert_verify_error_alert, CommonState, ConnectionRandoms, State};
+use crate::common_state::Side;
+use crate::common_state::{send_cert_verify_error_alert, CommonState, State};
+use crate::conn::ConnectionRandoms;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -24,8 +29,6 @@ use crate::ticketer;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
-#[cfg(feature = "quic")]
-use crate::{check::inappropriate_message, conn::Protocol};
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;

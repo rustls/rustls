@@ -317,6 +317,7 @@ mod log {
 mod msgs;
 mod anchors;
 mod cipher;
+mod common_state;
 mod conn;
 mod error;
 mod hash_hs;
@@ -367,9 +368,8 @@ pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
     ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
 };
-pub use crate::conn::{
-    CommonState, Connection, ConnectionCommon, IoState, Reader, Side, SideData, Writer,
-};
+pub use crate::common_state::{CommonState, IoState, Side};
+pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };

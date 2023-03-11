@@ -1,5 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::conn::{CommonState, ConnectionCommon, Protocol, Side};
+use crate::common_state::{CommonState, Protocol, Side};
+use crate::conn::ConnectionCommon;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;

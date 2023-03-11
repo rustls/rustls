@@ -1,5 +1,6 @@
 use crate::check::inappropriate_message;
-use crate::conn::{send_cert_verify_error_alert, CommonState, ConnectionRandoms, Side, State};
+use crate::common_state::{send_cert_verify_error_alert, CommonState, Side, State};
+use crate::conn::ConnectionRandoms;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};

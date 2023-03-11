@@ -1,7 +1,7 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::cipher::{Iv, IvLen};
 pub use crate::client::ClientQuicExt;
-use crate::conn::Side;
+use crate::common_state::Side;
 use crate::enums::AlertDescription;
 use crate::error::Error;
 pub use crate::server::ServerQuicExt;
