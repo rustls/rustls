@@ -635,13 +635,6 @@ impl<Data> ConnectionCommon<Data> {
         }
     }
 
-    pub(crate) fn send_some_plaintext(&mut self, buf: &[u8]) -> usize {
-        self.common_state
-            .perhaps_write_key_update();
-        self.common_state
-            .send_some_plaintext(buf)
-    }
-
     /// Read TLS content from `rd` into the internal buffer.
     ///
     /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
