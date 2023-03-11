@@ -1,5 +1,5 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{send_cert_verify_error_alert, CommonState, Side, State};
+use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
@@ -740,7 +740,10 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 &st.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| send_cert_verify_error_alert(cx.common, err))?;
+            .map_err(|err| {
+                cx.common
+                    .send_cert_verify_error_alert(err)
+            })?;
 
         // 3.
         // Build up the contents of the signed message.
@@ -766,7 +769,10 @@ impl State<ClientConnectionData> for ExpectServerDone {
             st.config
                 .verifier
                 .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
-                .map_err(|err| send_cert_verify_error_alert(cx.common, err))?
+                .map_err(|err| {
+                    cx.common
+                        .send_cert_verify_error_alert(err)
+                })?
         };
         cx.common.peer_certificates = Some(st.server_cert.cert_chain);
 

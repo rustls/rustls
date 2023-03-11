@@ -5,7 +5,7 @@ use crate::check::inappropriate_message;
 use crate::common_state::Protocol;
 #[cfg(feature = "secret_extraction")]
 use crate::common_state::Side;
-use crate::common_state::{send_cert_verify_error_alert, CommonState, State};
+use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
@@ -925,7 +925,10 @@ impl State<ServerConnectionData> for ExpectCertificate {
         self.config
             .verifier
             .verify_client_cert(end_entity, intermediates, now)
-            .map_err(|err| send_cert_verify_error_alert(cx.common, err))?;
+            .map_err(|err| {
+                cx.common
+                    .send_cert_verify_error_alert(err)
+            })?;
 
         Ok(Box::new(ExpectCertificateVerify {
             config: self.config,
@@ -966,7 +969,9 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         };
 
         if let Err(e) = rc {
-            return Err(send_cert_verify_error_alert(cx.common, e));
+            return Err(cx
+                .common
+                .send_cert_verify_error_alert(e));
         }
 
         trace!("client CertificateVerify OK");

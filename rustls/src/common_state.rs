@@ -478,6 +478,23 @@ impl CommonState {
         Err(Error::AlertReceived(alert.description))
     }
 
+    pub(crate) fn send_cert_verify_error_alert(&mut self, err: Error) -> Error {
+        match err {
+            Error::InvalidCertificate(ref e) => {
+                // the clone focus on the `Arc` wrapped error in `CertificateError`
+                self.send_fatal_alert(e.clone().into());
+            }
+            Error::PeerMisbehaved(_) => {
+                self.send_fatal_alert(AlertDescription::IllegalParameter);
+            }
+            _ => {
+                self.send_fatal_alert(AlertDescription::HandshakeFailure);
+            }
+        };
+
+        err
+    }
+
     pub(crate) fn send_fatal_alert(&mut self, desc: AlertDescription) {
         warn!("Sending fatal alert {:?}", desc);
         debug_assert!(!self.sent_fatal_alert);
@@ -658,23 +675,6 @@ impl Side {
             Self::Server => Self::Client,
         }
     }
-}
-
-pub(crate) fn send_cert_verify_error_alert(common: &mut CommonState, err: Error) -> Error {
-    match err {
-        Error::InvalidCertificate(ref e) => {
-            // the clone focus on the `Arc` wrapped error in `CertificateError`
-            common.send_fatal_alert(e.clone().into());
-        }
-        Error::PeerMisbehaved(_) => {
-            common.send_fatal_alert(AlertDescription::IllegalParameter);
-        }
-        _ => {
-            common.send_fatal_alert(AlertDescription::HandshakeFailure);
-        }
-    };
-
-    err
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
