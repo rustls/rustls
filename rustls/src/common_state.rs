@@ -479,19 +479,11 @@ impl CommonState {
     }
 
     pub(crate) fn send_cert_verify_error_alert(&mut self, err: Error) -> Error {
-        match err {
-            Error::InvalidCertificate(ref e) => {
-                // the clone focus on the `Arc` wrapped error in `CertificateError`
-                self.send_fatal_alert(e.clone().into());
-            }
-            Error::PeerMisbehaved(_) => {
-                self.send_fatal_alert(AlertDescription::IllegalParameter);
-            }
-            _ => {
-                self.send_fatal_alert(AlertDescription::HandshakeFailure);
-            }
-        };
-
+        self.send_fatal_alert(match &err {
+            Error::InvalidCertificate(e) => e.clone().into(),
+            Error::PeerMisbehaved(_) => AlertDescription::IllegalParameter,
+            _ => AlertDescription::HandshakeFailure,
+        });
         err
     }
 
