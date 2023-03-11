@@ -1,5 +1,5 @@
 use crate::cipher::{Iv, IvLen, MessageDecrypter};
-use crate::conn::{CommonState, Side};
+use crate::common_state::{CommonState, Side};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
 #[cfg(feature = "quic")]
@@ -578,8 +578,8 @@ impl KeyScheduleTraffic {
         }
 
         let (tx, rx) = match side {
-            crate::conn::Side::Client => (client_secrets, server_secrets),
-            crate::conn::Side::Server => (server_secrets, client_secrets),
+            Side::Client => (client_secrets, server_secrets),
+            Side::Server => (server_secrets, client_secrets),
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
     }

@@ -1,9 +1,9 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
-use crate::conn::{CommonState, ConnectionRandoms, State};
-use crate::enums::{AlertDescription, ContentType, HandshakeType};
-use crate::enums::{CipherSuite, ProtocolVersion};
+use crate::common_state::{CommonState, State};
+use crate::conn::ConnectionRandoms;
+use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
@@ -36,7 +36,7 @@ use std::sync::Arc;
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
-pub(super) type ClientContext<'a> = crate::conn::Context<'a, ClientConnectionData>;
+pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 fn find_session(
     server_name: &ServerName,

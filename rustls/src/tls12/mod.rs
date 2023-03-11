@@ -1,7 +1,7 @@
 use crate::cipher::{MessageDecrypter, MessageEncrypter};
-use crate::conn::{CommonState, ConnectionRandoms, Side};
-use crate::enums::AlertDescription;
-use crate::enums::{CipherSuite, SignatureScheme};
+use crate::common_state::{CommonState, Side};
+use crate::conn::ConnectionRandoms;
+use crate::enums::{AlertDescription, CipherSuite, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::kx;
 use crate::msgs::codec::{Codec, Reader};
@@ -514,7 +514,7 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::conn::{CommonState, Side};
+    use crate::common_state::{CommonState, Side};
     use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
     #[test]
