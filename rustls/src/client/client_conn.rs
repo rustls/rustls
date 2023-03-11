@@ -629,7 +629,7 @@ impl quic::QuicExt for ClientConnection {
     }
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
-        quic::write_hs(&mut self.inner.common_state, buf)
+        self.inner.quic.write_hs(buf)
     }
 
     fn alert(&self) -> Option<AlertDescription> {

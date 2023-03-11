@@ -1,7 +1,7 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::cipher::{Iv, IvLen};
 pub use crate::client::ClientQuicExt;
-use crate::conn::{CommonState, Side};
+use crate::conn::Side;
 use crate::enums::AlertDescription;
 use crate::error::Error;
 pub use crate::server::ServerQuicExt;
@@ -26,6 +26,40 @@ pub(crate) struct Quic {
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
     pub(crate) returned_traffic_keys: bool,
+}
+
+impl Quic {
+    pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
+        while let Some((_, msg)) = self.hs_queue.pop_front() {
+            buf.extend_from_slice(&msg);
+            if let Some(&(true, _)) = self.hs_queue.front() {
+                if self.hs_secrets.is_some() {
+                    // Allow the caller to switch keys before proceeding.
+                    break;
+                }
+            }
+        }
+
+        if let Some(secrets) = self.hs_secrets.take() {
+            return Some(KeyChange::Handshake {
+                keys: Keys::new(&secrets),
+            });
+        }
+
+        if let Some(mut secrets) = self.traffic_secrets.take() {
+            if !self.returned_traffic_keys {
+                self.returned_traffic_keys = true;
+                let keys = Keys::new(&secrets);
+                secrets.update();
+                return Some(KeyChange::OneRtt {
+                    keys,
+                    next: secrets,
+                });
+            }
+        }
+
+        None
+    }
 }
 
 /// Secrets used to encrypt/decrypt traffic
@@ -411,38 +445,6 @@ impl Keys {
             remote: DirectionalKeys::new(secrets.suite, remote),
         }
     }
-}
-
-pub(crate) fn write_hs(this: &mut CommonState, buf: &mut Vec<u8>) -> Option<KeyChange> {
-    while let Some((_, msg)) = this.quic.hs_queue.pop_front() {
-        buf.extend_from_slice(&msg);
-        if let Some(&(true, _)) = this.quic.hs_queue.front() {
-            if this.quic.hs_secrets.is_some() {
-                // Allow the caller to switch keys before proceeding.
-                break;
-            }
-        }
-    }
-
-    if let Some(secrets) = this.quic.hs_secrets.take() {
-        return Some(KeyChange::Handshake {
-            keys: Keys::new(&secrets),
-        });
-    }
-
-    if let Some(mut secrets) = this.quic.traffic_secrets.take() {
-        if !this.quic.returned_traffic_keys {
-            this.quic.returned_traffic_keys = true;
-            let keys = Keys::new(&secrets);
-            secrets.update();
-            return Some(KeyChange::OneRtt {
-                keys,
-                next: secrets,
-            });
-        }
-    }
-
-    None
 }
 
 /// Key material for use in QUIC packet spaces

@@ -138,8 +138,8 @@ impl crate::quic::QuicExt for Connection {
 
     fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
         match self {
-            Self::Client(conn) => quic::write_hs(conn, buf),
-            Self::Server(conn) => quic::write_hs(conn, buf),
+            Self::Client(conn) => conn.quic.write_hs(buf),
+            Self::Server(conn) => conn.quic.write_hs(buf),
         }
     }
 
