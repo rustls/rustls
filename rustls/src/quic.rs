@@ -8,9 +8,39 @@ pub use crate::server::ServerQuicExt;
 use crate::suites::BulkAlgorithm;
 use crate::tls13::key_schedule::hkdf_expand;
 use crate::tls13::{Tls13CipherSuite, TLS13_AES_128_GCM_SHA256_INTERNAL};
-use std::fmt::Debug;
 
 use ring::{aead, hkdf};
+
+use std::collections::VecDeque;
+use std::fmt::Debug;
+
+#[cfg(feature = "quic")]
+pub(crate) struct Quic {
+    /// QUIC transport parameters received from the peer during the handshake
+    pub(crate) params: Option<Vec<u8>>,
+    pub(crate) alert: Option<AlertDescription>,
+    pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
+    pub(crate) early_secret: Option<ring::hkdf::Prk>,
+    pub(crate) hs_secrets: Option<Secrets>,
+    pub(crate) traffic_secrets: Option<Secrets>,
+    /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
+    pub(crate) returned_traffic_keys: bool,
+}
+
+#[cfg(feature = "quic")]
+impl Quic {
+    pub(crate) fn new() -> Self {
+        Self {
+            params: None,
+            alert: None,
+            hs_queue: VecDeque::new(),
+            early_secret: None,
+            hs_secrets: None,
+            traffic_secrets: None,
+            returned_traffic_keys: false,
+        }
+    }
+}
 
 /// Secrets used to encrypt/decrypt traffic
 #[derive(Clone, Debug)]
