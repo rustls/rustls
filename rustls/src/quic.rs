@@ -15,6 +15,7 @@ use std::collections::VecDeque;
 use std::fmt::Debug;
 
 #[cfg(feature = "quic")]
+#[derive(Default)]
 pub(crate) struct Quic {
     /// QUIC transport parameters received from the peer during the handshake
     pub(crate) params: Option<Vec<u8>>,
@@ -25,21 +26,6 @@ pub(crate) struct Quic {
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
     pub(crate) returned_traffic_keys: bool,
-}
-
-#[cfg(feature = "quic")]
-impl Quic {
-    pub(crate) fn new() -> Self {
-        Self {
-            params: None,
-            alert: None,
-            hs_queue: VecDeque::new(),
-            early_secret: None,
-            hs_secrets: None,
-            traffic_secrets: None,
-            returned_traffic_keys: false,
-        }
-    }
 }
 
 /// Secrets used to encrypt/decrypt traffic

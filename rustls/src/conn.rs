@@ -860,7 +860,7 @@ impl CommonState {
 
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
-            quic: quic::Quic::new(),
+            quic: quic::Quic::default(),
             #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
         }
