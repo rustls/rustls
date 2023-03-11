@@ -22,8 +22,6 @@ use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
-#[cfg(feature = "quic")]
-use std::collections::VecDeque;
 
 use std::fmt::Debug;
 use std::io;
@@ -832,7 +830,7 @@ pub struct CommonState {
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,
     #[cfg(feature = "quic")]
-    pub(crate) quic: Quic,
+    pub(crate) quic: quic::Quic,
     #[cfg(feature = "secret_extraction")]
     pub(crate) enable_secret_extraction: bool,
 }
@@ -862,7 +860,7 @@ impl CommonState {
 
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
-            quic: Quic::new(),
+            quic: quic::Quic::new(),
             #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
         }
@@ -1379,34 +1377,6 @@ pub(crate) trait State<Data>: Send + Sync {
 pub(crate) struct Context<'a, Data> {
     pub(crate) common: &'a mut CommonState,
     pub(crate) data: &'a mut Data,
-}
-
-#[cfg(feature = "quic")]
-pub(crate) struct Quic {
-    /// QUIC transport parameters received from the peer during the handshake
-    pub(crate) params: Option<Vec<u8>>,
-    pub(crate) alert: Option<AlertDescription>,
-    pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub(crate) early_secret: Option<ring::hkdf::Prk>,
-    pub(crate) hs_secrets: Option<quic::Secrets>,
-    pub(crate) traffic_secrets: Option<quic::Secrets>,
-    /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    pub(crate) returned_traffic_keys: bool,
-}
-
-#[cfg(feature = "quic")]
-impl Quic {
-    fn new() -> Self {
-        Self {
-            params: None,
-            alert: None,
-            hs_queue: VecDeque::new(),
-            early_secret: None,
-            hs_secrets: None,
-            traffic_secrets: None,
-            returned_traffic_keys: false,
-        }
-    }
 }
 
 /// Side of the connection.
