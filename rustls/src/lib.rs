@@ -404,8 +404,6 @@ pub mod client {
     mod tls13;
 
     pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
-    #[cfg(feature = "quic")]
-    pub use client_conn::ClientQuicExt;
     pub use client_conn::ClientSessionStore;
     pub use client_conn::InvalidDnsNameError;
     pub use client_conn::ResolvesClientCert;
@@ -444,8 +442,6 @@ pub mod server {
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
-    #[cfg(feature = "quic")]
-    pub use server_conn::ServerQuicExt;
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{
         Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData,

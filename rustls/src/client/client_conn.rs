@@ -6,9 +6,6 @@ use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
-
-#[cfg(feature = "quic")]
-use crate::enums::AlertDescription;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
@@ -21,8 +18,6 @@ use crate::ExtractedSecrets;
 use crate::KeyLog;
 
 use super::hs;
-#[cfg(feature = "quic")]
-use crate::quic;
 
 use std::error::Error as StdError;
 use std::marker::PhantomData;
@@ -612,70 +607,3 @@ impl ClientConnectionData {
 }
 
 impl crate::conn::SideData for ClientConnectionData {}
-
-#[cfg(feature = "quic")]
-impl quic::QuicExt for ClientConnection {
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner
-            .quic
-            .params
-            .as_ref()
-            .map(|v| v.as_ref())
-    }
-
-    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
-        Some(quic::DirectionalKeys::new(
-            self.inner
-                .core
-                .data
-                .resumption_ciphersuite
-                .and_then(|suite| suite.tls13())?,
-            self.inner.quic.early_secret.as_ref()?,
-        ))
-    }
-
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        self.inner.read_quic_hs(plaintext)
-    }
-
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
-        self.inner.quic.write_hs(buf)
-    }
-
-    fn alert(&self) -> Option<AlertDescription> {
-        self.inner.quic.alert
-    }
-}
-
-/// Methods specific to QUIC client sessions
-#[cfg(feature = "quic")]
-#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
-pub trait ClientQuicExt {
-    /// Make a new QUIC ClientConnection. This differs from `ClientConnection::new()`
-    /// in that it takes an extra argument, `params`, which contains the
-    /// TLS-encoded transport parameters to send.
-    fn new_quic(
-        config: Arc<ClientConfig>,
-        quic_version: quic::Version,
-        name: ServerName,
-        params: Vec<u8>,
-    ) -> Result<ClientConnection, Error> {
-        if !config.supports_version(ProtocolVersion::TLSv1_3) {
-            return Err(Error::General(
-                "TLS 1.3 support is required for QUIC".into(),
-            ));
-        }
-
-        let ext = match quic_version {
-            quic::Version::V1Draft => ClientExtension::TransportParametersDraft(params),
-            quic::Version::V1 => ClientExtension::TransportParameters(params),
-        };
-
-        Ok(ClientConnection {
-            inner: ConnectionCore::for_client(config, name, vec![ext], Protocol::Quic)?.into(),
-        })
-    }
-}
-
-#[cfg(feature = "quic")]
-impl ClientQuicExt for ClientConnection {}
