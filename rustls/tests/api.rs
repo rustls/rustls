@@ -11,8 +11,6 @@ use std::sync::Mutex;
 use rustls::client::ResolvesClientCert;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-#[cfg(feature = "quic")]
-use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
@@ -3008,12 +3006,12 @@ fn early_data_can_be_rejected_by_server() {
 #[cfg(feature = "quic")]
 mod test_quic {
     use super::*;
-    use rustls::Connection;
+    use rustls::quic::{self, ConnectionCommon};
 
     // Returns the sender's next secrets to use, or the receiver's error.
-    fn step(
-        send: &mut dyn QuicExt,
-        recv: &mut dyn QuicExt,
+    fn step<L: SideData, R: SideData>(
+        send: &mut ConnectionCommon<L>,
+        recv: &mut ConnectionCommon<R>,
     ) -> Result<Option<quic::KeyChange>, Error> {
         let mut buf = Vec::new();
         let change = loop {
@@ -3077,24 +3075,20 @@ mod test_quic {
         let server_params = &b"server params"[..];
 
         // full handshake
-        let mut client = Connection::from(
-            ClientConnection::new_quic(
-                Arc::clone(&client_config),
-                quic::Version::V1,
-                dns_name("localhost"),
-                client_params.into(),
-            )
-            .unwrap(),
-        );
+        let mut client = quic::ClientConnection::new(
+            Arc::clone(&client_config),
+            quic::Version::V1,
+            dns_name("localhost"),
+            client_params.into(),
+        )
+        .unwrap();
 
-        let mut server = Connection::from(
-            ServerConnection::new_quic(
-                Arc::clone(&server_config),
-                quic::Version::V1,
-                server_params.into(),
-            )
-            .unwrap(),
-        );
+        let mut server = quic::ServerConnection::new(
+            Arc::clone(&server_config),
+            quic::Version::V1,
+            server_params.into(),
+        )
+        .unwrap();
 
         let client_initial = step(&mut client, &mut server).unwrap();
         assert!(client_initial.is_none());
@@ -3129,7 +3123,7 @@ mod test_quic {
             .is_none());
 
         // 0-RTT handshake
-        let mut client = ClientConnection::new_quic(
+        let mut client = quic::ClientConnection::new(
             Arc::clone(&client_config),
             quic::Version::V1,
             dns_name("localhost"),
@@ -3140,7 +3134,7 @@ mod test_quic {
             .negotiated_cipher_suite()
             .is_some());
 
-        let mut server = ServerConnection::new_quic(
+        let mut server = quic::ServerConnection::new(
             Arc::clone(&server_config),
             quic::Version::V1,
             server_params.into(),
@@ -3171,7 +3165,7 @@ mod test_quic {
         // 0-RTT rejection
         {
             let client_config = (*client_config).clone();
-            let mut client = ClientConnection::new_quic(
+            let mut client = quic::ClientConnection::new(
                 Arc::new(client_config),
                 quic::Version::V1,
                 dns_name("localhost"),
@@ -3179,7 +3173,7 @@ mod test_quic {
             )
             .unwrap();
 
-            let mut server = ServerConnection::new_quic(
+            let mut server = quic::ServerConnection::new(
                 Arc::clone(&server_config),
                 quic::Version::V1,
                 server_params.into(),
@@ -3204,7 +3198,7 @@ mod test_quic {
         }
 
         // failed handshake
-        let mut client = ClientConnection::new_quic(
+        let mut client = quic::ClientConnection::new(
             client_config,
             quic::Version::V1,
             dns_name("example.com"),
@@ -3213,7 +3207,7 @@ mod test_quic {
         .unwrap();
 
         let mut server =
-            ServerConnection::new_quic(server_config, quic::Version::V1, server_params.into())
+            quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                 .unwrap();
 
         step(&mut client, &mut server).unwrap();
@@ -3260,7 +3254,7 @@ mod test_quic {
             server_config.alpn_protocols = vec!["foo".into()];
             let server_config = Arc::new(server_config);
 
-            let mut client = ClientConnection::new_quic(
+            let mut client = quic::ClientConnection::new(
                 client_config,
                 quic::Version::V1,
                 dns_name("localhost"),
@@ -3268,7 +3262,7 @@ mod test_quic {
             )
             .unwrap();
             let mut server =
-                ServerConnection::new_quic(server_config, quic::Version::V1, server_params.into())
+                quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                     .unwrap();
 
             assert_debug_eq(
@@ -3293,7 +3287,7 @@ mod test_quic {
         client_config.alpn_protocols = vec!["foo".into()];
         let client_config = Arc::new(client_config);
 
-        assert!(ClientConnection::new_quic(
+        assert!(quic::ClientConnection::new(
             client_config,
             quic::Version::V1,
             dns_name("localhost"),
@@ -3306,7 +3300,7 @@ mod test_quic {
         server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
 
-        assert!(ServerConnection::new_quic(
+        assert!(quic::ServerConnection::new(
             server_config,
             quic::Version::V1,
             b"server params".to_vec(),
@@ -3335,7 +3329,7 @@ mod test_quic {
 
             let wrapped = Arc::new(server_config.clone());
             assert_eq!(
-                ServerConnection::new_quic(wrapped, quic::Version::V1, b"server params".to_vec(),)
+                quic::ServerConnection::new(wrapped, quic::Version::V1, b"server params".to_vec(),)
                     .is_ok(),
                 ok
             );
@@ -3348,9 +3342,12 @@ mod test_quic {
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
         let server_config = Arc::new(server_config);
 
-        let mut server =
-            ServerConnection::new_quic(server_config, quic::Version::V1, b"server params".to_vec())
-                .unwrap();
+        let mut server = quic::ServerConnection::new(
+            server_config,
+            quic::Version::V1,
+            b"server params".to_vec(),
+        )
+        .unwrap();
 
         use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
@@ -3358,7 +3355,6 @@ mod test_quic {
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
-        use rustls::internal::msgs::message::PlainMessage;
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let rng = ring::rand::SystemRandom::new();
@@ -3371,37 +3367,30 @@ mod test_quic {
             .compute_public_key()
             .unwrap();
 
-        let client_hello = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                    client_version: ProtocolVersion::TLSv1_3,
-                    random,
-                    session_id: SessionID::random().unwrap(),
-                    cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                    compression_methods: vec![Compression::Null],
-                    extensions: vec![
-                        ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
-                        ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-                        ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                        ClientExtension::KeyShare(vec![KeyShareEntry {
-                            group: NamedGroup::X25519,
-                            payload: PayloadU16::new(kx.as_ref().to_vec()),
-                        }]),
-                    ],
-                }),
+        let client_hello = MessagePayload::handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ClientHello,
+            payload: HandshakePayload::ClientHello(ClientHelloPayload {
+                client_version: ProtocolVersion::TLSv1_3,
+                random,
+                session_id: SessionID::random().unwrap(),
+                cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                compression_methods: vec![Compression::Null],
+                extensions: vec![
+                    ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
+                    ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
+                    ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
+                    ClientExtension::KeyShare(vec![KeyShareEntry {
+                        group: NamedGroup::X25519,
+                        payload: PayloadU16::new(kx.as_ref().to_vec()),
+                    }]),
+                ],
             }),
-        };
+        });
 
-        let buf = PlainMessage::from(client_hello)
-            .into_unencrypted_opaque()
-            .encode();
-        server
-            .read_tls(&mut buf.as_slice())
-            .unwrap();
+        let mut buf = Vec::with_capacity(512);
+        client_hello.encode(&mut buf);
         assert_debug_eq(
-            server.process_new_packets(),
+            server.read_hs(&mut buf.as_slice()),
             Err(Error::PeerMisbehaved(
                 PeerMisbehaved::MissingQuicTransportParameters,
             )),
@@ -3421,7 +3410,6 @@ mod test_quic {
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
-        use rustls::internal::msgs::message::PlainMessage;
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let rng = ring::rand::SystemRandom::new();
@@ -3434,40 +3422,36 @@ mod test_quic {
             .compute_public_key()
             .unwrap();
 
-        let mut server =
-            ServerConnection::new_quic(server_config, quic::Version::V1, b"server params".to_vec())
-                .unwrap();
+        let mut server = quic::ServerConnection::new(
+            server_config,
+            quic::Version::V1,
+            b"server params".to_vec(),
+        )
+        .unwrap();
 
-        let client_hello = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                    client_version: ProtocolVersion::TLSv1_2,
-                    random: random.clone(),
-                    session_id: SessionID::random().unwrap(),
-                    cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                    compression_methods: vec![Compression::Null],
-                    extensions: vec![
-                        ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-                        ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                        ClientExtension::KeyShare(vec![KeyShareEntry {
-                            group: NamedGroup::X25519,
-                            payload: PayloadU16::new(kx.as_ref().to_vec()),
-                        }]),
-                    ],
-                }),
+        let client_hello = MessagePayload::handshake(HandshakeMessagePayload {
+            typ: HandshakeType::ClientHello,
+            payload: HandshakePayload::ClientHello(ClientHelloPayload {
+                client_version: ProtocolVersion::TLSv1_2,
+                random: random.clone(),
+                session_id: SessionID::random().unwrap(),
+                cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
+                compression_methods: vec![Compression::Null],
+                extensions: vec![
+                    ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
+                    ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
+                    ClientExtension::KeyShare(vec![KeyShareEntry {
+                        group: NamedGroup::X25519,
+                        payload: PayloadU16::new(kx.as_ref().to_vec()),
+                    }]),
+                ],
             }),
-        };
+        });
 
-        let buf = PlainMessage::from(client_hello)
-            .into_unencrypted_opaque()
-            .encode();
-        server
-            .read_tls(&mut buf.as_slice())
-            .unwrap();
+        let mut buf = Vec::with_capacity(512);
+        client_hello.encode(&mut buf);
         assert_debug_eq(
-            server.process_new_packets(),
+            server.read_hs(&mut buf.as_slice()),
             Err(Error::PeerIncompatible(
                 PeerIncompatible::SupportedVersionsExtensionRequired,
             )),

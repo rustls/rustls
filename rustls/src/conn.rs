@@ -1,6 +1,4 @@
 use crate::common_state::{CommonState, Context, IoState, State};
-#[cfg(feature = "quic")]
-use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
@@ -8,8 +6,6 @@ use crate::log::trace;
 use crate::msgs::deframer::{Deframed, MessageDeframer};
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{Message, MessagePayload, PlainMessage};
-#[cfg(feature = "quic")]
-use crate::quic;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
@@ -107,44 +103,6 @@ impl Connection {
         match self {
             Self::Client(conn) => conn.complete_io(io),
             Self::Server(conn) => conn.complete_io(io),
-        }
-    }
-}
-
-#[cfg(feature = "quic")]
-impl crate::quic::QuicExt for Connection {
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        match self {
-            Self::Client(conn) => conn.quic_transport_parameters(),
-            Self::Server(conn) => conn.quic_transport_parameters(),
-        }
-    }
-
-    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
-        match self {
-            Self::Client(conn) => conn.zero_rtt_keys(),
-            Self::Server(conn) => conn.zero_rtt_keys(),
-        }
-    }
-
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        match self {
-            Self::Client(conn) => conn.read_quic_hs(plaintext),
-            Self::Server(conn) => conn.read_quic_hs(plaintext),
-        }
-    }
-
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
-        match self {
-            Self::Client(conn) => conn.quic.write_hs(buf),
-            Self::Server(conn) => conn.quic.write_hs(buf),
-        }
-    }
-
-    fn alert(&self) -> Option<AlertDescription> {
-        match self {
-            Self::Client(conn) => conn.alert(),
-            Self::Server(conn) => conn.alert(),
         }
     }
 }
@@ -600,17 +558,6 @@ impl<Data> ConnectionCommon<Data> {
     }
 }
 
-#[cfg(feature = "quic")]
-impl<Data> ConnectionCommon<Data> {
-    pub(crate) fn read_quic_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        self.core
-            .message_deframer
-            .push(ProtocolVersion::TLSv1_3, plaintext)?;
-        self.process_new_packets()?;
-        Ok(())
-    }
-}
-
 impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
     fn from(conn: &'a mut ConnectionCommon<Data>) -> Self {
         Self {
@@ -641,10 +588,10 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
 }
 
 pub(crate) struct ConnectionCore<Data> {
-    state: Result<Box<dyn State<Data>>, Error>,
+    pub(crate) state: Result<Box<dyn State<Data>>, Error>,
     pub(crate) data: Data,
     pub(crate) common_state: CommonState,
-    message_deframer: MessageDeframer,
+    pub(crate) message_deframer: MessageDeframer,
 }
 
 impl<Data> ConnectionCore<Data> {

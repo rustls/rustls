@@ -1,10 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-#[cfg(feature = "quic")]
-use crate::common_state::Protocol;
 use crate::common_state::{CommonState, Context, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
-#[cfg(feature = "quic")]
-use crate::enums::AlertDescription;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
@@ -13,8 +9,6 @@ use crate::log::trace;
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
 use crate::msgs::message::Message;
-#[cfg(feature = "quic")]
-use crate::quic;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
 use crate::vecbuf::ChunkVecBuffer;
@@ -784,73 +778,3 @@ impl ServerConnectionData {
 }
 
 impl crate::conn::SideData for ServerConnectionData {}
-
-#[cfg(feature = "quic")]
-impl quic::QuicExt for ServerConnection {
-    fn quic_transport_parameters(&self) -> Option<&[u8]> {
-        self.inner
-            .quic
-            .params
-            .as_ref()
-            .map(|v| v.as_ref())
-    }
-
-    fn zero_rtt_keys(&self) -> Option<quic::DirectionalKeys> {
-        Some(quic::DirectionalKeys::new(
-            self.inner
-                .suite
-                .and_then(|suite| suite.tls13())?,
-            self.inner.quic.early_secret.as_ref()?,
-        ))
-    }
-
-    fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-        self.inner.read_quic_hs(plaintext)
-    }
-
-    fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<quic::KeyChange> {
-        self.inner.quic.write_hs(buf)
-    }
-
-    fn alert(&self) -> Option<AlertDescription> {
-        self.inner.quic.alert
-    }
-}
-
-/// Methods specific to QUIC server sessions
-#[cfg(feature = "quic")]
-#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
-pub trait ServerQuicExt {
-    /// Make a new QUIC ServerConnection. This differs from `ServerConnection::new()`
-    /// in that it takes an extra argument, `params`, which contains the
-    /// TLS-encoded transport parameters to send.
-    fn new_quic(
-        config: Arc<ServerConfig>,
-        quic_version: quic::Version,
-        params: Vec<u8>,
-    ) -> Result<ServerConnection, Error> {
-        if !config.supports_version(ProtocolVersion::TLSv1_3) {
-            return Err(Error::General(
-                "TLS 1.3 support is required for QUIC".into(),
-            ));
-        }
-
-        if config.max_early_data_size != 0 && config.max_early_data_size != 0xffff_ffff {
-            return Err(Error::General(
-                "QUIC sessions must set a max early data of 0 or 2^32-1".into(),
-            ));
-        }
-
-        let ext = match quic_version {
-            quic::Version::V1Draft => ServerExtension::TransportParametersDraft(params),
-            quic::Version::V1 => ServerExtension::TransportParameters(params),
-        };
-
-        let mut core = ConnectionCore::for_server(config, vec![ext])?;
-        core.common_state.protocol = Protocol::Quic;
-        Ok(ServerConnection { inner: core.into() })
-    }
-}
-
-#[cfg(feature = "quic")]
-impl ServerQuicExt for ServerConnection {}
