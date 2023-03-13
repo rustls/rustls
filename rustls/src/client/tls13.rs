@@ -188,19 +188,22 @@ pub(super) fn initial_key_share(
     config: &ClientConfig<impl CryptoProvider>,
     server_name: &ServerName,
 ) -> Result<kx::KeyExchange, Error> {
-    let group = match config
+    let group = config
         .session_storage
         .kx_hint(server_name)
-    {
-        Some(group) => group,
-        None => {
+        .filter(|hint_group| {
+            config
+                .kx_groups
+                .iter()
+                .any(|supported_group| supported_group.name == *hint_group)
+        })
+        .unwrap_or(
             config
                 .kx_groups
                 .first()
                 .expect("No kx groups configured")
-                .name
-        }
-    };
+                .name,
+        );
 
     kx::KeyExchange::choose(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
 }
