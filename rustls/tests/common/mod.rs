@@ -233,7 +233,7 @@ impl KeyType {
 
 pub fn finish_server_config<C: CryptoProvider>(
     kt: KeyType,
-    conf: rustls::ConfigBuilder<ServerConfig<C>, rustls::WantsVerifier>,
+    conf: rustls::ConfigBuilder<ServerConfig<C>, rustls::WantsVerifier<C>>,
 ) -> ServerConfig<C> {
     conf.with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
@@ -295,7 +295,7 @@ pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfi
 
 pub fn finish_client_config<C: CryptoProvider>(
     kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier>,
+    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier<C>>,
 ) -> ClientConfig<C> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
@@ -308,7 +308,7 @@ pub fn finish_client_config<C: CryptoProvider>(
 
 pub fn finish_client_config_with_creds<C: CryptoProvider>(
     kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier>,
+    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier<C>>,
 ) -> ClientConfig<C> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));

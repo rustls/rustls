@@ -4,8 +4,7 @@ use crate::conn::Protocol;
 #[cfg(feature = "secret_extraction")]
 use crate::conn::Side;
 use crate::conn::{self, CommonState, ConnectionRandoms, State};
-use crate::crypto::ring::KeyExchange;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchange, SupportedGroup};
 use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -61,8 +60,8 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
-pub(super) fn handle_server_hello(
-    config: Arc<ClientConfig<impl CryptoProvider>>,
+pub(super) fn handle_server_hello<C: CryptoProvider>(
+    config: Arc<ClientConfig<C>>,
     cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::Tls13ClientSessionValue>,
@@ -72,7 +71,7 @@ pub(super) fn handle_server_hello(
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    our_key_share: KeyExchange,
+    our_key_share: C::KeyExchange,
     mut sent_tls13_fake_ccs: bool,
 ) -> hs::NextStateOrError {
     validate_server_hello(cx.common, server_hello)?;
@@ -184,10 +183,10 @@ fn validate_server_hello(
     Ok(())
 }
 
-pub(super) fn initial_key_share(
-    config: &ClientConfig<impl CryptoProvider>,
+pub(super) fn initial_key_share<C: CryptoProvider>(
+    config: &ClientConfig<C>,
     server_name: &ServerName,
-) -> Result<KeyExchange, Error> {
+) -> Result<C::KeyExchange, Error> {
     let group = config
         .session_storage
         .kx_hint(server_name)
@@ -195,15 +194,15 @@ pub(super) fn initial_key_share(
             config
                 .kx_groups
                 .iter()
-                .any(|supported_group| supported_group.name == *hint_group)
+                .any(|supported_group| supported_group.name() == *hint_group)
         })
-        .unwrap_or(
+        .unwrap_or_else(|| {
             config
                 .kx_groups
                 .first()
                 .expect("No kx groups configured")
-                .name,
-        );
+                .name()
+        });
 
     KeyExchange::choose(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
 }
@@ -342,7 +341,7 @@ fn validate_encrypted_extensions(
     Ok(())
 }
 
-struct ExpectEncryptedExtensions<C> {
+struct ExpectEncryptedExtensions<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName,
@@ -436,7 +435,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectEncryptedExtension
     }
 }
 
-struct ExpectCertificateOrCertReq<C> {
+struct ExpectCertificateOrCertReq<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -499,7 +498,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateOrCertR
 // TLS1.3 version of CertificateRequest handling.  We then move to expecting the server
 // Certificate. Unfortunately the CertificateRequest type changed in an annoying way
 // in TLS1.3.
-struct ExpectCertificateRequest<C> {
+struct ExpectCertificateRequest<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -568,7 +567,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateRequest
     }
 }
 
-struct ExpectCertificate<C> {
+struct ExpectCertificate<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -635,7 +634,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificate<C> {
 }
 
 // --- TLS1.3 CertificateVerify ---
-struct ExpectCertificateVerify<C> {
+struct ExpectCertificateVerify<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
@@ -797,7 +796,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Com
     common.send_msg(m, true);
 }
 
-struct ExpectFinished<C> {
+struct ExpectFinished<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     server_name: ServerName,
     randoms: ConnectionRandoms,

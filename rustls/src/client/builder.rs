@@ -2,8 +2,7 @@ use crate::anchors;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
-use crate::crypto::ring::SupportedKxGroup;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::error::Error;
 use crate::key;
 use crate::suites::SupportedCipherSuite;
@@ -15,12 +14,12 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
     /// Choose how to verify client certificates.
     pub fn with_root_certificates(
         self,
         root_store: anchors::RootCertStore,
-    ) -> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOrClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOrClientCert<C>> {
         ConfigBuilder {
             state: WantsTransparencyPolicyOrClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -37,7 +36,7 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier> {
     pub fn with_custom_certificate_verifier(
         self,
         verifier: Arc<dyn verify::ServerCertVerifier>,
-    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -58,14 +57,14 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsTransparencyPolicyOrClientCert {
+pub struct WantsTransparencyPolicyOrClientCert<C: CryptoProvider> {
     cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
     versions: versions::EnabledVersions,
     root_store: anchors::RootCertStore,
 }
 
-impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOrClientCert> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOrClientCert<C>> {
     /// Set Certificate Transparency logs to use for server certificate validation.
     ///
     /// Because Certificate Transparency logs are sharded on a per-year basis and can be trusted or
@@ -77,7 +76,7 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOr
         self,
         logs: &'static [&'static sct::Log],
         validation_deadline: SystemTime,
-    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
         self.with_logs(Some(CertificateTransparencyPolicy::new(
             logs,
             validation_deadline,
@@ -118,7 +117,7 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOr
     fn with_logs(
         self,
         ct_policy: Option<CertificateTransparencyPolicy>,
-    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -139,14 +138,14 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsTransparencyPolicyOr
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsClientCert {
+pub struct WantsClientCert<C: CryptoProvider> {
     cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static <<C as CryptoProvider>::KeyExchange as KeyExchange>::SupportedGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
 }
 
-impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///

@@ -1,7 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Side, State};
-use crate::crypto::ring::SupportedKxGroup;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 #[cfg(feature = "logging")]
@@ -199,7 +198,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
-pub struct ServerConfig<C> {
+pub struct ServerConfig<C: CryptoProvider> {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
@@ -207,7 +206,7 @@ pub struct ServerConfig<C> {
     ///
     /// The first is the highest priority: they will be
     /// offered to the client in this order.
-    pub(super) kx_groups: Vec<&'static SupportedKxGroup>,
+    pub(super) kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -302,7 +301,7 @@ pub struct ServerConfig<C> {
 }
 
 // Avoid a `Clone` bound on `C`.
-impl<C> Clone for ServerConfig<C> {
+impl<C: CryptoProvider> Clone for ServerConfig<C> {
     fn clone(&self) -> Self {
         Self {
             cipher_suites: self.cipher_suites.clone(),
@@ -326,7 +325,7 @@ impl<C> Clone for ServerConfig<C> {
     }
 }
 
-impl<C> fmt::Debug for ServerConfig<C> {
+impl<C: CryptoProvider> fmt::Debug for ServerConfig<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerConfig")
             .field("ignore_client_order", &self.ignore_client_order)

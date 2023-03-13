@@ -1,5 +1,4 @@
-use crate::crypto::ring::{SupportedKxGroup, ALL_KX_GROUPS};
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::error::Error;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHER_SUITES};
 use crate::versions;
@@ -154,11 +153,11 @@ impl<S: ConfigSide, C: CryptoProvider> ConfigBuilder<S, WantsCipherSuites<C>> {
     /// These are safe defaults, useful for 99% of applications.
     ///
     /// [`DEFAULT_VERSIONS`]: versions::DEFAULT_VERSIONS
-    pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier> {
+    pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier<C>> {
         ConfigBuilder {
             state: WantsVerifier {
                 cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
-                kx_groups: ALL_KX_GROUPS.to_vec(),
+                kx_groups: <C::KeyExchange as KeyExchange>::all_kx_groups().to_vec(),
                 versions: versions::EnabledVersions::new(versions::DEFAULT_VERSIONS),
             },
             side: self.side,
@@ -212,8 +211,8 @@ impl<S: ConfigSide, C: CryptoProvider> ConfigBuilder<S, WantsKxGroups<C>> {
     /// Choose a specific set of key exchange groups.
     pub fn with_kx_groups(
         self,
-        kx_groups: &[&'static SupportedKxGroup],
-    ) -> ConfigBuilder<S, WantsVersions> {
+        kx_groups: &[&'static <C::KeyExchange as KeyExchange>::SupportedGroup],
+    ) -> ConfigBuilder<S, WantsVersions<C>> {
         ConfigBuilder {
             state: WantsVersions {
                 cipher_suites: self.state.cipher_suites,
@@ -223,11 +222,11 @@ impl<S: ConfigSide, C: CryptoProvider> ConfigBuilder<S, WantsKxGroups<C>> {
         }
     }
 
-    /// Choose the default set of key exchange groups ([`ALL_KX_GROUPS`]).
+    /// Choose the default set of key exchange groups ([`CryptoProvider::KeyExchange::all_kx_groups`]).
     ///
     /// This is a safe default: rustls doesn't implement any poor-quality groups.
-    pub fn with_safe_default_kx_groups(self) -> ConfigBuilder<S, WantsVersions> {
-        self.with_kx_groups(&ALL_KX_GROUPS)
+    pub fn with_safe_default_kx_groups(self) -> ConfigBuilder<S, WantsVersions<C>> {
+        self.with_kx_groups(<C::KeyExchange as KeyExchange>::all_kx_groups())
     }
 }
 
@@ -235,16 +234,16 @@ impl<S: ConfigSide, C: CryptoProvider> ConfigBuilder<S, WantsKxGroups<C>> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsVersions {
+pub struct WantsVersions<C: CryptoProvider> {
     cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
 }
 
-impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
+impl<S: ConfigSide, C: CryptoProvider> ConfigBuilder<S, WantsVersions<C>> {
     /// Accept the default protocol versions: both TLS1.2 and TLS1.3 are enabled.
     pub fn with_safe_default_protocol_versions(
         self,
-    ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
+    ) -> Result<ConfigBuilder<S, WantsVerifier<C>>, Error> {
         self.with_protocol_versions(versions::DEFAULT_VERSIONS)
     }
 
@@ -252,7 +251,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
     pub fn with_protocol_versions(
         self,
         versions: &[&'static versions::SupportedProtocolVersion],
-    ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
+    ) -> Result<ConfigBuilder<S, WantsVerifier<C>>, Error> {
         let mut any_usable_suite = false;
         for suite in &self.state.cipher_suites {
             if versions.contains(&suite.version()) {
@@ -284,9 +283,10 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsVerifier {
+pub struct WantsVerifier<C: CryptoProvider> {
     pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
-    pub(crate) kx_groups: Vec<&'static SupportedKxGroup>,
+    pub(crate) kx_groups:
+        Vec<&'static <<C as CryptoProvider>::KeyExchange as KeyExchange>::SupportedGroup>,
     pub(crate) versions: versions::EnabledVersions,
 }
 

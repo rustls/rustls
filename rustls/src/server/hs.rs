@@ -77,7 +77,7 @@ impl ExtensionProcessing {
         Default::default()
     }
 
-    pub(super) fn process_common<C>(
+    pub(super) fn process_common<C: CryptoProvider>(
         &mut self,
         config: &ServerConfig<C>,
         cx: &mut ServerContext<'_>,
@@ -193,7 +193,7 @@ impl ExtensionProcessing {
     }
 
     #[cfg(feature = "tls12")]
-    pub(super) fn process_tls12<C>(
+    pub(super) fn process_tls12<C: CryptoProvider>(
         &mut self,
         config: &ServerConfig<C>,
         hello: &ClientHelloPayload,
@@ -234,7 +234,7 @@ impl ExtensionProcessing {
     }
 }
 
-pub(super) struct ExpectClientHello<C> {
+pub(super) struct ExpectClientHello<C: CryptoProvider> {
     pub(super) config: Arc<ServerConfig<C>>,
     pub(super) extra_exts: Vec<ServerExtension>,
     pub(super) transcript: HandshakeHashOrBuffer,

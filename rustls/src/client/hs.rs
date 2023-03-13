@@ -2,8 +2,7 @@
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
-use crate::crypto::ring::KeyExchange;
-use crate::crypto::{CryptoProvider, KeyExchangeError};
+use crate::crypto::{CryptoProvider, KeyExchange, KeyExchangeError, SupportedGroup};
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -160,7 +159,7 @@ pub(super) fn start_handshake<C: CryptoProvider>(
     ))
 }
 
-struct ExpectServerHello<C> {
+struct ExpectServerHello<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Retrieved<persist::ClientSessionValue>>,
     server_name: ServerName,
@@ -169,19 +168,19 @@ struct ExpectServerHello<C> {
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    offered_key_share: Option<KeyExchange>,
+    offered_key_share: Option<C::KeyExchange>,
     session_id: SessionID,
     sent_tls13_fake_ccs: bool,
     suite: Option<SupportedCipherSuite>,
 }
 
-struct ExpectServerHelloOrHelloRetryRequest<C> {
+struct ExpectServerHelloOrHelloRetryRequest<C: CryptoProvider> {
     next: ExpectServerHello<C>,
     extra_exts: Vec<ClientExtension>,
 }
 
-fn emit_client_hello_for_retry(
-    config: Arc<ClientConfig<impl CryptoProvider>>,
+fn emit_client_hello_for_retry<C: CryptoProvider>(
+    config: Arc<ClientConfig<C>>,
     cx: &mut ClientContext<'_>,
     resuming_session: Option<persist::Retrieved<persist::ClientSessionValue>>,
     random: Random,
@@ -192,7 +191,7 @@ fn emit_client_hello_for_retry(
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
-    key_share: Option<KeyExchange>,
+    key_share: Option<C::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
     suite: Option<SupportedCipherSuite>,
@@ -234,7 +233,7 @@ fn emit_client_hello_for_retry(
             config
                 .kx_groups
                 .iter()
-                .map(|skxg| skxg.name)
+                .map(|skxg| skxg.name())
                 .collect(),
         ),
         ClientExtension::SignatureAlgorithms(

@@ -1,6 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::crypto::ring::SupportedKxGroup;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::error::Error;
 use crate::key;
 use crate::server::handy;
@@ -13,12 +12,12 @@ use crate::NoKeyLog;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier> {
+impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier<C>> {
     /// Choose how to verify client certificates.
     pub fn with_client_cert_verifier(
         self,
         client_cert_verifier: Arc<dyn verify::ClientCertVerifier>,
-    ) -> ConfigBuilder<ServerConfig<C>, WantsServerCert> {
+    ) -> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
         ConfigBuilder {
             state: WantsServerCert {
                 cipher_suites: self.state.cipher_suites,
@@ -31,7 +30,7 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier> {
     }
 
     /// Disable client authentication.
-    pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig<C>, WantsServerCert> {
+    pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
         self.with_client_cert_verifier(verify::NoClientAuth::boxed())
     }
 }
@@ -41,14 +40,14 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsServerCert {
+pub struct WantsServerCert<C: CryptoProvider> {
     cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static SupportedKxGroup>,
+    kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ClientCertVerifier>,
 }
 
-impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert> {
+impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
