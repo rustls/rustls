@@ -416,7 +416,7 @@ fn server_can_get_client_cert_after_resumption() {
 fn test_config_builders_debug() {
     let b = ServerConfig::<Ring>::builder();
     assert_eq!(
-        "ConfigBuilder<ServerConfig<Ring>, _> { state: WantsCipherSuites(()) }",
+        "ConfigBuilder<ServerConfig<Ring>, _> { state: WantsCipherSuites }",
         format!("{:?}", b)
     );
     let b = b.with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
@@ -431,7 +431,7 @@ fn test_config_builders_debug() {
 
     let b = ClientConfig::<Ring>::builder();
     assert_eq!(
-        "ConfigBuilder<ClientConfig<Ring>, _> { state: WantsCipherSuites(()) }",
+        "ConfigBuilder<ClientConfig<Ring>, _> { state: WantsCipherSuites }",
         format!("{:?}", b)
     );
     let b = b.with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);

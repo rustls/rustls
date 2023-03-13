@@ -133,10 +133,18 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
 /// Config builder state where the caller must supply cipher suites.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
-#[derive(Clone, Debug)]
-pub struct WantsCipherSuites(pub(crate) ());
+#[derive(Clone)]
+pub struct WantsCipherSuites<C>(pub(crate) PhantomData<C>);
 
-impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
+impl<C> fmt::Debug for WantsCipherSuites<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let raw_name = std::any::type_name::<Self>();
+        let (name, _) = friendly_names(raw_name);
+        f.write_str(name)
+    }
+}
+
+impl<S: ConfigSide, C: CryptoProvider> ConfigBuilder<S, WantsCipherSuites<C>> {
     /// Start side-specific config with defaults for underlying cryptography.
     ///
     /// If used, this will enable all safe supported cipher suites ([`DEFAULT_CIPHER_SUITES`]), all
@@ -161,10 +169,11 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     pub fn with_cipher_suites(
         self,
         cipher_suites: &[SupportedCipherSuite],
-    ) -> ConfigBuilder<S, WantsKxGroups> {
+    ) -> ConfigBuilder<S, WantsKxGroups<C>> {
         ConfigBuilder {
             state: WantsKxGroups {
                 cipher_suites: cipher_suites.to_vec(),
+                provider: PhantomData::default(),
             },
             side: self.side,
         }
@@ -175,7 +184,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Note that this default provides only high-quality suites: there is no need
     /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
     /// implement these.
-    pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups> {
+    pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups<C>> {
         self.with_cipher_suites(DEFAULT_CIPHER_SUITES)
     }
 }
@@ -183,12 +192,23 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
 /// Config builder state where the caller must supply key exchange groups.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
-#[derive(Clone, Debug)]
-pub struct WantsKxGroups {
+#[derive(Clone)]
+pub struct WantsKxGroups<C> {
     cipher_suites: Vec<SupportedCipherSuite>,
+    provider: PhantomData<C>,
 }
 
-impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
+impl<C> fmt::Debug for WantsKxGroups<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let raw_name = std::any::type_name::<Self>();
+        let (name, _) = friendly_names(raw_name);
+        f.debug_struct(name)
+            .field("cipher_suites", &self.cipher_suites)
+            .finish()
+    }
+}
+
+impl<S: ConfigSide, C: CryptoProvider> ConfigBuilder<S, WantsKxGroups<C>> {
     /// Choose a specific set of key exchange groups.
     pub fn with_kx_groups(
         self,

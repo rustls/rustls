@@ -237,9 +237,9 @@ impl<C: CryptoProvider> ClientConfig<C> {
     /// Create a builder to build up the client configuration.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
+    pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites<C>> {
         ConfigBuilder {
-            state: WantsCipherSuites(()),
+            state: WantsCipherSuites(PhantomData::default()),
             side: PhantomData::default(),
         }
     }

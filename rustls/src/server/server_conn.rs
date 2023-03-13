@@ -343,9 +343,9 @@ impl<C: CryptoProvider> ServerConfig<C> {
     /// Create builder to build up the server configuration.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
+    pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites<C>> {
         ConfigBuilder {
-            state: WantsCipherSuites(()),
+            state: WantsCipherSuites(PhantomData::default()),
             side: PhantomData::default(),
         }
     }

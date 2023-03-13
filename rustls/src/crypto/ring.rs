@@ -11,6 +11,7 @@ use ring::constant_time;
 use ring::rand::{SecureRandom, SystemRandom};
 
 /// Default crypto provider.
+#[derive(Debug)]
 pub struct Ring;
 
 impl CryptoProvider for Ring {
