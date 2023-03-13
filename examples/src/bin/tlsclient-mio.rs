@@ -2,8 +2,8 @@ use std::process;
 use std::sync::Arc;
 
 use mio::net::TcpStream;
+use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
-use rustls::crypto::Ring;
 
 use std::fs;
 use std::io;

@@ -21,7 +21,7 @@ use std::marker::PhantomData;
 ///
 /// ```no_run
 /// # use rustls::ServerConfig;
-/// # use rustls::crypto::Ring;
+/// # use rustls::crypto::ring::Ring;
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
 /// ServerConfig::<Ring>::builder()
@@ -38,7 +38,7 @@ use std::marker::PhantomData;
 ///
 /// ```no_run
 /// # use rustls::ServerConfig;
-/// # use rustls::crypto::Ring;
+/// # use rustls::crypto::ring::Ring;
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
 /// ServerConfig::<Ring>::builder()
@@ -52,7 +52,7 @@ use std::marker::PhantomData;
 ///
 /// ```no_run
 /// # use rustls::ClientConfig;
-/// # use rustls::crypto::Ring;
+/// # use rustls::crypto::ring::Ring;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// # let certs = vec![];
 /// # let private_key = rustls::PrivateKey(vec![]);
@@ -70,7 +70,7 @@ use std::marker::PhantomData;
 ///
 /// ```
 /// # use rustls::ClientConfig;
-/// # use rustls::crypto::Ring;
+/// # use rustls::crypto::ring::Ring;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::<Ring>::builder()
 ///     .with_safe_defaults()

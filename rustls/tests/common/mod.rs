@@ -4,7 +4,8 @@ use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use rustls::crypto::{CryptoProvider, Ring};
+use rustls::crypto::ring::Ring;
+use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
 use rustls::server::AllowAnyAuthenticatedClient;

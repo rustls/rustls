@@ -9,7 +9,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use rustls::client::ResolvesClientCert;
-use rustls::crypto::{CryptoProvider, Ring};
+use rustls::crypto::ring::Ring;
+use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 #[cfg(feature = "quic")]

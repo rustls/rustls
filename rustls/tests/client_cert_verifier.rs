@@ -11,7 +11,7 @@ use crate::common::{
     ALL_KEY_TYPES,
 };
 use rustls::client::WebPkiVerifier;
-use rustls::crypto::Ring;
+use rustls::crypto::ring::Ring;
 use rustls::internal::msgs::base::PayloadU16;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{

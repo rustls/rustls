@@ -3,7 +3,8 @@ use std::sync::Arc;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
-use rustls::crypto::{CryptoProvider, Ring};
+use rustls::crypto::ring::Ring;
+use rustls::crypto::CryptoProvider;
 use rustls::{OwnedTrustAnchor, RootCertStore};
 
 fn start_connection(config: &Arc<rustls::ClientConfig<impl CryptoProvider>>, domain_name: &str) {

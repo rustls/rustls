@@ -8,7 +8,8 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use env_logger;
 use rustls;
 
-use rustls::crypto::{CryptoProvider, Ring};
+use rustls::crypto::ring::Ring;
+use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::KeyUpdateRequest;
 use rustls::internal::msgs::persist;
