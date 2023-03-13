@@ -104,16 +104,21 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) side: PhantomData<Side>,
 }
 
+fn friendly_names(raw_type: &str) -> (&str, &str) {
+    let (ty, param) = raw_type
+        .split_once('<')
+        .unwrap_or((raw_type, ""));
+    let (_, name) = ty.rsplit_once("::").unwrap_or(("", ty));
+    let (_, param) = param
+        .rsplit_once("::")
+        .unwrap_or(("", param));
+    (name, param)
+}
+
 impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let side_name = std::any::type_name::<Side>();
-        let (ty, param) = side_name
-            .split_once('<')
-            .unwrap_or((side_name, ""));
-        let (_, name) = ty.rsplit_once("::").unwrap_or(("", ty));
-        let (_, param) = param
-            .rsplit_once("::")
-            .unwrap_or(("", param));
+        let (name, param) = friendly_names(side_name);
 
         f.debug_struct(&format!(
             "ConfigBuilder<{}<{}>, _>",
