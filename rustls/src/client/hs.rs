@@ -2,8 +2,8 @@
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
-use crate::crypto::ring::{KeyExchange, KeyExchangeError};
-use crate::crypto::CryptoProvider;
+use crate::crypto::ring::KeyExchange;
+use crate::crypto::{CryptoProvider, KeyExchangeError};
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;

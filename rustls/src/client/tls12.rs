@@ -1,7 +1,7 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{self, CommonState, ConnectionRandoms, Side, State};
-use crate::crypto::ring::{KeyExchange, KeyExchangeError};
-use crate::crypto::CryptoProvider;
+use crate::crypto::ring::KeyExchange;
+use crate::crypto::{CryptoProvider, KeyExchangeError};
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;

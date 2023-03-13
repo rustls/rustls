@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchangeError};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
@@ -166,11 +166,6 @@ impl KeyExchange {
         agree_ephemeral(self.priv_key, &peer_key, (), f)
             .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
     }
-}
-
-pub(crate) enum KeyExchangeError {
-    UnsupportedGroup,
-    KeyExchangeFailed(GetRandomFailed),
 }
 
 /// A key-exchange group supported by rustls.

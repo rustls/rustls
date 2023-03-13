@@ -15,3 +15,8 @@ pub trait CryptoProvider: Send + Sync + 'static {
     /// Verify that the two input slices are equal, in constant time.
     fn verify_equal_ct(a: &[u8], b: &[u8]) -> bool;
 }
+
+pub(crate) enum KeyExchangeError {
+    UnsupportedGroup,
+    KeyExchangeFailed(GetRandomFailed),
+}
