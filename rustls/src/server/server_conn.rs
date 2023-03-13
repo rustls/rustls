@@ -1,9 +1,9 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::conn::{CommonState, ConnectionCommon, Side, State};
+use crate::crypto::ring::SupportedKxGroup;
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
-use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::base::{Payload, PayloadU8};

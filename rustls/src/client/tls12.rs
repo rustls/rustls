@@ -1,10 +1,10 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{self, CommonState, ConnectionRandoms, Side, State};
+use crate::crypto::ring::{KeyExchange, KeyExchangeError};
 use crate::crypto::CryptoProvider;
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::kx::KeyExchangeError;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -24,7 +24,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::SupportedCipherSuite;
 use crate::ticketer::TimeBase;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::{kx, verify};
+use crate::verify;
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
@@ -783,7 +783,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
         let ecdh_params =
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
-        let kx = match kx::KeyExchange::choose(named_group, &st.config.kx_groups) {
+        let kx = match KeyExchange::choose(named_group, &st.config.kx_groups) {
             Ok(kx) => kx,
             Err(KeyExchangeError::UnsupportedGroup) => {
                 return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into())

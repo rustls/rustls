@@ -1,5 +1,6 @@
 use crate::check::inappropriate_message;
 use crate::conn::{send_cert_verify_error_alert, CommonState, ConnectionRandoms, Side, State};
+use crate::crypto::ring::{KeyExchange, SupportedKxGroup};
 use crate::crypto::CryptoProvider;
 use crate::enums::ProtocolVersion;
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -18,7 +19,7 @@ use crate::msgs::persist;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::{kx, ticketer, verify};
+use crate::{ticketer, verify};
 
 use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
@@ -397,11 +398,11 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         common: &mut CommonState,
         sigschemes: Vec<SignatureScheme>,
-        skxg: &'static kx::SupportedKxGroup,
+        skxg: &'static SupportedKxGroup,
         signing_key: &dyn sign::SigningKey,
         randoms: &ConnectionRandoms,
-    ) -> Result<kx::KeyExchange, Error> {
-        let kx = kx::KeyExchange::start(skxg)?;
+    ) -> Result<KeyExchange, Error> {
+        let kx = KeyExchange::start(skxg)?;
         let secdh = ServerECDHParams::new(skxg.name, kx.pub_key());
 
         let mut msg = Vec::new();
@@ -500,7 +501,7 @@ struct ExpectCertificate<C> {
     session_id: SessionID,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
-    server_kx: kx::KeyExchange,
+    server_kx: KeyExchange,
     send_ticket: bool,
 }
 
@@ -571,7 +572,7 @@ struct ExpectClientKx<C> {
     session_id: SessionID,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
-    server_kx: kx::KeyExchange,
+    server_kx: KeyExchange,
     client_cert: Option<Vec<Certificate>>,
     send_ticket: bool,
 }

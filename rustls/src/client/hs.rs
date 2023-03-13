@@ -2,11 +2,11 @@
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::crypto::ring::{KeyExchange, KeyExchangeError};
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
-use crate::kx::{self, KeyExchangeError};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -169,7 +169,7 @@ struct ExpectServerHello<C> {
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    offered_key_share: Option<kx::KeyExchange>,
+    offered_key_share: Option<KeyExchange>,
     session_id: SessionID,
     sent_tls13_fake_ccs: bool,
     suite: Option<SupportedCipherSuite>,
@@ -192,7 +192,7 @@ fn emit_client_hello_for_retry(
     session_id: Option<SessionID>,
     retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
-    key_share: Option<kx::KeyExchange>,
+    key_share: Option<KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
     suite: Option<SupportedCipherSuite>,
@@ -752,7 +752,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                match kx::KeyExchange::choose(group, &self.next.config.kx_groups) {
+                match KeyExchange::choose(group, &self.next.config.kx_groups) {
                     Ok(kx) => kx,
                     Err(KeyExchangeError::UnsupportedGroup) => {
                         return Err(cx.common.illegal_param(

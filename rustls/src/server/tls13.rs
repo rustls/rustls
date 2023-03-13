@@ -36,8 +36,8 @@ use std::sync::Arc;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
+    use crate::crypto::ring::KeyExchange;
     use crate::enums::SignatureScheme;
-    use crate::kx;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::NamedGroup;
@@ -460,7 +460,7 @@ mod client_hello {
         let mut extensions = Vec::new();
 
         // Prepare key exchange; the caller ascertained that the `share.group` is supported
-        let kx = kx::KeyExchange::choose(share.group, &config.kx_groups)
+        let kx = KeyExchange::choose(share.group, &config.kx_groups)
             .map_err(|_| Error::FailedToGetRandomBytes)?;
 
         let kse = KeyShareEntry::new(share.group, kx.pub_key());
