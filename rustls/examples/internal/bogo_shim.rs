@@ -5,8 +5,8 @@
 //
 
 use rustls::client::{ClientConfig, ClientConnection, Resumption};
+use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
-use rustls::crypto::Ring;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};

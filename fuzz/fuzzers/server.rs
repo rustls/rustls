@@ -3,7 +3,7 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::crypto::Ring;
+use rustls::crypto::ring::Ring;
 use rustls::server::ResolvesServerCert;
 use rustls::{ServerConfig, ServerConnection};
 

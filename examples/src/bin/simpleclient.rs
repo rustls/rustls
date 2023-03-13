@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 
-use rustls::crypto::Ring;
+use rustls::crypto::ring::Ring;
 use rustls::{OwnedTrustAnchor, RootCertStore};
 
 fn main() {

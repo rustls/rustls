@@ -1,17 +1,9 @@
+use crate::crypto::CryptoProvider;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
 
 use ring::aead;
 use ring::rand::{SecureRandom, SystemRandom};
-
-/// Pluggable crypto galore.
-pub trait CryptoProvider: Send + Sync + 'static {
-    /// Build a ticket generator.
-    fn ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed>;
-
-    /// Fill the given buffer with random bytes.
-    fn fill_random(buf: &mut [u8]) -> Result<(), GetRandomFailed>;
-}
 
 /// Default crypto provider.
 pub struct Ring;
@@ -61,7 +53,7 @@ impl ProducesTickets for AeadTicketer {
         // Random nonce, because a counter is a privacy leak.
         let mut nonce_buf = [0u8; 12];
         Ring::fill_random(&mut nonce_buf).ok()?;
-        let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_buf);
+        let nonce = aead::Nonce::assume_unique_for_key(nonce_buf);
         let aad = ring::aead::Aad::empty();
 
         let mut ciphertext =
@@ -84,7 +76,7 @@ impl ProducesTickets for AeadTicketer {
         let ciphertext = ciphertext.get(nonce.len()..)?;
 
         // This won't fail since `nonce` has the required length.
-        let nonce = ring::aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
+        let nonce = aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
 
         let mut out = Vec::from(ciphertext);
 

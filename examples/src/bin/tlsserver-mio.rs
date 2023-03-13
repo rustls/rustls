@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use mio::net::{TcpListener, TcpStream};
-use rustls::crypto::Ring;
+use rustls::crypto::ring::Ring;
 
 #[macro_use]
 extern crate log;

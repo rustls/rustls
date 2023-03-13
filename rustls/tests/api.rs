@@ -10,7 +10,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use rustls::client::{ResolvesClientCert, Resumption};
-use rustls::crypto::{CryptoProvider, Ring};
+use rustls::crypto::ring::Ring;
+use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};

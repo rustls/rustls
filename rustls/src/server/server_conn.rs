@@ -554,7 +554,7 @@ impl From<ServerConnection> for crate::Connection {
 ///     };
 ///
 ///     // For some user-defined choose_server_config:
-///     let config = choose_server_config::<rustls::crypto::Ring>(accepted.client_hello());
+///     let config = choose_server_config::<rustls::crypto::ring::Ring>(accepted.client_hello());
 ///     let conn = accepted
 ///         .into_connection(config)
 ///         .unwrap();
