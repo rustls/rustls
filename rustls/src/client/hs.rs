@@ -256,7 +256,7 @@ fn emit_client_hello_for_retry(
 
     if let Some(key_share) = &key_share {
         debug_assert!(support_tls13);
-        let key_share = KeyShareEntry::new(key_share.group(), key_share.pubkey.as_ref());
+        let key_share = KeyShareEntry::new(key_share.group(), key_share.pub_key());
         exts.push(ClientExtension::KeyShare(vec![key_share]));
     }
 

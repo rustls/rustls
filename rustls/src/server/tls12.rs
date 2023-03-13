@@ -402,7 +402,7 @@ mod client_hello {
         randoms: &ConnectionRandoms,
     ) -> Result<kx::KeyExchange, Error> {
         let kx = kx::KeyExchange::start(skxg)?;
-        let secdh = ServerECDHParams::new(skxg.name, kx.pubkey.as_ref());
+        let secdh = ServerECDHParams::new(skxg.name, kx.pub_key());
 
         let mut msg = Vec::new();
         msg.extend(randoms.client);

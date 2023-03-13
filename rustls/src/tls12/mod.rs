@@ -520,7 +520,7 @@ mod tests {
     #[test]
     fn server_ecdhe_remaining_bytes() {
         let key = kx::KeyExchange::start(&kx::X25519).unwrap();
-        let server_params = ServerECDHParams::new(key.group(), key.pubkey.as_ref());
+        let server_params = ServerECDHParams::new(key.group(), key.pub_key());
         let mut server_buf = Vec::new();
         server_params.encode(&mut server_buf);
         server_buf.push(34);

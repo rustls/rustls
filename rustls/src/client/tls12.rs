@@ -32,8 +32,6 @@ use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 
-use ring::agreement::PublicKey;
-
 use std::sync::Arc;
 
 pub(super) use server_hello::CompleteServerHelloHandling;
@@ -453,9 +451,9 @@ fn emit_certificate(
     common.send_msg(cert, false);
 }
 
-fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pubkey: &PublicKey) {
+fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
     let mut buf = Vec::new();
-    let ecpoint = PayloadU8::new(Vec::from(pubkey.as_ref()));
+    let ecpoint = PayloadU8::new(Vec::from(pub_key));
     ecpoint.encode(&mut buf);
     let pubkey = Payload::new(buf);
 
@@ -795,7 +793,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
 
         // 5b.
         let mut transcript = st.transcript;
-        emit_clientkx(&mut transcript, cx.common, &kx.pubkey);
+        emit_clientkx(&mut transcript, cx.common, kx.pub_key());
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = st
             .using_ems

@@ -12,7 +12,7 @@ use ring::rand::SystemRandom;
 pub(crate) struct KeyExchange {
     skxg: &'static SupportedKxGroup,
     privkey: EphemeralPrivateKey,
-    pub(crate) pubkey: ring::agreement::PublicKey,
+    pubkey: ring::agreement::PublicKey,
 }
 
 impl KeyExchange {
@@ -53,6 +53,11 @@ impl KeyExchange {
     /// Return the group being used.
     pub(crate) fn group(&self) -> NamedGroup {
         self.skxg.name
+    }
+
+    /// Return the public key being used.
+    pub(crate) fn pub_key(&self) -> &[u8] {
+        self.pubkey.as_ref()
     }
 
     /// Completes the key exchange, given the peer's public key.

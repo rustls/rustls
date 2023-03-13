@@ -463,7 +463,7 @@ mod client_hello {
         let kx = kx::KeyExchange::choose(share.group, &config.kx_groups)
             .map_err(|_| Error::FailedToGetRandomBytes)?;
 
-        let kse = KeyShareEntry::new(share.group, kx.pubkey.as_ref());
+        let kse = KeyShareEntry::new(share.group, kx.pub_key());
         extensions.push(ServerExtension::KeyShare(kse));
         extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
 
