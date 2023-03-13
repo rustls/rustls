@@ -1,5 +1,7 @@
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
+use crate::NamedGroup;
+use std::fmt::Debug;
 
 /// *ring* based CryptoProvider.
 pub mod ring;
@@ -19,4 +21,10 @@ pub trait CryptoProvider: Send + Sync + 'static {
 pub(crate) enum KeyExchangeError {
     UnsupportedGroup,
     KeyExchangeFailed(GetRandomFailed),
+}
+
+/// A trait describing a supported key exchange group that can be identified by name.
+pub trait SupportedGroup: Debug + Send + Sync + 'static {
+    /// Named group the SupportedGroup operates in.
+    fn name(&self) -> NamedGroup;
 }

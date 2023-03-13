@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::crypto::{CryptoProvider, KeyExchangeError};
+use crate::crypto::{CryptoProvider, KeyExchangeError, SupportedGroup};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
@@ -168,7 +168,7 @@ impl KeyExchange {
     }
 }
 
-/// A key-exchange group supported by rustls.
+/// A key-exchange group supported by *ring*.
 ///
 /// All possible instances of this class are provided by the library in
 /// the `ALL_KX_GROUPS` array.
@@ -178,6 +178,12 @@ pub struct SupportedKxGroup {
 
     /// The corresponding ring agreement::Algorithm
     agreement_algorithm: &'static ring::agreement::Algorithm,
+}
+
+impl SupportedGroup for SupportedKxGroup {
+    fn name(&self) -> NamedGroup {
+        self.name
+    }
 }
 
 impl fmt::Debug for SupportedKxGroup {
