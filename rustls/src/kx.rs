@@ -11,8 +11,8 @@ use ring::rand::SystemRandom;
 /// our private key, and our public key.
 pub(crate) struct KeyExchange {
     skxg: &'static SupportedKxGroup,
-    privkey: EphemeralPrivateKey,
-    pubkey: ring::agreement::PublicKey,
+    priv_key: EphemeralPrivateKey,
+    pub_key: ring::agreement::PublicKey,
 }
 
 impl KeyExchange {
@@ -45,8 +45,8 @@ impl KeyExchange {
 
         Ok(Self {
             skxg,
-            privkey,
-            pubkey,
+            priv_key: privkey,
+            pub_key: pubkey,
         })
     }
 
@@ -57,7 +57,7 @@ impl KeyExchange {
 
     /// Return the public key being used.
     pub(crate) fn pub_key(&self) -> &[u8] {
-        self.pubkey.as_ref()
+        self.pub_key.as_ref()
     }
 
     /// Completes the key exchange, given the peer's public key.
@@ -70,7 +70,7 @@ impl KeyExchange {
         f: impl FnOnce(&[u8]) -> Result<T, ()>,
     ) -> Result<T, Error> {
         let peer_key = UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
-        agree_ephemeral(self.privkey, &peer_key, (), f)
+        agree_ephemeral(self.priv_key, &peer_key, (), f)
             .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
     }
 }
