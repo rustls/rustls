@@ -11,9 +11,12 @@ use ring::rand::{SecureRandom, SystemRandom};
 use std::fmt;
 
 /// Default crypto provider.
+#[derive(Debug)]
 pub struct Ring;
 
 impl CryptoProvider for Ring {
+    type KeyExchange = KeyExchange;
+
     fn ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
         let mut key = [0u8; 32];
         Self::fill_random(&mut key)?;
@@ -98,14 +101,17 @@ impl ProducesTickets for AeadTicketer {
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
-pub(crate) struct KeyExchange {
+#[derive(Debug)]
+pub struct KeyExchange {
     group: &'static SupportedKxGroup,
     priv_key: EphemeralPrivateKey,
     pub_key: ring::agreement::PublicKey,
 }
 
-impl KeyExchange {
-    pub(crate) fn choose(
+impl super::KeyExchange for KeyExchange {
+    type SupportedGroup = SupportedKxGroup;
+
+    fn choose(
         name: NamedGroup,
         supported: &[&'static SupportedKxGroup],
     ) -> Result<Self, KeyExchangeError> {
@@ -120,7 +126,7 @@ impl KeyExchange {
         Self::start(group).map_err(KeyExchangeError::KeyExchangeFailed)
     }
 
-    pub(crate) fn start(group: &'static SupportedKxGroup) -> Result<Self, GetRandomFailed> {
+    fn start(group: &'static SupportedKxGroup) -> Result<Self, GetRandomFailed> {
         let rng = SystemRandom::new();
         let priv_key = match EphemeralPrivateKey::generate(group.agreement_algorithm, &rng) {
             Ok(priv_key) => priv_key,
@@ -140,7 +146,7 @@ impl KeyExchange {
     }
 
     /// Return the group being used.
-    pub(crate) fn group(&self) -> NamedGroup {
+    fn group(&self) -> NamedGroup {
         self.group.name
     }
 
@@ -148,19 +154,20 @@ impl KeyExchange {
     ///
     /// The shared secret is passed into the closure passed down in `f`, and the result of calling
     /// `f` is returned to the caller.
-    pub(crate) fn complete<T>(
-        self,
-        peer: &[u8],
-        f: impl FnOnce(&[u8]) -> Result<T, ()>,
-    ) -> Result<T, Error> {
+    fn complete<T>(self, peer: &[u8], f: impl FnOnce(&[u8]) -> Result<T, ()>) -> Result<T, Error> {
         let peer_key = UnparsedPublicKey::new(self.group.agreement_algorithm, peer);
         agree_ephemeral(self.priv_key, &peer_key, (), f)
             .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
     }
 
     /// Return the public key being used.
-    pub(crate) fn pub_key(&self) -> &[u8] {
+    fn pub_key(&self) -> &[u8] {
         self.pub_key.as_ref()
+    }
+
+    /// Return all supported key exchange groups.
+    fn all_kx_groups() -> &'static [&'static Self::SupportedGroup] {
+        &ALL_KX_GROUPS
     }
 }
 

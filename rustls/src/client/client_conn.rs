@@ -1,8 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
-use crate::crypto::ring::SupportedKxGroup;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::dns_name::{DnsName, DnsNameRef, InvalidDnsNameError};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -122,7 +121,7 @@ pub trait ResolvesClientCert: Send + Sync {
 ///    ids or tickets, with a max of eight tickets per server.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
-pub struct ClientConfig<C> {
+pub struct ClientConfig<C: CryptoProvider> {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
@@ -131,7 +130,7 @@ pub struct ClientConfig<C> {
     ///
     /// The first element in this list is the _default key share algorithm_,
     /// and in TLS1.3 a key share for it is sent in the client hello.
-    pub(super) kx_groups: Vec<&'static SupportedKxGroup>,
+    pub(super) kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
@@ -200,7 +199,7 @@ pub enum Tls12Resumption {
     SessionIdOrTickets,
 }
 
-impl<C> Clone for ClientConfig<C> {
+impl<C: CryptoProvider> Clone for ClientConfig<C> {
     fn clone(&self) -> Self {
         Self {
             cipher_suites: self.cipher_suites.clone(),
@@ -221,7 +220,7 @@ impl<C> Clone for ClientConfig<C> {
     }
 }
 
-impl<C> fmt::Debug for ClientConfig<C> {
+impl<C: CryptoProvider> fmt::Debug for ClientConfig<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientConfig")
             .field("alpn_protocols", &self.alpn_protocols)
@@ -414,6 +413,7 @@ impl TryFrom<&str> for ServerName {
 /// Container for unsafe APIs
 #[cfg(feature = "dangerous_configuration")]
 pub(super) mod danger {
+    use crate::crypto::CryptoProvider;
     use std::sync::Arc;
 
     use super::verify::ServerCertVerifier;
@@ -422,12 +422,12 @@ pub(super) mod danger {
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
     #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-    pub struct DangerousClientConfig<'a, C> {
+    pub struct DangerousClientConfig<'a, C: CryptoProvider> {
         /// The underlying ClientConfig
         pub cfg: &'a mut ClientConfig<C>,
     }
 
-    impl<'a, C> DangerousClientConfig<'a, C> {
+    impl<'a, C: CryptoProvider> DangerousClientConfig<'a, C> {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;

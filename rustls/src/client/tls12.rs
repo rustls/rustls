@@ -1,8 +1,7 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::ring::KeyExchange;
-use crate::crypto::{CryptoProvider, KeyExchangeError};
+use crate::crypto::{CryptoProvider, KeyExchange, KeyExchangeError};
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
@@ -46,7 +45,7 @@ mod server_hello {
 
     use super::*;
 
-    pub(in crate::client) struct CompleteServerHelloHandling<C> {
+    pub(in crate::client) struct CompleteServerHelloHandling<C: CryptoProvider> {
         pub(in crate::client) config: Arc<ClientConfig<C>>,
         pub(in crate::client) resuming_session: Option<persist::Tls12ClientSessionValue>,
         pub(in crate::client) server_name: ServerName,
@@ -181,7 +180,7 @@ mod server_hello {
     }
 }
 
-struct ExpectCertificate<C> {
+struct ExpectCertificate<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -239,7 +238,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificate<C> {
     }
 }
 
-struct ExpectCertificateStatusOrServerKx<C> {
+struct ExpectCertificateStatusOrServerKx<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -307,7 +306,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateStatusO
     }
 }
 
-struct ExpectCertificateStatus<C> {
+struct ExpectCertificateStatus<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -356,7 +355,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateStatus<
     }
 }
 
-struct ExpectServerKx<C> {
+struct ExpectServerKx<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -521,7 +520,7 @@ impl ServerKxDetails {
 // --- Either a CertificateRequest, or a ServerHelloDone. ---
 // Existence of the CertificateRequest tells us the server is asking for
 // client auth.  Otherwise we go straight to ServerHelloDone.
-struct ExpectServerDoneOrCertReq<C> {
+struct ExpectServerDoneOrCertReq<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -583,7 +582,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDoneOrCertRe
     }
 }
 
-struct ExpectCertificateRequest<C> {
+struct ExpectCertificateRequest<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -644,7 +643,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateRequest
     }
 }
 
-struct ExpectServerDone<C> {
+struct ExpectServerDone<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -767,13 +766,14 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
         let ecdh_params =
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
-        let kx = match KeyExchange::choose(named_group, &st.config.kx_groups) {
-            Ok(kx) => kx,
-            Err(KeyExchangeError::UnsupportedGroup) => {
-                return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into())
-            }
-            Err(KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
-        };
+        let kx =
+            match <<C as CryptoProvider>::KeyExchange>::choose(named_group, &st.config.kx_groups) {
+                Ok(kx) => kx,
+                Err(KeyExchangeError::UnsupportedGroup) => {
+                    return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into())
+                }
+                Err(KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
+            };
 
         // 5b.
         let mut transcript = st.transcript;
@@ -845,7 +845,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
     }
 }
 
-struct ExpectNewTicket<C> {
+struct ExpectNewTicket<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
@@ -889,7 +889,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectNewTicket<C> {
 }
 
 // -- Waiting for their CCS --
-struct ExpectCcs<C> {
+struct ExpectCcs<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
@@ -939,7 +939,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCcs<C> {
     }
 }
 
-struct ExpectFinished<C> {
+struct ExpectFinished<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,

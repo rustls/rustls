@@ -3,8 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::ring::KeyExchange;
-use crate::crypto::{CryptoProvider, KeyExchangeError};
+use crate::crypto::{CryptoProvider, KeyExchange, KeyExchangeError, SupportedGroup};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -144,7 +143,7 @@ pub(super) fn start_handshake<C: CryptoProvider>(
 
     let random = Random::new::<C>()?;
 
-    Ok(emit_client_hello_for_retry(
+    Ok(emit_client_hello_for_retry::<C>(
         transcript_buffer,
         None,
         key_share,
@@ -165,20 +164,20 @@ pub(super) fn start_handshake<C: CryptoProvider>(
     ))
 }
 
-struct ExpectServerHello<C> {
+struct ExpectServerHello<C: CryptoProvider> {
     input: ClientHelloInput<C>,
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
-    offered_key_share: Option<KeyExchange>,
+    offered_key_share: Option<C::KeyExchange>,
     suite: Option<SupportedCipherSuite>,
 }
 
-struct ExpectServerHelloOrHelloRetryRequest<C> {
+struct ExpectServerHelloOrHelloRetryRequest<C: CryptoProvider> {
     next: ExpectServerHello<C>,
     extra_exts: Vec<ClientExtension>,
 }
 
-struct ClientHelloInput<C> {
+struct ClientHelloInput<C: CryptoProvider> {
     config: Arc<ClientConfig<C>>,
     resuming: Option<persist::Retrieved<ClientSessionValue>>,
     random: Random,
@@ -190,13 +189,13 @@ struct ClientHelloInput<C> {
     server_name: ServerName,
 }
 
-fn emit_client_hello_for_retry(
+fn emit_client_hello_for_retry<C: CryptoProvider>(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
-    key_share: Option<KeyExchange>,
+    key_share: Option<C::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
-    mut input: ClientHelloInput<impl CryptoProvider>,
+    mut input: ClientHelloInput<C>,
     cx: &mut ClientContext<'_>,
 ) -> NextState {
     let config = &input.config;
@@ -222,7 +221,7 @@ fn emit_client_hello_for_retry(
             config
                 .kx_groups
                 .iter()
-                .map(|skxg| skxg.name)
+                .map(|skxg| skxg.name())
                 .collect(),
         ),
         ClientExtension::SignatureAlgorithms(
@@ -805,7 +804,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
             _ => offered_key_share,
         };
 
-        Ok(emit_client_hello_for_retry(
+        Ok(emit_client_hello_for_retry::<C>(
             transcript_buffer,
             Some(hrr),
             Some(key_share),
