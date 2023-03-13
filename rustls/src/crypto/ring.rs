@@ -149,6 +149,16 @@ impl super::KeyExchange for KeyExchange {
         })
     }
 
+    /// Completes the key exchange, given the peer's public key.
+    ///
+    /// The shared secret is passed into the closure passed down in `f`, and the result of calling
+    /// `f` is returned to the caller.
+    fn complete<T>(self, peer: &[u8], f: impl FnOnce(&[u8]) -> Result<T, ()>) -> Result<T, Error> {
+        let peer_key = UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
+        agree_ephemeral(self.priv_key, &peer_key, (), f)
+            .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
+    }
+
     /// Return all supported key exchange groups.
     fn all_kx_groups() -> &'static [&'static Self::SupportedGroup] {
         &ALL_KX_GROUPS
@@ -162,16 +172,6 @@ impl super::KeyExchange for KeyExchange {
     /// Return the public key being used.
     fn pub_key(&self) -> &[u8] {
         self.pub_key.as_ref()
-    }
-
-    /// Completes the key exchange, given the peer's public key.
-    ///
-    /// The shared secret is passed into the closure passed down in `f`, and the result of calling
-    /// `f` is returned to the caller.
-    fn complete<T>(self, peer: &[u8], f: impl FnOnce(&[u8]) -> Result<T, ()>) -> Result<T, Error> {
-        let peer_key = UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
-        agree_ephemeral(self.priv_key, &peer_key, (), f)
-            .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
     }
 }
 
