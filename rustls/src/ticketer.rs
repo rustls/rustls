@@ -1,6 +1,6 @@
-use crate::crypto::CryptoProvider;
 #[cfg(test)]
-use crate::crypto::Ring;
+use crate::crypto::ring::Ring;
+use crate::crypto::CryptoProvider;
 use crate::rand;
 use crate::server::ProducesTickets;
 use crate::Error;

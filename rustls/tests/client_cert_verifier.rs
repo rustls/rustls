@@ -10,7 +10,7 @@ use crate::common::{
     make_pair_for_arc_configs, server_name, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
 use rustls::client::WebPkiVerifier;
-use rustls::crypto::Ring;
+use rustls::crypto::ring::Ring;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{

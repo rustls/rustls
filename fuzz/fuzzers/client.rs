@@ -4,7 +4,7 @@ extern crate libfuzzer_sys;
 extern crate rustls;
 extern crate webpki;
 
-use rustls::crypto::Ring;
+use rustls::crypto::ring::Ring;
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use std::io;
 use std::sync::Arc;
