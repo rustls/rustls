@@ -39,6 +39,13 @@ impl Connection {
         }
     }
 
+    /// Writes TLS messages to `wr`.
+    ///
+    /// See [`ConnectionCommon::write_tls()`] for more information.
+    pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+        self.sendable_tls.write_to(wr)
+    }
+
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader {
         match self {
@@ -298,7 +305,7 @@ impl<'a> Writer<'a> {
 impl<'a> io::Write for Writer<'a> {
     /// Send the plaintext `buf` to the peer, encrypting
     /// and authenticating it.  Once this function succeeds
-    /// you should call [`CommonState::write_tls`] which will output the
+    /// you should call [`Connection::write_tls`] which will output the
     /// corresponding TLS records.
     ///
     /// This function buffers plaintext sent before the
@@ -397,7 +404,7 @@ impl<Data> ConnectionCommon<Data> {
     /// [`is_handshaking`]: CommonState::is_handshaking
     /// [`wants_read`]: CommonState::wants_read
     /// [`wants_write`]: CommonState::wants_write
-    /// [`write_tls`]: CommonState::write_tls
+    /// [`write_tls`]: ConnectionCommon::write_tls
     /// [`read_tls`]: ConnectionCommon::read_tls
     /// [`process_new_packets`]: ConnectionCommon::process_new_packets
     pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
@@ -536,6 +543,17 @@ impl<Data> ConnectionCommon<Data> {
             self.has_seen_eof = true;
         }
         res
+    }
+
+    /// Writes TLS messages to `wr`.
+    ///
+    /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
+    /// (after encoding and encryption).
+    ///
+    /// After this function returns, the connection buffer may not yet be fully flushed. The
+    /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
+    pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+        self.sendable_tls.write_to(wr)
     }
 
     /// Derives key material from the agreed connection secrets.
