@@ -20,8 +20,6 @@ use crate::suites::SupportedCipherSuite;
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
-use std::io;
-
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
@@ -85,7 +83,9 @@ impl CommonState {
         }
     }
 
-    /// Returns true if the caller should call [`CommonState::write_tls`] as soon as possible.
+    /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
+    ///
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn wants_write(&self) -> bool {
         !self.sendable_tls.is_empty()
     }
@@ -277,17 +277,6 @@ impl CommonState {
         self.queue_tls_message(em);
     }
 
-    /// Writes TLS messages to `wr`.
-    ///
-    /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
-    /// (after encoding and encryption).
-    ///
-    /// After this function returns, the connection buffer may not yet be fully flushed. The
-    /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
-    pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.sendable_tls.write_to(wr)
-    }
-
     /// Encrypt and send some plaintext `data`.  `limit` controls
     /// whether the per-connection buffer limits apply.
     ///
@@ -343,7 +332,7 @@ impl CommonState {
     ///
     /// For illustration: `Some(1)` means a limit of one byte applies:
     /// [`Connection::writer`] will accept only one byte, encrypt it and
-    /// add a TLS header.  Once this is sent via [`CommonState::write_tls`],
+    /// add a TLS header.  Once this is sent via [`Connection::write_tls`],
     /// another byte may be sent.
     ///
     /// # Internal write-direction buffering
@@ -366,9 +355,10 @@ impl CommonState {
     /// - by [`Connection::writer`] post-handshake: the plaintext is
     ///   encrypted and the resulting TLS record is buffered.
     ///
-    /// This buffer is emptied by [`CommonState::write_tls`].
+    /// This buffer is emptied by [`Connection::write_tls`].
     ///
     /// [`Connection::writer`]: crate::Connection::writer
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
     /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
     pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.sendable_plaintext.set_limit(limit);
@@ -497,8 +487,10 @@ impl CommonState {
     }
 
     /// Queues a close_notify warning alert to be sent in the next
-    /// [`CommonState::write_tls`] call.  This informs the peer that the
+    /// [`Connection::write_tls`] call.  This informs the peer that the
     /// connection is being closed.
+    ///
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
@@ -600,8 +592,10 @@ pub struct IoState {
 }
 
 impl IoState {
-    /// How many bytes could be written by [`CommonState::write_tls`] if called
+    /// How many bytes could be written by [`Connection::write_tls`] if called
     /// right now.  A non-zero value implies [`CommonState::wants_write`].
+    ///
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn tls_bytes_to_write(&self) -> usize {
         self.tls_bytes_to_write
     }
