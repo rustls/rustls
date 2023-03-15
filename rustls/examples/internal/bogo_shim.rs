@@ -11,7 +11,6 @@ use rustls;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::KeyUpdateRequest;
 use rustls::internal::msgs::persist;
-use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::ClientHello;
 use rustls::ProtocolVersion;
 use rustls::{CertificateError, ClientConnection, Connection, ServerConnection, Side};
@@ -805,17 +804,6 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             }
         }
 
-        if !sess.is_handshaking()
-            && !opts
-                .expect_quic_transport_params
-                .is_empty()
-        {
-            let their_transport_params = sess
-                .quic_transport_parameters()
-                .expect("missing peer quic transport params");
-            assert_eq!(opts.expect_quic_transport_params, their_transport_params);
-        }
-
         let mut buf = [0u8; 1024];
         let len = match sess
             .reader()
@@ -1181,19 +1169,16 @@ fn main() {
         scfg: &Option<Arc<rustls::ServerConfig>>,
         ccfg: &Option<Arc<rustls::ClientConfig>>,
     ) -> Connection {
+        assert!(opts.quic_transport_params.is_empty());
+        assert!(opts
+            .expect_quic_transport_params
+            .is_empty());
+
         if opts.side == Side::Server {
             let scfg = Arc::clone(scfg.as_ref().unwrap());
-            let s = if opts.quic_transport_params.is_empty() {
-                rustls::ServerConnection::new(scfg).unwrap()
-            } else {
-                rustls::ServerConnection::new_quic(
-                    scfg,
-                    quic::Version::V1,
-                    opts.quic_transport_params.clone(),
-                )
+            ServerConnection::new(scfg)
                 .unwrap()
-            };
-            s.into()
+                .into()
         } else {
             let server_name = opts
                 .host_name
@@ -1201,25 +1186,16 @@ fn main() {
                 .try_into()
                 .unwrap();
             let ccfg = Arc::clone(ccfg.as_ref().unwrap());
-            let c = if opts.quic_transport_params.is_empty() {
-                rustls::ClientConnection::new(ccfg, server_name)
-            } else {
-                rustls::ClientConnection::new_quic(
-                    ccfg,
-                    quic::Version::V1,
-                    server_name,
-                    opts.quic_transport_params.clone(),
-                )
-            }
-            .unwrap();
-            c.into()
+
+            ClientConnection::new(ccfg, server_name)
+                .unwrap()
+                .into()
         }
     }
 
     for i in 0..opts.resumes + 1 {
         let sess = make_session(&opts, &server_cfg, &client_cfg);
         exec(&opts, sess, i);
-
         if opts.resume_with_tickets_disabled {
             opts.tickets = false;
             server_cfg = Some(make_server_cfg(&opts));
