@@ -44,7 +44,7 @@ If you're *looking* for security bugs, this crate is set up for
 ## Testing
 
 - Features involving additions to the public API should have (at least)
-  API-level tests (see [`tests/api.rs`](tests/api.rs)).
+  API-level tests (see [`rustls/tests/api.rs`](rustls/tests/api.rs)).
 - Protocol additions should have some coverage -- consider enabling
   corresponding tests in the bogo suite, or writing some ad hoc tests.
 
