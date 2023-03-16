@@ -19,7 +19,7 @@ rustversion = { version = "1.0.6", optional = true }
 log = { version = "0.4.4", optional = true }
 ring = "0.16.20"
 sct = "0.7.0"
-webpki = { package = "rustls-webpki", version = "0.100.0-alpha.2", features = ["alloc", "std"] }
+webpki = { package = "rustls-webpki", version = "0.100.0", features = ["alloc", "std"] }
 
 [features]
 default = ["logging", "tls12"]
