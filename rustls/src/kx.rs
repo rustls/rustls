@@ -10,9 +10,9 @@ use ring::rand::SystemRandom;
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
 pub(crate) struct KeyExchange {
-    skxg: &'static SupportedKxGroup,
-    privkey: EphemeralPrivateKey,
-    pubkey: ring::agreement::PublicKey,
+    group: &'static SupportedKxGroup,
+    priv_key: EphemeralPrivateKey,
+    pub_key: ring::agreement::PublicKey,
 }
 
 impl KeyExchange {
@@ -20,39 +20,39 @@ impl KeyExchange {
         name: NamedGroup,
         supported: &[&'static SupportedKxGroup],
     ) -> Result<Self, KeyExchangeError> {
-        let skxg = match supported
+        let group = match supported
             .iter()
-            .find(|skxg| skxg.name == name)
+            .find(|group| group.name == name)
         {
-            Some(skxg) => skxg,
+            Some(group) => group,
             None => return Err(KeyExchangeError::UnsupportedGroup),
         };
 
-        Self::start(skxg).map_err(KeyExchangeError::KeyExchangeFailed)
+        Self::start(group).map_err(KeyExchangeError::KeyExchangeFailed)
     }
 
-    pub(crate) fn start(skxg: &'static SupportedKxGroup) -> Result<Self, GetRandomFailed> {
+    pub(crate) fn start(group: &'static SupportedKxGroup) -> Result<Self, GetRandomFailed> {
         let rng = SystemRandom::new();
-        let privkey = match EphemeralPrivateKey::generate(skxg.agreement_algorithm, &rng) {
-            Ok(privkey) => privkey,
+        let priv_key = match EphemeralPrivateKey::generate(group.agreement_algorithm, &rng) {
+            Ok(priv_key) => priv_key,
             Err(_) => return Err(GetRandomFailed),
         };
 
-        let pubkey = match privkey.compute_public_key() {
-            Ok(pubkey) => pubkey,
+        let pub_key = match priv_key.compute_public_key() {
+            Ok(pub_key) => pub_key,
             Err(_) => return Err(GetRandomFailed),
         };
 
         Ok(Self {
-            skxg,
-            privkey,
-            pubkey,
+            group,
+            priv_key,
+            pub_key,
         })
     }
 
     /// Return the group being used.
     pub(crate) fn group(&self) -> NamedGroup {
-        self.skxg.name
+        self.group.name
     }
 
     /// Completes the key exchange, given the peer's public key.
@@ -64,14 +64,14 @@ impl KeyExchange {
         peer: &[u8],
         f: impl FnOnce(&[u8]) -> Result<T, ()>,
     ) -> Result<T, Error> {
-        let peer_key = UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
-        agree_ephemeral(self.privkey, &peer_key, (), f)
+        let peer_key = UnparsedPublicKey::new(self.group.agreement_algorithm, peer);
+        agree_ephemeral(self.priv_key, &peer_key, (), f)
             .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
     }
 
     /// Return the public key being used.
     pub(crate) fn pub_key(&self) -> &[u8] {
-        self.pubkey.as_ref()
+        self.pub_key.as_ref()
     }
 }
 
