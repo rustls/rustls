@@ -11,7 +11,8 @@ where
     T: Codec,
 {
     let mut rdr = Reader::init(data);
-    T::read(&mut rdr);
+
+    let _ = T::read(&mut rdr);
 }
 
 fuzz_target!(|data: &[u8]| {
