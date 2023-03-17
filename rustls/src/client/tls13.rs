@@ -5,13 +5,13 @@ use crate::common_state::Protocol;
 use crate::common_state::Side;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
+use crate::crypto::ring::KeyExchange;
 use crate::crypto::CryptoProvider;
 use crate::enums::{
     AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
-use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
@@ -74,7 +74,7 @@ pub(super) fn handle_server_hello(
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    our_key_share: kx::KeyExchange,
+    our_key_share: KeyExchange,
     mut sent_tls13_fake_ccs: bool,
 ) -> hs::NextStateOrError {
     validate_server_hello(cx.common, server_hello)?;
@@ -205,7 +205,7 @@ fn validate_server_hello(
 pub(super) fn initial_key_share(
     config: &ClientConfig<impl CryptoProvider>,
     server_name: &ServerName,
-) -> Result<kx::KeyExchange, Error> {
+) -> Result<KeyExchange, Error> {
     let group = config
         .resumption
         .store
@@ -224,7 +224,7 @@ pub(super) fn initial_key_share(
                 .name,
         );
 
-    kx::KeyExchange::choose(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
+    KeyExchange::choose(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a

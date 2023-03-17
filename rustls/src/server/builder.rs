@@ -1,8 +1,8 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
+use crate::crypto::ring::SupportedKxGroup;
 use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::key;
-use crate::kx::SupportedKxGroup;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
 use crate::suites::SupportedCipherSuite;

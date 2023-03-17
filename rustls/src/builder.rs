@@ -1,6 +1,6 @@
+use crate::crypto::ring::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::crypto::CryptoProvider;
 use crate::error::Error;
-use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHER_SUITES};
 use crate::versions;
 

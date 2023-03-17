@@ -351,7 +351,6 @@ mod enums;
 mod key;
 mod key_log;
 mod key_log_file;
-mod kx;
 mod suites;
 mod ticketer;
 mod versions;
@@ -380,6 +379,7 @@ pub use crate::builder::{
 };
 pub use crate::common_state::{CommonState, IoState, Side};
 pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
+pub use crate::crypto::ring::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
     SignatureScheme,
@@ -391,7 +391,6 @@ pub use crate::error::{
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
-pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::handshake::DistinguishedName;
 pub use crate::stream::{Stream, StreamOwned};
@@ -510,9 +509,9 @@ pub mod version {
 ///
 /// ALL_KX_GROUPS is provided as an array of all of these values.
 pub mod kx_group {
-    pub use crate::kx::SECP256R1;
-    pub use crate::kx::SECP384R1;
-    pub use crate::kx::X25519;
+    pub use crate::crypto::ring::SECP256R1;
+    pub use crate::crypto::ring::SECP384R1;
+    pub use crate::crypto::ring::X25519;
 }
 
 /// Message signing interfaces and implementations.
