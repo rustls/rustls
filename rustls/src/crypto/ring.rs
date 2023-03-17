@@ -202,3 +202,12 @@ pub static SECP384R1: SupportedKxGroup = SupportedKxGroup {
 
 /// A list of all the key exchange groups supported by rustls.
 pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [&X25519, &SECP256R1, &SECP384R1];
+
+/// All defined key exchange groups supported by *ring* appear in this module.
+///
+/// [`ALL_KX_GROUPS`] is provided as an array of all of these values.
+pub mod kx_group {
+    pub use crate::crypto::ring::SECP256R1;
+    pub use crate::crypto::ring::SECP384R1;
+    pub use crate::crypto::ring::X25519;
+}

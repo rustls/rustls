@@ -505,14 +505,8 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
-/// All defined key exchange groups appear in this module.
-///
-/// ALL_KX_GROUPS is provided as an array of all of these values.
-pub mod kx_group {
-    pub use crate::crypto::ring::SECP256R1;
-    pub use crate::crypto::ring::SECP384R1;
-    pub use crate::crypto::ring::X25519;
-}
+/// All defined key exchange groups supported by *ring* appear in this module.
+pub use crypto::ring::kx_group;
 
 /// Message signing interfaces and implementations.
 pub mod sign;
