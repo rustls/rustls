@@ -145,11 +145,6 @@ impl super::KeyExchange for KeyExchange {
         })
     }
 
-    /// Return the group being used.
-    fn group(&self) -> NamedGroup {
-        self.group.name
-    }
-
     /// Completes the key exchange, given the peer's public key.
     ///
     /// The shared secret is passed into the closure passed down in `f`, and the result of calling
@@ -158,6 +153,11 @@ impl super::KeyExchange for KeyExchange {
         let peer_key = UnparsedPublicKey::new(self.group.agreement_algorithm, peer);
         agree_ephemeral(self.priv_key, &peer_key, (), f)
             .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
+    }
+
+    /// Return the group being used.
+    fn group(&self) -> NamedGroup {
+        self.group.name
     }
 
     /// Return the public key being used.
