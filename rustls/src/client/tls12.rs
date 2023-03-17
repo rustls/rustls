@@ -1,7 +1,7 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, KeyExchangeError};
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
@@ -769,10 +769,10 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
         let named_group = ecdh_params.curve_params.named_group;
         let kx = match kx::KeyExchange::choose(named_group, &st.config.kx_groups) {
             Ok(kx) => kx,
-            Err(kx::KeyExchangeError::UnsupportedGroup) => {
+            Err(KeyExchangeError::UnsupportedGroup) => {
                 return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into())
             }
-            Err(kx::KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
+            Err(KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
         };
 
         // 5b.

@@ -12,3 +12,8 @@ pub trait CryptoProvider: Send + Sync + 'static {
     /// Fill the given buffer with random bytes.
     fn fill_random(buf: &mut [u8]) -> Result<(), GetRandomFailed>;
 }
+
+pub(crate) enum KeyExchangeError {
+    UnsupportedGroup,
+    KeyExchangeFailed(GetRandomFailed),
+}
