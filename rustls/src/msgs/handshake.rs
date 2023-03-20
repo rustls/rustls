@@ -11,6 +11,7 @@ use crate::msgs::enums::{
     ServerNameType, SignatureAlgorithm,
 };
 use crate::rand;
+use crate::sessionid::SessionId;
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -103,80 +104,6 @@ impl From<[u8; 32]> for Random {
     #[inline]
     fn from(bytes: [u8; 32]) -> Self {
         Self(bytes)
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct SessionID {
-    len: usize,
-    data: [u8; 32],
-}
-
-impl fmt::Debug for SessionID {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        super::base::hex(f, &self.data[..self.len])
-    }
-}
-
-impl PartialEq for SessionID {
-    fn eq(&self, other: &Self) -> bool {
-        if self.len != other.len {
-            return false;
-        }
-
-        let mut diff = 0u8;
-        for i in 0..self.len {
-            diff |= self.data[i] ^ other.data[i];
-        }
-
-        diff == 0u8
-    }
-}
-
-impl Codec for SessionID {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        debug_assert!(self.len <= 32);
-        bytes.push(self.len as u8);
-        bytes.extend_from_slice(&self.data[..self.len]);
-    }
-
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let len = u8::read(r)? as usize;
-        if len > 32 {
-            return Err(InvalidMessage::TrailingData("SessionID"));
-        }
-
-        let bytes = match r.take(len) {
-            Some(bytes) => bytes,
-            None => return Err(InvalidMessage::MissingData("SessionID")),
-        };
-
-        let mut out = [0u8; 32];
-        out[..len].clone_from_slice(&bytes[..len]);
-        Ok(Self { data: out, len })
-    }
-}
-
-impl SessionID {
-    pub fn random() -> Result<Self, rand::GetRandomFailed> {
-        let mut data = [0u8; 32];
-        rand::fill_random(&mut data)?;
-        Ok(Self { data, len: 32 })
-    }
-
-    pub fn empty() -> Self {
-        Self {
-            data: [0u8; 32],
-            len: 0,
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
     }
 }
 
@@ -853,7 +780,7 @@ impl ServerExtension {
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
-    pub session_id: SessionID,
+    pub session_id: SessionId,
     pub cipher_suites: Vec<CipherSuite>,
     pub compression_methods: Vec<Compression>,
     pub extensions: Vec<ClientExtension>,
@@ -876,7 +803,7 @@ impl Codec for ClientHelloPayload {
         let mut ret = Self {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
-            session_id: SessionID::read(r)?,
+            session_id: SessionId::read(r)?,
             cipher_suites: codec::read_vec_u16::<CipherSuite>(r)?,
             compression_methods: codec::read_vec_u8::<Compression>(r)?,
             extensions: Vec::new(),
@@ -1108,7 +1035,7 @@ impl Codec for HelloRetryExtension {
 #[derive(Debug)]
 pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
-    pub session_id: SessionID,
+    pub session_id: SessionId,
     pub cipher_suite: CipherSuite,
     pub extensions: Vec<HelloRetryExtension>,
 }
@@ -1124,7 +1051,7 @@ impl Codec for HelloRetryRequest {
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let session_id = SessionID::read(r)?;
+        let session_id = SessionId::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 
@@ -1202,7 +1129,7 @@ impl HelloRetryRequest {
 pub struct ServerHelloPayload {
     pub legacy_version: ProtocolVersion,
     pub random: Random,
-    pub session_id: SessionID,
+    pub session_id: SessionId,
     pub cipher_suite: CipherSuite,
     pub compression_method: Compression,
     pub extensions: Vec<ServerExtension>,
@@ -1224,7 +1151,7 @@ impl Codec for ServerHelloPayload {
 
     // minus version and random, which have already been read.
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let session_id = SessionID::read(r)?;
+        let session_id = SessionId::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 

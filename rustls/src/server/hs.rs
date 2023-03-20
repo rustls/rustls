@@ -8,13 +8,13 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
 use crate::msgs::enums::HandshakeType;
 use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
-#[cfg(feature = "tls12")]
-use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::{ClientHello, ServerConfig};
+#[cfg(feature = "tls12")]
+use crate::sessionid::SessionId;
 use crate::suites;
 use crate::SupportedCipherSuite;
 
@@ -238,7 +238,7 @@ pub(super) struct ExpectClientHello {
     pub(super) extra_exts: Vec<ServerExtension>,
     pub(super) transcript: HandshakeHashOrBuffer,
     #[cfg(feature = "tls12")]
-    pub(super) session_id: SessionID,
+    pub(super) session_id: SessionId,
     #[cfg(feature = "tls12")]
     pub(super) using_ems: bool,
     pub(super) done_retry: bool,
@@ -258,7 +258,7 @@ impl ExpectClientHello {
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
             #[cfg(feature = "tls12")]
-            session_id: SessionID::empty(),
+            session_id: SessionId::empty(),
             #[cfg(feature = "tls12")]
             using_ems: false,
             done_retry: false,

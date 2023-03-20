@@ -10,10 +10,11 @@ use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::msgs::handshake::NewSessionTicketPayload;
 use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sessionid::SessionId;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -33,11 +34,11 @@ mod client_hello {
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression};
+    use crate::msgs::handshake::ClientExtension;
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
     use crate::msgs::handshake::{
         CertificateStatus, DigitallySignedStruct, ECDHEServerKeyExchange,
     };
-    use crate::msgs::handshake::{ClientExtension, SessionID};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
     use crate::msgs::handshake::{ECPointFormatList, ServerECDHParams, SupportedPointFormats};
     use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
@@ -48,7 +49,7 @@ mod client_hello {
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,
         pub(in crate::server) transcript: HandshakeHash,
-        pub(in crate::server) session_id: SessionID,
+        pub(in crate::server) session_id: SessionId,
         pub(in crate::server) suite: &'static Tls12CipherSuite,
         pub(in crate::server) using_ems: bool,
         pub(in crate::server) randoms: ConnectionRandoms,
@@ -183,9 +184,9 @@ mod client_hello {
 
             // If we're not offered a ticket or a potential session ID, allocate a session ID.
             if !self.config.session_storage.can_cache() {
-                self.session_id = SessionID::empty();
+                self.session_id = SessionId::empty();
             } else if self.session_id.is_empty() && !ticket_received {
-                self.session_id = SessionID::random()?;
+                self.session_id = SessionId::random()?;
             }
 
             self.send_ticket = emit_server_hello(
@@ -247,7 +248,7 @@ mod client_hello {
             mut self,
             cx: &mut ServerContext<'_>,
             client_hello: &ClientHelloPayload,
-            id: &SessionID,
+            id: &SessionId,
             resumedata: persist::ServerSessionValue,
         ) -> hs::NextStateOrError {
             debug!("Resuming connection");
@@ -319,7 +320,7 @@ mod client_hello {
         config: &ServerConfig,
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
-        session_id: SessionID,
+        session_id: SessionId,
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
@@ -498,7 +499,7 @@ struct ExpectCertificate {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
-    session_id: SessionID,
+    session_id: SessionId,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
@@ -569,7 +570,7 @@ struct ExpectClientKx {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
-    session_id: SessionID,
+    session_id: SessionId,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: kx::KeyExchange,
@@ -638,7 +639,7 @@ struct ExpectCertificateVerify {
     config: Arc<ServerConfig>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
-    session_id: SessionID,
+    session_id: SessionId,
     using_ems: bool,
     client_cert: Vec<Certificate>,
     send_ticket: bool,
@@ -698,7 +699,7 @@ struct ExpectCcs {
     config: Arc<ServerConfig>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
-    session_id: SessionID,
+    session_id: SessionId,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,
@@ -831,7 +832,7 @@ struct ExpectFinished {
     config: Arc<ServerConfig>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
-    session_id: SessionID,
+    session_id: SessionId,
     using_ems: bool,
     resuming: bool,
     send_ticket: bool,

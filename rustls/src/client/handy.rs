@@ -200,7 +200,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 mod test {
     use super::*;
     use crate::client::ClientSessionStore;
-    use crate::internal::msgs::handshake::SessionID;
+    use crate::sessionid::SessionId;
     use std::convert::TryInto;
 
     #[cfg(feature = "tls12")]
@@ -225,7 +225,7 @@ mod test {
             &name,
             persist::Tls12ClientSessionValue::new(
                 tls12_suite,
-                SessionID::empty(),
+                SessionId::empty(),
                 Vec::new(),
                 Vec::new(),
                 Vec::new(),

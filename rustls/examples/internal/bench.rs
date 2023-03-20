@@ -129,7 +129,7 @@ enum ClientAuth {
 #[derive(PartialEq, Clone, Copy)]
 enum Resumption {
     No,
-    SessionID,
+    SessionId,
     Tickets,
 }
 
@@ -137,7 +137,7 @@ impl Resumption {
     fn label(&self) -> &'static str {
         match *self {
             Self::No => "no-resume",
-            Self::SessionID => "sessionid",
+            Self::SessionId => "sessionid",
             Self::Tickets => "tickets",
         }
     }
@@ -318,7 +318,7 @@ fn make_server_config(
         .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
         .expect("bad certs/private key?");
 
-    if resume == Resumption::SessionID {
+    if resume == Resumption::SessionId {
         cfg.session_storage = ServerSessionMemoryCache::new(128);
     } else if resume == Resumption::Tickets {
         cfg.ticketer = Ticketer::new().unwrap();
@@ -601,7 +601,7 @@ fn selected_tests(mut args: env::Args) {
                 let resume = if mode == "handshake" {
                     Resumption::No
                 } else if mode == "handshake-resume" {
-                    Resumption::SessionID
+                    Resumption::SessionId
                 } else {
                     Resumption::Tickets
                 };
@@ -645,8 +645,8 @@ fn all_tests() {
         bench_bulk(test, 1024 * 1024, Some(10000));
         bench_handshake(test, ClientAuth::No, Resumption::No);
         bench_handshake(test, ClientAuth::Yes, Resumption::No);
-        bench_handshake(test, ClientAuth::No, Resumption::SessionID);
-        bench_handshake(test, ClientAuth::Yes, Resumption::SessionID);
+        bench_handshake(test, ClientAuth::No, Resumption::SessionId);
+        bench_handshake(test, ClientAuth::Yes, Resumption::SessionId);
         bench_handshake(test, ClientAuth::No, Resumption::Tickets);
         bench_handshake(test, ClientAuth::Yes, Resumption::Tickets);
     }

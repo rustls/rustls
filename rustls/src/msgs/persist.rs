@@ -4,7 +4,7 @@ use crate::key;
 use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::handshake::SessionID;
+use crate::sessionid::SessionId;
 use crate::ticketer::TimeBase;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
@@ -164,7 +164,7 @@ impl std::ops::Deref for Tls13ClientSessionValue {
 #[derive(Debug, Clone)]
 pub struct Tls12ClientSessionValue {
     suite: &'static Tls12CipherSuite,
-    pub session_id: SessionID,
+    pub session_id: SessionId,
     extended_ms: bool,
     pub common: ClientSessionCommon,
 }
@@ -173,7 +173,7 @@ pub struct Tls12ClientSessionValue {
 impl Tls12ClientSessionValue {
     pub fn new(
         suite: &'static Tls12CipherSuite,
-        session_id: SessionID,
+        session_id: SessionId,
         ticket: Vec<u8>,
         master_secret: Vec<u8>,
         server_cert_chain: Vec<key::Certificate>,
@@ -270,7 +270,7 @@ static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
 
 // --- Server types ---
-pub type ServerSessionKey = SessionID;
+pub type ServerSessionKey = SessionId;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {

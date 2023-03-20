@@ -16,9 +16,9 @@ use crate::msgs::handshake::{
     HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
     NewSessionTicketPayload, NewSessionTicketPayloadTLS13, PresharedKeyBinder,
     PresharedKeyIdentity, PresharedKeyOffer, Random, ServerECDHParams, ServerExtension,
-    ServerHelloPayload, ServerKeyExchangePayload, SessionID, SupportedPointFormats,
-    UnknownExtension,
+    ServerHelloPayload, ServerKeyExchangePayload, SupportedPointFormats, UnknownExtension,
 };
+use crate::sessionid::SessionId;
 use webpki::DnsNameRef;
 
 #[test]
@@ -50,20 +50,20 @@ fn debug_random() {
 fn rejects_truncated_sessionid() {
     let bytes = [32; 32];
     let mut rd = Reader::init(&bytes);
-    assert!(SessionID::read(&mut rd).is_err());
+    assert!(SessionId::read(&mut rd).is_err());
 }
 
 #[test]
 fn rejects_sessionid_with_bad_length() {
     let bytes = [33; 33];
     let mut rd = Reader::init(&bytes);
-    assert!(SessionID::read(&mut rd).is_err());
+    assert!(SessionId::read(&mut rd).is_err());
 }
 
 #[test]
 fn sessionid_with_different_lengths_are_unequal() {
-    let a = SessionID::read(&mut Reader::init(&[1u8, 1])).unwrap();
-    let b = SessionID::read(&mut Reader::init(&[2u8, 1, 2])).unwrap();
+    let a = SessionId::read(&mut Reader::init(&[1u8, 1])).unwrap();
+    let b = SessionId::read(&mut Reader::init(&[2u8, 1, 2])).unwrap();
     assert_ne!(a, b);
 }
 
@@ -71,7 +71,7 @@ fn sessionid_with_different_lengths_are_unequal() {
 fn accepts_short_sessionid() {
     let bytes = [1; 2];
     let mut rd = Reader::init(&bytes);
-    let sess = SessionID::read(&mut rd).unwrap();
+    let sess = SessionId::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
     assert!(!sess.is_empty());
@@ -83,7 +83,7 @@ fn accepts_short_sessionid() {
 fn accepts_empty_sessionid() {
     let bytes = [0; 1];
     let mut rd = Reader::init(&bytes);
-    let sess = SessionID::read(&mut rd).unwrap();
+    let sess = SessionId::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
     assert!(sess.is_empty());
@@ -98,7 +98,7 @@ fn debug_sessionid() {
         1, 1, 1,
     ];
     let mut rd = Reader::init(&bytes);
-    let sess = SessionID::read(&mut rd).unwrap();
+    let sess = SessionId::read(&mut rd).unwrap();
     assert_eq!(
         "0101010101010101010101010101010101010101010101010101010101010101",
         format!("{:?}", sess)
@@ -395,7 +395,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
     ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
         random: Random::from([0; 32]),
-        session_id: SessionID::empty(),
+        session_id: SessionId::empty(),
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
         extensions: vec![
@@ -788,7 +788,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
     ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
         random: Random::from([0; 32]),
-        session_id: SessionID::empty(),
+        session_id: SessionId::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: vec![
@@ -825,7 +825,7 @@ fn can_clone_all_serverextensions() {
 fn get_sample_helloretryrequest() -> HelloRetryRequest {
     HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
-        session_id: SessionID::empty(),
+        session_id: SessionId::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         extensions: vec![
             HelloRetryExtension::KeyShare(NamedGroup::X25519),

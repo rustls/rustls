@@ -12,10 +12,11 @@ use crate::msgs::enums::AlertDescription;
 use crate::msgs::enums::{ContentType, HandshakeType};
 use crate::msgs::handshake::{
     CertificatePayload, DecomposedSignatureScheme, DigitallySignedStruct, HandshakeMessagePayload,
-    HandshakePayload, NewSessionTicketPayload, SCTList, ServerECDHParams, SessionID,
+    HandshakePayload, NewSessionTicketPayload, SCTList, ServerECDHParams,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sessionid::SessionId;
 use crate::sign::Signer;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
@@ -192,7 +193,7 @@ mod server_hello {
 struct ExpectCertificate {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -253,7 +254,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
 struct ExpectCertificateStatusOrServerKx {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -327,7 +328,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
 struct ExpectCertificateStatus {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -381,7 +382,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
 struct ExpectServerKx {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -545,7 +546,7 @@ impl ServerKxDetails {
 struct ExpectServerDoneOrCertReq {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -607,7 +608,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
 struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -668,7 +669,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
 struct ExpectServerDone {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     using_ems: bool,
@@ -863,7 +864,7 @@ struct ExpectNewTicket {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -907,7 +908,7 @@ struct ExpectCcs {
     config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -956,7 +957,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 struct ExpectFinished {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
-    session_id: SessionID,
+    session_id: SessionId,
     server_name: ServerName,
     using_ems: bool,
     transcript: HandshakeHash,

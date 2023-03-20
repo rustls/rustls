@@ -160,7 +160,7 @@ impl fmt::Debug for PayloadU8 {
 }
 
 // Format an iterator of u8 into a hex string
-pub(super) fn hex<'a>(
+pub(crate) fn hex<'a>(
     f: &mut fmt::Formatter<'_>,
     payload: impl IntoIterator<Item = &'a u8>,
 ) -> fmt::Result {

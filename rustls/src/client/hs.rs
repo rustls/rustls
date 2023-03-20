@@ -12,15 +12,16 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertDescription, Compression, ContentType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
 use crate::msgs::enums::{ExtensionType, HandshakeType};
+use crate::msgs::handshake::Random;
 use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList};
 use crate::msgs::handshake::{ECPointFormatList, SupportedPointFormats};
 use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
-use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sessionid::SessionId;
 use crate::ticketer::TimeBase;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::SupportedCipherSuite;
@@ -99,7 +100,7 @@ pub(super) fn start_handshake(
 
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
-    let mut session_id: Option<SessionID> = None;
+    let mut session_id: Option<SessionId> = None;
     let mut resuming_session = find_session(
         &server_name,
         &config,
@@ -120,7 +121,7 @@ pub(super) fn start_handshake(
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
             if !inner.ticket().is_empty() {
-                inner.session_id = SessionID::random()?;
+                inner.session_id = SessionId::random()?;
             }
             session_id = Some(inner.session_id);
         }
@@ -133,7 +134,7 @@ pub(super) fn start_handshake(
     // https://tools.ietf.org/html/rfc8446#appendix-D.4
     // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
     if session_id.is_none() && !cx.common.is_quic() {
-        session_id = Some(SessionID::random()?);
+        session_id = Some(SessionId::random()?);
     }
 
     let random = Random::new()?;
@@ -169,7 +170,7 @@ struct ExpectServerHello {
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     offered_key_share: Option<kx::KeyExchange>,
-    session_id: SessionID,
+    session_id: SessionId,
     sent_tls13_fake_ccs: bool,
     suite: Option<SupportedCipherSuite>,
 }
@@ -188,7 +189,7 @@ fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
-    session_id: Option<SessionID>,
+    session_id: Option<SessionId>,
     retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
     key_share: Option<kx::KeyExchange>,
@@ -196,7 +197,7 @@ fn emit_client_hello_for_retry(
     may_send_sct_list: bool,
     suite: Option<SupportedCipherSuite>,
 ) -> NextState {
-    // Do we have a SessionID or ticket cached for this host?
+    // Do we have a SessionId or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
         match &resuming.value {
             persist::ClientSessionValue::Tls13(inner) => {
@@ -331,7 +332,7 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
-    let session_id = session_id.unwrap_or_else(SessionID::empty);
+    let session_id = session_id.unwrap_or_else(SessionId::empty);
     let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()

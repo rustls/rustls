@@ -323,6 +323,7 @@ mod hash_hs;
 mod limited_cache;
 mod rand;
 mod record_layer;
+mod sessionid;
 mod stream;
 #[cfg(feature = "tls12")]
 mod tls12;
@@ -380,6 +381,7 @@ pub use crate::msgs::enums::{
     AlertDescription, ContentType, HandshakeType, NamedGroup, SignatureAlgorithm,
 };
 pub use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
+pub use crate::sessionid::SessionId;
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,
