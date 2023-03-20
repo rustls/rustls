@@ -217,6 +217,8 @@ jobs:
           components: rustfmt
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Check formatting (fuzz workspace)
+        run: cargo fmt --all --manifest-path=fuzz/Cargo.toml -- --check
 
   clippy:
     name: Clippy
@@ -231,6 +233,7 @@ jobs:
         with:
           components: clippy
       - run: cargo clippy --package rustls --all-features -- --deny warnings
+      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features -- --deny warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
@@ -245,3 +248,4 @@ jobs:
         with:
           components: clippy
       - run: cargo clippy --package rustls --all-features
+      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features -- --deny warnings
