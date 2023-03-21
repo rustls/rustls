@@ -379,7 +379,7 @@ pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::msgs::enums::{NamedGroup, SignatureAlgorithm};
-pub use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
+pub use crate::msgs::handshake::DistinguishedNames;
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     BulkAlgorithm, SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,
@@ -390,6 +390,7 @@ pub use crate::ticketer::Ticketer;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
+pub use crate::verify::DigitallySignedStruct;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
 
 /// Items for use in a client.

@@ -11,14 +11,15 @@ use crate::msgs::handshake::{
     CertificateRequestPayload, CertificateRequestPayloadTLS13, CertificateStatus,
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
     ConvertProtocolNameList, ConvertServerNameList, DecomposedSignatureScheme,
-    DigitallySignedStruct, ECDHEServerKeyExchange, ECParameters, ECPointFormatList,
-    EncryptedExtensions, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
-    NewSessionTicketPayload, NewSessionTicketPayloadTLS13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, Random, ServerECDHParams, ServerExtension,
-    ServerHelloPayload, ServerKeyExchangePayload, SessionID, SupportedPointFormats,
-    UnknownExtension,
+    ECDHEServerKeyExchange, ECParameters, ECPointFormatList, EncryptedExtensions,
+    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryExtension,
+    HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension, NewSessionTicketPayload,
+    NewSessionTicketPayloadTLS13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
+    Random, ServerECDHParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload,
+    SessionID, SupportedPointFormats, UnknownExtension,
 };
+use crate::verify::DigitallySignedStruct;
+
 use webpki::DnsNameRef;
 
 #[test]

@@ -3,11 +3,13 @@ use std::fmt;
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
-use crate::error::{CertificateError, Error, PeerMisbehaved};
+use crate::error::{CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
-use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
+use crate::msgs::base::PayloadU16;
+use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::handshake::DistinguishedNames;
 
 use ring::digest::Digest;
 
@@ -685,6 +687,43 @@ impl ClientCertVerifier for NoClientAuth {
         _now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
+    }
+}
+
+/// This type combines a [`SignatureScheme`] and a signature payload produced with that scheme.
+#[derive(Debug, Clone)]
+pub struct DigitallySignedStruct {
+    /// The [`SignatureScheme`] used to produce the signature.
+    pub scheme: SignatureScheme,
+    sig: PayloadU16,
+}
+
+impl DigitallySignedStruct {
+    pub(crate) fn new(scheme: SignatureScheme, sig: Vec<u8>) -> Self {
+        Self {
+            scheme,
+            sig: PayloadU16::new(sig),
+        }
+    }
+
+    /// Get the signature.
+    pub fn signature(&self) -> &[u8] {
+        &self.sig.0
+    }
+}
+
+impl Codec for DigitallySignedStruct {
+    #![allow(deprecated)]
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.scheme.encode(bytes);
+        self.sig.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        let scheme = SignatureScheme::read(r)?;
+        let sig = PayloadU16::read(r)?;
+
+        Ok(Self { scheme, sig })
     }
 }
 

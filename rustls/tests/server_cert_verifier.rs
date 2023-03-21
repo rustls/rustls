@@ -10,7 +10,7 @@ use crate::common::{
 use rustls::client::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier,
 };
-use rustls::internal::msgs::handshake::DigitallySignedStruct;
+use rustls::DigitallySignedStruct;
 use rustls::{AlertDescription, Certificate, Error, InvalidMessage, SignatureScheme};
 use std::sync::Arc;
 
