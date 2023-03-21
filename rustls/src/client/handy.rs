@@ -21,15 +21,12 @@ impl client::ClientSessionStore for NoClientSessionStorage {
         None
     }
 
-    #[cfg(feature = "tls12")]
     fn set_tls12_session(&self, _: &ServerName, _: persist::Tls12ClientSessionValue) {}
 
-    #[cfg(feature = "tls12")]
     fn tls12_session(&self, _: &ServerName) -> Option<persist::Tls12ClientSessionValue> {
         None
     }
 
-    #[cfg(feature = "tls12")]
     fn remove_tls12_session(&self, _: &ServerName) {}
 
     fn insert_tls13_ticket(&self, _: &ServerName, _: persist::Tls13ClientSessionValue) {}
@@ -99,29 +96,36 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
             .and_then(|sd| sd.kx_hint)
     }
 
-    #[cfg(feature = "tls12")]
-    fn set_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue) {
+    fn set_tls12_session(
+        &self,
+        _server_name: &ServerName,
+        _value: persist::Tls12ClientSessionValue,
+    ) {
+        #[cfg(feature = "tls12")]
         self.servers
             .lock()
             .unwrap()
-            .get_or_insert_default_and_edit(server_name.clone(), |data| data.tls12 = Some(value));
+            .get_or_insert_default_and_edit(_server_name.clone(), |data| data.tls12 = Some(_value));
     }
 
-    #[cfg(feature = "tls12")]
-    fn tls12_session(&self, server_name: &ServerName) -> Option<persist::Tls12ClientSessionValue> {
+    fn tls12_session(&self, _server_name: &ServerName) -> Option<persist::Tls12ClientSessionValue> {
+        #[cfg(not(feature = "tls12"))]
+        return None;
+
+        #[cfg(feature = "tls12")]
         self.servers
             .lock()
             .unwrap()
-            .get(server_name)
+            .get(_server_name)
             .and_then(|sd| sd.tls12.as_ref().cloned())
     }
 
-    #[cfg(feature = "tls12")]
-    fn remove_tls12_session(&self, server_name: &ServerName) {
+    fn remove_tls12_session(&self, _server_name: &ServerName) {
+        #[cfg(feature = "tls12")]
         self.servers
             .lock()
             .unwrap()
-            .get_mut(server_name)
+            .get_mut(_server_name)
             .and_then(|data| data.tls12.take());
     }
 
@@ -198,48 +202,57 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
-    use crate::internal::msgs::handshake::SessionID;
+    use crate::msgs::enums::NamedGroup;
+    #[cfg(feature = "tls12")]
+    use crate::msgs::handshake::SessionID;
+    use crate::msgs::persist::Tls13ClientSessionValue;
+    use crate::suites::SupportedCipherSuite;
     use std::convert::TryInto;
 
-    #[cfg(feature = "tls12")]
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
         let c = NoClientSessionStorage {};
         let name = "example.com".try_into().unwrap();
-        let tls12_suite = match crate::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 {
-            crate::suites::SupportedCipherSuite::Tls12(inner) => inner,
-            _ => unreachable!(),
-        };
-        let tls13_suite = match crate::cipher_suite::TLS13_AES_256_GCM_SHA384 {
-            crate::suites::SupportedCipherSuite::Tls13(inner) => inner,
-            _ => unreachable!(),
-        };
         let now = crate::ticketer::TimeBase::now().unwrap();
 
         c.set_kx_hint(&name, NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&name));
 
-        c.set_tls12_session(
-            &name,
-            persist::Tls12ClientSessionValue::new(
-                tls12_suite,
-                SessionID::empty(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                now,
-                0,
-                true,
-            ),
-        );
-        assert!(c.tls12_session(&name).is_none());
-        c.remove_tls12_session(&name);
+        #[cfg(feature = "tls12")]
+        {
+            use crate::msgs::persist::Tls12ClientSessionValue;
+            let tls12_suite = match crate::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 {
+                SupportedCipherSuite::Tls12(inner) => inner,
+                _ => unreachable!(),
+            };
 
+            c.set_tls12_session(
+                &name,
+                Tls12ClientSessionValue::new(
+                    tls12_suite,
+                    SessionID::empty(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    now,
+                    0,
+                    true,
+                ),
+            );
+            assert!(c.tls12_session(&name).is_none());
+            c.remove_tls12_session(&name);
+        }
+
+        let tls13_suite = match crate::cipher_suite::TLS13_AES_256_GCM_SHA384 {
+            SupportedCipherSuite::Tls13(inner) => inner,
+            #[cfg(feature = "tls12")]
+            _ => unreachable!(),
+        };
         c.insert_tls13_ticket(
             &name,
-            persist::Tls13ClientSessionValue::new(
+            Tls13ClientSessionValue::new(
                 tls13_suite,
                 Vec::new(),
                 Vec::new(),
