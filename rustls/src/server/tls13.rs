@@ -53,7 +53,6 @@ mod client_hello {
     use crate::msgs::handshake::CertificateRequestPayloadTLS13;
     use crate::msgs::handshake::CertificateStatus;
     use crate::msgs::handshake::ClientHelloPayload;
-    use crate::msgs::handshake::DigitallySignedStruct;
     use crate::msgs::handshake::HelloRetryExtension;
     use crate::msgs::handshake::HelloRetryRequest;
     use crate::msgs::handshake::KeyShareEntry;
@@ -66,6 +65,7 @@ mod client_hello {
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
+    use crate::verify::DigitallySignedStruct;
 
     use super::*;
 

@@ -18,7 +18,6 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::ClientExtension;
-use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
@@ -33,7 +32,7 @@ use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleTraffic,
 };
 use crate::tls13::Tls13CipherSuite;
-use crate::verify;
+use crate::verify::{self, DigitallySignedStruct};
 use crate::{sign, KeyLog};
 
 use super::client_conn::ClientConnectionData;

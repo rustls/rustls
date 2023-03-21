@@ -2,6 +2,8 @@
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::InvalidMessage;
 use crate::key;
+#[cfg(feature = "logging")]
+use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
@@ -11,9 +13,7 @@ use crate::msgs::enums::{
     SignatureAlgorithm,
 };
 use crate::rand;
-
-#[cfg(feature = "logging")]
-use crate::log::warn;
+use crate::verify::DigitallySignedStruct;
 
 use std::collections;
 use std::fmt;
@@ -1580,43 +1580,6 @@ impl Codec for ECParameters {
             curve_type: ct,
             named_group: grp,
         })
-    }
-}
-
-/// This type combines a [`SignatureScheme`] and a signature payload produced with that scheme.
-#[derive(Debug, Clone)]
-pub struct DigitallySignedStruct {
-    pub scheme: SignatureScheme,
-    #[deprecated(since = "0.20.7", note = "Use signature() accessor")]
-    pub sig: PayloadU16,
-}
-
-impl DigitallySignedStruct {
-    #![allow(deprecated)]
-    pub fn new(scheme: SignatureScheme, sig: Vec<u8>) -> Self {
-        Self {
-            scheme,
-            sig: PayloadU16::new(sig),
-        }
-    }
-
-    pub fn signature(&self) -> &[u8] {
-        &self.sig.0
-    }
-}
-
-impl Codec for DigitallySignedStruct {
-    #![allow(deprecated)]
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.scheme.encode(bytes);
-        self.sig.encode(bytes);
-    }
-
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let scheme = SignatureScheme::read(r)?;
-        let sig = PayloadU16::read(r)?;
-
-        Ok(Self { scheme, sig })
     }
 }
 
