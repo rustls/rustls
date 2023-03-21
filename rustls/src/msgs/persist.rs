@@ -165,7 +165,7 @@ pub struct Tls12ClientSessionValue {
     #[cfg(feature = "tls12")]
     suite: &'static Tls12CipherSuite,
     #[cfg(feature = "tls12")]
-    pub session_id: SessionID,
+    pub(crate) session_id: SessionID,
     #[cfg(feature = "tls12")]
     extended_ms: bool,
     pub common: ClientSessionCommon,
