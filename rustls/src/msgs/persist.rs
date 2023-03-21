@@ -76,7 +76,7 @@ pub struct Tls13ClientSessionValue {
 }
 
 impl Tls13ClientSessionValue {
-    pub fn new(
+    pub(crate) fn new(
         suite: &'static Tls13CipherSuite,
         ticket: Vec<u8>,
         secret: Vec<u8>,
@@ -137,12 +137,13 @@ pub struct Tls12ClientSessionValue {
     pub(crate) session_id: SessionID,
     #[cfg(feature = "tls12")]
     extended_ms: bool,
+    #[doc(hidden)]
     pub common: ClientSessionCommon,
 }
 
 #[cfg(feature = "tls12")]
 impl Tls12ClientSessionValue {
-    pub fn new(
+    pub(crate) fn new(
         suite: &'static Tls12CipherSuite,
         session_id: SessionID,
         ticket: Vec<u8>,
@@ -166,15 +167,15 @@ impl Tls12ClientSessionValue {
         }
     }
 
-    pub fn take_ticket(&mut self) -> Vec<u8> {
+    pub(crate) fn take_ticket(&mut self) -> Vec<u8> {
         mem::take(&mut self.common.ticket.0)
     }
 
-    pub fn extended_ms(&self) -> bool {
+    pub(crate) fn extended_ms(&self) -> bool {
         self.extended_ms
     }
 
-    pub fn suite(&self) -> &'static Tls12CipherSuite {
+    pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
         self.suite
     }
 }
@@ -214,19 +215,20 @@ impl ClientSessionCommon {
         }
     }
 
-    pub fn server_cert_chain(&self) -> &[key::Certificate] {
+    pub(crate) fn server_cert_chain(&self) -> &[key::Certificate] {
         self.server_cert_chain.as_ref()
     }
 
-    pub fn secret(&self) -> &[u8] {
+    pub(crate) fn secret(&self) -> &[u8] {
         self.secret.0.as_ref()
     }
 
-    pub fn ticket(&self) -> &[u8] {
+    pub(crate) fn ticket(&self) -> &[u8] {
         self.ticket.0.as_ref()
     }
 
     /// Test only: wind back epoch by delta seconds.
+    #[doc(hidden)]
     pub fn rewind_epoch(&mut self, delta: u32) {
         self.epoch -= delta as u64;
     }
