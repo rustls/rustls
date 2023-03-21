@@ -31,6 +31,7 @@ use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::{tls13, ClientConfig, ServerName};
 
+use std::ops::Deref;
 use std::sync::Arc;
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
@@ -41,19 +42,19 @@ fn find_session(
     server_name: &ServerName,
     config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
-) -> Option<persist::Retrieved<persist::ClientSessionValue>> {
+) -> Option<persist::Retrieved<ClientSessionValue>> {
     #[allow(clippy::let_and_return)]
     let found = config
         .session_storage
         .take_tls13_ticket(server_name)
-        .map(persist::ClientSessionValue::from)
+        .map(ClientSessionValue::Tls13)
         .or_else(|| {
             #[cfg(feature = "tls12")]
             {
                 config
                     .session_storage
                     .tls12_session(server_name)
-                    .map(persist::ClientSessionValue::from)
+                    .map(ClientSessionValue::Tls12)
             }
 
             #[cfg(not(feature = "tls12"))]
@@ -115,7 +116,7 @@ pub(super) fn start_handshake(
 
     if let Some(_resuming) = &mut resuming_session {
         #[cfg(feature = "tls12")]
-        if let persist::ClientSessionValue::Tls12(inner) = &mut _resuming.value {
+        if let ClientSessionValue::Tls12(inner) = &mut _resuming.value {
             // If we have a ticket, we use the sessionid as a signal that
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
@@ -161,7 +162,7 @@ pub(super) fn start_handshake(
 
 struct ExpectServerHello {
     config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Retrieved<persist::ClientSessionValue>>,
+    resuming_session: Option<persist::Retrieved<ClientSessionValue>>,
     server_name: ServerName,
     random: Random,
     using_ems: bool,
@@ -182,7 +183,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 fn emit_client_hello_for_retry(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
-    resuming_session: Option<persist::Retrieved<persist::ClientSessionValue>>,
+    resuming_session: Option<persist::Retrieved<ClientSessionValue>>,
     random: Random,
     using_ems: bool,
     mut transcript_buffer: HandshakeHashBuffer,
@@ -199,13 +200,9 @@ fn emit_client_hello_for_retry(
     // Do we have a SessionID or ticket cached for this host?
     let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
         match &resuming.value {
-            persist::ClientSessionValue::Tls13(inner) => {
-                (inner.ticket().to_vec(), ProtocolVersion::TLSv1_3)
-            }
+            ClientSessionValue::Tls13(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_3),
             #[cfg(feature = "tls12")]
-            persist::ClientSessionValue::Tls12(inner) => {
-                (inner.ticket().to_vec(), ProtocolVersion::TLSv1_2)
-            }
+            ClientSessionValue::Tls12(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_2),
         }
     } else {
         (Vec::new(), ProtocolVersion::Unknown(0))
@@ -595,9 +592,9 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 let resuming_session = self
                     .resuming_session
                     .and_then(|resuming| match resuming.value {
-                        persist::ClientSessionValue::Tls13(inner) => Some(inner),
+                        ClientSessionValue::Tls13(inner) => Some(inner),
                         #[cfg(feature = "tls12")]
-                        persist::ClientSessionValue::Tls12(_) => None,
+                        ClientSessionValue::Tls12(_) => None,
                     });
 
                 tls13::handle_server_hello(
@@ -621,8 +618,8 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 let resuming_session = self
                     .resuming_session
                     .and_then(|resuming| match resuming.value {
-                        persist::ClientSessionValue::Tls12(inner) => Some(inner),
-                        persist::ClientSessionValue::Tls13(_) => None,
+                        ClientSessionValue::Tls12(inner) => Some(inner),
+                        ClientSessionValue::Tls13(_) => None,
                     });
 
                 tls12::CompleteServerHelloHandling {
@@ -809,5 +806,39 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
                 &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
             )),
         }
+    }
+}
+
+enum ClientSessionValue {
+    Tls13(persist::Tls13ClientSessionValue),
+    #[cfg(feature = "tls12")]
+    Tls12(persist::Tls12ClientSessionValue),
+}
+
+impl ClientSessionValue {
+    fn common(&self) -> &persist::ClientSessionCommon {
+        match self {
+            Self::Tls13(inner) => &inner.common,
+            #[cfg(feature = "tls12")]
+            Self::Tls12(inner) => &inner.common,
+        }
+    }
+}
+
+impl persist::Retrieved<ClientSessionValue> {
+    fn tls13(&self) -> Option<persist::Retrieved<&persist::Tls13ClientSessionValue>> {
+        self.map(|v| match v {
+            ClientSessionValue::Tls13(v) => Some(v),
+            #[cfg(feature = "tls12")]
+            ClientSessionValue::Tls12(_) => None,
+        })
+    }
+}
+
+impl Deref for ClientSessionValue {
+    type Target = persist::ClientSessionCommon;
+
+    fn deref(&self) -> &Self::Target {
+        self.common()
     }
 }

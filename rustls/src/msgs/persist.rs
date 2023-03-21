@@ -14,36 +14,6 @@ use std::cmp;
 #[cfg(feature = "tls12")]
 use std::mem;
 
-#[derive(Debug)]
-pub enum ClientSessionValue {
-    Tls13(Tls13ClientSessionValue),
-    #[cfg(feature = "tls12")]
-    Tls12(Tls12ClientSessionValue),
-}
-
-impl ClientSessionValue {
-    fn common(&self) -> &ClientSessionCommon {
-        match self {
-            Self::Tls13(inner) => &inner.common,
-            #[cfg(feature = "tls12")]
-            Self::Tls12(inner) => &inner.common,
-        }
-    }
-}
-
-impl From<Tls13ClientSessionValue> for ClientSessionValue {
-    fn from(v: Tls13ClientSessionValue) -> Self {
-        Self::Tls13(v)
-    }
-}
-
-#[cfg(feature = "tls12")]
-impl From<Tls12ClientSessionValue> for ClientSessionValue {
-    fn from(v: Tls12ClientSessionValue) -> Self {
-        Self::Tls12(v)
-    }
-}
-
 pub struct Retrieved<T> {
     pub value: T,
     retrieved_at: TimeBase,
@@ -55,6 +25,13 @@ impl<T> Retrieved<T> {
             value,
             retrieved_at,
         }
+    }
+
+    pub fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
+        Some(Retrieved {
+            value: f(&self.value)?,
+            retrieved_at: self.retrieved_at,
+        })
     }
 }
 
@@ -69,17 +46,9 @@ impl Retrieved<&Tls13ClientSessionValue> {
     }
 }
 
-impl Retrieved<ClientSessionValue> {
-    pub fn tls13(&self) -> Option<Retrieved<&Tls13ClientSessionValue>> {
-        match &self.value {
-            ClientSessionValue::Tls13(value) => Some(Retrieved::new(value, self.retrieved_at)),
-            #[cfg(feature = "tls12")]
-            ClientSessionValue::Tls12(_) => None,
-        }
-    }
-
+impl<T: std::ops::Deref<Target = ClientSessionCommon>> Retrieved<T> {
     pub fn has_expired(&self) -> bool {
-        let common = self.value.common();
+        let common = &*self.value;
         common.lifetime_secs != 0
             && common
                 .epoch
@@ -427,27 +396,8 @@ impl ServerSessionValue {
 mod tests {
     use super::*;
     use crate::enums::*;
-    use crate::key::Certificate;
     use crate::msgs::codec::{Codec, Reader};
     use crate::ticketer::TimeBase;
-    use crate::tls13::TLS13_AES_128_GCM_SHA256;
-
-    #[test]
-    fn clientsessionvalue_is_debug() {
-        let csv = ClientSessionValue::from(Tls13ClientSessionValue::new(
-            TLS13_AES_128_GCM_SHA256
-                .tls13()
-                .unwrap(),
-            vec![],
-            vec![1, 2, 3],
-            vec![Certificate(b"abc".to_vec()), Certificate(b"def".to_vec())],
-            TimeBase::now().unwrap(),
-            15,
-            10,
-            128,
-        ));
-        println!("{:?}", csv);
-    }
 
     #[test]
     fn serversessionvalue_is_debug() {
