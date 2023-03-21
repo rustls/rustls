@@ -483,7 +483,7 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
         server_name: &ServerName,
         mut value: client::Tls12ClientSessionValue,
     ) {
-        value.common.rewind_epoch(self.delay);
+        value.rewind_epoch(self.delay);
         self.storage
             .set_tls12_session(server_name, value);
     }
@@ -502,7 +502,7 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
         server_name: &ServerName,
         mut value: client::Tls13ClientSessionValue,
     ) {
-        value.common.rewind_epoch(self.delay);
+        value.rewind_epoch(self.delay);
         self.storage
             .insert_tls13_ticket(server_name, value);
     }

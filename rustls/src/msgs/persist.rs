@@ -70,7 +70,7 @@ pub struct Tls13ClientSessionValue {
     suite: &'static Tls13CipherSuite,
     age_add: u32,
     max_early_data_size: u32,
-    pub common: ClientSessionCommon,
+    pub(crate) common: ClientSessionCommon,
     #[cfg(feature = "quic")]
     quic_params: PayloadU16,
 }
@@ -110,6 +110,12 @@ impl Tls13ClientSessionValue {
         self.suite
     }
 
+    #[doc(hidden)]
+    /// Test only: rewind epoch by `delta` seconds.
+    pub fn rewind_epoch(&mut self, delta: u32) {
+        self.common.epoch -= delta as u64;
+    }
+
     #[cfg(feature = "quic")]
     pub fn set_quic_params(&mut self, quic_params: &[u8]) {
         self.quic_params = PayloadU16(quic_params.to_vec());
@@ -138,7 +144,7 @@ pub struct Tls12ClientSessionValue {
     #[cfg(feature = "tls12")]
     extended_ms: bool,
     #[doc(hidden)]
-    pub common: ClientSessionCommon,
+    pub(crate) common: ClientSessionCommon,
 }
 
 #[cfg(feature = "tls12")]
@@ -177,6 +183,12 @@ impl Tls12ClientSessionValue {
 
     pub(crate) fn suite(&self) -> &'static Tls12CipherSuite {
         self.suite
+    }
+
+    #[doc(hidden)]
+    /// Test only: rewind epoch by `delta` seconds.
+    pub fn rewind_epoch(&mut self, delta: u32) {
+        self.common.epoch -= delta as u64;
     }
 }
 
@@ -225,12 +237,6 @@ impl ClientSessionCommon {
 
     pub(crate) fn ticket(&self) -> &[u8] {
         self.ticket.0.as_ref()
-    }
-
-    /// Test only: wind back epoch by delta seconds.
-    #[doc(hidden)]
-    pub fn rewind_epoch(&mut self, delta: u32) {
-        self.epoch -= delta as u64;
     }
 }
 
