@@ -3,9 +3,8 @@ use std::ops::Range;
 
 use super::base::Payload;
 use super::codec::Codec;
-use super::enums::ContentType;
 use super::message::PlainMessage;
-use crate::enums::ProtocolVersion;
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
 use crate::msgs::message::{MessageError, OpaqueMessage};

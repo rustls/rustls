@@ -4,6 +4,7 @@ use crate::conn::Protocol;
 #[cfg(feature = "secret_extraction")]
 use crate::conn::Side;
 use crate::conn::{self, CommonState, ConnectionRandoms, State};
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
@@ -12,9 +13,8 @@ use crate::kx;
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::enums::AlertDescription;
+use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::KeyUpdateRequest;
-use crate::msgs::enums::{ContentType, ExtensionType, HandshakeType};
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::handshake::DigitallySignedStruct;
 use crate::msgs::handshake::EncryptedExtensions;

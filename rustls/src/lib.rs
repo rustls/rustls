@@ -370,15 +370,15 @@ pub use crate::builder::{
 pub use crate::conn::{
     CommonState, Connection, ConnectionCommon, IoState, Reader, Side, SideData, Writer,
 };
-pub use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+pub use crate::enums::{
+    AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
+};
 pub use crate::error::{CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
 pub use crate::kx::{SupportedKxGroup, ALL_KX_GROUPS};
-pub use crate::msgs::enums::{
-    AlertDescription, ContentType, HandshakeType, NamedGroup, SignatureAlgorithm,
-};
+pub use crate::msgs::enums::{NamedGroup, SignatureAlgorithm};
 pub use crate::msgs::handshake::{DigitallySignedStruct, DistinguishedNames};
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{

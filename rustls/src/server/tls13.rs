@@ -3,14 +3,14 @@ use crate::check::inappropriate_handshake_message;
 use crate::conn::Side;
 use crate::conn::{send_cert_verify_error_alert, CommonState, ConnectionRandoms, State};
 use crate::enums::ProtocolVersion;
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::{AlertDescription, KeyUpdateRequest};
-use crate::msgs::enums::{ContentType, HandshakeType};
+use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::handshake::HandshakePayload;
 use crate::msgs::handshake::{NewSessionTicketExtension, NewSessionTicketPayloadTLS13};

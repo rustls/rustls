@@ -1,7 +1,5 @@
-use crate::msgs::enums::{
-    AlertDescription, CertificateStatusType, ContentType, ECCurveType, HandshakeType,
-    KeyUpdateRequest,
-};
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::msgs::enums::{CertificateStatusType, ECCurveType, KeyUpdateRequest};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::rand;
 
@@ -437,7 +435,7 @@ mod tests {
 
     #[test]
     fn smoke() {
-        use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
+        use crate::enums::{AlertDescription, ContentType, HandshakeType};
         use sct;
 
         let all = vec![

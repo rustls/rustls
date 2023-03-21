@@ -1,4 +1,5 @@
 use crate::enums::ProtocolVersion;
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::key;
 #[cfg(feature = "logging")]
@@ -6,8 +7,7 @@ use crate::log::{debug, error, trace, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::deframer::{Deframed, MessageDeframer};
-use crate::msgs::enums::{AlertDescription, AlertLevel, ContentType};
-use crate::msgs::enums::{HandshakeType, KeyUpdateRequest};
+use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{

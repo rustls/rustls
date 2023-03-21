@@ -2,6 +2,7 @@
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::conn::{CommonState, ConnectionRandoms, State};
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -9,9 +10,8 @@ use crate::kx;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-use crate::msgs::enums::{AlertDescription, Compression, ContentType};
+use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::enums::{ExtensionType, HandshakeType};
 use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};

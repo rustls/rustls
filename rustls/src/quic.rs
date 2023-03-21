@@ -2,8 +2,8 @@
 use crate::cipher::{Iv, IvLen};
 pub use crate::client::ClientQuicExt;
 use crate::conn::{CommonState, Side};
+use crate::enums::AlertDescription;
 use crate::error::Error;
-use crate::msgs::enums::AlertDescription;
 pub use crate::server::ServerQuicExt;
 use crate::suites::BulkAlgorithm;
 use crate::tls13::key_schedule::hkdf_expand;
