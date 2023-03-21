@@ -421,7 +421,6 @@ pub mod client {
     #[cfg(feature = "dangerous_configuration")]
     pub use client_conn::danger::DangerousClientConfig;
 
-    #[cfg(feature = "tls12")]
     pub use crate::msgs::persist::Tls12ClientSessionValue;
     pub use crate::msgs::persist::Tls13ClientSessionValue;
 }

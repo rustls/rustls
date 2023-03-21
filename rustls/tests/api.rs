@@ -2689,10 +2689,12 @@ impl ClientStorage {
         }
     }
 
+    #[cfg(feature = "tls12")]
     fn ops(&self) -> Vec<ClientStorageOp> {
         self.ops.lock().unwrap().clone()
     }
 
+    #[cfg(feature = "tls12")]
     fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
         std::mem::take(&mut self.ops.lock().unwrap())
     }
@@ -2723,7 +2725,6 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         rc
     }
 
-    #[cfg(feature = "tls12")]
     fn set_tls12_session(
         &self,
         server_name: &rustls::ServerName,
@@ -2737,7 +2738,6 @@ impl rustls::client::ClientSessionStore for ClientStorage {
             .set_tls12_session(server_name, value)
     }
 
-    #[cfg(feature = "tls12")]
     fn tls12_session(
         &self,
         server_name: &rustls::ServerName,
@@ -2753,7 +2753,6 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         rc
     }
 
-    #[cfg(feature = "tls12")]
     fn remove_tls12_session(&self, server_name: &rustls::ServerName) {
         self.ops
             .lock()

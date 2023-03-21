@@ -160,11 +160,13 @@ impl std::ops::Deref for Tls13ClientSessionValue {
     }
 }
 
-#[cfg(feature = "tls12")]
 #[derive(Debug, Clone)]
 pub struct Tls12ClientSessionValue {
+    #[cfg(feature = "tls12")]
     suite: &'static Tls12CipherSuite,
+    #[cfg(feature = "tls12")]
     pub session_id: SessionID,
+    #[cfg(feature = "tls12")]
     extended_ms: bool,
     pub common: ClientSessionCommon,
 }
