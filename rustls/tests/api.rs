@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use rustls::client::ResolvesClientCert;
 use rustls::internal::msgs::base::Payload;
-use rustls::internal::msgs::codec::Codec;
+use rustls::internal::msgs::codec::{Codec, Reader};
 #[cfg(feature = "quic")]
 use rustls::quic::{self, ClientQuicExt, QuicExt, ServerQuicExt};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
@@ -2730,6 +2730,22 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         server_name: &rustls::ServerName,
         value: rustls::client::Tls12ClientSessionValue,
     ) {
+        #[cfg(feature = "tls12")]
+        {
+            let mut bytes = Vec::new();
+            value.encode(&mut bytes);
+            let mut reader = Reader::init(&bytes);
+            let tls12_suites = ALL_CIPHER_SUITES
+                .iter()
+                .filter_map(|&suite| match suite {
+                    rustls::SupportedCipherSuite::Tls12(suite) => Some(suite),
+                    _ => None,
+                });
+            let decoded =
+                rustls::client::Tls12ClientSessionValue::read(&mut reader, tls12_suites).unwrap();
+            assert_eq!(value, decoded);
+        }
+
         self.ops
             .lock()
             .unwrap()
@@ -2767,6 +2783,20 @@ impl rustls::client::ClientSessionStore for ClientStorage {
         server_name: &rustls::ServerName,
         value: rustls::client::Tls13ClientSessionValue,
     ) {
+        let mut bytes = Vec::new();
+        value.encode(&mut bytes);
+        let mut reader = Reader::init(&bytes);
+        let tls13_suites = ALL_CIPHER_SUITES
+            .iter()
+            .filter_map(|&suite| match suite {
+                rustls::SupportedCipherSuite::Tls13(suite) => Some(suite),
+                #[cfg(feature = "tls12")]
+                _ => None,
+            });
+        let decoded =
+            rustls::client::Tls13ClientSessionValue::read(&mut reader, tls13_suites).unwrap();
+        assert_eq!(value, decoded);
+
         self.ops
             .lock()
             .unwrap()

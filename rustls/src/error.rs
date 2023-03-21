@@ -1,4 +1,4 @@
-use crate::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType};
 use crate::msgs::enums::{CertificateStatusType, ECCurveType, KeyUpdateRequest};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::rand;
@@ -132,6 +132,8 @@ pub enum InvalidMessage {
     UnexpectedMessage(&'static str),
     /// An unknown TLS protocol was encountered during message decoding.
     UnknownProtocolVersion,
+    /// An unsupported cipher suite was encountered during message decoding.
+    UnsupportedCipherSuite(CipherSuite),
     /// A peer sent a non-null compression method.
     UnsupportedCompression,
     /// A peer sent an unknown elliptic curve type.
