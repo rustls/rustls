@@ -1,6 +1,7 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::conn::{self, CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -8,8 +9,6 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::AlertDescription;
-use crate::msgs::enums::{ContentType, HandshakeType};
 use crate::msgs::handshake::{
     CertificatePayload, DecomposedSignatureScheme, DigitallySignedStruct, HandshakeMessagePayload,
     HandshakePayload, NewSessionTicketPayload, SCTList, ServerECDHParams, SessionID,

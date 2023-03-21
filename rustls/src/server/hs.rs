@@ -1,13 +1,12 @@
 use crate::conn::{CommonState, ConnectionRandoms, State};
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
-use crate::enums::{ProtocolVersion, SignatureScheme};
+use crate::enums::{AlertDescription, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::enums::HandshakeType;
-use crate::msgs::enums::{AlertDescription, Compression, ExtensionType};
+use crate::msgs::enums::{Compression, ExtensionType};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionID;
 use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};

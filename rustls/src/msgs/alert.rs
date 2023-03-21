@@ -1,6 +1,7 @@
+use crate::enums::AlertDescription;
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{AlertDescription, AlertLevel};
+use crate::msgs::enums::AlertLevel;
 
 #[derive(Debug)]
 pub struct AlertMessagePayload {

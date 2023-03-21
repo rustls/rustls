@@ -1,9 +1,9 @@
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::key::Certificate;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
-    ClientCertificateType, Compression, ECCurveType, ExtensionType, HandshakeType, HashAlgorithm,
+    ClientCertificateType, Compression, ECCurveType, ExtensionType, HashAlgorithm,
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType, SignatureAlgorithm,
 };
 use crate::msgs::handshake::{

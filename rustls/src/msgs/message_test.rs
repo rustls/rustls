@@ -1,8 +1,9 @@
+use crate::enums::{AlertDescription, HandshakeType};
 use crate::msgs::base::{PayloadU16, PayloadU24, PayloadU8};
 
 use super::base::Payload;
 use super::codec::Reader;
-use super::enums::{AlertDescription, AlertLevel, HandshakeType};
+use super::enums::AlertLevel;
 use super::message::{Message, OpaqueMessage, PlainMessage};
 
 use std::fs;

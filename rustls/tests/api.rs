@@ -3354,12 +3354,12 @@ mod test_quic {
 
         use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
-        use rustls::internal::msgs::enums::{Compression, HandshakeType, NamedGroup};
+        use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
         use rustls::internal::msgs::message::PlainMessage;
-        use rustls::{CipherSuite, SignatureScheme};
+        use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let rng = ring::rand::SystemRandom::new();
         let mut random = [0; 32];
@@ -3417,12 +3417,12 @@ mod test_quic {
 
         use ring::rand::SecureRandom;
         use rustls::internal::msgs::base::PayloadU16;
-        use rustls::internal::msgs::enums::{Compression, HandshakeType, NamedGroup};
+        use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
         };
         use rustls::internal::msgs::message::PlainMessage;
-        use rustls::{CipherSuite, SignatureScheme};
+        use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let rng = ring::rand::SystemRandom::new();
         let mut random = [0; 32];
@@ -3674,9 +3674,9 @@ mod test_quic {
 #[test]
 fn test_client_does_not_offer_sha1() {
     use rustls::internal::msgs::{
-        codec::Reader, enums::HandshakeType, handshake::HandshakePayload, message::MessagePayload,
-        message::OpaqueMessage,
+        codec::Reader, handshake::HandshakePayload, message::MessagePayload, message::OpaqueMessage,
     };
+    use rustls::HandshakeType;
 
     for kt in ALL_KEY_TYPES.iter() {
         for version in rustls::ALL_VERSIONS {

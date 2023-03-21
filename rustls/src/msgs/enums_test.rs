@@ -52,12 +52,18 @@ fn test_enums() {
         ClientCertificateType::ECDSAFixedECDH,
     );
     test_enum8::<Compression>(Compression::Null, Compression::LSZ);
-    test_enum8::<ContentType>(ContentType::ChangeCipherSpec, ContentType::Heartbeat);
-    test_enum8::<HandshakeType>(HandshakeType::HelloRequest, HandshakeType::MessageHash);
+    test_enum8::<crate::ContentType>(
+        crate::ContentType::ChangeCipherSpec,
+        crate::ContentType::Heartbeat,
+    );
+    test_enum8::<crate::HandshakeType>(
+        crate::HandshakeType::HelloRequest,
+        crate::HandshakeType::MessageHash,
+    );
     test_enum8::<AlertLevel>(AlertLevel::Warning, AlertLevel::Fatal);
-    test_enum8::<AlertDescription>(
-        AlertDescription::CloseNotify,
-        AlertDescription::NoApplicationProtocol,
+    test_enum8::<crate::AlertDescription>(
+        crate::AlertDescription::CloseNotify,
+        crate::AlertDescription::NoApplicationProtocol,
     );
     test_enum8::<HeartbeatMessageType>(
         HeartbeatMessageType::Request,

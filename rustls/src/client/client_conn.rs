@@ -7,7 +7,7 @@ use crate::kx::SupportedKxGroup;
 use crate::log::trace;
 
 #[cfg(feature = "quic")]
-use crate::msgs::enums::AlertDescription;
+use crate::enums::AlertDescription;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;

@@ -1,9 +1,9 @@
 use crate::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
+use crate::enums::ContentType;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::ContentType;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};

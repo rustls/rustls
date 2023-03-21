@@ -1,6 +1,7 @@
 use crate::check::inappropriate_message;
 use crate::conn::{send_cert_verify_error_alert, CommonState, ConnectionRandoms, Side, State};
 use crate::enums::ProtocolVersion;
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 use crate::key::Certificate;
@@ -9,7 +10,6 @@ use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
