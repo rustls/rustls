@@ -391,7 +391,7 @@ impl ServerConnection {
     ///
     /// The server name is also used to match sessions during session resumption.
     pub fn server_name(&self) -> Option<&str> {
-        self.inner.core.data.get_sni_str()
+        self.inner.core.get_sni_str()
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -758,6 +758,10 @@ impl ConnectionCore<ServerConnectionData> {
             "cannot retroactively reject early data"
         );
         self.data.early_data.reject();
+    }
+
+    pub(crate) fn get_sni_str(&self) -> Option<&str> {
+        self.data.get_sni_str()
     }
 }
 
