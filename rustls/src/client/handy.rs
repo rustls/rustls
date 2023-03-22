@@ -1,3 +1,4 @@
+use crate::builder::sealed::Sealed;
 use crate::client;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
@@ -9,12 +10,15 @@ use crate::NamedGroup;
 use crate::ServerName;
 
 use std::collections::VecDeque;
+use std::fmt;
 use std::sync::{Arc, Mutex};
+
+use super::ClientSessionStore;
 
 /// An implementer of `ClientSessionStore` which does nothing.
 pub struct NoClientSessionStorage {}
 
-impl client::ClientSessionStore for NoClientSessionStorage {
+impl ClientSessionStore for NoClientSessionStorage {
     fn set_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
 
     fn kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
@@ -35,6 +39,8 @@ impl client::ClientSessionStore for NoClientSessionStorage {
         None
     }
 }
+
+impl Sealed for NoClientSessionStorage {}
 
 const MAX_TLS13_TICKETS_PER_SERVER: usize = 8;
 
@@ -80,7 +86,7 @@ impl ClientSessionMemoryCache {
     }
 }
 
-impl client::ClientSessionStore for ClientSessionMemoryCache {
+impl ClientSessionStore for ClientSessionMemoryCache {
     fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup) {
         self.servers
             .lock()
@@ -157,6 +163,8 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
     }
 }
 
+impl Sealed for ClientSessionMemoryCache {}
+
 pub(super) struct FailResolveClientCert {}
 
 impl client::ResolvesClientCert for FailResolveClientCert {
@@ -198,6 +206,199 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
     fn has_certs(&self) -> bool {
         true
     }
+}
+
+/// Test-only: used for the bogo shim.
+#[doc(hidden)]
+pub struct ClientCacheWithoutKxHints {
+    delay: u32,
+    storage: Arc<ClientSessionMemoryCache>,
+}
+
+impl ClientCacheWithoutKxHints {
+    /// Create new cache.
+    pub fn new(delay: u32) -> Arc<Self> {
+        Arc::new(Self {
+            delay,
+            storage: ClientSessionMemoryCache::new(32),
+        })
+    }
+}
+
+impl ClientSessionStore for ClientCacheWithoutKxHints {
+    fn set_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
+    fn kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
+        None
+    }
+
+    fn set_tls12_session(
+        &self,
+        server_name: &ServerName,
+        #[allow(unused_mut)] mut value: super::Tls12ClientSessionValue,
+    ) {
+        #[cfg(feature = "tls12")]
+        value.rewind_epoch(self.delay);
+        self.storage
+            .set_tls12_session(server_name, value);
+    }
+
+    fn tls12_session(&self, server_name: &ServerName) -> Option<super::Tls12ClientSessionValue> {
+        self.storage.tls12_session(server_name)
+    }
+
+    fn remove_tls12_session(&self, server_name: &ServerName) {
+        self.storage
+            .remove_tls12_session(server_name);
+    }
+
+    fn insert_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+        mut value: super::Tls13ClientSessionValue,
+    ) {
+        value.rewind_epoch(self.delay);
+        self.storage
+            .insert_tls13_ticket(server_name, value);
+    }
+
+    fn take_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+    ) -> Option<super::Tls13ClientSessionValue> {
+        self.storage
+            .take_tls13_ticket(server_name)
+    }
+}
+
+impl Sealed for ClientCacheWithoutKxHints {}
+
+/// Test-only.
+#[doc(hidden)]
+pub struct ClientSessionStoreMock {
+    storage: Arc<dyn ClientSessionStore>,
+    ops: Mutex<Vec<ClientStorageOp>>,
+}
+
+impl ClientSessionStoreMock {
+    /// Create a new tracker.
+    pub fn new() -> Self {
+        Self {
+            storage: ClientSessionMemoryCache::new(1024),
+            ops: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Get the current list of operations.
+    #[cfg(feature = "tls12")]
+    pub fn ops(&self) -> Vec<ClientStorageOp> {
+        self.ops.lock().unwrap().clone()
+    }
+
+    /// Get the current list of operations and reset the list.
+    #[cfg(feature = "tls12")]
+    pub fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
+        std::mem::take(&mut self.ops.lock().unwrap())
+    }
+}
+
+impl ClientSessionStore for ClientSessionStoreMock {
+    fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetKxHint(server_name.clone(), group));
+        self.storage
+            .set_kx_hint(server_name, group)
+    }
+
+    fn kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup> {
+        let rc = self.storage.kx_hint(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetKxHint(server_name.clone(), rc));
+        rc
+    }
+
+    fn set_tls12_session(&self, server_name: &ServerName, value: client::Tls12ClientSessionValue) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::SetTls12Session(server_name.clone()));
+        self.storage
+            .set_tls12_session(server_name, value)
+    }
+
+    fn tls12_session(&self, server_name: &ServerName) -> Option<client::Tls12ClientSessionValue> {
+        let rc = self.storage.tls12_session(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::GetTls12Session(
+                server_name.clone(),
+                rc.is_some(),
+            ));
+        rc
+    }
+
+    fn remove_tls12_session(&self, server_name: &ServerName) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::RemoveTls12Session(server_name.clone()));
+        self.storage
+            .remove_tls12_session(server_name);
+    }
+
+    fn insert_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+        value: client::Tls13ClientSessionValue,
+    ) {
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::InsertTls13Ticket(server_name.clone()));
+        self.storage
+            .insert_tls13_ticket(server_name, value);
+    }
+
+    fn take_tls13_ticket(
+        &self,
+        server_name: &ServerName,
+    ) -> Option<client::Tls13ClientSessionValue> {
+        let rc = self
+            .storage
+            .take_tls13_ticket(server_name);
+        self.ops
+            .lock()
+            .unwrap()
+            .push(ClientStorageOp::TakeTls13Ticket(
+                server_name.clone(),
+                rc.is_some(),
+            ));
+        rc
+    }
+}
+
+impl fmt::Debug for ClientSessionStoreMock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(ops: {:?})", self.ops.lock().unwrap())
+    }
+}
+
+impl Sealed for ClientSessionStoreMock {}
+
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub enum ClientStorageOp {
+    SetKxHint(ServerName, NamedGroup),
+    GetKxHint(ServerName, Option<NamedGroup>),
+    SetTls12Session(ServerName),
+    GetTls12Session(ServerName, bool),
+    RemoveTls12Session(ServerName),
+    InsertTls13Ticket(ServerName),
+    TakeTls13Ticket(ServerName, bool),
 }
 
 #[cfg(test)]

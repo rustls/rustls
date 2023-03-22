@@ -361,6 +361,13 @@ pub mod internal {
     pub mod record_layer {
         pub use crate::record_layer::{Decrypted, RecordLayer};
     }
+
+    #[doc(hidden)]
+    pub use crate::client::handy::ClientCacheWithoutKxHints;
+    #[doc(hidden)]
+    pub use crate::client::handy::ClientSessionStoreMock;
+    #[doc(hidden)]
+    pub use crate::client::handy::ClientStorageOp;
 }
 
 // The public interface is:

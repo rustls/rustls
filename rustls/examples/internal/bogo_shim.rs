@@ -8,10 +8,11 @@ use rustls::client::{ClientConfig, ClientConnection};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::KeyUpdateRequest;
 use rustls::internal::msgs::persist;
+use rustls::internal::ClientCacheWithoutKxHints;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
 use rustls::{
     self, client, kx_group, server, sign, version, AlertDescription, Certificate, CertificateError,
-    Connection, DistinguishedNames, Error, InvalidMessage, NamedGroup, PeerMisbehaved, PrivateKey,
+    Connection, DistinguishedNames, Error, InvalidMessage, PeerMisbehaved, PrivateKey,
     ProtocolVersion, ServerName, Side, SignatureAlgorithm, SignatureScheme, SupportedKxGroup,
     SupportedProtocolVersion, Ticketer, ALL_KX_GROUPS,
 };
@@ -456,64 +457,6 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     }
 
     Arc::new(cfg)
-}
-
-struct ClientCacheWithoutKxHints {
-    delay: u32,
-    storage: Arc<client::ClientSessionMemoryCache>,
-}
-
-impl ClientCacheWithoutKxHints {
-    fn new(delay: u32) -> Arc<ClientCacheWithoutKxHints> {
-        Arc::new(ClientCacheWithoutKxHints {
-            delay,
-            storage: client::ClientSessionMemoryCache::new(32),
-        })
-    }
-}
-
-impl client::ClientSessionStore for ClientCacheWithoutKxHints {
-    fn set_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
-    fn kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
-        None
-    }
-
-    fn set_tls12_session(
-        &self,
-        server_name: &ServerName,
-        mut value: client::Tls12ClientSessionValue,
-    ) {
-        value.rewind_epoch(self.delay);
-        self.storage
-            .set_tls12_session(server_name, value);
-    }
-
-    fn tls12_session(&self, server_name: &ServerName) -> Option<client::Tls12ClientSessionValue> {
-        self.storage.tls12_session(server_name)
-    }
-
-    fn remove_tls12_session(&self, server_name: &ServerName) {
-        self.storage
-            .remove_tls12_session(server_name);
-    }
-
-    fn insert_tls13_ticket(
-        &self,
-        server_name: &ServerName,
-        mut value: client::Tls13ClientSessionValue,
-    ) {
-        value.rewind_epoch(self.delay);
-        self.storage
-            .insert_tls13_ticket(server_name, value);
-    }
-
-    fn take_tls13_ticket(
-        &self,
-        server_name: &ServerName,
-    ) -> Option<client::Tls13ClientSessionValue> {
-        self.storage
-            .take_tls13_ticket(server_name)
-    }
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {

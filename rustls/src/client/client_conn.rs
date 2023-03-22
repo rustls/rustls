@@ -1,3 +1,4 @@
+use crate::builder::sealed::Sealed;
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
@@ -36,7 +37,7 @@ use std::{fmt, io, mem};
 /// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
-pub trait ClientSessionStore: Send + Sync {
+pub trait ClientSessionStore: Sealed + Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
     fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
 

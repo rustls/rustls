@@ -11,6 +11,7 @@ use std::sync::Mutex;
 use rustls::client::ResolvesClientCert;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
+use rustls::internal::{ClientSessionStoreMock, ClientStorageOp};
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
@@ -2663,134 +2664,6 @@ impl rustls::server::StoresServerSessions for ServerStorage {
     }
 }
 
-#[derive(Debug, Clone)]
-enum ClientStorageOp {
-    SetKxHint(rustls::ServerName, rustls::NamedGroup),
-    GetKxHint(rustls::ServerName, Option<rustls::NamedGroup>),
-    SetTls12Session(rustls::ServerName),
-    GetTls12Session(rustls::ServerName, bool),
-    RemoveTls12Session(rustls::ServerName),
-    InsertTls13Ticket(rustls::ServerName),
-    TakeTls13Ticket(rustls::ServerName, bool),
-}
-
-struct ClientStorage {
-    storage: Arc<dyn rustls::client::ClientSessionStore>,
-    ops: Mutex<Vec<ClientStorageOp>>,
-}
-
-impl ClientStorage {
-    fn new() -> Self {
-        Self {
-            storage: rustls::client::ClientSessionMemoryCache::new(1024),
-            ops: Mutex::new(Vec::new()),
-        }
-    }
-
-    #[cfg(feature = "tls12")]
-    fn ops(&self) -> Vec<ClientStorageOp> {
-        self.ops.lock().unwrap().clone()
-    }
-
-    #[cfg(feature = "tls12")]
-    fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
-        std::mem::take(&mut self.ops.lock().unwrap())
-    }
-}
-
-impl fmt::Debug for ClientStorage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(ops: {:?})", self.ops.lock().unwrap())
-    }
-}
-
-impl rustls::client::ClientSessionStore for ClientStorage {
-    fn set_kx_hint(&self, server_name: &rustls::ServerName, group: rustls::NamedGroup) {
-        self.ops
-            .lock()
-            .unwrap()
-            .push(ClientStorageOp::SetKxHint(server_name.clone(), group));
-        self.storage
-            .set_kx_hint(server_name, group)
-    }
-
-    fn kx_hint(&self, server_name: &rustls::ServerName) -> Option<rustls::NamedGroup> {
-        let rc = self.storage.kx_hint(server_name);
-        self.ops
-            .lock()
-            .unwrap()
-            .push(ClientStorageOp::GetKxHint(server_name.clone(), rc));
-        rc
-    }
-
-    fn set_tls12_session(
-        &self,
-        server_name: &rustls::ServerName,
-        value: rustls::client::Tls12ClientSessionValue,
-    ) {
-        self.ops
-            .lock()
-            .unwrap()
-            .push(ClientStorageOp::SetTls12Session(server_name.clone()));
-        self.storage
-            .set_tls12_session(server_name, value)
-    }
-
-    fn tls12_session(
-        &self,
-        server_name: &rustls::ServerName,
-    ) -> Option<rustls::client::Tls12ClientSessionValue> {
-        let rc = self.storage.tls12_session(server_name);
-        self.ops
-            .lock()
-            .unwrap()
-            .push(ClientStorageOp::GetTls12Session(
-                server_name.clone(),
-                rc.is_some(),
-            ));
-        rc
-    }
-
-    fn remove_tls12_session(&self, server_name: &rustls::ServerName) {
-        self.ops
-            .lock()
-            .unwrap()
-            .push(ClientStorageOp::RemoveTls12Session(server_name.clone()));
-        self.storage
-            .remove_tls12_session(server_name);
-    }
-
-    fn insert_tls13_ticket(
-        &self,
-        server_name: &rustls::ServerName,
-        value: rustls::client::Tls13ClientSessionValue,
-    ) {
-        self.ops
-            .lock()
-            .unwrap()
-            .push(ClientStorageOp::InsertTls13Ticket(server_name.clone()));
-        self.storage
-            .insert_tls13_ticket(server_name, value);
-    }
-
-    fn take_tls13_ticket(
-        &self,
-        server_name: &rustls::ServerName,
-    ) -> Option<rustls::client::Tls13ClientSessionValue> {
-        let rc = self
-            .storage
-            .take_tls13_ticket(server_name);
-        self.ops
-            .lock()
-            .unwrap()
-            .push(ClientStorageOp::TakeTls13Ticket(
-                server_name.clone(),
-                rc.is_some(),
-            ));
-        rc
-    }
-}
-
 #[test]
 fn tls13_stateful_resumption() {
     let kt = KeyType::Rsa;
@@ -2912,7 +2785,7 @@ fn early_data_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     let kt = KeyType::Rsa;
     let mut client_config = make_client_config(kt);
     client_config.enable_early_data = true;
-    client_config.session_storage = Some(Arc::new(ClientStorage::new()));
+    client_config.session_storage = Some(Arc::new(ClientSessionStoreMock::new()));
 
     let mut server_config = make_server_config(kt);
     server_config.max_early_data_size = 1234;
@@ -3724,7 +3597,7 @@ fn test_client_sends_helloretryrequest() {
         &[&rustls::kx_group::SECP384R1, &rustls::kx_group::X25519],
     );
 
-    let storage = Arc::new(ClientStorage::new());
+    let storage = Arc::new(ClientSessionStoreMock::new());
     client_config.session_storage = Some(storage.clone());
 
     // but server only accepts x25519, so a HRR is required
@@ -3817,7 +3690,7 @@ fn test_client_sends_helloretryrequest() {
 #[test]
 fn test_client_attempts_to_use_unsupported_kx_group() {
     // common to both client configs
-    let shared_storage = Arc::new(ClientStorage::new());
+    let shared_storage = Arc::new(ClientSessionStoreMock::new());
 
     // first, client sends a x25519 and server agrees. x25519 is inserted
     //   into kx group cache.
@@ -3866,7 +3739,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
 #[cfg(feature = "tls12")]
 #[test]
 fn test_tls13_client_resumption_does_not_reuse_tickets() {
-    let shared_storage = Arc::new(ClientStorage::new());
+    let shared_storage = Arc::new(ClientSessionStoreMock::new());
 
     let mut client_config = make_client_config(KeyType::Rsa);
     client_config.session_storage = Some(shared_storage.clone());
@@ -4169,7 +4042,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
 #[test]
 fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut client_config = common::make_client_config(KeyType::Ed25519);
-    let client_storage = Arc::new(ClientStorage::new());
+    let client_storage = Arc::new(ClientSessionStoreMock::new());
     client_config.session_storage = Some(client_storage.clone());
     let client_config = Arc::new(client_config);
 

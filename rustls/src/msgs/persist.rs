@@ -143,7 +143,7 @@ pub struct Tls12ClientSessionValue {
     pub(crate) session_id: SessionID,
     #[cfg(feature = "tls12")]
     extended_ms: bool,
-    #[doc(hidden)]
+    #[cfg(feature = "tls12")]
     pub(crate) common: ClientSessionCommon,
 }
 
@@ -185,9 +185,8 @@ impl Tls12ClientSessionValue {
         self.suite
     }
 
-    #[doc(hidden)]
     /// Test only: rewind epoch by `delta` seconds.
-    pub fn rewind_epoch(&mut self, delta: u32) {
+    pub(crate) fn rewind_epoch(&mut self, delta: u32) {
         self.common.epoch -= delta as u64;
     }
 }

@@ -261,7 +261,7 @@ pub trait ConfigSide: sealed::Sealed {}
 impl ConfigSide for crate::ClientConfig {}
 impl ConfigSide for crate::ServerConfig {}
 
-mod sealed {
+pub(crate) mod sealed {
     pub trait Sealed {}
     impl Sealed for crate::ClientConfig {}
     impl Sealed for crate::ServerConfig {}
