@@ -19,9 +19,6 @@ pub mod persist;
 mod handshake_test;
 
 #[cfg(test)]
-pub(crate) mod enums_test;
-
-#[cfg(test)]
 mod message_test;
 
 #[cfg(test)]
