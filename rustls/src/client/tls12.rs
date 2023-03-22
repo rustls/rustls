@@ -12,8 +12,8 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
-    CertificatePayload, DecomposedSignatureScheme, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayload, SCTList, ServerECDHParams, SessionID,
+    CertificatePayload, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
+    SCTList, ServerECDHParams, SessionID,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
