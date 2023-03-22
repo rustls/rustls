@@ -46,7 +46,10 @@ fn test_enum8<T: Codec>(first: T, last: T) {
 #[test]
 fn test_enums() {
     test_enum8::<HashAlgorithm>(HashAlgorithm::NONE, HashAlgorithm::SHA512);
-    test_enum8::<SignatureAlgorithm>(SignatureAlgorithm::Anonymous, SignatureAlgorithm::ECDSA);
+    test_enum8::<crate::SignatureAlgorithm>(
+        crate::SignatureAlgorithm::Anonymous,
+        crate::SignatureAlgorithm::ECDSA,
+    );
     test_enum8::<ClientCertificateType>(
         ClientCertificateType::RSASign,
         ClientCertificateType::ECDSAFixedECDH,

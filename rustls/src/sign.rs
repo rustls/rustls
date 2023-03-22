@@ -1,7 +1,6 @@
-use crate::enums::SignatureScheme;
+use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
 use crate::key;
-use crate::msgs::enums::SignatureAlgorithm;
 use crate::x509::{wrap_in_asn1_len, wrap_in_sequence};
 
 use ring::io::der;
