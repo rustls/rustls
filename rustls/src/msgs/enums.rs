@@ -271,7 +271,7 @@ enum_builder! {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     //! These tests are intended to provide coverage and
     //! check panic-safety of relatively unused values.
 
@@ -281,28 +281,12 @@ mod tests {
     #[test]
     fn test_enums() {
         test_enum8::<HashAlgorithm>(HashAlgorithm::NONE, HashAlgorithm::SHA512);
-        test_enum8::<crate::SignatureAlgorithm>(
-            crate::SignatureAlgorithm::Anonymous,
-            crate::SignatureAlgorithm::ECDSA,
-        );
         test_enum8::<ClientCertificateType>(
             ClientCertificateType::RSASign,
             ClientCertificateType::ECDSAFixedECDH,
         );
         test_enum8::<Compression>(Compression::Null, Compression::LSZ);
-        test_enum8::<crate::ContentType>(
-            crate::ContentType::ChangeCipherSpec,
-            crate::ContentType::Heartbeat,
-        );
-        test_enum8::<crate::HandshakeType>(
-            crate::HandshakeType::HelloRequest,
-            crate::HandshakeType::MessageHash,
-        );
         test_enum8::<AlertLevel>(AlertLevel::Warning, AlertLevel::Fatal);
-        test_enum8::<crate::AlertDescription>(
-            crate::AlertDescription::CloseNotify,
-            crate::AlertDescription::NoApplicationProtocol,
-        );
         test_enum8::<HeartbeatMessageType>(
             HeartbeatMessageType::Request,
             HeartbeatMessageType::Response,
@@ -337,7 +321,7 @@ mod tests {
         );
     }
 
-    fn test_enum8<T: Codec>(first: T, last: T) {
+    pub(crate) fn test_enum8<T: Codec>(first: T, last: T) {
         let first_v = get8(&first);
         let last_v = get8(&last);
 
@@ -351,7 +335,7 @@ mod tests {
         }
     }
 
-    fn test_enum16<T: Codec>(first: T, last: T) {
+    pub(crate) fn test_enum16<T: Codec>(first: T, last: T) {
         let first_v = get16(&first);
         let last_v = get16(&last);
 

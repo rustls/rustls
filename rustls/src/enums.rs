@@ -551,3 +551,20 @@ enum_builder! {
         ED448 => 0x08
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::msgs::enums::tests::test_enum8;
+
+    #[test]
+    fn test_enums() {
+        test_enum8::<SignatureAlgorithm>(SignatureAlgorithm::Anonymous, SignatureAlgorithm::ECDSA);
+        test_enum8::<ContentType>(ContentType::ChangeCipherSpec, ContentType::Heartbeat);
+        test_enum8::<HandshakeType>(HandshakeType::HelloRequest, HandshakeType::MessageHash);
+        test_enum8::<AlertDescription>(
+            AlertDescription::CloseNotify,
+            AlertDescription::NoApplicationProtocol,
+        );
+    }
+}
