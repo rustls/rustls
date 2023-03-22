@@ -3,20 +3,20 @@ use crate::key::Certificate;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
-    ClientCertificateType, Compression, ECCurveType, ExtensionType, HashAlgorithm,
-    KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType, SignatureAlgorithm,
+    ClientCertificateType, Compression, ECCurveType, ExtensionType, KeyUpdateRequest, NamedGroup,
+    PSKKeyExchangeMode, ServerNameType,
 };
 use crate::msgs::handshake::{
     CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTLS13,
     CertificateRequestPayload, CertificateRequestPayloadTLS13, CertificateStatus,
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
-    ConvertProtocolNameList, ConvertServerNameList, DecomposedSignatureScheme,
-    ECDHEServerKeyExchange, ECParameters, ECPointFormatList, EncryptedExtensions,
-    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryExtension,
-    HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension, NewSessionTicketPayload,
-    NewSessionTicketPayloadTLS13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    Random, ServerECDHParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload,
-    SessionID, SupportedPointFormats, UnknownExtension,
+    ConvertProtocolNameList, ConvertServerNameList, ECDHEServerKeyExchange, ECParameters,
+    ECPointFormatList, EncryptedExtensions, HandshakeMessagePayload, HandshakePayload,
+    HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
+    NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTLS13,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, Random, ServerECDHParams,
+    ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionID,
+    SupportedPointFormats, UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
 
@@ -357,39 +357,6 @@ fn can_roundtrip_single_proto() {
         }
         _ => unreachable!(),
     }
-}
-
-#[test]
-fn decomposed_signature_scheme_has_correct_mappings() {
-    assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA1),
-        SignatureScheme::RSA_PKCS1_SHA1
-    );
-    assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA256),
-        SignatureScheme::RSA_PKCS1_SHA256
-    );
-    assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA384),
-        SignatureScheme::RSA_PKCS1_SHA384
-    );
-    assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::RSA, HashAlgorithm::SHA512),
-        SignatureScheme::RSA_PKCS1_SHA512
-    );
-
-    assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA256),
-        SignatureScheme::ECDSA_NISTP256_SHA256
-    );
-    assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA384),
-        SignatureScheme::ECDSA_NISTP384_SHA384
-    );
-    assert_eq!(
-        SignatureScheme::make(SignatureAlgorithm::ECDSA, HashAlgorithm::SHA512),
-        SignatureScheme::ECDSA_NISTP521_SHA512
-    );
 }
 
 fn get_sample_clienthellopayload() -> ClientHelloPayload {

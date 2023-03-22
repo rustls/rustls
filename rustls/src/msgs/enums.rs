@@ -19,7 +19,6 @@ enum_builder! {
         SHA512 => 0x06
     }
 }
-
 enum_builder! {
     /// The `SignatureAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.

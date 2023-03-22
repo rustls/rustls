@@ -9,8 +9,7 @@ use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    ExtensionType, HashAlgorithm, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
-    SignatureAlgorithm,
+    ExtensionType, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
 use crate::verify::DigitallySignedStruct;
@@ -212,45 +211,6 @@ impl SupportedPointFormats for ECPointFormatList {
 declare_u16_vec!(NamedGroups, NamedGroup);
 
 declare_u16_vec!(SupportedSignatureSchemes, SignatureScheme);
-
-pub trait DecomposedSignatureScheme {
-    fn sign(&self) -> SignatureAlgorithm;
-    fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme;
-}
-
-impl DecomposedSignatureScheme for SignatureScheme {
-    fn sign(&self) -> SignatureAlgorithm {
-        match *self {
-            Self::RSA_PKCS1_SHA1
-            | Self::RSA_PKCS1_SHA256
-            | Self::RSA_PKCS1_SHA384
-            | Self::RSA_PKCS1_SHA512
-            | Self::RSA_PSS_SHA256
-            | Self::RSA_PSS_SHA384
-            | Self::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
-            Self::ECDSA_NISTP256_SHA256
-            | Self::ECDSA_NISTP384_SHA384
-            | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
-            _ => SignatureAlgorithm::Unknown(0),
-        }
-    }
-
-    fn make(alg: SignatureAlgorithm, hash: HashAlgorithm) -> SignatureScheme {
-        use crate::msgs::enums::HashAlgorithm::{SHA1, SHA256, SHA384, SHA512};
-        use crate::msgs::enums::SignatureAlgorithm::{ECDSA, RSA};
-
-        match (alg, hash) {
-            (RSA, SHA1) => Self::RSA_PKCS1_SHA1,
-            (RSA, SHA256) => Self::RSA_PKCS1_SHA256,
-            (RSA, SHA384) => Self::RSA_PKCS1_SHA384,
-            (RSA, SHA512) => Self::RSA_PKCS1_SHA512,
-            (ECDSA, SHA256) => Self::ECDSA_NISTP256_SHA256,
-            (ECDSA, SHA384) => Self::ECDSA_NISTP384_SHA384,
-            (ECDSA, SHA512) => Self::ECDSA_NISTP521_SHA512,
-            (_, _) => unreachable!(),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub enum ServerNamePayload {

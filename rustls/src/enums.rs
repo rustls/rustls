@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types)]
 #![allow(missing_docs)]
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::enums::SignatureAlgorithm;
 
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
@@ -515,5 +516,23 @@ enum_builder! {
         RSA_PSS_SHA512 => 0x0806,
         ED25519 => 0x0807,
         ED448 => 0x0808
+    }
+}
+
+impl SignatureScheme {
+    pub(crate) fn sign(&self) -> SignatureAlgorithm {
+        match *self {
+            Self::RSA_PKCS1_SHA1
+            | Self::RSA_PKCS1_SHA256
+            | Self::RSA_PKCS1_SHA384
+            | Self::RSA_PKCS1_SHA512
+            | Self::RSA_PSS_SHA256
+            | Self::RSA_PSS_SHA384
+            | Self::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
+            Self::ECDSA_NISTP256_SHA256
+            | Self::ECDSA_NISTP384_SHA384
+            | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
+            _ => SignatureAlgorithm::Unknown(0),
+        }
     }
 }
