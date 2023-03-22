@@ -75,6 +75,38 @@ impl Connection {
             Self::Server(conn) => conn.alert(),
         }
     }
+
+    /// Derives key material from the agreed connection secrets.
+    ///
+    /// This function fills in `output` with `output.len()` bytes of key
+    /// material derived from the master session secret using `label`
+    /// and `context` for diversification. Ownership of the buffer is taken
+    /// by the function and returned via the Ok result to ensure no key
+    /// material leaks if the function fails.
+    ///
+    /// See RFC5705 for more details on what this does and is for.
+    ///
+    /// For TLS1.3 connections, this function does not use the
+    /// "early" exporter at any point.
+    ///
+    /// This function fails if called prior to the handshake completing;
+    /// check with [`CommonState::is_handshaking`] first.
+    #[inline]
+    pub fn export_keying_material<T: AsMut<[u8]>>(
+        &self,
+        output: T,
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<T, Error> {
+        match self {
+            Self::Client(conn) => conn
+                .core
+                .export_keying_material(output, label, context),
+            Self::Server(conn) => conn
+                .core
+                .export_keying_material(output, label, context),
+        }
+    }
 }
 
 impl Deref for Connection {
