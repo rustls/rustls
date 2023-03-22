@@ -1,7 +1,6 @@
 use std::fmt;
 
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
-use crate::msgs::enums::SignatureAlgorithm;
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 #[cfg(feature = "tls12")]
