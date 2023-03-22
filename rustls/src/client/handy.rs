@@ -1,4 +1,5 @@
 use crate::client;
+use crate::client::client_conn::ClientSessionStore;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::key;
@@ -12,9 +13,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 /// An implementer of `ClientSessionStore` which does nothing.
+#[doc(hidden)]
 pub struct NoClientSessionStorage {}
 
-impl client::ClientSessionStore for NoClientSessionStorage {
+impl ClientSessionStore for NoClientSessionStorage {
     fn set_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
 
     fn kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
@@ -64,6 +66,7 @@ impl Default for ServerData {
 /// in memory.
 ///
 /// It enforces a limit on the number of entries to bound memory usage.
+#[doc(hidden)]
 pub struct ClientSessionMemoryCache {
     servers: Mutex<limited_cache::LimitedCache<ServerName, ServerData>>,
 }
@@ -80,7 +83,7 @@ impl ClientSessionMemoryCache {
     }
 }
 
-impl client::ClientSessionStore for ClientSessionMemoryCache {
+impl ClientSessionStore for ClientSessionMemoryCache {
     fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup) {
         self.servers
             .lock()
@@ -203,7 +206,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 #[cfg(test)]
 mod test {
     use super::NoClientSessionStorage;
-    use crate::client::ClientSessionStore;
+    use crate::client::client_conn::ClientSessionStore;
     use crate::msgs::enums::NamedGroup;
     #[cfg(feature = "tls12")]
     use crate::msgs::handshake::SessionID;

@@ -429,7 +429,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if args.flag_no_tickets {
-        config.enable_tickets = false;
+        config.set_session_support(rustls::client::ClientSessionSupport::SessionOnly(256));
     }
 
     if args.flag_no_sni {

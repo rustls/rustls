@@ -405,6 +405,7 @@ pub mod client {
 
     pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
     pub use client_conn::ClientSessionStore;
+    pub use client_conn::ClientSessionSupport;
     pub use client_conn::InvalidDnsNameError;
     pub use client_conn::ResolvesClientCert;
     pub use client_conn::ServerName;

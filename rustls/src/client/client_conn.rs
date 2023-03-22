@@ -26,6 +26,8 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::{fmt, io, mem};
 
+/// Test-only. Used in bogo_shim.
+///
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
 ///
@@ -36,6 +38,7 @@ use std::{fmt, io, mem};
 /// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
+#[doc(hidden)]
 pub trait ClientSessionStore: Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
     fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
@@ -115,8 +118,10 @@ pub trait ResolvesClientCert: Send + Sync {
 ///
 /// # Defaults
 ///
+/// By default, stores TLS sessions and tickets in an in-memory LRU cache
+/// limited to 256 entries.
+///
 /// * [`ClientConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
-/// * [`ClientConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
 #[derive(Clone)]
@@ -136,7 +141,7 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How we store session data or tickets.
-    pub session_storage: Arc<dyn ClientSessionStore>,
+    pub(crate) session_storage: Arc<dyn ClientSessionStore>,
 
     /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
     /// message lengths except to the 2**16 limit specified in the standard.
@@ -155,7 +160,7 @@ pub struct ClientConfig {
     /// effect.
     ///
     /// The default is true.
-    pub enable_tickets: bool,
+    pub(crate) enable_tickets: bool,
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
@@ -186,6 +191,20 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
 }
 
+/// How to handle TLS session caching. See [ClientConfig::set_session_support].
+#[non_exhaustive]
+pub enum ClientSessionSupport {
+    /// Don't store any sort of client sessions.
+    None,
+    /// No tickets. Limit cache size to the provided amount.
+    SessionOnly(usize),
+    /// Allow tickets or sessions. Limit cache size to the provided amount.
+    SessionsOrTickets(usize),
+    /// Test-only: used in bogo_shim.
+    #[doc(hidden)]
+    Custom(Arc<dyn ClientSessionStore>),
+}
+
 impl fmt::Debug for ClientConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientConfig")
@@ -206,6 +225,22 @@ impl ClientConfig {
         ConfigBuilder {
             state: WantsCipherSuites(()),
             side: PhantomData::default(),
+        }
+    }
+
+    /// Set how sessions will be handled for this config.
+    pub fn set_session_support(&mut self, support: ClientSessionSupport) {
+        self.session_storage = match support {
+            ClientSessionSupport::None => Arc::new(super::handy::NoClientSessionStorage {}),
+            ClientSessionSupport::SessionOnly(n) => {
+                self.enable_tickets = false;
+                super::handy::ClientSessionMemoryCache::new(n)
+            }
+            ClientSessionSupport::SessionsOrTickets(n) => {
+                self.enable_tickets = true;
+                super::handy::ClientSessionMemoryCache::new(n)
+            }
+            ClientSessionSupport::Custom(store) => store,
         }
     }
 

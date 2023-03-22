@@ -4,7 +4,7 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use rustls::client::{ClientConfig, ClientConnection};
+use rustls::client::{ClientConfig, ClientConnection, ClientSessionSupport};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::KeyUpdateRequest;
 use rustls::internal::msgs::persist;
@@ -552,7 +552,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     }
 
     let persist = ClientCacheWithoutKxHints::new(opts.resumption_delay);
-    cfg.session_storage = persist;
+    cfg.set_session_support(ClientSessionSupport::Custom(persist));
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
 

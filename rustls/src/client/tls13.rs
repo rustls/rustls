@@ -38,9 +38,10 @@ use crate::{sign, KeyLog};
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
+use crate::client::client_conn::ClientSessionStore;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::{hs, ClientConfig, ClientSessionStore, ServerName};
+use crate::client::{hs, ClientConfig, ServerName};
 
 use crate::ticketer::TimeBase;
 use ring::constant_time;
