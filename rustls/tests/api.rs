@@ -1807,9 +1807,9 @@ fn server_exposes_offered_sni() {
                 .unwrap();
         let mut server = ServerConnection::new(Arc::new(make_server_config(kt))).unwrap();
 
-        assert_eq!(None, server.sni_hostname());
+        assert_eq!(None, server.server_name());
         do_handshake(&mut client, &mut server);
-        assert_eq!(Some("second.testserver.com"), server.sni_hostname());
+        assert_eq!(Some("second.testserver.com"), server.server_name());
     }
 }
 
@@ -1824,9 +1824,9 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
                 .unwrap();
         let mut server = ServerConnection::new(Arc::new(make_server_config(kt))).unwrap();
 
-        assert_eq!(None, server.sni_hostname());
+        assert_eq!(None, server.server_name());
         do_handshake(&mut client, &mut server);
-        assert_eq!(Some("second.testserver.com"), server.sni_hostname());
+        assert_eq!(Some("second.testserver.com"), server.server_name());
     }
 }
 
@@ -1846,7 +1846,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
             ClientConnection::new(Arc::new(client_config), dns_name("thisdoesNOTexist.com"))
                 .unwrap();
 
-        assert_eq!(None, server.sni_hostname());
+        assert_eq!(None, server.server_name());
         transfer(&mut client, &mut server);
         assert_debug_eq(
             server.process_new_packets(),
@@ -1854,7 +1854,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
                 "no server certificate chain resolved".to_string(),
             )),
         );
-        assert_eq!(Some("thisdoesnotexist.com"), server.sni_hostname());
+        assert_eq!(Some("thisdoesnotexist.com"), server.server_name());
     }
 }
 
