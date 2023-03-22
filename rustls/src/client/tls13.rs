@@ -141,9 +141,9 @@ pub(super) fn handle_server_hello(
     })?;
 
     // Remember what KX group the server liked for next time.
-    config
-        .session_storage
-        .set_kx_hint(&server_name, their_key_share.group);
+    if let Some(store) = &config.session_storage {
+        store.set_kx_hint(&server_name, their_key_share.group);
+    }
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -193,7 +193,8 @@ pub(super) fn initial_key_share(
 ) -> Result<kx::KeyExchange, Error> {
     let group = config
         .session_storage
-        .kx_hint(server_name)
+        .as_ref()
+        .and_then(|store| store.kx_hint(server_name))
         .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
         .unwrap_or_else(|| {
             config
@@ -882,9 +883,9 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
-        st.config
-            .session_storage
-            .remove_tls12_session(&st.server_name);
+        if let Some(store) = &st.config.session_storage {
+            store.remove_tls12_session(&st.server_name);
+        }
 
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
@@ -892,7 +893,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         cx.common.start_traffic();
 
         let st = ExpectTraffic {
-            session_storage: Arc::clone(&st.config.session_storage),
+            session_storage: st.config.session_storage.clone(),
             server_name: st.server_name,
             suite: st.suite,
             transcript: st.transcript,
@@ -915,7 +916,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 // In this state we can be sent tickets, key updates,
 // and application data.
 struct ExpectTraffic {
-    session_storage: Arc<dyn ClientSessionStore>,
+    session_storage: Option<Arc<dyn ClientSessionStore>>,
     server_name: ServerName,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -981,8 +982,10 @@ impl ExpectTraffic {
             }
         }
 
-        self.session_storage
-            .insert_tls13_ticket(&self.server_name, value);
+        if let Some(store) = &self.session_storage {
+            store.insert_tls13_ticket(&self.server_name, value);
+        }
+
         Ok(())
     }
 

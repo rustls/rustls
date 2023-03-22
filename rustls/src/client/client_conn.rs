@@ -135,8 +135,11 @@ pub struct ClientConfig {
     /// If empty, no ALPN extension is sent.
     pub alpn_protocols: Vec<Vec<u8>>,
 
-    /// How we store session data or tickets.
-    pub session_storage: Arc<dyn ClientSessionStore>,
+    /// Provides a caching mechanism for RFC 5077 session tickets.
+    ///
+    /// By default we config the [`crate::client::ClientSessionMemoryCache`] with a capacity of
+    /// 256. Set to `None` to disable client session resumption.
+    pub session_storage: Option<Arc<dyn ClientSessionStore>>,
 
     /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
     /// message lengths except to the 2**16 limit specified in the standard.
@@ -149,13 +152,6 @@ pub struct ClientConfig {
 
     /// How to decide what client auth certificate/keys to use.
     pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
-
-    /// Whether to support RFC5077 tickets.  You must provide a working
-    /// `session_storage` member for this to have any meaningful
-    /// effect.
-    ///
-    /// The default is true.
-    pub enable_tickets: bool,
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
@@ -191,7 +187,6 @@ impl fmt::Debug for ClientConfig {
         f.debug_struct("ClientConfig")
             .field("alpn_protocols", &self.alpn_protocols)
             .field("max_fragment_size", &self.max_fragment_size)
-            .field("enable_tickets", &self.enable_tickets)
             .field("enable_sni", &self.enable_sni)
             .field("enable_early_data", &self.enable_early_data)
             .finish_non_exhaustive()

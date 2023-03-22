@@ -358,9 +358,9 @@ fn make_client_config(
     };
 
     if resume != Resumption::No {
-        cfg.session_storage = ClientSessionMemoryCache::new(128);
+        cfg.session_storage = Some(ClientSessionMemoryCache::new(128));
     } else {
-        cfg.session_storage = Arc::new(NoClientSessionStorage {});
+        cfg.session_storage = Some(Arc::new(NoClientSessionStorage {}));
     }
 
     cfg

@@ -1003,6 +1003,11 @@ impl ExpectFinished {
             }
         };
 
+        let store = match &self.config.session_storage {
+            Some(store) => store,
+            None => return,
+        };
+
         let session_value = persist::Tls12ClientSessionValue::new(
             self.secrets.suite(),
             self.session_id,
@@ -1017,9 +1022,7 @@ impl ExpectFinished {
             self.using_ems,
         );
 
-        self.config
-            .session_storage
-            .set_tls12_session(&self.server_name, session_value);
+        store.set_tls12_session(&self.server_name, session_value);
     }
 }
 

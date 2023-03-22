@@ -43,16 +43,19 @@ fn find_session(
     config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
+    let store = match &config.session_storage {
+        Some(store) => store,
+        None => return None,
+    };
+
     #[allow(clippy::let_and_return)]
-    let found = config
-        .session_storage
+    let found = store
         .take_tls13_ticket(server_name)
         .map(ClientSessionValue::Tls13)
         .or_else(|| {
             #[cfg(feature = "tls12")]
             {
-                config
-                    .session_storage
+                store
                     .tls12_session(server_name)
                     .map(ClientSessionValue::Tls12)
             }
@@ -260,7 +263,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::Cookie(cookie.clone()));
     }
 
-    if support_tls13 && config.enable_tickets {
+    if support_tls13 && config.session_storage.is_some() {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
         let psk_modes = vec![PSKKeyExchangeMode::PSK_DHE_KE];
@@ -280,47 +283,44 @@ fn emit_client_hello_for_retry(
     // Extra extensions must be placed before the PSK extension
     exts.extend(extra_exts.iter().cloned());
 
-    let fill_in_binder = if support_tls13
-        && config.enable_tickets
-        && resume_version == ProtocolVersion::TLSv1_3
-        && !ticket.is_empty()
-    {
-        resuming_session
-            .as_ref()
-            .and_then(|resuming| match (suite, resuming.tls13()) {
-                (Some(suite), Some(resuming)) => {
-                    suite
-                        .tls13()?
-                        .can_resume_from(resuming.suite())?;
-                    Some(resuming)
-                }
-                (None, Some(resuming)) => Some(resuming),
-                _ => None,
-            })
-            .map(|resuming| {
-                tls13::prepare_resumption(
-                    &config,
-                    cx,
-                    ticket,
-                    &resuming,
-                    &mut exts,
-                    retryreq.is_some(),
-                );
-                resuming
-            })
-    } else if config.enable_tickets {
-        // If we have a ticket, include it.  Otherwise, request one.
-        if ticket.is_empty() {
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+    let fill_in_binder =
+        if support_tls13 && resume_version == ProtocolVersion::TLSv1_3 && !ticket.is_empty() {
+            resuming_session
+                .as_ref()
+                .and_then(|resuming| match (suite, resuming.tls13()) {
+                    (Some(suite), Some(resuming)) => {
+                        suite
+                            .tls13()?
+                            .can_resume_from(resuming.suite())?;
+                        Some(resuming)
+                    }
+                    (None, Some(resuming)) => Some(resuming),
+                    _ => None,
+                })
+                .map(|resuming| {
+                    tls13::prepare_resumption(
+                        &config,
+                        cx,
+                        ticket,
+                        &resuming,
+                        &mut exts,
+                        retryreq.is_some(),
+                    );
+                    resuming
+                })
+        } else if config.session_storage.is_some() {
+            // If we have a ticket, include it.  Otherwise, request one.
+            if ticket.is_empty() {
+                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+            } else {
+                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+                    Payload::new(ticket),
+                )));
+            }
+            None
         } else {
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                Payload::new(ticket),
-            )));
-        }
-        None
-    } else {
-        None
-    };
+            None
+        };
 
     // Note what extensions we sent.
     hello.sent_extensions = exts
