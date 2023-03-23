@@ -196,17 +196,6 @@ fn emit_client_hello_for_retry(
     may_send_sct_list: bool,
     suite: Option<SupportedCipherSuite>,
 ) -> NextState {
-    // Do we have a SessionID or ticket cached for this host?
-    let (ticket, resume_version) = if let Some(resuming) = &resuming_session {
-        match &resuming.value {
-            ClientSessionValue::Tls13(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_3),
-            #[cfg(feature = "tls12")]
-            ClientSessionValue::Tls12(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_2),
-        }
-    } else {
-        (Vec::new(), ProtocolVersion::Unknown(0))
-    };
-
     let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
@@ -279,40 +268,15 @@ fn emit_client_hello_for_retry(
     // Extra extensions must be placed before the PSK extension
     exts.extend(extra_exts.iter().cloned());
 
-    let tls13_session = if support_tls13
-        && config.enable_tickets
-        && resume_version == ProtocolVersion::TLSv1_3
-        && !ticket.is_empty()
-    {
-        resuming_session
-            .as_ref()
-            .and_then(|resuming| match (suite, resuming.map(|csv| csv.tls13())) {
-                (Some(suite), Some(resuming)) => {
-                    suite
-                        .tls13()?
-                        .can_resume_from(resuming.suite())?;
-                    Some(resuming)
-                }
-                (None, Some(resuming)) => Some(resuming),
-                _ => None,
-            })
-            .map(|resuming| {
-                tls13::prepare_resumption(&config, cx, &resuming, &mut exts, retryreq.is_some());
-                resuming
-            })
-    } else if config.enable_tickets {
-        // If we have a ticket, include it.  Otherwise, request one.
-        if ticket.is_empty() {
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
-        } else {
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                Payload::new(ticket),
-            )));
-        }
-        None
-    } else {
-        None
-    };
+    // Do we have a SessionID or ticket cached for this host?
+    let tls13_session = prepare_resumption(
+        &resuming_session,
+        &mut exts,
+        retryreq.is_some(),
+        suite,
+        cx,
+        &config,
+    );
 
     // Note what extensions we sent.
     hello.sent_extensions = exts
@@ -408,6 +372,70 @@ fn emit_client_hello_for_retry(
         Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         Box::new(next)
+    }
+}
+
+/// Prepare resumption with the session state retrieved from storage.
+///
+/// This function will push onto `exts` to (a) request a new ticket if we don't have one,
+/// (b) send our TLS 1.2 ticket after retrieving an 1.2 session, (c) send a request for 1.3
+/// early data if allowed and (d) send a 1.3 preshared key if we have one.
+///
+/// For resumption to work, the currently negotiated cipher suite (if available) must be
+/// able to resume from the resuming session's cipher suite.
+///
+/// If 1.3 resumption can continue, returns the 1.3 session value for further processing.
+fn prepare_resumption<'a>(
+    resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
+    exts: &mut Vec<ClientExtension>,
+    doing_retry: bool,
+    suite: Option<SupportedCipherSuite>,
+    cx: &mut ClientContext<'_>,
+    config: &ClientConfig,
+) -> Option<persist::Retrieved<&'a persist::Tls13ClientSessionValue>> {
+    let (ticket, resume_version) = if let Some(resuming) = resuming {
+        match &resuming.value {
+            ClientSessionValue::Tls13(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_3),
+            #[cfg(feature = "tls12")]
+            ClientSessionValue::Tls12(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_2),
+        }
+    } else {
+        (Vec::new(), ProtocolVersion::Unknown(0))
+    };
+
+    if config.supports_version(ProtocolVersion::TLSv1_3)
+        && config.enable_tickets
+        && resume_version == ProtocolVersion::TLSv1_3
+        && !ticket.is_empty()
+    {
+        resuming
+            .as_ref()
+            .and_then(|resuming| match (suite, resuming.map(|csv| csv.tls13())) {
+                (Some(suite), Some(resuming)) => {
+                    suite
+                        .tls13()?
+                        .can_resume_from(resuming.suite())?;
+                    Some(resuming)
+                }
+                (None, Some(resuming)) => Some(resuming),
+                _ => None,
+            })
+            .map(|resuming| {
+                tls13::prepare_resumption(&config, cx, &resuming, exts, doing_retry);
+                resuming
+            })
+    } else if config.enable_tickets {
+        // If we have a ticket, include it.  Otherwise, request one.
+        if ticket.is_empty() {
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+        } else {
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+                Payload::new(ticket),
+            )));
+        }
+        None
+    } else {
+        None
     }
 }
 
