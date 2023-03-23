@@ -235,7 +235,6 @@ pub(super) fn fill_in_psk_binder(
 pub(super) fn prepare_resumption(
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
-    ticket: Vec<u8>,
     resuming_session: &persist::Retrieved<&persist::Tls13ClientSessionValue>,
     exts: &mut Vec<ClientExtension>,
     doing_retry: bool,
@@ -265,7 +264,8 @@ pub(super) fn prepare_resumption(
         .output_len;
     let binder = vec![0u8; binder_len];
 
-    let psk_identity = PresharedKeyIdentity::new(ticket, obfuscated_ticket_age);
+    let psk_identity =
+        PresharedKeyIdentity::new(resuming_session.ticket().to_vec(), obfuscated_ticket_age);
     let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
     exts.push(ClientExtension::PresharedKey(psk_ext));
 }

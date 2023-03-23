@@ -298,14 +298,7 @@ fn emit_client_hello_for_retry(
                 _ => None,
             })
             .map(|resuming| {
-                tls13::prepare_resumption(
-                    &config,
-                    cx,
-                    ticket,
-                    &resuming,
-                    &mut exts,
-                    retryreq.is_some(),
-                );
+                tls13::prepare_resumption(&config, cx, &resuming, &mut exts, retryreq.is_some());
                 resuming
             })
     } else if config.enable_tickets {
