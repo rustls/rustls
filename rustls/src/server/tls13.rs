@@ -698,13 +698,7 @@ mod client_hello {
 
         let names = config
             .verifier
-            .client_auth_root_subjects()
-            .ok_or_else(|| {
-                debug!("could not determine root subjects based on SNI");
-                cx.common
-                    .send_fatal_alert(AlertDescription::AccessDenied);
-                Error::General("client rejected by client_auth_root_subjects".into())
-            })?;
+            .client_auth_root_subjects();
 
         if !names.is_empty() {
             cr.extensions
@@ -892,13 +886,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         let mandatory = self
             .config
             .verifier
-            .client_auth_mandatory()
-            .ok_or_else(|| {
-                debug!("could not determine if client auth is mandatory based on SNI");
-                cx.common
-                    .send_fatal_alert(AlertDescription::AccessDenied);
-                Error::General("client rejected by client_auth_mandatory".into())
-            })?;
+            .client_auth_mandatory();
 
         let (end_entity, intermediates) = match client_cert.split_first() {
             None => {

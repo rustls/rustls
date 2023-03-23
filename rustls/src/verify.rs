@@ -233,11 +233,11 @@ pub trait ClientCertVerifier: Send + Sync {
         true
     }
 
-    /// Return `Some(true)` to require a client certificate and `Some(false)` to make
-    /// client authentication optional. Return `None` to abort the connection.
+    /// Return `true` to require a client certificate and `false` to make
+    /// client authentication optional.
     /// Defaults to `Some(self.offer_client_auth())`.
-    fn client_auth_mandatory(&self) -> Option<bool> {
-        Some(self.offer_client_auth())
+    fn client_auth_mandatory(&self) -> bool {
+        self.offer_client_auth()
     }
 
     /// Returns the [Subjects] of the client authentication trust anchors to
@@ -251,9 +251,9 @@ pub trait ClientCertVerifier: Send + Sync {
     /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     ///
-    /// Return `None` to abort the connection. Return an empty `Vec` to continue
-    /// the handshake without sending a CertificateRequest message.
-    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>>;
+    /// Return an empty `Vec` to continue the handshake without sending a
+    /// CertificateRequest message.
+    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName>;
 
     /// Verify the end-entity certificate `end_entity` is valid, acceptable,
     /// and chains to at least one of the trust anchors trusted by
@@ -565,8 +565,12 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
     }
 
     #[allow(deprecated)]
-    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
-        Some(self.roots.subjects())
+    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
+        self.roots
+            .roots
+            .iter()
+            .map(|r| DistinguishedName::from(r.subject().to_vec()))
+            .collect()
     }
 
     fn verify_client_cert(
@@ -622,11 +626,11 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         self.inner.offer_client_auth()
     }
 
-    fn client_auth_mandatory(&self) -> Option<bool> {
-        Some(false)
+    fn client_auth_mandatory(&self) -> bool {
+        false
     }
 
-    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
+    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
         self.inner.client_auth_root_subjects()
     }
 
@@ -676,7 +680,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
+    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
         unimplemented!();
     }
 

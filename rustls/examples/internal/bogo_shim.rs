@@ -193,12 +193,12 @@ impl server::ClientCertVerifier for DummyClientAuth {
         true
     }
 
-    fn client_auth_mandatory(&self) -> Option<bool> {
-        Some(self.mandatory)
+    fn client_auth_mandatory(&self) -> bool {
+        self.mandatory
     }
 
-    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
-        Some(Vec::new())
+    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
+        Vec::new()
     }
 
     fn verify_client_cert(
