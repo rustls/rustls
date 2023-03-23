@@ -485,13 +485,54 @@ impl From<ServerConnection> for crate::Connection {
 
 /// Handle on a server-side connection before configuration is available.
 ///
-/// The `Acceptor` allows the caller to provide a [`ServerConfig`] based on the [`ClientHello`] of
-/// the incoming connection.
+/// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
+/// the [`ClientHello`] of an incoming connection. This is useful for servers
+/// that choose different certificates or cipher suites based on the
+/// characteristics of the `ClientHello`. In particular it is useful for
+/// servers that need to do some I/O to load a certificate and its private key
+/// and don't want to use the blocking interface provided by
+/// [`ResolvesServerCert`].
+///
+/// Create an Acceptor with [`Acceptor::default()`].
+///
+/// # Example
+///
+/// ```no_run
+/// # fn choose_server_config(
+/// #     _: rustls::server::ClientHello,
+/// # ) -> std::sync::Arc<rustls::ServerConfig> {
+/// #     unimplemented!();
+/// # }
+/// # #[allow(unused_variables)]
+/// # fn main() {
+/// use rustls::server::{Acceptor, ServerConfig};
+/// let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+/// for stream in listener.incoming() {
+///     let mut stream = stream.unwrap();
+///     let mut acceptor = Acceptor::default();
+///     let accepted = loop {
+///         acceptor.read_tls(&mut stream).unwrap();
+///         if let Some(accepted) = acceptor.accept().unwrap() {
+///             break accepted;
+///         }
+///     };
+///
+///     // For some user-defined choose_server_config:
+///     let config = choose_server_config(accepted.client_hello());
+///     let conn = accepted
+///         .into_connection(config)
+///         .unwrap();
+
+///     // Proceed with handling the ServerConnection.
+/// }
+/// # }
+//// ```
 pub struct Acceptor {
     inner: Option<ConnectionCommon<ServerConnectionData>>,
 }
 
 impl Default for Acceptor {
+    /// Return an empty Acceptor, ready to receive bytes from a new client connection.
     fn default() -> Self {
         Self {
             inner: Some(
@@ -507,28 +548,6 @@ impl Default for Acceptor {
 }
 
 impl Acceptor {
-    /// Create a new `Acceptor`.
-    #[deprecated(
-        since = "0.20.7",
-        note = "Use Acceptor::default instead for an infallible constructor"
-    )]
-    pub fn new() -> Result<Self, Error> {
-        Ok(Self::default())
-    }
-
-    /// Returns true if the caller should call [`Connection::read_tls()`] as soon as possible.
-    ///
-    /// Since the purpose of an Acceptor is to read and then parse TLS bytes, this always returns true.
-    ///
-    /// [`Connection::read_tls()`]: crate::Connection::read_tls
-    #[deprecated(since = "0.20.7", note = "Always returns true")]
-    pub fn wants_read(&self) -> bool {
-        self.inner
-            .as_ref()
-            .map(|conn| conn.wants_read())
-            .unwrap_or(false)
-    }
-
     /// Read TLS content from `rd`.
     ///
     /// Returns an error if this `Acceptor` has already yielded an [`Accepted`]. For more details,
