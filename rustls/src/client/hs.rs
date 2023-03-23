@@ -426,17 +426,13 @@ fn prepare_resumption<'a>(
         None => None,
     };
 
-    match suite {
-        Some(suite) => {
-            suite.can_resume_from(tls13.suite())?;
-            Some(tls13)
-        }
-        None => Some(tls13),
+    // If the selected cipher suite can't select from the session's, we can't resume.
+    if let Some(suite) = suite {
+        suite.can_resume_from(tls13.suite())?;
     }
-    .map(|resuming| {
-        tls13::prepare_resumption(&config, cx, &resuming, exts, doing_retry);
-        resuming
-    })
+
+    tls13::prepare_resumption(config, cx, &tls13, exts, doing_retry);
+    Some(tls13)
 }
 
 pub(super) fn process_alpn_protocol(
