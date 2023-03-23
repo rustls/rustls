@@ -197,8 +197,8 @@ impl server::ClientCertVerifier for DummyClientAuth {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
-        Vec::new()
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+        &[]
     }
 
     fn verify_client_cert(

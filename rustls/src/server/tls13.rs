@@ -41,7 +41,6 @@ pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
     use crate::enums::SignatureScheme;
-    use crate::kx;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::NamedGroup;
@@ -66,6 +65,7 @@ mod client_hello {
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
+    use crate::{kx, DistinguishedName};
 
     use super::*;
 
@@ -698,7 +698,10 @@ mod client_hello {
 
         let names = config
             .verifier
-            .client_auth_root_subjects();
+            .client_auth_root_subjects()
+            .iter()
+            .map(|n| DistinguishedName::from(n.clone()))
+            .collect::<Vec<_>>();
 
         if !names.is_empty() {
             cr.extensions
