@@ -407,35 +407,30 @@ fn prepare_resumption<'a>(
         }
     };
 
-    let resume_version = match &resuming.value {
-        ClientSessionValue::Tls13(_) => ProtocolVersion::TLSv1_3,
-        #[cfg(feature = "tls12")]
-        ClientSessionValue::Tls12(_) => ProtocolVersion::TLSv1_2,
+    let tls13 = match resuming.map(|csv| csv.tls13()) {
+        Some(tls13) if config.supports_version(ProtocolVersion::TLSv1_3) => tls13,
+        _ => {
+            // TODO: does this make sense for `Some(tls13)`???
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+                Payload::new(resuming.ticket()),
+            )));
+            return None; // TLS 1.2, so there's no 1.3 value to return
+        }
     };
 
-    if config.supports_version(ProtocolVersion::TLSv1_3)
-        && resume_version == ProtocolVersion::TLSv1_3
-    {
-        match (suite, resuming.map(|csv| csv.tls13())) {
-            (Some(suite), Some(resuming)) => {
-                suite
-                    .tls13()?
-                    .can_resume_from(resuming.suite())?;
-                Some(resuming)
-            }
-            (None, Some(resuming)) => Some(resuming),
-            _ => None,
+    match suite {
+        Some(suite) => {
+            suite
+                .tls13()?
+                .can_resume_from(tls13.suite())?;
+            Some(tls13)
         }
-        .map(|resuming| {
-            tls13::prepare_resumption(&config, cx, &resuming, exts, doing_retry);
-            resuming
-        })
-    } else {
-        exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-            Payload::new(resuming.ticket()),
-        )));
-        None
+        None => Some(tls13),
     }
+    .map(|resuming| {
+        tls13::prepare_resumption(&config, cx, &resuming, exts, doing_retry);
+        resuming
+    })
 }
 
 pub(super) fn process_alpn_protocol(
