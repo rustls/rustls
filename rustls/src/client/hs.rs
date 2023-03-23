@@ -397,45 +397,43 @@ fn prepare_resumption<'a>(
         return None;
     }
 
-    let (ticket, resume_version) = if let Some(resuming) = resuming {
-        match &resuming.value {
-            ClientSessionValue::Tls13(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_3),
-            #[cfg(feature = "tls12")]
-            ClientSessionValue::Tls12(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_2),
+    // Check whether we're resuming with a non-empty ticket.
+    let resuming = match resuming {
+        Some(resuming) if !resuming.ticket().is_empty() => resuming,
+        _ => {
+            // If we don't have a ticket, request one.
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+            return None;
         }
-    } else {
-        (Vec::new(), ProtocolVersion::Unknown(0))
+    };
+
+    let resume_version = match &resuming.value {
+        ClientSessionValue::Tls13(_) => ProtocolVersion::TLSv1_3,
+        #[cfg(feature = "tls12")]
+        ClientSessionValue::Tls12(_) => ProtocolVersion::TLSv1_2,
     };
 
     if config.supports_version(ProtocolVersion::TLSv1_3)
         && resume_version == ProtocolVersion::TLSv1_3
-        && !ticket.is_empty()
     {
-        resuming
-            .as_ref()
-            .and_then(|resuming| match (suite, resuming.map(|csv| csv.tls13())) {
-                (Some(suite), Some(resuming)) => {
-                    suite
-                        .tls13()?
-                        .can_resume_from(resuming.suite())?;
-                    Some(resuming)
-                }
-                (None, Some(resuming)) => Some(resuming),
-                _ => None,
-            })
-            .map(|resuming| {
-                tls13::prepare_resumption(&config, cx, &resuming, exts, doing_retry);
-                resuming
-            })
-    } else {
-        // If we have a ticket, include it.  Otherwise, request one.
-        if ticket.is_empty() {
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
-        } else {
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                Payload::new(ticket),
-            )));
+        match (suite, resuming.map(|csv| csv.tls13())) {
+            (Some(suite), Some(resuming)) => {
+                suite
+                    .tls13()?
+                    .can_resume_from(resuming.suite())?;
+                Some(resuming)
+            }
+            (None, Some(resuming)) => Some(resuming),
+            _ => None,
         }
+        .map(|resuming| {
+            tls13::prepare_resumption(&config, cx, &resuming, exts, doing_retry);
+            resuming
+        })
+    } else {
+        exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+            Payload::new(resuming.ticket()),
+        )));
         None
     }
 }
