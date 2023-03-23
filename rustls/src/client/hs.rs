@@ -287,7 +287,7 @@ fn emit_client_hello_for_retry(
     {
         resuming_session
             .as_ref()
-            .and_then(|resuming| match (suite, resuming.tls13()) {
+            .and_then(|resuming| match (suite, resuming.map(|csv| csv.tls13())) {
                 (Some(suite), Some(resuming)) => {
                     suite
                         .tls13()?
@@ -816,15 +816,13 @@ impl ClientSessionValue {
             Self::Tls12(inner) => &inner.common,
         }
     }
-}
 
-impl persist::Retrieved<ClientSessionValue> {
-    fn tls13(&self) -> Option<persist::Retrieved<&persist::Tls13ClientSessionValue>> {
-        self.map(|v| match v {
-            ClientSessionValue::Tls13(v) => Some(v),
+    fn tls13(&self) -> Option<&persist::Tls13ClientSessionValue> {
+        match self {
+            Self::Tls13(v) => Some(v),
             #[cfg(feature = "tls12")]
-            ClientSessionValue::Tls12(_) => None,
-        })
+            Self::Tls12(_) => None,
+        }
     }
 }
 
