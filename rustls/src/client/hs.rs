@@ -280,7 +280,7 @@ fn emit_client_hello_for_retry(
     // Extra extensions must be placed before the PSK extension
     exts.extend(extra_exts.iter().cloned());
 
-    let fill_in_binder = if support_tls13
+    let tls13_session = if support_tls13
         && config.enable_tickets
         && resume_version == ProtocolVersion::TLSv1_3
         && !ticket.is_empty()
@@ -342,7 +342,7 @@ fn emit_client_hello_for_retry(
         }),
     };
 
-    let early_key_schedule = if let Some(resuming) = fill_in_binder {
+    let early_key_schedule = if let Some(resuming) = tls13_session {
         let schedule = tls13::fill_in_psk_binder(&resuming, &transcript_buffer, &mut chp);
         Some((resuming.suite(), schedule))
     } else {
