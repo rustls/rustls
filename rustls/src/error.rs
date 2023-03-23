@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum Error {
     /// We received a TLS message that isn't valid right now.
