@@ -394,6 +394,10 @@ fn prepare_resumption<'a>(
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
 ) -> Option<persist::Retrieved<&'a persist::Tls13ClientSessionValue>> {
+    if !config.enable_tickets {
+        return None;
+    }
+
     let (ticket, resume_version) = if let Some(resuming) = resuming {
         match &resuming.value {
             ClientSessionValue::Tls13(inner) => (inner.ticket().to_vec(), ProtocolVersion::TLSv1_3),
@@ -405,7 +409,6 @@ fn prepare_resumption<'a>(
     };
 
     if config.supports_version(ProtocolVersion::TLSv1_3)
-        && config.enable_tickets
         && resume_version == ProtocolVersion::TLSv1_3
         && !ticket.is_empty()
     {
@@ -425,7 +428,7 @@ fn prepare_resumption<'a>(
                 tls13::prepare_resumption(&config, cx, &resuming, exts, doing_retry);
                 resuming
             })
-    } else if config.enable_tickets {
+    } else {
         // If we have a ticket, include it.  Otherwise, request one.
         if ticket.is_empty() {
             exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
@@ -434,8 +437,6 @@ fn prepare_resumption<'a>(
                 Payload::new(ticket),
             )));
         }
-        None
-    } else {
         None
     }
 }
