@@ -7,6 +7,7 @@ macro_rules! enum_builder {
         EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
         $(#[$comment])*
+        #[non_exhaustive]
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         pub enum $enum_name {
             $( $enum_var),*
@@ -49,6 +50,7 @@ macro_rules! enum_builder {
         EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
         $(#[$comment])*
+        #[non_exhaustive]
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         pub enum $enum_name {
             $( $enum_var),*
