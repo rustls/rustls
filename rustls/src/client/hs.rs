@@ -408,15 +408,21 @@ fn prepare_resumption<'a>(
     };
 
     let tls13 = match resuming.map(|csv| csv.tls13()) {
-        Some(tls13) if config.supports_version(ProtocolVersion::TLSv1_3) => tls13,
-        _ => {
-            // TODO: does this make sense for `Some(tls13)`???
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                Payload::new(resuming.ticket()),
-            )));
-            return None; // TLS 1.2, so there's no 1.3 value to return
+        Some(tls13) => tls13,
+        None => {
+            // TLS 1.2; send the ticket if we have support this protocol version
+            if config.supports_version(ProtocolVersion::TLSv1_2) {
+                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+                    Payload::new(resuming.ticket()),
+                )));
+            }
+            return None; // TLS 1.2, so nothing to return here
         }
     };
+
+    if !config.supports_version(ProtocolVersion::TLSv1_3) {
+        return None;
+    }
 
     // If the server selected TLS 1.2, we can't resume.
     let suite = match suite {
