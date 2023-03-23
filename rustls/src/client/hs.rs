@@ -418,11 +418,17 @@ fn prepare_resumption<'a>(
         }
     };
 
+    // If the server selected TLS 1.2, we can't resume.
+    let suite = match suite {
+        Some(SupportedCipherSuite::Tls13(suite)) => Some(suite),
+        #[cfg(feature = "tls12")]
+        Some(SupportedCipherSuite::Tls12(_)) => return None,
+        None => None,
+    };
+
     match suite {
         Some(suite) => {
-            suite
-                .tls13()?
-                .can_resume_from(tls13.suite())?;
+            suite.can_resume_from(tls13.suite())?;
             Some(tls13)
         }
         None => Some(tls13),
