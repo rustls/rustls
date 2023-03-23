@@ -186,8 +186,8 @@ impl ClientCertVerifier for MockClientVerifier {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
-        self.subjects.clone()
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+        &self.subjects
     }
 
     fn verify_client_cert(

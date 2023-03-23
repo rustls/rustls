@@ -251,9 +251,8 @@ pub trait ClientCertVerifier: Send + Sync {
     /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     ///
-    /// Return an empty `Vec` to continue the handshake without sending a
-    /// CertificateRequest message.
-    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName>;
+    /// If the return value is empty, no CertificateRequest message will be sent.
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName];
 
     /// Verify the end-entity certificate `end_entity` is valid, acceptable,
     /// and chains to at least one of the trust anchors trusted by
@@ -540,6 +539,7 @@ fn prepare<'a, 'b>(
 /// certificate, without any name checking.
 pub struct AllowAnyAuthenticatedClient {
     roots: RootCertStore,
+    subjects: Vec<DistinguishedName>,
 }
 
 impl AllowAnyAuthenticatedClient {
@@ -547,7 +547,14 @@ impl AllowAnyAuthenticatedClient {
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
     pub fn new(roots: RootCertStore) -> Self {
-        Self { roots }
+        Self {
+            subjects: roots
+                .roots
+                .iter()
+                .map(|r| DistinguishedName::from(r.subject().to_vec()))
+                .collect(),
+            roots,
+        }
     }
 
     /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
@@ -565,12 +572,8 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
     }
 
     #[allow(deprecated)]
-    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
-        self.roots
-            .roots
-            .iter()
-            .map(|r| DistinguishedName::from(r.subject().to_vec()))
-            .collect()
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+        &self.subjects
     }
 
     fn verify_client_cert(
@@ -608,7 +611,7 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
     /// `roots` is the list of trust anchors to use for certificate validation.
     pub fn new(roots: RootCertStore) -> Self {
         Self {
-            inner: AllowAnyAuthenticatedClient { roots },
+            inner: AllowAnyAuthenticatedClient::new(roots),
         }
     }
 
@@ -630,7 +633,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
         false
     }
 
-    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
         self.inner.client_auth_root_subjects()
     }
 
@@ -680,7 +683,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(&self) -> Vec<DistinguishedName> {
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
         unimplemented!();
     }
 
