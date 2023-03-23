@@ -2,10 +2,8 @@ use super::ResolvesClientCert;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::handshake::CertificatePayload;
-use crate::msgs::handshake::SCTList;
-use crate::msgs::handshake::ServerExtension;
-use crate::{sign, DistinguishedNames, SignatureScheme};
+use crate::msgs::handshake::{CertificatePayload, DistinguishedNames, SCTList, ServerExtension};
+use crate::{sign, SignatureScheme};
 
 use std::sync::Arc;
 

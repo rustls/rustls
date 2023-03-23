@@ -87,8 +87,7 @@ impl RootCertStore {
     }
 
     /// Return the Subject Names for certificates in the container.
-    #[deprecated(since = "0.20.7", note = "Use OwnedTrustAnchor::subject() instead")]
-    pub fn subjects(&self) -> DistinguishedNames {
+    pub(crate) fn subjects(&self) -> DistinguishedNames {
         let mut r = DistinguishedNames::new();
 
         for ota in &self.roots {
