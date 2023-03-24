@@ -213,16 +213,6 @@ impl TlsListElement for ECPointFormat {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
 
-pub trait SupportedPointFormats {
-    fn supported() -> ECPointFormatList;
-}
-
-impl SupportedPointFormats for ECPointFormatList {
-    fn supported() -> ECPointFormatList {
-        vec![ECPointFormat::Uncompressed]
-    }
-}
-
 declare_u16_vec!(NamedGroups, NamedGroup);
 
 impl TlsListElement for NamedGroup {
