@@ -1531,7 +1531,7 @@ impl Codec for ECParameters {
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let ct = ECCurveType::read(r)?;
         if ct != ECCurveType::NamedCurve {
-            return Err(InvalidMessage::UnsupportedCurve(ct));
+            return Err(InvalidMessage::UnsupportedCurveType);
         }
 
         let grp = NamedGroup::read(r)?;
@@ -2046,7 +2046,7 @@ impl Codec for CertificateStatus {
             CertificateStatusType::OCSP => Ok(Self {
                 ocsp_response: PayloadU24::read(r)?,
             }),
-            _ => Err(InvalidMessage::InvalidCertificateStatusType(typ)),
+            _ => Err(InvalidMessage::InvalidCertificateStatusType),
         }
     }
 }

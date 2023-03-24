@@ -559,7 +559,7 @@ impl CommonState {
             KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
             _ => {
                 self.send_fatal_alert(AlertDescription::IllegalParameter);
-                Err(InvalidMessage::InvalidKeyUpdate(*key_update_request).into())
+                Err(InvalidMessage::InvalidKeyUpdate.into())
             }
         }
     }

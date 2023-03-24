@@ -6,7 +6,6 @@
 
 use rustls::client::{ClientConfig, ClientConnection};
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::KeyUpdateRequest;
 use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
 use rustls::{
@@ -605,7 +604,7 @@ fn handle_err(err: Error) -> ! {
             InvalidMessage::TrailingData("ChangeCipherSpecPayload") | InvalidMessage::InvalidCcs,
         ) => quit(":BAD_CHANGE_CIPHER_SPEC:"),
         Error::InvalidMessage(
-            InvalidMessage::InvalidKeyUpdate(KeyUpdateRequest::Unknown(42))
+            InvalidMessage::InvalidKeyUpdate
             | InvalidMessage::MissingData(_)
             | InvalidMessage::TrailingData(_)
             | InvalidMessage::UnexpectedMessage("HelloRetryRequest")
