@@ -460,7 +460,10 @@ pub(super) fn process_alpn_protocol(
 }
 
 pub(super) fn sct_list_is_invalid(scts: &SCTList) -> bool {
-    scts.is_empty() || scts.iter().any(|sct| sct.0.is_empty())
+    scts.is_empty()
+        || scts
+            .iter()
+            .any(|sct| sct.as_ref().is_empty())
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {

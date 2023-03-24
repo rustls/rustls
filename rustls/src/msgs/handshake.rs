@@ -84,8 +84,6 @@ macro_rules! wrapped_payload(
   }
 );
 
-declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
-
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Random(pub [u8; 32]);
 
@@ -549,7 +547,9 @@ impl CertificateStatusRequest {
 // ---
 // SCTs
 
-pub type SCTList = VecU16OfPayloadU16;
+wrapped_payload!(Sct, PayloadU16,);
+
+declare_u16_vec!(SCTList, Sct);
 
 // ---
 
