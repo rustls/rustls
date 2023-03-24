@@ -16,7 +16,7 @@ use crate::msgs::handshake::{
     NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTLS13,
     PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, Random, ServerECDHParams,
     ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionID,
-    SupportedPointFormats, UnknownExtension,
+    SupportedPointFormats, UnknownExtension, DistinguishedName,
 };
 use crate::verify::DigitallySignedStruct;
 
@@ -847,7 +847,7 @@ fn get_sample_certificaterequestpayload() -> CertificateRequestPayload {
     CertificateRequestPayload {
         certtypes: vec![ClientCertificateType::RSASign],
         sigschemes: vec![SignatureScheme::ECDSA_NISTP256_SHA256],
-        canames: vec![PayloadU16(vec![1, 2, 3])],
+        canames: vec![DistinguishedName::from(vec![1, 2, 3])],
     }
 }
 
@@ -856,7 +856,7 @@ fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTLS13
         context: PayloadU8(vec![1, 2, 3]),
         extensions: vec![
             CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            CertReqExtension::AuthorityNames(vec![PayloadU16(vec![1, 2, 3])]),
+            CertReqExtension::AuthorityNames(vec![DistinguishedName::from(vec![1, 2, 3])]),
             CertReqExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload(vec![1, 2, 3]),

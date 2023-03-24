@@ -49,6 +49,41 @@ macro_rules! declare_u16_vec(
   }
 );
 
+/// Create a newtype wrapper around a given type.
+///
+/// This is used to create newtypes for the various TLS message types which is used to wrap
+/// the `PayloadU8` or `PayloadU16` types. This is typically used for types where we don't need
+/// anything other than access to the underlying bytes.
+macro_rules! wrapped_payload(
+  ($(#[$comment:meta])* $name:ident, $inner:ident,) => {
+    $(#[$comment])*
+    #[derive(Clone, Debug)]
+    pub struct $name($inner);
+
+    impl From<Vec<u8>> for $name {
+        fn from(v: Vec<u8>) -> Self {
+            Self($inner::new(v))
+        }
+    }
+
+    impl AsRef<[u8]> for $name {
+        fn as_ref(&self) -> &[u8] {
+            self.0.0.as_slice()
+        }
+    }
+
+    impl Codec for $name {
+        fn encode(&self, bytes: &mut Vec<u8>) {
+            self.0.encode(bytes);
+        }
+
+        fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+            Ok(Self($inner::read(r)?))
+        }
+    }
+  }
+);
+
 declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
@@ -1716,26 +1751,31 @@ impl HasServerExtensions for EncryptedExtensions {
 
 // -- CertificateRequest and sundries --
 declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
-pub type DistinguishedName = PayloadU16;
-/// DistinguishedNames is a `Vec<Vec<u8>>` wrapped in internal types. Each element contains the
-/// DER or BER encoded [`Subject` field from RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6)
-/// for a single certificate. The Subject field is
-/// [encoded as an RFC 5280 `Name`](https://datatracker.ietf.org/doc/html/rfc5280#page-116).
-/// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
-///
-/// ```ignore
-/// for name in distinguished_names {
-///     use x509_parser::prelude::FromDer;
-///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
-/// }
-/// ```
-pub type DistinguishedNames = VecU16OfPayloadU16;
+
+wrapped_payload!(
+    /// A `DistinguishedName` is a `Vec<u8>` wrapped in internal types.
+    ///
+    /// It contains the DER or BER encoded [`Subject` field from RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6)
+    /// for a single certificate. The Subject field is [encoded as an RFC 5280 `Name`](https://datatracker.ietf.org/doc/html/rfc5280#page-116).
+    /// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
+    ///
+    /// ```ignore
+    /// for name in distinguished_names {
+    ///     use x509_parser::prelude::FromDer;
+    ///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
+    /// }
+    /// ```
+    DistinguishedName,
+    PayloadU16,
+);
+
+declare_u16_vec!(DistinguishedNames, DistinguishedName);
 
 #[derive(Debug)]
 pub struct CertificateRequestPayload {
     pub certtypes: ClientCertificateTypes,
     pub sigschemes: SupportedSignatureSchemes,
-    pub canames: DistinguishedNames,
+    pub canames: Vec<DistinguishedName>,
 }
 
 impl Codec for CertificateRequestPayload {
