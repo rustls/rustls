@@ -10,7 +10,7 @@ use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
 use rustls::{
     self, client, kx_group, server, sign, version, AlertDescription, Certificate, CertificateError,
-    Connection, DistinguishedNames, Error, InvalidMessage, NamedGroup, PeerMisbehaved, PrivateKey,
+    Connection, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerMisbehaved, PrivateKey,
     ProtocolVersion, ServerName, Side, SignatureAlgorithm, SignatureScheme, SupportedKxGroup,
     SupportedProtocolVersion, Ticketer, ALL_KX_GROUPS,
 };
@@ -197,8 +197,8 @@ impl server::ClientCertVerifier for DummyClientAuth {
         Some(self.mandatory)
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
-        Some(DistinguishedNames::new())
+    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
+        Some(Vec::new())
     }
 
     fn verify_client_cert(

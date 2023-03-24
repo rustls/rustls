@@ -12,8 +12,8 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
-    CertificatePayload, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
-    SCTList, ServerECDHParams, SessionID,
+    CertificatePayload, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload, Sct,
+    ServerECDHParams, SessionID,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -106,7 +106,7 @@ mod server_hello {
                 if hs::sct_list_is_invalid(sct_list) {
                     return Err(PeerMisbehaved::InvalidSctList.into());
                 }
-                Some(sct_list.clone())
+                Some(sct_list.to_owned())
             } else {
                 None
             };
@@ -201,7 +201,7 @@ struct ExpectCertificate {
     pub(super) suite: &'static Tls12CipherSuite,
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
-    server_cert_sct_list: Option<SCTList>,
+    server_cert_sct_list: Option<Vec<Sct>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -260,7 +260,7 @@ struct ExpectCertificateStatusOrServerKx {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_sct_list: Option<SCTList>,
+    server_cert_sct_list: Option<Vec<Sct>>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }
@@ -334,7 +334,7 @@ struct ExpectCertificateStatus {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_sct_list: Option<SCTList>,
+    server_cert_sct_list: Option<Vec<Sct>>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }

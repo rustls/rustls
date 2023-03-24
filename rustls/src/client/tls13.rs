@@ -17,10 +17,9 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::KeyUpdateRequest;
-use crate::msgs::handshake::ClientExtension;
-use crate::msgs::handshake::EncryptedExtensions;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
+use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
@@ -314,7 +313,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
 fn validate_encrypted_extensions(
     common: &mut CommonState,
     hello: &ClientHelloDetails,
-    exts: &EncryptedExtensions,
+    exts: &Vec<ServerExtension>,
 ) -> Result<(), Error> {
     if exts.has_duplicate_extension() {
         common.send_fatal_alert(AlertDescription::DecodeError);
@@ -604,7 +603,9 @@ impl State<ClientConnectionData> for ExpectCertificate {
         let server_cert = ServerCertDetails::new(
             cert_chain.convert(),
             cert_chain.get_end_entity_ocsp(),
-            cert_chain.get_end_entity_scts(),
+            cert_chain
+                .get_end_entity_scts()
+                .map(|scts| scts.to_vec()),
         );
 
         if let Some(sct_list) = server_cert.scts.as_ref() {

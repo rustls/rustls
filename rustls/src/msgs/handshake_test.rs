@@ -11,12 +11,11 @@ use crate::msgs::handshake::{
     CertificateRequestPayload, CertificateRequestPayloadTLS13, CertificateStatus,
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
     ConvertProtocolNameList, ConvertServerNameList, DistinguishedName, ECDHEServerKeyExchange,
-    ECParameters, EncryptedExtensions, HandshakeMessagePayload, HandshakePayload,
-    HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
-    NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTLS13,
-    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, Sct,
-    ServerECDHParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionID,
-    UnknownExtension,
+    ECParameters, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
+    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
+    NewSessionTicketPayload, NewSessionTicketPayloadTLS13, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, Sct, ServerECDHParams,
+    ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionID, UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
 
@@ -885,7 +884,7 @@ fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTLS13 {
     }
 }
 
-fn get_sample_encryptedextensions() -> EncryptedExtensions {
+fn get_sample_encryptedextensions() -> Vec<ServerExtension> {
     get_sample_serverhellopayload().extensions
 }
 
