@@ -104,8 +104,12 @@ impl RootCertStore {
     /// Add a single DER-encoded certificate to the store.
     ///
     /// This is suitable for a small set of root certificates that are expected to parse
-    /// successfully. If you're adding a larger collection of certificates, for instance from
-    /// a system root store, prefer [`RootCertStore::add_parsable_certificates`].
+    /// successfully. For large collections of roots (for example from a system store) it
+    /// is expected that some of them might not be valid according to the rules rustls
+    /// implements. As long as a relatively limited number of certificates are affected,
+    /// this should not be a cause for concern. Use [`RootCertStore::add_parsable_certificates`]
+    /// in order to add as many valid roots as possible and to understand how many certificates
+    /// have been diagnosed as malformed.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), Error> {
         let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)
             .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
