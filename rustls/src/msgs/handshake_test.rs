@@ -288,7 +288,7 @@ fn can_roundtrip_psk_offer() {
     assert_eq!(psko.identities[0].identity.0, vec![0x99]);
     assert_eq!(psko.identities[0].obfuscated_ticket_age, 0x11223344);
     assert_eq!(psko.binders.len(), 1);
-    assert_eq!(psko.binders[0].0, vec![1, 2, 3]);
+    assert_eq!(psko.binders[0].as_ref(), &[1, 2, 3]);
     assert_eq!(psko.get_encoding(), bytes.to_vec());
 }
 
@@ -383,8 +383,8 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
                     PresharedKeyIdentity::new(vec![6, 7, 8], 7891011),
                 ],
                 binders: vec![
-                    PresharedKeyBinder::new(vec![1, 2, 3]),
-                    PresharedKeyBinder::new(vec![3, 4, 5]),
+                    PresharedKeyBinder::from(vec![1, 2, 3]),
+                    PresharedKeyBinder::from(vec![3, 4, 5]),
                 ],
             }),
             ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
@@ -426,7 +426,7 @@ fn client_has_duplicate_extensions_works() {
 fn test_truncated_psk_offer() {
     let ext = ClientExtension::PresharedKey(PresharedKeyOffer {
         identities: vec![PresharedKeyIdentity::new(vec![3, 4, 5], 123456)],
-        binders: vec![PresharedKeyBinder::new(vec![1, 2, 3])],
+        binders: vec![PresharedKeyBinder::from(vec![1, 2, 3])],
     });
 
     let mut enc = ext.get_encoding();
