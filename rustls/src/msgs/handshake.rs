@@ -84,7 +84,6 @@ macro_rules! wrapped_payload(
   }
 );
 
-declare_u16_vec!(VecU16OfPayloadU8, PayloadU8);
 declare_u16_vec!(VecU16OfPayloadU16, PayloadU16);
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -346,7 +345,9 @@ impl ConvertServerNameList for ServerNameRequest {
     }
 }
 
-pub type ProtocolNameList = VecU16OfPayloadU8;
+wrapped_payload!(ProtocolName, PayloadU8,);
+
+declare_u16_vec!(ProtocolNameList, ProtocolName);
 
 pub trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
@@ -359,7 +360,7 @@ impl ConvertProtocolNameList for ProtocolNameList {
         let mut ret = Self::new();
 
         for name in names {
-            ret.push(PayloadU8::new(name.to_vec()));
+            ret.push(ProtocolName::from(name.to_vec()));
         }
 
         ret
@@ -367,13 +368,13 @@ impl ConvertProtocolNameList for ProtocolNameList {
 
     fn to_slices(&self) -> Vec<&[u8]> {
         self.iter()
-            .map(|proto| -> &[u8] { &proto.0 })
+            .map(|proto| proto.as_ref())
             .collect::<Vec<&[u8]>>()
     }
 
     fn as_single_slice(&self) -> Option<&[u8]> {
         if self.len() == 1 {
-            Some(&self[0].0)
+            Some(self[0].as_ref())
         } else {
             None
         }

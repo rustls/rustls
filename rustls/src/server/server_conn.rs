@@ -6,8 +6,8 @@ use crate::error::Error;
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
-use crate::msgs::base::{Payload, PayloadU8};
-use crate::msgs::handshake::{ClientHelloPayload, ServerExtension};
+use crate::msgs::base::Payload;
+use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
 use crate::sign;
 use crate::suites::SupportedCipherSuite;
@@ -109,7 +109,7 @@ pub trait ResolvesServerCert: Send + Sync {
 pub struct ClientHello<'a> {
     server_name: &'a Option<webpki::DnsName>,
     signature_schemes: &'a [SignatureScheme],
-    alpn: Option<&'a Vec<PayloadU8>>,
+    alpn: Option<&'a Vec<ProtocolName>>,
     cipher_suites: &'a [CipherSuite],
 }
 
@@ -118,7 +118,7 @@ impl<'a> ClientHello<'a> {
     pub(super) fn new(
         server_name: &'a Option<webpki::DnsName>,
         signature_schemes: &'a [SignatureScheme],
-        alpn: Option<&'a Vec<PayloadU8>>,
+        alpn: Option<&'a Vec<ProtocolName>>,
         cipher_suites: &'a [CipherSuite],
     ) -> Self {
         trace!("sni {:?}", server_name);
@@ -171,7 +171,7 @@ impl<'a> ClientHello<'a> {
         self.alpn.map(|protocols| {
             protocols
                 .iter()
-                .map(|proto| proto.0.as_slice())
+                .map(|proto| proto.as_ref())
         })
     }
 
