@@ -94,7 +94,7 @@ impl ClientAuthDetails {
             .map(Vec::as_slice)
             .unwrap_or_default()
             .iter()
-            .map(|p| p.0.as_slice())
+            .map(|p| p.as_ref())
             .collect::<Vec<&[u8]>>();
 
         if let Some(certkey) = resolver.resolve(&acceptable_issuers, sigschemes) {

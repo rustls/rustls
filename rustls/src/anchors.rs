@@ -95,7 +95,7 @@ impl RootCertStore {
             let mut name = Vec::new();
             name.extend_from_slice(&ota.subject);
             x509::wrap_in_sequence(&mut name);
-            r.push(DistinguishedName::new(name));
+            r.push(DistinguishedName::from(name));
         }
 
         r

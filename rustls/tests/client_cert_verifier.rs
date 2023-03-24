@@ -11,7 +11,7 @@ use crate::common::{
     ALL_KEY_TYPES,
 };
 use rustls::client::WebPkiVerifier;
-use rustls::internal::msgs::base::PayloadU16;
+use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
     AlertDescription, Certificate, ClientConnection, DistinguishedNames, Error, InvalidMessage,
@@ -55,7 +55,7 @@ fn client_verifier_works() {
                 get_client_root_store(*kt)
                     .roots
                     .iter()
-                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .map(|r| DistinguishedName::from(r.subject().to_vec()))
                     .collect(),
             ),
             mandatory: Some(true),
@@ -85,7 +85,7 @@ fn client_verifier_no_schemes() {
                 get_client_root_store(*kt)
                     .roots
                     .iter()
-                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .map(|r| DistinguishedName::from(r.subject().to_vec()))
                     .collect(),
             ),
             mandatory: Some(true),
@@ -186,7 +186,7 @@ fn client_verifier_no_auth_yes_root() {
                 get_client_root_store(*kt)
                     .roots
                     .iter()
-                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .map(|r| DistinguishedName::from(r.subject().to_vec()))
                     .collect(),
             ),
             mandatory: Some(true),
@@ -225,7 +225,7 @@ fn client_verifier_fails_properly() {
                 get_client_root_store(*kt)
                     .roots
                     .iter()
-                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .map(|r| DistinguishedName::from(r.subject().to_vec()))
                     .collect(),
             ),
             mandatory: Some(true),
@@ -259,7 +259,7 @@ fn client_verifier_must_determine_client_auth_requirement_to_continue() {
                 get_client_root_store(*kt)
                     .roots
                     .iter()
-                    .map(|r| PayloadU16(r.subject().to_vec()))
+                    .map(|r| DistinguishedName::from(r.subject().to_vec()))
                     .collect(),
             ),
             mandatory: None,
