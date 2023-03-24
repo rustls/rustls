@@ -478,7 +478,9 @@ impl Codec for PresharedKeyOffer {
 }
 
 // --- RFC6066 certificate status request ---
-type ResponderIDs = VecU16OfPayloadU16;
+wrapped_payload!(ResponderId, PayloadU16,);
+
+declare_u16_vec!(ResponderIDs, ResponderId);
 
 #[derive(Clone, Debug)]
 pub struct OCSPCertificateStatusRequest {
