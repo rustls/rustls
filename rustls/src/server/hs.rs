@@ -515,10 +515,9 @@ pub(super) fn process_client_hello<'a>(
                 cx.common,
                 PeerIncompatible::SignatureAlgorithmsExtensionRequired,
             )
-        })?
-        .clone();
+        })?;
 
-    Ok((client_hello, sig_schemes))
+    Ok((client_hello, sig_schemes.to_owned()))
 }
 
 #[allow(clippy::large_enum_variant)]

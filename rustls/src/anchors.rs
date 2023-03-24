@@ -1,7 +1,7 @@
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::handshake::{DistinguishedName, DistinguishedNames};
+use crate::msgs::handshake::DistinguishedName;
 use crate::x509;
 use crate::{CertificateError, Error};
 
@@ -88,8 +88,8 @@ impl RootCertStore {
 
     /// Return the Subject Names for certificates in the container.
     #[deprecated(since = "0.20.7", note = "Use OwnedTrustAnchor::subject() instead")]
-    pub fn subjects(&self) -> DistinguishedNames {
-        let mut r = DistinguishedNames::new();
+    pub fn subjects(&self) -> Vec<DistinguishedName> {
+        let mut r = Vec::new();
 
         for ota in &self.roots {
             let mut name = Vec::new();

@@ -14,8 +14,8 @@ use rustls::client::WebPkiVerifier;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
-    AlertDescription, Certificate, ClientConnection, DistinguishedNames, Error, InvalidMessage,
-    ServerConfig, ServerConnection, SignatureScheme,
+    AlertDescription, Certificate, ClientConnection, Error, InvalidMessage, ServerConfig,
+    ServerConnection, SignatureScheme,
 };
 use std::sync::Arc;
 
@@ -290,7 +290,7 @@ fn client_verifier_must_determine_client_auth_requirement_to_continue() {
 
 pub struct MockClientVerifier {
     pub verified: fn() -> Result<ClientCertVerified, Error>,
-    pub subjects: Option<DistinguishedNames>,
+    pub subjects: Option<Vec<DistinguishedName>>,
     pub mandatory: Option<bool>,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
 }
@@ -300,7 +300,7 @@ impl ClientCertVerifier for MockClientVerifier {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(&self) -> Option<DistinguishedNames> {
+    fn client_auth_root_subjects(&self) -> Option<Vec<DistinguishedName>> {
         self.subjects.as_ref().cloned()
     }
 

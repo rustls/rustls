@@ -16,18 +16,6 @@ use crate::verify::DigitallySignedStruct;
 use std::collections;
 use std::fmt;
 
-macro_rules! declare_u8_vec(
-  ($name:ident, $itemtype:ty) => {
-    pub type $name = Vec<$itemtype>;
-  }
-);
-
-macro_rules! declare_u16_vec(
-  ($name:ident, $itemtype:ty) => {
-    pub type $name = Vec<$itemtype>;
-  }
-);
-
 /// Create a newtype wrapper around a given type.
 ///
 /// This is used to create newtypes for the various TLS message types which is used to wrap
@@ -207,19 +195,13 @@ impl UnknownExtension {
     }
 }
 
-declare_u8_vec!(ECPointFormatList, ECPointFormat);
-
 impl TlsListElement for ECPointFormat {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
 
-declare_u16_vec!(NamedGroups, NamedGroup);
-
 impl TlsListElement for NamedGroup {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
-
-declare_u16_vec!(SupportedSignatureSchemes, SignatureScheme);
 
 impl TlsListElement for SignatureScheme {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -288,8 +270,6 @@ impl Codec for ServerName {
     }
 }
 
-declare_u16_vec!(ServerNameRequest, ServerName);
-
 impl TlsListElement for ServerName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -299,7 +279,7 @@ pub trait ConvertServerNameList {
     fn get_single_hostname(&self) -> Option<webpki::DnsNameRef>;
 }
 
-impl ConvertServerNameList for ServerNameRequest {
+impl ConvertServerNameList for [ServerName] {
     /// RFC6066: "The ServerNameList MUST NOT contain more than one name of the same name_type."
     fn has_duplicate_names_for_type(&self) -> bool {
         let mut seen = collections::HashSet::new();
@@ -334,15 +314,13 @@ impl TlsListElement for ProtocolName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-declare_u16_vec!(ProtocolNameList, ProtocolName);
-
 pub trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
     fn to_slices(&self) -> Vec<&[u8]>;
     fn as_single_slice(&self) -> Option<&[u8]>;
 }
 
-impl ConvertProtocolNameList for ProtocolNameList {
+impl ConvertProtocolNameList for Vec<ProtocolName> {
     fn from_slices(names: &[&[u8]]) -> Self {
         let mut ret = Self::new();
 
@@ -432,11 +410,7 @@ impl TlsListElement for PresharedKeyIdentity {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
-
 wrapped_payload!(PresharedKeyBinder, PayloadU8,);
-
-declare_u16_vec!(PresharedKeyBinders, PresharedKeyBinder);
 
 impl TlsListElement for PresharedKeyBinder {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -444,8 +418,8 @@ impl TlsListElement for PresharedKeyBinder {
 
 #[derive(Clone, Debug)]
 pub struct PresharedKeyOffer {
-    pub identities: PresharedKeyIdentities,
-    pub binders: PresharedKeyBinders,
+    pub identities: Vec<PresharedKeyIdentity>,
+    pub binders: Vec<PresharedKeyBinder>,
 }
 
 impl PresharedKeyOffer {
@@ -466,8 +440,8 @@ impl Codec for PresharedKeyOffer {
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            identities: PresharedKeyIdentities::read(r)?,
-            binders: PresharedKeyBinders::read(r)?,
+            identities: Vec::read(r)?,
+            binders: Vec::read(r)?,
         })
     }
 }
@@ -475,15 +449,13 @@ impl Codec for PresharedKeyOffer {
 // --- RFC6066 certificate status request ---
 wrapped_payload!(ResponderId, PayloadU16,);
 
-declare_u16_vec!(ResponderIDs, ResponderId);
-
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Clone, Debug)]
 pub struct OCSPCertificateStatusRequest {
-    pub responder_ids: ResponderIDs,
+    pub responder_ids: Vec<ResponderId>,
     pub extensions: PayloadU16,
 }
 
@@ -496,7 +468,7 @@ impl Codec for OCSPCertificateStatusRequest {
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            responder_ids: ResponderIDs::read(r)?,
+            responder_ids: Vec::read(r)?,
             extensions: PayloadU16::read(r)?,
         })
     }
@@ -538,7 +510,7 @@ impl Codec for CertificateStatusRequest {
 impl CertificateStatusRequest {
     pub fn build_ocsp() -> Self {
         let ocsp = OCSPCertificateStatusRequest {
-            responder_ids: ResponderIDs::new(),
+            responder_ids: Vec::new(),
             extensions: PayloadU16::empty(),
         };
         Self::OCSP(ocsp)
@@ -554,23 +526,15 @@ impl TlsListElement for Sct {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-declare_u16_vec!(SCTList, Sct);
-
 // ---
-
-declare_u8_vec!(PSKKeyExchangeModes, PSKKeyExchangeMode);
 
 impl TlsListElement for PSKKeyExchangeMode {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
 
-declare_u16_vec!(KeyShareEntries, KeyShareEntry);
-
 impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
-
-declare_u8_vec!(ProtocolVersions, ProtocolVersion);
 
 impl TlsListElement for ProtocolVersion {
     const SIZE_LEN: ListLength = ListLength::U8;
@@ -578,15 +542,15 @@ impl TlsListElement for ProtocolVersion {
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
-    ECPointFormats(ECPointFormatList),
-    NamedGroups(NamedGroups),
-    SignatureAlgorithms(SupportedSignatureSchemes),
-    ServerName(ServerNameRequest),
+    ECPointFormats(Vec<ECPointFormat>),
+    NamedGroups(Vec<NamedGroup>),
+    SignatureAlgorithms(Vec<SignatureScheme>),
+    ServerName(Vec<ServerName>),
     SessionTicket(ClientSessionTicket),
-    Protocols(ProtocolNameList),
-    SupportedVersions(ProtocolVersions),
-    KeyShare(KeyShareEntries),
-    PresharedKeyModes(PSKKeyExchangeModes),
+    Protocols(Vec<ProtocolName>),
+    SupportedVersions(Vec<ProtocolVersion>),
+    KeyShare(Vec<KeyShareEntry>),
+    PresharedKeyModes(Vec<PSKKeyExchangeMode>),
     PresharedKey(PresharedKeyOffer),
     Cookie(PayloadU16),
     ExtendedMasterSecretRequest,
@@ -661,15 +625,10 @@ impl Codec for ClientExtension {
         let mut sub = r.sub(len)?;
 
         let ext = match typ {
-            ExtensionType::ECPointFormats => {
-                Self::ECPointFormats(ECPointFormatList::read(&mut sub)?)
-            }
-            ExtensionType::EllipticCurves => Self::NamedGroups(NamedGroups::read(&mut sub)?),
-            ExtensionType::SignatureAlgorithms => {
-                let schemes = SupportedSignatureSchemes::read(&mut sub)?;
-                Self::SignatureAlgorithms(schemes)
-            }
-            ExtensionType::ServerName => Self::ServerName(ServerNameRequest::read(&mut sub)?),
+            ExtensionType::ECPointFormats => Self::ECPointFormats(Vec::read(&mut sub)?),
+            ExtensionType::EllipticCurves => Self::NamedGroups(Vec::read(&mut sub)?),
+            ExtensionType::SignatureAlgorithms => Self::SignatureAlgorithms(Vec::read(&mut sub)?),
+            ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
                     let contents = Payload::read(&mut sub);
@@ -678,16 +637,10 @@ impl Codec for ClientExtension {
                     Self::SessionTicket(ClientSessionTicket::Request)
                 }
             }
-            ExtensionType::ALProtocolNegotiation => {
-                Self::Protocols(ProtocolNameList::read(&mut sub)?)
-            }
-            ExtensionType::SupportedVersions => {
-                Self::SupportedVersions(ProtocolVersions::read(&mut sub)?)
-            }
-            ExtensionType::KeyShare => Self::KeyShare(KeyShareEntries::read(&mut sub)?),
-            ExtensionType::PSKKeyExchangeModes => {
-                Self::PresharedKeyModes(PSKKeyExchangeModes::read(&mut sub)?)
-            }
+            ExtensionType::ALProtocolNegotiation => Self::Protocols(Vec::read(&mut sub)?),
+            ExtensionType::SupportedVersions => Self::SupportedVersions(Vec::read(&mut sub)?),
+            ExtensionType::KeyShare => Self::KeyShare(Vec::read(&mut sub)?),
+            ExtensionType::PSKKeyExchangeModes => Self::PresharedKeyModes(Vec::read(&mut sub)?),
             ExtensionType::PreSharedKey => Self::PresharedKey(PresharedKeyOffer::read(&mut sub)?),
             ExtensionType::Cookie => Self::Cookie(PayloadU16::read(&mut sub)?),
             ExtensionType::ExtendedMasterSecret if !sub.any_left() => {
@@ -746,16 +699,16 @@ pub enum ClientSessionTicket {
 
 #[derive(Clone, Debug)]
 pub enum ServerExtension {
-    ECPointFormats(ECPointFormatList),
+    ECPointFormats(Vec<ECPointFormat>),
     ServerNameAck,
     SessionTicketAck,
     RenegotiationInfo(PayloadU8),
-    Protocols(ProtocolNameList),
+    Protocols(Vec<ProtocolName>),
     KeyShare(KeyShareEntry),
     PresharedKey(u16),
     ExtendedMasterSecretAck,
     CertificateStatusAck,
-    SignedCertificateTimestamp(SCTList),
+    SignedCertificateTimestamp(Vec<Sct>),
     SupportedVersions(ProtocolVersion),
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
@@ -819,23 +772,16 @@ impl Codec for ServerExtension {
         let mut sub = r.sub(len)?;
 
         let ext = match typ {
-            ExtensionType::ECPointFormats => {
-                Self::ECPointFormats(ECPointFormatList::read(&mut sub)?)
-            }
+            ExtensionType::ECPointFormats => Self::ECPointFormats(Vec::read(&mut sub)?),
             ExtensionType::ServerName => Self::ServerNameAck,
             ExtensionType::SessionTicket => Self::SessionTicketAck,
             ExtensionType::StatusRequest => Self::CertificateStatusAck,
             ExtensionType::RenegotiationInfo => Self::RenegotiationInfo(PayloadU8::read(&mut sub)?),
-            ExtensionType::ALProtocolNegotiation => {
-                Self::Protocols(ProtocolNameList::read(&mut sub)?)
-            }
+            ExtensionType::ALProtocolNegotiation => Self::Protocols(Vec::read(&mut sub)?),
             ExtensionType::KeyShare => Self::KeyShare(KeyShareEntry::read(&mut sub)?),
             ExtensionType::PreSharedKey => Self::PresharedKey(u16::read(&mut sub)?),
             ExtensionType::ExtendedMasterSecret => Self::ExtendedMasterSecretAck,
-            ExtensionType::SCT => {
-                let scts = SCTList::read(&mut sub)?;
-                Self::SignedCertificateTimestamp(scts)
-            }
+            ExtensionType::SCT => Self::SignedCertificateTimestamp(Vec::read(&mut sub)?),
             ExtensionType::SupportedVersions => {
                 Self::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
@@ -854,7 +800,7 @@ impl Codec for ServerExtension {
 
 impl ServerExtension {
     pub fn make_alpn(proto: &[&[u8]]) -> Self {
-        Self::Protocols(ProtocolNameList::from_slices(proto))
+        Self::Protocols(Vec::from_slices(proto))
     }
 
     pub fn make_empty_renegotiation_info() -> Self {
@@ -863,7 +809,7 @@ impl ServerExtension {
     }
 
     pub fn make_sct(sctl: Vec<u8>) -> Self {
-        let scts = SCTList::read_bytes(&sctl).expect("invalid SCT list");
+        let scts = Vec::read_bytes(&sctl).expect("invalid SCT list");
         Self::SignedCertificateTimestamp(scts)
     }
 }
@@ -949,7 +895,7 @@ impl ClientHelloPayload {
             .find(|x| x.get_type() == ext)
     }
 
-    pub fn get_sni_extension(&self) -> Option<&ServerNameRequest> {
+    pub fn get_sni_extension(&self) -> Option<&[ServerName]> {
         let ext = self.find_extension(ExtensionType::ServerName)?;
         match *ext {
             ClientExtension::ServerName(ref req) => Some(req),
@@ -957,7 +903,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_sigalgs_extension(&self) -> Option<&SupportedSignatureSchemes> {
+    pub fn get_sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
         let ext = self.find_extension(ExtensionType::SignatureAlgorithms)?;
         match *ext {
             ClientExtension::SignatureAlgorithms(ref req) => Some(req),
@@ -965,7 +911,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_namedgroups_extension(&self) -> Option<&NamedGroups> {
+    pub fn get_namedgroups_extension(&self) -> Option<&[NamedGroup]> {
         let ext = self.find_extension(ExtensionType::EllipticCurves)?;
         match *ext {
             ClientExtension::NamedGroups(ref req) => Some(req),
@@ -973,7 +919,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_ecpoints_extension(&self) -> Option<&ECPointFormatList> {
+    pub fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ClientExtension::ECPointFormats(ref req) => Some(req),
@@ -981,7 +927,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_alpn_extension(&self) -> Option<&ProtocolNameList> {
+    pub fn get_alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
             ClientExtension::Protocols(ref req) => Some(req),
@@ -1004,7 +950,7 @@ impl ClientHelloPayload {
         self.find_extension(ExtensionType::SessionTicket)
     }
 
-    pub fn get_versions_extension(&self) -> Option<&ProtocolVersions> {
+    pub fn get_versions_extension(&self) -> Option<&[ProtocolVersion]> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             ClientExtension::SupportedVersions(ref vers) => Some(vers),
@@ -1012,7 +958,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_keyshare_extension(&self) -> Option<&KeyShareEntries> {
+    pub fn get_keyshare_extension(&self) -> Option<&[KeyShareEntry]> {
         let ext = self.find_extension(ExtensionType::KeyShare)?;
         match *ext {
             ClientExtension::KeyShare(ref shares) => Some(shares),
@@ -1050,7 +996,7 @@ impl ClientHelloPayload {
             .map_or(false, |ext| ext.get_type() == ExtensionType::PreSharedKey)
     }
 
-    pub fn get_psk_modes(&self) -> Option<&PSKKeyExchangeModes> {
+    pub fn get_psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
         let ext = self.find_extension(ExtensionType::PSKKeyExchangeModes)?;
         match *ext {
             ClientExtension::PresharedKeyModes(ref psk_modes) => Some(psk_modes),
@@ -1306,7 +1252,7 @@ impl ServerHelloPayload {
         }
     }
 
-    pub fn get_ecpoints_extension(&self) -> Option<&ECPointFormatList> {
+    pub fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ServerExtension::ECPointFormats(ref fmts) => Some(fmts),
@@ -1319,7 +1265,7 @@ impl ServerHelloPayload {
             .is_some()
     }
 
-    pub fn get_sct_list(&self) -> Option<&SCTList> {
+    pub fn get_sct_list(&self) -> Option<&[Sct]> {
         let ext = self.find_extension(ExtensionType::SCT)?;
         match *ext {
             ServerExtension::SignedCertificateTimestamp(ref sctl) => Some(sctl),
@@ -1349,7 +1295,7 @@ impl TlsListElement for key::Certificate {
 #[derive(Debug)]
 pub enum CertificateExtension {
     CertificateStatus(CertificateStatus),
-    SignedCertificateTimestamp(SCTList),
+    SignedCertificateTimestamp(Vec<Sct>),
     Unknown(UnknownExtension),
 }
 
@@ -1363,7 +1309,7 @@ impl CertificateExtension {
     }
 
     pub fn make_sct(sct_list: Vec<u8>) -> Self {
-        let sctl = SCTList::read_bytes(&sct_list).expect("invalid SCT list");
+        let sctl = Vec::read_bytes(&sct_list).expect("invalid SCT list");
         Self::SignedCertificateTimestamp(sctl)
     }
 
@@ -1374,7 +1320,7 @@ impl CertificateExtension {
         }
     }
 
-    pub fn get_sct_list(&self) -> Option<&SCTList> {
+    pub fn get_sct_list(&self) -> Option<&[Sct]> {
         match *self {
             Self::SignedCertificateTimestamp(ref sctl) => Some(sctl),
             _ => None,
@@ -1407,10 +1353,7 @@ impl Codec for CertificateExtension {
                 let st = CertificateStatus::read(&mut sub)?;
                 Self::CertificateStatus(st)
             }
-            ExtensionType::SCT => {
-                let scts = SCTList::read(&mut sub)?;
-                Self::SignedCertificateTimestamp(scts)
-            }
+            ExtensionType::SCT => Self::SignedCertificateTimestamp(Vec::read(&mut sub)?),
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -1419,8 +1362,6 @@ impl Codec for CertificateExtension {
     }
 }
 
-declare_u16_vec!(CertificateExtensions, CertificateExtension);
-
 impl TlsListElement for CertificateExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -1428,7 +1369,7 @@ impl TlsListElement for CertificateExtension {
 #[derive(Debug)]
 pub struct CertificateEntry {
     pub cert: key::Certificate,
-    pub exts: CertificateExtensions,
+    pub exts: Vec<CertificateExtension>,
 }
 
 impl Codec for CertificateEntry {
@@ -1440,7 +1381,7 @@ impl Codec for CertificateEntry {
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         Ok(Self {
             cert: key::Certificate::read(r)?,
-            exts: CertificateExtensions::read(r)?,
+            exts: Vec::read(r)?,
         })
     }
 }
@@ -1481,7 +1422,7 @@ impl CertificateEntry {
             .and_then(CertificateExtension::get_cert_status)
     }
 
-    pub fn get_scts(&self) -> Option<&SCTList> {
+    pub fn get_scts(&self) -> Option<&[Sct]> {
         self.exts
             .iter()
             .find(|ext| ext.get_type() == ExtensionType::SCT)
@@ -1559,11 +1500,10 @@ impl CertificatePayloadTLS13 {
             .unwrap_or_default()
     }
 
-    pub fn get_end_entity_scts(&self) -> Option<SCTList> {
+    pub fn get_end_entity_scts(&self) -> Option<&[Sct]> {
         self.entries
             .first()
             .and_then(CertificateEntry::get_scts)
-            .cloned()
     }
 
     pub fn convert(&self) -> CertificatePayload {
@@ -1727,7 +1667,6 @@ impl ServerKeyExchangePayload {
 }
 
 // -- EncryptedExtensions (TLS1.3 only) --
-declare_u16_vec!(EncryptedExtensions, ServerExtension);
 
 impl TlsListElement for ServerExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -1784,14 +1723,11 @@ pub trait HasServerExtensions {
     }
 }
 
-impl HasServerExtensions for EncryptedExtensions {
+impl HasServerExtensions for Vec<ServerExtension> {
     fn get_extensions(&self) -> &[ServerExtension] {
         self
     }
 }
-
-// -- CertificateRequest and sundries --
-declare_u8_vec!(ClientCertificateTypes, ClientCertificateType);
 
 impl TlsListElement for ClientCertificateType {
     const SIZE_LEN: ListLength = ListLength::U8;
@@ -1818,12 +1754,10 @@ impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-declare_u16_vec!(DistinguishedNames, DistinguishedName);
-
 #[derive(Debug)]
 pub struct CertificateRequestPayload {
-    pub certtypes: ClientCertificateTypes,
-    pub sigschemes: SupportedSignatureSchemes,
+    pub certtypes: Vec<ClientCertificateType>,
+    pub sigschemes: Vec<SignatureScheme>,
     pub canames: Vec<DistinguishedName>,
 }
 
@@ -1835,9 +1769,9 @@ impl Codec for CertificateRequestPayload {
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let certtypes = ClientCertificateTypes::read(r)?;
-        let sigschemes = SupportedSignatureSchemes::read(r)?;
-        let canames = DistinguishedNames::read(r)?;
+        let certtypes = Vec::read(r)?;
+        let sigschemes = Vec::read(r)?;
+        let canames = Vec::read(r)?;
 
         if sigschemes.is_empty() {
             warn!("meaningless CertificateRequest message");
@@ -1854,8 +1788,8 @@ impl Codec for CertificateRequestPayload {
 
 #[derive(Debug)]
 pub enum CertReqExtension {
-    SignatureAlgorithms(SupportedSignatureSchemes),
-    AuthorityNames(DistinguishedNames),
+    SignatureAlgorithms(Vec<SignatureScheme>),
+    AuthorityNames(Vec<DistinguishedName>),
     Unknown(UnknownExtension),
 }
 
@@ -1891,14 +1825,14 @@ impl Codec for CertReqExtension {
 
         let ext = match typ {
             ExtensionType::SignatureAlgorithms => {
-                let schemes = SupportedSignatureSchemes::read(&mut sub)?;
+                let schemes = Vec::read(&mut sub)?;
                 if schemes.is_empty() {
                     return Err(InvalidMessage::NoSignatureSchemes);
                 }
                 Self::SignatureAlgorithms(schemes)
             }
             ExtensionType::CertificateAuthorities => {
-                let cas = DistinguishedNames::read(&mut sub)?;
+                let cas = Vec::read(&mut sub)?;
                 Self::AuthorityNames(cas)
             }
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
@@ -1909,8 +1843,6 @@ impl Codec for CertReqExtension {
     }
 }
 
-declare_u16_vec!(CertReqExtensions, CertReqExtension);
-
 impl TlsListElement for CertReqExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -1918,7 +1850,7 @@ impl TlsListElement for CertReqExtension {
 #[derive(Debug)]
 pub struct CertificateRequestPayloadTLS13 {
     pub context: PayloadU8,
-    pub extensions: CertReqExtensions,
+    pub extensions: Vec<CertReqExtension>,
 }
 
 impl Codec for CertificateRequestPayloadTLS13 {
@@ -1929,7 +1861,7 @@ impl Codec for CertificateRequestPayloadTLS13 {
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let context = PayloadU8::read(r)?;
-        let extensions = CertReqExtensions::read(r)?;
+        let extensions = Vec::read(r)?;
 
         Ok(Self {
             context,
@@ -1945,7 +1877,7 @@ impl CertificateRequestPayloadTLS13 {
             .find(|x| x.get_type() == ext)
     }
 
-    pub fn get_sigalgs_extension(&self) -> Option<&SupportedSignatureSchemes> {
+    pub fn get_sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
         let ext = self.find_extension(ExtensionType::SignatureAlgorithms)?;
         match *ext {
             CertReqExtension::SignatureAlgorithms(ref sa) => Some(sa),
@@ -1953,7 +1885,7 @@ impl CertificateRequestPayloadTLS13 {
         }
     }
 
-    pub fn get_authorities_extension(&self) -> Option<&DistinguishedNames> {
+    pub fn get_authorities_extension(&self) -> Option<&[DistinguishedName]> {
         let ext = self.find_extension(ExtensionType::CertificateAuthorities)?;
         match *ext {
             CertReqExtension::AuthorityNames(ref an) => Some(an),
@@ -2040,8 +1972,6 @@ impl Codec for NewSessionTicketExtension {
     }
 }
 
-declare_u16_vec!(NewSessionTicketExtensions, NewSessionTicketExtension);
-
 impl TlsListElement for NewSessionTicketExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -2052,7 +1982,7 @@ pub struct NewSessionTicketPayloadTLS13 {
     pub age_add: u32,
     pub nonce: PayloadU8,
     pub ticket: PayloadU16,
-    pub exts: NewSessionTicketExtensions,
+    pub exts: Vec<NewSessionTicketExtension>,
 }
 
 impl NewSessionTicketPayloadTLS13 {
@@ -2110,7 +2040,7 @@ impl Codec for NewSessionTicketPayloadTLS13 {
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
         let ticket = PayloadU16::read(r)?;
-        let exts = NewSessionTicketExtensions::read(r)?;
+        let exts = Vec::read(r)?;
 
         Ok(Self {
             lifetime,
@@ -2177,7 +2107,7 @@ pub enum HandshakePayload {
     ClientKeyExchange(Payload),
     NewSessionTicket(NewSessionTicketPayload),
     NewSessionTicketTLS13(NewSessionTicketPayloadTLS13),
-    EncryptedExtensions(EncryptedExtensions),
+    EncryptedExtensions(Vec<ServerExtension>),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload),
     CertificateStatus(CertificateStatus),
@@ -2304,7 +2234,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::NewSessionTicket(p)
             }
             HandshakeType::EncryptedExtensions => {
-                HandshakePayload::EncryptedExtensions(EncryptedExtensions::read(&mut sub)?)
+                HandshakePayload::EncryptedExtensions(Vec::read(&mut sub)?)
             }
             HandshakeType::KeyUpdate => {
                 HandshakePayload::KeyUpdate(KeyUpdateRequest::read(&mut sub)?)

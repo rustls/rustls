@@ -12,10 +12,10 @@ use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, SCTList};
+use crate::msgs::handshake::ConvertProtocolNameList;
+use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, Sct};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::handshake::{ConvertProtocolNameList, ProtocolNameList};
 use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{Random, SessionID};
 use crate::msgs::message::{Message, MessagePayload};
@@ -267,7 +267,7 @@ fn emit_client_hello_for_retry(
     }
 
     if !config.alpn_protocols.is_empty() {
-        exts.push(ClientExtension::Protocols(ProtocolNameList::from_slices(
+        exts.push(ClientExtension::Protocols(Vec::from_slices(
             &config
                 .alpn_protocols
                 .iter()
@@ -458,7 +458,7 @@ pub(super) fn process_alpn_protocol(
     Ok(())
 }
 
-pub(super) fn sct_list_is_invalid(scts: &SCTList) -> bool {
+pub(super) fn sct_list_is_invalid(scts: &[Sct]) -> bool {
     scts.is_empty()
         || scts
             .iter()
