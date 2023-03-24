@@ -1,8 +1,6 @@
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::handshake::DistinguishedName;
-use crate::x509;
 use crate::{CertificateError, Error};
 
 /// A trust anchor, commonly known as a "Root Certificate."
@@ -84,21 +82,6 @@ impl RootCertStore {
     /// Say how many certificates are in the container.
     pub fn len(&self) -> usize {
         self.roots.len()
-    }
-
-    /// Return the Subject Names for certificates in the container.
-    #[deprecated(since = "0.20.7", note = "Use OwnedTrustAnchor::subject() instead")]
-    pub fn subjects(&self) -> Vec<DistinguishedName> {
-        let mut r = Vec::new();
-
-        for ota in &self.roots {
-            let mut name = Vec::new();
-            name.extend_from_slice(&ota.subject);
-            x509::wrap_in_sequence(&mut name);
-            r.push(DistinguishedName::from(name));
-        }
-
-        r
     }
 
     /// Add a single DER-encoded certificate to the store.
