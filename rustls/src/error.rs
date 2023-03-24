@@ -1,5 +1,4 @@
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
-use crate::msgs::enums::{CertificateStatusType, ECCurveType, KeyUpdateRequest};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::rand;
 
@@ -106,7 +105,7 @@ pub enum InvalidMessage {
     /// An unknown content type was encountered during message decoding.
     InvalidContentType,
     /// A peer sent an invalid certificate status type
-    InvalidCertificateStatusType(CertificateStatusType),
+    InvalidCertificateStatusType,
     /// Context was incorrectly attached to a certificate request during a handshake.
     InvalidCertRequest,
     /// A peer's DH params could not be decoded
@@ -114,7 +113,7 @@ pub enum InvalidMessage {
     /// A message was zero-length when its record kind forbids it.
     InvalidEmptyPayload,
     /// A peer sent an unexpected key update request.
-    InvalidKeyUpdate(KeyUpdateRequest),
+    InvalidKeyUpdate,
     /// A peer's server name could not be decoded
     InvalidServerName,
     /// A TLS message payload was larger then allowed by the specification.
@@ -136,7 +135,7 @@ pub enum InvalidMessage {
     /// A peer sent a non-null compression method.
     UnsupportedCompression,
     /// A peer sent an unknown elliptic curve type.
-    UnsupportedCurve(ECCurveType),
+    UnsupportedCurveType,
     /// A peer sent an unsupported key exchange algorithm.
     UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
 }
