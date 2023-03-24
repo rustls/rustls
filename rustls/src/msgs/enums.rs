@@ -210,6 +210,10 @@ enum_builder! {
     }
 }
 
+impl ECPointFormat {
+    pub const SUPPORTED: [ECPointFormat; 1] = [ECPointFormat::Uncompressed];
+}
+
 enum_builder! {
     /// The `HeartbeatMode` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.

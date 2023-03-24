@@ -198,16 +198,6 @@ impl UnknownExtension {
 
 declare_u8_vec!(ECPointFormatList, ECPointFormat);
 
-pub trait SupportedPointFormats {
-    fn supported() -> ECPointFormatList;
-}
-
-impl SupportedPointFormats for ECPointFormatList {
-    fn supported() -> ECPointFormatList {
-        vec![ECPointFormat::Uncompressed]
-    }
-}
-
 declare_u16_vec!(NamedGroups, NamedGroup);
 
 declare_u16_vec!(SupportedSignatureSchemes, SignatureScheme);
