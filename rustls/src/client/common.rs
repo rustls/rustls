@@ -34,7 +34,7 @@ impl ServerCertDetails {
             .as_deref()
             .unwrap_or(&[])
             .iter()
-            .map(|payload| payload.0.as_slice())
+            .map(|payload| payload.as_ref())
     }
 }
 

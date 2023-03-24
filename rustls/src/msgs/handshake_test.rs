@@ -14,7 +14,7 @@ use crate::msgs::handshake::{
     ECParameters, ECPointFormatList, EncryptedExtensions, HandshakeMessagePayload,
     HandshakePayload, HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
     NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTLS13,
-    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, Sct,
     ServerECDHParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionID,
     SupportedPointFormats, UnknownExtension,
 };
@@ -769,7 +769,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
             ServerExtension::PresharedKey(3),
             ServerExtension::ExtendedMasterSecretAck,
             ServerExtension::CertificateStatusAck,
-            ServerExtension::SignedCertificateTimestamp(vec![PayloadU16(vec![0])]),
+            ServerExtension::SignedCertificateTimestamp(vec![Sct::from(vec![0])]),
             ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             ServerExtension::TransportParameters(vec![1, 2, 3]),
             ServerExtension::Unknown(UnknownExtension {
@@ -816,7 +816,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
                 CertificateExtension::CertificateStatus(CertificateStatus {
                     ocsp_response: PayloadU24(vec![1, 2, 3]),
                 }),
-                CertificateExtension::SignedCertificateTimestamp(vec![PayloadU16(vec![0])]),
+                CertificateExtension::SignedCertificateTimestamp(vec![Sct::from(vec![0])]),
                 CertificateExtension::Unknown(UnknownExtension {
                     typ: ExtensionType::Unknown(12345),
                     payload: Payload(vec![1, 2, 3]),
