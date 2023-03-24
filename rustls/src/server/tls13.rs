@@ -300,7 +300,7 @@ mod client_hello {
                         self.suite,
                         chm,
                         &resume.master_secret.0,
-                        &psk_offer.binders[i].0,
+                        psk_offer.binders[i].as_ref(),
                     ) {
                         cx.common
                             .send_fatal_alert(AlertDescription::DecryptError);

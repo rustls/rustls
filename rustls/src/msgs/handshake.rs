@@ -441,8 +441,10 @@ impl Codec for PresharedKeyIdentity {
 }
 
 declare_u16_vec!(PresharedKeyIdentities, PresharedKeyIdentity);
-pub type PresharedKeyBinder = PayloadU8;
-pub type PresharedKeyBinders = VecU16OfPayloadU8;
+
+wrapped_payload!(PresharedKeyBinder, PayloadU8,);
+
+declare_u16_vec!(PresharedKeyBinders, PresharedKeyBinder);
 
 #[derive(Clone, Debug)]
 pub struct PresharedKeyOffer {
@@ -455,7 +457,7 @@ impl PresharedKeyOffer {
     pub fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> Self {
         Self {
             identities: vec![id],
-            binders: vec![PresharedKeyBinder::new(binder)],
+            binders: vec![PresharedKeyBinder::from(binder)],
         }
     }
 }
@@ -1031,7 +1033,7 @@ impl ClientHelloPayload {
     pub fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
         let last_extension = self.extensions.last_mut();
         if let Some(ClientExtension::PresharedKey(ref mut offer)) = last_extension {
-            offer.binders[0] = PresharedKeyBinder::new(binder.into());
+            offer.binders[0] = PresharedKeyBinder::from(binder.into());
         }
     }
 
