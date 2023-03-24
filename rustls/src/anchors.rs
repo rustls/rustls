@@ -102,6 +102,10 @@ impl RootCertStore {
     }
 
     /// Add a single DER-encoded certificate to the store.
+    ///
+    /// This is suitable for a small set of root certificates that are expected to parse
+    /// successfully. If you're adding a larger collection of certificates, for instance from
+    /// a system root store, prefer [`RootCertStore::add_parsable_certificates`].
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), Error> {
         let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)
             .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
