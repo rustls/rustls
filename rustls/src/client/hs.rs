@@ -97,8 +97,6 @@ pub(super) fn start_handshake(
         transcript_buffer.set_client_auth_enabled();
     }
 
-    let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
-
     let mut session_id: Option<SessionID> = None;
     let mut resuming_session = find_session(
         &server_name,
@@ -107,7 +105,7 @@ pub(super) fn start_handshake(
         cx,
     );
 
-    let key_share = if support_tls13 {
+    let key_share = if config.supports_version(ProtocolVersion::TLSv1_3) {
         Some(tls13::initial_key_share(&config, &server_name)?)
     } else {
         None
