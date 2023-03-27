@@ -3353,7 +3353,7 @@ mod test_quic {
         use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
-            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
+            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
         };
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
@@ -3372,7 +3372,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_3,
                 random,
-                session_id: SessionID::random().unwrap(),
+                session_id: SessionId::random().unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![
@@ -3408,7 +3408,7 @@ mod test_quic {
         use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
-            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionID,
+            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
         };
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
@@ -3434,7 +3434,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_2,
                 random: random.clone(),
-                session_id: SessionID::random().unwrap(),
+                session_id: SessionId::random().unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![

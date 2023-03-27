@@ -59,7 +59,7 @@ mod client_hello {
     use crate::msgs::handshake::Random;
     use crate::msgs::handshake::ServerExtension;
     use crate::msgs::handshake::ServerHelloPayload;
-    use crate::msgs::handshake::SessionID;
+    use crate::msgs::handshake::SessionId;
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
     use crate::tls13::key_schedule::{
@@ -234,7 +234,7 @@ mod client_hello {
                             config: self.config,
                             transcript: HandshakeHashOrBuffer::Hash(self.transcript),
                             #[cfg(feature = "tls12")]
-                            session_id: SessionID::empty(),
+                            session_id: SessionId::empty(),
                             #[cfg(feature = "tls12")]
                             using_ems: false,
                             done_retry: true,
@@ -455,7 +455,7 @@ mod client_hello {
         randoms: &ConnectionRandoms,
         suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
-        session_id: &SessionID,
+        session_id: &SessionId,
         share: &KeyShareEntry,
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
@@ -549,7 +549,7 @@ mod client_hello {
     ) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
-            session_id: SessionID::empty(),
+            session_id: SessionId::empty(),
             cipher_suite: suite.common.suite,
             extensions: Vec::new(),
         };
