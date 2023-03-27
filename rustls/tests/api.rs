@@ -31,7 +31,7 @@ fn alpn_test_error(
     server_protos: Vec<Vec<u8>>,
     client_protos: Vec<Vec<u8>>,
     agreed: Option<&[u8]>,
-    expected_error: impl Fn() -> Option<ErrorFromPeer>,
+    expected_error: Option<ErrorFromPeer>,
 ) {
     let mut server_config = make_server_config(KeyType::Rsa);
     server_config.alpn_protocols = server_protos;
@@ -50,12 +50,12 @@ fn alpn_test_error(
         let error = do_handshake_until_error(&mut client, &mut server);
         assert_eq!(client.alpn_protocol(), agreed);
         assert_eq!(server.alpn_protocol(), agreed);
-        assert_debug_eq(error.err(), expected_error());
+        assert_eq!(error.err(), expected_error);
     }
 }
 
 fn alpn_test(server_protos: Vec<Vec<u8>>, client_protos: Vec<Vec<u8>>, agreed: Option<&[u8]>) {
-    alpn_test_error(server_protos, client_protos, agreed, || None)
+    alpn_test_error(server_protos, client_protos, agreed, None)
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn alpn() {
         vec![b"server-proto".to_vec()],
         vec![b"client-proto".to_vec()],
         None,
-        || Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
+        Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
     );
 
     // server chooses preference
@@ -89,7 +89,7 @@ fn alpn() {
         vec![b"PROTO".to_vec()],
         vec![b"proto".to_vec()],
         None,
-        || Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
+        Some(ErrorFromPeer::Server(Error::NoApplicationProtocol)),
     );
 }
 
@@ -185,75 +185,75 @@ fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
 
 #[test]
 fn config_builder_for_client_rejects_empty_kx_groups() {
-    assert_debug_eq(
+    assert_eq!(
         ClientConfig::builder()
             .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
             .err(),
-        Some(Error::General("no kx groups configured".into())),
+        Some(Error::General("no kx groups configured".into()))
     );
 }
 
 #[test]
 fn config_builder_for_client_rejects_empty_cipher_suites() {
-    assert_debug_eq(
+    assert_eq!(
         ClientConfig::builder()
             .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .err(),
-        Some(Error::General("no usable cipher suites configured".into())),
+        Some(Error::General("no usable cipher suites configured".into()))
     );
 }
 
 #[cfg(feature = "tls12")]
 #[test]
 fn config_builder_for_client_rejects_incompatible_cipher_suites() {
-    assert_debug_eq(
+    assert_eq!(
         ClientConfig::builder()
             .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .err(),
-        Some(Error::General("no usable cipher suites configured".into())),
+        Some(Error::General("no usable cipher suites configured".into()))
     );
 }
 
 #[test]
 fn config_builder_for_server_rejects_empty_kx_groups() {
-    assert_debug_eq(
+    assert_eq!(
         ServerConfig::builder()
             .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
             .err(),
-        Some(Error::General("no kx groups configured".into())),
+        Some(Error::General("no kx groups configured".into()))
     );
 }
 
 #[test]
 fn config_builder_for_server_rejects_empty_cipher_suites() {
-    assert_debug_eq(
+    assert_eq!(
         ServerConfig::builder()
             .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .err(),
-        Some(Error::General("no usable cipher suites configured".into())),
+        Some(Error::General("no usable cipher suites configured".into()))
     );
 }
 
 #[cfg(feature = "tls12")]
 #[test]
 fn config_builder_for_server_rejects_incompatible_cipher_suites() {
-    assert_debug_eq(
+    assert_eq!(
         ServerConfig::builder()
             .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .err(),
-        Some(Error::General("no usable cipher suites configured".into())),
+        Some(Error::General("no usable cipher suites configured".into()))
     );
 }
 
@@ -872,11 +872,11 @@ fn client_checks_server_certificate_with_given_name() {
             let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert_debug_eq(
+            assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::NotValidForName,
-                ))),
+                    CertificateError::NotValidForName
+                )))
             );
         }
     }
@@ -942,9 +942,9 @@ fn client_cert_resolve() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-            assert_debug_eq(
+            assert_eq!(
                 do_handshake_until_error(&mut client, &mut server),
-                Err(ErrorFromPeer::Server(Error::NoCertificatesPresented)),
+                Err(ErrorFromPeer::Server(Error::NoCertificatesPresented))
             );
         }
     }
@@ -1848,11 +1848,11 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 
         assert_eq!(None, server.server_name());
         transfer(&mut client, &mut server);
-        assert_debug_eq(
+        assert_eq!(
             server.process_new_packets(),
             Err(Error::General(
-                "no server certificate chain resolved".to_string(),
-            )),
+                "no server certificate chain resolved".to_string()
+            ))
         );
         assert_eq!(Some("thisdoesnotexist.com"), server.server_name());
     }
@@ -1879,17 +1879,17 @@ fn sni_resolver_works() {
     let mut client1 =
         ClientConnection::new(Arc::new(make_client_config(kt)), dns_name("localhost")).unwrap();
     let err = do_handshake_until_error(&mut client1, &mut server1);
-    assert_debug_eq(err, Ok(()));
+    assert_eq!(err, Ok(()));
 
     let mut server2 = ServerConnection::new(Arc::clone(&server_config)).unwrap();
     let mut client2 =
         ClientConnection::new(Arc::new(make_client_config(kt)), dns_name("notlocalhost")).unwrap();
     let err = do_handshake_until_error(&mut client2, &mut server2);
-    assert_debug_eq(
+    assert_eq!(
         err,
         Err(ErrorFromPeer::Server(Error::General(
-            "no server certificate chain resolved".into(),
-        ))),
+            "no server certificate chain resolved".into()
+        )))
     );
 }
 
@@ -1900,28 +1900,28 @@ fn sni_resolver_rejects_wrong_names() {
     let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
-    assert_debug_eq(
+    assert_eq!(
+        Ok(()),
         resolver.add(
             "localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
-        ),
-        Ok(()),
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+        )
     );
-    assert_debug_eq(
+    assert_eq!(
+        Err(Error::General(
+            "The server certificate is not valid for the given name".into()
+        )),
         resolver.add(
             "not-localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
-        ),
-        Err(Error::General(
-            "The server certificate is not valid for the given name".into(),
-        )),
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+        )
     );
-    assert_debug_eq(
+    assert_eq!(
+        Err(Error::General("Bad DNS name".into())),
         resolver.add(
             "not ascii 🦀",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
-        ),
-        Err(Error::General("Bad DNS name".into())),
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+        )
     );
 }
 
@@ -1932,12 +1932,12 @@ fn sni_resolver_lower_cases_configured_names() {
     let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
-    assert_debug_eq(
+    assert_eq!(
+        Ok(()),
         resolver.add(
             "LOCALHOST",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
-        ),
-        Ok(()),
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+        )
     );
 
     let mut server_config = make_server_config(kt);
@@ -1948,7 +1948,7 @@ fn sni_resolver_lower_cases_configured_names() {
     let mut client1 =
         ClientConnection::new(Arc::new(make_client_config(kt)), dns_name("localhost")).unwrap();
     let err = do_handshake_until_error(&mut client1, &mut server1);
-    assert_debug_eq(err, Ok(()));
+    assert_eq!(err, Ok(()));
 }
 
 #[test]
@@ -1959,12 +1959,12 @@ fn sni_resolver_lower_cases_queried_names() {
     let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
-    assert_debug_eq(
+    assert_eq!(
+        Ok(()),
         resolver.add(
             "localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
-        ),
-        Ok(()),
+            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+        )
     );
 
     let mut server_config = make_server_config(kt);
@@ -1975,7 +1975,7 @@ fn sni_resolver_lower_cases_queried_names() {
     let mut client1 =
         ClientConnection::new(Arc::new(make_client_config(kt)), dns_name("LOCALHOST")).unwrap();
     let err = do_handshake_until_error(&mut client1, &mut server1);
-    assert_debug_eq(err, Ok(()));
+    assert_eq!(err, Ok(()));
 }
 
 #[test]
@@ -1985,29 +1985,25 @@ fn sni_resolver_rejects_bad_certs() {
     let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
-    assert_debug_eq(
-        resolver
-            .add(
-                "localhost",
-                sign::CertifiedKey::new(vec![], signing_key.clone()),
-            )
-            .err(),
-        Some(Error::General(
-            "No end-entity certificate in certificate chain".into(),
+    assert_eq!(
+        Err(Error::General(
+            "No end-entity certificate in certificate chain".into()
         )),
+        resolver.add(
+            "localhost",
+            sign::CertifiedKey::new(vec![], signing_key.clone())
+        )
     );
 
     let bad_chain = vec![rustls::Certificate(vec![0xa0])];
-    assert_debug_eq(
-        resolver
-            .add(
-                "localhost",
-                sign::CertifiedKey::new(bad_chain, signing_key.clone()),
-            )
-            .err(),
-        Some(Error::General(
-            "End-entity certificate in certificate chain is syntactically invalid".into(),
+    assert_eq!(
+        Err(Error::General(
+            "End-entity certificate in certificate chain is syntactically invalid".into()
         )),
+        resolver.add(
+            "localhost",
+            sign::CertifiedKey::new(bad_chain, signing_key.clone())
+        )
     );
 }
 
@@ -2017,13 +2013,13 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    assert_debug_eq(
-        client.export_keying_material(&mut client_secret, b"label", Some(b"context")),
+    assert_eq!(
         Err(Error::HandshakeNotComplete),
+        client.export_keying_material(&mut client_secret, b"label", Some(b"context"))
     );
-    assert_debug_eq(
-        server.export_keying_material(&mut server_secret, b"label", Some(b"context")),
+    assert_eq!(
         Err(Error::HandshakeNotComplete),
+        server.export_keying_material(&mut server_secret, b"label", Some(b"context"))
     );
     do_handshake(&mut client, &mut server);
 
@@ -2041,7 +2037,7 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
     assert_ne!(client_secret.to_vec(), server_secret.to_vec());
     assert!(server
         .export_keying_material(&mut server_secret, b"label", None)
-        .is_ok(),);
+        .is_ok());
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 }
 
@@ -3265,11 +3261,11 @@ mod test_quic {
                 quic::ServerConnection::new(server_config, quic::Version::V1, server_params.into())
                     .unwrap();
 
-            assert_debug_eq(
+            assert_eq!(
                 step(&mut client, &mut server)
                     .err()
                     .unwrap(),
-                Error::NoApplicationProtocol,
+                Error::NoApplicationProtocol
             );
 
             assert_eq!(
@@ -3389,11 +3385,13 @@ mod test_quic {
 
         let mut buf = Vec::with_capacity(512);
         client_hello.encode(&mut buf);
-        assert_debug_eq(
-            server.read_hs(&mut buf.as_slice()),
-            Err(Error::PeerMisbehaved(
-                PeerMisbehaved::MissingQuicTransportParameters,
-            )),
+        assert_eq!(
+            server
+                .read_hs(&mut buf.as_slice())
+                .err(),
+            Some(Error::PeerMisbehaved(
+                PeerMisbehaved::MissingQuicTransportParameters
+            ))
         );
     }
 
@@ -3450,10 +3448,12 @@ mod test_quic {
 
         let mut buf = Vec::with_capacity(512);
         client_hello.encode(&mut buf);
-        assert_debug_eq(
-            server.read_hs(&mut buf.as_slice()),
-            Err(Error::PeerIncompatible(
-                PeerIncompatible::SupportedVersionsExtensionRequired,
+        assert_eq!(
+            server
+                .read_hs(&mut buf.as_slice())
+                .err(),
+            Some(Error::PeerIncompatible(
+                PeerIncompatible::SupportedVersionsExtensionRequired
             )),
         );
     }
@@ -4014,22 +4014,22 @@ fn check_client_max_fragment_size(size: usize) -> Option<Error> {
 
 #[test]
 fn bad_client_max_fragment_sizes() {
-    assert_debug_eq(
+    assert_eq!(
         check_client_max_fragment_size(31),
-        Some(Error::BadMaxFragmentSize),
+        Some(Error::BadMaxFragmentSize)
     );
-    assert_debug_eq(check_client_max_fragment_size(32), None);
-    assert_debug_eq(check_client_max_fragment_size(64), None);
-    assert_debug_eq(check_client_max_fragment_size(1460), None);
-    assert_debug_eq(check_client_max_fragment_size(0x4000), None);
-    assert_debug_eq(check_client_max_fragment_size(0x4005), None);
-    assert_debug_eq(
+    assert_eq!(check_client_max_fragment_size(32), None);
+    assert_eq!(check_client_max_fragment_size(64), None);
+    assert_eq!(check_client_max_fragment_size(1460), None);
+    assert_eq!(check_client_max_fragment_size(0x4000), None);
+    assert_eq!(check_client_max_fragment_size(0x4005), None);
+    assert_eq!(
         check_client_max_fragment_size(0x4006),
-        Some(Error::BadMaxFragmentSize),
+        Some(Error::BadMaxFragmentSize)
     );
-    assert_debug_eq(
+    assert_eq!(
         check_client_max_fragment_size(0xffff),
-        Some(Error::BadMaxFragmentSize),
+        Some(Error::BadMaxFragmentSize)
     );
 }
 
@@ -4071,11 +4071,11 @@ fn test_server_rejects_duplicate_sni_names() {
     let (client, server) = make_pair(KeyType::Rsa);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, duplicate_sni_payload, &mut server);
-    assert_debug_eq(
+    assert_eq!(
         server.process_new_packets(),
         Err(Error::PeerMisbehaved(
-            PeerMisbehaved::DuplicateServerNameTypes,
-        )),
+            PeerMisbehaved::DuplicateServerNameTypes
+        ))
     );
 }
 
@@ -4100,11 +4100,11 @@ fn test_server_rejects_empty_sni_extension() {
     let (client, server) = make_pair(KeyType::Rsa);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, empty_sni_payload, &mut server);
-    assert_debug_eq(
+    assert_eq!(
         server.process_new_packets(),
         Err(Error::PeerMisbehaved(
-            PeerMisbehaved::ServerNameMustContainOneHostName,
-        )),
+            PeerMisbehaved::ServerNameMustContainOneHostName
+        ))
     );
 }
 
@@ -4131,11 +4131,11 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
     let (client, server) = make_pair(KeyType::Rsa);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, different_kx_group, &mut server);
-    assert_debug_eq(
+    assert_eq!(
         server.process_new_packets(),
         Err(Error::PeerIncompatible(
-            PeerIncompatible::NoKxGroupsInCommon,
-        )),
+            PeerIncompatible::NoKxGroupsInCommon
+        ))
     );
 }
 
@@ -4156,11 +4156,11 @@ fn test_client_rejects_illegal_tls13_ccs() {
     let (mut server, mut client) = (server.into(), client.into());
 
     transfer_altered(&mut server, corrupt_ccs, &mut client);
-    assert_debug_eq(
+    assert_eq!(
         client.process_new_packets(),
         Err(Error::PeerMisbehaved(
-            PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
-        )),
+            PeerMisbehaved::IllegalMiddleboxChangeCipherSpec
+        ))
     );
 }
 
@@ -4266,9 +4266,9 @@ fn test_acceptor() {
             .kind(),
         io::ErrorKind::Other,
     );
-    assert_debug_eq(
+    assert_eq!(
         acceptor.accept().err(),
-        Some(Error::General("Acceptor polled after completion".into())),
+        Some(Error::General("Acceptor polled after completion".into()))
     );
 
     let mut acceptor = Acceptor::default();

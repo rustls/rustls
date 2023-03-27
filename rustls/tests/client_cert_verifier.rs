@@ -5,10 +5,9 @@
 mod common;
 
 use crate::common::{
-    assert_debug_eq, dns_name, do_handshake_until_both_error, do_handshake_until_error,
-    get_client_root_store, make_client_config_with_versions,
-    make_client_config_with_versions_with_auth, make_pair_for_arc_configs, ErrorFromPeer, KeyType,
-    ALL_KEY_TYPES,
+    dns_name, do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,
+    make_client_config_with_versions, make_client_config_with_versions_with_auth,
+    make_pair_for_arc_configs, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
 use rustls::client::WebPkiVerifier;
 use rustls::internal::msgs::handshake::DistinguishedName;
@@ -70,7 +69,7 @@ fn client_verifier_works() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert_debug_eq(err, Ok(()));
+            assert_eq!(err, Ok(()));
         }
     }
 }
@@ -100,7 +99,7 @@ fn client_verifier_no_schemes() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config.clone()), &server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert_debug_eq(
+            assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidMessage(
                     InvalidMessage::NoSignatureSchemes,
@@ -130,14 +129,14 @@ fn client_verifier_no_root() {
             let mut client =
                 ClientConnection::new(Arc::new(client_config), dns_name("notlocalhost")).unwrap();
             let errs = do_handshake_until_both_error(&mut client, &mut server);
-            assert_debug_eq(
+            assert_eq!(
                 errs,
                 Err(vec![
                     ErrorFromPeer::Server(Error::General(
-                        "client rejected by client_auth_root_subjects".into(),
+                        "client rejected by client_auth_root_subjects".into()
                     )),
-                    ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied)),
-                ]),
+                    ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied))
+                ])
             );
         }
     }
@@ -163,14 +162,14 @@ fn client_verifier_no_auth_no_root() {
             let mut client =
                 ClientConnection::new(Arc::new(client_config), dns_name("notlocalhost")).unwrap();
             let errs = do_handshake_until_both_error(&mut client, &mut server);
-            assert_debug_eq(
+            assert_eq!(
                 errs,
                 Err(vec![
                     ErrorFromPeer::Server(Error::General(
-                        "client rejected by client_auth_root_subjects".into(),
+                        "client rejected by client_auth_root_subjects".into()
                     )),
-                    ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied)),
-                ]),
+                    ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied))
+                ])
             );
         }
     }
@@ -202,14 +201,14 @@ fn client_verifier_no_auth_yes_root() {
             let mut client =
                 ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
             let errs = do_handshake_until_both_error(&mut client, &mut server);
-            assert_debug_eq(
+            assert_eq!(
                 errs,
                 Err(vec![
                     ErrorFromPeer::Server(Error::NoCertificatesPresented),
                     ErrorFromPeer::Client(Error::AlertReceived(
-                        AlertDescription::CertificateRequired,
-                    )),
-                ]),
+                        AlertDescription::CertificateRequired
+                    ))
+                ])
             );
         }
     }
@@ -241,9 +240,9 @@ fn client_verifier_fails_properly() {
             let mut client =
                 ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert_debug_eq(
+            assert_eq!(
                 err,
-                Err(ErrorFromPeer::Server(Error::General("test err".into()))),
+                Err(ErrorFromPeer::Server(Error::General("test err".into())))
             );
         }
     }
@@ -275,14 +274,14 @@ fn client_verifier_must_determine_client_auth_requirement_to_continue() {
             let mut client =
                 ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
             let errs = do_handshake_until_both_error(&mut client, &mut server);
-            assert_debug_eq(
+            assert_eq!(
                 errs,
                 Err(vec![
                     ErrorFromPeer::Server(Error::General(
-                        "client rejected by client_auth_mandatory".into(),
+                        "client rejected by client_auth_mandatory".into()
                     )),
-                    ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied)),
-                ]),
+                    ErrorFromPeer::Client(Error::AlertReceived(AlertDescription::AccessDenied))
+                ])
             );
         }
     }
