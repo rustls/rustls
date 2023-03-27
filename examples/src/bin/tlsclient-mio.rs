@@ -429,7 +429,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     if args.flag_no_tickets {
-        config.enable_tickets = false;
+        config.tls12_resumption = Some(rustls::client::Tls12Resumption::SessionIdOnly);
     }
 
     if args.flag_no_sni {

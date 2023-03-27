@@ -155,7 +155,7 @@ pub struct ClientConfig {
     /// effect.
     ///
     /// The default is true.
-    pub enable_tickets: bool,
+    pub tls12_resumption: Option<Tls12Resumption>,
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
@@ -187,12 +187,26 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
 }
 
+/// What mechanisms to support for resuming a TLS 1.2 session.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Tls12Resumption {
+    /// Support 1.2 resumption using session ids only.
+    SessionIdOnly,
+    /// Support 1.2 resumption using session ids or RFC 5077 tickets.
+    ///
+    /// See[^1] for why you might like to disable RFC 5077 by instead choosing the `SessionIdOnly`
+    /// option. Note that TLS 1.3 tickets do not have those issues.
+    ///
+    /// [^1]: <https://words.filippo.io/we-need-to-talk-about-session-tickets/>
+    SessionIdOrTickets,
+}
+
 impl fmt::Debug for ClientConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientConfig")
             .field("alpn_protocols", &self.alpn_protocols)
             .field("max_fragment_size", &self.max_fragment_size)
-            .field("enable_tickets", &self.enable_tickets)
+            .field("tls12_resumption", &self.tls12_resumption)
             .field("enable_sni", &self.enable_sni)
             .field("enable_early_data", &self.enable_early_data)
             .finish_non_exhaustive()

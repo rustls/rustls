@@ -1,14 +1,13 @@
-use crate::anchors;
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::client::handy;
-use crate::client::{ClientConfig, ResolvesClientCert};
+use crate::client::{handy, ClientConfig, ResolvesClientCert};
 use crate::error::Error;
-use crate::key;
+use crate::key_log::NoKeyLog;
 use crate::kx::SupportedKxGroup;
 use crate::suites::SupportedCipherSuite;
 use crate::verify::{self, CertificateTransparencyPolicy};
-use crate::versions;
-use crate::NoKeyLog;
+use crate::{anchors, key, versions};
+
+use super::Tls12Resumption;
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -179,7 +178,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             session_storage: handy::ClientSessionMemoryCache::new(256),
             max_fragment_size: None,
             client_auth_cert_resolver,
-            enable_tickets: true,
+            tls12_resumption: Some(Tls12Resumption::SessionIdOrTickets),
             versions: self.state.versions,
             enable_sni: true,
             verifier: self.state.verifier,
