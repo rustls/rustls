@@ -269,14 +269,7 @@ fn emit_client_hello_for_retry(
     exts.extend(extra_exts.iter().cloned());
 
     // Do we have a SessionID or ticket cached for this host?
-    let tls13_session = prepare_resumption(
-        &input.resuming,
-        &mut exts,
-        retryreq.is_some(),
-        suite,
-        cx,
-        &config,
-    );
+    let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
 
     // Note what extensions we sent.
     input.hello.sent_extensions = exts
@@ -380,7 +373,6 @@ fn emit_client_hello_for_retry(
 fn prepare_resumption<'a>(
     resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
     exts: &mut Vec<ClientExtension>,
-    doing_retry: bool,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
@@ -429,7 +421,7 @@ fn prepare_resumption<'a>(
         suite.can_resume_from(tls13.suite())?;
     }
 
-    tls13::prepare_resumption(config, cx, &tls13, exts, doing_retry);
+    tls13::prepare_resumption(config, cx, &tls13, exts, suite.is_some());
     Some(tls13)
 }
 
