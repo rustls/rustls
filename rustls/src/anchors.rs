@@ -1,12 +1,12 @@
-use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
+use crate::{key, DistinguishedName};
 use crate::{CertificateError, Error};
 
 /// A trust anchor, commonly known as a "Root Certificate."
 #[derive(Debug, Clone)]
 pub struct OwnedTrustAnchor {
-    subject: Vec<u8>,
+    subject: DistinguishedName,
     spki: Vec<u8>,
     name_constraints: Option<Vec<u8>>,
 }
@@ -15,7 +15,7 @@ impl OwnedTrustAnchor {
     /// Get a `webpki::TrustAnchor` by borrowing the owned elements.
     pub(crate) fn to_trust_anchor(&self) -> webpki::TrustAnchor {
         webpki::TrustAnchor {
-            subject: &self.subject,
+            subject: self.subject.as_ref(),
             spki: &self.spki,
             name_constraints: self.name_constraints.as_deref(),
         }
@@ -41,7 +41,7 @@ impl OwnedTrustAnchor {
         name_constraints: Option<impl Into<Vec<u8>>>,
     ) -> Self {
         Self {
-            subject: subject.into(),
+            subject: DistinguishedName::from(subject.into()),
             spki: spki.into(),
             name_constraints: name_constraints.map(|x| x.into()),
         }
@@ -55,7 +55,7 @@ impl OwnedTrustAnchor {
     /// use x509_parser::prelude::FromDer;
     /// println!("{}", x509_parser::x509::X509Name::from_der(anchor.subject())?.1);
     /// ```
-    pub fn subject(&self) -> &[u8] {
+    pub fn subject(&self) -> &DistinguishedName {
         &self.subject
     }
 }

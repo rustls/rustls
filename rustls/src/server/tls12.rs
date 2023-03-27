@@ -40,8 +40,8 @@ mod client_hello {
     use crate::msgs::handshake::{ClientExtension, SessionID};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
     use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
+    use crate::sign;
     use crate::verify::DigitallySignedStruct;
-    use crate::{sign, DistinguishedName};
 
     use super::*;
 
@@ -450,9 +450,7 @@ mod client_hello {
         let names = config
             .verifier
             .client_auth_root_subjects()
-            .iter()
-            .map(|n| DistinguishedName::from(n.clone()))
-            .collect::<Vec<_>>();
+            .to_vec();
 
         let cr = CertificateRequestPayload {
             certtypes: vec![
