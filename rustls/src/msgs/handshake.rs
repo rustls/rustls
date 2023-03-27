@@ -105,18 +105,18 @@ impl From<[u8; 32]> for Random {
 }
 
 #[derive(Copy, Clone)]
-pub struct SessionID {
+pub struct SessionId {
     len: usize,
     data: [u8; 32],
 }
 
-impl fmt::Debug for SessionID {
+impl fmt::Debug for SessionId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         super::base::hex(f, &self.data[..self.len])
     }
 }
 
-impl PartialEq for SessionID {
+impl PartialEq for SessionId {
     fn eq(&self, other: &Self) -> bool {
         if self.len != other.len {
             return false;
@@ -131,7 +131,7 @@ impl PartialEq for SessionID {
     }
 }
 
-impl Codec for SessionID {
+impl Codec for SessionId {
     fn encode(&self, bytes: &mut Vec<u8>) {
         debug_assert!(self.len <= 32);
         bytes.push(self.len as u8);
@@ -155,7 +155,7 @@ impl Codec for SessionID {
     }
 }
 
-impl SessionID {
+impl SessionId {
     pub fn random() -> Result<Self, rand::GetRandomFailed> {
         let mut data = [0u8; 32];
         rand::fill_random(&mut data)?;
@@ -818,7 +818,7 @@ impl ServerExtension {
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
-    pub session_id: SessionID,
+    pub session_id: SessionId,
     pub cipher_suites: Vec<CipherSuite>,
     pub compression_methods: Vec<Compression>,
     pub extensions: Vec<ClientExtension>,
@@ -841,7 +841,7 @@ impl Codec for ClientHelloPayload {
         let mut ret = Self {
             client_version: ProtocolVersion::read(r)?,
             random: Random::read(r)?,
-            session_id: SessionID::read(r)?,
+            session_id: SessionId::read(r)?,
             cipher_suites: Vec::read(r)?,
             compression_methods: Vec::read(r)?,
             extensions: Vec::new(),
@@ -1089,7 +1089,7 @@ impl TlsListElement for HelloRetryExtension {
 #[derive(Debug)]
 pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
-    pub session_id: SessionID,
+    pub session_id: SessionId,
     pub cipher_suite: CipherSuite,
     pub extensions: Vec<HelloRetryExtension>,
 }
@@ -1105,7 +1105,7 @@ impl Codec for HelloRetryRequest {
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let session_id = SessionID::read(r)?;
+        let session_id = SessionId::read(r)?;
         let cipher_suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 
@@ -1183,7 +1183,7 @@ impl HelloRetryRequest {
 pub struct ServerHelloPayload {
     pub legacy_version: ProtocolVersion,
     pub random: Random,
-    pub session_id: SessionID,
+    pub session_id: SessionId,
     pub cipher_suite: CipherSuite,
     pub compression_method: Compression,
     pub extensions: Vec<ServerExtension>,
@@ -1205,7 +1205,7 @@ impl Codec for ServerHelloPayload {
 
     // minus version and random, which have already been read.
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let session_id = SessionID::read(r)?;
+        let session_id = SessionId::read(r)?;
         let suite = CipherSuite::read(r)?;
         let compression = Compression::read(r)?;
 

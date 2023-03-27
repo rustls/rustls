@@ -206,7 +206,7 @@ mod test {
     use crate::client::ClientSessionStore;
     use crate::msgs::enums::NamedGroup;
     #[cfg(feature = "tls12")]
-    use crate::msgs::handshake::SessionID;
+    use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
     use std::convert::TryInto;
@@ -232,7 +232,7 @@ mod test {
                 &name,
                 Tls12ClientSessionValue::new(
                     tls12_suite,
-                    SessionID::empty(),
+                    SessionId::empty(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
