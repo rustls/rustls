@@ -53,7 +53,7 @@ fn client_verifier_works() {
             subjects: get_client_root_store(*kt)
                 .roots
                 .iter()
-                .map(|r| DistinguishedName::from(r.subject().to_vec()))
+                .map(|r| r.subject().clone())
                 .collect(),
             mandatory: true,
             offered_schemes: None,
@@ -81,7 +81,7 @@ fn client_verifier_no_schemes() {
             subjects: get_client_root_store(*kt)
                 .roots
                 .iter()
-                .map(|r| DistinguishedName::from(r.subject().to_vec()))
+                .map(|r| r.subject().clone())
                 .collect(),
             mandatory: true,
             offered_schemes: Some(vec![]),
@@ -114,7 +114,7 @@ fn client_verifier_no_auth_yes_root() {
             subjects: get_client_root_store(*kt)
                 .roots
                 .iter()
-                .map(|r| DistinguishedName::from(r.subject().to_vec()))
+                .map(|r| r.subject().clone())
                 .collect(),
             mandatory: true,
             offered_schemes: None,
@@ -151,7 +151,7 @@ fn client_verifier_fails_properly() {
             subjects: get_client_root_store(*kt)
                 .roots
                 .iter()
-                .map(|r| DistinguishedName::from(r.subject().to_vec()))
+                .map(|r| r.subject().clone())
                 .collect(),
             mandatory: true,
             offered_schemes: None,
