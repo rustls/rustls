@@ -95,7 +95,7 @@ pub enum Error {
 
 /// A corrupt TLS message payload that resulted in an error.
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 
 pub enum InvalidMessage {
     /// An advertised message was larger then expected.
@@ -271,7 +271,7 @@ impl From<PeerIncompatible> for Error {
 }
 
 #[non_exhaustive]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 /// The ways in which certificate validators can express errors.
 ///
 /// Note that the rustls TLS protocol code interprets specifically these
@@ -322,7 +322,29 @@ pub enum CertificateError {
     ///
     /// It is also used by the default verifier in case its error is
     /// not covered by the above common cases.
+    ///
+    /// Enums holding this variant will never compare equal to each other.
     Other(Arc<dyn StdError + Send + Sync>),
+}
+
+impl PartialEq<Self> for CertificateError {
+    fn eq(&self, other: &Self) -> bool {
+        use CertificateError::*;
+        #[allow(clippy::match_like_matches_macro)]
+        match (self, other) {
+            (BadEncoding, BadEncoding) => true,
+            (Expired, Expired) => true,
+            (NotValidYet, NotValidYet) => true,
+            (Revoked, Revoked) => true,
+            (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
+            (UnknownIssuer, UnknownIssuer) => true,
+            (BadSignature, BadSignature) => true,
+            (NotValidForName, NotValidForName) => true,
+            (InvalidPurpose, InvalidPurpose) => true,
+            (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
+            _ => false,
+        }
+    }
 }
 
 // The following mapping are heavily referenced in:
@@ -432,6 +454,27 @@ impl From<rand::GetRandomFailed> for Error {
 #[cfg(test)]
 mod tests {
     use super::{Error, InvalidMessage};
+
+    #[test]
+    fn certificate_error_equality() {
+        use super::CertificateError::*;
+        assert_eq!(BadEncoding, BadEncoding);
+        assert_eq!(Expired, Expired);
+        assert_eq!(NotValidYet, NotValidYet);
+        assert_eq!(Revoked, Revoked);
+        assert_eq!(UnhandledCriticalExtension, UnhandledCriticalExtension);
+        assert_eq!(UnknownIssuer, UnknownIssuer);
+        assert_eq!(BadSignature, BadSignature);
+        assert_eq!(NotValidForName, NotValidForName);
+        assert_eq!(InvalidPurpose, InvalidPurpose);
+        assert_eq!(
+            ApplicationVerificationFailure,
+            ApplicationVerificationFailure
+        );
+        let other = Other(std::sync::Arc::from(Box::from("")));
+        assert_ne!(other, other);
+        assert_ne!(BadEncoding, Expired);
+    }
 
     #[test]
     fn smoke() {

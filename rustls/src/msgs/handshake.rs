@@ -1515,7 +1515,7 @@ impl CertificatePayloadTLS13 {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum KeyExchangeAlgorithm {
     BulkOnly,
     DH,
