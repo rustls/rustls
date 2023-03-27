@@ -97,7 +97,7 @@ pub(super) fn start_handshake(
         transcript_buffer.set_client_auth_enabled();
     }
 
-    let mut resuming_session = find_session(
+    let mut resuming = find_session(
         &server_name,
         &config,
         #[cfg(feature = "quic")]
@@ -112,7 +112,7 @@ pub(super) fn start_handshake(
 
     #[cfg_attr(not(feature = "tls12"), allow(unused_mut))]
     let mut session_id = None;
-    if let Some(_resuming) = &mut resuming_session {
+    if let Some(_resuming) = &mut resuming {
         #[cfg(feature = "tls12")]
         if let ClientSessionValue::Tls12(inner) = &mut _resuming.value {
             // If we have a ticket, we use the sessionid as a signal that
@@ -137,41 +137,34 @@ pub(super) fn start_handshake(
         None => SessionId::random()?,
     };
 
-    let random = Random::new()?;
-    let hello_details = ClientHelloDetails::new();
-    let sent_tls13_fake_ccs = false;
     let may_send_sct_list = config.verifier.request_scts();
     Ok(emit_client_hello_for_retry(
-        config,
-        cx,
-        resuming_session,
-        random,
-        false,
         transcript_buffer,
-        sent_tls13_fake_ccs,
-        hello_details,
-        session_id,
         None,
-        server_name,
         key_share,
         extra_exts,
         may_send_sct_list,
         None,
+        ClientHelloInput {
+            config,
+            resuming,
+            random: Random::new()?,
+            #[cfg(feature = "tls12")]
+            using_ems: false,
+            sent_tls13_fake_ccs: false,
+            hello: ClientHelloDetails::new(),
+            session_id,
+            server_name,
+        },
+        cx,
     ))
 }
 
 struct ExpectServerHello {
-    config: Arc<ClientConfig>,
-    resuming_session: Option<persist::Retrieved<ClientSessionValue>>,
-    server_name: ServerName,
-    random: Random,
-    using_ems: bool,
+    input: ClientHelloInput,
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
-    hello: ClientHelloDetails,
     offered_key_share: Option<kx::KeyExchange>,
-    session_id: SessionId,
-    sent_tls13_fake_ccs: bool,
     suite: Option<SupportedCipherSuite>,
 }
 
@@ -180,23 +173,29 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: Vec<ClientExtension>,
 }
 
-fn emit_client_hello_for_retry(
+struct ClientHelloInput {
     config: Arc<ClientConfig>,
-    cx: &mut ClientContext<'_>,
-    resuming_session: Option<persist::Retrieved<ClientSessionValue>>,
+    resuming: Option<persist::Retrieved<ClientSessionValue>>,
     random: Random,
+    #[cfg(feature = "tls12")]
     using_ems: bool,
-    mut transcript_buffer: HandshakeHashBuffer,
-    mut sent_tls13_fake_ccs: bool,
-    mut hello: ClientHelloDetails,
+    sent_tls13_fake_ccs: bool,
+    hello: ClientHelloDetails,
     session_id: SessionId,
-    retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
+}
+
+fn emit_client_hello_for_retry(
+    mut transcript_buffer: HandshakeHashBuffer,
+    retryreq: Option<&HelloRetryRequest>,
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
     may_send_sct_list: bool,
     suite: Option<SupportedCipherSuite>,
+    mut input: ClientHelloInput,
+    cx: &mut ClientContext<'_>,
 ) -> NextState {
+    let config = &input.config;
     let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
@@ -231,7 +230,7 @@ fn emit_client_hello_for_retry(
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
 
-    if let (Some(sni_name), true) = (server_name.for_sni(), config.enable_sni) {
+    if let (Some(sni_name), true) = (input.server_name.for_sni(), config.enable_sni) {
         exts.push(ClientExtension::make_sni(sni_name));
     }
 
@@ -271,7 +270,7 @@ fn emit_client_hello_for_retry(
 
     // Do we have a SessionID or ticket cached for this host?
     let tls13_session = prepare_resumption(
-        &resuming_session,
+        &input.resuming,
         &mut exts,
         retryreq.is_some(),
         suite,
@@ -280,7 +279,7 @@ fn emit_client_hello_for_retry(
     );
 
     // Note what extensions we sent.
-    hello.sent_extensions = exts
+    input.hello.sent_extensions = exts
         .iter()
         .map(ClientExtension::get_type)
         .collect();
@@ -297,8 +296,8 @@ fn emit_client_hello_for_retry(
         typ: HandshakeType::ClientHello,
         payload: HandshakePayload::ClientHello(ClientHelloPayload {
             client_version: ProtocolVersion::TLSv1_2,
-            random,
-            session_id,
+            random: input.random,
+            session_id: input.session_id,
             cipher_suites,
             compression_methods: vec![Compression::Null],
             extensions: exts,
@@ -327,7 +326,7 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, cx.common);
     }
 
     trace!("Sending ClientHello {:#?}", ch);
@@ -346,25 +345,18 @@ fn emit_client_hello_for_retry(
             cx,
             resuming_suite,
             &schedule,
-            &mut sent_tls13_fake_ccs,
+            &mut input.sent_tls13_fake_ccs,
             &transcript_buffer,
-            &random.0,
+            &input.random.0,
         );
         schedule
     });
 
     let next = ExpectServerHello {
-        config,
-        resuming_session,
-        server_name,
-        random,
-        using_ems,
+        input,
         transcript_buffer,
         early_key_schedule,
-        hello,
         offered_key_share: key_share,
-        session_id,
-        sent_tls13_fake_ccs,
         suite,
     };
 
@@ -495,7 +487,8 @@ impl State<ClientConnectionData> for ExpectServerHello {
         trace!("We got ServerHello {:#?}", server_hello);
 
         use crate::ProtocolVersion::{TLSv1_2, TLSv1_3};
-        let tls13_supported = self.config.supports_version(TLSv1_3);
+        let config = &self.input.config;
+        let tls13_supported = config.supports_version(TLSv1_3);
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello
@@ -507,7 +500,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let version = match server_version {
             TLSv1_3 if tls13_supported => TLSv1_3,
-            TLSv1_2 if self.config.supports_version(TLSv1_2) => {
+            TLSv1_2 if config.supports_version(TLSv1_2) => {
                 if cx.data.early_data.is_enabled() && cx.common.early_traffic {
                     // The client must fail with a dedicated error code if the server
                     // responds with TLS 1.2 when offering 0-RTT.
@@ -550,6 +543,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
         if self
+            .input
             .hello
             .server_sent_unsolicited_extensions(&server_hello.extensions, &allowed_unsolicited)
         {
@@ -562,7 +556,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
-            process_alpn_protocol(cx.common, &self.config, server_hello.get_alpn_protocol())?;
+            process_alpn_protocol(cx.common, config, server_hello.get_alpn_protocol())?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
@@ -575,8 +569,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
         }
 
-        let suite = self
-            .config
+        let suite = config
             .find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
                 cx.common
@@ -609,14 +602,15 @@ impl State<ClientConnectionData> for ExpectServerHello {
             .start_hash(suite.hash_algorithm());
         transcript.add_message(&m);
 
-        let randoms = ConnectionRandoms::new(self.random, server_hello.random);
+        let randoms = ConnectionRandoms::new(self.input.random, server_hello.random);
         // For TLS1.3, start message encryption using
         // handshake_traffic_secret.
         match suite {
             SupportedCipherSuite::Tls13(suite) => {
                 #[allow(clippy::bind_instead_of_map)]
                 let resuming_session = self
-                    .resuming_session
+                    .input
+                    .resuming
                     .and_then(|resuming| match resuming.value {
                         ClientSessionValue::Tls13(inner) => Some(inner),
                         #[cfg(feature = "tls12")]
@@ -624,36 +618,37 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     });
 
                 tls13::handle_server_hello(
-                    self.config,
+                    self.input.config,
                     cx,
                     server_hello,
                     resuming_session,
-                    self.server_name,
+                    self.input.server_name,
                     randoms,
                     suite,
                     transcript,
                     self.early_key_schedule,
-                    self.hello,
+                    self.input.hello,
                     // We always send a key share when TLS 1.3 is enabled.
                     self.offered_key_share.unwrap(),
-                    self.sent_tls13_fake_ccs,
+                    self.input.sent_tls13_fake_ccs,
                 )
             }
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => {
                 let resuming_session = self
-                    .resuming_session
+                    .input
+                    .resuming
                     .and_then(|resuming| match resuming.value {
                         ClientSessionValue::Tls12(inner) => Some(inner),
                         ClientSessionValue::Tls13(_) => None,
                     });
 
                 tls12::CompleteServerHelloHandling {
-                    config: self.config,
+                    config: self.input.config,
                     resuming_session,
-                    server_name: self.server_name,
+                    server_name: self.input.server_name,
                     randoms,
-                    using_ems: self.using_ems,
+                    using_ems: self.input.using_ems,
                     transcript,
                 }
                 .handle_server_hello(cx, suite, server_hello, tls13_supported)
@@ -738,11 +733,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to use a ciphersuite we didn't offer.
-        let maybe_cs = self
-            .next
-            .config
-            .find_cipher_suite(hrr.cipher_suite);
-        let cs = match maybe_cs {
+        let config = &self.next.input.config;
+        let cs = match config.find_cipher_suite(hrr.cipher_suite) {
             Some(cs) => cs,
             None => {
                 return Err(cx.common.illegal_param(
@@ -769,38 +761,31 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let may_send_sct_list = self
             .next
+            .input
             .hello
             .server_may_send_sct_list();
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                let group = kx::KeyExchange::choose(group, &self.next.config.kx_groups)
-                    .ok_or_else(|| {
-                        cx.common.illegal_param(
-                            PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
-                        )
-                    })?;
+                let group = kx::KeyExchange::choose(group, &config.kx_groups).ok_or_else(|| {
+                    cx.common.illegal_param(
+                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
+                    )
+                })?;
                 kx::KeyExchange::start(group).ok_or(Error::FailedToGetRandomBytes)?
             }
             _ => offered_key_share,
         };
 
         Ok(emit_client_hello_for_retry(
-            self.next.config,
-            cx,
-            self.next.resuming_session,
-            self.next.random,
-            self.next.using_ems,
             transcript_buffer,
-            self.next.sent_tls13_fake_ccs,
-            self.next.hello,
-            self.next.session_id,
             Some(hrr),
-            self.next.server_name,
             Some(key_share),
             self.extra_exts,
             may_send_sct_list,
             Some(cs),
+            self.next.input,
+            cx,
         ))
     }
 }
