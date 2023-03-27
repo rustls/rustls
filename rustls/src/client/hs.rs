@@ -26,6 +26,7 @@ use crate::SupportedCipherSuite;
 
 #[cfg(feature = "tls12")]
 use super::tls12;
+use super::Tls12Resumption;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::{tls13, ClientConfig, ServerName};
@@ -248,7 +249,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::Cookie(cookie.clone()));
     }
 
-    if support_tls13 && config.enable_tickets {
+    if support_tls13 {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
         let psk_modes = vec![PSKKeyExchangeMode::PSK_DHE_KE];
@@ -380,16 +381,16 @@ fn prepare_resumption<'a>(
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
 ) -> Option<persist::Retrieved<&'a persist::Tls13ClientSessionValue>> {
-    if !config.enable_tickets {
-        return None;
-    }
-
     // Check whether we're resuming with a non-empty ticket.
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
         _ => {
-            // If we don't have a ticket, request one.
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+            if config.supports_version(ProtocolVersion::TLSv1_3)
+                || config.tls12_resumption == Some(Tls12Resumption::SessionIdOrTickets)
+            {
+                // If we don't have a ticket, request one.
+                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+            }
             return None;
         }
     };
@@ -398,7 +399,9 @@ fn prepare_resumption<'a>(
         Some(tls13) => tls13,
         None => {
             // TLS 1.2; send the ticket if we have support this protocol version
-            if config.supports_version(ProtocolVersion::TLSv1_2) {
+            if config.supports_version(ProtocolVersion::TLSv1_2)
+                && config.tls12_resumption == Some(Tls12Resumption::SessionIdOrTickets)
+            {
                 exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
                     Payload::new(resuming.ticket()),
                 )));

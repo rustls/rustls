@@ -407,11 +407,10 @@ pub mod client {
     mod tls13;
 
     pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
-    pub use client_conn::ClientSessionStore;
-    pub use client_conn::InvalidDnsNameError;
-    pub use client_conn::ResolvesClientCert;
-    pub use client_conn::ServerName;
-    pub use client_conn::{ClientConfig, ClientConnection, ClientConnectionData, WriteEarlyData};
+    pub use client_conn::{
+        ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
+        InvalidDnsNameError, ResolvesClientCert, ServerName, Tls12Resumption, WriteEarlyData,
+    };
     pub use handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 
     #[cfg(feature = "dangerous_configuration")]
