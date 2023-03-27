@@ -362,9 +362,12 @@ fn emit_client_hello_for_retry(
 
 /// Prepare resumption with the session state retrieved from storage.
 ///
-/// This function will push onto `exts` to (a) request a new ticket if we don't have one,
-/// (b) send our TLS 1.2 ticket after retrieving an 1.2 session, (c) send a request for 1.3
-/// early data if allowed and (d) send a 1.3 preshared key if we have one.
+/// This function will push onto `exts` to
+///
+/// (a) request a new ticket if we don't have one,
+/// (b) send our TLS 1.2 ticket after retrieving an 1.2 session,
+/// (c) send a request for 1.3 early data if allowed and
+/// (d) send a 1.3 preshared key if we have one.
 ///
 /// For resumption to work, the currently negotiated cipher suite (if available) must be
 /// able to resume from the resuming session's cipher suite.
