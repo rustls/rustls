@@ -17,7 +17,7 @@ use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, Sct}
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
-use crate::msgs::handshake::{Random, SessionID};
+use crate::msgs::handshake::{Random, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::ticketer::TimeBase;
@@ -119,7 +119,7 @@ pub(super) fn start_handshake(
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
             if !inner.ticket().is_empty() {
-                inner.session_id = SessionID::random()?;
+                inner.session_id = SessionId::random()?;
             }
             session_id = Some(inner.session_id);
         }
@@ -133,8 +133,8 @@ pub(super) fn start_handshake(
     // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
     let session_id = match session_id {
         Some(session_id) => session_id,
-        None if cx.common.is_quic() => SessionID::empty(),
-        None => SessionID::random()?,
+        None if cx.common.is_quic() => SessionId::empty(),
+        None => SessionId::random()?,
     };
 
     let random = Random::new()?;
@@ -170,7 +170,7 @@ struct ExpectServerHello {
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     offered_key_share: Option<kx::KeyExchange>,
-    session_id: SessionID,
+    session_id: SessionId,
     sent_tls13_fake_ccs: bool,
     suite: Option<SupportedCipherSuite>,
 }
@@ -189,7 +189,7 @@ fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
-    session_id: SessionID,
+    session_id: SessionId,
     retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
     key_share: Option<kx::KeyExchange>,
