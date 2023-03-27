@@ -639,10 +639,10 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(
+        assert_eq!(
             d.pop(&mut rl).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::InvalidContentType)
-        ));
+        );
     }
 
     #[test]
@@ -654,10 +654,10 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(
+        assert_eq!(
             d.pop(&mut rl).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::UnknownProtocolVersion)
-        ));
+        );
     }
 
     #[test]
@@ -669,10 +669,10 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(
+        assert_eq!(
             d.pop(&mut rl).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::MessageTooLarge)
-        ));
+        );
     }
 
     #[test]
@@ -700,16 +700,15 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        assert!(matches!(
+        assert_eq!(
             d.pop(&mut rl).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
-        ));
-        // CorruptMessage has been fused, and returns the same error upon every read
-        // afterwards.
-        assert!(matches!(
+        );
+        // CorruptMessage has been fused
+        assert_eq!(
             d.pop(&mut rl).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
-        ));
+        );
     }
 
     #[test]

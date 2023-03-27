@@ -9,7 +9,7 @@ use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
 #[non_exhaustive]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Error {
     /// We received a TLS message that isn't valid right now.
     /// `expect_types` lists the message types we can expect right now.
@@ -236,7 +236,7 @@ impl From<PeerMisbehaved> for Error {
 
 #[non_exhaustive]
 #[allow(missing_docs)]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 /// The set of cases where we failed to make a connection because a peer
 /// doesn't support a TLS version/feature we require.
 ///
@@ -271,7 +271,7 @@ impl From<PeerIncompatible> for Error {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 /// The ways in which certificate validators can express errors.
 ///
 /// Note that the rustls TLS protocol code interprets specifically these
@@ -474,7 +474,7 @@ mod tests {
     fn rand_error_mapping() {
         use super::rand;
         let err: Error = rand::GetRandomFailed.into();
-        assert!(matches!(err, Error::FailedToGetRandomBytes));
+        assert_eq!(err, Error::FailedToGetRandomBytes);
     }
 
     #[test]
@@ -485,6 +485,6 @@ mod tests {
             .duration_since(SystemTime::now())
             .unwrap_err();
         let err: Error = time_error.into();
-        assert!(matches!(err, Error::FailedToGetCurrentTime));
+        assert_eq!(err, Error::FailedToGetCurrentTime);
     }
 }

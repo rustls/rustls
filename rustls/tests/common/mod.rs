@@ -397,7 +397,7 @@ pub fn do_handshake(
     (to_server, to_client)
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum ErrorFromPeer {
     Client(Error),
     Server(Error),
@@ -470,11 +470,4 @@ impl io::Read for FailsReads {
     fn read(&mut self, _b: &mut [u8]) -> io::Result<usize> {
         Err(io::Error::from(self.errkind))
     }
-}
-
-pub fn assert_debug_eq<T>(err: T, expect: T)
-where
-    T: std::fmt::Debug,
-{
-    assert_eq!(format!("{:?}", err), format!("{:?}", expect));
 }
