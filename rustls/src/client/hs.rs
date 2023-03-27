@@ -97,7 +97,6 @@ pub(super) fn start_handshake(
         transcript_buffer.set_client_auth_enabled();
     }
 
-    let mut session_id: Option<SessionID> = None;
     let mut resuming_session = find_session(
         &server_name,
         &config,
@@ -111,6 +110,8 @@ pub(super) fn start_handshake(
         None
     };
 
+    #[cfg_attr(not(feature = "tls12"), allow(unused_mut))]
+    let mut session_id = None;
     if let Some(_resuming) = &mut resuming_session {
         #[cfg(feature = "tls12")]
         if let ClientSessionValue::Tls12(inner) = &mut _resuming.value {
@@ -130,9 +131,11 @@ pub(super) fn start_handshake(
 
     // https://tools.ietf.org/html/rfc8446#appendix-D.4
     // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
-    if session_id.is_none() && !cx.common.is_quic() {
-        session_id = Some(SessionID::random()?);
-    }
+    let session_id = match session_id {
+        Some(session_id) => session_id,
+        None if cx.common.is_quic() => SessionID::empty(),
+        None => SessionID::random()?,
+    };
 
     let random = Random::new()?;
     let hello_details = ClientHelloDetails::new();
@@ -186,7 +189,7 @@ fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     mut sent_tls13_fake_ccs: bool,
     mut hello: ClientHelloDetails,
-    session_id: Option<SessionID>,
+    session_id: SessionID,
     retryreq: Option<&HelloRetryRequest>,
     server_name: ServerName,
     key_share: Option<kx::KeyExchange>,
@@ -282,7 +285,6 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::get_type)
         .collect();
 
-    let session_id = session_id.unwrap_or_else(SessionID::empty);
     let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()
@@ -792,7 +794,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             transcript_buffer,
             self.next.sent_tls13_fake_ccs,
             self.next.hello,
-            Some(self.next.session_id),
+            self.next.session_id,
             Some(hrr),
             self.next.server_name,
             Some(key_share),
