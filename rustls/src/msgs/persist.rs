@@ -144,6 +144,7 @@ pub struct Tls12ClientSessionValue {
     #[cfg(feature = "tls12")]
     extended_ms: bool,
     #[doc(hidden)]
+    #[cfg(feature = "tls12")]
     pub(crate) common: ClientSessionCommon,
 }
 
