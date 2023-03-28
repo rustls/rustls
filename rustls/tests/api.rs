@@ -2703,11 +2703,6 @@ impl ClientStorage {
     fn push_op(&self, op: ClientStorageOp) {
         self.ops.lock().unwrap().push(op);
     }
-
-    #[cfg(feature = "tls12")]
-    fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
-        std::mem::take(&mut self.ops.lock().unwrap())
-    }
 }
 
 impl fmt::Debug for ClientStorage {
@@ -3862,10 +3857,12 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
 #[cfg(feature = "tls12")]
 #[test]
 fn test_tls13_client_resumption_does_not_reuse_tickets() {
-    let shared_storage = Arc::new(ClientStorage::new());
+    use std::io::Cursor;
+
+    use rustls::internal::{msgs::deframer::MessageDeframer, record_layer::RecordLayer};
 
     let mut client_config = make_client_config(KeyType::Rsa);
-    client_config.resumption = Resumption::store(shared_storage.clone());
+    client_config.resumption = Resumption::in_memory_sessions(20);
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(KeyType::Rsa);
@@ -3876,40 +3873,64 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     do_handshake_until_error(&mut client, &mut server).unwrap();
 
-    let ops = shared_storage.ops_and_reset();
-    println!("storage {:#?}", ops);
-    assert_eq!(ops.len(), 10);
-    assert!(matches!(ops[5], ClientStorageOp::InsertTls13Ticket(_)));
-    assert!(matches!(ops[6], ClientStorageOp::InsertTls13Ticket(_)));
-    assert!(matches!(ops[7], ClientStorageOp::InsertTls13Ticket(_)));
-    assert!(matches!(ops[8], ClientStorageOp::InsertTls13Ticket(_)));
-    assert!(matches!(ops[9], ClientStorageOp::InsertTls13Ticket(_)));
+    // Create a client from the given ClientConfig, read its ClientHello, and return the ClientExtensions.
+    fn extensions_from_client_hello(client_config: &Arc<ClientConfig>) -> Vec<ClientExtension> {
+        let mut client =
+            ClientConnection::new(Arc::clone(&client_config), dns_name("localhost")).unwrap();
+        let mut handshake = Vec::new();
+        while client.wants_write() {
+            client
+                .write_tls(&mut handshake)
+                .unwrap();
+        }
 
-    // 5 subsequent handshakes: all are resumptions
+        let mut deframer = MessageDeframer::default();
+        let mut record_layer = RecordLayer::new();
+        deframer
+            .read(&mut Cursor::new(handshake))
+            .unwrap();
+        let deframed = deframer
+            .pop(&mut record_layer)
+            .unwrap()
+            .unwrap();
+        let message = Message::try_from(deframed.message).unwrap();
+        let MessagePayload::Handshake { parsed: parsed_handshake, .. } = message.payload else {
+            panic!("expected handshake message, got {:?}", message.payload);
+        };
+        let HandshakePayload::ClientHello(client_hello_payload) = parsed_handshake.payload else {
+            panic!("expected client hello, got {:?}", parsed_handshake.payload);
+        };
+        client_hello_payload.extensions
+    }
 
-    // Note: we don't do complete the handshakes, because that means
+    // 5 subsequent client hellos: all are resumptions
+
+    // Note: we don't complete the handshakes, because that means
     // we get five additional tickets per connection which is unhelpful
     // in this test.  It also acts to record a "Happy Eyeballs"-type use
     // case, where a client speculatively makes many connection attempts
     // in parallel without knowledge of which will work due to underlying
     // connectivity uncertainty.
     for _ in 0..5 {
-        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-        transfer(&mut client, &mut server);
-        server.process_new_packets().unwrap();
-
-        let ops = shared_storage.ops_and_reset();
-        assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, true)));
+        let extensions = extensions_from_client_hello(&client_config);
+        if extensions
+            .iter()
+            .find(|ext| matches!(ext, ClientExtension::PresharedKey(_)))
+            .is_none()
+        {
+            panic!("expected client to offer resumption but it did not");
+        }
     }
 
     // 6th subsequent handshake: cannot be resumed; we ran out of tickets
-    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-
-    let ops = shared_storage.ops_and_reset();
-    println!("last {:?}", ops);
-    assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, false)));
+    let extensions = extensions_from_client_hello(&client_config);
+    if extensions
+        .iter()
+        .find(|ext| matches!(ext, ClientExtension::PresharedKey(_)))
+        .is_some()
+    {
+        panic!("expected client not to offer resumption but it did");
+    }
 }
 
 #[test]
