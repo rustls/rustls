@@ -42,7 +42,7 @@ fn find_session(
     config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
-    #[allow(clippy::let_and_return)]
+    #[allow(clippy::let_and_return, clippy::unnecessary_lazy_evaluations)]
     let found = config
         .session_storage
         .take_tls13_ticket(server_name)
@@ -614,6 +614,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // handshake_traffic_secret.
         match suite {
             SupportedCipherSuite::Tls13(suite) => {
+                #[allow(clippy::bind_instead_of_map)]
                 let resuming_session = self
                     .resuming_session
                     .and_then(|resuming| match resuming.value {
