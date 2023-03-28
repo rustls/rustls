@@ -45,14 +45,16 @@ fn find_session(
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
     #[allow(clippy::let_and_return)]
     let found = config
-        .session_storage
+        .resumption
+        .store
         .take_tls13_ticket(server_name)
         .map(ClientSessionValue::Tls13)
         .or_else(|| {
             #[cfg(feature = "tls12")]
             {
                 config
-                    .session_storage
+                    .resumption
+                    .store
                     .tls12_session(server_name)
                     .map(ClientSessionValue::Tls12)
             }
@@ -383,7 +385,7 @@ fn prepare_resumption<'a>(
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
         _ => {
             if config.supports_version(ProtocolVersion::TLSv1_3)
-                || config.tls12_resumption == Some(Tls12Resumption::SessionIdOrTickets)
+                || config.resumption.tls12_resumption == Some(Tls12Resumption::SessionIdOrTickets)
             {
                 // If we don't have a ticket, request one.
                 exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
@@ -397,7 +399,7 @@ fn prepare_resumption<'a>(
         None => {
             // TLS 1.2; send the ticket if we have support this protocol version
             if config.supports_version(ProtocolVersion::TLSv1_2)
-                && config.tls12_resumption == Some(Tls12Resumption::SessionIdOrTickets)
+                && config.resumption.tls12_resumption == Some(Tls12Resumption::SessionIdOrTickets)
             {
                 exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
                     Payload::new(resuming.ticket()),

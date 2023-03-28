@@ -551,7 +551,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     }
 
     let persist = ClientCacheWithoutKxHints::new(opts.resumption_delay);
-    cfg.session_storage = persist;
+    cfg.resumption.store = persist;
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
 

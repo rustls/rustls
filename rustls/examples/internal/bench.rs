@@ -11,7 +11,7 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rustls::client::{ClientSessionMemoryCache, NoClientSessionStorage};
+use rustls::client::Resumption;
 use rustls::server::{
     AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, ServerSessionMemoryCache,
 };
@@ -127,13 +127,13 @@ enum ClientAuth {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-enum Resumption {
+enum ResumptionParam {
     No,
     SessionID,
     Tickets,
 }
 
-impl Resumption {
+impl ResumptionParam {
     fn label(&self) -> &'static str {
         match *self {
             Self::No => "no-resume",
@@ -358,9 +358,9 @@ fn make_client_config(
     };
 
     if resume != Resumption::No {
-        cfg.session_storage = ClientSessionMemoryCache::new(128);
+        cfg.resumption.store = ClientSessionMemoryCache::new(128);
     } else {
-        cfg.session_storage = Arc::new(NoClientSessionStorage {});
+        cfg.resumption.store = Arc::new(NoClientSessionStorage {});
     }
 
     cfg

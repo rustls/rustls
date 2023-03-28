@@ -17,6 +17,7 @@ use crate::versions;
 use crate::ExtractedSecrets;
 use crate::KeyLog;
 
+use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 use super::hs;
 
 use std::error::Error as StdError;
@@ -135,8 +136,8 @@ pub struct ClientConfig {
     /// If empty, no ALPN extension is sent.
     pub alpn_protocols: Vec<Vec<u8>>,
 
-    /// How we store session data or tickets.
-    pub session_storage: Arc<dyn ClientSessionStore>,
+    /// How and when the client can resume a previous session.
+    pub resumption: Resumption,
 
     /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
     /// message lengths except to the 2**16 limit specified in the standard.
@@ -149,13 +150,6 @@ pub struct ClientConfig {
 
     /// How to decide what client auth certificate/keys to use.
     pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
-
-    /// Whether to support RFC5077 tickets.  You must provide a working
-    /// `session_storage` member for this to have any meaningful
-    /// effect.
-    ///
-    /// The default is true.
-    pub tls12_resumption: Option<Tls12Resumption>,
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
@@ -199,8 +193,8 @@ impl fmt::Debug for ClientConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientConfig")
             .field("alpn_protocols", &self.alpn_protocols)
+            .field("resumption", &self.resumption)
             .field("max_fragment_size", &self.max_fragment_size)
-            .field("tls12_resumption", &self.tls12_resumption)
             .field("enable_sni", &self.enable_sni)
             .field("enable_early_data", &self.enable_early_data)
             .finish_non_exhaustive()
@@ -241,6 +235,68 @@ impl ClientConfig {
             .iter()
             .copied()
             .find(|&scs| scs.suite() == suite)
+    }
+}
+
+/// Configuration for how/when a client is allowed to resume a previous session.
+#[derive(Clone)]
+pub struct Resumption {
+    /// How we store session data or tickets.
+    pub(super) store: Arc<dyn ClientSessionStore>,
+
+    /// The default is true.
+    pub(super) tls12_resumption: Option<Tls12Resumption>,
+}
+
+impl Resumption {
+    /// Create a new `Resumption` that stores data for the given number of sessions in memory.
+    ///
+    /// This is default. By default, use of tickets is enabled.
+    pub fn in_memory_sessions(num: usize) -> Self {
+        Self {
+            store: ClientSessionMemoryCache::new(num),
+            tls12_resumption: Some(Tls12Resumption::SessionIdOrTickets),
+        }
+    }
+
+    /// Use a custom [`ClientSessionStore`] implementation to store sessions.
+    ///
+    /// By default, use of tickets is enabled.
+    pub fn store(store: Arc<dyn ClientSessionStore>) -> Self {
+        Self {
+            store,
+            tls12_resumption: Some(Tls12Resumption::SessionIdOrTickets),
+        }
+    }
+
+    /// Disable all use of session resumption.
+    pub fn disabled() -> Self {
+        Self {
+            store: Arc::new(NoClientSessionStorage),
+            tls12_resumption: None,
+        }
+    }
+
+    /// Disable the use of RFC 5077 tickets for resumption.
+    ///
+    /// This is meaningless if you've disabled resumption entirely.
+    pub fn tls12_resumption(mut self, tls12: Option<Tls12Resumption>) -> Self {
+        self.tls12_resumption = tls12;
+        self
+    }
+}
+
+impl fmt::Debug for Resumption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Resumption")
+            .field("tls12_resumption", &self.tls12_resumption)
+            .finish()
+    }
+}
+
+impl Default for Resumption {
+    fn default() -> Self {
+        Self::in_memory_sessions(256)
     }
 }
 
