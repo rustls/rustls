@@ -8,17 +8,15 @@ description = "Rustls example code and tests."
 publish = false
 
 [features]
-default = ["logging"]
-logging = ["log"]
 dangerous_configuration = ["rustls/dangerous_configuration"]
 quic = ["rustls/quic"]
 
 [dependencies]
 docopt = "~1.1"
 env_logger = "0.9.0" # 0.10 requires an MSRV bump to 1.60
-log = { version = "0.4.4", optional = true }
+log = { version = "0.4.4" }
 mio = { version = "0.8", features = ["net", "os-poll"] }
-rustls = { path = "../rustls" }
+rustls = { path = "../rustls", features = [ "logging" ]}
 rustls-pemfile = "1.0.0"
 sct = "0.7"
 serde = "1.0"
