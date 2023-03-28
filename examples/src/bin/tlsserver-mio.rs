@@ -3,7 +3,15 @@ use std::sync::Arc;
 use mio::net::{TcpListener, TcpStream};
 
 #[macro_use]
+#[cfg(feature = "logging")]
 extern crate log;
+
+#[cfg(not(feature = "logging"))]
+#[macro_use]
+mod log {
+    macro_rules! debug    ( ($($tt:tt)*) => {{}} );
+    macro_rules! error    ( ($($tt:tt)*) => {{}} );
+}
 
 use std::collections::HashMap;
 use std::fs;
@@ -62,8 +70,8 @@ impl TlsServer {
     fn accept(&mut self, registry: &mio::Registry) -> Result<(), io::Error> {
         loop {
             match self.server.accept() {
-                Ok((socket, addr)) => {
-                    debug!("Accepting new connection from {:?}", addr);
+                Ok((socket, _addr)) => {
+                    debug!("Accepting new connection from {:?}", _addr);
 
                     let tls_conn =
                         rustls::ServerConnection::new(Arc::clone(&self.tls_config)).unwrap();
@@ -226,8 +234,8 @@ impl OpenConnection {
         };
 
         // Process newly-received TLS messages.
-        if let Err(err) = self.tls_conn.process_new_packets() {
-            error!("cannot process packet: {:?}", err);
+        if let Err(_err) = self.tls_conn.process_new_packets() {
+            error!("cannot process packet: {:?}", _err);
 
             // last gasp write to send any alerts
             self.do_tls_write_and_handle_error();
