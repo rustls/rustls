@@ -4,7 +4,9 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use rustls::client::{ClientConfig, ClientConnection, Resumption};
+use rustls::client::{
+    ClientConfig, ClientConnection, Resumption, Tls12ClientSessionValue, Tls13ClientSessionValue,
+};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
@@ -18,8 +20,9 @@ use rustls::{
 use base64::prelude::{Engine, BASE64_STANDARD};
 use env_logger;
 
+use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{self, SystemTime};
 use std::{env, fs, net, process, thread};
 
@@ -459,14 +462,16 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
 
 struct ClientCacheWithoutKxHints {
     delay: u32,
-    storage: Arc<client::ClientSessionMemoryCache>,
+    tls12_storage: Arc<Mutex<HashMap<ServerName, Tls12ClientSessionValue>>>,
+    tls13_storage: Arc<Mutex<HashMap<ServerName, Tls13ClientSessionValue>>>,
 }
 
 impl ClientCacheWithoutKxHints {
     fn new(delay: u32) -> Arc<ClientCacheWithoutKxHints> {
         Arc::new(ClientCacheWithoutKxHints {
             delay,
-            storage: client::ClientSessionMemoryCache::new(32),
+            tls12_storage: Default::default(),
+            tls13_storage: Default::default(),
         })
     }
 }
@@ -483,17 +488,25 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
         mut value: client::Tls12ClientSessionValue,
     ) {
         value.rewind_epoch(self.delay);
-        self.storage
-            .set_tls12_session(server_name, value);
+        self.tls12_storage
+            .lock()
+            .unwrap()
+            .insert(server_name.clone(), value);
     }
 
     fn tls12_session(&self, server_name: &ServerName) -> Option<client::Tls12ClientSessionValue> {
-        self.storage.tls12_session(server_name)
+        self.tls12_storage
+            .lock()
+            .unwrap()
+            .get(server_name)
+            .map(Tls12ClientSessionValue::clone)
     }
 
     fn remove_tls12_session(&self, server_name: &ServerName) {
-        self.storage
-            .remove_tls12_session(server_name);
+        self.tls12_storage
+            .lock()
+            .unwrap()
+            .remove(server_name);
     }
 
     fn insert_tls13_ticket(
@@ -502,16 +515,20 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
         mut value: client::Tls13ClientSessionValue,
     ) {
         value.rewind_epoch(self.delay);
-        self.storage
-            .insert_tls13_ticket(server_name, value);
+        self.tls13_storage
+            .lock()
+            .unwrap()
+            .insert(server_name.clone(), value);
     }
 
     fn take_tls13_ticket(
         &self,
         server_name: &ServerName,
     ) -> Option<client::Tls13ClientSessionValue> {
-        self.storage
-            .take_tls13_ticket(server_name)
+        self.tls13_storage
+            .lock()
+            .unwrap()
+            .remove(server_name)
     }
 }
 
