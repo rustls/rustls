@@ -231,6 +231,7 @@ jobs:
         with:
           components: clippy
       - run: cargo clippy --package rustls --all-features -- --deny warnings
+      - run: cargo clippy --package rustls --no-default-features -- --deny warnings
       - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features -- --deny warnings
 
   clippy-nightly:
@@ -246,4 +247,5 @@ jobs:
         with:
           components: clippy
       - run: cargo clippy --package rustls --all-features
+      - run: cargo clippy --package rustls --no-default-features -- --deny warnings
       - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features -- --deny warnings
