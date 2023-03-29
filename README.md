@@ -8,8 +8,8 @@ verification.
 </p>
 
 # Status
-Rustls is ready for use.  There are no major breaking interface changes
-envisioned after the set included in the 0.20 release.
+Rustls is mature and widely used. While most of the API surface is stable, we expect the next
+few releases will make further changes as needed to accomodate new features or performance improvements.
 
 If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
