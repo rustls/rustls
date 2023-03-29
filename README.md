@@ -23,27 +23,51 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 * Future release
   - Planned: removal of unused signature verification schemes at link-time.
   - Planned: removal of unused protocol versions at link-time.
-* Next release: 0.21.0 (2023-xx-xx)
+* Next release: 0.21.0 (2023-03-29)
   - Support for connecting to peers named with IP addresses.  This means
     rustls now depends on a fork of webpki - `rustls-webpki` - with a suitably
     extended API.
   - *Breaking change*: `StoresClientSessions` trait renamed to `ClientSessionStore` and
     reworked to allow storage of multiple TLS1.3 tickets and avoid reuse of them.
     This is a privacy improvement, see RFC8446 appendix C.4.
-  - *Breaking change*: `rustls::Error` is no longer `PartialEq`.
+  - *Breaking change*: the `DistinguishedNames` type alias no longer exists; the public
+    API now exports a `DistinguishedName` type, and the
+    `ClientCertVerifier::client_auth_root_subjects()` method now returns a
+    `&[DistinguishedName]` instead (with the lifetime constrained to the
+    verifier's).
+  - *Breaking change*: the `ClientCertVerifier` methods `client_auth_mandatory()`
+    and `client_auth_root_subjects()` no longer return an `Option`. You can now
+    use an `Acceptor` to decide whether to accept the connection based on information
+    from the `ClientHello` (like server name).
   - *Breaking change*: rework `rustls::Error` to avoid String usage in
     `PeerMisbehavedError`, `PeerIncompatibleError` and certificate errors.
     Especially note that custom certificate verifiers should move to use the
-    new certificate errors.
+    new certificate errors. `Error` is now `non_exhaustive`, and so are the
+    inner enums used in its variants.
   - *Breaking change*: replace `webpki::Error` appearing in the public API
     in `RootCertStore::add`.
   - The number of tickets sent by a TLS1.3 server is now configurable via
     `ServerConfig::send_tls13_tickets`.  Previously one ticket was sent, now
     the default is four.
+  - *Breaking change*: remove deprecated methods from `Acceptor`.
   - *Breaking change*: `AllowAnyAuthenticatedClient` and `AllowAnyAnonymousOrAuthenticatedClient`
     `new` functions now return `Self`. A `boxed` function was added to both types to easily acquire
     an `Arc<dyn ClientCertVerifier>`.
   - *Breaking change*: `NoClientAuth::new` was renamed to `boxed`.
+  - *Breaking change*: the QUIC API has changed to provide QUIC-specific `ClientConnection` and
+    `ServerConnection` types, instead of using an extension trait.
+  - *Breaking change*: the QUIC `Secrets` constructor was changed to take
+    a `Side` instead of `bool`.
+  - *Breaking change*: the `export_keying_material` function on a `Connection`
+    was changed from returning `Result<(), Error>` to `Result<T, Error>` where
+    `T: AsMut<[u8]>`.
+  - *Breaking change*: the `sni_hostname` function on a `Connection` was renamed
+    to `server_name`.
+  - *Breaking change*: remove alternative type names deprecated in 0.20.0 (`RSASigningKey` vs.
+    `RsaSigningKey` etc.)
+  - *Breaking change*: the client config `session_storage` and `enable_tickets`
+    fields have been replaced by a more misuse resistant `Resumption` type that
+    combines the two options.
 * 0.20.8 (2023-01-12)
   - Yield an error from `ConnectionCommon::read_tls()` if buffers are full.
     Both a full deframer buffer and a full incoming plaintext buffer will
