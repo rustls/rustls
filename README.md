@@ -23,7 +23,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 * Future release
   - Planned: removal of unused signature verification schemes at link-time.
   - Planned: removal of unused protocol versions at link-time.
-* Next release: 0.21.0 (2023-03-29)
+* Current release: 0.21.0 (2023-03-29)
   - Support for connecting to peers named with IP addresses.  This means
     rustls now depends on a fork of webpki - `rustls-webpki` - with a suitably
     extended API.
@@ -68,62 +68,6 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
   - *Breaking change*: the client config `session_storage` and `enable_tickets`
     fields have been replaced by a more misuse resistant `Resumption` type that
     combines the two options.
-* 0.20.8 (2023-01-12)
-  - Yield an error from `ConnectionCommon::read_tls()` if buffers are full.
-    Both a full deframer buffer and a full incoming plaintext buffer will
-    now cause an error to be returned. Callers should call `process_new_packets()`
-    and read out the plaintext data from `reader()` after each successful call to `read_tls()`.
-  - The minimum supported Rust version is now 1.57.0 due to some dependencies
-    requiring it.
-* 0.20.7 (2022-10-18)
-  - Expose secret extraction API under the `secret_extraction` cargo feature.
-    This is designed to enable switching from rustls to kTLS (kernel TLS
-    offload) after a successful TLS 1.2/1.3 handshake, for example.
-  - Move filtering of signature schemes after config selection, avoiding the need
-    for linking in encryption/decryption code for all cipher suites at the cost of
-    exposing more signature schemes in the `ClientHello` emitted by the `Acceptor`.
-  - Expose AlertDescription, ContentType, and HandshakeType,
-    SignatureAlgorithm, and NamedGroup as part of the stable API. Previously they
-    were part of the unstable internals API, but were referenced by parts of the
-    stable API.
-  - We now have a [Discord channel](https://discord.gg/MCSB76RU96) for community
-    discussions.
-  - The minimum supported Rust version is now 1.56.0 due to several dependencies
-    requiring it.
-* 0.20.6 (2022-05-18)
-  - 0.20.5 included a change to track more context for the `Error::CorruptMessage`
-    which made API-incompatible changes to the `Error` type. We yanked 0.20.5
-    and have reverted that change as part of 0.20.6.
-* 0.20.5 (2022-05-14)
-  - Correct compatbility with servers which return no TLS extensions and take
-    advantage of a special case encoding.
-  - Remove spurious warn-level logging introduced in 0.20.3.
-  - Expose cipher suites in `ClientHello` type.
-  - Allow verification of IP addresses with `dangerous_config` enabled.
-  - Retry I/O operations in `ConnectionCommon::complete_io()` when interrupted.
-  - Fix server::ResolvesServerCertUsingSni case sensitivity.
-* 0.20.4 (2022-02-19)
-  - Correct regression in QUIC 0-RTT support.
-* 0.20.3 (2022-02-13)
-  - Support loading ECDSA keys in SEC1 format.
-  - Support receipt of 0-RTT "early data" in TLS1.3 servers.  It is not enabled
-    by default; opt in by setting `ServerConfig::max_early_data_size` to a non-zero
-    value.
-  - Support sending of data with the first server flight.  This is also not
-    enabled by default either: opt in by setting `ServerConfig::send_half_rtt_data`.
-  - Support `read_buf` interface when compiled with nightly. This means
-    data can be safely read out of a rustls connection into a buffer without
-    the buffer requiring initialisation first.  Set the `read_buf` feature to
-    use this.
-  - Improve efficiency when writing vectors of TLS types.
-  - Reduce copying and improve efficiency in TLS1.2 handshake.
-* 0.20.2 (2021-11-21)
-  - Fix `CipherSuite::as_str()` value (as introduced in 0.20.1).
-* 0.20.1 (2021-11-14)
-  - Allow cipher suite enum items to be stringified.
-  - Improve documentation of configuration builder types.
-  - Ensure unused cipher suites can be removed at link-time.
-  - Ensure single-use error types implement `std::error::Error`, and are public.
 
 See [RELEASE_NOTES.md](RELEASE_NOTES.md) for further change history.
 
