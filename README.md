@@ -134,7 +134,7 @@ cryptography in TLS. As a result, rustls only runs on platforms
 [supported by `ring`](https://github.com/briansmith/ring#online-automated-testing).
 At the time of writing this means x86, x86-64, armv7, and aarch64.
 
-Rustls requires Rust 1.56 or later.
+Rustls requires Rust 1.57 or later.
 
 # Example code
 There are two example programs which use
