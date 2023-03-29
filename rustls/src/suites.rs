@@ -220,6 +220,7 @@ pub(crate) fn compatible_sigscheme_for_suites(
 /// to configure kTLS for a socket, and have the kernel take over encryption
 /// and/or decryption.
 #[cfg(feature = "secret_extraction")]
+#[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
 pub struct ExtractedSecrets {
     /// sequence number and secrets for the "tx" (transmit) direction
     pub tx: (u64, ConnectionTrafficSecrets),
@@ -244,6 +245,7 @@ pub(crate) struct PartiallyExtractedSecrets {
 /// The only other piece of information needed is the sequence number,
 /// which is in [ExtractedSecrets].
 #[cfg(feature = "secret_extraction")]
+#[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
 #[non_exhaustive]
 pub enum ConnectionTrafficSecrets {
     /// Secrets for the AES_128_GCM AEAD algorithm
