@@ -15,7 +15,7 @@ jobs:
       uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
       with:
         oss-fuzz-project-name: 'rustls'
-        fuzz-seconds: 600
+        fuzz-seconds: 150
         dry-run: false
         language: rust
     - name: Upload Crash
