@@ -3894,13 +3894,19 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
             .unwrap()
             .unwrap();
         let message = Message::try_from(deframed.message).unwrap();
-        let MessagePayload::Handshake { parsed: parsed_handshake, .. } = message.payload else {
+        if let MessagePayload::Handshake {
+            parsed: parsed_handshake,
+            ..
+        } = message.payload
+        {
+            if let HandshakePayload::ClientHello(client_hello_payload) = parsed_handshake.payload {
+                client_hello_payload.extensions
+            } else {
+                panic!("expected client hello, got {:?}", parsed_handshake.payload);
+            }
+        } else {
             panic!("expected handshake message, got {:?}", message.payload);
-        };
-        let HandshakePayload::ClientHello(client_hello_payload) = parsed_handshake.payload else {
-            panic!("expected client hello, got {:?}", parsed_handshake.payload);
-        };
-        client_hello_payload.extensions
+        }
     }
 
     // 5 subsequent client hellos: all are resumptions
