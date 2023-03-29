@@ -11,7 +11,7 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rustls::client::{ClientSessionMemoryCache, NoClientSessionStorage};
+use rustls::client::Resumption;
 use rustls::server::{
     AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, ServerSessionMemoryCache,
 };
@@ -358,9 +358,9 @@ fn make_client_config(
     };
 
     if resume != ResumptionParam::No {
-        cfg.session_storage = ClientSessionMemoryCache::new(128);
+        cfg.resumption = Resumption::in_memory_sessions(128);
     } else {
-        cfg.session_storage = Arc::new(NoClientSessionStorage {});
+        cfg.resumption = Resumption::disabled();
     }
 
     cfg

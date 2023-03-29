@@ -1019,7 +1019,8 @@ impl ExpectFinished {
         );
 
         self.config
-            .session_storage
+            .resumption
+            .store
             .set_tls12_session(&self.server_name, session_value);
     }
 }

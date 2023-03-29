@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use rustls::client::ResolvesClientCert;
+use rustls::client::{ResolvesClientCert, Resumption};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
@@ -2678,7 +2678,7 @@ struct ClientStorage {
 impl ClientStorage {
     fn new() -> Self {
         Self {
-            storage: rustls::client::ClientSessionMemoryCache::new(1024),
+            storage: Arc::new(rustls::client::ClientSessionMemoryCache::new(1024)),
             ops: Mutex::new(Vec::new()),
         }
     }
@@ -2908,7 +2908,7 @@ fn early_data_configs() -> (Arc<ClientConfig>, Arc<ServerConfig>) {
     let kt = KeyType::Rsa;
     let mut client_config = make_client_config(kt);
     client_config.enable_early_data = true;
-    client_config.session_storage = Arc::new(ClientStorage::new());
+    client_config.resumption = Resumption::store(Arc::new(ClientStorage::new()));
 
     let mut server_config = make_server_config(kt);
     server_config.max_early_data_size = 1234;
@@ -3725,7 +3725,7 @@ fn test_client_sends_helloretryrequest() {
     );
 
     let storage = Arc::new(ClientStorage::new());
-    client_config.session_storage = storage.clone();
+    client_config.resumption = Resumption::store(storage.clone());
 
     // but server only accepts x25519, so a HRR is required
     let server_config =
@@ -3823,13 +3823,13 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     //   into kx group cache.
     let mut client_config_1 =
         make_client_config_with_kx_groups(KeyType::Rsa, &[&rustls::kx_group::X25519]);
-    client_config_1.session_storage = shared_storage.clone();
+    client_config_1.resumption = Resumption::store(shared_storage.clone());
 
     // second, client only supports secp-384 and so kx group cache
     //   contains an unusable value.
     let mut client_config_2 =
         make_client_config_with_kx_groups(KeyType::Rsa, &[&rustls::kx_group::SECP384R1]);
-    client_config_2.session_storage = shared_storage.clone();
+    client_config_2.resumption = Resumption::store(shared_storage.clone());
 
     let server_config = make_server_config(KeyType::Rsa);
 
@@ -3869,7 +3869,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let shared_storage = Arc::new(ClientStorage::new());
 
     let mut client_config = make_client_config(KeyType::Rsa);
-    client_config.session_storage = shared_storage.clone();
+    client_config.resumption = Resumption::store(shared_storage.clone());
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(KeyType::Rsa);
@@ -4170,7 +4170,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
 fn test_client_tls12_no_resume_after_server_downgrade() {
     let mut client_config = common::make_client_config(KeyType::Ed25519);
     let client_storage = Arc::new(ClientStorage::new());
-    client_config.session_storage = client_storage.clone();
+    client_config.resumption = Resumption::store(client_storage.clone());
     let client_config = Arc::new(client_config);
 
     let server_config_1 = Arc::new(common::finish_server_config(

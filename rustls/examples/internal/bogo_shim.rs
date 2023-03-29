@@ -4,7 +4,7 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use rustls::client::{ClientConfig, ClientConnection};
+use rustls::client::{ClientConfig, ClientConnection, Resumption};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
@@ -466,7 +466,7 @@ impl ClientCacheWithoutKxHints {
     fn new(delay: u32) -> Arc<ClientCacheWithoutKxHints> {
         Arc::new(ClientCacheWithoutKxHints {
             delay,
-            storage: client::ClientSessionMemoryCache::new(32),
+            storage: Arc::new(client::ClientSessionMemoryCache::new(32)),
         })
     }
 }
@@ -503,7 +503,7 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
     ) {
         value.rewind_epoch(self.delay);
         self.storage
-            .insert_tls13_ticket(server_name, value);
+            .insert_tls13_ticket(server_name, value)
     }
 
     fn take_tls13_ticket(
@@ -550,8 +550,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         });
     }
 
-    let persist = ClientCacheWithoutKxHints::new(opts.resumption_delay);
-    cfg.session_storage = persist;
+    cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay));
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
 
