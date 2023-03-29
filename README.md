@@ -20,9 +20,6 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
-* Future release
-  - Planned: removal of unused signature verification schemes at link-time.
-  - Planned: removal of unused protocol versions at link-time.
 * Current release: 0.21.0 (2023-03-29)
   - Support for connecting to peers named with IP addresses.  This means
     rustls now depends on a fork of webpki - `rustls-webpki` - with a suitably
