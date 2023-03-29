@@ -242,17 +242,20 @@ impl ClientConfig {
 /// Configuration for how/when a client is allowed to resume a previous session.
 #[derive(Clone)]
 pub struct Resumption {
-    /// How we store session data or tickets.
+    /// How we store session data or tickets. The default is to use an in-memory
+    /// [ClientSessionMemoryCache].
     pub(super) store: Arc<dyn ClientSessionStore>,
 
-    /// The default is true.
+    /// What mechanism is used for resuming a TLS 1.2 session. None, or
+    /// one of the choices from [Tls12Resumption].
     pub(super) tls12_resumption: Option<Tls12Resumption>,
 }
 
 impl Resumption {
     /// Create a new `Resumption` that stores data for the given number of sessions in memory.
     ///
-    /// This is default. By default, use of tickets is enabled.
+    /// This is the default `Resumption` choice, and enables resuming a TLS 1.2 session with
+    /// a session id or RFC 5077 ticket.
     pub fn in_memory_sessions(num: usize) -> Self {
         Self {
             store: ClientSessionMemoryCache::new(num),
@@ -262,7 +265,7 @@ impl Resumption {
 
     /// Use a custom [`ClientSessionStore`] implementation to store sessions.
     ///
-    /// By default, use of tickets is enabled.
+    /// By default, enables resuming a TLS 1.2 session with a session id or RFC 5077 ticket.
     pub fn store(store: Arc<dyn ClientSessionStore>) -> Self {
         Self {
             store,
@@ -278,7 +281,7 @@ impl Resumption {
         }
     }
 
-    /// Disable the use of RFC 5077 tickets for resumption.
+    /// Configure whether TLS 1.2 sessions may be resumed, and by what mechanism.
     ///
     /// This is meaningless if you've disabled resumption entirely.
     pub fn tls12_resumption(mut self, tls12: Option<Tls12Resumption>) -> Self {
@@ -296,6 +299,8 @@ impl fmt::Debug for Resumption {
 }
 
 impl Default for Resumption {
+    /// Create an in-memory session store resumption with up to 256 server names, allowing
+    /// a TLS 1.2 session to resume with a session id or RFC 5077 ticket.
     fn default() -> Self {
         Self::in_memory_sessions(256)
     }
