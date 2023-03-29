@@ -140,7 +140,8 @@ pub(super) fn handle_server_hello(
 
     // Remember what KX group the server liked for next time.
     config
-        .session_storage
+        .resumption
+        .store
         .set_kx_hint(&server_name, their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
@@ -190,7 +191,8 @@ pub(super) fn initial_key_share(
     server_name: &ServerName,
 ) -> Result<kx::KeyExchange, Error> {
     let group = config
-        .session_storage
+        .resumption
+        .store
         .kx_hint(server_name)
         .and_then(|group| kx::KeyExchange::choose(group, &config.kx_groups))
         .unwrap_or_else(|| {
@@ -883,7 +885,8 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
         st.config
-            .session_storage
+            .resumption
+            .store
             .remove_tls12_session(&st.server_name);
 
         /* Now move to our application traffic keys. */
@@ -892,7 +895,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         cx.common.start_traffic();
 
         let st = ExpectTraffic {
-            session_storage: Arc::clone(&st.config.session_storage),
+            session_storage: Arc::clone(&st.config.resumption.store),
             server_name: st.server_name,
             suite: st.suite,
             transcript: st.transcript,

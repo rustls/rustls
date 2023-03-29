@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 /// An implementer of `ClientSessionStore` which does nothing.
-pub struct NoClientSessionStorage {}
+pub(super) struct NoClientSessionStorage;
 
 impl client::ClientSessionStore for NoClientSessionStorage {
     fn set_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
@@ -71,12 +71,12 @@ pub struct ClientSessionMemoryCache {
 impl ClientSessionMemoryCache {
     /// Make a new ClientSessionMemoryCache.  `size` is the
     /// maximum number of stored sessions.
-    pub fn new(size: usize) -> Arc<Self> {
+    pub fn new(size: usize) -> Self {
         let max_servers =
             size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1) / MAX_TLS13_TICKETS_PER_SERVER;
-        Arc::new(Self {
+        Self {
             servers: Mutex::new(limited_cache::LimitedCache::new(max_servers)),
-        })
+        }
     }
 }
 

@@ -409,9 +409,10 @@ pub mod client {
     pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
     pub use client_conn::{
         ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
-        InvalidDnsNameError, ResolvesClientCert, ServerName, Tls12Resumption, WriteEarlyData,
+        InvalidDnsNameError, ResolvesClientCert, Resumption, ServerName, Tls12Resumption,
+        WriteEarlyData,
     };
-    pub use handy::{ClientSessionMemoryCache, NoClientSessionStorage};
+    pub use handy::ClientSessionMemoryCache;
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{
