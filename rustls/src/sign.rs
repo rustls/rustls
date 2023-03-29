@@ -210,11 +210,6 @@ impl SigningKey for RsaSigningKey {
     }
 }
 
-#[allow(clippy::upper_case_acronyms)]
-#[doc(hidden)]
-#[deprecated(since = "0.20.0", note = "Use RsaSigningKey")]
-pub type RSASigningKey = RsaSigningKey;
-
 struct RsaSigner {
     key: Arc<RsaKeyPair>,
     scheme: SignatureScheme,

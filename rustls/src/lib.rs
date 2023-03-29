@@ -507,28 +507,3 @@ pub mod quic;
 
 /// This is the rustls manual.
 pub mod manual;
-
-/** Type renames. */
-#[allow(clippy::upper_case_acronyms)]
-#[doc(hidden)]
-#[deprecated(since = "0.20.0", note = "Use ResolvesServerCertUsingSni")]
-pub type ResolvesServerCertUsingSNI = server::ResolvesServerCertUsingSni;
-#[allow(clippy::upper_case_acronyms)]
-#[cfg(feature = "dangerous_configuration")]
-#[doc(hidden)]
-#[deprecated(since = "0.20.0", note = "Use client::WebPkiVerifier")]
-pub type WebPKIVerifier = client::WebPkiVerifier;
-#[allow(clippy::upper_case_acronyms)]
-#[doc(hidden)]
-#[deprecated(since = "0.20.0", note = "Use Error")]
-pub type TLSError = Error;
-#[doc(hidden)]
-#[deprecated(since = "0.20.0", note = "Use ClientConnection")]
-pub type ClientSession = ClientConnection;
-#[doc(hidden)]
-#[deprecated(since = "0.20.0", note = "Use ServerConnection")]
-pub type ServerSession = ServerConnection;
-
-/* Apologies: would make a trait alias here, but those remain unstable.
-pub trait Session = Connection;
-*/
