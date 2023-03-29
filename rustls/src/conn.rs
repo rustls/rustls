@@ -85,6 +85,7 @@ impl Connection {
 
     /// Extract secrets, to set up kTLS for example
     #[cfg(feature = "secret_extraction")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
     pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         match self {
             Self::Client(conn) => conn.extract_secrets(),
@@ -542,6 +543,7 @@ impl<Data> ConnectionCommon<Data> {
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     #[cfg(feature = "secret_extraction")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
     pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         if !self.enable_secret_extraction {
             return Err(Error::General("Secret extraction is disabled".into()));
