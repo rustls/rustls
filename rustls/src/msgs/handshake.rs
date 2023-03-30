@@ -229,7 +229,10 @@ impl ServerNamePayload {
             match webpki::DnsNameRef::try_from_ascii(&raw.0) {
                 Ok(dns_name) => dns_name.into(),
                 Err(_) => {
-                    warn!("Illegal SNI hostname received {:?}", raw.0);
+                    warn!(
+                        "Illegal SNI hostname received {:?}",
+                        String::from_utf8_lossy(&raw.0)
+                    );
                     return Err(InvalidMessage::InvalidServerName);
                 }
             }
