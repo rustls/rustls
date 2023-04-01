@@ -3,7 +3,7 @@ use std::fmt;
 /// This type contains a private key by value.
 ///
 /// The private key must be DER-encoded ASN.1 in either
-/// PKCS#8 or PKCS#1 format.
+/// PKCS#8, PKCS#1, or Sec1 format.
 ///
 /// The `rustls-pemfile` crate can be used to extract
 /// private keys from a PEM file in these formats.
