@@ -55,17 +55,9 @@ where
         // We call complete_io() in a loop since a single call may read only
         // a partial packet from the underlying transport. A full packet is
         // needed to get more plaintext, which we must do if EOF has not been
-        // hit. Otherwise, we will prematurely signal EOF by returning 0. We
-        // determine if EOF has actually been hit by checking if 0 bytes were
-        // read from the underlying transport.
+        // hit.
         while self.conn.wants_read() {
-            let at_eof = self.conn.complete_io(self.sock)?.0 == 0;
-            if at_eof {
-                if let Ok(io_state) = self.conn.process_new_packets() {
-                    if at_eof && io_state.plaintext_bytes_to_read() == 0 {
-                        return Ok(0);
-                    }
-                }
+            if self.conn.complete_io(self.sock)?.0 == 0 {
                 break;
             }
         }
@@ -80,17 +72,9 @@ where
         // We call complete_io() in a loop since a single call may read only
         // a partial packet from the underlying transport. A full packet is
         // needed to get more plaintext, which we must do if EOF has not been
-        // hit. Otherwise, we will prematurely signal EOF by returning without
-        // writing anything. We determine if EOF has actually been hit by
-        // checking if 0 bytes were read from the underlying transport.
+        // hit.
         while self.conn.wants_read() {
-            let at_eof = self.conn.complete_io(self.sock)?.0 == 0;
-            if at_eof {
-                if let Ok(io_state) = self.conn.process_new_packets() {
-                    if at_eof && io_state.plaintext_bytes_to_read() == 0 {
-                        return Ok(());
-                    }
-                }
+            if self.conn.complete_io(self.sock)?.0 == 0 {
                 break;
             }
         }
