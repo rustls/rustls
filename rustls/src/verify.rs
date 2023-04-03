@@ -264,7 +264,10 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
     /// the implementor to handle invalid data. It is recommended that the implementor returns
-    /// [`Error::InvalidCertificate(CertificateError::BadEncoding)`] when these cases are encountered.
+    /// an [InvalidCertificate] error with the [BadEncoding] variant when these cases are encountered.
+    ///
+    /// [InvalidCertificate]: Error#variant.InvalidCertificate
+    /// [BadEncoding]: CertificateError#variant.BadEncoding
     fn verify_client_cert(
         &self,
         end_entity: &Certificate,
