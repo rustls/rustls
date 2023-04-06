@@ -25,9 +25,25 @@ pub enum Connection {
 }
 
 impl Connection {
-    /// Read TLS content from `rd`.
+    /// Read TLS content from `rd` into the internal buffer.
     ///
-    /// See [`ConnectionCommon::read_tls()`] for more information.
+    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
+    /// a socket or pipe might).
+    ///
+    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
+    /// to empty the incoming TLS data buffer.
+    ///
+    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
+    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
+    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
+    ///
+    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
+    ///   each time a call to this function succeeds.
+    /// * In order to empty the incoming plaintext data buffer, you should empty it through
+    ///   the [`reader()`] after the call to [`process_new_packets()`].
+    ///
+    /// [`process_new_packets()`]: Connection::process_new_packets
+    /// [`reader()`]: Connection::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         match self {
             Self::Client(conn) => conn.read_tls(rd),
@@ -37,7 +53,11 @@ impl Connection {
 
     /// Writes TLS messages to `wr`.
     ///
-    /// See [`ConnectionCommon::write_tls()`] for more information.
+    /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
+    /// (after encoding and encryption).
+    ///
+    /// After this function returns, the connection buffer may not yet be fully flushed. The
+    /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.sendable_tls.write_to(wr)
     }
@@ -58,9 +78,24 @@ impl Connection {
         }
     }
 
-    /// Processes any new packets read by a previous call to [`Connection::read_tls`].
+    /// Processes any new packets read by a previous call to
+    /// [`Connection::read_tls`].
     ///
-    /// See [`ConnectionCommon::process_new_packets()`] for more information.
+    /// Errors from this function relate to TLS protocol errors, and
+    /// are fatal to the connection.  Future calls after an error will do
+    /// no new work and will return the same error. After an error is
+    /// received from [`process_new_packets`], you should not call [`read_tls`]
+    /// any more (it will fill up buffers to no purpose). However, you
+    /// may call the other methods on the connection, including `write`,
+    /// `send_close_notify`, and `write_tls`. Most likely you will want to
+    /// call `write_tls` to send any alerts queued by the error and then
+    /// close the underlying connection.
+    ///
+    /// Success from this function comes with some sundry state data
+    /// about the connection.
+    ///
+    /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
         match self {
             Self::Client(conn) => conn.process_new_packets(),
@@ -70,7 +105,19 @@ impl Connection {
 
     /// Derives key material from the agreed connection secrets.
     ///
-    /// See [`ConnectionCommon::export_keying_material()`] for more information.
+    /// This function fills in `output` with `output.len()` bytes of key
+    /// material derived from the master session secret using `label`
+    /// and `context` for diversification. Ownership of the buffer is taken
+    /// by the function and returned via the Ok result to ensure no key
+    /// material leaks if the function fails.
+    ///
+    /// See RFC5705 for more details on what this does and is for.
+    ///
+    /// For TLS1.3 connections, this function does not use the
+    /// "early" exporter at any point.
+    ///
+    /// This function fails if called prior to the handshake completing;
+    /// check with [`CommonState::is_handshaking`] first.
     pub fn export_keying_material<T: AsMut<[u8]>>(
         &self,
         output: T,
@@ -83,7 +130,7 @@ impl Connection {
         }
     }
 
-    /// Extract secrets, to set up kTLS for example
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
     #[cfg(feature = "secret_extraction")]
     #[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
     pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
@@ -93,9 +140,35 @@ impl Connection {
         }
     }
 
-    /// This function uses `io` to complete any outstanding IO for this connection.
+    /// This function uses `io` to complete any outstanding IO for
+    /// this connection.
     ///
-    /// See [`ConnectionCommon::complete_io()`] for more information.
+    /// This is a convenience function which solely uses other parts
+    /// of the public API.
+    ///
+    /// What this means depends on the connection  state:
+    ///
+    /// - If the connection [`is_handshaking`], then IO is performed until
+    ///   the handshake is complete.
+    /// - Otherwise, if [`wants_write`] is true, [`write_tls`] is invoked
+    ///   until it is all written.
+    /// - Otherwise, if [`wants_read`] is true, [`read_tls`] is invoked
+    ///   once.
+    ///
+    /// The return value is the number of bytes read from and written
+    /// to `io`, respectively.
+    ///
+    /// This function will block if `io` blocks.
+    ///
+    /// Errors from TLS record handling (i.e., from [`process_new_packets`])
+    /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
+    ///
+    /// [`is_handshaking`]: CommonState::is_handshaking
+    /// [`wants_read`]: CommonState::wants_read
+    /// [`wants_write`]: CommonState::wants_write
+    /// [`write_tls`]: Connection::write_tls
+    /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
     pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
     where
         Self: Sized,
@@ -337,35 +410,9 @@ impl<Data> ConnectionCommon<Data> {
         Writer::new(self)
     }
 
-    /// This function uses `io` to complete any outstanding IO for
-    /// this connection.
+    /// This function uses `io` to complete any outstanding IO for this connection.
     ///
-    /// This is a convenience function which solely uses other parts
-    /// of the public API.
-    ///
-    /// What this means depends on the connection  state:
-    ///
-    /// - If the connection [`is_handshaking`], then IO is performed until
-    ///   the handshake is complete.
-    /// - Otherwise, if [`wants_write`] is true, [`write_tls`] is invoked
-    ///   until it is all written.
-    /// - Otherwise, if [`wants_read`] is true, [`read_tls`] is invoked
-    ///   once.
-    ///
-    /// The return value is the number of bytes read from and written
-    /// to `io`, respectively.
-    ///
-    /// This function will block if `io` blocks.
-    ///
-    /// Errors from TLS record handling (i.e., from [`process_new_packets`])
-    /// are wrapped in an `io::ErrorKind::InvalidData`-kind error.
-    ///
-    /// [`is_handshaking`]: CommonState::is_handshaking
-    /// [`wants_read`]: CommonState::wants_read
-    /// [`wants_write`]: CommonState::wants_write
-    /// [`write_tls`]: ConnectionCommon::write_tls
-    /// [`read_tls`]: ConnectionCommon::read_tls
-    /// [`process_new_packets`]: ConnectionCommon::process_new_packets
+    /// See [`Connection::complete_io()`] for more information.
     pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
     where
         Self: Sized,
@@ -447,48 +494,18 @@ impl<Data> ConnectionCommon<Data> {
         self.core.state = Ok(new);
     }
 
-    /// Processes any new packets read by a previous call to
-    /// [`Connection::read_tls`].
+    /// Processes any new packets read by a previous call to [`Connection::read_tls`].
     ///
-    /// Errors from this function relate to TLS protocol errors, and
-    /// are fatal to the connection.  Future calls after an error will do
-    /// no new work and will return the same error. After an error is
-    /// received from [`process_new_packets`], you should not call [`read_tls`]
-    /// any more (it will fill up buffers to no purpose). However, you
-    /// may call the other methods on the connection, including `write`,
-    /// `send_close_notify`, and `write_tls`. Most likely you will want to
-    /// call `write_tls` to send any alerts queued by the error and then
-    /// close the underlying connection.
-    ///
-    /// Success from this function comes with some sundry state data
-    /// about the connection.
-    ///
-    /// [`read_tls`]: Connection::read_tls
-    /// [`process_new_packets`]: Connection::process_new_packets
+    /// See [`Connection::process_new_packets()`] for more information.
     #[inline]
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.core.process_new_packets()
     }
 
-    /// Read TLS content from `rd` into the internal buffer.
+    /// Read TLS content from `rd`.
     ///
-    /// Due to the internal buffering, `rd` can supply TLS messages in arbitrary-sized chunks (like
-    /// a socket or pipe might).
+    /// See [`Connection::read_tls()`] for more information.
     ///
-    /// You should call [`process_new_packets()`] each time a call to this function succeeds in order
-    /// to empty the incoming TLS data buffer.
-    ///
-    /// This function returns `Ok(0)` when the underlying `rd` does so. This typically happens when
-    /// a socket is cleanly closed, or a file is at EOF. Errors may result from the IO done through
-    /// `rd`; additionally, errors of `ErrorKind::Other` are emitted to signal backpressure:
-    ///
-    /// * In order to empty the incoming TLS data buffer, you should call [`process_new_packets()`]
-    ///   each time a call to this function succeeds.
-    /// * In order to empty the incoming plaintext data buffer, you should empty it through
-    ///   the [`reader()`] after the call to [`process_new_packets()`].
-    ///
-    /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
-    /// [`reader()`]: ConnectionCommon::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         if self.received_plaintext.is_full() {
             return Err(io::Error::new(
@@ -506,30 +523,14 @@ impl<Data> ConnectionCommon<Data> {
 
     /// Writes TLS messages to `wr`.
     ///
-    /// On success, this function returns `Ok(n)` where `n` is a number of bytes written to `wr`
-    /// (after encoding and encryption).
-    ///
-    /// After this function returns, the connection buffer may not yet be fully flushed. The
-    /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
+    /// See [`Connection::write_tls()`] for more information.
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.sendable_tls.write_to(wr)
     }
 
     /// Derives key material from the agreed connection secrets.
     ///
-    /// This function fills in `output` with `output.len()` bytes of key
-    /// material derived from the master session secret using `label`
-    /// and `context` for diversification. Ownership of the buffer is taken
-    /// by the function and returned via the Ok result to ensure no key
-    /// material leaks if the function fails.
-    ///
-    /// See RFC5705 for more details on what this does and is for.
-    ///
-    /// For TLS1.3 connections, this function does not use the
-    /// "early" exporter at any point.
-    ///
-    /// This function fails if called prior to the handshake completing;
-    /// check with [`CommonState::is_handshaking`] first.
+    /// See [`Connection::export_keying_material()`] for more information.
     #[inline]
     pub fn export_keying_material<T: AsMut<[u8]>>(
         &self,
