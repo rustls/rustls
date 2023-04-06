@@ -371,12 +371,13 @@ impl<Data> ConnectionCommon<Data> {
         Self: Sized,
         T: io::Read + io::Write,
     {
-        let until_handshaked = self.is_handshaking();
         let mut eof = false;
         let mut wrlen = 0;
         let mut rdlen = 0;
 
         loop {
+            let until_handshaked = self.is_handshaking();
+
             while self.wants_write() {
                 wrlen += self.write_tls(io)?;
             }
@@ -414,6 +415,13 @@ impl<Data> ConnectionCommon<Data> {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, e));
                 }
             };
+
+            // if we're doing IO until handshaked, and we believe we've finished handshaking,
+            // but process_new_packets() has queued TLS data to send, loop around again to write
+            // the queued messages.
+            if until_handshaked && !self.is_handshaking() && self.wants_write() {
+                continue;
+            }
 
             match (eof, until_handshaked, self.is_handshaking()) {
                 (_, true, false) => return Ok((rdlen, wrlen)),

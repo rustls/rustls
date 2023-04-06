@@ -1315,6 +1315,7 @@ fn client_complete_io_for_handshake() {
         .unwrap();
     assert!(rdlen > 0 && wrlen > 0);
     assert!(!client.is_handshaking());
+    assert!(!client.wants_write());
 }
 
 #[test]
@@ -1390,6 +1391,7 @@ fn server_complete_io_for_handshake() {
             .unwrap();
         assert!(rdlen > 0 && wrlen > 0);
         assert!(!server.is_handshaking());
+        assert!(!server.wants_write());
     }
 }
 
