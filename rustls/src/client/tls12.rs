@@ -71,9 +71,12 @@ mod server_hello {
             // public values and don't require constant time comparison
             let has_downgrade_marker = self.randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
             if tls13_supported && has_downgrade_marker {
-                return Err(cx
-                    .common
-                    .illegal_param(PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported));
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported,
+                    )
+                });
             }
 
             // Doing EMS?
