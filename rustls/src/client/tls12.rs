@@ -404,9 +404,10 @@ impl State<ClientConnectionData> for ExpectServerKx {
         let ecdhe = opaque_kx
             .unwrap_given_kxa(self.suite.kx)
             .ok_or_else(|| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::DecodeError);
-                InvalidMessage::MissingKeyExchange
+                cx.common.send_fatal_alert(
+                    AlertDescription::DecodeError,
+                    InvalidMessage::MissingKeyExchange,
+                )
             })?;
 
         // Save the signature and signed parameters for later verification.
@@ -1043,8 +1044,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
                 .map_err(|_| {
                     cx.common
-                        .send_fatal_alert(AlertDescription::DecryptError);
-                    Error::DecryptError
+                        .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError)
                 })
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 

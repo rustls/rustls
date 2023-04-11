@@ -497,15 +497,15 @@ type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 pub(crate) fn decode_ecdh_params<T: Codec>(
     common: &mut CommonState,
     kx_params: &[u8],
-) -> Result<T, InvalidMessage> {
+) -> Result<T, Error> {
     let mut rd = Reader::init(kx_params);
     let ecdh_params = T::read(&mut rd)?;
     match rd.any_left() {
         false => Ok(ecdh_params),
-        true => {
-            common.send_fatal_alert(AlertDescription::DecodeError);
-            Err(InvalidMessage::InvalidDhParams)
-        }
+        true => Err(common.send_fatal_alert(
+            AlertDescription::DecodeError,
+            InvalidMessage::InvalidDhParams,
+        )),
     }
 }
 

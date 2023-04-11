@@ -81,9 +81,10 @@ pub(super) fn handle_server_hello(
     let their_key_share = server_hello
         .get_key_share()
         .ok_or_else(|| {
-            cx.common
-                .send_fatal_alert(AlertDescription::MissingExtension);
-            Error::PeerMisbehaved(PeerMisbehaved::MissingKeyShare)
+            cx.common.send_fatal_alert(
+                AlertDescription::MissingExtension,
+                PeerMisbehaved::MissingKeyShare,
+            )
         })?;
 
     if our_key_share.group() != their_key_share.group {
@@ -178,8 +179,10 @@ fn validate_server_hello(
 ) -> Result<(), Error> {
     for ext in &server_hello.extensions {
         if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
-            common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(PeerMisbehaved::UnexpectedCleartextExtension.into());
+            return Err(common.send_fatal_alert(
+                AlertDescription::UnsupportedExtension,
+                PeerMisbehaved::UnexpectedCleartextExtension,
+            ));
         }
     }
 
@@ -318,21 +321,27 @@ fn validate_encrypted_extensions(
     exts: &Vec<ServerExtension>,
 ) -> Result<(), Error> {
     if exts.has_duplicate_extension() {
-        common.send_fatal_alert(AlertDescription::DecodeError);
-        return Err(PeerMisbehaved::DuplicateEncryptedExtensions.into());
+        return Err(common.send_fatal_alert(
+            AlertDescription::DecodeError,
+            PeerMisbehaved::DuplicateEncryptedExtensions,
+        ));
     }
 
     if hello.server_sent_unsolicited_extensions(exts, &[]) {
-        common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-        return Err(PeerMisbehaved::UnsolicitedEncryptedExtension.into());
+        return Err(common.send_fatal_alert(
+            AlertDescription::UnsupportedExtension,
+            PeerMisbehaved::UnsolicitedEncryptedExtension,
+        ));
     }
 
     for ext in exts {
         if ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type())
             || DISALLOWED_TLS13_EXTS.contains(&ext.get_type())
         {
-            common.send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(PeerMisbehaved::DisallowedEncryptedExtension.into());
+            return Err(common.send_fatal_alert(
+                AlertDescription::UnsupportedExtension,
+                PeerMisbehaved::DisallowedEncryptedExtension,
+            ));
         }
     }
 
@@ -522,9 +531,10 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         // Must be empty during handshake.
         if !certreq.context.0.is_empty() {
             warn!("Server sent non-empty certreq context");
-            cx.common
-                .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(InvalidMessage::InvalidCertRequest.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::DecodeError,
+                InvalidMessage::InvalidCertRequest,
+            ));
         }
 
         let tls13_sign_schemes = sign::supported_sign_tls13();
@@ -538,9 +548,10 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             .collect::<Vec<SignatureScheme>>();
 
         if compat_sigschemes.is_empty() {
-            cx.common
-                .send_fatal_alert(AlertDescription::HandshakeFailure);
-            return Err(PeerIncompatible::NoCertificateRequestSignatureSchemesInCommon.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::HandshakeFailure,
+                PeerIncompatible::NoCertificateRequestSignatureSchemesInCommon,
+            ));
         }
 
         let client_auth = ClientAuthDetails::resolve(
@@ -588,18 +599,20 @@ impl State<ClientConnectionData> for ExpectCertificate {
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
             warn!("certificate with non-empty context during handshake");
-            cx.common
-                .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(InvalidMessage::InvalidCertRequest.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::DecodeError,
+                InvalidMessage::InvalidCertRequest,
+            ));
         }
 
         if cert_chain.any_entry_has_duplicate_extension()
             || cert_chain.any_entry_has_unknown_extension()
         {
             warn!("certificate chain contains unsolicited/unknown extension");
-            cx.common
-                .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(PeerMisbehaved::BadCertChainExtensions.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::UnsupportedExtension,
+                PeerMisbehaved::BadCertChainExtensions,
+            ));
         }
 
         let server_cert = ServerCertDetails::new(
@@ -828,8 +841,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
             .map_err(|_| {
                 cx.common
-                    .send_fatal_alert(AlertDescription::DecryptError);
-                Error::DecryptError
+                    .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError)
             })
             .map(|_| verify::FinishedMessageVerified::assertion())?;
 
@@ -936,9 +948,10 @@ impl ExpectTraffic {
         nst: &NewSessionTicketPayloadTLS13,
     ) -> Result<(), Error> {
         if nst.has_duplicate_extension() {
-            cx.common
-                .send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(PeerMisbehaved::DuplicateNewSessionTicketExtensions.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::DuplicateNewSessionTicketExtensions,
+            ));
         }
 
         let handshake_hash = self.transcript.get_current_hash();
@@ -997,9 +1010,11 @@ impl ExpectTraffic {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = common.protocol {
-                common.send_fatal_alert(AlertDescription::UnexpectedMessage);
                 warn!("KeyUpdate received in QUIC connection");
-                return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
+                return Err(common.send_fatal_alert(
+                    AlertDescription::UnexpectedMessage,
+                    PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
+                ));
             }
         }
 

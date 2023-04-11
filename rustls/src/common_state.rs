@@ -174,8 +174,7 @@ impl CommonState {
             }
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
-                self.send_fatal_alert(AlertDescription::UnexpectedMessage);
-                Err(e)
+                Err(self.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
             }
             Err(e) => Err(e),
         }
@@ -209,16 +208,17 @@ impl CommonState {
     // which is illegal.  Not mentioned in RFC.
     pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
         if !self.aligned_handshake {
-            self.send_fatal_alert(AlertDescription::UnexpectedMessage);
-            Err(PeerMisbehaved::KeyEpochWithPendingFragment.into())
+            Err(self.send_fatal_alert(
+                AlertDescription::UnexpectedMessage,
+                PeerMisbehaved::KeyEpochWithPendingFragment,
+            ))
         } else {
             Ok(())
         }
     }
 
     pub(crate) fn illegal_param(&mut self, why: PeerMisbehaved) -> Error {
-        self.send_fatal_alert(AlertDescription::IllegalParameter);
-        Error::PeerMisbehaved(why)
+        self.send_fatal_alert(AlertDescription::IllegalParameter, why)
     }
 
     /// Fragment `m`, encrypt the fragments, and then queue
@@ -431,8 +431,7 @@ impl CommonState {
 
     #[cfg(feature = "quic")]
     pub(crate) fn missing_extension(&mut self, why: PeerMisbehaved) -> Error {
-        self.send_fatal_alert(AlertDescription::MissingExtension);
-        Error::PeerMisbehaved(why)
+        self.send_fatal_alert(AlertDescription::MissingExtension, why)
     }
 
     fn send_warning_alert(&mut self, desc: AlertDescription) {
@@ -443,8 +442,10 @@ impl CommonState {
     pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
         // Reject unknown AlertLevels.
         if let AlertLevel::Unknown(_) = alert.level {
-            self.send_fatal_alert(AlertDescription::IllegalParameter);
-            return Err(Error::AlertReceived(alert.description));
+            return Err(self.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                Error::AlertReceived(alert.description),
+            ));
         }
 
         // If we get a CloseNotify, make a note to declare EOF to our
@@ -456,9 +457,10 @@ impl CommonState {
 
         // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
         // (except, for no good reason, user_cancelled).
+        let err = Error::AlertReceived(alert.description);
         if alert.level == AlertLevel::Warning {
             if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
-                self.send_fatal_alert(AlertDescription::DecodeError);
+                return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
             } else {
                 warn!("TLS alert warning received: {:#?}", alert);
                 return Ok(());
@@ -466,24 +468,31 @@ impl CommonState {
         }
 
         error!("TLS alert received: {:#?}", alert);
-        Err(Error::AlertReceived(alert.description))
+        Err(err)
     }
 
     pub(crate) fn send_cert_verify_error_alert(&mut self, err: Error) -> Error {
-        self.send_fatal_alert(match &err {
-            Error::InvalidCertificate(e) => e.clone().into(),
-            Error::PeerMisbehaved(_) => AlertDescription::IllegalParameter,
-            _ => AlertDescription::HandshakeFailure,
-        });
-        err
+        self.send_fatal_alert(
+            match &err {
+                Error::InvalidCertificate(e) => e.clone().into(),
+                Error::PeerMisbehaved(_) => AlertDescription::IllegalParameter,
+                _ => AlertDescription::HandshakeFailure,
+            },
+            err,
+        )
     }
 
-    pub(crate) fn send_fatal_alert(&mut self, desc: AlertDescription) {
+    pub(crate) fn send_fatal_alert(
+        &mut self,
+        desc: AlertDescription,
+        err: impl Into<Error>,
+    ) -> Error {
         warn!("Sending fatal alert {:?}", desc);
         debug_assert!(!self.sent_fatal_alert);
         let m = Message::build_alert(AlertLevel::Fatal, desc);
         self.send_msg(m, self.record_layer.is_encrypting());
         self.sent_fatal_alert = true;
+        err.into()
     }
 
     /// Queues a close_notify warning alert to be sent in the next
@@ -557,10 +566,10 @@ impl CommonState {
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => Ok(false),
             KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
-            _ => {
-                self.send_fatal_alert(AlertDescription::IllegalParameter);
-                Err(InvalidMessage::InvalidKeyUpdate.into())
-            }
+            _ => Err(self.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                InvalidMessage::InvalidKeyUpdate,
+            )),
         }
     }
 

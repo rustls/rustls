@@ -31,18 +31,15 @@ pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
 pub(super) fn incompatible(common: &mut CommonState, why: PeerIncompatible) -> Error {
-    common.send_fatal_alert(AlertDescription::HandshakeFailure);
-    Error::PeerIncompatible(why)
+    common.send_fatal_alert(AlertDescription::HandshakeFailure, why)
 }
 
 fn bad_version(common: &mut CommonState, why: PeerIncompatible) -> Error {
-    common.send_fatal_alert(AlertDescription::ProtocolVersion);
-    Error::PeerIncompatible(why)
+    common.send_fatal_alert(AlertDescription::ProtocolVersion, why)
 }
 
 pub(super) fn decode_error(common: &mut CommonState, why: PeerMisbehaved) -> Error {
-    common.send_fatal_alert(AlertDescription::DecodeError);
-    Error::PeerMisbehaved(why)
+    common.send_fatal_alert(AlertDescription::DecodeError, why)
 }
 
 pub(super) fn can_resume(
@@ -108,9 +105,10 @@ impl ExtensionProcessing {
                 self.exts
                     .push(ServerExtension::make_alpn(&[selected_protocol]));
             } else if !our_protocols.is_empty() {
-                cx.common
-                    .send_fatal_alert(AlertDescription::NoApplicationProtocol);
-                return Err(Error::NoApplicationProtocol);
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::NoApplicationProtocol,
+                    Error::NoApplicationProtocol,
+                ));
             }
         }
 
@@ -127,9 +125,10 @@ impl ExtensionProcessing {
                 if cx.common.alpn_protocol.is_none()
                     && (!our_protocols.is_empty() || maybe_their_protocols.is_some())
                 {
-                    cx.common
-                        .send_fatal_alert(AlertDescription::NoApplicationProtocol);
-                    return Err(Error::NoApplicationProtocol);
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::NoApplicationProtocol,
+                        Error::NoApplicationProtocol,
+                    ));
                 }
 
                 match hello.get_quic_params_extension() {
@@ -352,9 +351,10 @@ impl ExpectClientHello {
                 .resolve(client_hello);
 
             certkey.ok_or_else(|| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::AccessDenied);
-                Error::General("no server certificate chain resolved".to_string())
+                cx.common.send_fatal_alert(
+                    AlertDescription::AccessDenied,
+                    Error::General("no server certificate chain resolved".to_owned()),
+                )
             })?
         };
         let certkey = ActiveCertifiedKey::from_certified_key(&certkey);
@@ -458,9 +458,10 @@ pub(super) fn process_client_hello<'a>(
         .compression_methods
         .contains(&Compression::Null)
     {
-        cx.common
-            .send_fatal_alert(AlertDescription::IllegalParameter);
-        return Err(PeerIncompatible::NullCompressionRequired.into());
+        return Err(cx.common.send_fatal_alert(
+            AlertDescription::IllegalParameter,
+            PeerIncompatible::NullCompressionRequired,
+        ));
     }
 
     if client_hello.has_duplicate_extension() {
