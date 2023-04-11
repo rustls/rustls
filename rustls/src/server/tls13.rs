@@ -1222,7 +1222,6 @@ impl ExpectTraffic {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = common.protocol {
-                warn!("KeyUpdate received in QUIC connection");
                 return Err(common.send_fatal_alert(
                     AlertDescription::UnexpectedMessage,
                     PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
