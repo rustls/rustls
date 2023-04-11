@@ -610,7 +610,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
 
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
-            warn!("certificate with non-empty context during handshake");
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::DecodeError,
                 InvalidMessage::InvalidCertRequest,
@@ -620,7 +619,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
         if cert_chain.any_entry_has_duplicate_extension()
             || cert_chain.any_entry_has_unknown_extension()
         {
-            warn!("certificate chain contains unsolicited/unknown extension");
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
                 PeerMisbehaved::BadCertChainExtensions,
@@ -1022,7 +1020,6 @@ impl ExpectTraffic {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = common.protocol {
-                warn!("KeyUpdate received in QUIC connection");
                 return Err(common.send_fatal_alert(
                     AlertDescription::UnexpectedMessage,
                     PeerMisbehaved::KeyUpdateReceivedInQuicConnection,

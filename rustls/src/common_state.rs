@@ -2,7 +2,7 @@ use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::key;
 #[cfg(feature = "logging")]
-use crate::log::{debug, error, warn};
+use crate::log::{debug, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
@@ -463,7 +463,6 @@ impl CommonState {
             }
         }
 
-        error!("TLS alert received: {:#?}", alert);
         Err(err)
     }
 
@@ -483,7 +482,6 @@ impl CommonState {
         desc: AlertDescription,
         err: impl Into<Error>,
     ) -> Error {
-        warn!("Sending fatal alert {:?}", desc);
         debug_assert!(!self.sent_fatal_alert);
         let m = Message::build_alert(AlertLevel::Fatal, desc);
         self.send_msg(m, self.record_layer.is_encrypting());
