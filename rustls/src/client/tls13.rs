@@ -88,9 +88,12 @@ pub(super) fn handle_server_hello(
         })?;
 
     if our_key_share.group() != their_key_share.group {
-        return Err(cx
-            .common
-            .illegal_param(PeerMisbehaved::WrongGroupForKeyShare));
+        return Err({
+            cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::WrongGroupForKeyShare,
+            )
+        });
     }
 
     let key_schedule_pre_handshake = if let (Some(selected_psk), Some(early_key_schedule)) =
@@ -100,24 +103,33 @@ pub(super) fn handle_server_hello(
             let resuming_suite = match suite.can_resume_from(resuming.suite()) {
                 Some(resuming) => resuming,
                 None => {
-                    return Err(cx.common.illegal_param(
-                        PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
-                    ));
+                    return Err({
+                        cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
+                        )
+                    });
                 }
             };
 
             // If the server varies the suite here, we will have encrypted early data with
             // the wrong suite.
             if cx.data.early_data.is_enabled() && resuming_suite != suite {
-                return Err(cx
-                    .common
-                    .illegal_param(PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite));
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite,
+                    )
+                });
             }
 
             if selected_psk != 0 {
-                return Err(cx
-                    .common
-                    .illegal_param(PeerMisbehaved::SelectedInvalidPsk));
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::SelectedInvalidPsk,
+                    )
+                });
             }
 
             debug!("Resuming using PSK");

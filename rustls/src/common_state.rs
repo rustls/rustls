@@ -217,10 +217,6 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn illegal_param(&mut self, why: PeerMisbehaved) -> Error {
-        self.send_fatal_alert(AlertDescription::IllegalParameter, why)
-    }
-
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
     pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {

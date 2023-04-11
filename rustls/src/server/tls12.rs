@@ -76,12 +76,18 @@ mod client_hello {
             let groups_ext = client_hello
                 .get_namedgroups_extension()
                 .ok_or_else(|| {
-                    hs::incompatible(cx.common, PeerIncompatible::NamedGroupsExtensionRequired)
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::NamedGroupsExtensionRequired,
+                    )
                 })?;
             let ecpoints_ext = client_hello
                 .get_ecpoints_extension()
                 .ok_or_else(|| {
-                    hs::incompatible(cx.common, PeerIncompatible::EcPointsExtensionRequired)
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::EcPointsExtensionRequired,
+                    )
                 })?;
 
             trace!("namedgroups {:?}", groups_ext);
@@ -155,8 +161,8 @@ mod client_hello {
                 .resolve_sig_schemes(&sigschemes_ext);
 
             if sigschemes.is_empty() {
-                return Err(hs::incompatible(
-                    cx.common,
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
                     PeerIncompatible::NoSignatureSchemesInCommon,
                 ));
             }
@@ -167,14 +173,22 @@ mod client_hello {
                 .iter()
                 .find(|skxg| groups_ext.contains(&skxg.name))
                 .cloned()
-                .ok_or_else(|| hs::incompatible(cx.common, PeerIncompatible::NoKxGroupsInCommon))?;
+                .ok_or_else(|| {
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::NoKxGroupsInCommon,
+                    )
+                })?;
 
             let ecpoint = ECPointFormat::SUPPORTED
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
                 .cloned()
                 .ok_or_else(|| {
-                    hs::incompatible(cx.common, PeerIncompatible::NoEcPointFormatsInCommon)
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::NoEcPointFormatsInCommon,
+                    )
                 })?;
 
             debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
@@ -254,9 +268,10 @@ mod client_hello {
             debug!("Resuming connection");
 
             if resumedata.extended_ms && !self.using_ems {
-                return Err(cx
-                    .common
-                    .illegal_param(PeerMisbehaved::ResumptionAttemptedWithVariedEms));
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::ResumptionAttemptedWithVariedEms,
+                ));
             }
 
             self.session_id = *id;

@@ -153,15 +153,19 @@ mod client_hello {
             mut sigschemes_ext: Vec<SignatureScheme>,
         ) -> hs::NextStateOrError {
             if client_hello.compression_methods.len() != 1 {
-                return Err(cx
-                    .common
-                    .illegal_param(PeerMisbehaved::OfferedIncorrectCompressions));
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::OfferedIncorrectCompressions,
+                ));
             }
 
             let groups_ext = client_hello
                 .get_namedgroups_extension()
                 .ok_or_else(|| {
-                    hs::incompatible(cx.common, PeerIncompatible::NamedGroupsExtensionRequired)
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::NamedGroupsExtensionRequired,
+                    )
                 })?;
 
             let tls13_schemes = sign::supported_sign_tls13();
@@ -170,22 +174,29 @@ mod client_hello {
             let shares_ext = client_hello
                 .get_keyshare_extension()
                 .ok_or_else(|| {
-                    hs::incompatible(cx.common, PeerIncompatible::KeyShareExtensionRequired)
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::KeyShareExtensionRequired,
+                    )
                 })?;
 
             if client_hello.has_keyshare_extension_with_duplicates() {
-                return Err(cx
-                    .common
-                    .illegal_param(PeerMisbehaved::OfferedDuplicateKeyShares));
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::OfferedDuplicateKeyShares,
+                ));
             }
 
             let early_data_requested = client_hello.early_data_extension_offered();
 
             // EarlyData extension is illegal in second ClientHello
             if self.done_retry && early_data_requested {
-                return Err(cx
-                    .common
-                    .illegal_param(PeerMisbehaved::EarlyDataAttemptedInSecondClientHello));
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::EarlyDataAttemptedInSecondClientHello,
+                    )
+                });
             }
 
             // choose a share that we support
@@ -215,9 +226,10 @@ mod client_hello {
 
                     if let Some(group) = retry_group_maybe {
                         if self.done_retry {
-                            return Err(cx
-                                .common
-                                .illegal_param(PeerMisbehaved::RefusedToFollowHelloRetryRequest));
+                            return Err(cx.common.send_fatal_alert(
+                                AlertDescription::IllegalParameter,
+                                PeerMisbehaved::RefusedToFollowHelloRetryRequest,
+                            ));
                         }
 
                         emit_hello_retry_request(
@@ -252,8 +264,8 @@ mod client_hello {
                         };
                     }
 
-                    return Err(hs::incompatible(
-                        cx.common,
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
                         PeerIncompatible::NoKxGroupsInCommon,
                     ));
                 }
@@ -265,22 +277,24 @@ mod client_hello {
 
             if let Some(psk_offer) = client_hello.get_psk() {
                 if !client_hello.check_psk_ext_is_last() {
-                    return Err(cx
-                        .common
-                        .illegal_param(PeerMisbehaved::PskExtensionMustBeLast));
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::PskExtensionMustBeLast,
+                    ));
                 }
 
                 if psk_offer.binders.is_empty() {
-                    return Err(hs::decode_error(
-                        cx.common,
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::DecodeError,
                         PeerMisbehaved::MissingBinderInPskExtension,
                     ));
                 }
 
                 if psk_offer.binders.len() != psk_offer.identities.len() {
-                    return Err(cx
-                        .common
-                        .illegal_param(PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders));
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders,
+                    ));
                 }
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
@@ -781,7 +795,10 @@ mod client_hello {
         let signer = signing_key
             .choose_scheme(schemes)
             .ok_or_else(|| {
-                hs::incompatible(common, PeerIncompatible::NoSignatureSchemesInCommon)
+                common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::NoSignatureSchemesInCommon,
+                )
             })?;
 
         let scheme = signer.scheme();
