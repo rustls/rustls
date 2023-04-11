@@ -302,9 +302,10 @@ mod client_hello {
                         &resume.master_secret.0,
                         psk_offer.binders[i].as_ref(),
                     ) {
-                        cx.common
-                            .send_fatal_alert(AlertDescription::DecryptError);
-                        return Err(PeerMisbehaved::IncorrectBinder.into());
+                        return Err(cx.common.send_fatal_alert(
+                            AlertDescription::DecryptError,
+                            PeerMisbehaved::IncorrectBinder,
+                        ));
                     }
 
                     chosen_psk_index = Some(i);
@@ -903,9 +904,10 @@ impl State<ServerConnectionData> for ExpectCertificate {
                     }));
                 }
 
-                cx.common
-                    .send_fatal_alert(AlertDescription::CertificateRequired);
-                return Err(Error::NoCertificatesPresented);
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::CertificateRequired,
+                    Error::NoCertificatesPresented,
+                ));
             }
             Some(chain) => chain,
         };
@@ -998,11 +1000,10 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     .take_received_plaintext(payload)
                 {
                     true => Ok(self),
-                    false => {
-                        cx.common
-                            .send_fatal_alert(AlertDescription::UnexpectedMessage);
-                        Err(PeerMisbehaved::TooMuchEarlyDataReceived.into())
-                    }
+                    false => Err(cx.common.send_fatal_alert(
+                        AlertDescription::UnexpectedMessage,
+                        PeerMisbehaved::TooMuchEarlyDataReceived,
+                    )),
                 }
             }
             MessagePayload::Handshake {
@@ -1147,10 +1148,9 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         let fin = constant_time::verify_slices_are_equal(expect_verify_data.as_ref(), &finished.0)
             .map_err(|_| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::DecryptError);
                 warn!("Finished wrong");
-                Error::DecryptError
+                cx.common
+                    .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError)
             })
             .map(|_| verify::FinishedMessageVerified::assertion())?;
 
@@ -1205,9 +1205,11 @@ impl ExpectTraffic {
         #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = common.protocol {
-                common.send_fatal_alert(AlertDescription::UnexpectedMessage);
                 warn!("KeyUpdate received in QUIC connection");
-                return Err(PeerMisbehaved::KeyUpdateReceivedInQuicConnection.into());
+                return Err(common.send_fatal_alert(
+                    AlertDescription::UnexpectedMessage,
+                    PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
+                ));
             }
         }
 

@@ -458,8 +458,10 @@ pub(super) fn process_alpn_protocol(
         // servers which accept a connection that requires an application-layer protocol they do not
         // understand.
         if common.is_quic() && common.alpn_protocol.is_none() && !config.alpn_protocols.is_empty() {
-            common.send_fatal_alert(AlertDescription::NoApplicationProtocol);
-            return Err(Error::NoApplicationProtocol);
+            return Err(common.send_fatal_alert(
+                AlertDescription::NoApplicationProtocol,
+                Error::NoApplicationProtocol,
+            ));
         }
     }
 
@@ -519,13 +521,13 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 TLSv1_2
             }
             _ => {
-                cx.common
-                    .send_fatal_alert(AlertDescription::ProtocolVersion);
                 let reason = match server_version {
                     TLSv1_2 | TLSv1_3 => PeerIncompatible::ServerTlsVersionIsDisabledByOurConfig,
                     _ => PeerIncompatible::ServerDoesNotSupportTls12Or13,
                 };
-                return Err(reason.into());
+                return Err(cx
+                    .common
+                    .send_fatal_alert(AlertDescription::ProtocolVersion, reason));
             }
         };
 
@@ -536,9 +538,10 @@ impl State<ClientConnectionData> for ExpectServerHello {
         }
 
         if server_hello.has_duplicate_extension() {
-            cx.common
-                .send_fatal_alert(AlertDescription::DecodeError);
-            return Err(PeerMisbehaved::DuplicateServerHelloExtensions.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::DecodeError,
+                PeerMisbehaved::DuplicateServerHelloExtensions,
+            ));
         }
 
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
@@ -547,9 +550,10 @@ impl State<ClientConnectionData> for ExpectServerHello {
             .hello
             .server_sent_unsolicited_extensions(&server_hello.extensions, &allowed_unsolicited)
         {
-            cx.common
-                .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(PeerMisbehaved::UnsolicitedServerHelloExtension.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::UnsupportedExtension,
+                PeerMisbehaved::UnsolicitedServerHelloExtension,
+            ));
         }
 
         cx.common.negotiated_version = Some(version);
@@ -563,18 +567,20 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // Uncompressed.  But it's allowed to be omitted.
         if let Some(point_fmts) = server_hello.get_ecpoints_extension() {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
-                cx.common
-                    .send_fatal_alert(AlertDescription::HandshakeFailure);
-                return Err(PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints.into());
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints,
+                ));
             }
         }
 
         let suite = config
             .find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
-                cx.common
-                    .send_fatal_alert(AlertDescription::HandshakeFailure);
-                Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedCipherSuite)
+                cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerMisbehaved::SelectedUnofferedCipherSuite,
+                )
             })?;
 
         if version != suite.version().version {
@@ -701,9 +707,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or has something unrecognised
         if hrr.has_unknown_extension() {
-            cx.common
-                .send_fatal_alert(AlertDescription::UnsupportedExtension);
-            return Err(PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension.into());
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::UnsupportedExtension,
+                PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
+            ));
         }
 
         // Or has the same extensions more than once

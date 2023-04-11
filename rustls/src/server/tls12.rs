@@ -88,9 +88,10 @@ mod client_hello {
             trace!("ecpoints {:?}", ecpoints_ext);
 
             if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
-                cx.common
-                    .send_fatal_alert(AlertDescription::IllegalParameter);
-                return Err(PeerIncompatible::UncompressedEcPointsRequired.into());
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerIncompatible::UncompressedEcPointsRequired,
+                ));
             }
 
             // -- If TLS1.3 is enabled, signal the downgrade in the server random
@@ -520,9 +521,10 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         let client_cert = match cert_chain.split_first() {
             None if mandatory => {
-                cx.common
-                    .send_fatal_alert(AlertDescription::CertificateRequired);
-                return Err(Error::NoCertificatesPresented);
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::CertificateRequired,
+                    Error::NoCertificatesPresented,
+                ));
             }
             None => {
                 debug!("client auth requested but no certificate supplied");
@@ -659,9 +661,10 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
                     // `transcript.abandon_client_auth()` can extract it, but its only caller in
                     // this flow will also set `ExpectClientKx::client_cert` to `None`, making it
                     // impossible to reach this state.
-                    cx.common
-                        .send_fatal_alert(AlertDescription::AccessDenied);
-                    return Err(Error::General("client authentication not set up".into()));
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::AccessDenied,
+                        Error::General("client authentication not set up".into()),
+                    ));
                 }
             }
         };
@@ -846,8 +849,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
                 .map_err(|_| {
                     cx.common
-                        .send_fatal_alert(AlertDescription::DecryptError);
-                    Error::DecryptError
+                        .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError)
                 })
                 .map(|_| verify::FinishedMessageVerified::assertion())?;
 
