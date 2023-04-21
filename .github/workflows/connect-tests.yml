@@ -1,0 +1,46 @@
+name: connect-tests
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # We only run connectivity tests on a weekly basis, choosing a weekday and
+    # a time slightly offset from the top of the hour.
+    - cron: '15 12 * * 3'
+
+jobs:
+  build:
+    name: Connectivity Tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # test a bunch of toolchains on ubuntu
+        rust:
+          - stable
+          - beta
+          - nightly
+          - 1.57 # MSRV
+        os: [ubuntu-20.04]
+        # but only stable on macos/windows (slower platforms)
+        include:
+          - os: macos-latest
+            rust: stable
+          - os: windows-latest
+            rust: stable
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+
+      - name: Install ${{ matrix.rust }} toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - run: cargo build
+
+      - run: cargo test --manifest-path=connect-tests/Cargo.toml
+        env:
+          RUST_BACKTRACE: 1
