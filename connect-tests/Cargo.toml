@@ -1,0 +1,23 @@
+[package]
+name = "rustls-connect-tests"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.57"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "Rustls connectivity based integration tests."
+publish = false
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[features]
+dangerous_configuration = ["rustls/dangerous_configuration"]
+quic = ["rustls/quic"]
+
+[dependencies]
+rustls = { path = "../rustls", features = [ "logging" ]}
+
+[dev-dependencies]
+regex = "1.0"
+ring = "0.16.20"
