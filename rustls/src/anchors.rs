@@ -1,12 +1,14 @@
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
+use crate::x509;
 use crate::{key, DistinguishedName};
 use crate::{CertificateError, Error};
 
 /// A trust anchor, commonly known as a "Root Certificate."
 #[derive(Debug, Clone)]
 pub struct OwnedTrustAnchor {
-    subject: DistinguishedName,
+    subject_dn_header_len: usize,
+    subject_dn: DistinguishedName,
     spki: Vec<u8>,
     name_constraints: Option<Vec<u8>>,
 }
@@ -15,7 +17,7 @@ impl OwnedTrustAnchor {
     /// Get a `webpki::TrustAnchor` by borrowing the owned elements.
     pub(crate) fn to_trust_anchor(&self) -> webpki::TrustAnchor {
         webpki::TrustAnchor {
-            subject: self.subject.as_ref(),
+            subject: &self.subject_dn.as_ref()[self.subject_dn_header_len..],
             spki: &self.spki,
             name_constraints: self.name_constraints.as_deref(),
         }
@@ -25,7 +27,8 @@ impl OwnedTrustAnchor {
     ///
     /// All inputs are DER-encoded.
     ///
-    /// `subject` is the [Subject] field of the trust anchor.
+    /// `subject` is the [Subject] field of the trust anchor *without* the outer SEQUENCE
+    /// encoding.
     ///
     /// `spki` is the [SubjectPublicKeyInfo] field of the trust anchor.
     ///
@@ -40,14 +43,22 @@ impl OwnedTrustAnchor {
         spki: impl Into<Vec<u8>>,
         name_constraints: Option<impl Into<Vec<u8>>>,
     ) -> Self {
+        let (subject_dn, subject_dn_header_len) = {
+            let mut subject = subject.into();
+            let before_len = subject.len();
+            x509::wrap_in_sequence(&mut subject);
+            let header_len = subject.len().saturating_sub(before_len);
+            (DistinguishedName::from(subject), header_len)
+        };
         Self {
-            subject: DistinguishedName::from(subject.into()),
+            subject_dn_header_len,
+            subject_dn,
             spki: spki.into(),
             name_constraints: name_constraints.map(|x| x.into()),
         }
     }
 
-    /// Return the subject field.
+    /// Return the subject field including its outer SEQUENCE encoding.
     ///
     /// This can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
     ///
@@ -56,7 +67,7 @@ impl OwnedTrustAnchor {
     /// println!("{}", x509_parser::x509::X509Name::from_der(anchor.subject())?.1);
     /// ```
     pub fn subject(&self) -> &DistinguishedName {
-        &self.subject
+        &self.subject_dn
     }
 }
 
@@ -143,5 +154,22 @@ impl RootCertStore {
         );
 
         (valid_count, invalid_count)
+    }
+}
+
+mod tests {
+    #[test]
+    fn ownedtrustanchor_subject_is_correctly_encoding_dn() {
+        let subject = b"subject".to_owned();
+        let ota = super::OwnedTrustAnchor::from_subject_spki_name_constraints(
+            subject,
+            b"".to_owned(),
+            None::<Vec<u8>>,
+        );
+        let expected_prefix = vec![ring::io::der::Tag::Sequence as u8, subject.len() as u8];
+        assert_eq!(
+            ota.subject().as_ref(),
+            [expected_prefix, subject.to_vec()].concat()
+        );
     }
 }
