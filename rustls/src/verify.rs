@@ -574,7 +574,6 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         true
     }
 
-    #[allow(deprecated)]
     fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
         &self.subjects
     }
@@ -723,7 +722,6 @@ impl DigitallySignedStruct {
 }
 
 impl Codec for DigitallySignedStruct {
-    #![allow(deprecated)]
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.scheme.encode(bytes);
         self.sig.encode(bytes);
