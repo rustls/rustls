@@ -20,7 +20,13 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
-* Current release: 0.21.0 (2023-03-29)
+* Release 0.21.1 (2023-05-01)
+  - Remove `warn`-level logging from code paths that also return a `rustls::Error` with
+    the same information.
+  - Bug fix: ensure `ConnectionCommon::complete_io` flushes pending writes.
+  - Bug fix: correct encoding of acceptable issuer subjects when rustls operates as a server
+    requesting client authentication.  This was a regression introduced in 0.21.0.
+* Release 0.21.0 (2023-03-29)
   - Support for connecting to peers named with IP addresses.  This means
     rustls now depends on a fork of webpki - `rustls-webpki` - with a suitably
     extended API.
