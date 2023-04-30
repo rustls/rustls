@@ -176,7 +176,7 @@ where
     total
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum KeyType {
     Rsa,
     Ecdsa,
@@ -271,7 +271,9 @@ pub fn make_server_config_with_kx_groups(
 }
 
 pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
-    let roots = kt.get_chain();
+    let mut roots = kt.get_chain();
+    // drop server cert
+    roots.drain(0..1);
     let mut client_auth_roots = RootCertStore::empty();
     for root in roots {
         client_auth_roots.add(&root).unwrap();
