@@ -885,13 +885,21 @@ fn client_checks_server_certificate_with_given_name() {
 struct ClientCheckCertResolve {
     query_count: AtomicUsize,
     expect_queries: usize,
+    expect_issuers: Vec<Vec<u8>>,
+    expect_sigschemes: Vec<SignatureScheme>,
 }
 
 impl ClientCheckCertResolve {
-    fn new(expect_queries: usize) -> Self {
+    fn new(
+        expect_queries: usize,
+        expect_issuers: Vec<Vec<u8>>,
+        expect_sigschemes: Vec<SignatureScheme>,
+    ) -> Self {
         Self {
             query_count: AtomicUsize::new(0),
             expect_queries,
+            expect_issuers,
+            expect_sigschemes,
         }
     }
 }
@@ -922,6 +930,9 @@ impl ResolvesClientCert for ClientCheckCertResolve {
             panic!("no signature schemes shared by server");
         }
 
+        assert_eq!(acceptable_issuers, self.expect_issuers);
+        assert_eq!(sigschemes, self.expect_sigschemes);
+
         None
     }
 
@@ -935,9 +946,53 @@ fn client_cert_resolve() {
     for kt in ALL_KEY_TYPES.iter() {
         let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
 
+        let expected_issuers = match *kt {
+            KeyType::Rsa => vec![
+                b"0,1*0(\x06\x03U\x04\x03\x0c!ponytown RSA level 2 intermediate".to_vec(),
+                b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA".to_vec(),
+            ],
+            KeyType::Ecdsa => vec![
+                b"0.1,0*\x06\x03U\x04\x03\x0c#ponytown ECDSA level 2 intermediate".to_vec(),
+                b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA".to_vec(),
+            ],
+            KeyType::Ed25519 => vec![
+                b"0.1,0*\x06\x03U\x04\x03\x0c#ponytown EdDSA level 2 intermediate".to_vec(),
+                b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA".to_vec(),
+            ],
+        };
+
         for version in rustls::ALL_VERSIONS {
+            let expected_sigschemes = match version.version {
+                ProtocolVersion::TLSv1_2 => vec![
+                    SignatureScheme::ECDSA_NISTP384_SHA384,
+                    SignatureScheme::ECDSA_NISTP256_SHA256,
+                    SignatureScheme::ED25519,
+                    SignatureScheme::RSA_PSS_SHA512,
+                    SignatureScheme::RSA_PSS_SHA384,
+                    SignatureScheme::RSA_PSS_SHA256,
+                    SignatureScheme::RSA_PKCS1_SHA512,
+                    SignatureScheme::RSA_PKCS1_SHA384,
+                    SignatureScheme::RSA_PKCS1_SHA256,
+                ],
+                ProtocolVersion::TLSv1_3 => vec![
+                    SignatureScheme::ECDSA_NISTP384_SHA384,
+                    SignatureScheme::ECDSA_NISTP256_SHA256,
+                    SignatureScheme::ED25519,
+                    SignatureScheme::RSA_PSS_SHA512,
+                    SignatureScheme::RSA_PSS_SHA384,
+                    SignatureScheme::RSA_PSS_SHA256,
+                ],
+                _ => unreachable!(),
+            };
+
+            println!("{:?} {:?}:", version.version, *kt);
+
             let mut client_config = make_client_config_with_versions(*kt, &[version]);
-            client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(1));
+            client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
+                1,
+                expected_issuers.clone(),
+                expected_sigschemes,
+            ));
 
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
