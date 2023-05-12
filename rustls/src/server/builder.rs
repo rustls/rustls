@@ -25,7 +25,7 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
                 versions: self.state.versions,
                 verifier: client_cert_verifier,
             },
-            side: PhantomData::default(),
+            side: PhantomData,
         }
     }
 

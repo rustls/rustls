@@ -27,7 +27,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 versions: self.state.versions,
                 root_store,
             },
-            side: PhantomData::default(),
+            side: PhantomData,
         }
     }
 
@@ -44,7 +44,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 versions: self.state.versions,
                 verifier,
             },
-            side: PhantomData::default(),
+            side: PhantomData,
         }
     }
 }
