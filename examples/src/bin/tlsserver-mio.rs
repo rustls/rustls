@@ -281,7 +281,6 @@ impl OpenConnection {
             }
             Some(len) => {
                 self.tls_conn
-                    .writer()
                     .write_all(&buf[..len])
                     .unwrap();
             }
@@ -294,7 +293,6 @@ impl OpenConnection {
         match self.mode {
             ServerMode::Echo => {
                 self.tls_conn
-                    .writer()
                     .write_all(buf)
                     .unwrap();
             }
@@ -316,7 +314,6 @@ impl OpenConnection {
             b"HTTP/1.0 200 OK\r\nConnection: close\r\n\r\nHello world from rustls tlsserver\r\n";
         if !self.sent_http_response {
             self.tls_conn
-                .writer()
                 .write_all(response)
                 .unwrap();
             self.sent_http_response = true;

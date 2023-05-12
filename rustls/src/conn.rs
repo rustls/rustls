@@ -50,14 +50,6 @@ impl Connection {
         }
     }
 
-    /// Returns an object that allows writing plaintext.
-    pub fn writer(&mut self) -> Writer {
-        match self {
-            Self::Client(conn) => Writer::new(&mut **conn),
-            Self::Server(conn) => Writer::new(&mut **conn),
-        }
-    }
-
     /// Processes any new packets read by a previous call to [`Connection::read_tls`].
     ///
     /// See [`ConnectionCommon::process_new_packets()`] for more information.
@@ -220,15 +212,7 @@ impl<'a> io::Read for Reader<'a> {
     }
 }
 
-/// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
-/// allowing them to be the subject of a [`Writer`].
-pub(crate) trait PlaintextSink {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
-    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
-    fn flush(&mut self) -> io::Result<()>;
-}
-
-impl<T> PlaintextSink for ConnectionCommon<T> {
+impl<Data> io::Write for ConnectionCommon<Data> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         Ok(self.send_some_plaintext(buf))
     }
@@ -243,44 +227,6 @@ impl<T> PlaintextSink for ConnectionCommon<T> {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
-    }
-}
-
-/// A structure that implements [`std::io::Write`] for writing plaintext.
-pub struct Writer<'a> {
-    sink: &'a mut dyn PlaintextSink,
-}
-
-impl<'a> Writer<'a> {
-    /// Create a new Writer.
-    ///
-    /// This is not an external interface.  Get one of these objects
-    /// from [`Connection::writer`].
-    pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
-        Writer { sink }
-    }
-}
-
-impl<'a> io::Write for Writer<'a> {
-    /// Send the plaintext `buf` to the peer, encrypting
-    /// and authenticating it.  Once this function succeeds
-    /// you should call [`Connection::write_tls`] which will output the
-    /// corresponding TLS records.
-    ///
-    /// This function buffers plaintext sent before the
-    /// TLS handshake completes, and sends it as soon
-    /// as it can.  See [`CommonState::set_buffer_limit`] to control
-    /// the size of this buffer.
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sink.write(buf)
-    }
-
-    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-        self.sink.write_vectored(bufs)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.sink.flush()
     }
 }
 
@@ -330,11 +276,6 @@ impl<Data> ConnectionCommon<Data> {
                 && !self.core.message_deframer.has_pending(),
             has_seen_eof: common.has_seen_eof,
         }
-    }
-
-    /// Returns an object that allows writing plaintext.
-    pub fn writer(&mut self) -> Writer {
-        Writer::new(self)
     }
 
     /// This function uses `io` to complete any outstanding IO for

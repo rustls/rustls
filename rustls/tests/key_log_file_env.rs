@@ -70,7 +70,7 @@ fn exercise_key_log_file_for_client() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-            assert_eq!(5, client.writer().write(b"hello").unwrap());
+            assert_eq!(5, client.write(b"hello").unwrap());
 
             do_handshake(&mut client, &mut server);
             transfer(&mut client, &mut server);
@@ -94,7 +94,7 @@ fn exercise_key_log_file_for_server() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-            assert_eq!(5, client.writer().write(b"hello").unwrap());
+            assert_eq!(5, client.write(b"hello").unwrap());
 
             do_handshake(&mut client, &mut server);
             transfer(&mut client, &mut server);

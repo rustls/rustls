@@ -63,7 +63,6 @@ impl TlsClient {
         let mut buf = Vec::new();
         let len = rd.read_to_end(&mut buf)?;
         self.tls_conn
-            .writer()
             .write_all(&buf)
             .unwrap();
         Ok(len)
@@ -173,11 +172,11 @@ impl TlsClient {
 }
 impl io::Write for TlsClient {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.tls_conn.writer().write(bytes)
+        self.tls_conn.write(bytes)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.tls_conn.writer().flush()
+        self.tls_conn.flush()
     }
 }
 

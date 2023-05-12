@@ -487,7 +487,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
 
     for _ in 0..rounds {
         time_send += time(|| {
-            server.writer().write_all(&buf).unwrap();
+            server.write_all(&buf).unwrap();
         });
 
         time_recv += transfer(&mut server, &mut client, Some(buf.len()));
@@ -552,7 +552,6 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
 
     for client in clients.iter_mut() {
         client
-            .writer()
             .write_all(&[0u8; 1024])
             .unwrap();
     }

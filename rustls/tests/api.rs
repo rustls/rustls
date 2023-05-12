@@ -266,7 +266,7 @@ fn buffered_client_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(5, client.writer().write(b"hello").unwrap());
+        assert_eq!(5, client.write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
         transfer(&mut client, &mut server);
@@ -285,7 +285,7 @@ fn buffered_server_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(5, server.writer().write(b"hello").unwrap());
+        assert_eq!(5, server.write(b"hello").unwrap());
 
         do_handshake(&mut client, &mut server);
         transfer(&mut server, &mut client);
@@ -304,20 +304,8 @@ fn buffered_both_data_sent() {
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
-        assert_eq!(
-            12,
-            server
-                .writer()
-                .write(b"from-server!")
-                .unwrap()
-        );
-        assert_eq!(
-            12,
-            client
-                .writer()
-                .write(b"from-client!")
-                .unwrap()
-        );
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
 
         do_handshake(&mut client, &mut server);
 
@@ -492,20 +480,8 @@ fn server_close_notify() {
         do_handshake(&mut client, &mut server);
 
         // check that alerts don't overtake appdata
-        assert_eq!(
-            12,
-            server
-                .writer()
-                .write(b"from-server!")
-                .unwrap()
-        );
-        assert_eq!(
-            12,
-            client
-                .writer()
-                .write(b"from-client!")
-                .unwrap()
-        );
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
         server.send_close_notify();
 
         transfer(&mut server, &mut client);
@@ -531,20 +507,8 @@ fn client_close_notify() {
         do_handshake(&mut client, &mut server);
 
         // check that alerts don't overtake appdata
-        assert_eq!(
-            12,
-            server
-                .writer()
-                .write(b"from-server!")
-                .unwrap()
-        );
-        assert_eq!(
-            12,
-            client
-                .writer()
-                .write(b"from-client!")
-                .unwrap()
-        );
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
         client.send_close_notify();
 
         transfer(&mut client, &mut server);
@@ -570,20 +534,8 @@ fn server_closes_uncleanly() {
         do_handshake(&mut client, &mut server);
 
         // check that unclean EOF reporting does not overtake appdata
-        assert_eq!(
-            12,
-            server
-                .writer()
-                .write(b"from-server!")
-                .unwrap()
-        );
-        assert_eq!(
-            12,
-            client
-                .writer()
-                .write(b"from-client!")
-                .unwrap()
-        );
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
 
         transfer(&mut server, &mut client);
         transfer_eof(&mut client);
@@ -613,20 +565,8 @@ fn client_closes_uncleanly() {
         do_handshake(&mut client, &mut server);
 
         // check that unclean EOF reporting does not overtake appdata
-        assert_eq!(
-            12,
-            server
-                .writer()
-                .write(b"from-server!")
-                .unwrap()
-        );
-        assert_eq!(
-            12,
-            client
-                .writer()
-                .write(b"from-client!")
-                .unwrap()
-        );
+        assert_eq!(12, server.write(b"from-server!").unwrap());
+        assert_eq!(12, client.write(b"from-client!").unwrap());
 
         transfer(&mut client, &mut server);
         transfer_eof(&mut server);
@@ -1046,13 +986,13 @@ fn server_error_is_sticky() {
 #[test]
 fn server_flush_does_nothing() {
     let (_, mut server) = make_pair(KeyType::Rsa);
-    assert!(matches!(server.writer().flush(), Ok(())));
+    assert!(matches!(server.flush(), Ok(())));
 }
 
 #[test]
 fn client_flush_does_nothing() {
     let (mut client, _) = make_pair(KeyType::Rsa);
-    assert!(matches!(client.writer().flush(), Ok(())));
+    assert!(matches!(client.flush(), Ok(())));
 }
 
 #[test]
@@ -1077,14 +1017,12 @@ fn server_respects_buffer_limit_pre_handshake() {
 
     assert_eq!(
         server
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         server
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         12
@@ -1105,7 +1043,6 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
     assert_eq!(
         server
-            .writer()
             .write_vectored(&[
                 IoSlice::new(b"01234567890123456789"),
                 IoSlice::new(b"01234567890123456789")
@@ -1131,14 +1068,12 @@ fn server_respects_buffer_limit_post_handshake() {
 
     assert_eq!(
         server
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         server
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         6
@@ -1158,14 +1093,12 @@ fn client_respects_buffer_limit_pre_handshake() {
 
     assert_eq!(
         client
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         client
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         12
@@ -1186,7 +1119,6 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
     assert_eq!(
         client
-            .writer()
             .write_vectored(&[
                 IoSlice::new(b"01234567890123456789"),
                 IoSlice::new(b"01234567890123456789")
@@ -1211,14 +1143,12 @@ fn client_respects_buffer_limit_post_handshake() {
 
     assert_eq!(
         client
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         20
     );
     assert_eq!(
         client
-            .writer()
             .write(b"01234567890123456789")
             .unwrap(),
         6
@@ -1393,11 +1323,9 @@ fn client_complete_io_for_write() {
         do_handshake(&mut client, &mut server);
 
         client
-            .writer()
             .write_all(b"01234567890123456789")
             .unwrap();
         client
-            .writer()
             .write_all(b"01234567890123456789")
             .unwrap();
         {
@@ -1422,7 +1350,6 @@ fn client_complete_io_for_read() {
         do_handshake(&mut client, &mut server);
 
         server
-            .writer()
             .write_all(b"01234567890123456789")
             .unwrap();
         {
@@ -1470,11 +1397,9 @@ fn server_complete_io_for_write() {
         do_handshake(&mut client, &mut server);
 
         server
-            .writer()
             .write_all(b"01234567890123456789")
             .unwrap();
         server
-            .writer()
             .write_all(b"01234567890123456789")
             .unwrap();
         {
@@ -1498,7 +1423,6 @@ fn server_complete_io_for_read() {
         do_handshake(&mut client, &mut server);
 
         client
-            .writer()
             .write_all(b"01234567890123456789")
             .unwrap();
         {
@@ -1544,10 +1468,7 @@ fn client_stream_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, mut server) = make_pair(*kt);
 
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
+        server.write_all(b"world").unwrap();
 
         {
             let mut pipe = OtherSession::new(&mut server);
@@ -1562,10 +1483,7 @@ fn client_streamowned_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (client, mut server) = make_pair(*kt);
 
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
+        server.write_all(b"world").unwrap();
 
         {
             let pipe = OtherSession::new(&mut server);
@@ -1608,10 +1526,7 @@ fn server_stream_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, mut server) = make_pair(*kt);
 
-        client
-            .writer()
-            .write_all(b"world")
-            .unwrap();
+        client.write_all(b"world").unwrap();
 
         {
             let mut pipe = OtherSession::new(&mut client);
@@ -1626,10 +1541,7 @@ fn server_streamowned_read() {
     for kt in ALL_KEY_TYPES.iter() {
         let (mut client, server) = make_pair(*kt);
 
-        client
-            .writer()
-            .write_all(b"world")
-            .unwrap();
+        client.write_all(b"world").unwrap();
 
         {
             let pipe = OtherSession::new(&mut client);
@@ -1674,10 +1586,7 @@ fn stream_write_reports_underlying_io_error_before_plaintext_processed() {
         errkind: io::ErrorKind::ConnectionAborted,
         after: 0,
     };
-    client
-        .writer()
-        .write_all(b"hello")
-        .unwrap();
+    client.write_all(b"hello").unwrap();
     let mut client_stream = Stream::new(&mut client, &mut pipe);
     let rc = client_stream.write(b"world");
     assert!(rc.is_err());
@@ -1694,10 +1603,7 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
         errkind: io::ErrorKind::ConnectionAborted,
         after: 1,
     };
-    client
-        .writer()
-        .write_all(b"hello")
-        .unwrap();
+    client.write_all(b"hello").unwrap();
     let mut client_stream = Stream::new(&mut client, &mut pipe);
     let rc = client_stream.write(b"world");
     assert_eq!(format!("{:?}", rc), "Ok(5)");
@@ -1775,10 +1681,7 @@ fn server_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    client
-        .writer()
-        .write_all(b"world")
-        .unwrap();
+    client.write_all(b"world").unwrap();
 
     {
         let mut pipe = OtherSession::new_fails(&mut client);
@@ -1798,10 +1701,7 @@ fn server_streamowned_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
     let (mut client, server) = make_pair_for_configs(client_config, server_config);
 
-    client
-        .writer()
-        .write_all(b"world")
-        .unwrap();
+    client.write_all(b"world").unwrap();
 
     let pipe = OtherSession::new_fails(&mut client);
     let mut server_stream = StreamOwned::new(server, pipe);
@@ -2442,11 +2342,9 @@ fn vectored_write_for_server_appdata() {
     do_handshake(&mut client, &mut server);
 
     server
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
     server
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
     {
@@ -2467,11 +2365,9 @@ fn vectored_write_for_client_appdata() {
     do_handshake(&mut client, &mut server);
 
     client
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
     client
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
     {
@@ -2494,13 +2390,9 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
         make_pair_for_configs(make_client_config_with_auth(KeyType::Rsa), server_config);
 
     server
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
-    server
-        .writer()
-        .write_all(b"0123456789")
-        .unwrap();
+    server.write_all(b"0123456789").unwrap();
 
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
@@ -2534,13 +2426,9 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         make_pair_for_configs(make_client_config_with_auth(KeyType::Rsa), server_config);
 
     server
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
-    server
-        .writer()
-        .write_all(b"0123456789")
-        .unwrap();
+    server.write_all(b"0123456789").unwrap();
 
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
@@ -2592,13 +2480,9 @@ fn vectored_write_for_client_handshake() {
     let (mut client, mut server) = make_pair(KeyType::Rsa);
 
     client
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
-    client
-        .writer()
-        .write_all(b"0123456789")
-        .unwrap();
+    client.write_all(b"0123456789").unwrap();
     {
         let mut pipe = OtherSession::new(&mut server);
         let wrlen = client.write_tls(&mut pipe).unwrap();
@@ -2632,7 +2516,6 @@ fn vectored_write_with_slow_client() {
 
     do_handshake(&mut client, &mut server);
     server
-        .writer()
         .write_all(b"01234567890123456789")
         .unwrap();
 
@@ -4028,10 +3911,7 @@ fn test_server_mtu_reduction() {
         make_pair_for_configs(make_client_config(KeyType::Rsa), server_config);
 
     let big_data = [0u8; 2048];
-    server
-        .writer()
-        .write_all(&big_data)
-        .unwrap();
+    server.write_all(&big_data).unwrap();
 
     let encryption_overhead = 20; // FIXME: see issue #991
 
@@ -4596,10 +4476,7 @@ fn test_received_plaintext_backpressure() {
 
     // Fill the server's received plaintext buffer with 16k bytes
     let client_buf = [0; 16_385];
-    dbg!(client
-        .writer()
-        .write(&client_buf)
-        .unwrap());
+    dbg!(client.write(&client_buf).unwrap());
     let mut network_buf = Vec::with_capacity(32_768);
     let sent = dbg!(client
         .write_tls(&mut network_buf)
@@ -4618,10 +4495,7 @@ fn test_received_plaintext_backpressure() {
     server.process_new_packets().unwrap();
 
     // Send two more bytes from client to server
-    dbg!(client
-        .writer()
-        .write(&client_buf[..2])
-        .unwrap());
+    dbg!(client.write(&client_buf[..2]).unwrap());
     let sent = dbg!(client
         .write_tls(&mut network_buf)
         .unwrap());

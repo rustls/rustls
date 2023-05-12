@@ -202,7 +202,7 @@
 //! use std::io;
 //! use rustls::Connection;
 //!
-//! client.writer().write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
+//! client.write(b"GET / HTTP/1.0\r\n\r\n").unwrap();
 //! let mut socket = connect("example.com", 443);
 //! loop {
 //!   if client.wants_read() && socket.ready_for_read() {
@@ -368,7 +368,7 @@ pub use crate::builder::{
     ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
 };
 pub use crate::common_state::{CommonState, IoState, Side};
-pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
+pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData};
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
     SignatureScheme,
