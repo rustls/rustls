@@ -1,3 +1,4 @@
+#![cfg_attr(read_buf, feature(read_buf))]
 //! Assorted public API tests.
 use std::cell::RefCell;
 use std::fmt;
@@ -181,6 +182,34 @@ fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
     let mut buf = vec![0u8; bytes.len() + 1];
     assert_eq!(bytes.len(), reader.read(&mut buf).unwrap());
     assert_eq!(bytes, &buf[..bytes.len()]);
+}
+
+fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
+    let mut buf = vec![0u8; 1];
+    let err = reader.read(&mut buf).unwrap_err();
+    assert!(matches!(err, err  if err.kind()  == err_kind))
+}
+
+#[cfg(read_buf)]
+fn check_read_buf(reader: &mut dyn io::Read, bytes: &[u8]) {
+    use std::{io::BorrowedBuf, mem::MaybeUninit};
+
+    let mut buf = [MaybeUninit::<u8>::uninit(); 128];
+    let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
+    reader.read_buf(buf.unfilled()).unwrap();
+    assert_eq!(buf.filled(), bytes);
+}
+
+#[cfg(read_buf)]
+fn check_read_buf_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
+    use std::{io::BorrowedBuf, mem::MaybeUninit};
+
+    let mut buf = [MaybeUninit::<u8>::uninit(); 1];
+    let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
+    let err = reader
+        .read_buf(buf.unfilled())
+        .unwrap_err();
+    assert!(matches!(err, err  if err.kind()  == err_kind))
 }
 
 #[test]
@@ -591,8 +620,10 @@ fn server_closes_uncleanly() {
         assert!(!io_state.peer_has_closed());
         check_read(&mut client.reader(), b"from-server!");
 
-        assert!(matches!(client.reader().read(&mut [0u8; 1]),
-                         Err(err) if err.kind() == io::ErrorKind::UnexpectedEof));
+        check_read_err(
+            &mut client.reader() as &mut dyn io::Read,
+            io::ErrorKind::UnexpectedEof,
+        );
 
         // may still transmit pending frames
         transfer(&mut client, &mut server);
@@ -634,8 +665,10 @@ fn client_closes_uncleanly() {
         assert!(!io_state.peer_has_closed());
         check_read(&mut server.reader(), b"from-client!");
 
-        assert!(matches!(server.reader().read(&mut [0u8; 1]),
-                         Err(err) if err.kind() == io::ErrorKind::UnexpectedEof));
+        check_read_err(
+            &mut server.reader() as &mut dyn io::Read,
+            io::ErrorKind::UnexpectedEof,
+        );
 
         // may still transmit pending frames
         transfer(&mut server, &mut client);
@@ -1571,6 +1604,146 @@ fn client_streamowned_read() {
             let pipe = OtherSession::new(&mut server);
             let mut stream = StreamOwned::new(client, pipe);
             check_read(&mut stream, b"world");
+        }
+    }
+}
+
+#[cfg(read_buf)]
+#[test]
+fn client_stream_readbuf() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
+
+        server
+            .writer()
+            .write_all(b"world")
+            .unwrap();
+
+        {
+            let mut pipe = OtherSession::new(&mut server);
+            let mut stream = Stream::new(&mut client, &mut pipe);
+            check_read_buf(&mut stream, b"world");
+        }
+    }
+}
+
+#[cfg(read_buf)]
+#[test]
+fn client_streamowned_readbuf() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (client, mut server) = make_pair(*kt);
+
+        server
+            .writer()
+            .write_all(b"world")
+            .unwrap();
+
+        {
+            let pipe = OtherSession::new(&mut server);
+            let mut stream = StreamOwned::new(client, pipe);
+            check_read_buf(&mut stream, b"world");
+        }
+    }
+}
+
+#[test]
+fn client_stream_read_unclean_close() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (client, mut server) = make_pair(*kt);
+
+        server
+            .writer()
+            .write_all(b"world")
+            .unwrap();
+
+        {
+            let pipe = OtherSession::new(&mut server);
+            let mut stream = StreamOwned::new(client, pipe);
+            // Simulate the server closing without signaling a clean close.
+            transfer_eof(&mut stream.conn);
+
+            // We should still be able to read the data the server sent before close.
+            check_read(&mut stream, b"world");
+
+            // But a subsequent read should error with UnexpectedEof.
+            check_read_err(&mut stream, io::ErrorKind::UnexpectedEof);
+        }
+    }
+}
+
+#[cfg(read_buf)]
+#[test]
+fn client_stream_readbuf_unclean_close() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
+
+        server
+            .writer()
+            .write_all(b"world")
+            .unwrap();
+
+        {
+            let mut pipe = OtherSession::new(&mut server);
+            let mut stream = Stream::new(&mut client, &mut pipe);
+            // Simulate the server closing without signaling a clean close.
+            transfer_eof(stream.conn);
+
+            // We should still be able to read the data the server sent before close.
+            check_read_buf(&mut stream, b"world");
+
+            // But a subsequent read should error with UnexpectedEof.
+            check_read_buf_err(&mut stream, io::ErrorKind::UnexpectedEof);
+        }
+    }
+}
+
+#[test]
+fn client_streamowned_read_unclean_close() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (client, mut server) = make_pair(*kt);
+
+        server
+            .writer()
+            .write_all(b"world")
+            .unwrap();
+
+        {
+            let pipe = OtherSession::new(&mut server);
+            let mut stream = StreamOwned::new(client, pipe);
+            // Simulate the server closing without signaling a clean close.
+            transfer_eof(&mut stream.conn);
+
+            // We should still be able to read the data the server sent before close.
+            check_read(&mut stream, b"world");
+
+            // But a subsequent read should error with UnexpectedEof.
+            check_read_err(&mut stream, io::ErrorKind::UnexpectedEof);
+        }
+    }
+}
+
+#[cfg(read_buf)]
+#[test]
+fn client_streamowned_readbuf_unclean_close() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (client, mut server) = make_pair(*kt);
+
+        server
+            .writer()
+            .write_all(b"world")
+            .unwrap();
+
+        {
+            let pipe = OtherSession::new(&mut server);
+            let mut stream = StreamOwned::new(client, pipe);
+            // Simulate the server closing without signaling a clean close.
+            transfer_eof(&mut stream.conn);
+
+            // We should still be able to read the data the server sent before close.
+            check_read_buf(&mut stream, b"world");
+
+            // But a subsequent read should error with UnexpectedEof.
+            check_read_buf_err(&mut stream, io::ErrorKind::UnexpectedEof);
         }
     }
 }
