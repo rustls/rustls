@@ -1290,7 +1290,7 @@ where
         Ok(())
     }
 
-    fn write_vectored<'b>(&mut self, b: &[io::IoSlice<'b>]) -> io::Result<usize> {
+    fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
         let mut total = 0;
         let mut lengths = vec![];
         for bytes in b {
@@ -3986,7 +3986,7 @@ fn test_client_mtu_reduction() {
         fn flush(&mut self) -> io::Result<()> {
             panic!()
         }
-        fn write_vectored<'b>(&mut self, b: &[io::IoSlice<'b>]) -> io::Result<usize> {
+        fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
             let writes = b
                 .iter()
                 .map(|slice| slice.len())

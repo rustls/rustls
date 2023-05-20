@@ -288,6 +288,7 @@
     clippy::single_component_path_imports,
     clippy::new_without_default
 )]
+#![deny(clippy::cloned_instead_of_copied)]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
 // XXX: Because of https://github.com/rust-lang/rust/issues/54726, we cannot

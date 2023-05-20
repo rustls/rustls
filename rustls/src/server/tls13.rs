@@ -220,7 +220,7 @@ mod client_hello {
                         .kx_groups
                         .iter()
                         .find(|group| groups_ext.contains(&group.name))
-                        .cloned();
+                        .copied();
 
                     self.transcript.add_message(chm);
 

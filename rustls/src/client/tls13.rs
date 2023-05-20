@@ -555,7 +555,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             .get_sigalgs_extension()
             .unwrap_or(&no_sigschemes)
             .iter()
-            .cloned()
+            .copied()
             .filter(|scheme| tls13_sign_schemes.contains(scheme))
             .collect::<Vec<SignatureScheme>>();
 

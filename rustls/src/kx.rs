@@ -20,7 +20,7 @@ impl KeyExchange {
         supported
             .iter()
             .find(|skxg| skxg.name == name)
-            .cloned()
+            .copied()
     }
 
     /// Start a key exchange, using the given SupportedKxGroup.

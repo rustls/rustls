@@ -172,7 +172,7 @@ mod client_hello {
                 .kx_groups
                 .iter()
                 .find(|skxg| groups_ext.contains(&skxg.name))
-                .cloned()
+                .copied()
                 .ok_or_else(|| {
                     cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
@@ -183,7 +183,7 @@ mod client_hello {
             let ecpoint = ECPointFormat::SUPPORTED
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
-                .cloned()
+                .copied()
                 .ok_or_else(|| {
                     cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
