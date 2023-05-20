@@ -85,7 +85,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
         self.servers
             .lock()
             .unwrap()
-            .get_or_insert_default_and_edit(server_name.clone(), |data| data.kx_hint = Some(group));
+            .get_or_insert_default_and_edit(server_name, |data| data.kx_hint = Some(group));
     }
 
     fn kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup> {
@@ -105,7 +105,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
         self.servers
             .lock()
             .unwrap()
-            .get_or_insert_default_and_edit(_server_name.clone(), |data| data.tls12 = Some(_value));
+            .get_or_insert_default_and_edit(_server_name, |data| data.tls12 = Some(_value));
     }
 
     fn tls12_session(&self, _server_name: &ServerName) -> Option<persist::Tls12ClientSessionValue> {
@@ -137,7 +137,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
         self.servers
             .lock()
             .unwrap()
-            .get_or_insert_default_and_edit(server_name.clone(), |data| {
+            .get_or_insert_default_and_edit(server_name, |data| {
                 if data.tls13.len() == data.tls13.capacity() {
                     data.tls13.pop_front();
                 }

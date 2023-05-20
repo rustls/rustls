@@ -33,11 +33,13 @@ where
         }
     }
 
-    pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V))
+    pub(crate) fn get_or_insert_default_and_edit<Key>(&mut self, k: &Key, edit: impl FnOnce(&mut V))
     where
+        K: Borrow<Key>,
+        Key: Hash + Eq + ?Sized,
         V: Default,
     {
-        let k_hash = make_hash(&k);
+        let k_hash = make_hash(k);
 
         let inserted_new_item = match self.map.entry(k_hash) {
             Entry::Occupied(value) => {
@@ -59,8 +61,12 @@ where
         }
     }
 
-    pub(crate) fn insert(&mut self, k: K, v: V) {
-        let k_hash = make_hash(&k);
+    pub(crate) fn insert<Key>(&mut self, k: &Key, v: V)
+    where
+        K: Borrow<Key>,
+        Key: Hash + Eq + ?Sized,
+    {
+        let k_hash = make_hash(k);
 
         let inserted_new_item = match self.map.entry(k_hash) {
             Entry::Occupied(mut old) => {
@@ -139,17 +145,17 @@ mod test {
     #[test]
     fn test_updates_existing_item() {
         let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("abc".into(), 2);
+        t.insert("abc", 1);
+        t.insert("abc", 2);
         assert_eq!(t.get("abc"), Some(&2));
     }
 
     #[test]
     fn test_evicts_oldest_item() {
         let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
-        t.insert("ghi".into(), 3);
+        t.insert("abc", 1);
+        t.insert("def", 2);
+        t.insert("ghi", 3);
 
         assert_eq!(t.get("abc"), None);
         assert_eq!(t.get("def"), Some(&2));
@@ -159,13 +165,13 @@ mod test {
     #[test]
     fn test_evicts_second_oldest_item_if_first_removed() {
         let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
+        t.insert("abc", 1);
+        t.insert("def", 2);
 
         assert_eq!(t.remove("abc"), Some(1));
 
-        t.insert("ghi".into(), 3);
-        t.insert("jkl".into(), 4);
+        t.insert("ghi", 3);
+        t.insert("jkl", 4);
 
         assert_eq!(t.get("abc"), None);
         assert_eq!(t.get("def"), None);
@@ -176,14 +182,14 @@ mod test {
     #[test]
     fn test_evicts_after_second_oldest_item_removed() {
         let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
+        t.insert("abc", 1);
+        t.insert("def", 2);
 
         assert_eq!(t.remove("def"), Some(2));
         assert_eq!(t.get("abc"), Some(&1));
 
-        t.insert("ghi".into(), 3);
-        t.insert("jkl".into(), 4);
+        t.insert("ghi", 3);
+        t.insert("jkl", 4);
 
         assert_eq!(t.get("abc"), None);
         assert_eq!(t.get("def"), None);
@@ -194,15 +200,15 @@ mod test {
     #[test]
     fn test_removes_all_items() {
         let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
+        t.insert("abc", 1);
+        t.insert("def", 2);
 
         assert_eq!(t.remove("def"), Some(2));
         assert_eq!(t.remove("abc"), Some(1));
 
-        t.insert("ghi".into(), 3);
-        t.insert("jkl".into(), 4);
-        t.insert("mno".into(), 5);
+        t.insert("ghi", 3);
+        t.insert("jkl", 4);
+        t.insert("mno", 5);
 
         assert_eq!(t.get("abc"), None);
         assert_eq!(t.get("def"), None);
@@ -216,9 +222,9 @@ mod test {
         let mut t = Test::new(3);
 
         for _ in 0..10000 {
-            t.insert("abc".into(), 1);
-            t.insert("def".into(), 2);
-            t.insert("ghi".into(), 3);
+            t.insert("abc", 1);
+            t.insert("def", 2);
+            t.insert("ghi", 3);
         }
     }
 
@@ -226,23 +232,23 @@ mod test {
     fn test_get_or_insert_default_and_edit_evicts_old_items_to_meet_capacity() {
         let mut t = Test::new(3);
 
-        t.get_or_insert_default_and_edit("abc".into(), |v| *v += 1);
-        t.get_or_insert_default_and_edit("def".into(), |v| *v += 2);
+        t.get_or_insert_default_and_edit("abc", |v| *v += 1);
+        t.get_or_insert_default_and_edit("def", |v| *v += 2);
 
         // evicts "abc"
-        t.get_or_insert_default_and_edit("ghi".into(), |v| *v += 3);
+        t.get_or_insert_default_and_edit("ghi", |v| *v += 3);
         assert_eq!(t.get("abc"), None);
 
         // evicts "def"
-        t.get_or_insert_default_and_edit("jkl".into(), |v| *v += 4);
+        t.get_or_insert_default_and_edit("jkl", |v| *v += 4);
         assert_eq!(t.get("def"), None);
 
         // evicts "ghi"
-        t.get_or_insert_default_and_edit("abc".into(), |v| *v += 5);
+        t.get_or_insert_default_and_edit("abc", |v| *v += 5);
         assert_eq!(t.get("ghi"), None);
 
         // evicts "jkl"
-        t.get_or_insert_default_and_edit("def".into(), |v| *v += 6);
+        t.get_or_insert_default_and_edit("def", |v| *v += 6);
 
         assert_eq!(t.get("abc"), Some(&5));
         assert_eq!(t.get("def"), Some(&6));
@@ -254,9 +260,9 @@ mod test {
     fn test_get_or_insert_default_and_edit_edits_existing_item() {
         let mut t = Test::new(3);
 
-        t.get_or_insert_default_and_edit("abc".into(), |v| *v += 1);
-        t.get_or_insert_default_and_edit("abc".into(), |v| *v += 2);
-        t.get_or_insert_default_and_edit("abc".into(), |v| *v += 3);
+        t.get_or_insert_default_and_edit("abc", |v| *v += 1);
+        t.get_or_insert_default_and_edit("abc", |v| *v += 2);
+        t.get_or_insert_default_and_edit("abc", |v| *v += 3);
 
         assert_eq!(t.get("abc"), Some(&6));
     }

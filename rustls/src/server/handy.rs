@@ -49,7 +49,7 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
         self.cache
             .lock()
             .unwrap()
-            .insert(key, value);
+            .insert(&key, value);
         true
     }
 

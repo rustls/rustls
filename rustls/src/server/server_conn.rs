@@ -46,6 +46,8 @@ pub trait StoresServerSessions: Send + Sync {
     /// Store session secrets encoded in `value` against `key`,
     /// overwrites any existing value against `key`.  Returns `true`
     /// if the value was stored.
+    //
+    // TODO: We could drop `key` to be &[u8].
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool;
 
     /// Find a value with the given `key`.  Return it, or None
