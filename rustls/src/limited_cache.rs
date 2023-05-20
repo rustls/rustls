@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -85,7 +86,8 @@ where
 
     pub(crate) fn get<Key>(&self, k: &Key) -> Option<&V>
     where
-        Key: Hash + ?Sized,
+        K: Borrow<Key>,
+        Key: Hash + Eq + ?Sized,
     {
         let k_hash = make_hash(&k);
         self.map.get(&k_hash)
@@ -93,7 +95,8 @@ where
 
     pub(crate) fn get_mut<Key>(&mut self, k: &Key) -> Option<&mut V>
     where
-        Key: Hash + ?Sized,
+        K: Borrow<Key>,
+        Key: Hash + Eq + ?Sized,
     {
         let k_hash = make_hash(&k);
         self.map.get_mut(&k_hash)
