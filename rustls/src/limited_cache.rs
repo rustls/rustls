@@ -12,7 +12,7 @@ use std::marker::PhantomData;
 /// storage.
 ///
 /// This is inefficient: it stores the hash of the keys twice.
-pub(crate) struct LimitedCache<K: Hash, V> {
+pub(crate) struct LimitedCache<K: Hash + Eq, V> {
     map: HashMap<u64, V>,
 
     // first item is the oldest key
@@ -22,7 +22,7 @@ pub(crate) struct LimitedCache<K: Hash, V> {
 
 impl<K, V> LimitedCache<K, V>
 where
-    K: Hash,
+    K: Hash + Eq,
 {
     /// Create a new LimitedCache with the given rough capacity.
     pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
@@ -33,10 +33,13 @@ where
         }
     }
 
-    pub(crate) fn get_or_insert_default_and_edit<Key>(&mut self, k: &Key, edit: impl FnOnce(&mut V))
-    where
-        K: Borrow<Key>,
-        Key: Hash + Eq + ?Sized,
+    pub(crate) fn get_or_insert_default_and_edit<Q: ?Sized>(
+        &mut self,
+        k: &Q,
+        edit: impl FnOnce(&mut V),
+    ) where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
         V: Default,
     {
         let k_hash = make_hash(k);
@@ -61,10 +64,10 @@ where
         }
     }
 
-    pub(crate) fn insert<Key>(&mut self, k: &Key, v: V)
+    pub(crate) fn insert<Q: ?Sized>(&mut self, k: &Q, v: V)
     where
-        K: Borrow<Key>,
-        Key: Hash + Eq + ?Sized,
+        K: Borrow<Q>,
+        Q: Hash + Eq,
     {
         let k_hash = make_hash(k);
 
@@ -90,27 +93,28 @@ where
         }
     }
 
-    pub(crate) fn get<Key>(&self, k: &Key) -> Option<&V>
+    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
     where
-        K: Borrow<Key>,
-        Key: Hash + Eq + ?Sized,
+        K: Borrow<Q>,
+        Q: Hash + Eq,
     {
         let k_hash = make_hash(&k);
         self.map.get(&k_hash)
     }
 
-    pub(crate) fn get_mut<Key>(&mut self, k: &Key) -> Option<&mut V>
+    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
     where
-        K: Borrow<Key>,
-        Key: Hash + Eq + ?Sized,
+        K: Borrow<Q>,
+        Q: Hash + Eq,
     {
         let k_hash = make_hash(&k);
         self.map.get_mut(&k_hash)
     }
 
-    pub(crate) fn remove<Key>(&mut self, k: &Key) -> Option<V>
+    pub(crate) fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
     where
-        Key: Hash + ?Sized,
+        K: Borrow<Q>,
+        Q: Hash + Eq,
     {
         let k_hash = make_hash(&k);
 
@@ -129,9 +133,9 @@ where
     }
 }
 
-fn make_hash<K>(key: &K) -> u64
+fn make_hash<K: ?Sized>(key: &K) -> u64
 where
-    K: Hash + ?Sized,
+    K: Hash + Eq,
 {
     let mut hasher = DefaultHasher::new();
     key.hash(&mut hasher);
