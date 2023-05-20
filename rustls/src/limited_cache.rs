@@ -1,7 +1,7 @@
-use std::borrow::Borrow;
-use std::collections::hash_map::Entry;
+use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
 /// A HashMap-alike, which never gets larger than a specified
 /// capacity, and evicts the oldest insertion to maintain this.
@@ -10,36 +10,41 @@ use std::hash::Hash;
 /// collections.  This implementation uses all the allocated
 /// storage.
 ///
-/// This is inefficient: it stores keys twice.
-pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
-    map: HashMap<K, V>,
+/// This is inefficient: it stores the hash of the keys twice.
+pub(crate) struct LimitedCache<K: Hash, V> {
+    map: HashMap<u64, V>,
 
     // first item is the oldest key
-    oldest: VecDeque<K>,
+    oldest: VecDeque<u64>,
+    phantom: PhantomData<K>,
 }
 
 impl<K, V> LimitedCache<K, V>
 where
-    K: Eq + Hash + Clone + std::fmt::Debug,
-    V: Default,
+    K: Hash,
 {
     /// Create a new LimitedCache with the given rough capacity.
     pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
         Self {
             map: HashMap::with_capacity(capacity_order_of_magnitude),
             oldest: VecDeque::with_capacity(capacity_order_of_magnitude),
+            phantom: PhantomData,
         }
     }
 
-    pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
-        let inserted_new_item = match self.map.entry(k) {
+    pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V))
+    where
+        V: Default,
+    {
+        let k_hash = make_hash(&k);
+
+        let inserted_new_item = match self.map.entry(k_hash) {
             Entry::Occupied(value) => {
                 edit(value.into_mut());
                 false
             }
             entry @ Entry::Vacant(_) => {
-                self.oldest
-                    .push_back(entry.key().clone());
+                self.oldest.push_back(k_hash);
                 edit(entry.or_insert_with(V::default));
                 true
             }
@@ -54,7 +59,9 @@ where
     }
 
     pub(crate) fn insert(&mut self, k: K, v: V) {
-        let inserted_new_item = match self.map.entry(k) {
+        let k_hash = make_hash(&k);
+
+        let inserted_new_item = match self.map.entry(k_hash) {
             Entry::Occupied(mut old) => {
                 // nb. does not freshen entry in `oldest`
                 old.insert(v);
@@ -62,8 +69,7 @@ where
             }
 
             entry @ Entry::Vacant(_) => {
-                self.oldest
-                    .push_back(entry.key().clone());
+                self.oldest.push_back(k_hash);
                 entry.or_insert(v);
                 true
             }
@@ -77,41 +83,50 @@ where
         }
     }
 
-    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+    pub(crate) fn get<Key>(&self, k: &Key) -> Option<&V>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
+        Key: Hash + ?Sized,
     {
-        self.map.get(k)
+        let k_hash = make_hash(&k);
+        self.map.get(&k_hash)
     }
 
-    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    pub(crate) fn get_mut<Key>(&mut self, k: &Key) -> Option<&mut V>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
+        Key: Hash + ?Sized,
     {
-        self.map.get_mut(k)
+        let k_hash = make_hash(&k);
+        self.map.get_mut(&k_hash)
     }
 
-    pub(crate) fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
+    pub(crate) fn remove<Key>(&mut self, k: &Key) -> Option<V>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
+        Key: Hash + ?Sized,
     {
-        if let Some(value) = self.map.remove(k) {
+        let k_hash = make_hash(&k);
+
+        self.map.remove(&k_hash).map(|value| {
             // O(N) search, followed by O(N) removal
             if let Some(index) = self
                 .oldest
                 .iter()
-                .position(|item| item.borrow() == k)
+                .position(|item| *item == k_hash)
             {
                 self.oldest.remove(index);
             }
-            Some(value)
-        } else {
-            None
-        }
+
+            value
+        })
     }
+}
+
+fn make_hash<K>(key: &K) -> u64
+where
+    K: Hash + ?Sized,
+{
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    hasher.finish()
 }
 
 #[cfg(test)]

@@ -16,7 +16,6 @@ use rustls::{
 };
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use env_logger;
 
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
@@ -415,7 +414,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
         .unwrap()
         .with_client_cert_verifier(client_auth)
         .with_single_cert_with_ocsp_and_sct(
-            cert.clone(),
+            cert,
             key,
             opts.server_ocsp_response.clone(),
             opts.server_sct_list.clone(),
