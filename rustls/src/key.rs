@@ -11,7 +11,7 @@ use std::fmt;
 ///
 /// ```txt
 /// -----BEGIN PRIVATE KEY-----
-///
+/// <base64-encoded private key content>
 /// -----END PRIVATE KEY-----
 /// ```
 ///
@@ -54,7 +54,7 @@ pub struct PrivateKey(pub Vec<u8>);
 ///
 /// ```txt
 /// -----BEGIN CERTIFICATE-----
-///
+/// <base64-encoded certificate content>
 /// -----END CERTIFICATE-----
 /// ```
 ///
