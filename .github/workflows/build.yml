@@ -20,7 +20,6 @@ jobs:
           - stable
           - beta
           - nightly
-          - 1.57 # MSRV
         os: [ubuntu-20.04]
         # but only stable on macos/windows (slower platforms)
         include:
@@ -47,6 +46,20 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.57
+
+      - run: cargo check --lib --all-features -p rustls
 
   features:
     name: Features
