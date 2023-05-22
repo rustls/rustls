@@ -62,14 +62,6 @@ pub struct PrivateKey(pub Vec<u8>);
 /// to parse PEM files. The [`rcgen`](https://docs.rs/rcgen/latest/rcgen/) crate can be used to
 /// generate certificates and private keys.
 ///
-/// ## Note
-///
-/// If you are receiving certificates from an untrusted client or server, it is essential
-/// to validate the contents of the certificate manually. This typically involves verifying
-/// the certificate's signature, checking its expiration date, verifying the certificate
-/// chain (including intermediate and root certificates), and performing additional checks
-/// based on your specific requirements.
-///
 /// ## Examples
 ///
 /// Parsing a PEM file to extract DER-encoded certificates:
