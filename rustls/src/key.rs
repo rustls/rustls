@@ -5,21 +5,88 @@ use std::fmt;
 /// The private key must be DER-encoded ASN.1 in either
 /// PKCS#8, PKCS#1, or Sec1 format.
 ///
-/// The `rustls-pemfile` crate can be used to extract
-/// private keys from a PEM file in these formats.
+/// A common format for storing private keys is
+/// [PEM](https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail).
+/// PEM private keys are commonly stored in files with a `.pem` or `.key` suffix, and look like this:
+///
+/// ```txt
+/// -----BEGIN PRIVATE KEY-----
+///
+/// -----END PRIVATE KEY-----
+/// ```
+///
+/// The [`rustls-pemfile`](https://docs.rs/rustls-pemfile/latest/rustls_pemfile/) crate can be used
+/// to parse PEM files. The [`rcgen`](https://docs.rs/rcgen/latest/rcgen/) can be used to generate
+/// certificates and private keys.
+///
+/// ## Examples
+///
+/// Creating a `PrivateKey` from a PEM file containing a PKCS8-encoded private key using the `rustls_pemfile` crate:
+///
+/// ```rust
+/// use std::fs::File;
+/// use std::io::BufReader;
+/// use rustls::PrivateKey;
+///
+/// fn load_private_key_from_file(path: &str) -> Result<PrivateKey, Box<dyn std::error::Error>> {
+///     let file = File::open(&path)?;
+///     let mut reader = BufReader::new(file);
+///     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
+///
+///     match keys.len() {
+///         0 => Err(format!("No PKCS8-encoded private key found in {path}").into()),
+///         1 => Ok(PrivateKey(keys.remove(0))),
+///         _ => Err(format!("More than one PKCS8-encoded private key found in {path}").into()),
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PrivateKey(pub Vec<u8>);
 
 /// This type contains a single certificate by value.
 ///
-/// The certificate must be DER-encoded X.509.
+/// The certificate must be in DER-encoded X.509 format.
 ///
-/// The `rustls-pemfile` crate can be used to parse a PEM file.
+/// A common format for storing certificates is
+/// [PEM](https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail).
+/// PEM certificates are commonly stored in files with a `.pem`, `.cer` or `.crt` suffix, and look
+/// like this:
+///
+/// ```txt
+/// -----BEGIN CERTIFICATE-----
+///
+/// -----END CERTIFICATE-----
+/// ```
+///
+/// The [`rustls-pemfile`](https://docs.rs/rustls-pemfile/latest/rustls_pemfile/) crate can be used
+/// to parse PEM files. The [`rcgen`](https://docs.rs/rcgen/latest/rcgen/) crate can be used to
+/// generate certificates and private keys.
 ///
 /// ## Note
 ///
-/// If you are receiving certificates from an untrusted client or server, the contents
-/// must be validated manually.
+/// If you are receiving certificates from an untrusted client or server, it is essential
+/// to validate the contents of the certificate manually. This typically involves verifying
+/// the certificate's signature, checking its expiration date, verifying the certificate
+/// chain (including intermediate and root certificates), and performing additional checks
+/// based on your specific requirements.
+///
+/// ## Examples
+///
+/// Parsing a PEM file to extract DER-encoded certificates:
+///
+/// ```rust
+/// use std::fs::File;
+/// use std::io::BufReader;
+/// use rustls::Certificate;
+///
+/// fn load_certificates_from_pem(path: &str) -> std::io::Result<Vec<Certificate>> {
+///     let file = File::open(path)?;
+///     let mut reader = BufReader::new(file);
+///     let certs = rustls_pemfile::certs(&mut reader)?;
+///
+///     Ok(certs.into_iter().map(Certificate).collect())
+/// }
+/// ```
 #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Certificate(pub Vec<u8>);
 
