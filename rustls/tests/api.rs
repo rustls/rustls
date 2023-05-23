@@ -1546,268 +1546,133 @@ fn server_complete_io_for_read() {
 
 #[test]
 fn client_stream_write() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, mut server) = make_pair(*kt);
-
-        {
-            let mut pipe = OtherSession::new(&mut server);
-            let mut stream = Stream::new(&mut client, &mut pipe);
-            assert_eq!(stream.write(b"hello").unwrap(), 5);
-        }
-        check_read(&mut server.reader(), b"hello");
-    }
+    test_client_stream_write(StreamKind::Ref);
+    test_client_stream_write(StreamKind::Owned);
 }
 
 #[test]
-fn client_streamowned_write() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (client, mut server) = make_pair(*kt);
+fn server_stream_write() {
+    test_server_stream_write(StreamKind::Ref);
+    test_server_stream_write(StreamKind::Owned);
+}
 
+#[derive(Debug, Copy, Clone)]
+enum StreamKind {
+    Owned,
+    Ref,
+}
+
+fn test_client_stream_write(stream_kind: StreamKind) {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
+        let data = b"hello";
         {
-            let pipe = OtherSession::new(&mut server);
-            let mut stream = StreamOwned::new(client, pipe);
-            assert_eq!(stream.write(b"hello").unwrap(), 5);
+            let mut pipe = OtherSession::new(&mut server);
+            let mut stream: Box<dyn Write> = match stream_kind {
+                StreamKind::Ref => Box::new(Stream::new(&mut client, &mut pipe)),
+                StreamKind::Owned => Box::new(StreamOwned::new(client, pipe)),
+            };
+            assert_eq!(stream.write(data).unwrap(), 5);
         }
-        check_read(&mut server.reader(), b"hello");
+        check_read(&mut server.reader(), data);
+    }
+}
+
+fn test_server_stream_write(stream_kind: StreamKind) {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
+        let data = b"hello";
+        {
+            let mut pipe = OtherSession::new(&mut client);
+            let mut stream: Box<dyn Write> = match stream_kind {
+                StreamKind::Ref => Box::new(Stream::new(&mut server, &mut pipe)),
+                StreamKind::Owned => Box::new(StreamOwned::new(server, pipe)),
+            };
+            assert_eq!(stream.write(data).unwrap(), 5);
+        }
+        check_read(&mut client.reader(), data);
     }
 }
 
 #[test]
 fn client_stream_read() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let mut pipe = OtherSession::new(&mut server);
-            let mut stream = Stream::new(&mut client, &mut pipe);
-            check_read(&mut stream, b"world");
-        }
-    }
-}
-
-#[test]
-fn client_streamowned_read() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let pipe = OtherSession::new(&mut server);
-            let mut stream = StreamOwned::new(client, pipe);
-            check_read(&mut stream, b"world");
-        }
-    }
-}
-
-#[cfg(read_buf)]
-#[test]
-fn client_stream_readbuf() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let mut pipe = OtherSession::new(&mut server);
-            let mut stream = Stream::new(&mut client, &mut pipe);
-            check_read_buf(&mut stream, b"world");
-        }
-    }
-}
-
-#[cfg(read_buf)]
-#[test]
-fn client_streamowned_readbuf() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let pipe = OtherSession::new(&mut server);
-            let mut stream = StreamOwned::new(client, pipe);
-            check_read_buf(&mut stream, b"world");
-        }
-    }
-}
-
-#[test]
-fn client_stream_read_unclean_close() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let pipe = OtherSession::new(&mut server);
-            let mut stream = StreamOwned::new(client, pipe);
-            // Simulate the server closing without signaling a clean close.
-            transfer_eof(&mut stream.conn);
-
-            // We should still be able to read the data the server sent before close.
-            check_read(&mut stream, b"world");
-
-            // But a subsequent read should error with UnexpectedEof.
-            check_read_err(&mut stream, io::ErrorKind::UnexpectedEof);
-        }
-    }
-}
-
-#[cfg(read_buf)]
-#[test]
-fn client_stream_readbuf_unclean_close() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let mut pipe = OtherSession::new(&mut server);
-            let mut stream = Stream::new(&mut client, &mut pipe);
-            // Simulate the server closing without signaling a clean close.
-            transfer_eof(stream.conn);
-
-            // We should still be able to read the data the server sent before close.
-            check_read_buf(&mut stream, b"world");
-
-            // But a subsequent read should error with UnexpectedEof.
-            check_read_buf_err(&mut stream, io::ErrorKind::UnexpectedEof);
-        }
-    }
-}
-
-#[test]
-fn client_streamowned_read_unclean_close() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let pipe = OtherSession::new(&mut server);
-            let mut stream = StreamOwned::new(client, pipe);
-            // Simulate the server closing without signaling a clean close.
-            transfer_eof(&mut stream.conn);
-
-            // We should still be able to read the data the server sent before close.
-            check_read(&mut stream, b"world");
-
-            // But a subsequent read should error with UnexpectedEof.
-            check_read_err(&mut stream, io::ErrorKind::UnexpectedEof);
-        }
-    }
-}
-
-#[cfg(read_buf)]
-#[test]
-fn client_streamowned_readbuf_unclean_close() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (client, mut server) = make_pair(*kt);
-
-        server
-            .writer()
-            .write_all(b"world")
-            .unwrap();
-
-        {
-            let pipe = OtherSession::new(&mut server);
-            let mut stream = StreamOwned::new(client, pipe);
-            // Simulate the server closing without signaling a clean close.
-            transfer_eof(&mut stream.conn);
-
-            // We should still be able to read the data the server sent before close.
-            check_read_buf(&mut stream, b"world");
-
-            // But a subsequent read should error with UnexpectedEof.
-            check_read_buf_err(&mut stream, io::ErrorKind::UnexpectedEof);
-        }
-    }
-}
-
-#[test]
-fn server_stream_write() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, mut server) = make_pair(*kt);
-
-        {
-            let mut pipe = OtherSession::new(&mut client);
-            let mut stream = Stream::new(&mut server, &mut pipe);
-            assert_eq!(stream.write(b"hello").unwrap(), 5);
-        }
-        check_read(&mut client.reader(), b"hello");
-    }
-}
-
-#[test]
-fn server_streamowned_write() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, server) = make_pair(*kt);
-
-        {
-            let pipe = OtherSession::new(&mut client);
-            let mut stream = StreamOwned::new(server, pipe);
-            assert_eq!(stream.write(b"hello").unwrap(), 5);
-        }
-        check_read(&mut client.reader(), b"hello");
+    test_client_stream_read(StreamKind::Ref, ReadKind::Buf);
+    test_client_stream_read(StreamKind::Owned, ReadKind::Buf);
+    #[cfg(read_buf)]
+    {
+        test_client_stream_read(StreamKind::Ref, ReadKind::BorrowedBuf);
+        test_client_stream_read(StreamKind::Owned, ReadKind::BorrowedBuf);
     }
 }
 
 #[test]
 fn server_stream_read() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, mut server) = make_pair(*kt);
+    test_server_stream_read(StreamKind::Ref, ReadKind::Buf);
+    test_server_stream_read(StreamKind::Owned, ReadKind::Buf);
+    #[cfg(read_buf)]
+    {
+        test_server_stream_read(StreamKind::Ref, ReadKind::BorrowedBuf);
+        test_server_stream_read(StreamKind::Owned, ReadKind::BorrowedBuf);
+    }
+}
 
-        client
-            .writer()
-            .write_all(b"world")
-            .unwrap();
+#[derive(Debug, Copy, Clone)]
+enum ReadKind {
+    Buf,
+    #[cfg(read_buf)]
+    BorrowedBuf,
+}
 
-        {
-            let mut pipe = OtherSession::new(&mut client);
-            let mut stream = Stream::new(&mut server, &mut pipe);
-            check_read(&mut stream, b"world");
+fn test_stream_read(read_kind: ReadKind, mut stream: impl Read, data: &[u8]) {
+    match read_kind {
+        ReadKind::Buf => {
+            check_read(&mut stream, data);
+            check_read_err(&mut stream, io::ErrorKind::UnexpectedEof)
+        }
+        #[cfg(read_buf)]
+        ReadKind::BorrowedBuf => {
+            check_read_buf(&mut stream, data);
+            check_read_buf_err(&mut stream, io::ErrorKind::UnexpectedEof)
         }
     }
 }
 
-#[test]
-fn server_streamowned_read() {
+fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
     for kt in ALL_KEY_TYPES.iter() {
-        let (mut client, server) = make_pair(*kt);
-
-        client
-            .writer()
-            .write_all(b"world")
-            .unwrap();
+        let (mut client, mut server) = make_pair(*kt);
+        let data = b"world";
+        server.writer().write_all(data).unwrap();
 
         {
-            let pipe = OtherSession::new(&mut client);
-            let mut stream = StreamOwned::new(server, pipe);
-            check_read(&mut stream, b"world");
+            let mut pipe = OtherSession::new(&mut server);
+            transfer_eof(&mut client);
+
+            let stream: Box<dyn Read> = match stream_kind {
+                StreamKind::Ref => Box::new(Stream::new(&mut client, &mut pipe)),
+                StreamKind::Owned => Box::new(StreamOwned::new(client, pipe)),
+            };
+
+            test_stream_read(read_kind, stream, data)
+        }
+    }
+}
+
+fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
+        let data = b"world";
+        client.writer().write_all(data).unwrap();
+
+        {
+            let mut pipe = OtherSession::new(&mut client);
+            transfer_eof(&mut server);
+
+            let stream: Box<dyn Read> = match stream_kind {
+                StreamKind::Ref => Box::new(Stream::new(&mut server, &mut pipe)),
+                StreamKind::Owned => Box::new(StreamOwned::new(server, pipe)),
+            };
+
+            test_stream_read(read_kind, stream, data)
         }
     }
 }
