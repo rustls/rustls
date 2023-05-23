@@ -105,15 +105,7 @@ impl RootCertStore {
     /// in order to add as many valid roots as possible and to understand how many certificates
     /// have been diagnosed as malformed.
     pub fn add(&mut self, der: &key::Certificate) -> Result<(), Error> {
-        let ta = webpki::TrustAnchor::try_from_cert_der(&der.0)
-            .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
-        let ota = OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        );
-        self.roots.push(ota);
-        Ok(())
+        self.add_internal(&der.0)
     }
 
     /// Adds all the given TrustAnchors `anchors`.  This does not
@@ -132,16 +124,16 @@ impl RootCertStore {
     /// include ancient or syntactically invalid certificates.
     ///
     /// Returns the number of certificates added, and the number that were ignored.
-    pub fn add_parsable_certificates(&mut self, der_certs: &[Vec<u8>]) -> (usize, usize) {
+    pub fn add_parsable_certificates(&mut self, der_certs: &[impl AsRef<[u8]>]) -> (usize, usize) {
         let mut valid_count = 0;
         let mut invalid_count = 0;
 
         for der_cert in der_certs {
             #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match self.add(&key::Certificate(der_cert.clone())) {
+            match self.add_internal(der_cert.as_ref()) {
                 Ok(_) => valid_count += 1,
                 Err(err) => {
-                    trace!("invalid cert der {:?}", der_cert);
+                    trace!("invalid cert der {:?}", der_cert.as_ref());
                     debug!("certificate parsing failed: {:?}", err);
                     invalid_count += 1;
                 }
@@ -154,6 +146,18 @@ impl RootCertStore {
         );
 
         (valid_count, invalid_count)
+    }
+
+    fn add_internal(&mut self, der: &[u8]) -> Result<(), Error> {
+        let ta = webpki::TrustAnchor::try_from_cert_der(der)
+            .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
+        self.roots
+            .push(OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            ));
+        Ok(())
     }
 }
 
