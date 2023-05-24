@@ -152,11 +152,13 @@ impl ClientConnection {
 
         let ext = match quic_version {
             Version::V1Draft => ClientExtension::TransportParametersDraft(params),
-            Version::V1 => ClientExtension::TransportParameters(params),
+            Version::V1 | Version::V2 => ClientExtension::TransportParameters(params),
         };
 
+        let mut inner = ConnectionCore::for_client(config, name, vec![ext], Protocol::Quic)?;
+        inner.common_state.quic.version = quic_version;
         Ok(Self {
-            inner: ConnectionCore::for_client(config, name, vec![ext], Protocol::Quic)?.into(),
+            inner: inner.into(),
         })
     }
 
@@ -225,11 +227,12 @@ impl ServerConnection {
 
         let ext = match quic_version {
             Version::V1Draft => ServerExtension::TransportParametersDraft(params),
-            Version::V1 => ServerExtension::TransportParameters(params),
+            Version::V1 | Version::V2 => ServerExtension::TransportParameters(params),
         };
 
         let mut core = ConnectionCore::for_server(config, vec![ext])?;
         core.common_state.protocol = Protocol::Quic;
+        core.common_state.quic.version = quic_version;
         Ok(Self { inner: core.into() })
     }
 
@@ -323,6 +326,7 @@ impl<Data: SideData> ConnectionCommon<Data> {
                 .quic
                 .early_secret
                 .as_ref()?,
+            self.core.common_state.quic.version,
         ))
     }
 
@@ -387,6 +391,7 @@ pub(crate) struct Quic {
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
     pub(crate) returned_traffic_keys: bool,
+    pub(crate) version: Version,
 }
 
 impl Quic {
@@ -433,6 +438,7 @@ pub struct Secrets {
     /// Cipher suite used with these secrets
     suite: &'static Tls13CipherSuite,
     side: Side,
+    version: Version,
 }
 
 impl Secrets {
@@ -441,12 +447,14 @@ impl Secrets {
         server: hkdf::Prk,
         suite: &'static Tls13CipherSuite,
         side: Side,
+        version: Version,
     ) -> Self {
         Self {
             client,
             server,
             suite,
             side,
+            version,
         }
     }
 
@@ -459,8 +467,8 @@ impl Secrets {
 
     fn update(&mut self) {
         let hkdf_alg = self.suite.hkdf_algorithm;
-        self.client = hkdf_expand(&self.client, hkdf_alg, b"quic ku", &[]);
-        self.server = hkdf_expand(&self.server, hkdf_alg, b"quic ku", &[]);
+        self.client = hkdf_expand(&self.client, hkdf_alg, self.version.key_update_label(), &[]);
+        self.server = hkdf_expand(&self.server, hkdf_alg, self.version.key_update_label(), &[]);
     }
 
     fn local_remote(&self) -> (&hkdf::Prk, &hkdf::Prk) {
@@ -480,10 +488,14 @@ pub struct DirectionalKeys {
 }
 
 impl DirectionalKeys {
-    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
+    pub(crate) fn new(
+        suite: &'static Tls13CipherSuite,
+        secret: &hkdf::Prk,
+        version: Version,
+    ) -> Self {
         Self {
-            header: HeaderProtectionKey::new(suite, secret),
-            packet: PacketKey::new(suite, secret),
+            header: HeaderProtectionKey::new(suite, secret, version),
+            packet: PacketKey::new(suite, secret, version),
         }
     }
 }
@@ -492,14 +504,14 @@ impl DirectionalKeys {
 pub struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
 
 impl HeaderProtectionKey {
-    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk, version: Version) -> Self {
         let alg = match suite.common.bulk {
             BulkAlgorithm::Aes128Gcm => &aead::quic::AES_128,
             BulkAlgorithm::Aes256Gcm => &aead::quic::AES_256,
             BulkAlgorithm::Chacha20Poly1305 => &aead::quic::CHACHA20,
         };
 
-        Self(hkdf_expand(secret, alg, b"quic hp", &[]))
+        Self(hkdf_expand(secret, alg, version.header_key_label(), &[]))
     }
 
     /// Adds QUIC Header Protection.
@@ -634,15 +646,15 @@ pub struct PacketKey {
 }
 
 impl PacketKey {
-    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk, version: Version) -> Self {
         Self {
             key: aead::LessSafeKey::new(hkdf_expand(
                 secret,
                 suite.common.aead_algorithm,
-                b"quic key",
+                version.packet_key_label(),
                 &[],
             )),
-            iv: hkdf_expand(secret, IvLen, b"quic iv", &[]),
+            iv: hkdf_expand(secret, IvLen, version.packet_iv_label(), &[]),
             suite,
         }
     }
@@ -738,8 +750,8 @@ impl PacketKeySet {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
         Self {
-            local: PacketKey::new(secrets.suite, local),
-            remote: PacketKey::new(secrets.suite, remote),
+            local: PacketKey::new(secrets.suite, local, secrets.version),
+            remote: PacketKey::new(secrets.suite, remote, secrets.version),
         }
     }
 }
@@ -761,6 +773,7 @@ impl Keys {
         let hs_secret = hkdf::Salt::new(hkdf::HKDF_SHA256, salt).extract(client_dst_connection_id);
 
         let secrets = Secrets {
+            version,
             client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
             server: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, SERVER_LABEL, &[]),
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
@@ -772,8 +785,8 @@ impl Keys {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
         Self {
-            local: DirectionalKeys::new(secrets.suite, local),
-            remote: DirectionalKeys::new(secrets.suite, remote),
+            local: DirectionalKeys::new(secrets.suite, local, secrets.version),
+            remote: DirectionalKeys::new(secrets.suite, remote, secrets.version),
         }
     }
 }
@@ -827,6 +840,8 @@ pub enum Version {
     V1Draft,
     /// First stable RFC
     V1,
+    /// Anti-ossification variant of V1
+    V2,
 }
 
 impl Version {
@@ -842,7 +857,46 @@ impl Version {
                 0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
                 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a,
             ],
+            Self::V2 => &[
+                // https://www.ietf.org/archive/id/draft-ietf-quic-v2-10.html#name-initial-salt-2
+                0x0d, 0xed, 0xe3, 0xde, 0xf7, 0x00, 0xa6, 0xdb, 0x81, 0x93, 0x81, 0xbe, 0x6e, 0x26,
+                0x9d, 0xcb, 0xf9, 0xbd, 0x2e, 0xd9,
+            ],
         }
+    }
+
+    fn packet_key_label(&self) -> &'static [u8] {
+        match self {
+            Self::V1Draft | Self::V1 => b"quic key",
+            Self::V2 => b"quicv2 key",
+        }
+    }
+
+    fn packet_iv_label(&self) -> &'static [u8] {
+        match self {
+            Self::V1Draft | Self::V1 => b"quic iv",
+            Self::V2 => b"quicv2 iv",
+        }
+    }
+
+    fn header_key_label(&self) -> &'static [u8] {
+        match self {
+            Self::V1Draft | Self::V1 => b"quic hp",
+            Self::V2 => b"quicv2 hp",
+        }
+    }
+
+    fn key_update_label(&self) -> &'static [u8] {
+        match self {
+            Self::V1Draft | Self::V1 => b"quic ku",
+            Self::V2 => b"quicv2 ku",
+        }
+    }
+}
+
+impl Default for Version {
+    fn default() -> Self {
+        Self::V1
     }
 }
 
@@ -850,10 +904,7 @@ impl Version {
 mod test {
     use super::*;
 
-    #[test]
-    fn short_packet_header_protection() {
-        // https://www.rfc-editor.org/rfc/rfc9001.html#name-chacha20-poly1305-short-hea
-
+    fn test_short_packet(version: Version, expected: &[u8]) {
         const PN: u64 = 654360564;
         const SECRET: &[u8] = &[
             0x9a, 0xc3, 0x12, 0xa7, 0xf8, 0x77, 0x46, 0x8e, 0xbe, 0x69, 0x42, 0x27, 0x48, 0xad,
@@ -863,8 +914,9 @@ mod test {
 
         let secret = hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, SECRET);
         use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
-        let hpk = HeaderProtectionKey::new(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL, &secret);
-        let packet = PacketKey::new(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL, &secret);
+        let hpk =
+            HeaderProtectionKey::new(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL, &secret, version);
+        let packet = PacketKey::new(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL, &secret, version);
 
         const PLAIN: &[u8] = &[0x42, 0x00, 0xbf, 0xf4, 0x01];
 
@@ -882,12 +934,7 @@ mod test {
         hpk.encrypt_in_place(sample, &mut first[0], dbg!(rest))
             .unwrap();
 
-        const PROTECTED: &[u8] = &[
-            0x4c, 0xfe, 0x41, 0x89, 0x65, 0x5e, 0x5c, 0xd5, 0x5c, 0x41, 0xf6, 0x90, 0x80, 0x57,
-            0x5d, 0x79, 0x99, 0xc2, 0x5a, 0x5b, 0xfb,
-        ];
-
-        assert_eq!(&buf, PROTECTED);
+        assert_eq!(&buf, expected);
 
         let (header, sample) = buf.split_at_mut(pn_offset + 4);
         let (first, rest) = header.split_at_mut(1);
@@ -901,6 +948,18 @@ mod test {
             .unwrap();
 
         assert_eq!(plain, &PLAIN[4..]);
+    }
+
+    #[test]
+    fn short_packet_header_protection() {
+        // https://www.rfc-editor.org/rfc/rfc9001.html#name-chacha20-poly1305-short-hea
+        test_short_packet(
+            Version::V1,
+            &[
+                0x4c, 0xfe, 0x41, 0x89, 0x65, 0x5e, 0x5c, 0xd5, 0x5c, 0x41, 0xf6, 0x90, 0x80, 0x57,
+                0x5d, 0x79, 0x99, 0xc2, 0x5a, 0x5b, 0xfb,
+            ],
+        );
     }
 
     #[test]
@@ -939,6 +998,7 @@ mod test {
             ),
             suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
             side: Side::Client,
+            version: Version::V1,
         };
         secrets.update();
 
@@ -964,5 +1024,70 @@ mod test {
                 ]
             )
         ));
+    }
+
+    #[test]
+    fn short_packet_header_protection_v2() {
+        // https://www.ietf.org/archive/id/draft-ietf-quic-v2-10.html#name-chacha20-poly1305-short-head
+        test_short_packet(
+            Version::V2,
+            &[
+                0x55, 0x58, 0xb1, 0xc6, 0x0a, 0xe7, 0xb6, 0xb9, 0x32, 0xbc, 0x27, 0xd7, 0x86, 0xf4,
+                0xbc, 0x2b, 0xb2, 0x0f, 0x21, 0x62, 0xba,
+            ],
+        );
+    }
+
+    #[test]
+    fn initial_test_vector_v2() {
+        // https://www.ietf.org/archive/id/draft-ietf-quic-v2-10.html#name-sample-packet-protection-2
+        let icid = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
+        let server = Keys::initial(Version::V2, &icid, Side::Server);
+        let mut server_payload = [
+            0x02, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x40, 0x5a, 0x02, 0x00, 0x00, 0x56, 0x03,
+            0x03, 0xee, 0xfc, 0xe7, 0xf7, 0xb3, 0x7b, 0xa1, 0xd1, 0x63, 0x2e, 0x96, 0x67, 0x78,
+            0x25, 0xdd, 0xf7, 0x39, 0x88, 0xcf, 0xc7, 0x98, 0x25, 0xdf, 0x56, 0x6d, 0xc5, 0x43,
+            0x0b, 0x9a, 0x04, 0x5a, 0x12, 0x00, 0x13, 0x01, 0x00, 0x00, 0x2e, 0x00, 0x33, 0x00,
+            0x24, 0x00, 0x1d, 0x00, 0x20, 0x9d, 0x3c, 0x94, 0x0d, 0x89, 0x69, 0x0b, 0x84, 0xd0,
+            0x8a, 0x60, 0x99, 0x3c, 0x14, 0x4e, 0xca, 0x68, 0x4d, 0x10, 0x81, 0x28, 0x7c, 0x83,
+            0x4d, 0x53, 0x11, 0xbc, 0xf3, 0x2b, 0xb9, 0xda, 0x1a, 0x00, 0x2b, 0x00, 0x02, 0x03,
+            0x04,
+        ];
+        let mut server_header = [
+            0xd1, 0x6b, 0x33, 0x43, 0xcf, 0x00, 0x08, 0xf0, 0x67, 0xa5, 0x50, 0x2a, 0x42, 0x62,
+            0xb5, 0x00, 0x40, 0x75, 0x00, 0x01,
+        ];
+        let tag = server
+            .local
+            .packet
+            .encrypt_in_place(1, &server_header, &mut server_payload)
+            .unwrap();
+        let (first, rest) = server_header.split_at_mut(1);
+        let rest_len = rest.len();
+        server
+            .local
+            .header
+            .encrypt_in_place(
+                &server_payload[2..18],
+                &mut first[0],
+                &mut rest[rest_len - 2..],
+            )
+            .unwrap();
+        let mut server_packet = server_header.to_vec();
+        server_packet.extend(server_payload);
+        server_packet.extend(tag.as_ref());
+        let expected_server_packet = [
+            0xdc, 0x6b, 0x33, 0x43, 0xcf, 0x00, 0x08, 0xf0, 0x67, 0xa5, 0x50, 0x2a, 0x42, 0x62,
+            0xb5, 0x00, 0x40, 0x75, 0xd9, 0x2f, 0xaa, 0xf1, 0x6f, 0x05, 0xd8, 0xa4, 0x39, 0x8c,
+            0x47, 0x08, 0x96, 0x98, 0xba, 0xee, 0xa2, 0x6b, 0x91, 0xeb, 0x76, 0x1d, 0x9b, 0x89,
+            0x23, 0x7b, 0xbf, 0x87, 0x26, 0x30, 0x17, 0x91, 0x53, 0x58, 0x23, 0x00, 0x35, 0xf7,
+            0xfd, 0x39, 0x45, 0xd8, 0x89, 0x65, 0xcf, 0x17, 0xf9, 0xaf, 0x6e, 0x16, 0x88, 0x6c,
+            0x61, 0xbf, 0xc7, 0x03, 0x10, 0x6f, 0xba, 0xf3, 0xcb, 0x4c, 0xfa, 0x52, 0x38, 0x2d,
+            0xd1, 0x6a, 0x39, 0x3e, 0x42, 0x75, 0x75, 0x07, 0x69, 0x80, 0x75, 0xb2, 0xc9, 0x84,
+            0xc7, 0x07, 0xf0, 0xa0, 0x81, 0x2d, 0x8c, 0xd5, 0xa6, 0x88, 0x1e, 0xaf, 0x21, 0xce,
+            0xda, 0x98, 0xf4, 0xbd, 0x23, 0xf6, 0xfe, 0x1a, 0x3e, 0x2c, 0x43, 0xed, 0xd9, 0xce,
+            0x7c, 0xa8, 0x4b, 0xed, 0x85, 0x21, 0xe2, 0xe1, 0x40,
+        ];
+        assert_eq!(server_packet[..], expected_server_packet[..]);
     }
 }
