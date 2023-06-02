@@ -151,12 +151,12 @@ mod client_hello {
             chm: &Message,
             client_hello: &ClientHelloPayload,
             mut sigschemes_ext: Vec<SignatureScheme>,
-        ) -> hs::NextStateOrError {
+        ) -> hs::NextStateOrErrorWithState {
             if client_hello.compression_methods.len() != 1 {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::OfferedIncorrectCompressions,
-                ));
+                ).into());
             }
 
             let groups_ext = client_hello
@@ -184,7 +184,7 @@ mod client_hello {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::OfferedDuplicateKeyShares,
-                ));
+                ).into());
             }
 
             let early_data_requested = client_hello.early_data_extension_offered();
@@ -196,7 +196,7 @@ mod client_hello {
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::EarlyDataAttemptedInSecondClientHello,
                     )
-                });
+                }.into());
             }
 
             // choose a share that we support
@@ -229,7 +229,7 @@ mod client_hello {
                             return Err(cx.common.send_fatal_alert(
                                 AlertDescription::IllegalParameter,
                                 PeerMisbehaved::RefusedToFollowHelloRetryRequest,
-                            ));
+                            ).into());
                         }
 
                         emit_hello_retry_request(
@@ -267,7 +267,7 @@ mod client_hello {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
                         PeerIncompatible::NoKxGroupsInCommon,
-                    ));
+                    ).into());
                 }
             };
 
@@ -280,21 +280,21 @@ mod client_hello {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::PskExtensionMustBeLast,
-                    ));
+                    ).into());
                 }
 
                 if psk_offer.binders.is_empty() {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::DecodeError,
                         PeerMisbehaved::MissingBinderInPskExtension,
-                    ));
+                    ).into());
                 }
 
                 if psk_offer.binders.len() != psk_offer.identities.len() {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders,
-                    ));
+                    ).into());
                 }
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
@@ -319,7 +319,7 @@ mod client_hello {
                         return Err(cx.common.send_fatal_alert(
                             AlertDescription::DecryptError,
                             PeerMisbehaved::IncorrectBinder,
-                        ));
+                        ).into());
                     }
 
                     chosen_psk_index = Some(i);
@@ -861,7 +861,7 @@ struct ExpectAndSkipRejectedEarlyData {
 }
 
 impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
@@ -886,7 +886,7 @@ struct ExpectCertificate {
 }
 
 impl State<ServerConnectionData> for ExpectCertificate {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let certp = require_handshake_msg!(
             m,
             HandshakeType::Certificate,
@@ -924,7 +924,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::CertificateRequired,
                     Error::NoCertificatesPresented,
-                ));
+                ).into());
             }
             Some(chain) => chain,
         };
@@ -959,7 +959,7 @@ struct ExpectCertificateVerify {
 }
 
 impl State<ServerConnectionData> for ExpectCertificateVerify {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let rc = {
             let sig = require_handshake_msg!(
                 m,
@@ -979,7 +979,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         if let Err(e) = rc {
             return Err(cx
                 .common
-                .send_cert_verify_error_alert(e));
+                .send_cert_verify_error_alert(e).into());
         }
 
         trace!("client CertificateVerify OK");
@@ -1008,7 +1008,7 @@ struct ExpectEarlyData {
 }
 
 impl State<ServerConnectionData> for ExpectEarlyData {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::ApplicationData(payload) => {
                 match cx
@@ -1020,7 +1020,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     false => Err(cx.common.send_fatal_alert(
                         AlertDescription::UnexpectedMessage,
                         PeerMisbehaved::TooMuchEarlyDataReceived,
-                    )),
+                    ).into()),
                 }
             }
             MessagePayload::Handshake {
@@ -1046,7 +1046,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 &payload,
                 &[ContentType::ApplicationData, ContentType::Handshake],
                 &[HandshakeType::EndOfEarlyData],
-            )),
+            ).into()),
         }
     }
 }
@@ -1154,7 +1154,7 @@ impl ExpectFinished {
 }
 
 impl State<ServerConnectionData> for ExpectFinished {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
@@ -1244,7 +1244,7 @@ impl ExpectTraffic {
 }
 
 impl State<ServerConnectionData> for ExpectTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common
@@ -1262,7 +1262,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
                     &payload,
                     &[ContentType::ApplicationData, ContentType::Handshake],
                     &[HandshakeType::KeyUpdate],
-                ));
+                ).into());
             }
         }
 
@@ -1294,7 +1294,7 @@ struct ExpectQuicTraffic {
 
 #[cfg(feature = "quic")]
 impl State<ServerConnectionData> for ExpectQuicTraffic {
-    fn handle(self: Box<Self>, _cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, _cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         // reject all messages
         Err(inappropriate_message(&m.payload, &[]))
     }

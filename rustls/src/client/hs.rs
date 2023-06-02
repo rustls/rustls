@@ -4,7 +4,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved, ErrorWithState};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::kx;
 #[cfg(feature = "logging")]
@@ -36,6 +36,7 @@ use std::sync::Arc;
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
+pub(super) type NextStateOrErrorWithState = Result<NextState, ErrorWithState<ClientConnectionData>>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 fn find_session(
@@ -486,7 +487,7 @@ pub(super) fn sct_list_is_invalid(scts: &[Sct]) -> bool {
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrErrorWithState {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
         trace!("We got ServerHello {:#?}", server_hello);
@@ -520,7 +521,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                         cx.common.send_fatal_alert(
                             AlertDescription::IllegalParameter,
                             PeerMisbehaved::SelectedTls12UsingTls13VersionExtension,
-                        )
+                        ).into()
                     });
                 }
 
@@ -533,7 +534,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 };
                 return Err(cx
                     .common
-                    .send_fatal_alert(AlertDescription::ProtocolVersion, reason));
+                    .send_fatal_alert(AlertDescription::ProtocolVersion, reason).into());
             }
         };
 
@@ -542,7 +543,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::SelectedUnofferedCompression,
-                )
+                ).into()
             });
         }
 
@@ -550,7 +551,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::DecodeError,
                 PeerMisbehaved::DuplicateServerHelloExtensions,
-            ));
+            ).into());
         }
 
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
@@ -562,7 +563,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
                 PeerMisbehaved::UnsolicitedServerHelloExtension,
-            ));
+            ).into());
         }
 
         cx.common.negotiated_version = Some(version);
@@ -579,7 +580,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
                     PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints,
-                ));
+                ).into());
             }
         }
 
@@ -597,7 +598,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::SelectedUnusableCipherSuiteForVersion,
-                )
+                ).into()
             });
         }
 
@@ -607,7 +608,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry,
-                    )
+                    ).into()
                 });
             }
             _ => {
@@ -687,7 +688,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         self,
         cx: &mut ClientContext<'_>,
         m: Message,
-    ) -> NextStateOrError {
+    ) -> NextStateOrErrorWithState {
         let hrr = require_handshake_msg!(
             m,
             HandshakeType::HelloRetryRequest,
@@ -710,7 +711,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup,
-                )
+                ).into()
             });
         }
 
@@ -721,7 +722,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::IllegalHelloRetryRequestWithEmptyCookie,
-                    )
+                    ).into()
                 });
             }
         }
@@ -731,7 +732,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
                 PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
-            ));
+            ).into());
         }
 
         // Or has the same extensions more than once
@@ -740,7 +741,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::DuplicateHelloRetryRequestExtensions,
-                )
+                ).into()
             });
         }
 
@@ -750,7 +751,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::IllegalHelloRetryRequestWithNoChanges,
-                )
+                ).into()
             });
         }
 
@@ -764,7 +765,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::IllegalHelloRetryRequestWithUnsupportedVersion,
-                    )
+                    ).into()
                 });
             }
         }
@@ -778,7 +779,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
-                    )
+                    ).into()
                 });
             }
         };
@@ -832,7 +833,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::Handshake {
                 parsed:
@@ -856,7 +857,7 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
                 &payload,
                 &[ContentType::Handshake],
                 &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
-            )),
+            ).into()),
         }
     }
 }

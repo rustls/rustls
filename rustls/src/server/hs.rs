@@ -3,7 +3,7 @@ use crate::conn::ConnectionRandoms;
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
 use crate::enums::{AlertDescription, HandshakeType, ProtocolVersion, SignatureScheme};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved, ErrorWithState};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
@@ -14,8 +14,9 @@ use crate::msgs::handshake::{ClientHelloPayload, Random, ServerExtension};
 use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::server::server_conn::CertFetchResult;
 use crate::server::{ClientHello, ServerConfig};
-use crate::suites;
+use crate::{suites, WouldBlockCell};
 use crate::SupportedCipherSuite;
 
 use super::server_conn::ServerConnectionData;
@@ -27,7 +28,7 @@ use crate::server::tls13;
 use std::sync::Arc;
 
 pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
-pub(super) type NextStateOrError = Result<NextState, Error>;
+pub(super) type NextStateOrErrorWithState = Result<NextState, ErrorWithState<ServerConnectionData>>;
 pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
 pub(super) fn can_resume(
@@ -260,7 +261,7 @@ impl ExpectClientHello {
         client_hello: &ClientHelloPayload,
         m: &Message,
         cx: &mut ServerContext<'_>,
-    ) -> NextStateOrError {
+    ) -> NextStateOrErrorWithState {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
@@ -277,12 +278,12 @@ impl ExpectClientHello {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::ProtocolVersion,
                     PeerIncompatible::Tls12NotOfferedOrEnabled,
-                ));
+                ).into());
             } else if cx.common.is_quic() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::ProtocolVersion,
                     PeerIncompatible::Tls13RequiredForQuic,
-                ));
+                ).into());
             } else {
                 ProtocolVersion::TLSv1_2
             }
@@ -290,17 +291,17 @@ impl ExpectClientHello {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::Tls12NotOffered,
-            ));
+            ).into());
         } else if !tls12_enabled && tls13_enabled {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::SupportedVersionsExtensionRequired,
-            ));
+            ).into());
         } else if cx.common.is_quic() {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::Tls13RequiredForQuic,
-            ));
+            ).into());
         } else {
             ProtocolVersion::TLSv1_2
         };
@@ -339,14 +340,26 @@ impl ExpectClientHello {
             let certkey = self
                 .config
                 .cert_resolver
-                .resolve(client_hello);
+                .clone()
+                .fetch(client_hello.clone());
 
-            certkey.ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::AccessDenied,
-                    Error::General("no server certificate chain resolved".to_owned()),
-                )
-            })?
+            match certkey {
+                CertFetchResult::Hit(cert) => {
+                    cert
+                }
+                CertFetchResult::Miss => {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::AccessDenied,
+                        Error::General("no server certificate chain resolved".to_owned()),
+                    ).into());
+                }
+                CertFetchResult::WouldBlock(callback) => {
+                    return Err(ErrorWithState {
+                        error: Error::WouldBlock(WouldBlockCell::new(callback, m)),
+                        next: Some(Box::new(self))
+                    });
+                }
+            }
         };
         let certkey = ActiveCertifiedKey::from_certified_key(&certkey);
 
@@ -388,7 +401,7 @@ impl ExpectClientHello {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::HandshakeHashVariedAfterRetry,
-                ));
+                ).into());
             }
         };
 
@@ -429,9 +442,9 @@ impl ExpectClientHello {
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrErrorWithState {
         let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
-        self.with_certified_key(sig_schemes, client_hello, &m, cx)
+        self.with_certified_key(sig_schemes, client_hello, &m, cx)        
     }
 }
 
@@ -501,7 +514,7 @@ pub(super) fn process_client_hello<'a>(
     if let (Some(sni), false) = (&sni, done_retry) {
         // Save the SNI into the session.
         // The SNI hostname is immutable once set.
-        assert!(cx.data.sni.is_none());
+        assert!(cx.data.sni.is_none() || cx.data.sni == Some(sni.clone()));
         cx.data.sni = Some(sni.clone());
     } else if cx.data.sni != sni {
         return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());

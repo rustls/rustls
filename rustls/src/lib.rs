@@ -344,6 +344,7 @@ mod kx;
 mod suites;
 mod ticketer;
 mod versions;
+mod would_block;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
@@ -393,6 +394,7 @@ pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::DigitallySignedStruct;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
+pub use crate::would_block::{WouldBlockCallback, WouldBlockCell};
 
 /// Items for use in a client.
 pub mod client {
@@ -446,7 +448,7 @@ pub mod server {
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{
-        Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData,
+        Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData, CertFetchResult
     };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
 

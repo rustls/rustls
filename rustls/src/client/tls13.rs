@@ -75,7 +75,7 @@ pub(super) fn handle_server_hello(
     hello: ClientHelloDetails,
     our_key_share: kx::KeyExchange,
     mut sent_tls13_fake_ccs: bool,
-) -> hs::NextStateOrError {
+) -> hs::NextStateOrErrorWithState {
     validate_server_hello(cx.common, server_hello)?;
 
     let their_key_share = server_hello
@@ -92,7 +92,7 @@ pub(super) fn handle_server_hello(
             cx.common.send_fatal_alert(
                 AlertDescription::IllegalParameter,
                 PeerMisbehaved::WrongGroupForKeyShare,
-            )
+            ).into()
         });
     }
 
@@ -107,7 +107,7 @@ pub(super) fn handle_server_hello(
                         cx.common.send_fatal_alert(
                             AlertDescription::IllegalParameter,
                             PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
-                        )
+                        ).into()
                     });
                 }
             };
@@ -119,7 +119,7 @@ pub(super) fn handle_server_hello(
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite,
-                    )
+                    ).into()
                 });
             }
 
@@ -128,7 +128,7 @@ pub(super) fn handle_server_hello(
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::SelectedInvalidPsk,
-                    )
+                    ).into()
                 });
             }
 
@@ -372,7 +372,7 @@ struct ExpectEncryptedExtensions {
 }
 
 impl State<ClientConnectionData> for ExpectEncryptedExtensions {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let exts = require_handshake_msg!(
             m,
             HandshakeType::EncryptedExtensions,
@@ -465,7 +465,7 @@ struct ExpectCertificateOrCertReq {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::Handshake {
                 parsed:
@@ -509,7 +509,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                     HandshakeType::Certificate,
                     HandshakeType::CertificateRequest,
                 ],
-            )),
+            ).into()),
         }
     }
 }
@@ -528,7 +528,7 @@ struct ExpectCertificateRequest {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateRequest {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let certreq = &require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -546,7 +546,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::DecodeError,
                 InvalidMessage::InvalidCertRequest,
-            ));
+            ).into());
         }
 
         let tls13_sign_schemes = sign::supported_sign_tls13();
@@ -563,7 +563,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::HandshakeFailure,
                 PeerIncompatible::NoCertificateRequestSignatureSchemesInCommon,
-            ));
+            ).into());
         }
 
         let client_auth = ClientAuthDetails::resolve(
@@ -600,7 +600,7 @@ struct ExpectCertificate {
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let cert_chain = require_handshake_msg!(
             m,
             HandshakeType::Certificate,
@@ -613,7 +613,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::DecodeError,
                 InvalidMessage::InvalidCertRequest,
-            ));
+            ).into());
         }
 
         if cert_chain.any_entry_has_duplicate_extension()
@@ -622,7 +622,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
                 PeerMisbehaved::BadCertChainExtensions,
-            ));
+            ).into());
         }
 
         let server_cert = ServerCertDetails::new(
@@ -669,7 +669,7 @@ struct ExpectCertificateVerify {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateVerify {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let cert_verify = require_handshake_msg!(
             m,
             HandshakeType::CertificateVerify,
@@ -838,7 +838,7 @@ struct ExpectFinished {
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let mut st = *self;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -1043,7 +1043,7 @@ impl ExpectTraffic {
 }
 
 impl State<ClientConnectionData> for ExpectTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common
@@ -1069,7 +1069,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
                     &payload,
                     &[ContentType::ApplicationData, ContentType::Handshake],
                     &[HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
-                ));
+                ).into());
             }
         }
 
@@ -1098,7 +1098,7 @@ struct ExpectQuicTraffic(ExpectTraffic);
 
 #[cfg(feature = "quic")]
 impl State<ClientConnectionData> for ExpectQuicTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let nst = require_handshake_msg!(
             m,
             HandshakeType::NewSessionTicket,

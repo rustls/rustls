@@ -61,7 +61,7 @@ mod server_hello {
             suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
             tls13_supported: bool,
-        ) -> hs::NextStateOrError {
+        ) -> hs::NextStateOrErrorWithState {
             server_hello
                 .random
                 .write_slice(&mut self.randoms.server);
@@ -75,7 +75,7 @@ mod server_hello {
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
                         PeerMisbehaved::AttemptedDowngradeToTls12WhenTls13IsSupported,
-                    )
+                    ).into()
                 });
             }
 
@@ -212,7 +212,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
         m: Message,
-    ) -> hs::NextStateOrError {
+    ) -> hs::NextStateOrErrorWithState {
         self.transcript.add_message(&m);
         let server_cert_chain = require_handshake_msg_move!(
             m,
@@ -269,7 +269,7 @@ struct ExpectCertificateStatusOrServerKx {
 }
 
 impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::Handshake {
                 parsed:
@@ -323,7 +323,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                     HandshakeType::ServerKeyExchange,
                     HandshakeType::CertificateStatus,
                 ],
-            )),
+            ).into()),
         }
     }
 }
@@ -347,7 +347,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
         m: Message,
-    ) -> hs::NextStateOrError {
+    ) -> hs::NextStateOrErrorWithState {
         self.transcript.add_message(&m);
         let server_cert_ocsp_response = require_handshake_msg_move!(
             m,
@@ -396,7 +396,7 @@ struct ExpectServerKx {
 }
 
 impl State<ClientConnectionData> for ExpectServerKx {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let opaque_kx = require_handshake_msg!(
             m,
             HandshakeType::ServerKeyExchange,
@@ -562,7 +562,7 @@ struct ExpectServerDoneOrCertReq {
 }
 
 impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         if matches!(
             m.payload,
             MessagePayload::Handshake {
@@ -628,7 +628,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
         m: Message,
-    ) -> hs::NextStateOrError {
+    ) -> hs::NextStateOrErrorWithState {
         let certreq = require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
@@ -686,7 +686,7 @@ struct ExpectServerDone {
 }
 
 impl State<ClientConnectionData> for ExpectServerDone {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::Handshake {
                 parsed:
@@ -701,7 +701,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
                     &payload,
                     &[ContentType::Handshake],
                     &[HandshakeType::ServerHelloDone],
-                ));
+                ).into());
             }
         }
 
@@ -888,7 +888,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
         m: Message,
-    ) -> hs::NextStateOrError {
+    ) -> hs::NextStateOrErrorWithState {
         self.transcript.add_message(&m);
 
         let nst = require_handshake_msg_move!(
@@ -929,14 +929,14 @@ struct ExpectCcs {
 }
 
 impl State<ClientConnectionData> for ExpectCcs {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
             payload => {
                 return Err(inappropriate_message(
                     &payload,
                     &[ContentType::ChangeCipherSpec],
-                ));
+                ).into());
             }
         }
         // CCS should not be received interleaved with fragmented handshake-level
@@ -1030,7 +1030,7 @@ impl ExpectFinished {
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         let mut st = *self;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -1083,7 +1083,7 @@ struct ExpectTraffic {
 }
 
 impl State<ClientConnectionData> for ExpectTraffic {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrErrorWithState {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common
@@ -1092,7 +1092,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
                 return Err(inappropriate_message(
                     &payload,
                     &[ContentType::ApplicationData],
-                ));
+                ).into());
             }
         }
         Ok(self)

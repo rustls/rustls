@@ -1,6 +1,7 @@
+use crate::common_state::State;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
-use crate::rand;
+use crate::{rand, WouldBlockCell};
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -91,6 +92,13 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+
+    /// The operation would, in order to get past this block the callback
+    /// in the cell must be polled to completion.
+    WouldBlock(WouldBlockCell),
+
+    /// Occurs when a blocking event triggers twice for the same message
+    DeadLock
 }
 
 /// A corrupt TLS message payload that resulted in an error.
@@ -144,6 +152,13 @@ impl From<InvalidMessage> for Error {
     #[inline]
     fn from(e: InvalidMessage) -> Self {
         Self::InvalidMessage(e)
+    }
+}
+
+impl<Data> From<InvalidMessage> for ErrorWithState<Data> {
+    #[inline]
+    fn from(e: InvalidMessage) -> Self {
+        Into::<Error>::into(e).into()
     }
 }
 
@@ -234,6 +249,13 @@ impl From<PeerMisbehaved> for Error {
     }
 }
 
+impl<Data> From<PeerMisbehaved> for ErrorWithState<Data> {
+    #[inline]
+    fn from(e: PeerMisbehaved) -> Self {
+        Into::<Error>::into(e).into()
+    }
+}
+
 #[non_exhaustive]
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq, Clone)]
@@ -267,6 +289,13 @@ impl From<PeerIncompatible> for Error {
     #[inline]
     fn from(e: PeerIncompatible) -> Self {
         Self::PeerIncompatible(e)
+    }
+}
+
+impl<Data> From<PeerIncompatible> for ErrorWithState<Data> {
+    #[inline]
+    fn from(e: PeerIncompatible) -> Self {
+        Into::<Error>::into(e).into()
     }
 }
 
@@ -380,6 +409,13 @@ impl From<CertificateError> for Error {
     }
 }
 
+impl<Data> From<CertificateError> for ErrorWithState<Data> {
+    #[inline]
+    fn from(e: CertificateError) -> Self {
+        Into::<Error>::into(e).into()
+    }
+}
+
 fn join<T: fmt::Debug>(items: &[T]) -> String {
     items
         .iter()
@@ -431,6 +467,8 @@ impl fmt::Display for Error {
             Self::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
+            Self::WouldBlock(_) => write!(f, "would block"),
+            Self::DeadLock => write!(f, "deadlock"),
             Self::General(ref err) => write!(f, "unexpected error: {}", err),
         }
     }
@@ -443,11 +481,38 @@ impl From<SystemTimeError> for Error {
     }
 }
 
+impl<Data> From<SystemTimeError> for ErrorWithState<Data> {
+    #[inline]
+    fn from(e: SystemTimeError) -> Self {
+        Into::<Error>::into(e).into()
+    }
+}
+
 impl StdError for Error {}
 
 impl From<rand::GetRandomFailed> for Error {
     fn from(_: rand::GetRandomFailed) -> Self {
         Self::FailedToGetRandomBytes
+    }
+}
+
+impl<Data> From<rand::GetRandomFailed> for ErrorWithState<Data> {
+    fn from(e: rand::GetRandomFailed) -> Self {
+        Into::<Error>::into(e).into()
+    }
+}
+
+pub(crate) struct ErrorWithState<Data> {
+    pub(crate) error: Error,
+    pub(crate) next: Option<Box<dyn State<Data>>>
+}
+impl<Data> From<Error>
+for ErrorWithState<Data> {
+    fn from(value: Error) -> Self {
+        Self {
+            error: value,
+            next: None
+        }
     }
 }
 

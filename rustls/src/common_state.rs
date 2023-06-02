@@ -1,5 +1,5 @@
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerMisbehaved, ErrorWithState};
 use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, warn};
@@ -152,7 +152,7 @@ impl CommonState {
         msg: Message,
         mut state: Box<dyn State<Data>>,
         data: &mut Data,
-    ) -> Result<Box<dyn State<Data>>, Error> {
+    ) -> Result<Box<dyn State<Data>>, ErrorWithState<Data>> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if self.may_receive_application_data && !self.is_tls13() {
@@ -172,11 +172,20 @@ impl CommonState {
                 state = next;
                 Ok(state)
             }
-            Err(e @ Error::InappropriateMessage { .. })
-            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
-                Err(self.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
-            }
-            Err(e) => Err(e),
+            Err(s) => {
+                match s.error {
+                    e @ Error::InappropriateMessage { .. }
+                    | e @ Error::InappropriateHandshakeMessage { .. } => {
+                        Err(self.send_fatal_alert(AlertDescription::UnexpectedMessage, e).into())
+                    }
+                    e => {
+                        Err(ErrorWithState {
+                            next: s.next,
+                            error: e
+                        })
+                    }
+                }
+            },
         }
     }
 
@@ -627,7 +636,7 @@ pub(crate) trait State<Data>: Send + Sync {
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
         message: Message,
-    ) -> Result<Box<dyn State<Data>>, Error>;
+    ) -> Result<Box<dyn State<Data>>, ErrorWithState<Data>>;
 
     fn export_keying_material(
         &self,

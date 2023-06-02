@@ -817,7 +817,7 @@ impl ServerExtension {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
@@ -1031,7 +1031,7 @@ impl ClientHelloPayload {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HelloRetryExtension {
     KeyShare(NamedGroup),
     Cookie(PayloadU16),
@@ -1089,7 +1089,7 @@ impl TlsListElement for HelloRetryExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HelloRetryRequest {
     pub legacy_version: ProtocolVersion,
     pub session_id: SessionId,
@@ -1182,7 +1182,7 @@ impl HelloRetryRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ServerHelloPayload {
     pub legacy_version: ProtocolVersion,
     pub random: Random,
@@ -1295,7 +1295,7 @@ impl TlsListElement for key::Certificate {
 // That's annoying. It means the parsing is not
 // context-free any more.
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CertificateExtension {
     CertificateStatus(CertificateStatus),
     SignedCertificateTimestamp(Vec<Sct>),
@@ -1369,7 +1369,7 @@ impl TlsListElement for CertificateExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CertificateEntry {
     pub cert: key::Certificate,
     pub exts: Vec<CertificateExtension>,
@@ -1437,7 +1437,7 @@ impl TlsListElement for CertificateEntry {
     const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CertificatePayloadTLS13 {
     pub context: PayloadU8,
     pub entries: Vec<CertificateEntry>,
@@ -1531,7 +1531,7 @@ pub enum KeyExchangeAlgorithm {
 // We don't support arbitrary curves.  It's a terrible
 // idea and unnecessary attack surface.  Please,
 // get a grip.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ECParameters {
     pub curve_type: ECCurveType,
     pub named_group: NamedGroup,
@@ -1574,7 +1574,7 @@ impl Codec for ClientECDHParams {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ServerECDHParams {
     pub curve_params: ECParameters,
     pub public: PayloadU8,
@@ -1609,7 +1609,7 @@ impl Codec for ServerECDHParams {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ECDHEServerKeyExchange {
     pub params: ServerECDHParams,
     pub dss: DigitallySignedStruct,
@@ -1629,7 +1629,7 @@ impl Codec for ECDHEServerKeyExchange {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ServerKeyExchangePayload {
     ECDHE(ECDHEServerKeyExchange),
     Unknown(Payload),
@@ -1757,7 +1757,7 @@ impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CertificateRequestPayload {
     pub certtypes: Vec<ClientCertificateType>,
     pub sigschemes: Vec<SignatureScheme>,
@@ -1789,7 +1789,7 @@ impl Codec for CertificateRequestPayload {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CertReqExtension {
     SignatureAlgorithms(Vec<SignatureScheme>),
     AuthorityNames(Vec<DistinguishedName>),
@@ -1850,7 +1850,7 @@ impl TlsListElement for CertReqExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CertificateRequestPayloadTLS13 {
     pub context: PayloadU8,
     pub extensions: Vec<CertReqExtension>,
@@ -1898,7 +1898,7 @@ impl CertificateRequestPayloadTLS13 {
 }
 
 // -- NewSessionTicket --
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewSessionTicketPayload {
     pub lifetime_hint: u32,
     pub ticket: PayloadU16,
@@ -1931,7 +1931,7 @@ impl Codec for NewSessionTicketPayload {
 }
 
 // -- NewSessionTicket electric boogaloo --
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NewSessionTicketExtension {
     EarlyData(u32),
     Unknown(UnknownExtension),
@@ -1979,7 +1979,7 @@ impl TlsListElement for NewSessionTicketExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NewSessionTicketPayloadTLS13 {
     pub lifetime: u32,
     pub age_add: u32,
@@ -2058,7 +2058,7 @@ impl Codec for NewSessionTicketPayloadTLS13 {
 // -- RFC6066 certificate status types
 
 /// Only supports OCSP
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CertificateStatus {
     pub ocsp_response: PayloadU24,
 }
@@ -2093,7 +2093,7 @@ impl CertificateStatus {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HandshakePayload {
     HelloRequest,
     ClientHello(ClientHelloPayload),
@@ -2145,7 +2145,7 @@ impl HandshakePayload {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HandshakeMessagePayload {
     pub typ: HandshakeType,
     pub payload: HandshakePayload,

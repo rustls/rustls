@@ -2,14 +2,14 @@ use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Context, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
-use crate::error::Error;
+use crate::error::{Error, ErrorWithState};
 use crate::kx::SupportedKxGroup;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
-use crate::sign;
+use crate::{sign, WouldBlockCallback};
 use crate::suites::SupportedCipherSuite;
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
@@ -95,6 +95,17 @@ pub trait ProducesTickets: Send + Sync {
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 }
 
+/// Result of a fetch operation on a certificate, this will either complete
+/// synchronously or it will start a background process
+pub enum CertFetchResult {
+    /// The certificate was found and has been returned
+    Hit(Arc<sign::CertifiedKey>),
+    /// The certificate fetch resulted in a miss
+    Miss,
+    /// The fetch is underway and the resolving should would block
+    WouldBlock(WouldBlockCallback),
+}
+
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
 pub trait ResolvesServerCert: Send + Sync {
@@ -103,9 +114,19 @@ pub trait ResolvesServerCert: Send + Sync {
     ///
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>>;
+
+    /// Fetches the certificate in the background when the resolve
+    /// fails which will leave the connection in a pending state
+    fn fetch(self: Arc<Self>, client_hello: ClientHello) -> CertFetchResult {
+        match self.resolve(client_hello) {
+            Some(cert) => CertFetchResult::Hit(cert),
+            None => CertFetchResult::Miss,
+        }
+    }
 }
 
 /// A struct representing the received Client Hello
+#[derive(Clone)]
 pub struct ClientHello<'a> {
     server_name: &'a Option<webpki::DnsName>,
     signature_schemes: &'a [SignatureScheme],
@@ -645,7 +666,7 @@ impl Accepted {
             Self::client_hello_payload(&self.message),
             &self.message,
             &mut cx,
-        )?;
+        ).map_err(|s| s.error)?;
 
         self.connection.replace_state(new);
         Ok(ServerConnection {
@@ -672,8 +693,8 @@ impl State<ServerConnectionData> for Accepting {
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
         _m: Message,
-    ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
-        Err(Error::General("unreachable state".into()))
+    ) -> Result<Box<dyn State<ServerConnectionData>>, ErrorWithState<ServerConnectionData>> {
+        Err(Error::General("unreachable state".into()).into())
     }
 }
 

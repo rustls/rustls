@@ -8,7 +8,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::AlertLevel;
 use crate::msgs::handshake::HandshakeMessagePayload;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),
     Handshake {
@@ -208,7 +208,7 @@ impl PlainMessage {
 }
 
 /// A message with decoded payload
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Message {
     pub version: ProtocolVersion,
     pub payload: MessagePayload,

@@ -1,6 +1,7 @@
+use crate::WouldBlockCell;
 use crate::common_state::{CommonState, Context, IoState, State};
 use crate::enums::{AlertDescription, ContentType};
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::{Error, PeerMisbehaved, ErrorWithState};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::deframer::{Deframed, MessageDeframer};
@@ -406,6 +407,7 @@ impl<Data> ConnectionCommon<Data> {
 
             match self.process_new_packets() {
                 Ok(_) => {}
+                Err(Error::WouldBlock(_)) => return Err(io::ErrorKind::WouldBlock.into()),
                 Err(e) => {
                     // In case we have an alert to send describing this error,
                     // try a last-gasp write -- but don't predate the primary
@@ -473,6 +475,25 @@ impl<Data> ConnectionCommon<Data> {
     #[inline]
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.core.process_new_packets()
+    }
+
+    /// Processes a WouldBlockCell after its been polling to completion
+    ///
+    /// This will rerun the message that was received that triggered
+    /// the WouldBlock event.
+    #[inline]
+    pub fn process_would_block(&mut self, cell: WouldBlockCell) -> Result<IoState, Error> {
+        let msg = cell.into_msg();
+        self.core
+            .process_msg(msg)
+            .map_err(|err| {
+                // We don't allow another would block even to occur again
+                // as otherwise we might end up in a loop
+                match err {
+                    Error::WouldBlock(_) => Error::DeadLock,
+                    e => e
+                }
+            })
     }
 
     /// Read TLS content from `rd` into the internal buffer.
@@ -621,15 +642,52 @@ impl<Data> ConnectionCore<Data> {
         };
 
         while let Some(msg) = self.deframe()? {
-            match self.process_msg(msg, state) {
+            match self.process_plain_msg(msg, state) {
                 Ok(new) => state = new,
-                Err(e) => {
-                    self.state = Err(e.clone());
-                    return Err(e);
+                Err(mut s) => {
+                    if let Some(state) = s.next.take() {
+                        self.state = Ok(state);
+                    }
+                    match s.error {
+                        Error::WouldBlock(cell) => return Err(Error::WouldBlock(cell)),
+                        e => {
+                            self.state = Err(e.clone());
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }
 
+        self.state = Ok(state);
+        Ok(self.common_state.current_io_state())
+    }
+
+    pub(crate) fn process_msg(&mut self, msg: Message) -> Result<IoState, Error> {
+        let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
+            Ok(state) => state,
+            Err(e) => {
+                self.state = Err(e.clone());
+                return Err(e);
+            }
+        };
+
+        match self.common_state.process_main_protocol(msg, state, &mut self.data) {
+            Ok(new) => state = new,
+            Err(mut s) => {
+                if let Some(state) = s.next.take() {
+                    self.state = Ok(state);
+                }
+                match s.error {
+                    Error::WouldBlock(cell) => return Err(Error::WouldBlock(cell)),
+                    e => {
+                        self.state = Err(e.clone());
+                        return Err(e);
+                    }
+                }
+            }
+        }
+        
         self.state = Ok(state);
         Ok(self.common_state.current_io_state())
     }
@@ -683,11 +741,11 @@ impl<Data> ConnectionCore<Data> {
         }
     }
 
-    fn process_msg(
+    fn process_plain_msg(
         &mut self,
         msg: PlainMessage,
         state: Box<dyn State<Data>>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
+    ) -> Result<Box<dyn State<Data>>, ErrorWithState<Data>> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
             && !self
@@ -704,7 +762,7 @@ impl<Data> ConnectionCore<Data> {
                 return Err(self.common_state.send_fatal_alert(
                     AlertDescription::UnexpectedMessage,
                     PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
-                ));
+                ).into());
             } else {
                 self.common_state.received_middlebox_ccs += 1;
                 trace!("Dropping CCS");
@@ -718,10 +776,10 @@ impl<Data> ConnectionCore<Data> {
             Err(err) => {
                 return Err(self
                     .common_state
-                    .send_fatal_alert(AlertDescription::DecodeError, err));
+                    .send_fatal_alert(AlertDescription::DecodeError, err).into());
             }
         };
-
+        
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &msg.payload {
             self.common_state.process_alert(alert)?;
