@@ -54,6 +54,7 @@ struct Options {
     key_file: String,
     cert_file: String,
     protocols: Vec<String>,
+    reject_alpn: bool,
     support_tls13: bool,
     support_tls12: bool,
     min_version: Option<ProtocolVersion>,
@@ -101,6 +102,7 @@ impl Options {
             key_file: "".to_string(),
             cert_file: "".to_string(),
             protocols: vec![],
+            reject_alpn: false,
             support_tls13: true,
             support_tls12: true,
             min_version: None,
@@ -448,6 +450,10 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
             .collect::<Vec<_>>();
     }
 
+    if opts.reject_alpn {
+        cfg.alpn_protocols = vec![b"invalid".to_vec()];
+    }
+
     if opts.enable_early_data {
         // see kMaxEarlyDataAccepted in boringssl, which bogo validates
         cfg.max_early_data_size = 14336;
@@ -619,6 +625,7 @@ fn handle_err(err: Error) -> ! {
         | Error::InvalidMessage(InvalidMessage::MessageTooLarge) => quit(":GARBAGE:"),
         Error::InvalidMessage(InvalidMessage::UnexpectedMessage(_)) => quit(":GARBAGE:"),
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
+        Error::NoApplicationProtocol => quit(":NO_APPLICATION_PROTOCOL:"),
         Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
@@ -1007,6 +1014,9 @@ fn main() {
             }
             "-advertise-alpn" => {
                 opts.protocols = split_protocols(&args.remove(0));
+            }
+            "-reject-alpn" => {
+                opts.reject_alpn = true;
             }
             "-use-null-client-ca-list" => {
                 opts.offer_no_client_cas = true;
