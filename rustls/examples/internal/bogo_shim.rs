@@ -1140,6 +1140,7 @@ fn main() {
             "-expect-peer-cert-file" |
             "-no-rsa-pss-rsae-certs" |
             "-ignore-tls13-downgrade" |
+            "-allow-hint-mismatch" |
             "-on-initial-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
