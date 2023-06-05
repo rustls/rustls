@@ -115,6 +115,7 @@
     "Server-VerifyDefault-Ed25519-TLS12": "",
     "Client-VerifyDefault-Ed25519-TLS13": "",
     "Client-VerifyDefault-Ed25519-TLS12": "",
+    "*-HintMismatch-*": "hints are a boringssl-specific feature",
     "*-QUIC-*" :"",
     "QUIC-*": "",
     "*-QUIC": ""
