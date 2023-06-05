@@ -1141,6 +1141,8 @@ fn main() {
             "-no-rsa-pss-rsae-certs" |
             "-ignore-tls13-downgrade" |
             "-allow-hint-mismatch" |
+            "-fips-202205" |
+            "-wpa-202304" |
             "-on-initial-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
