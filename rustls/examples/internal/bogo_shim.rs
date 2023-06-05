@@ -10,9 +10,9 @@ use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
 use rustls::{
     self, client, kx_group, server, sign, version, AlertDescription, Certificate, CertificateError,
-    Connection, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerMisbehaved, PrivateKey,
-    ProtocolVersion, ServerName, Side, SignatureAlgorithm, SignatureScheme, SupportedKxGroup,
-    SupportedProtocolVersion, Ticketer, ALL_KX_GROUPS,
+    Connection, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, PrivateKey, ProtocolVersion, ServerName, Side, SignatureAlgorithm,
+    SignatureScheme, SupportedKxGroup, SupportedProtocolVersion, Ticketer, ALL_KX_GROUPS,
 };
 
 use base64::prelude::{Engine, BASE64_STANDARD};
@@ -626,6 +626,9 @@ fn handle_err(err: Error) -> ! {
         Error::InvalidMessage(InvalidMessage::UnexpectedMessage(_)) => quit(":GARBAGE:"),
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         Error::NoApplicationProtocol => quit(":NO_APPLICATION_PROTOCOL:"),
+        Error::PeerIncompatible(
+            PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
+        ) => quit(":UNEXPECTED_EXTENSION:"),
         Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
