@@ -31,7 +31,7 @@
     "ServerOCSPCallback*": "",
     "CertCompression*": "not implemented",
     "DuplicateCertCompressionExt*": "",
-    "ECH-*": "",
+    "TLS-ECH-*": "",
     "ALPS-*": "",
     "ExtraClientEncryptedExtension-TLS-TLS13": "uses ALPS",
     "SendHelloRetryRequest-2-TLS13": "we accept any supported keyshare",
