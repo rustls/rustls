@@ -153,7 +153,7 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
             .lock()
             .unwrap()
             .get_mut(server_name)
-            .and_then(|data| data.tls13.pop_front())
+            .and_then(|data| data.tls13.pop_back())
     }
 }
 
