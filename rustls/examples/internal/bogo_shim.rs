@@ -630,6 +630,9 @@ fn handle_err(err: Error) -> ! {
             PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
         ) => quit(":UNEXPECTED_EXTENSION:"),
         Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
+        Error::PeerMisbehaved(PeerMisbehaved::MissingPskModesExtension) => {
+            quit(":MISSING_EXTENSION:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
         }
