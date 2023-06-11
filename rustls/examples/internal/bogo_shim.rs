@@ -1147,6 +1147,7 @@ fn main() {
             "-fips-202205" |
             "-wpa-202304" |
             "-srtp-profiles" |
+            "-permute-extensions" |
             "-on-initial-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
