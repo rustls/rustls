@@ -137,6 +137,7 @@ pub(super) fn start_handshake(
     let session_id = match session_id {
         Some(session_id) => session_id,
         None if cx.common.is_quic() => SessionId::empty(),
+        None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
         None => SessionId::random()?,
     };
 
