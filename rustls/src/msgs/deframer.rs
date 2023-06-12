@@ -135,7 +135,8 @@ impl MessageDeframer {
 
             // If it's not a handshake message, just return it -- no joining necessary.
             if msg.typ != ContentType::Handshake {
-                self.discard(start + rd.used());
+                let end = start + rd.used();
+                self.discard(end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
