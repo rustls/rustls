@@ -2,7 +2,7 @@
 name = "rustls-connect-tests"
 version = "0.0.1"
 edition = "2021"
-rust-version = "1.57"
+rust-version = "1.60"
 license = "Apache-2.0 OR ISC OR MIT"
 description = "Rustls connectivity based integration tests."
 publish = false
