@@ -20,6 +20,8 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
+* Next release:
+  - Bump MSRV to 1.60 to track similar change in dependencies.
 * Release 0.21.1 (2023-05-01)
   - Remove `warn`-level logging from code paths that also return a `rustls::Error` with
     the same information.
@@ -142,7 +144,7 @@ supported by `ring`. At the time of writing this means x86, x86-64, armv7, and
 aarch64. For more information see [the supported `ring` CI
 targets](https://github.com/briansmith/ring/blob/9cc0d45f4d8521f467bb3a621e74b1535e118188/.github/workflows/ci.yml#L151-L167).
 
-Rustls requires Rust 1.57 or later.
+Rustls requires Rust 1.60 or later.
 
 # Example code
 There are two example programs which use

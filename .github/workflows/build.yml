@@ -57,7 +57,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.57
+          toolchain: "1.60"
 
       - run: cargo check --lib --all-features -p rustls
 
