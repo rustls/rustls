@@ -8,6 +8,9 @@ pub mod ring;
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
 
+/// HMAC interfaces.
+pub mod hmac;
+
 pub use crate::rand::GetRandomFailed;
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;

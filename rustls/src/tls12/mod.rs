@@ -31,6 +31,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         aead_alg: &ChaCha20Poly1305,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
+        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
@@ -45,6 +46,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         aead_alg: &ChaCha20Poly1305,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
+        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
@@ -59,6 +61,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         aead_alg: &AES128_GCM,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
+        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
@@ -73,6 +76,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         aead_alg: &AES256_GCM,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA384,
+        hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
@@ -87,6 +91,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         aead_alg: &AES128_GCM,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
+        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
@@ -101,6 +106,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         aead_alg: &AES256_GCM,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA384,
+        hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
     });
 
 static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
@@ -123,7 +129,12 @@ static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
 pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
+
     pub(crate) hmac_algorithm: ring::hmac::Algorithm,
+
+    /// How to compute HMAC for the suite's hash function.
+    pub hmac_provider: &'static dyn crypto::hmac::Hmac,
+
     /// How to exchange/agree keys.
     pub kx: KeyExchangeAlgorithm,
 
@@ -206,8 +217,7 @@ impl ConnectionSecrets {
         kx.complete(peer_pub_key, |secret| {
             prf::prf(
                 &mut ret.master_secret,
-                suite.hmac_algorithm,
-                secret,
+                &*suite.hmac_provider.with_key(secret),
                 label.as_bytes(),
                 seed.as_ref(),
             );
@@ -282,8 +292,10 @@ impl ConnectionSecrets {
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
         prf::prf(
             &mut out,
-            self.suite.hmac_algorithm,
-            &self.master_secret,
+            &*self
+                .suite
+                .hmac_provider
+                .with_key(&self.master_secret),
             b"key expansion",
             &randoms,
         );
@@ -306,8 +318,10 @@ impl ConnectionSecrets {
 
         prf::prf(
             &mut out,
-            self.suite.hmac_algorithm,
-            &self.master_secret,
+            &*self
+                .suite
+                .hmac_provider
+                .with_key(&self.master_secret),
             label,
             handshake_hash.as_ref(),
         );
@@ -339,8 +353,10 @@ impl ConnectionSecrets {
 
         prf::prf(
             output,
-            self.suite.hmac_algorithm,
-            &self.master_secret,
+            &*self
+                .suite
+                .hmac_provider
+                .with_key(&self.master_secret),
             label,
             &randoms,
         );

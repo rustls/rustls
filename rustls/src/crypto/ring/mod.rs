@@ -11,6 +11,8 @@ use ring::rand::{SecureRandom, SystemRandom};
 use alloc::sync::Arc;
 use core::fmt;
 
+pub(crate) mod hmac;
+
 /// Default crypto provider.
 #[derive(Debug)]
 pub struct Ring;
