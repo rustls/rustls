@@ -9,6 +9,9 @@ pub mod ring;
 /// TLS message encryption/decryption intefaces.
 pub mod cipher;
 
+/// HMAC interfaces.
+pub mod hmac;
+
 /// Pluggable crypto galore.
 pub trait CryptoProvider: Send + Sync + 'static {
     /// KeyExchange operations that are supported by the provider.
