@@ -10,13 +10,12 @@ use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 
-use ring::aead;
 use ring::digest::Digest;
 
 use core::fmt;
 
 mod cipher;
-pub(crate) use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
+pub(crate) use cipher::{Aes128Gcm, Aes256Gcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
 
 mod prf;
 
@@ -26,13 +25,14 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
-            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         fixed_iv_len: 12,
+        aead_key_len: 32,
         explicit_nonce_len: 0,
         aead_alg: &ChaCha20Poly1305,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -42,13 +42,14 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
-            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         fixed_iv_len: 12,
+        aead_key_len: 32,
         explicit_nonce_len: 0,
         aead_alg: &ChaCha20Poly1305,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -58,13 +59,14 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
-            aead_algorithm: &ring::aead::AES_128_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         fixed_iv_len: 4,
+        aead_key_len: 16,
         explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
+        aead_alg: &Aes128Gcm,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -74,13 +76,14 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         fixed_iv_len: 4,
+        aead_key_len: 32,
         explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
+        aead_alg: &Aes256Gcm,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA384,
     });
 
@@ -90,13 +93,14 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
-            aead_algorithm: &ring::aead::AES_128_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         fixed_iv_len: 4,
+        aead_key_len: 16,
         explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
+        aead_alg: &Aes128Gcm,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -106,13 +110,14 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         fixed_iv_len: 4,
+        aead_key_len: 32,
         explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
+        aead_alg: &Aes256Gcm,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA384,
     });
 
@@ -149,11 +154,16 @@ pub struct Tls12CipherSuite {
     /// terminology misuse to match the standard.
     pub fixed_iv_len: usize,
 
+    /// How long the AEAD key is.
+    pub(crate) aead_key_len: usize,
+
     /// This is a non-standard extension which extends the
     /// key block to provide an initial explicit nonce offset,
     /// in a deterministic and safe way.  GCM needs this,
     /// chacha20poly1305 works this way by design.
     pub explicit_nonce_len: usize,
+
+    pub(crate) aead_algorithm_only_for_extract_secrets_fixme: &'static ring::aead::Algorithm,
 
     pub(crate) aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
@@ -255,29 +265,17 @@ impl ConnectionSecrets {
         ret
     }
 
-    /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
+    /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
     /// and the session's `secrets`.
     pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
-        fn split_key<'a>(
-            key_block: &'a [u8],
-            alg: &'static aead::Algorithm,
-        ) -> (aead::LessSafeKey, &'a [u8]) {
-            // Might panic if the key block is too small.
-            let (key, rest) = key_block.split_at(alg.key_len());
-            // Won't panic because its only prerequisite is that `key` is `alg.key_len()` bytes long.
-            let key = aead::UnboundKey::new(alg, key).unwrap();
-            (aead::LessSafeKey::new(key), rest)
-        }
-
         // Make a key block, and chop it up.
         // nb. we don't implement any ciphersuites with nonzero mac_key_len.
         let key_block = self.make_key_block();
 
         let suite = self.suite;
-        let scs = &suite.common;
 
-        let (client_write_key, key_block) = split_key(&key_block, scs.aead_algorithm);
-        let (server_write_key, key_block) = split_key(key_block, scs.aead_algorithm);
+        let (client_write_key, key_block) = key_block.split_at(suite.aead_key_len);
+        let (server_write_key, key_block) = key_block.split_at(suite.aead_key_len);
         let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
         let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
 
@@ -308,10 +306,8 @@ impl ConnectionSecrets {
 
     fn make_key_block(&self) -> Vec<u8> {
         let suite = &self.suite;
-        let common = &self.suite.common;
 
-        let len =
-            (common.aead_algorithm.key_len() + suite.fixed_iv_len) * 2 + suite.explicit_nonce_len;
+        let len = (suite.aead_key_len + suite.fixed_iv_len) * 2 + suite.explicit_nonce_len;
 
         let mut out = vec![0u8; len];
 
@@ -390,7 +386,7 @@ impl ConnectionSecrets {
         let key_block = self.make_key_block();
 
         let suite = self.suite;
-        let algo = suite.common.aead_algorithm;
+        let algo = suite.aead_algorithm_only_for_extract_secrets_fixme;
 
         let (client_key, key_block) = key_block.split_at(algo.key_len());
         let (server_key, key_block) = key_block.split_at(algo.key_len());

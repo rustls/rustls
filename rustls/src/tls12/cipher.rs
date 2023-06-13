@@ -25,60 +25,99 @@ fn make_tls12_aad(
     ring::aead::Aad::from(out)
 }
 
-pub(crate) struct AesGcm;
+fn make_aesgcm_decrypter(
+    dec_key: &[u8],
+    dec_iv: &[u8],
+    aead_alg: &'static aead::Algorithm,
+) -> Box<dyn MessageDecrypter> {
+    let dec_key = aead::LessSafeKey::new(aead::UnboundKey::new(aead_alg, dec_key).unwrap());
 
-impl Tls12AeadAlgorithm for AesGcm {
-    fn decrypter(&self, dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
-        let mut ret = GcmMessageDecrypter {
-            dec_key,
-            dec_salt: [0u8; 4],
-        };
+    let mut ret = GcmMessageDecrypter {
+        dec_key,
+        dec_salt: [0u8; 4],
+    };
 
-        debug_assert_eq!(dec_iv.len(), 4);
-        ret.dec_salt.copy_from_slice(dec_iv);
-        Box::new(ret)
+    debug_assert_eq!(dec_iv.len(), 4);
+    ret.dec_salt.copy_from_slice(dec_iv);
+    Box::new(ret)
+}
+
+fn make_aesgcm_encrypter(
+    enc_key: &[u8],
+    write_iv: &[u8],
+    explicit: &[u8],
+    aead_alg: &'static aead::Algorithm,
+) -> Box<dyn MessageEncrypter> {
+    debug_assert_eq!(write_iv.len(), 4);
+    debug_assert_eq!(explicit.len(), 8);
+
+    let enc_key = aead::LessSafeKey::new(aead::UnboundKey::new(aead_alg, enc_key).unwrap());
+
+    // The GCM nonce is constructed from a 32-bit 'salt' derived
+    // from the master-secret, and a 64-bit explicit part,
+    // with no specified construction.  Thanks for that.
+    //
+    // We use the same construction as TLS1.3/ChaCha20Poly1305:
+    // a starting point extracted from the key block, xored with
+    // the sequence number.
+    let mut iv = Iv(Default::default());
+    iv.0[..4].copy_from_slice(write_iv);
+    iv.0[4..].copy_from_slice(explicit);
+
+    Box::new(GcmMessageEncrypter { enc_key, iv })
+}
+
+pub(crate) struct Aes128Gcm;
+
+impl Tls12AeadAlgorithm for Aes128Gcm {
+    fn decrypter(&self, dec_key: &[u8], dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        make_aesgcm_decrypter(dec_key, dec_iv, &aead::AES_128_GCM)
     }
 
     fn encrypter(
         &self,
-        enc_key: aead::LessSafeKey,
+        enc_key: &[u8],
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
-        debug_assert_eq!(write_iv.len(), 4);
-        debug_assert_eq!(explicit.len(), 8);
+        make_aesgcm_encrypter(enc_key, write_iv, explicit, &aead::AES_128_GCM)
+    }
+}
 
-        // The GCM nonce is constructed from a 32-bit 'salt' derived
-        // from the master-secret, and a 64-bit explicit part,
-        // with no specified construction.  Thanks for that.
-        //
-        // We use the same construction as TLS1.3/ChaCha20Poly1305:
-        // a starting point extracted from the key block, xored with
-        // the sequence number.
-        let mut iv = Iv(Default::default());
-        iv.0[..4].copy_from_slice(write_iv);
-        iv.0[4..].copy_from_slice(explicit);
+pub(crate) struct Aes256Gcm;
 
-        Box::new(GcmMessageEncrypter { enc_key, iv })
+impl Tls12AeadAlgorithm for Aes256Gcm {
+    fn decrypter(&self, dec_key: &[u8], dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        make_aesgcm_decrypter(dec_key, dec_iv, &aead::AES_256_GCM)
+    }
+
+    fn encrypter(
+        &self,
+        enc_key: &[u8],
+        write_iv: &[u8],
+        explicit: &[u8],
+    ) -> Box<dyn MessageEncrypter> {
+        make_aesgcm_encrypter(enc_key, write_iv, explicit, &aead::AES_256_GCM)
     }
 }
 
 pub(crate) struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
-    fn decrypter(&self, dec_key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        let dec_key = aead::LessSafeKey::new(
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key).unwrap(),
+        );
         Box::new(ChaCha20Poly1305MessageDecrypter {
             dec_key,
             dec_offset: Iv::copy(iv),
         })
     }
 
-    fn encrypter(
-        &self,
-        enc_key: aead::LessSafeKey,
-        enc_iv: &[u8],
-        _: &[u8],
-    ) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, enc_key: &[u8], enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+        let enc_key = aead::LessSafeKey::new(
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key).unwrap(),
+        );
         Box::new(ChaCha20Poly1305MessageEncrypter {
             enc_key,
             enc_offset: Iv::copy(enc_iv),
@@ -87,13 +126,8 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
 }
 
 pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
-    fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter>;
-    fn encrypter(
-        &self,
-        key: aead::LessSafeKey,
-        iv: &[u8],
-        extra: &[u8],
-    ) -> Box<dyn MessageEncrypter>;
+    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
+    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.

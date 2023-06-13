@@ -43,8 +43,6 @@ pub struct CipherSuiteCommon {
 
     /// How to do bulk encryption.
     pub bulk: BulkAlgorithm,
-
-    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
 }
 
 /// A cipher suite supported by rustls.
