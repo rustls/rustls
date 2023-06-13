@@ -1,7 +1,7 @@
-use crate::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::common_state::{CommonState, Side};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::enums::{AlertDescription, CipherSuite, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};

@@ -1,4 +1,4 @@
-use crate::cipher::{MessageDecrypter, MessageEncrypter};
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 

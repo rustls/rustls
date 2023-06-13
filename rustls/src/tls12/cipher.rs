@@ -1,4 +1,4 @@
-use crate::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
+use crate::crypto::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
 use crate::enums::ContentType;
 use crate::enums::ProtocolVersion;
 use crate::error::Error;
