@@ -10,13 +10,12 @@ use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 
-use ring::aead;
 use ring::digest::Digest;
 
 use core::fmt;
 
 mod cipher;
-pub(crate) use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};
+pub(crate) use cipher::{ChaCha20Poly1305, Tls12AeadAlgorithm, AES128_GCM, AES256_GCM};
 
 mod prf;
 
@@ -29,10 +28,8 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
-        fixed_iv_len: 12,
-        explicit_nonce_len: 0,
         aead_alg: &ChaCha20Poly1305,
-        aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -45,10 +42,8 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
-        fixed_iv_len: 12,
-        explicit_nonce_len: 0,
         aead_alg: &ChaCha20Poly1305,
-        aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -61,10 +56,8 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
-        fixed_iv_len: 4,
-        explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
-        aead_algorithm: &ring::aead::AES_128_GCM,
+        aead_alg: &AES128_GCM,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -77,10 +70,8 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
-        fixed_iv_len: 4,
-        explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
-        aead_algorithm: &ring::aead::AES_256_GCM,
+        aead_alg: &AES256_GCM,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA384,
     });
 
@@ -93,10 +84,8 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
-        fixed_iv_len: 4,
-        explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
-        aead_algorithm: &ring::aead::AES_128_GCM,
+        aead_alg: &AES128_GCM,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA256,
     });
 
@@ -109,10 +98,8 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
-        fixed_iv_len: 4,
-        explicit_nonce_len: 8,
-        aead_alg: &AesGcm,
-        aead_algorithm: &ring::aead::AES_256_GCM,
+        aead_alg: &AES256_GCM,
+        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_algorithm: ring::hmac::HMAC_SHA384,
     });
 
@@ -143,21 +130,9 @@ pub struct Tls12CipherSuite {
     /// How to sign messages for authentication.
     pub sign: &'static [SignatureScheme],
 
-    /// How long the fixed part of the 'IV' is.
-    ///
-    /// This isn't usually an IV, but we continue the
-    /// terminology misuse to match the standard.
-    pub fixed_iv_len: usize,
-
-    /// This is a non-standard extension which extends the
-    /// key block to provide an initial explicit nonce offset,
-    /// in a deterministic and safe way.  GCM needs this,
-    /// chacha20poly1305 works this way by design.
-    pub explicit_nonce_len: usize,
+    pub(crate) aead_algorithm_only_for_extract_secrets_fixme: &'static ring::aead::Algorithm,
 
     pub(crate) aead_alg: &'static dyn Tls12AeadAlgorithm,
-
-    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
 }
 
 impl Tls12CipherSuite {
@@ -257,30 +232,18 @@ impl ConnectionSecrets {
         ret
     }
 
-    /// Make a `MessageCipherPair` based on the given supported ciphersuite `scs`,
+    /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
     /// and the session's `secrets`.
     pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
-        fn split_key<'a>(
-            key_block: &'a [u8],
-            alg: &'static aead::Algorithm,
-        ) -> (aead::LessSafeKey, &'a [u8]) {
-            // Might panic if the key block is too small.
-            let (key, rest) = key_block.split_at(alg.key_len());
-            // Won't panic because its only prerequisite is that `key` is `alg.key_len()` bytes long.
-            let key = aead::UnboundKey::new(alg, key).unwrap();
-            (aead::LessSafeKey::new(key), rest)
-        }
-
         // Make a key block, and chop it up.
         // nb. we don't implement any ciphersuites with nonzero mac_key_len.
         let key_block = self.make_key_block();
+        let shape = self.suite.aead_alg.key_block_shape();
 
-        let suite = self.suite;
-
-        let (client_write_key, key_block) = split_key(&key_block, suite.aead_algorithm);
-        let (server_write_key, key_block) = split_key(key_block, suite.aead_algorithm);
-        let (client_write_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
-        let (server_write_iv, extra) = key_block.split_at(suite.fixed_iv_len);
+        let (client_write_key, key_block) = key_block.split_at(shape.enc_key_len);
+        let (server_write_key, key_block) = key_block.split_at(shape.enc_key_len);
+        let (client_write_iv, key_block) = key_block.split_at(shape.fixed_iv_len);
+        let (server_write_iv, extra) = key_block.split_at(shape.fixed_iv_len);
 
         let (write_key, write_iv, read_key, read_iv) = match side {
             Side::Client => (
@@ -298,20 +261,19 @@ impl ConnectionSecrets {
         };
 
         (
-            suite
+            self.suite
                 .aead_alg
                 .decrypter(read_key, read_iv),
-            suite
+            self.suite
                 .aead_alg
                 .encrypter(write_key, write_iv, extra),
         )
     }
 
     fn make_key_block(&self) -> Vec<u8> {
-        let suite = &self.suite;
+        let shape = self.suite.aead_alg.key_block_shape();
 
-        let len =
-            (suite.aead_algorithm.key_len() + suite.fixed_iv_len) * 2 + suite.explicit_nonce_len;
+        let len = (shape.enc_key_len + shape.fixed_iv_len) * 2 + shape.explicit_nonce_len;
 
         let mut out = vec![0u8; len];
 
@@ -388,14 +350,16 @@ impl ConnectionSecrets {
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         // Make a key block, and chop it up
         let key_block = self.make_key_block();
+        let shape = self.suite.aead_alg.key_block_shape();
 
-        let suite = self.suite;
-        let algo = suite.aead_algorithm;
+        let algo = self
+            .suite
+            .aead_algorithm_only_for_extract_secrets_fixme;
 
         let (client_key, key_block) = key_block.split_at(algo.key_len());
         let (server_key, key_block) = key_block.split_at(algo.key_len());
-        let (client_iv, key_block) = key_block.split_at(suite.fixed_iv_len);
-        let (server_iv, extra) = key_block.split_at(suite.fixed_iv_len);
+        let (client_iv, key_block) = key_block.split_at(shape.fixed_iv_len);
+        let (server_iv, extra) = key_block.split_at(shape.fixed_iv_len);
 
         // A key/IV pair (fixed IV len is 4 for GCM, 12 for Chacha)
         struct Pair<'a> {

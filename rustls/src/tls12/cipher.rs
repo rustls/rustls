@@ -25,10 +25,15 @@ fn make_tls12_aad(
     ring::aead::Aad::from(out)
 }
 
-pub(crate) struct AesGcm;
+pub(crate) static AES128_GCM: GcmAlgorithm = GcmAlgorithm(&aead::AES_128_GCM);
+pub(crate) static AES256_GCM: GcmAlgorithm = GcmAlgorithm(&aead::AES_256_GCM);
 
-impl Tls12AeadAlgorithm for AesGcm {
-    fn decrypter(&self, dec_key: aead::LessSafeKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+pub(crate) struct GcmAlgorithm(&'static aead::Algorithm);
+
+impl Tls12AeadAlgorithm for GcmAlgorithm {
+    fn decrypter(&self, dec_key: &[u8], dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        let dec_key = aead::LessSafeKey::new(aead::UnboundKey::new(self.0, dec_key).unwrap());
+
         let mut ret = GcmMessageDecrypter {
             dec_key,
             dec_salt: [0u8; 4],
@@ -41,12 +46,14 @@ impl Tls12AeadAlgorithm for AesGcm {
 
     fn encrypter(
         &self,
-        enc_key: aead::LessSafeKey,
+        enc_key: &[u8],
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
         debug_assert_eq!(write_iv.len(), 4);
         debug_assert_eq!(explicit.len(), 8);
+
+        let enc_key = aead::LessSafeKey::new(aead::UnboundKey::new(self.0, enc_key).unwrap());
 
         // The GCM nonce is constructed from a 32-bit 'salt' derived
         // from the master-secret, and a 64-bit explicit part,
@@ -61,39 +68,46 @@ impl Tls12AeadAlgorithm for AesGcm {
 
         Box::new(GcmMessageEncrypter { enc_key, iv })
     }
+
+    fn key_block_shape(&self) -> KeyBlockShape {
+        KeyBlockShape {
+            enc_key_len: self.0.key_len(),
+            fixed_iv_len: 4,
+            explicit_nonce_len: 8,
+        }
+    }
 }
 
 pub(crate) struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
-    fn decrypter(&self, dec_key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        let dec_key = aead::LessSafeKey::new(
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key).unwrap(),
+        );
         Box::new(ChaCha20Poly1305MessageDecrypter {
             dec_key,
             dec_offset: Iv::copy(iv),
         })
     }
 
-    fn encrypter(
-        &self,
-        enc_key: aead::LessSafeKey,
-        enc_iv: &[u8],
-        _: &[u8],
-    ) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, enc_key: &[u8], enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+        let enc_key = aead::LessSafeKey::new(
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key).unwrap(),
+        );
         Box::new(ChaCha20Poly1305MessageEncrypter {
             enc_key,
             enc_offset: Iv::copy(enc_iv),
         })
     }
-}
 
-pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
-    fn decrypter(&self, key: aead::LessSafeKey, iv: &[u8]) -> Box<dyn MessageDecrypter>;
-    fn encrypter(
-        &self,
-        key: aead::LessSafeKey,
-        iv: &[u8],
-        extra: &[u8],
-    ) -> Box<dyn MessageEncrypter>;
+    fn key_block_shape(&self) -> KeyBlockShape {
+        KeyBlockShape {
+            enc_key_len: 32,
+            fixed_iv_len: 12,
+            explicit_nonce_len: 0,
+        }
+    }
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
@@ -233,4 +247,32 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
             payload: Payload::new(buf),
         })
     }
+}
+
+pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
+    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
+    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+    fn key_block_shape(&self) -> KeyBlockShape;
+}
+
+/// How a TLS1.2 `key_block` is partitioned.
+///
+/// nb. ciphersuites with non-zero `mac_key_length` not currently supported
+pub(crate) struct KeyBlockShape {
+    /// How long keys are.
+    ///
+    /// `enc_key_len` terminology is from the standard.
+    pub(crate) enc_key_len: usize,
+
+    /// How long the fixed part of the 'IV' is.
+    ///
+    /// This isn't usually an IV, but we continue the
+    /// terminology misuse to match the standard.
+    pub(crate) fixed_iv_len: usize,
+
+    /// This is a non-standard extension which extends the
+    /// key block to provide an initial explicit nonce offset,
+    /// in a deterministic and safe way.  GCM needs this,
+    /// chacha20poly1305 works this way by design.
+    pub(crate) explicit_nonce_len: usize,
 }
