@@ -1,8 +1,8 @@
 /// This module contains optional APIs for implementing QUIC TLS.
-use crate::cipher::{Iv, IvLen};
 use crate::client::{ClientConfig, ClientConnectionData, ServerName};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
+use crate::crypto::cipher::{Iv, IvLen};
 use crate::crypto::CryptoProvider;
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;

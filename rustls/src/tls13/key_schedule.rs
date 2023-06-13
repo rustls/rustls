@@ -1,5 +1,5 @@
-use crate::cipher::{Iv, IvLen, MessageDecrypter};
 use crate::common_state::{CommonState, Side};
+use crate::crypto::cipher::{Iv, IvLen, MessageDecrypter};
 use crate::error::Error;
 use crate::msgs::base::PayloadU8;
 #[cfg(feature = "quic")]
