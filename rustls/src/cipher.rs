@@ -2,12 +2,11 @@ use crate::error::Error;
 use crate::msgs::codec;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 
-use ring::{aead, hkdf};
+use ring::hkdf;
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
     /// Perform the decryption over the concerned TLS message.
-
     fn decrypt(&self, m: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
 }
 
@@ -28,26 +27,30 @@ impl dyn MessageDecrypter {
     }
 }
 
+/// Size of TLS nonces (incorrectly termed "IV" in standard) for all supported ciphersuites
+/// (AES-GCM, Chacha20Poly1305)
+const NONCE_LEN: usize = 12;
+
 /// A write or read IV.
 #[derive(Default)]
-pub(crate) struct Iv(pub(crate) [u8; ring::aead::NONCE_LEN]);
+pub(crate) struct Iv(pub(crate) [u8; NONCE_LEN]);
 
 impl Iv {
     #[cfg(feature = "tls12")]
-    fn new(value: [u8; ring::aead::NONCE_LEN]) -> Self {
+    fn new(value: [u8; NONCE_LEN]) -> Self {
         Self(value)
     }
 
     #[cfg(feature = "tls12")]
     pub(crate) fn copy(value: &[u8]) -> Self {
-        debug_assert_eq!(value.len(), ring::aead::NONCE_LEN);
+        debug_assert_eq!(value.len(), NONCE_LEN);
         let mut iv = Self::new(Default::default());
         iv.0.copy_from_slice(value);
         iv
     }
 
     #[cfg(test)]
-    pub(crate) fn value(&self) -> &[u8; 12] {
+    pub(crate) fn value(&self) -> &[u8; NONCE_LEN] {
         &self.0
     }
 }
@@ -56,7 +59,7 @@ pub(crate) struct IvLen;
 
 impl hkdf::KeyType for IvLen {
     fn len(&self) -> usize {
-        aead::NONCE_LEN
+        NONCE_LEN
     }
 }
 
@@ -68,8 +71,8 @@ impl From<hkdf::Okm<'_, IvLen>> for Iv {
     }
 }
 
-pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
-    let mut nonce = [0u8; ring::aead::NONCE_LEN];
+pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
+    let mut nonce = [0u8; NONCE_LEN];
     codec::put_u64(seq, &mut nonce[4..]);
 
     nonce
@@ -79,7 +82,7 @@ pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
             *nonce ^= *iv;
         });
 
-    aead::Nonce::assume_unique_for_key(nonce)
+    nonce
 }
 
 /// A `MessageEncrypter` which doesn't work.
