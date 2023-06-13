@@ -144,7 +144,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
 
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let nonce = make_nonce(&self.iv, seq);
+        let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.iv, seq));
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
         let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
@@ -191,7 +191,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             return Err(Error::DecryptError);
         }
 
-        let nonce = make_nonce(&self.dec_offset, seq);
+        let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.dec_offset, seq));
         let aad = make_tls12_aad(
             seq,
             msg.typ,
@@ -216,7 +216,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
-        let nonce = make_nonce(&self.enc_offset, seq);
+        let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.enc_offset, seq));
         let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
 
         let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();

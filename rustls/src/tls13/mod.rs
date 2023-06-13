@@ -150,7 +150,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         payload.extend_from_slice(msg.payload);
         msg.typ.encode(&mut payload);
 
-        let nonce = make_nonce(&self.iv, seq);
+        let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.iv, seq));
         let aad = make_tls13_aad(total_len);
 
         self.enc_key
@@ -172,7 +172,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             return Err(Error::DecryptError);
         }
 
-        let nonce = make_nonce(&self.iv, seq);
+        let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.iv, seq));
         let aad = make_tls13_aad(payload.len());
         let plain_len = self
             .dec_key
