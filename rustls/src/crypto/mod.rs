@@ -5,6 +5,9 @@ use core::fmt::Debug;
 /// *ring* based CryptoProvider.
 pub mod ring;
 
+/// TLS message encryption/decryption interfaces.
+pub mod cipher;
+
 pub use crate::rand::GetRandomFailed;
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
