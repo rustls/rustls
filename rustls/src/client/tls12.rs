@@ -31,7 +31,7 @@ use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 
-use ring::constant_time;
+use subtle::ConstantTimeEq;
 
 use std::sync::Arc;
 
@@ -1018,13 +1018,15 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectFinished<C> {
 
         // Constant-time verification of this is relatively unimportant: they only
         // get one chance.  But it can't hurt.
-        let _fin_verified =
-            constant_time::verify_slices_are_equal(&expect_verify_data, &finished.0)
-                .map_err(|_| {
-                    cx.common
-                        .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError)
-                })
-                .map(|_| verify::FinishedMessageVerified::assertion())?;
+        let _fin_verified = match ConstantTimeEq::ct_eq(&expect_verify_data[..], &finished.0).into()
+        {
+            true => verify::FinishedMessageVerified::assertion(),
+            false => {
+                return Err(cx
+                    .common
+                    .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError));
+            }
+        };
 
         // Hash this message too.
         st.transcript.add_message(&m);
