@@ -395,11 +395,9 @@ pub use crate::key_log_file::KeyLogFile;
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::handshake::DistinguishedName;
 pub use crate::stream::{Stream, StreamOwned};
-pub use crate::suites::{
-    BulkAlgorithm, SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES,
-};
 #[cfg(feature = "secret_extraction")]
 pub use crate::suites::{ConnectionTrafficSecrets, ExtractedSecrets};
+pub use crate::suites::{SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES};
 pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;

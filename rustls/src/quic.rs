@@ -8,7 +8,6 @@ use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::server::{ServerConfig, ServerConnectionData};
-use crate::suites::BulkAlgorithm;
 use crate::tls13::key_schedule::hkdf_expand;
 use crate::tls13::{Tls13CipherSuite, TLS13_AES_128_GCM_SHA256_INTERNAL};
 
@@ -506,11 +505,8 @@ pub struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
 
 impl HeaderProtectionKey {
     fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk, version: Version) -> Self {
-        let alg = match suite.common.bulk {
-            BulkAlgorithm::Aes128Gcm => &aead::quic::AES_128,
-            BulkAlgorithm::Aes256Gcm => &aead::quic::AES_256,
-            BulkAlgorithm::Chacha20Poly1305 => &aead::quic::CHACHA20,
-        };
+        todo!("have Tls13CipherSuite contain/generate header protection algorithm");
+        let alg = &aead::quic::AES_128;
 
         Self(hkdf_expand(secret, alg, version.header_key_label(), &[]))
     }

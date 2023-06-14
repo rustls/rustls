@@ -6,7 +6,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
-use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
+use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 
 use ring::aead;
 use ring::digest::Digest;
@@ -22,7 +22,6 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
 pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-        bulk: BulkAlgorithm::Chacha20Poly1305,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::CHACHA20_POLY1305,
@@ -37,7 +36,6 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(&Tls13CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
-            bulk: BulkAlgorithm::Aes256Gcm,
         },
         hkdf_algorithm: ring::hkdf::HKDF_SHA384,
         aead_algorithm: &ring::aead::AES_256_GCM,
@@ -54,7 +52,6 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
 pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
-        bulk: BulkAlgorithm::Aes128Gcm,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
@@ -106,7 +103,6 @@ impl fmt::Debug for Tls13CipherSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tls13CipherSuite")
             .field("suite", &self.common.suite)
-            .field("bulk", &self.common.bulk)
             .finish()
     }
 }
