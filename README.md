@@ -20,8 +20,11 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
-* Next release:
+* Release 0.21.2 (2023-06-14)
   - Bump MSRV to 1.60 to track similar change in dependencies.
+  - Differentiate between unexpected and expected EOF in `Stream` and `OwnedStream`.
+  - `RootCertStore::add_parsable_certificates` now takes a `&[impl AsRef<[u8]>]`.
+  - Add QUIC V2 support.
 * Release 0.21.1 (2023-05-01)
   - Remove `warn`-level logging from code paths that also return a `rustls::Error` with
     the same information.
