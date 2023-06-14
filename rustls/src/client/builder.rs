@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
-    /// Choose how to verify client certificates.
+    /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,
         root_store: anchors::RootCertStore,
