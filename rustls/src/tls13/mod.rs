@@ -1,3 +1,4 @@
+use crate::crypto;
 use crate::crypto::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
 use crate::enums::ContentType;
 use crate::enums::{CipherSuite, ProtocolVersion};
@@ -22,6 +23,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
 pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+        hash_provider: &crypto::ring::hash::SHA256,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::CHACHA20_POLY1305,
@@ -36,6 +38,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(&Tls13CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
+            hash_provider: &crypto::ring::hash::SHA384,
         },
         hkdf_algorithm: ring::hkdf::HKDF_SHA384,
         aead_algorithm: &ring::aead::AES_256_GCM,
@@ -52,6 +55,7 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
 pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+        hash_provider: &crypto::ring::hash::SHA256,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
@@ -83,7 +87,8 @@ impl Tls13CipherSuite {
 
     /// Can a session using suite self resume from suite prev?
     pub fn can_resume_from(&self, prev: &'static Self) -> Option<&'static Self> {
-        (prev.hash_algorithm() == self.hash_algorithm()).then(|| prev)
+        (prev.common.hash_provider.algorithm() == self.common.hash_provider.algorithm())
+            .then(|| prev)
     }
 }
 

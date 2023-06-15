@@ -1,5 +1,6 @@
 use core::fmt;
 
+use crate::crypto;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
@@ -22,10 +23,12 @@ use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
-#[derive(Debug)]
 pub struct CipherSuiteCommon {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
+
+    /// Which hash function the suite uses.
+    pub(crate) hash_provider: &'static dyn crypto::hash::Hash,
 }
 
 /// A cipher suite supported by rustls.
@@ -60,6 +63,11 @@ impl SupportedCipherSuite {
     /// The cipher suite's identifier
     pub fn suite(&self) -> CipherSuite {
         self.common().suite
+    }
+
+    /// The hash function the ciphersuite uses.
+    pub(crate) fn hash_provider(&self) -> &'static dyn crypto::hash::Hash {
+        self.common().hash_provider
     }
 
     pub(crate) fn common(&self) -> &CipherSuiteCommon {
