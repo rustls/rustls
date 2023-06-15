@@ -30,7 +30,7 @@ extension points.
 | Certificate and signature verification | Pluggable extension point, behind `dangerous_configuration`. Default uses webpki which statically uses *ring*. | ECDSA-P256 | `src/verify.rs` |
 | Authentication key loading and signature generation | Pluggable extension point.  Default uses *ring*. | ECDSA-P256 | `src/sign.rs` |
 | Key exchange | Statically uses *ring* | X25519 | `src/kx.rs` |
-| TLS1.2 PRF | Statically uses *ring* | HMAC-SHA256 | `src/tls12/kdf.rs` |
+| TLS1.2 PRF | Statically uses *ring* | HMAC-SHA256 | `src/tls12/prf.rs` |
 | TLS1.3 key schedule | Statically uses *ring* | HKDF-HMAC-SHA256 | `src/tls13/key_schedule.rs` |
 | Server ticket production | Pluggable extension point. Default does not support ticket generation. Provided optional implementation uses *ring*. | CHACHA20-POLY1305 | `src/ticketer.rs` |
 
