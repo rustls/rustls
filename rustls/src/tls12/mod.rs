@@ -7,9 +7,9 @@ use crate::enums::{AlertDescription, CipherSuite, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
-use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 #[cfg(feature = "secret_extraction")]
-use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
+use crate::suites::PartiallyExtractedSecrets;
+use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 
 use core::fmt;
 
@@ -29,7 +29,6 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &ChaCha20Poly1305,
-        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -44,7 +43,6 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &ChaCha20Poly1305,
-        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -59,7 +57,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &AES128_GCM,
-        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -74,7 +71,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &AES256_GCM,
-        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
     });
 
@@ -89,7 +85,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &AES128_GCM,
-        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -104,7 +99,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &AES256_GCM,
-        aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
     });
 
@@ -137,8 +131,6 @@ pub struct Tls12CipherSuite {
 
     /// How to sign messages for authentication.
     pub sign: &'static [SignatureScheme],
-
-    pub(crate) aead_algorithm_only_for_extract_secrets_fixme: &'static ring::aead::Algorithm,
 
     pub(crate) aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
@@ -360,78 +352,19 @@ impl ConnectionSecrets {
         let key_block = self.make_key_block();
         let shape = self.suite.aead_alg.key_block_shape();
 
-        let algo = self
-            .suite
-            .aead_algorithm_only_for_extract_secrets_fixme;
-
-        let (client_key, key_block) = key_block.split_at(algo.key_len());
-        let (server_key, key_block) = key_block.split_at(algo.key_len());
+        let (client_key, key_block) = key_block.split_at(shape.enc_key_len);
+        let (server_key, key_block) = key_block.split_at(shape.enc_key_len);
         let (client_iv, key_block) = key_block.split_at(shape.fixed_iv_len);
-        let (server_iv, extra) = key_block.split_at(shape.fixed_iv_len);
+        let (server_iv, explicit_nonce) = key_block.split_at(shape.fixed_iv_len);
 
-        // A key/IV pair (fixed IV len is 4 for GCM, 12 for Chacha)
-        struct Pair<'a> {
-            key: &'a [u8],
-            iv: &'a [u8],
-        }
-
-        let client_pair = Pair {
-            key: client_key,
-            iv: client_iv,
-        };
-        let server_pair = Pair {
-            key: server_key,
-            iv: server_iv,
-        };
-
-        let (client_secrets, server_secrets) = if algo == &ring::aead::AES_128_GCM {
-            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
-                let mut key = [0u8; 16];
-                key.copy_from_slice(pair.key);
-
-                let mut salt = [0u8; 4];
-                salt.copy_from_slice(pair.iv);
-
-                let mut iv = [0u8; 8];
-                iv.copy_from_slice(&extra[..8]);
-
-                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
-            };
-
-            (extract(client_pair), extract(server_pair))
-        } else if algo == &ring::aead::AES_256_GCM {
-            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(pair.key);
-
-                let mut salt = [0u8; 4];
-                salt.copy_from_slice(pair.iv);
-
-                let mut iv = [0u8; 8];
-                iv.copy_from_slice(&extra[..8]);
-
-                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
-            };
-
-            (extract(client_pair), extract(server_pair))
-        } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            let extract = |pair: Pair| -> ConnectionTrafficSecrets {
-                let mut key = [0u8; 32];
-                key.copy_from_slice(pair.key);
-
-                let mut iv = [0u8; 12];
-                iv.copy_from_slice(pair.iv);
-
-                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
-            };
-
-            (extract(client_pair), extract(server_pair))
-        } else {
-            return Err(Error::General(format!(
-                "exporting secrets for {:?}: unimplemented",
-                algo
-            )));
-        };
+        let client_secrets =
+            self.suite
+                .aead_alg
+                .extract_keys(client_key, client_iv, explicit_nonce);
+        let server_secrets =
+            self.suite
+                .aead_alg
+                .extract_keys(server_key, server_iv, explicit_nonce);
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),

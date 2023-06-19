@@ -6,6 +6,8 @@ use crate::msgs::base::Payload;
 use crate::msgs::codec;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+#[cfg(feature = "secret_extraction")]
+use crate::suites::ConnectionTrafficSecrets;
 
 use ring::aead;
 
@@ -76,6 +78,23 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
             explicit_nonce_len: 8,
         }
     }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
+        match key.len() {
+            16 => {
+                // nb. "fixed IV" becomes the GCM nonce "salt"
+                let (key, salt, iv) = slices_to_arrays(key, iv, explicit);
+                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
+            }
+            32 => {
+                // nb. "fixed IV" becomes the GCM nonce "salt"
+                let (key, salt, iv) = slices_to_arrays(key, iv, explicit);
+                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 pub(crate) struct ChaCha20Poly1305;
@@ -107,6 +126,12 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
             fixed_iv_len: 12,
             explicit_nonce_len: 0,
         }
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], _explicit: &[u8]) -> ConnectionTrafficSecrets {
+        let (key, iv) = (slice_to_array(key), slice_to_array(iv));
+        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
     }
 }
 
@@ -253,6 +278,8 @@ pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
     fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
     fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
     fn key_block_shape(&self) -> KeyBlockShape;
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
 }
 
 /// How a TLS1.2 `key_block` is partitioned.
@@ -275,4 +302,21 @@ pub(crate) struct KeyBlockShape {
     /// in a deterministic and safe way.  GCM needs this,
     /// chacha20poly1305 works this way by design.
     pub(crate) explicit_nonce_len: usize,
+}
+
+#[cfg(feature = "secret_extraction")]
+fn slices_to_arrays<const NK: usize, const NS: usize, const NI: usize>(
+    k: &[u8],
+    s: &[u8],
+    i: &[u8],
+) -> ([u8; NK], [u8; NS], [u8; NI]) {
+    (slice_to_array(k), slice_to_array(s), slice_to_array(i))
+}
+
+#[cfg(feature = "secret_extraction")]
+fn slice_to_array<const N: usize>(slice: &[u8]) -> [u8; N] {
+    // this is guaranteed true because `ConnectionTrafficSecrets` items and
+    // `key_block_shape()` are in agreement.
+    debug_assert_eq!(N, slice.len());
+    slice.try_into().unwrap()
 }
