@@ -363,10 +363,14 @@ impl<C: CryptoProvider> ExpectClientHello<C> {
         cx.common.suite = Some(suite);
 
         // Start handshake hash.
-        let starting_hash = suite.hash_algorithm();
+        let starting_hash = suite.hash_provider();
         let transcript = match self.transcript {
             HandshakeHashOrBuffer::Buffer(inner) => inner.start_hash(starting_hash),
-            HandshakeHashOrBuffer::Hash(inner) if inner.algorithm() == starting_hash => inner,
+            HandshakeHashOrBuffer::Hash(inner)
+                if inner.algorithm() == starting_hash.algorithm() =>
+            {
+                inner
+            }
             _ => {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
