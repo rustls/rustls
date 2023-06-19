@@ -51,15 +51,6 @@ impl fmt::Debug for SupportedCipherSuite {
 }
 
 impl SupportedCipherSuite {
-    /// Which hash function to use with this suite.
-    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
-        match self {
-            #[cfg(feature = "tls12")]
-            Self::Tls12(inner) => inner.hash_algorithm(),
-            Self::Tls13(inner) => inner.hash_algorithm(),
-        }
-    }
-
     /// The cipher suite's identifier
     pub fn suite(&self) -> CipherSuite {
         self.common().suite

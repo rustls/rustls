@@ -1,8 +1,9 @@
+use crate::crypto::hash;
 use crate::msgs::codec::Codec;
+use crate::msgs::enums::HashAlgorithm;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
 use core::mem;
-use ring::digest;
 
 /// Early stage buffering of handshake payloads.
 ///
@@ -45,20 +46,21 @@ impl HandshakeHashBuffer {
     /// Get the hash value if we were to hash `extra` too.
     pub(crate) fn get_hash_given(
         &self,
-        hash: &'static digest::Algorithm,
+        provider: &'static dyn hash::Hash,
         extra: &[u8],
-    ) -> digest::Digest {
-        let mut ctx = digest::Context::new(hash);
+    ) -> hash::Output {
+        let mut ctx = provider.start();
         ctx.update(&self.buffer);
         ctx.update(extra);
         ctx.finish()
     }
 
     /// We now know what hash function the verify_data will use.
-    pub(crate) fn start_hash(self, alg: &'static digest::Algorithm) -> HandshakeHash {
-        let mut ctx = digest::Context::new(alg);
+    pub(crate) fn start_hash(self, provider: &'static dyn hash::Hash) -> HandshakeHash {
+        let mut ctx = provider.start();
         ctx.update(&self.buffer);
         HandshakeHash {
+            provider,
             ctx,
             client_auth: match self.client_auth_enabled {
                 true => Some(self.buffer),
@@ -76,8 +78,8 @@ impl HandshakeHashBuffer {
 /// For client auth, we also need to buffer all the messages.
 /// This is disabled in cases where client auth is not possible.
 pub(crate) struct HandshakeHash {
-    /// None before we know what hash function we're using
-    ctx: digest::Context,
+    provider: &'static dyn hash::Hash,
+    ctx: Box<dyn hash::Context>,
 
     /// buffer for client-auth.
     client_auth: Option<Vec<u8>>,
@@ -111,8 +113,8 @@ impl HandshakeHash {
 
     /// Get the hash value if we were to hash `extra` too,
     /// using hash function `hash`.
-    pub(crate) fn get_hash_given(&self, extra: &[u8]) -> digest::Digest {
-        let mut ctx = self.ctx.clone();
+    pub(crate) fn get_hash_given(&self, extra: &[u8]) -> hash::Output {
+        let mut ctx = self.ctx.fork();
         ctx.update(extra);
         ctx.finish()
     }
@@ -134,7 +136,7 @@ impl HandshakeHash {
     pub(crate) fn rollup_for_hrr(&mut self) {
         let ctx = &mut self.ctx;
 
-        let old_ctx = mem::replace(ctx, digest::Context::new(ctx.algorithm()));
+        let old_ctx = mem::replace(ctx, self.provider.start());
         let old_hash = old_ctx.finish();
         let old_handshake_hash_msg =
             HandshakeMessagePayload::build_handshake_hash(old_hash.as_ref());
@@ -143,8 +145,8 @@ impl HandshakeHash {
     }
 
     /// Get the current hash value.
-    pub(crate) fn get_current_hash(&self) -> digest::Digest {
-        self.ctx.clone().finish()
+    pub(crate) fn get_current_hash(&self) -> hash::Output {
+        self.ctx.fork().finish()
     }
 
     /// Takes this object's buffer containing all handshake messages
@@ -155,23 +157,23 @@ impl HandshakeHash {
         self.client_auth.take()
     }
 
-    /// The digest algorithm
-    pub(crate) fn algorithm(&self) -> &'static digest::Algorithm {
-        self.ctx.algorithm()
+    /// The hashing algorithm
+    pub(crate) fn algorithm(&self) -> HashAlgorithm {
+        self.provider.algorithm()
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::HandshakeHashBuffer;
-    use ring::digest;
+    use crate::crypto::ring;
 
     #[test]
     fn hashes_correctly() {
         let mut hhb = HandshakeHashBuffer::new();
         hhb.update_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
-        let mut hh = hhb.start_hash(&digest::SHA256);
+        let mut hh = hhb.start_hash(&ring::hash::SHA256);
         assert!(hh.client_auth.is_none());
         hh.update_raw(b"world");
         let h = hh.get_current_hash();
@@ -189,7 +191,7 @@ mod test {
         hhb.set_client_auth_enabled();
         hhb.update_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
-        let mut hh = hhb.start_hash(&digest::SHA256);
+        let mut hh = hhb.start_hash(&ring::hash::SHA256);
         assert_eq!(
             hh.client_auth
                 .as_ref()
@@ -219,7 +221,7 @@ mod test {
         hhb.set_client_auth_enabled();
         hhb.update_raw(b"hello");
         assert_eq!(hhb.buffer.len(), 5);
-        let mut hh = hhb.start_hash(&digest::SHA256);
+        let mut hh = hhb.start_hash(&ring::hash::SHA256);
         assert_eq!(
             hh.client_auth
                 .as_ref()

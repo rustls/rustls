@@ -2,8 +2,6 @@ use crate::error::Error;
 use crate::msgs::codec;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 
-use ring::hkdf;
-
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
     /// Perform the decryption over the concerned TLS message.
@@ -35,6 +33,12 @@ const NONCE_LEN: usize = 12;
 #[derive(Default)]
 pub(crate) struct Iv(pub(crate) [u8; NONCE_LEN]);
 
+impl From<[u8; NONCE_LEN]> for Iv {
+    fn from(bytes: [u8; NONCE_LEN]) -> Self {
+        Self(bytes)
+    }
+}
+
 impl Iv {
     #[cfg(feature = "tls12")]
     fn new(value: [u8; NONCE_LEN]) -> Self {
@@ -55,22 +59,6 @@ impl Iv {
     }
 }
 
-pub(crate) struct IvLen;
-
-impl hkdf::KeyType for IvLen {
-    fn len(&self) -> usize {
-        NONCE_LEN
-    }
-}
-
-impl From<hkdf::Okm<'_, IvLen>> for Iv {
-    fn from(okm: hkdf::Okm<IvLen>) -> Self {
-        let mut r = Self(Default::default());
-        okm.fill(&mut r.0[..]).unwrap();
-        r
-    }
-}
-
 pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
     let mut nonce = [0u8; NONCE_LEN];
     codec::put_u64(seq, &mut nonce[4..]);
@@ -83,6 +71,39 @@ pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
         });
 
     nonce
+}
+
+/// Largest possible AEAD key in the ciphersuites we support.
+const MAX_AEAD_KEY_LEN: usize = 32;
+
+pub(crate) struct AeadKey {
+    buf: [u8; MAX_AEAD_KEY_LEN],
+    used: usize,
+}
+
+impl From<[u8; MAX_AEAD_KEY_LEN]> for AeadKey {
+    fn from(bytes: [u8; MAX_AEAD_KEY_LEN]) -> Self {
+        Self {
+            buf: bytes,
+            used: MAX_AEAD_KEY_LEN,
+        }
+    }
+}
+
+impl AsRef<[u8]> for AeadKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
+}
+
+impl AeadKey {
+    pub(crate) fn with_length(self, len: usize) -> Self {
+        assert!(len <= self.used);
+        Self {
+            buf: self.buf,
+            used: len,
+        }
+    }
 }
 
 /// A `MessageEncrypter` which doesn't work.

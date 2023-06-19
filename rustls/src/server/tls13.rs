@@ -1069,7 +1069,7 @@ fn get_server_session_value(
         cx.data.sni.as_ref(),
         version,
         suite.common.suite,
-        secret,
+        secret.as_ref().to_vec(),
         cx.common.peer_certificates.clone(),
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),

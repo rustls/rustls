@@ -5,6 +5,7 @@ use crate::common_state::Protocol;
 use crate::common_state::Side;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
+use crate::crypto;
 use crate::crypto::{CryptoProvider, KeyExchange, SupportedGroup};
 use crate::enums::{
     AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -237,7 +238,7 @@ pub(super) fn fill_in_psk_binder(
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
     let suite = resuming.suite();
-    let suite_hash = suite.hash_algorithm();
+    let suite_hash = suite.common.hash_provider;
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
@@ -284,8 +285,9 @@ pub(super) fn prepare_resumption(
     let obfuscated_ticket_age = resuming_session.obfuscated_ticket_age();
 
     let binder_len = resuming_suite
-        .hash_algorithm()
-        .output_len;
+        .common
+        .hash_provider
+        .output_len();
     let binder = vec![0u8; binder_len];
 
     let psk_identity =
@@ -306,7 +308,8 @@ pub(super) fn derive_early_traffic_secret(
     // For middlebox compatibility
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
 
-    let client_hello_hash = transcript_buffer.get_hash_given(resuming_suite.hash_algorithm(), &[]);
+    let client_hello_hash =
+        transcript_buffer.get_hash_given(resuming_suite.common.hash_provider, &[]);
     early_key_schedule.client_early_traffic_secret(
         &client_hello_hash,
         key_log,
@@ -775,7 +778,7 @@ fn emit_certverify_tls13(
 
 fn emit_finished_tls13(
     transcript: &mut HandshakeHash,
-    verify_data: ring::hmac::Tag,
+    verify_data: &crypto::hmac::Tag,
     common: &mut CommonState,
 ) {
     let verify_data_payload = Payload::new(verify_data.as_ref());
@@ -888,7 +891,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectFinished<C> {
                 &st.randoms.client,
             );
 
-        emit_finished_tls13(&mut st.transcript, verify_data, cx.common);
+        emit_finished_tls13(&mut st.transcript, &verify_data, cx.common);
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
@@ -968,7 +971,7 @@ impl ExpectTraffic {
         let mut value = persist::Tls13ClientSessionValue::new(
             self.suite,
             nst.ticket.0.clone(),
-            secret,
+            secret.as_ref().to_vec(),
             cx.common
                 .peer_certificates
                 .clone()

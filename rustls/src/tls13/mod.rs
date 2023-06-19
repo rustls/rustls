@@ -1,5 +1,6 @@
 use crate::crypto;
 use crate::crypto::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
+use crate::crypto::hash;
 use crate::enums::ContentType;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
@@ -10,7 +11,6 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 
 use ring::aead;
-use ring::digest::Digest;
 
 use core::fmt;
 
@@ -25,7 +25,7 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
         hash_provider: &crypto::ring::hash::SHA256,
     },
-    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     aead_algorithm: &ring::aead::CHACHA20_POLY1305,
     #[cfg(feature = "quic")]
     confidentiality_limit: u64::MAX,
@@ -40,7 +40,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
             hash_provider: &crypto::ring::hash::SHA384,
         },
-        hkdf_algorithm: ring::hkdf::HKDF_SHA384,
+        hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
         aead_algorithm: &ring::aead::AES_256_GCM,
         #[cfg(feature = "quic")]
         confidentiality_limit: 1 << 23,
@@ -57,7 +57,7 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
         hash_provider: &crypto::ring::hash::SHA256,
     },
-    hkdf_algorithm: ring::hkdf::HKDF_SHA256,
+    hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     aead_algorithm: &ring::aead::AES_128_GCM,
     #[cfg(feature = "quic")]
     confidentiality_limit: 1 << 23,
@@ -69,7 +69,7 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
 pub struct Tls13CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
-    pub(crate) hkdf_algorithm: ring::hkdf::Algorithm,
+    pub(crate) hmac_provider: &'static dyn crypto::hmac::Hmac,
     pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
     #[cfg(feature = "quic")]
     pub(crate) confidentiality_limit: u64,
@@ -78,13 +78,6 @@ pub struct Tls13CipherSuite {
 }
 
 impl Tls13CipherSuite {
-    /// Which hash function to use with this suite.
-    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
-        self.hkdf_algorithm
-            .hmac_algorithm()
-            .digest_algorithm()
-    }
-
     /// Can a session using suite self resume from suite prev?
     pub fn can_resume_from(&self, prev: &'static Self) -> Option<&'static Self> {
         (prev.common.hash_provider.algorithm() == self.common.hash_provider.algorithm())
@@ -203,16 +196,19 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+pub(crate) fn construct_client_verify_message(handshake_hash: &hash::Output) -> Vec<u8> {
     construct_verify_message(handshake_hash, b"TLS 1.3, client CertificateVerify\x00")
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+pub(crate) fn construct_server_verify_message(handshake_hash: &hash::Output) -> Vec<u8> {
     construct_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
 }
 
-fn construct_verify_message(handshake_hash: &Digest, context_string_with_0: &[u8]) -> Vec<u8> {
+fn construct_verify_message(
+    handshake_hash: &hash::Output,
+    context_string_with_0: &[u8],
+) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.resize(64, 0x20u8);
     msg.extend_from_slice(context_string_with_0);

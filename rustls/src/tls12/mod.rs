@@ -2,6 +2,7 @@ use crate::common_state::{CommonState, Side};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter};
+use crate::crypto::hash;
 use crate::enums::{AlertDescription, CipherSuite, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
@@ -9,8 +10,6 @@ use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
-
-use ring::digest::Digest;
 
 use core::fmt;
 
@@ -33,7 +32,6 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         explicit_nonce_len: 0,
         aead_alg: &ChaCha20Poly1305,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
-        hmac_algorithm: ring::hmac::HMAC_SHA256,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -51,7 +49,6 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         explicit_nonce_len: 0,
         aead_alg: &ChaCha20Poly1305,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::CHACHA20_POLY1305,
-        hmac_algorithm: ring::hmac::HMAC_SHA256,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -69,7 +66,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         explicit_nonce_len: 8,
         aead_alg: &Aes128Gcm,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
-        hmac_algorithm: ring::hmac::HMAC_SHA256,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -87,7 +83,6 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         explicit_nonce_len: 8,
         aead_alg: &Aes256Gcm,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
-        hmac_algorithm: ring::hmac::HMAC_SHA384,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
     });
 
@@ -105,7 +100,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         explicit_nonce_len: 8,
         aead_alg: &Aes128Gcm,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_128_GCM,
-        hmac_algorithm: ring::hmac::HMAC_SHA256,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
     });
 
@@ -123,7 +117,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         explicit_nonce_len: 8,
         aead_alg: &Aes256Gcm,
         aead_algorithm_only_for_extract_secrets_fixme: &ring::aead::AES_256_GCM,
-        hmac_algorithm: ring::hmac::HMAC_SHA384,
         hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
     });
 
@@ -147,8 +140,6 @@ static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
 pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
-
-    pub(crate) hmac_algorithm: ring::hmac::Algorithm,
 
     /// How to compute HMAC for the suite's hash function.
     pub hmac_provider: &'static dyn crypto::hmac::Hmac,
@@ -190,11 +181,6 @@ impl Tls12CipherSuite {
             .cloned()
             .collect()
     }
-
-    /// Which hash function to use with this suite.
-    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
-        self.hmac_algorithm.digest_algorithm()
-    }
 }
 
 impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {
@@ -228,7 +214,7 @@ impl ConnectionSecrets {
     pub(crate) fn from_key_exchange(
         kx: impl crypto::KeyExchange,
         peer_pub_key: &[u8],
-        ems_seed: Option<Digest>,
+        ems_seed: Option<hash::Output>,
         randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
     ) -> Result<Self, Error> {
@@ -349,7 +335,7 @@ impl ConnectionSecrets {
         ret
     }
 
-    fn make_verify_data(&self, handshake_hash: &Digest, label: &[u8]) -> Vec<u8> {
+    fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {
         let mut out = vec![0u8; 12];
 
         prf::prf(
@@ -364,11 +350,11 @@ impl ConnectionSecrets {
         out
     }
 
-    pub(crate) fn client_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
+    pub(crate) fn client_verify_data(&self, handshake_hash: &hash::Output) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"client finished")
     }
 
-    pub(crate) fn server_verify_data(&self, handshake_hash: &Digest) -> Vec<u8> {
+    pub(crate) fn server_verify_data(&self, handshake_hash: &hash::Output) -> Vec<u8> {
         self.make_verify_data(handshake_hash, b"server finished")
     }
 
@@ -484,7 +470,7 @@ impl ConnectionSecrets {
 }
 
 enum Seed {
-    Ems(Digest),
+    Ems(hash::Output),
     Randoms([u8; 64]),
 }
 
