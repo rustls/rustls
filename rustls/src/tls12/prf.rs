@@ -1,43 +1,24 @@
-use ring::hmac;
+use crate::crypto;
 
-fn concat_sign(key: &hmac::Key, a: &[u8], b: &[u8]) -> hmac::Tag {
-    let mut ctx = hmac::Context::with_key(key);
-    ctx.update(a);
-    ctx.update(b);
-    ctx.sign()
-}
-
-fn p(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], seed: &[u8]) {
-    let hmac_key = hmac::Key::new(alg, secret);
-
+pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn crypto::hmac::Key, label: &[u8], seed: &[u8]) {
     // A(1)
-    let mut current_a = hmac::sign(&hmac_key, seed);
-    let chunk_size = alg.digest_algorithm().output_len;
+    let mut current_a = hmac_key.sign(&[label, seed]);
+
+    let chunk_size = hmac_key.tag_len();
     for chunk in out.chunks_mut(chunk_size) {
         // P_hash[i] = HMAC_hash(secret, A(i) + seed)
-        let p_term = concat_sign(&hmac_key, current_a.as_ref(), seed);
+        let p_term = hmac_key.sign(&[current_a.as_ref(), label, seed]);
         chunk.copy_from_slice(&p_term.as_ref()[..chunk.len()]);
 
         // A(i+1) = HMAC_hash(secret, A(i))
-        current_a = hmac::sign(&hmac_key, current_a.as_ref());
+        current_a = hmac_key.sign(&[current_a.as_ref()]);
     }
-}
-
-fn concat(a: &[u8], b: &[u8]) -> Vec<u8> {
-    let mut ret = Vec::new();
-    ret.extend_from_slice(a);
-    ret.extend_from_slice(b);
-    ret
-}
-
-pub(crate) fn prf(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], label: &[u8], seed: &[u8]) {
-    let joined_seed = concat(label, seed);
-    p(out, alg, secret, &joined_seed);
 }
 
 #[cfg(test)]
 mod tests {
-    use ring::hmac::{HMAC_SHA256, HMAC_SHA512};
+    use crate::crypto::hmac::Hmac;
+    use crate::crypto::ring;
 
     #[test]
     fn check_sha256() {
@@ -47,7 +28,14 @@ mod tests {
         let expect = include_bytes!("../testdata/prf-result.1.bin");
         let mut output = [0u8; 100];
 
-        super::prf(&mut output, HMAC_SHA256, secret, label, seed);
+        super::prf(
+            &mut output,
+            ring::hmac::HMAC_SHA256
+                .open_key(secret)
+                .as_ref(),
+            label,
+            seed,
+        );
         assert_eq!(expect.len(), output.len());
         assert_eq!(expect.to_vec(), output.to_vec());
     }
@@ -60,7 +48,14 @@ mod tests {
         let expect = include_bytes!("../testdata/prf-result.2.bin");
         let mut output = [0u8; 196];
 
-        super::prf(&mut output, HMAC_SHA512, secret, label, seed);
+        super::prf(
+            &mut output,
+            ring::hmac::HMAC_SHA512
+                .open_key(secret)
+                .as_ref(),
+            label,
+            seed,
+        );
         assert_eq!(expect.len(), output.len());
         assert_eq!(expect.to_vec(), output.to_vec());
     }
@@ -70,13 +65,23 @@ mod tests {
 mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
+        use crate::crypto::hmac::Hmac;
+        use crate::crypto::ring;
+
         let label = &b"extended master secret"[..];
         let seed = [0u8; 32];
         let key = &b"secret"[..];
 
         b.iter(|| {
             let mut out = [0u8; 48];
-            super::prf(&mut out, ring::hmac::HMAC_SHA256, key, &label, &seed);
+            super::prf(
+                &mut out,
+                ring::hmac::HMAC_SHA256
+                    .open_key(key)
+                    .as_ref(),
+                &label,
+                &seed,
+            );
             test::black_box(out);
         });
     }
