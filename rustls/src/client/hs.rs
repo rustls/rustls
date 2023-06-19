@@ -610,7 +610,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerHello<C> {
         // Start our handshake hash, and input the server-hello.
         let mut transcript = self
             .transcript_buffer
-            .start_hash(suite.hash_algorithm());
+            .start_hash(suite.hash_provider());
         transcript.add_message(&m);
 
         let randoms = ConnectionRandoms::new(self.input.random, server_hello.random);
@@ -802,7 +802,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
         let transcript = self
             .next
             .transcript_buffer
-            .start_hash(cs.hash_algorithm());
+            .start_hash(cs.hash_provider());
         let mut transcript_buffer = transcript.into_hrr_buffer();
         transcript_buffer.add_message(&m);
 

@@ -1,9 +1,7 @@
 use crate::crypto;
 use ring;
 
-#[cfg(feature = "tls12")]
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring::hmac::HMAC_SHA256);
-#[cfg(feature = "tls12")]
 pub(crate) static HMAC_SHA384: Hmac = Hmac(&ring::hmac::HMAC_SHA384);
 #[cfg(all(test, feature = "tls12"))]
 pub(crate) static HMAC_SHA512: Hmac = Hmac(&ring::hmac::HMAC_SHA512);
