@@ -7,6 +7,9 @@ use crate::msgs::codec;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 
+#[cfg(feature = "secret_extraction")]
+use crate::suites::ConnectionTrafficSecrets;
+
 use ring::aead;
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
@@ -82,6 +85,29 @@ impl Tls12AeadAlgorithm for Aes128Gcm {
     ) -> Box<dyn MessageEncrypter> {
         make_aesgcm_encrypter(enc_key, write_iv, explicit, &aead::AES_128_GCM)
     }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
+        let key = {
+            let mut k = [0u8; 16];
+            k.copy_from_slice(key);
+            k
+        };
+
+        let salt = {
+            let mut s = [0u8; 4];
+            s.copy_from_slice(iv);
+            s
+        };
+
+        let iv = {
+            let mut i = [0u8; 8];
+            i.copy_from_slice(&explicit[..8]);
+            i
+        };
+
+        ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
+    }
 }
 
 pub(crate) struct Aes256Gcm;
@@ -98,6 +124,29 @@ impl Tls12AeadAlgorithm for Aes256Gcm {
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
         make_aesgcm_encrypter(enc_key, write_iv, explicit, &aead::AES_256_GCM)
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
+        let key = {
+            let mut k = [0u8; 32];
+            k.copy_from_slice(key);
+            k
+        };
+
+        let salt = {
+            let mut s = [0u8; 4];
+            s.copy_from_slice(iv);
+            s
+        };
+
+        let iv = {
+            let mut i = [0u8; 8];
+            i.copy_from_slice(&explicit[..8]);
+            i
+        };
+
+        ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
     }
 }
 
@@ -123,11 +172,31 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
             enc_offset: Iv::copy(enc_iv),
         })
     }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], _explicit: &[u8]) -> ConnectionTrafficSecrets {
+        let key = {
+            let mut k = [0u8; 32];
+            k.copy_from_slice(key);
+            k
+        };
+
+        let iv = {
+            let mut i = [0u8; 12];
+            i.copy_from_slice(iv);
+            i
+        };
+
+        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
+    }
 }
 
 pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
     fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
     fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
