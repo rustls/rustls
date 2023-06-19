@@ -20,7 +20,7 @@ pub struct Tag {
 impl Tag {
     /// Build a tag by copying a byte slice.
     ///
-    /// The slice can be up to `Tag::MAX_LEN` bytes in length.
+    /// The slice can be up to [`Tag::MAX_LEN`] bytes in length.
     pub fn new(bytes: &[u8]) -> Self {
         let mut tag = Self {
             buf: [0u8; Self::MAX_LEN],
@@ -31,7 +31,7 @@ impl Tag {
     }
 
     /// Maximum supported HMAC tag size: supports up to SHA512.
-    const MAX_LEN: usize = 64;
+    pub const MAX_LEN: usize = 64;
 }
 
 impl AsRef<[u8]> for Tag {
