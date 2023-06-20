@@ -1,16 +1,133 @@
 use crate::crypto::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
+use crate::enums::CipherSuite;
 use crate::enums::ContentType;
 use crate::enums::ProtocolVersion;
+use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::msgs::base::Payload;
 use crate::msgs::codec;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
+use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
-
 #[cfg(feature = "secret_extraction")]
 use crate::suites::ConnectionTrafficSecrets;
+use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
+use crate::tls12::Tls12AeadAlgorithm;
+use crate::tls12::Tls12CipherSuite;
 
 use ring::aead;
+
+static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
+    SignatureScheme::ED25519,
+    SignatureScheme::ECDSA_NISTP521_SHA512,
+    SignatureScheme::ECDSA_NISTP384_SHA384,
+    SignatureScheme::ECDSA_NISTP256_SHA256,
+];
+
+static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
+    SignatureScheme::RSA_PSS_SHA512,
+    SignatureScheme::RSA_PSS_SHA384,
+    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PKCS1_SHA512,
+    SignatureScheme::RSA_PKCS1_SHA384,
+    SignatureScheme::RSA_PKCS1_SHA256,
+];
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
+pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+            hash_provider: &super::hash::SHA256,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_ECDSA_SCHEMES,
+        fixed_iv_len: 12,
+        aead_key_len: 32,
+        explicit_nonce_len: 0,
+        aead_alg: &ChaCha20Poly1305,
+        hmac_provider: &super::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+            hash_provider: &super::hash::SHA256,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_RSA_SCHEMES,
+        fixed_iv_len: 12,
+        aead_key_len: 32,
+        explicit_nonce_len: 0,
+        aead_alg: &ChaCha20Poly1305,
+        hmac_provider: &super::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+            hash_provider: &super::hash::SHA256,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_RSA_SCHEMES,
+        fixed_iv_len: 4,
+        aead_key_len: 16,
+        explicit_nonce_len: 8,
+        aead_alg: &Aes128Gcm,
+        hmac_provider: &super::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+            hash_provider: &super::hash::SHA384,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_RSA_SCHEMES,
+        fixed_iv_len: 4,
+        aead_key_len: 32,
+        explicit_nonce_len: 8,
+        aead_alg: &Aes256Gcm,
+        hmac_provider: &super::hmac::HMAC_SHA384,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+            hash_provider: &super::hash::SHA256,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_ECDSA_SCHEMES,
+        fixed_iv_len: 4,
+        aead_key_len: 16,
+        explicit_nonce_len: 8,
+        aead_alg: &Aes128Gcm,
+        hmac_provider: &super::hmac::HMAC_SHA256,
+    });
+
+/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+            hash_provider: &super::hash::SHA384,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: TLS12_ECDSA_SCHEMES,
+        fixed_iv_len: 4,
+        aead_key_len: 32,
+        explicit_nonce_len: 8,
+        aead_alg: &Aes256Gcm,
+        hmac_provider: &super::hmac::HMAC_SHA384,
+    });
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 
@@ -19,7 +136,7 @@ fn make_tls12_aad(
     typ: ContentType,
     vers: ProtocolVersion,
     len: usize,
-) -> ring::aead::Aad<[u8; TLS12_AAD_SIZE]> {
+) -> aead::Aad<[u8; TLS12_AAD_SIZE]> {
     let mut out = [0; TLS12_AAD_SIZE];
     codec::put_u64(seq, &mut out[0..]);
     out[8] = typ.get_u8();
@@ -189,14 +306,6 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
 
         ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
     }
-}
-
-pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
-    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
-    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
-
-    #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
 }
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.

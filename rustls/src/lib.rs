@@ -380,6 +380,7 @@ pub use crate::builder::{
 };
 pub use crate::common_state::{CommonState, IoState, Side};
 pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
+pub use crate::crypto::ring::suites::{ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES};
 pub use crate::crypto::ring::Ticketer;
 pub use crate::crypto::ring::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::enums::{
@@ -396,9 +397,9 @@ pub use crate::key_log_file::KeyLogFile;
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::handshake::DistinguishedName;
 pub use crate::stream::{Stream, StreamOwned};
+pub use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "secret_extraction")]
 pub use crate::suites::{ConnectionTrafficSecrets, ExtractedSecrets};
-pub use crate::suites::{SupportedCipherSuite, ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES};
 pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
@@ -477,22 +478,22 @@ pub use server::{ServerConfig, ServerConnection};
 ///
 /// [`ALL_CIPHER_SUITES`] is provided as an array of all of these values.
 pub mod cipher_suite {
+    #[cfg(feature = "tls12")]
+    pub use crate::crypto::ring::tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
+    #[cfg(feature = "tls12")]
+    pub use crate::crypto::ring::tls12::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
+    #[cfg(feature = "tls12")]
+    pub use crate::crypto::ring::tls12::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
+    #[cfg(feature = "tls12")]
+    pub use crate::crypto::ring::tls12::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
+    #[cfg(feature = "tls12")]
+    pub use crate::crypto::ring::tls12::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
+    #[cfg(feature = "tls12")]
+    pub use crate::crypto::ring::tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
+    pub use crate::crypto::ring::tls13::TLS13_AES_128_GCM_SHA256;
+    pub use crate::crypto::ring::tls13::TLS13_AES_256_GCM_SHA384;
+    pub use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256;
     pub use crate::suites::CipherSuiteCommon;
-    #[cfg(feature = "tls12")]
-    pub use crate::tls12::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
-    #[cfg(feature = "tls12")]
-    pub use crate::tls12::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;
-    #[cfg(feature = "tls12")]
-    pub use crate::tls12::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;
-    #[cfg(feature = "tls12")]
-    pub use crate::tls12::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;
-    #[cfg(feature = "tls12")]
-    pub use crate::tls12::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;
-    #[cfg(feature = "tls12")]
-    pub use crate::tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;
-    pub use crate::tls13::TLS13_AES_128_GCM_SHA256;
-    pub use crate::tls13::TLS13_AES_256_GCM_SHA384;
-    pub use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256;
 }
 
 /// All defined protocol versions appear in this module.

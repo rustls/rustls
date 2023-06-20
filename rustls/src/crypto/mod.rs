@@ -1,4 +1,5 @@
 use crate::rand::GetRandomFailed;
+use crate::suites;
 use crate::{Error, NamedGroup};
 
 use core::fmt::Debug;
@@ -22,6 +23,9 @@ pub trait CryptoProvider: Send + Sync + 'static {
 
     /// Fill the given buffer with random bytes.
     fn fill_random(buf: &mut [u8]) -> Result<(), GetRandomFailed>;
+
+    /// Configure a safe set of cipher suites that can be used as the defaults.
+    fn default_cipher_suites() -> &'static [suites::SupportedCipherSuite];
 }
 
 /// An in-progress key exchange over a [SupportedGroup].

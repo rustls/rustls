@@ -1,4 +1,3 @@
-use super::{Tls13MessageDecrypter, Tls13MessageEncrypter};
 use crate::common_state::{CommonState, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
 use crate::crypto::{hash, hmac};
@@ -7,7 +6,7 @@ use crate::hkdf;
 #[cfg(feature = "quic")]
 use crate::quic;
 #[cfg(feature = "secret_extraction")]
-use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
+use crate::suites::PartiallyExtractedSecrets;
 use crate::{KeyLog, Tls13CipherSuite};
 
 /// Key schedule maintenance for TLS1.3
@@ -505,85 +504,38 @@ impl KeyScheduleTraffic {
     #[cfg(feature = "secret_extraction")]
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         fn expand(
-            expander: &hkdf::Expander,
-            aead_algorithm: &'static ring::aead::Algorithm,
+            secret: &hkdf::OkmOneBlock,
+            hmac: &'static dyn hmac::Hmac,
+            aead_key_len: usize,
         ) -> (AeadKey, Iv) {
+            let expander = hkdf::Expander::from_okm(secret, hmac);
+
             (
-                hkdf_expand_aead_key(expander, aead_algorithm, b"key", &[]),
-                hkdf_expand(expander, b"iv", &[]),
+                hkdf_expand_aead_key(&expander, aead_key_len, b"key", &[]),
+                hkdf_expand(&expander, b"iv", &[]),
             )
         }
 
-        let client_secrets;
-        let server_secrets;
-
-        let algo = self.ks.suite.aead_algorithm;
-        if algo == &ring::aead::AES_128_GCM {
-            let extract = |secret: &hkdf::OkmOneBlock| -> Result<ConnectionTrafficSecrets, Error> {
-                let expander = hkdf::Expander::from_okm(secret, self.ks.suite.hmac_provider);
-                let (key, iv_in) = expand(&expander, algo);
-
-                let mut salt = [0u8; 4];
-                salt.copy_from_slice(&iv_in.0[..4]);
-
-                let mut iv = [0u8; 8];
-                iv.copy_from_slice(&iv_in.0[4..]);
-
-                let mut key_array = [0u8; 16];
-                key_array.copy_from_slice(key.as_ref());
-
-                Ok(ConnectionTrafficSecrets::Aes128Gcm {
-                    key: key_array,
-                    salt,
-                    iv,
-                })
-            };
-
-            client_secrets = extract(&self.current_client_traffic_secret)?;
-            server_secrets = extract(&self.current_server_traffic_secret)?;
-        } else if algo == &ring::aead::AES_256_GCM {
-            let extract = |secret: &hkdf::OkmOneBlock| -> Result<ConnectionTrafficSecrets, Error> {
-                let expander = hkdf::Expander::from_okm(secret, self.ks.suite.hmac_provider);
-                let (key, iv_in) = expand(&expander, algo);
-
-                let mut salt = [0u8; 4];
-                salt.copy_from_slice(&iv_in.0[..4]);
-
-                let mut iv = [0u8; 8];
-                iv.copy_from_slice(&iv_in.0[4..]);
-
-                let mut key_array = [0u8; 32];
-                key_array.copy_from_slice(key.as_ref());
-
-                Ok(ConnectionTrafficSecrets::Aes256Gcm {
-                    key: key_array,
-                    salt,
-                    iv,
-                })
-            };
-
-            client_secrets = extract(&self.current_client_traffic_secret)?;
-            server_secrets = extract(&self.current_server_traffic_secret)?;
-        } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            let extract = |secret: &hkdf::OkmOneBlock| -> Result<ConnectionTrafficSecrets, Error> {
-                let expander = hkdf::Expander::from_okm(secret, self.ks.suite.hmac_provider);
-                let (key, iv) = expand(&expander, algo);
-                let mut key_array = [0u8; 32];
-                key_array.copy_from_slice(key.as_ref());
-                Ok(ConnectionTrafficSecrets::Chacha20Poly1305 {
-                    key: key_array,
-                    iv: iv.0,
-                })
-            };
-
-            client_secrets = extract(&self.current_client_traffic_secret)?;
-            server_secrets = extract(&self.current_server_traffic_secret)?;
-        } else {
-            return Err(Error::General(format!(
-                "exporting secrets for {:?}: unimplemented",
-                algo
-            )));
-        }
+        let (client_key, client_iv) = expand(
+            &self.current_client_traffic_secret,
+            self.ks.suite.hmac_provider,
+            self.ks.suite.aead_alg.key_len(),
+        );
+        let (server_key, server_iv) = expand(
+            &self.current_server_traffic_secret,
+            self.ks.suite.hmac_provider,
+            self.ks.suite.aead_alg.key_len(),
+        );
+        let client_secrets = self
+            .ks
+            .suite
+            .aead_alg
+            .extract_keys(client_key, client_iv);
+        let server_secrets = self
+            .ks
+            .suite
+            .aead_alg
+            .extract_keys(server_key, server_iv);
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),
@@ -603,15 +555,12 @@ impl KeySchedule {
 
     fn set_encrypter(&self, secret: &hkdf::OkmOneBlock, common: &mut CommonState) {
         let expander = hkdf::Expander::from_okm(secret, self.suite.hmac_provider);
-        let key = derive_traffic_key(&expander, self.suite.aead_algorithm);
+        let key = derive_traffic_key(&expander, self.suite.aead_alg.key_len());
         let iv = derive_traffic_iv(&expander);
 
         common
             .record_layer
-            .set_message_encrypter(Box::new(Tls13MessageEncrypter {
-                enc_key: ring::aead::LessSafeKey::new(key),
-                iv,
-            }));
+            .set_message_encrypter(self.suite.aead_alg.encrypter(key, iv));
     }
 
     fn set_decrypter(&self, secret: &hkdf::OkmOneBlock, common: &mut CommonState) {
@@ -622,12 +571,9 @@ impl KeySchedule {
 
     fn derive_decrypter(&self, secret: &hkdf::OkmOneBlock) -> Box<dyn MessageDecrypter> {
         let expander = hkdf::Expander::from_okm(secret, self.suite.hmac_provider);
-        let key = derive_traffic_key(&expander, self.suite.aead_algorithm);
+        let key = derive_traffic_key(&expander, self.suite.aead_alg.key_len());
         let iv = derive_traffic_iv(&expander);
-        Box::new(Tls13MessageDecrypter {
-            dec_key: ring::aead::LessSafeKey::new(key),
-            iv,
-        })
+        self.suite.aead_alg.decrypter(key, iv)
     }
 
     fn new_with_empty_secret(suite: &'static Tls13CipherSuite) -> Self {
@@ -807,11 +753,10 @@ fn hkdf_expand_one(expander: &hkdf::Expander, label: &[u8], context: &[u8]) -> h
 
 fn hkdf_expand_aead_key(
     expander: &hkdf::Expander,
-    aead_algorithm: &'static ring::aead::Algorithm,
+    key_len: usize,
     label: &[u8],
     context: &[u8],
 ) -> AeadKey {
-    let key_len = aead_algorithm.key_len();
     hkdf_expand_inner(expander, label, context, key_len, |e, info| {
         let key: AeadKey = e.expand(info);
         key.with_length(key_len)
@@ -829,13 +774,8 @@ fn hkdf_expand_slice(
     })
 }
 
-pub(crate) fn derive_traffic_key(
-    expander: &hkdf::Expander,
-    aead_algorithm: &'static ring::aead::Algorithm,
-) -> ring::aead::UnboundKey {
-    let key: AeadKey = hkdf_expand_aead_key(expander, aead_algorithm, b"key", &[]);
-    let key = key.with_length(aead_algorithm.key_len());
-    ring::aead::UnboundKey::new(aead_algorithm, key.as_ref()).unwrap()
+pub(crate) fn derive_traffic_key(expander: &hkdf::Expander, aead_key_len: usize) -> AeadKey {
+    hkdf_expand_aead_key(expander, aead_key_len, b"key", &[])
 }
 
 pub(crate) fn derive_traffic_iv(expander: &hkdf::Expander) -> Iv {
@@ -845,7 +785,7 @@ pub(crate) fn derive_traffic_iv(expander: &hkdf::Expander) -> Iv {
 #[cfg(test)]
 mod test {
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-    use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
+    use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
     use crate::KeyLog;
     use ring::aead;
 
@@ -995,7 +935,8 @@ mod test {
             &traffic_secret,
             &crate::crypto::ring::hmac::HMAC_SHA256,
         );
-        let key = derive_traffic_key(&expander, aead_alg);
+        let key = derive_traffic_key(&expander, aead_alg.key_len());
+        let key = aead::UnboundKey::new(aead_alg, key.as_ref()).unwrap();
         let seal_output = seal_zeroes(key);
         let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();
         let expected_seal_output = seal_zeroes(expected_key);
@@ -1024,8 +965,8 @@ mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
+        use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::hkdf;
-        use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::KeyLog;
         use ring::aead;
 
@@ -1043,7 +984,10 @@ mod benchmarks {
                 &traffic_secret,
                 TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.hmac_provider,
             );
-            test::black_box(derive_traffic_key(&traffic_secret_expander, aead_alg));
+            test::black_box(derive_traffic_key(
+                &traffic_secret_expander,
+                aead_alg.key_len(),
+            ));
             test::black_box(derive_traffic_iv(&traffic_secret_expander));
         }
 

@@ -4,20 +4,7 @@ use crate::crypto;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
-#[cfg(feature = "tls12")]
-use crate::tls12::{
-    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-    // TLS1.2 suites
-    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-};
 use crate::tls13::Tls13CipherSuite;
-use crate::tls13::{
-    TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
-};
 #[cfg(feature = "tls12")]
 use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
@@ -28,13 +15,15 @@ pub struct CipherSuiteCommon {
     pub suite: CipherSuite,
 
     /// Which hash function the suite uses.
-    pub(crate) hash_provider: &'static dyn crypto::hash::Hash,
+    pub hash_provider: &'static dyn crypto::hash::Hash,
 }
 
 /// A cipher suite supported by rustls.
 ///
-/// All possible instances of this type are provided by the library in
-/// the [`ALL_CIPHER_SUITES`] array.
+/// All possible instances of this type are provided by the `CryptoProvider` in
+/// its the [`ALL_CIPHER_SUITES`] array.
+///
+/// [`ALL_CIPHER_SUITES`]: crate::crypto::ring::suites::ALL_CIPHER_SUITES
 #[derive(Clone, Copy, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite
@@ -100,33 +89,6 @@ impl SupportedCipherSuite {
         }
     }
 }
-
-/// A list of all the cipher suites supported by rustls.
-pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
-    // TLS1.3 suites
-    TLS13_AES_256_GCM_SHA384,
-    TLS13_AES_128_GCM_SHA256,
-    TLS13_CHACHA20_POLY1305_SHA256,
-    // TLS1.2 suites
-    #[cfg(feature = "tls12")]
-    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-    #[cfg(feature = "tls12")]
-    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-    #[cfg(feature = "tls12")]
-    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-    #[cfg(feature = "tls12")]
-    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    #[cfg(feature = "tls12")]
-    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-    #[cfg(feature = "tls12")]
-    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-];
-
-/// The cipher suite configuration that an application should use by default.
-///
-/// This will be [`ALL_CIPHER_SUITES`] sans any supported cipher suites that
-/// shouldn't be enabled by most applications.
-pub static DEFAULT_CIPHER_SUITES: &[SupportedCipherSuite] = ALL_CIPHER_SUITES;
 
 // These both O(N^2)!
 pub(crate) fn choose_ciphersuite_preferring_client(
@@ -258,6 +220,8 @@ pub enum ConnectionTrafficSecrets {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::crypto::ring::suites::ALL_CIPHER_SUITES;
+    use crate::crypto::ring::tls13::*;
     use crate::enums::CipherSuite;
 
     #[test]
@@ -308,12 +272,12 @@ mod test {
         assert!(TLS13_AES_128_GCM_SHA256
             .tls13()
             .unwrap()
-            .can_resume_from(crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL)
+            .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL)
             .is_some());
         assert!(TLS13_AES_256_GCM_SHA384
             .tls13()
             .unwrap()
-            .can_resume_from(crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL)
+            .can_resume_from(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL)
             .is_none());
     }
 }
