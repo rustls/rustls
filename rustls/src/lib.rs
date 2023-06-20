@@ -416,7 +416,7 @@ pub mod client {
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{
         CertificateTransparencyPolicy, HandshakeSignatureValid, ServerCertVerified,
-        ServerCertVerifier, WebPkiVerifier,
+        ServerCertVerifier, WebPkiVerifier, WebPkiVerifierAnyServerName,
     };
     #[cfg(feature = "dangerous_configuration")]
     pub use client_conn::danger::DangerousClientConfig;

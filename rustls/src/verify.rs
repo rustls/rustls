@@ -433,6 +433,71 @@ impl WebPkiVerifier {
     }
 }
 
+
+
+impl ServerCertVerifier for WebPkiVerifierAnyServerName {
+    /// Will verify the certificate is valid in the following ways:
+    /// - Signed by a  trusted `RootCertStore` CA
+    /// - Not Expired
+    fn verify_server_cert(
+        &self,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        now: SystemTime,
+    ) -> Result<ServerCertVerified, Error> {
+        let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
+        let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
+
+        cert
+            .verify_is_valid_tls_server_cert(
+                SUPPORTED_SIG_ALGS,
+                &webpki::TlsServerTrustAnchors(&trustroots),
+                &chain,
+                webpki_now,
+            )
+            .map_err(pki_error)
+            .map(|_| ServerCertVerified::assertion())
+    }
+}
+
+/// `ServerCertVerifier` that verifies that the server is signed by a trusted root, but allows any serverName
+/// see the trait impl for more information.
+#[allow(unreachable_pub)]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+pub struct WebPkiVerifierAnyServerName {
+    roots: RootCertStore,
+}
+
+#[allow(unreachable_pub)]
+impl WebPkiVerifierAnyServerName {
+    /// Constructs a new `WebPkiVerifierAnyServerName`.
+    ///
+    /// `roots` is the set of trust anchors to trust for issuing server certs.
+    pub fn new(roots: RootCertStore) -> Self {
+        Self { roots }
+    }
+
+    /// Returns the signature verification methods supported by
+    /// webpki.
+    pub fn verification_schemes() -> Vec<SignatureScheme> {
+        vec![
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::ED25519,
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA256,
+        ]
+    }
+}
+
+
 /// Policy for enforcing Certificate Transparency.
 ///
 /// Because Certificate Transparency logs are sharded on a per-year basis and can be trusted or
