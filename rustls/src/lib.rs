@@ -452,6 +452,7 @@ pub mod server {
 
     pub use crate::verify::{
         AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+        UnparsedCertRevocationList,
     };
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;

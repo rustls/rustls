@@ -18,6 +18,7 @@ use docopt::Docopt;
 
 use rustls::server::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+    UnparsedCertRevocationList,
 };
 use rustls::{self, RootCertStore};
 
@@ -429,6 +430,8 @@ Options:
                         to certificate.  Optional.
     --auth CERTFILE     Enable client authentication, and accept certificates
                         signed by those roots provided in CERTFILE.
+    --crl CRLFILE ...   Perform client certificate revocation checking using the DER-encoded
+                        CRLFILE. May be used multiple times.
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
     --resumption        Support session resumption.
@@ -454,6 +457,7 @@ struct Args {
     flag_suite: Vec<String>,
     flag_proto: Vec<String>,
     flag_certs: Option<String>,
+    flag_crl: Vec<String>,
     flag_key: Option<String>,
     flag_ocsp: Option<String>,
     flag_auth: Option<String>,
@@ -551,6 +555,20 @@ fn load_ocsp(filename: &Option<String>) -> Vec<u8> {
     ret
 }
 
+fn load_crls(filenames: &[String]) -> Vec<UnparsedCertRevocationList> {
+    filenames
+        .iter()
+        .map(|filename| {
+            let mut der = Vec::new();
+            fs::File::open(filename)
+                .expect("cannot open CRL file")
+                .read_to_end(&mut der)
+                .unwrap();
+            UnparsedCertRevocationList(der)
+        })
+        .collect()
+}
+
 fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let client_auth = if args.flag_auth.is_some() {
         let roots = load_certs(args.flag_auth.as_ref().unwrap());
@@ -558,10 +576,17 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         for root in roots {
             client_auth_roots.add(&root).unwrap();
         }
+        let crls = load_crls(&args.flag_crl);
         if args.flag_require_auth {
-            AllowAnyAuthenticatedClient::new(client_auth_roots).boxed()
+            AllowAnyAuthenticatedClient::new(client_auth_roots)
+                .with_crls(crls)
+                .expect("invalid CRLs")
+                .boxed()
         } else {
-            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots).boxed()
+            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots)
+                .with_crls(crls)
+                .expect("invalid CRLs")
+                .boxed()
         }
     } else {
         NoClientAuth::boxed()
@@ -632,6 +657,11 @@ fn main() {
         env_logger::Builder::new()
             .parse_filters("trace")
             .init();
+    }
+
+    if !args.flag_crl.is_empty() && args.flag_auth.is_none() {
+        println!("-crl can only be provided with -auth enabled");
+        return;
     }
 
     let mut addr: net::SocketAddr = "0.0.0.0:443".parse().unwrap();

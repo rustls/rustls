@@ -69,6 +69,9 @@ pub enum Error {
     /// The presented SCT(s) were invalid.
     InvalidSct(sct::Error),
 
+    /// A provided certificate revocation list (CRL) was invalid.
+    InvalidCertRevocationList(CertRevocationListError),
+
     /// A catch-all error for unlikely errors.
     General(String),
 
@@ -381,6 +384,99 @@ impl From<CertificateError> for Error {
     }
 }
 
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+/// The ways in which a certificate revocation list (CRL) can be invalid.
+pub enum CertRevocationListError {
+    /// The CRL had a bad, or unsupported signature from its issuer.
+    BadSignature,
+
+    /// The CRL contained an invalid CRL number.
+    InvalidCrlNumber,
+
+    /// The CRL contained a revoked certificate with an invalid serial number.
+    InvalidRevokedCertSerialNumber,
+
+    /// The CRL issuer does not specify the cRLSign key usage.
+    IssuerInvalidForCrl,
+
+    /// The CRL is invalid for some other reason.
+    ///
+    /// Enums holding this variant will never compare equal to each other.
+    Other(Arc<dyn StdError + Send + Sync>),
+
+    /// The CRL is not correctly encoded.
+    ParseError,
+
+    /// The CRL is not a v2 X.509 CRL.
+    UnsupportedCrlVersion,
+
+    /// The CRL, or a revoked certificate in the CRL, contained an unsupported critical extension.
+    UnsupportedCriticalExtension,
+
+    /// The CRL is an unsupported delta CRL, containing only changes relative to another CRL.
+    UnsupportedDeltaCrl,
+
+    /// The CRL is an unsupported indirect CRL, containing revoked certificates issued by a CA
+    /// other than the issuer of the CRL.
+    UnsupportedIndirectCrl,
+
+    /// The CRL contained a revoked certificate with an unsupported revocation reason.
+    /// See RFC 5280 Section 5.3.1[^1] for a list of supported revocation reasons.
+    ///
+    /// [^1]: https://www.rfc-editor.org/rfc/rfc5280#section-5.3.1
+    UnsupportedRevocationReason,
+}
+
+impl PartialEq<Self> for CertRevocationListError {
+    fn eq(&self, other: &Self) -> bool {
+        use CertRevocationListError::*;
+        #[allow(clippy::match_like_matches_macro)]
+        match (self, other) {
+            (BadSignature, BadSignature) => true,
+            (InvalidCrlNumber, InvalidCrlNumber) => true,
+            (InvalidRevokedCertSerialNumber, InvalidRevokedCertSerialNumber) => true,
+            (IssuerInvalidForCrl, IssuerInvalidForCrl) => true,
+            (ParseError, ParseError) => true,
+            (UnsupportedCrlVersion, UnsupportedCrlVersion) => true,
+            (UnsupportedCriticalExtension, UnsupportedCriticalExtension) => true,
+            (UnsupportedDeltaCrl, UnsupportedDeltaCrl) => true,
+            (UnsupportedIndirectCrl, UnsupportedIndirectCrl) => true,
+            (UnsupportedRevocationReason, UnsupportedRevocationReason) => true,
+            _ => false,
+        }
+    }
+}
+
+impl From<webpki::Error> for CertRevocationListError {
+    fn from(e: webpki::Error) -> Self {
+        use webpki::Error::*;
+        match e {
+            InvalidCrlSignatureForPublicKey
+            | UnsupportedCrlSignatureAlgorithm
+            | UnsupportedCrlSignatureAlgorithmForPublicKey => Self::BadSignature,
+            InvalidCrlNumber => Self::InvalidCrlNumber,
+            InvalidSerialNumber => Self::InvalidRevokedCertSerialNumber,
+            IssuerNotCrlSigner => Self::IssuerInvalidForCrl,
+            MalformedExtensions | BadDer | BadDerTime => Self::ParseError,
+            UnsupportedCriticalExtension => Self::UnsupportedCriticalExtension,
+            UnsupportedCrlVersion => Self::UnsupportedCrlVersion,
+            UnsupportedDeltaCrl => Self::UnsupportedDeltaCrl,
+            UnsupportedIndirectCrl => Self::UnsupportedIndirectCrl,
+            UnsupportedRevocationReason => Self::UnsupportedRevocationReason,
+
+            _ => Self::Other(Arc::new(e)),
+        }
+    }
+}
+
+impl From<CertRevocationListError> for Error {
+    #[inline]
+    fn from(e: CertRevocationListError) -> Self {
+        Self::InvalidCertRevocationList(e)
+    }
+}
+
 fn join<T: fmt::Debug>(items: &[T]) -> String {
     items
         .iter()
@@ -419,6 +515,9 @@ impl fmt::Display for Error {
             Self::InvalidCertificate(ref err) => {
                 write!(f, "invalid peer certificate: {:?}", err)
             }
+            Self::InvalidCertRevocationList(ref err) => {
+                write!(f, "invalid certificate revocation list: {:?}", err)
+            }
             Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
             Self::DecryptError => write!(f, "cannot decrypt peer's message"),
@@ -455,6 +554,7 @@ impl From<rand::GetRandomFailed> for Error {
 #[cfg(test)]
 mod tests {
     use super::{Error, InvalidMessage};
+    use crate::error::CertRevocationListError;
 
     #[test]
     fn certificate_error_equality() {
@@ -475,6 +575,79 @@ mod tests {
         let other = Other(std::sync::Arc::from(Box::from("")));
         assert_ne!(other, other);
         assert_ne!(BadEncoding, Expired);
+    }
+
+    #[test]
+    fn crl_error_equality() {
+        use super::CertRevocationListError::*;
+        assert_eq!(BadSignature, BadSignature);
+        assert_eq!(InvalidCrlNumber, InvalidCrlNumber);
+        assert_eq!(
+            InvalidRevokedCertSerialNumber,
+            InvalidRevokedCertSerialNumber
+        );
+        assert_eq!(IssuerInvalidForCrl, IssuerInvalidForCrl);
+        assert_eq!(ParseError, ParseError);
+        assert_eq!(UnsupportedCriticalExtension, UnsupportedCriticalExtension);
+        assert_eq!(UnsupportedCrlVersion, UnsupportedCrlVersion);
+        assert_eq!(UnsupportedDeltaCrl, UnsupportedDeltaCrl);
+        assert_eq!(UnsupportedIndirectCrl, UnsupportedIndirectCrl);
+        assert_eq!(UnsupportedRevocationReason, UnsupportedRevocationReason);
+        let other = Other(std::sync::Arc::from(Box::from("")));
+        assert_ne!(other, other);
+        assert_ne!(BadSignature, InvalidCrlNumber);
+    }
+
+    #[test]
+    fn crl_error_from_webpki() {
+        use super::CertRevocationListError::*;
+        let testcases = &[
+            (webpki::Error::InvalidCrlSignatureForPublicKey, BadSignature),
+            (
+                webpki::Error::UnsupportedCrlSignatureAlgorithm,
+                BadSignature,
+            ),
+            (
+                webpki::Error::UnsupportedCrlSignatureAlgorithmForPublicKey,
+                BadSignature,
+            ),
+            (webpki::Error::InvalidCrlNumber, InvalidCrlNumber),
+            (
+                webpki::Error::InvalidSerialNumber,
+                InvalidRevokedCertSerialNumber,
+            ),
+            (webpki::Error::IssuerNotCrlSigner, IssuerInvalidForCrl),
+            (webpki::Error::MalformedExtensions, ParseError),
+            (webpki::Error::BadDer, ParseError),
+            (webpki::Error::BadDerTime, ParseError),
+            (
+                webpki::Error::UnsupportedCriticalExtension,
+                UnsupportedCriticalExtension,
+            ),
+            (webpki::Error::UnsupportedCrlVersion, UnsupportedCrlVersion),
+            (webpki::Error::UnsupportedDeltaCrl, UnsupportedDeltaCrl),
+            (
+                webpki::Error::UnsupportedIndirectCrl,
+                UnsupportedIndirectCrl,
+            ),
+            (
+                webpki::Error::UnsupportedRevocationReason,
+                UnsupportedRevocationReason,
+            ),
+        ];
+        for t in testcases {
+            assert_eq!(
+                <webpki::Error as Into<CertRevocationListError>>::into(t.0),
+                t.1
+            );
+        }
+
+        assert!(matches!(
+            <webpki::Error as Into<CertRevocationListError>>::into(
+                webpki::Error::NameConstraintViolation
+            ),
+            Other(_)
+        ));
     }
 
     #[test]
@@ -506,6 +679,7 @@ mod tests {
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
             Error::BadMaxFragmentSize,
+            Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
         ];
 
         for err in all {

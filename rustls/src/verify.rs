@@ -3,7 +3,9 @@ use std::fmt;
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
-use crate::error::{CertificateError, Error, InvalidMessage, PeerMisbehaved};
+use crate::error::{
+    CertRevocationListError, CertificateError, Error, InvalidMessage, PeerMisbehaved,
+};
 use crate::key::{Certificate, ParsedCertificate};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
@@ -541,11 +543,26 @@ fn trust_roots(roots: &RootCertStore) -> Vec<webpki::TrustAnchor> {
         .collect()
 }
 
+/// An unparsed DER encoded Certificate Revocation List (CRL).
+pub struct UnparsedCertRevocationList(pub Vec<u8>);
+
+impl UnparsedCertRevocationList {
+    /// Parse the CRL DER, yielding a [`webpki::CertRevocationList`] or an error if the CRL
+    /// is malformed, or uses unsupported features.
+    pub fn parse(&self) -> Result<webpki::OwnedCertRevocationList, CertRevocationListError> {
+        webpki::BorrowedCertRevocationList::from_der(&self.0)
+            .and_then(|crl| crl.to_owned())
+            .map_err(CertRevocationListError::from)
+    }
+}
+
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
-/// certificate, without any name checking.
+/// certificate, without any name checking. Optionally, client certificates will
+/// have their revocation status checked using the DER encoded CRLs provided.
 pub struct AllowAnyAuthenticatedClient {
     roots: RootCertStore,
     subjects: Vec<DistinguishedName>,
+    crls: Vec<webpki::OwnedCertRevocationList>,
 }
 
 impl AllowAnyAuthenticatedClient {
@@ -559,8 +576,24 @@ impl AllowAnyAuthenticatedClient {
                 .iter()
                 .map(|r| r.subject().clone())
                 .collect(),
+            crls: Vec::new(),
             roots,
         }
+    }
+
+    /// Update the verifier to validate client certificates against the provided DER format
+    /// unparsed certificate revocation lists (CRLs).
+    pub fn with_crls(
+        self,
+        crls: impl IntoIterator<Item = UnparsedCertRevocationList>,
+    ) -> Result<Self, CertRevocationListError> {
+        Ok(Self {
+            crls: crls
+                .into_iter()
+                .map(|der_crl| der_crl.parse())
+                .collect::<Result<Vec<_>, CertRevocationListError>>()?,
+            ..self
+        })
     }
 
     /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
@@ -592,13 +625,20 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         let trust_roots = trust_roots(&self.roots);
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
+        #[allow(trivial_casts)] // Cast to &dyn trait is required.
+        let crls = self
+            .crls
+            .iter()
+            .map(|crl| crl as &dyn webpki::CertRevocationList)
+            .collect::<Vec<_>>();
+
         cert.0
             .verify_is_valid_tls_client_cert(
                 SUPPORTED_SIG_ALGS,
                 &webpki::TlsClientTrustAnchors(&trust_roots),
                 &chain,
                 now,
-                &[], // TODO(@cpu): provide CRLs as appropriate.
+                crls.as_slice(),
             )
             .map_err(pki_error)
             .map(|_| ClientCertVerified::assertion())
@@ -623,6 +663,17 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
         Self {
             inner: AllowAnyAuthenticatedClient::new(roots),
         }
+    }
+
+    /// Update the verifier to validate client certificates against the provided DER format
+    /// unparsed certificate revocation lists (CRLs).
+    pub fn with_crls(
+        self,
+        crls: impl IntoIterator<Item = UnparsedCertRevocationList>,
+    ) -> Result<Self, CertRevocationListError> {
+        Ok(Self {
+            inner: self.inner.with_crls(crls)?,
+        })
     }
 
     /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
@@ -666,10 +717,19 @@ pub(crate) fn pki_error(error: webpki::Error) -> Error {
         CertExpired | InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
         CertNotValidForName => CertificateError::NotValidForName.into(),
+        CertRevoked => CertificateError::Revoked.into(),
+        IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey
         | UnsupportedSignatureAlgorithm
         | UnsupportedSignatureAlgorithmForPublicKey => CertificateError::BadSignature.into(),
+
+        InvalidCrlSignatureForPublicKey
+        | UnsupportedCrlSignatureAlgorithm
+        | UnsupportedCrlSignatureAlgorithmForPublicKey => {
+            CertRevocationListError::BadSignature.into()
+        }
+
         _ => CertificateError::Other(Arc::new(error)).into(),
     }
 }
@@ -891,6 +951,35 @@ mod tests {
         assert_eq!(
             format!("{:?}", ServerCertVerified::assertion()),
             "ServerCertVerified(())"
+        );
+    }
+
+    #[test]
+    fn pki_crl_errors() {
+        // CRL signature errors should be turned into BadSignature.
+        assert_eq!(
+            pki_error(webpki::Error::InvalidCrlSignatureForPublicKey),
+            Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::UnsupportedCrlSignatureAlgorithm),
+            Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::UnsupportedCrlSignatureAlgorithmForPublicKey),
+            Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+        );
+
+        // Revoked cert errors should be turned into Revoked.
+        assert_eq!(
+            pki_error(webpki::Error::CertRevoked),
+            Error::InvalidCertificate(CertificateError::Revoked),
+        );
+
+        // Issuer not CRL signer errors should be turned into IssuerInvalidForCrl
+        assert_eq!(
+            pki_error(webpki::Error::IssuerNotCrlSigner),
+            Error::InvalidCertRevocationList(CertRevocationListError::IssuerInvalidForCrl)
         );
     }
 }
