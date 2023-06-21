@@ -160,7 +160,42 @@ impl ResolvesServerCertUsingSni {
             .map_err(|_| Error::General("Bad DNS name".into()))
             .map(|dns| dns.to_lowercase_owned())?;
 
-        ck.cross_check_end_entity_cert(Some(&checked_name.borrow()))?;
+        // Check the certificate chain for validity:
+        // - it should be non-empty list
+        // - the first certificate should be parsable as a x509v3,
+        // - the first certificate should quote the given server name
+        //   (if provided)
+        //
+        // These checks are not security-sensitive.  They are the
+        // *server* attempting to detect accidental misconfiguration.
+
+        // Always reject an empty certificate chain.
+        let end_entity_cert = ck.end_entity_cert().map_err(|_| {
+            Error::General("No end-entity certificate in certificate chain".to_string())
+        })?;
+
+        // Reject syntactically-invalid end-entity certificates.
+        let end_entity_cert =
+            webpki::EndEntityCert::try_from(end_entity_cert.as_ref()).map_err(|_| {
+                Error::General(
+                    "End-entity certificate in certificate chain is syntactically invalid"
+                        .to_string(),
+                )
+            })?;
+
+        // Note that this doesn't fully validate that the certificate is valid; it only validates that the name is one
+        // that the certificate is valid for, if the certificate is
+        // valid.
+        let general_error =
+            || Error::General("The server certificate is not valid for the given name".to_string());
+
+        let name = webpki::DnsNameRef::try_from_ascii(checked_name.as_ref().as_bytes())
+            .map_err(|_| general_error())?;
+
+        end_entity_cert
+            .verify_is_valid_for_subject_name(webpki::SubjectNameRef::DnsName(name))
+            .map_err(|_| general_error())?;
+
         let as_str: &str = checked_name.as_ref();
         self.by_name
             .insert(as_str.to_string(), Arc::new(ck));
