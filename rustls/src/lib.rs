@@ -440,7 +440,8 @@ pub mod server {
     mod tls13;
 
     pub use crate::verify::{
-        AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
+        AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, CertRevocationList,
+        NoClientAuth,
     };
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;

@@ -304,7 +304,7 @@ fn make_server_config(
             for root in roots {
                 client_auth_roots.add(&root).unwrap();
             }
-            Arc::new(AllowAnyAuthenticatedClient::new(client_auth_roots))
+            Arc::new(AllowAnyAuthenticatedClient::new(client_auth_roots, Vec::default()).unwrap())
         }
         ClientAuth::No => NoClientAuth::boxed(),
     };

@@ -284,7 +284,8 @@ pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
 pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
     let client_auth_roots = get_client_root_store(kt);
 
-    let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots);
+    // TODO(@cpu): allow building test configuration with CRLs.
+    let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots, Vec::default()).unwrap();
 
     ServerConfig::builder()
         .with_safe_defaults()

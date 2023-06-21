@@ -558,10 +558,16 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         for root in roots {
             client_auth_roots.add(&root).unwrap();
         }
+        // TODO(@cpu): Parse CRLs from Args.
+        let crls = Vec::default();
         if args.flag_require_auth {
-            AllowAnyAuthenticatedClient::new(client_auth_roots).boxed()
+            AllowAnyAuthenticatedClient::new(client_auth_roots, crls)
+                .expect("invalid client auth config")
+                .boxed()
         } else {
-            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots).boxed()
+            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots, crls)
+                .expect("invalid client auth config")
+                .boxed()
         }
     } else {
         NoClientAuth::boxed()

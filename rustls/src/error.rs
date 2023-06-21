@@ -66,6 +66,10 @@ pub enum Error {
     /// implementation.
     InvalidCertificate(CertificateError),
 
+    /// A provided certificate revocation list (CRL) was invalid.
+    // TODO(@cpu): provide more detail, maybe with a sub-enum, or by exposing webpki::Error?
+    InvalidCrl,
+
     /// The presented SCT(s) were invalid.
     InvalidSct(sct::Error),
 
@@ -418,6 +422,9 @@ impl fmt::Display for Error {
             Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
             Self::InvalidCertificate(ref err) => {
                 write!(f, "invalid peer certificate: {:?}", err)
+            }
+            Self::InvalidCrl => {
+                write!(f, "invalid certificate revocation list")
             }
             Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),

@@ -522,26 +522,46 @@ fn prepare<'a, 'b>(
     Ok((cert, intermediates, trustroots))
 }
 
+/// A DER encoded Certificate Revocation List (CRL).
+pub struct CertRevocationList(pub Vec<u8>);
+
+impl CertRevocationList {
+    /// Parse the CRL DER, yielding a [`webpki::CertRevocationList`] or an error if the CRL
+    /// is malformed, or uses unsupported features.
+    pub fn parse(&self) -> Result<webpki::CertRevocationList, Error> {
+        // TODO(@cpu): Revisit map_err error specificity.
+        webpki::CertRevocationList::from_der(&self.0).map_err(|_| Error::InvalidCrl)
+    }
+}
+
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
-/// certificate, without any name checking.
+/// certificate, without any name checking. Optionally, client certificates will
+/// have their revocation status checked using the DER encoded CRLs provided.
 pub struct AllowAnyAuthenticatedClient {
     roots: RootCertStore,
     subjects: Vec<DistinguishedName>,
+    crls: Vec<CertRevocationList>,
 }
 
 impl AllowAnyAuthenticatedClient {
     /// Construct a new `AllowAnyAuthenticatedClient`.
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn new(roots: RootCertStore) -> Self {
-        Self {
+    /// `crls` is an optional list of DER encoded CRLs to use for certificate revocation checking.
+    pub fn new(roots: RootCertStore, crls: Vec<CertRevocationList>) -> Result<Self, Error> {
+        // Verify that all CRLs can parse successfully ahead of needing to use them.
+        crls.iter()
+            .map(|crl| crl.parse())
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
             subjects: roots
                 .roots
                 .iter()
                 .map(|r| r.subject().clone())
                 .collect(),
             roots,
-        }
+            crls,
+        })
     }
 
     /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
@@ -569,13 +589,21 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
+        let crls = self
+            .crls
+            .iter()
+            .map(|crl| crl.parse())
+            .collect::<Result<Vec<_>, _>>()?;
+        let crls = crls
+            .iter()
+            .collect::<Vec<&webpki::CertRevocationList>>();
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
         cert.verify_is_valid_tls_client_cert(
             SUPPORTED_SIG_ALGS,
             &webpki::TlsClientTrustAnchors(&trustroots),
             &chain,
             now,
-            &[], // TODO(@cpu): provide CRLs as appropriate.
+            crls.as_slice(),
         )
         .map_err(pki_error)
         .map(|_| ClientCertVerified::assertion())
@@ -596,10 +624,11 @@ impl AllowAnyAnonymousOrAuthenticatedClient {
     /// Construct a new `AllowAnyAnonymousOrAuthenticatedClient`.
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn new(roots: RootCertStore) -> Self {
-        Self {
-            inner: AllowAnyAuthenticatedClient::new(roots),
-        }
+    /// `crls` is an optional list of DER encoded CRLs to use for certificate revocation checking.
+    pub fn new(roots: RootCertStore, crls: Vec<CertRevocationList>) -> Result<Self, Error> {
+        Ok(Self {
+            inner: AllowAnyAuthenticatedClient::new(roots, crls)?,
+        })
     }
 
     /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
@@ -643,6 +672,7 @@ fn pki_error(error: webpki::Error) -> Error {
         CertExpired | InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
         CertNotValidForName => CertificateError::NotValidForName.into(),
+        CertRevoked => CertificateError::Revoked.into(),
 
         InvalidSignatureForPublicKey
         | UnsupportedSignatureAlgorithm
