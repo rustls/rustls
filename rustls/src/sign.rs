@@ -1,3 +1,4 @@
+use crate::dns_name;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
 use crate::key;
@@ -80,7 +81,7 @@ impl CertifiedKey {
     /// *server* attempting to detect accidental misconfiguration.
     pub(crate) fn cross_check_end_entity_cert(
         &self,
-        name: Option<webpki::DnsNameRef>,
+        name: Option<&dns_name::DnsNameRef>,
     ) -> Result<(), Error> {
         // Always reject an empty certificate chain.
         let end_entity_cert = self
@@ -105,16 +106,20 @@ impl CertifiedKey {
             // certificate is valid; it only validates that the name is one
             // that the certificate is valid for, if the certificate is
             // valid.
-            if end_entity_cert
-                .verify_is_valid_for_subject_name(webpki::SubjectNameRef::DnsName(name))
-                .is_err()
-            {
-                return Err(Error::General(
+            let general_error = || {
+                Error::General(
                     "The server certificate is not \
                                              valid for the given name"
                         .to_string(),
-                ));
-            }
+                )
+            };
+
+            let name = webpki::DnsNameRef::try_from_ascii(name.as_ref().as_bytes())
+                .map_err(|_| general_error())?;
+
+            end_entity_cert
+                .verify_is_valid_for_subject_name(webpki::SubjectNameRef::DnsName(name))
+                .map_err(|_| general_error())?;
         }
 
         Ok(())

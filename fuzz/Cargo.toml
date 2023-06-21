@@ -44,3 +44,7 @@ path = "fuzzers/client.rs"
 [[bin]]
 name = "server"
 path = "fuzzers/server.rs"
+
+[[bin]]
+name = "server_name"
+path = "fuzzers/server_name.rs"

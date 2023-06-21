@@ -203,26 +203,6 @@ impl fmt::Debug for dyn ServerCertVerifier {
     }
 }
 
-/// A type which encapsulates a string that is a syntactically valid DNS name.
-#[derive(Clone, Eq, Hash, PartialEq)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-pub struct DnsName(pub(crate) webpki::DnsName);
-
-impl AsRef<str> for DnsName {
-    fn as_ref(&self) -> &str {
-        AsRef::<str>::as_ref(&self.0)
-    }
-}
-
-impl fmt::Debug for DnsName {
-    // Workaround solution for ServerName debug formatting:
-    // Just show the string contents here, as verify::DnsName is only
-    // used in ServerName which has some more verbose debug output
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", &self.as_ref())
-    }
-}
-
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
@@ -378,7 +358,11 @@ impl ServerCertVerifier for WebPkiVerifier {
 
         match server_name {
             ServerName::DnsName(dns_name) => {
-                let name = webpki::SubjectNameRef::DnsName(dns_name.0.as_ref());
+                // unlikely error because dns_name::DnsNameRef and webpki::DnsNameRef
+                // should have the same encoding rules.
+                let dns_name = webpki::DnsNameRef::try_from_ascii_str(dns_name.as_ref())
+                    .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
+                let name = webpki::SubjectNameRef::DnsName(dns_name);
                 cert.verify_is_valid_for_subject_name(name)
                     .map_err(pki_error)
                     .map(|_| ServerCertVerified::assertion())

@@ -1,4 +1,5 @@
 #![allow(non_camel_case_types)]
+use crate::dns_name::{DnsName, DnsNameRef};
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::InvalidMessage;
 use crate::key;
@@ -209,41 +210,36 @@ impl TlsListElement for SignatureScheme {
 
 #[derive(Clone, Debug)]
 pub enum ServerNamePayload {
-    // Stored twice, bytes so we can round-trip, and DnsName for use
-    HostName((PayloadU16, webpki::DnsName)),
+    HostName(DnsName),
     Unknown(Payload),
 }
 
 impl ServerNamePayload {
-    pub fn new_hostname(hostname: webpki::DnsName) -> Self {
-        let raw = {
-            let s: &str = hostname.as_ref().into();
-            PayloadU16::new(s.as_bytes().into())
-        };
-        Self::HostName((raw, hostname))
+    pub fn new_hostname(hostname: DnsName) -> Self {
+        Self::HostName(hostname)
     }
 
     fn read_hostname(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let raw = PayloadU16::read(r)?;
-        let dns_name = {
-            match webpki::DnsNameRef::try_from_ascii(&raw.0) {
-                Ok(dns_name) => dns_name.into(),
-                Err(_) => {
-                    warn!(
-                        "Illegal SNI hostname received {:?}",
-                        String::from_utf8_lossy(&raw.0)
-                    );
-                    return Err(InvalidMessage::InvalidServerName);
-                }
-            }
-        };
 
-        Ok(Self::HostName((raw, dns_name)))
+        match DnsName::try_from_ascii(&raw.0) {
+            Ok(dns_name) => Ok(Self::HostName(dns_name)),
+            Err(_) => {
+                warn!(
+                    "Illegal SNI hostname received {:?}",
+                    String::from_utf8_lossy(&raw.0)
+                );
+                Err(InvalidMessage::InvalidServerName)
+            }
+        }
     }
 
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            Self::HostName((ref r, _)) => r.encode(bytes),
+            Self::HostName(ref name) => {
+                (name.as_ref().len() as u16).encode(bytes);
+                bytes.extend_from_slice(name.as_ref().as_bytes());
+            }
             Self::Unknown(ref r) => r.encode(bytes),
         }
     }
@@ -279,7 +275,7 @@ impl TlsListElement for ServerName {
 
 pub trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
-    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef>;
+    fn get_single_hostname(&self) -> Option<DnsNameRef>;
 }
 
 impl ConvertServerNameList for [ServerName] {
@@ -296,10 +292,10 @@ impl ConvertServerNameList for [ServerName] {
         false
     }
 
-    fn get_single_hostname(&self) -> Option<webpki::DnsNameRef> {
-        fn only_dns_hostnames(name: &ServerName) -> Option<webpki::DnsNameRef> {
-            if let ServerNamePayload::HostName((_, ref dns)) = name.payload {
-                Some(dns.as_ref())
+    fn get_single_hostname(&self) -> Option<DnsNameRef> {
+        fn only_dns_hostnames(name: &ServerName) -> Option<DnsNameRef> {
+            if let ServerNamePayload::HostName(ref dns) = name.payload {
+                Some(dns.borrow())
             } else {
                 None
             }
@@ -667,14 +663,14 @@ impl Codec for ClientExtension {
     }
 }
 
-fn trim_hostname_trailing_dot_for_sni(dns_name: webpki::DnsNameRef) -> webpki::DnsName {
-    let dns_name_str: &str = dns_name.into();
+fn trim_hostname_trailing_dot_for_sni(dns_name: DnsNameRef) -> DnsName {
+    let dns_name_str: &str = dns_name.as_ref();
 
     // RFC6066: "The hostname is represented as a byte string using
     // ASCII encoding without a trailing dot"
     if dns_name_str.ends_with('.') {
         let trimmed = &dns_name_str[0..dns_name_str.len() - 1];
-        webpki::DnsNameRef::try_from_ascii_str(trimmed)
+        DnsNameRef::try_from(trimmed)
             .unwrap()
             .to_owned()
     } else {
@@ -684,7 +680,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: webpki::DnsNameRef) -> webpki::D
 
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
-    pub fn make_sni(dns_name: webpki::DnsNameRef) -> Self {
+    pub fn make_sni(dns_name: DnsNameRef) -> Self {
         let name = ServerName {
             typ: ServerNameType::HostName,
             payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),

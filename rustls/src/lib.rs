@@ -318,6 +318,7 @@ mod anchors;
 mod cipher;
 mod common_state;
 mod conn;
+mod dns_name;
 mod error;
 mod hash_hs;
 mod limited_cache;
@@ -405,11 +406,11 @@ pub mod client {
     mod tls12;
     mod tls13;
 
+    pub use crate::dns_name::InvalidDnsNameError;
     pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
     pub use client_conn::{
         ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
-        InvalidDnsNameError, ResolvesClientCert, Resumption, ServerName, Tls12Resumption,
-        WriteEarlyData,
+        ResolvesClientCert, Resumption, ServerName, Tls12Resumption, WriteEarlyData,
     };
     pub use handy::ClientSessionMemoryCache;
 
@@ -451,7 +452,9 @@ pub mod server {
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
 
     #[cfg(feature = "dangerous_configuration")]
-    pub use crate::verify::{ClientCertVerified, ClientCertVerifier, DnsName};
+    pub use crate::dns_name::DnsName;
+    #[cfg(feature = "dangerous_configuration")]
+    pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
 }
 
 pub use server::{ServerConfig, ServerConnection};
