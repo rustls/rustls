@@ -1,3 +1,4 @@
+use crate::dns_name;
 use crate::error::Error;
 use crate::key;
 use crate::limited_cache;
@@ -155,12 +156,12 @@ impl ResolvesServerCertUsingSni {
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
     pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
-        let checked_name = webpki::DnsNameRef::try_from_ascii_str(name)
-            .map_err(|_| Error::General("Bad DNS name".into()))?
-            .to_owned();
+        let checked_name = dns_name::DnsNameRef::try_from(name)
+            .map_err(|_| Error::General("Bad DNS name".into()))
+            .map(|dns| dns.to_lowercase_owned())?;
 
-        ck.cross_check_end_entity_cert(Some(checked_name.as_ref()))?;
-        let as_str: &str = checked_name.as_ref().into();
+        ck.cross_check_end_entity_cert(Some(&checked_name.borrow()))?;
+        let as_str: &str = checked_name.as_ref();
         self.by_name
             .insert(as_str.to_string(), Arc::new(ck));
         Ok(())
@@ -268,7 +269,7 @@ mod test {
     #[test]
     fn test_resolvesservercertusingsni_handles_unknown_name() {
         let rscsni = ResolvesServerCertUsingSni::new();
-        let name = webpki::DnsNameRef::try_from_ascii_str("hello.com")
+        let name = dns_name::DnsNameRef::try_from("hello.com")
             .unwrap()
             .to_owned();
         assert!(rscsni

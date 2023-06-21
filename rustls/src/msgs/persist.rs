@@ -1,3 +1,4 @@
+use crate::dns_name;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::key;
@@ -254,7 +255,7 @@ pub type ServerSessionKey = SessionId;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {
-    pub sni: Option<webpki::DnsName>,
+    pub sni: Option<dns_name::DnsName>,
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
@@ -271,7 +272,7 @@ impl Codec for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let Some(ref sni) = self.sni {
             1u8.encode(bytes);
-            let sni_bytes: &str = sni.as_ref().into();
+            let sni_bytes: &str = sni.as_ref();
             PayloadU8::new(Vec::from(sni_bytes)).encode(bytes);
         } else {
             0u8.encode(bytes);
@@ -302,12 +303,12 @@ impl Codec for ServerSessionValue {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
-            let dns_name = match webpki::DnsNameRef::try_from_ascii(&dns_name.0) {
+            let dns_name = match dns_name::DnsName::try_from_ascii(&dns_name.0) {
                 Ok(dns_name) => dns_name,
                 Err(_) => return Err(InvalidMessage::InvalidServerName),
             };
 
-            Some(dns_name.into())
+            Some(dns_name)
         } else {
             None
         };
@@ -350,7 +351,7 @@ impl Codec for ServerSessionValue {
 
 impl ServerSessionValue {
     pub fn new(
-        sni: Option<&webpki::DnsName>,
+        sni: Option<&dns_name::DnsName>,
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: Vec<u8>,
