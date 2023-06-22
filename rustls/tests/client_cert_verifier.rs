@@ -9,13 +9,13 @@ use crate::common::{
     make_client_config_with_versions, make_client_config_with_versions_with_auth,
     make_pair_for_arc_configs, server_name, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
-use rustls::client::WebPkiServerVerifier;
+use rustls::client::{HandshakeSignatureValid, WebPkiServerVerifier};
 use rustls::crypto::ring::Ring;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
-    AlertDescription, Certificate, ClientConnection, Error, InvalidMessage, ServerConfig,
-    ServerConnection, SignatureScheme,
+    AlertDescription, Certificate, ClientConnection, DigitallySignedStruct, Error, InvalidMessage,
+    ServerConfig, ServerConnection, SignatureScheme,
 };
 use std::sync::Arc;
 
@@ -200,11 +200,29 @@ impl ClientCertVerifier for MockClientVerifier {
         (self.verified)()
     }
 
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+    }
+
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         if let Some(schemes) = &self.offered_schemes {
             schemes.clone()
         } else {
-            WebPkiServerVerifier::verification_schemes()
+            WebPkiServerVerifier::default_supported_verify_schemes()
         }
     }
 }
