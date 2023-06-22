@@ -1,4 +1,5 @@
 use crate::client;
+use crate::crypto::ring;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::limited_cache;
@@ -182,7 +183,7 @@ impl AlwaysResolvesClientCert {
         chain: Vec<CertificateDer<'static>>,
         priv_key: &PrivateKeyDer<'_>,
     ) -> Result<Self, Error> {
-        let key = sign::any_supported_type(priv_key)
+        let key = ring::sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;
         Ok(Self(Arc::new(sign::CertifiedKey::new(chain, key))))
     }
