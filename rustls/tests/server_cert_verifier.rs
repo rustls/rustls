@@ -262,7 +262,7 @@ impl Default for MockServerVerifier {
             cert_rejection_error: None,
             tls12_signature_error: None,
             tls13_signature_error: None,
-            signature_schemes: WebPkiServerVerifier::verification_schemes(),
+            signature_schemes: WebPkiServerVerifier::default_supported_verify_schemes(),
         }
     }
 }

@@ -474,8 +474,7 @@ fn test_config_builders_debug() {
 /// Test that the server handles combination of `offer_client_auth()` returning true
 /// and `client_auth_mandatory` returning `Some(false)`. This exercises both the
 /// client's and server's ability to "recover" from the server asking for a client
-/// certificate and not being given one. This also covers the implementation
-/// of `AllowAnyAnonymousOrAuthenticatedClient`.
+/// certificate and not being given one.
 #[test]
 fn server_allow_any_anonymous_or_authenticated_client() {
     let kt = KeyType::Rsa;

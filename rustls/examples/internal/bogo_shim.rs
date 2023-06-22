@@ -4,7 +4,9 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use rustls::client::{ClientConfig, ClientConnection, Resumption};
+use rustls::client::{
+    ClientConfig, ClientConnection, HandshakeSignatureValid, Resumption, WebPkiServerVerifier,
+};
 use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Codec;
@@ -12,9 +14,10 @@ use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
 use rustls::{
     self, client, kx_group, server, sign, version, AlertDescription, Certificate, CertificateError,
-    Connection, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, PrivateKey, ProtocolVersion, ServerName, Side, SignatureAlgorithm,
-    SignatureScheme, SupportedKxGroup, SupportedProtocolVersion, Ticketer, ALL_KX_GROUPS,
+    Connection, DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup,
+    PeerIncompatible, PeerMisbehaved, PrivateKey, ProtocolVersion, ServerName, Side,
+    SignatureAlgorithm, SignatureScheme, SupportedKxGroup, SupportedProtocolVersion, Ticketer,
+    ALL_KX_GROUPS,
 };
 
 use base64::prelude::{Engine, BASE64_STANDARD};
@@ -211,6 +214,28 @@ impl server::ClientCertVerifier for DummyClientAuth {
     ) -> Result<server::ClientCertVerified, Error> {
         Ok(server::ClientCertVerified::assertion())
     }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        WebPkiServerVerifier::default_supported_verify_schemes()
+    }
 }
 
 struct DummyServerAuth {}
@@ -225,6 +250,28 @@ impl client::ServerCertVerifier for DummyServerAuth {
         _now: SystemTime,
     ) -> Result<client::ServerCertVerified, Error> {
         Ok(client::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        WebPkiServerVerifier::default_supported_verify_schemes()
     }
 }
 

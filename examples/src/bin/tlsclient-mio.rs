@@ -338,6 +338,9 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
 
 #[cfg(feature = "dangerous_configuration")]
 mod danger {
+    use rustls::client::{HandshakeSignatureValid, WebPkiServerVerifier};
+    use rustls::DigitallySignedStruct;
+
     pub struct NoCertificateVerification {}
 
     impl rustls::client::ServerCertVerifier for NoCertificateVerification {
@@ -350,6 +353,28 @@ mod danger {
             _now: std::time::SystemTime,
         ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
             Ok(rustls::client::ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::Certificate,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::Certificate,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            WebPkiServerVerifier::default_supported_verify_schemes()
         }
     }
 }
