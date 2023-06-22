@@ -1,4 +1,4 @@
-use crate::dns_name;
+use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::key;
@@ -255,7 +255,7 @@ pub type ServerSessionKey = SessionId;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {
-    pub sni: Option<dns_name::DnsName>,
+    pub sni: Option<DnsName>,
     pub version: ProtocolVersion,
     pub cipher_suite: CipherSuite,
     pub master_secret: PayloadU8,
@@ -303,7 +303,7 @@ impl Codec for ServerSessionValue {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
-            let dns_name = match dns_name::DnsName::try_from_ascii(&dns_name.0) {
+            let dns_name = match DnsName::try_from_ascii(&dns_name.0) {
                 Ok(dns_name) => dns_name,
                 Err(_) => return Err(InvalidMessage::InvalidServerName),
             };
@@ -351,7 +351,7 @@ impl Codec for ServerSessionValue {
 
 impl ServerSessionValue {
     pub fn new(
-        sni: Option<&dns_name::DnsName>,
+        sni: Option<&DnsName>,
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: Vec<u8>,

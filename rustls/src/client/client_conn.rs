@@ -1,7 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
-use crate::dns_name;
+use crate::dns_name::{DnsName, DnsNameRef, InvalidDnsNameError};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kx::SupportedKxGroup;
@@ -339,7 +339,7 @@ pub enum ServerName {
     /// The server is identified by a DNS name.  The name
     /// is sent in the TLS Server Name Indication (SNI)
     /// extension.
-    DnsName(dns_name::DnsName),
+    DnsName(DnsName),
 
     /// The server is identified by an IP address. SNI is not
     /// done.
@@ -365,7 +365,7 @@ impl ServerName {
     /// Return the name that should go in the SNI extension.
     /// If [`None`] is returned, the SNI extension is not included
     /// in the handshake.
-    pub(crate) fn for_sni(&self) -> Option<dns_name::DnsNameRef> {
+    pub(crate) fn for_sni(&self) -> Option<DnsNameRef> {
         match self {
             Self::DnsName(dns_name) => Some(dns_name.borrow()),
             Self::IpAddress(_) => None,
@@ -376,13 +376,13 @@ impl ServerName {
 /// Attempt to make a ServerName from a string by parsing
 /// it as a DNS name.
 impl TryFrom<&str> for ServerName {
-    type Error = dns_name::InvalidDnsNameError;
+    type Error = InvalidDnsNameError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match dns_name::DnsNameRef::try_from(s) {
+        match DnsNameRef::try_from(s) {
             Ok(dns) => Ok(Self::DnsName(dns.to_owned())),
-            Err(dns_name::InvalidDnsNameError) => match s.parse() {
+            Err(InvalidDnsNameError) => match s.parse() {
                 Ok(ip) => Ok(Self::IpAddress(ip)),
-                Err(_) => Err(dns_name::InvalidDnsNameError),
+                Err(_) => Err(InvalidDnsNameError),
             },
         }
     }

@@ -1,4 +1,4 @@
-use crate::dns_name;
+use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::key;
 use crate::limited_cache;
@@ -156,7 +156,7 @@ impl ResolvesServerCertUsingSni {
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
     pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
-        let checked_name = dns_name::DnsNameRef::try_from(name)
+        let checked_name = DnsNameRef::try_from(name)
             .map_err(|_| Error::General("Bad DNS name".into()))
             .map(|dns| dns.to_lowercase_owned())?;
 
@@ -304,7 +304,7 @@ mod test {
     #[test]
     fn test_resolvesservercertusingsni_handles_unknown_name() {
         let rscsni = ResolvesServerCertUsingSni::new();
-        let name = dns_name::DnsNameRef::try_from("hello.com")
+        let name = DnsNameRef::try_from("hello.com")
             .unwrap()
             .to_owned();
         assert!(rscsni
