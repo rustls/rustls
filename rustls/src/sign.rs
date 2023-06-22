@@ -60,8 +60,10 @@ impl CertifiedKey {
     }
 
     /// The end-entity certificate.
-    pub fn end_entity_cert(&self) -> Result<&key::Certificate, SignError> {
-        self.cert.get(0).ok_or(SignError(()))
+    pub fn end_entity_cert(&self) -> Result<&key::Certificate, Error> {
+        self.cert
+            .get(0)
+            .ok_or(Error::NoCertificatesPresented)
     }
 }
 
