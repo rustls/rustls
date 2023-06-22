@@ -32,7 +32,7 @@ use crate::tls13::key_schedule::{
 };
 use crate::tls13::Tls13CipherSuite;
 use crate::verify::{self, DigitallySignedStruct};
-use crate::{sign, KeyLog};
+use crate::KeyLog;
 
 use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
@@ -550,14 +550,13 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateRequest
             ));
         }
 
-        let tls13_sign_schemes = sign::supported_sign_tls13();
         let no_sigschemes = Vec::new();
         let compat_sigschemes = certreq
             .get_sigalgs_extension()
             .unwrap_or(&no_sigschemes)
             .iter()
             .cloned()
-            .filter(|scheme| tls13_sign_schemes.contains(scheme))
+            .filter(SignatureScheme::supported_in_tls13)
             .collect::<Vec<SignatureScheme>>();
 
         if compat_sigschemes.is_empty() {

@@ -376,19 +376,6 @@ impl Signer for Ed25519Signer {
     }
 }
 
-/// The set of schemes we support for signatures and
-/// that are allowed for TLS1.3.
-pub fn supported_sign_tls13() -> &'static [SignatureScheme] {
-    &[
-        SignatureScheme::ECDSA_NISTP384_SHA384,
-        SignatureScheme::ECDSA_NISTP256_SHA256,
-        SignatureScheme::RSA_PSS_SHA512,
-        SignatureScheme::RSA_PSS_SHA384,
-        SignatureScheme::RSA_PSS_SHA256,
-        SignatureScheme::ED25519,
-    ]
-}
-
 /// Errors while signing
 #[derive(Debug)]
 pub struct SignError(());
