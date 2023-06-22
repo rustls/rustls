@@ -10,7 +10,7 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-webpki = "0.22"
+webpki = { package = "rustls-webpki", version = "0.101.0", features = ["alloc", "std"] }
 
 [dependencies.rustls]
 path = "../rustls"
