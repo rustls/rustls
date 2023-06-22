@@ -169,8 +169,7 @@ mod client_hello {
                     )
                 })?;
 
-            let tls13_schemes = sign::supported_sign_tls13();
-            sigschemes_ext.retain(|scheme| tls13_schemes.contains(scheme));
+            sigschemes_ext.retain(SignatureScheme::supported_in_tls13);
 
             let shares_ext = client_hello
                 .get_keyshare_extension()

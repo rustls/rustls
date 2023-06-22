@@ -534,6 +534,25 @@ impl SignatureScheme {
             _ => SignatureAlgorithm::Unknown(0),
         }
     }
+
+    /// Whether a particular `SignatureScheme` is allowed for TLS protocol signatures
+    /// in TLS1.3.
+    ///
+    /// This prevents (eg) RSA_PKCS1_SHA256 being offered or accepted, even if our
+    /// verifier supports it for other protocol versions.
+    ///
+    /// See RFC8446 s4.2.3.
+    pub(crate) fn supported_in_tls13(&self) -> bool {
+        matches!(
+            *self,
+            Self::ECDSA_NISTP384_SHA384
+                | Self::ECDSA_NISTP256_SHA256
+                | Self::RSA_PSS_SHA512
+                | Self::RSA_PSS_SHA384
+                | Self::RSA_PSS_SHA256
+                | Self::ED25519
+        )
+    }
 }
 
 enum_builder! {
