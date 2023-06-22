@@ -21,6 +21,9 @@ pub(crate) mod suites;
 pub(crate) mod tls12;
 pub(crate) mod tls13;
 
+/// Using software keys for authentication.
+pub mod sign;
+
 /// Default crypto provider.
 #[derive(Debug)]
 pub struct Ring;
