@@ -1,6 +1,6 @@
 use crate::common_state::State;
 use crate::conn::ConnectionRandoms;
-use crate::dns_name;
+use crate::dns_name::DnsName;
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
 use crate::enums::{AlertDescription, HandshakeType, ProtocolVersion, SignatureScheme};
@@ -33,7 +33,7 @@ pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConne
 
 pub(super) fn can_resume(
     suite: SupportedCipherSuite,
-    sni: &Option<dns_name::DnsName>,
+    sni: &Option<DnsName>,
     using_ems: bool,
     resumedata: &persist::ServerSessionValue,
 ) -> bool {
@@ -477,7 +477,7 @@ pub(super) fn process_client_hello<'a>(
     // send an Illegal Parameter alert instead of the Internal Error alert
     // (or whatever) that we'd send if this were checked later or in a
     // different way.
-    let sni: Option<dns_name::DnsName> = match client_hello.get_sni_extension() {
+    let sni: Option<DnsName> = match client_hello.get_sni_extension() {
         Some(sni) => {
             if sni.has_duplicate_names_for_type() {
                 return Err(cx.common.send_fatal_alert(
