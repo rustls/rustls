@@ -575,6 +575,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
             &webpki::TlsClientTrustAnchors(&trustroots),
             &chain,
             now,
+            &[], // TODO(@cpu): provide CRLs as appropriate.
         )
         .map_err(pki_error)
         .map(|_| ClientCertVerified::assertion())

@@ -7,3 +7,6 @@ members = [
 ]
 exclude = ["admin/rustfmt"]
 resolver = "2"
+
+[patch.crates-io]
+webpki = { package='rustls-webpki', git = 'https://github.com/cpu/webpki.git', branch = 'cpu-crl-support-rustls-fixes' }
