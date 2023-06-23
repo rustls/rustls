@@ -89,22 +89,45 @@ fn validate(input: &[u8]) -> Result<(), InvalidDnsNameError> {
     /// "Labels must be 63 characters or less."
     const MAX_LABEL_LENGTH: usize = 63;
 
+    /// https://devblogs.microsoft.com/oldnewthing/20120412-00/?p=7873
+    const MAX_NAME_LENGTH: usize = 253;
+
+    if input.len() > MAX_NAME_LENGTH {
+        return Err(InvalidDnsNameError);
+    }
+
     for ch in input {
         state = match (state, ch) {
-            (Start | Next | Hyphen { .. }, b'.') => return Err(InvalidDnsNameError),
+            (Start | Next | NextAfterNumericOnly | Hyphen { .. }, b'.') => {
+                return Err(InvalidDnsNameError)
+            }
             (Subsequent { .. }, b'.') => Next,
-            (Subsequent { len }, _) if len >= MAX_LABEL_LENGTH => return Err(InvalidDnsNameError),
-            (Start | Next, b'a'..=b'z' | b'A'..=b'Z') => Subsequent { len: 1 },
-            (Subsequent { len }, b'-') => Hyphen { len: len + 1 },
+            (NumericOnly { .. }, b'.') => NextAfterNumericOnly,
+            (Subsequent { len } | NumericOnly { len } | Hyphen { len }, _)
+                if len >= MAX_LABEL_LENGTH =>
+            {
+                return Err(InvalidDnsNameError)
+            }
+            (Start | Next | NextAfterNumericOnly, b'0'..=b'9') => NumericOnly { len: 1 },
+            (NumericOnly { len }, b'0'..=b'9') => NumericOnly { len: len + 1 },
+            (Start | Next | NextAfterNumericOnly, b'a'..=b'z' | b'A'..=b'Z' | b'_') => {
+                Subsequent { len: 1 }
+            }
+            (Subsequent { len } | NumericOnly { len } | Hyphen { len }, b'-') => {
+                Hyphen { len: len + 1 }
+            }
             (
-                Subsequent { len } | Hyphen { len },
-                b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'-' | b'0'..=b'9',
+                Subsequent { len } | NumericOnly { len } | Hyphen { len },
+                b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'0'..=b'9',
             ) => Subsequent { len: len + 1 },
             _ => return Err(InvalidDnsNameError),
         };
     }
 
-    if matches!(state, Start | Hyphen { .. }) {
+    if matches!(
+        state,
+        Start | Hyphen { .. } | NumericOnly { .. } | NextAfterNumericOnly
+    ) {
         return Err(InvalidDnsNameError);
     }
 
@@ -114,6 +137,8 @@ fn validate(input: &[u8]) -> Result<(), InvalidDnsNameError> {
 enum State {
     Start,
     Next,
+    NumericOnly { len: usize },
+    NextAfterNumericOnly,
     Subsequent { len: usize },
     Hyphen { len: usize },
 }
@@ -134,10 +159,11 @@ mod test {
         ("foo.bar.com", true),
         ("infix-hyphen-allowed.com", true),
         ("-prefixhypheninvalid.com", false),
+        ("suffixhypheninvalid--", false),
         ("suffixhypheninvalid-.com", false),
         ("foo.lastlabelendswithhyphen-", false),
         ("infix_underscore_allowed.com", true),
-        ("_prefixunderscoreinvalid.com", false),
+        ("_prefixunderscorevalid.com", true),
         ("labelendswithnumber1.bar.com", true),
         ("xn--bcher-kva.example", true),
         (
@@ -148,6 +174,33 @@ mod test {
             "sixtyfoursixtyfoursixtyfoursixtyfoursixtyfoursixtyfoursixtyfours.com",
             false,
         ),
+        (
+            "012345678901234567890123456789012345678901234567890123456789012.com",
+            true,
+        ),
+        (
+            "0123456789012345678901234567890123456789012345678901234567890123.com",
+            false,
+        ),
+        (
+            "01234567890123456789012345678901234567890123456789012345678901-.com",
+            false,
+        ),
+        (
+            "012345678901234567890123456789012345678901234567890123456789012-.com",
+            false,
+        ),
+        ("numeric-only-final-label.1", false),
+        ("numeric-only-final-label.absolute.1.", false),
+        ("1starts-with-number.com", true),
+        ("1Starts-with-number.com", true),
+        ("1.2.3.4.com", true),
+        ("123.numeric-only-first-label", true),
+        ("a123b.com", true),
+        ("numeric-only-middle-label.4.com", true),
+        ("1000-sans.badssl.com", true),
+        ("twohundredandfiftythreecharacters.twohundredandfiftythreecharacters.twohundredandfiftythreecharacters.twohundredandfiftythreecharacters.twohundredandfiftythreecharacters.twohundredandfiftythreecharacters.twohundredandfiftythreecharacters.twohundredandfi", true),
+        ("twohundredandfiftyfourcharacters.twohundredandfiftyfourcharacters.twohundredandfiftyfourcharacters.twohundredandfiftyfourcharacters.twohundredandfiftyfourcharacters.twohundredandfiftyfourcharacters.twohundredandfiftyfourcharacters.twohundredandfiftyfourc", false),
     ];
 
     #[test]
