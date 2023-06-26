@@ -307,6 +307,59 @@ impl fmt::Debug for dyn ClientCertVerifier {
     }
 }
 
+/// Verify that the end-entity certificate `end_entity` is valid and chains to at least one of the [OwnedTrustAnchor] in the `roots` [RootCertStore].
+///
+/// `intermediates` contains all certificates other than `end_entity` that
+/// were sent as part of the server's [Certificate] message. It is in the
+/// same order that the server sent them and may be empty.
+#[allow(unreachable_pub, dead_code)]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+pub fn verify_signed_by_trust_anchor(
+    end_entity: &Certificate,
+    roots: &RootCertStore,
+    intermediates: &[Certificate],
+    now: SystemTime,
+) -> Result<(), Error> {
+    let (cert, chain, trustroots) = prepare(end_entity, intermediates, roots)?;
+    let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
+
+    cert.verify_is_valid_tls_server_cert(
+        SUPPORTED_SIG_ALGS,
+        &webpki::TlsServerTrustAnchors(&trustroots),
+        &chain,
+        webpki_now,
+    )
+    .map_err(pki_error)
+    .map(|_| ())
+}
+
+/// Verify that the `end_entity` has a name or alternative name matching the `server_name`
+#[allow(unreachable_pub, dead_code)]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+pub fn verify_server_name(end_entity: &Certificate, server_name: &ServerName) -> Result<(), Error> {
+    let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref()).map_err(pki_error)?;
+
+    match server_name {
+        ServerName::DnsName(dns_name) => {
+            // unlikely error because dns_name::DnsNameRef and webpki::DnsNameRef
+            // should have the same encoding rules.
+            let dns_name = webpki::DnsNameRef::try_from_ascii_str(dns_name.as_ref())
+                .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
+            let name = webpki::SubjectNameRef::DnsName(dns_name);
+            cert.verify_is_valid_for_subject_name(name)
+                .map_err(pki_error)?;
+        }
+        ServerName::IpAddress(ip_addr) => {
+            let ip_addr = webpki::IpAddr::from(*ip_addr);
+            cert.verify_is_valid_for_subject_name(webpki::SubjectNameRef::IpAddress(
+                webpki::IpAddrRef::from(&ip_addr),
+            ))
+            .map_err(pki_error)?;
+        }
+    }
+    Ok(())
+}
+
 impl ServerCertVerifier for WebPkiVerifier {
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a  trusted `RootCertStore` CA
@@ -323,15 +376,13 @@ impl ServerCertVerifier for WebPkiVerifier {
         let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
         let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
-        let cert = cert
-            .verify_is_valid_tls_server_cert(
-                SUPPORTED_SIG_ALGS,
-                &webpki::TlsServerTrustAnchors(&trustroots),
-                &chain,
-                webpki_now,
-            )
-            .map_err(pki_error)
-            .map(|_| cert)?;
+        cert.verify_is_valid_tls_server_cert(
+            SUPPORTED_SIG_ALGS,
+            &webpki::TlsServerTrustAnchors(&trustroots),
+            &chain,
+            webpki_now,
+        )
+        .map_err(pki_error)?;
 
         if !ocsp_response.is_empty() {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());

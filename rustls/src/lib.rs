@@ -424,7 +424,8 @@ pub mod client {
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{
-        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier,
+        verify_signed_by_trust_anchor, HandshakeSignatureValid, ServerCertVerified,
+        ServerCertVerifier, WebPkiVerifier,
     };
     #[cfg(feature = "dangerous_configuration")]
     pub use client_conn::danger::DangerousClientConfig;
