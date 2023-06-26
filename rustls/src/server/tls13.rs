@@ -27,6 +27,8 @@ use crate::server::ServerConfig;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::ticketer;
+use crate::tls13::construct_client_verify_message;
+use crate::tls13::construct_server_verify_message;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
 use crate::tls13::Tls13CipherSuite;
 use crate::verify;
@@ -786,7 +788,7 @@ mod client_hello {
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
-        let message = verify::construct_tls13_server_verify_message(&transcript.get_current_hash());
+        let message = construct_server_verify_message(&transcript.get_current_hash());
 
         let signer = signing_key
             .choose_scheme(schemes)
@@ -965,7 +967,7 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificateVerify<
             let handshake_hash = self.transcript.get_current_hash();
             self.transcript.abandon_client_auth();
             let certs = &self.client_cert;
-            let msg = verify::construct_tls13_client_verify_message(&handshake_hash);
+            let msg = construct_client_verify_message(&handshake_hash);
 
             self.config
                 .verifier

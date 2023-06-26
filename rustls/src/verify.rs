@@ -16,8 +16,6 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::DistinguishedName;
 use crate::server::ClientCertVerifierBuilder;
 
-use ring::digest::Digest;
-
 type SignatureAlgorithms = &'static [&'static dyn webpki::SignatureVerificationAlgorithm];
 
 /// Which signature verification mechanisms we support.  No particular
@@ -849,27 +847,6 @@ fn convert_alg_tls13(
         RSA_PSS_SHA512 => Ok(webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
         _ => Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into()),
     }
-}
-
-/// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_tls13_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
-    construct_tls13_verify_message(handshake_hash, b"TLS 1.3, client CertificateVerify\x00")
-}
-
-/// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_tls13_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
-    construct_tls13_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
-}
-
-fn construct_tls13_verify_message(
-    handshake_hash: &Digest,
-    context_string_with_0: &[u8],
-) -> Vec<u8> {
-    let mut msg = Vec::new();
-    msg.resize(64, 0x20u8);
-    msg.extend_from_slice(context_string_with_0);
-    msg.extend_from_slice(handshake_hash.as_ref());
-    msg
 }
 
 fn verify_tls13(

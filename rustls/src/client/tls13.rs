@@ -27,6 +27,8 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
+use crate::tls13::construct_client_verify_message;
+use crate::tls13::construct_server_verify_message;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleTraffic,
 };
@@ -689,7 +691,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateVerify<
             .config
             .verifier
             .verify_tls13_signature(
-                &verify::construct_tls13_server_verify_message(&handshake_hash),
+                &construct_server_verify_message(&handshake_hash),
                 &self.server_cert.cert_chain[0],
                 cert_verify,
             )
@@ -752,7 +754,7 @@ fn emit_certverify_tls13(
     signer: &dyn Signer,
     common: &mut CommonState,
 ) -> Result<(), Error> {
-    let message = verify::construct_tls13_client_verify_message(&transcript.get_current_hash());
+    let message = construct_client_verify_message(&transcript.get_current_hash());
 
     let scheme = signer.scheme();
     let sig = signer.sign(&message)?;

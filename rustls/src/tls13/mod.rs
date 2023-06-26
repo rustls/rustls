@@ -9,6 +9,7 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 
 use ring::aead;
+use ring::digest::Digest;
 
 use core::fmt;
 
@@ -197,4 +198,22 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         msg.version = ProtocolVersion::TLSv1_3;
         Ok(msg.into_plain_message())
     }
+}
+
+/// Constructs the signature message specified in section 4.4.3 of RFC8446.
+pub(crate) fn construct_client_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+    construct_verify_message(handshake_hash, b"TLS 1.3, client CertificateVerify\x00")
+}
+
+/// Constructs the signature message specified in section 4.4.3 of RFC8446.
+pub(crate) fn construct_server_verify_message(handshake_hash: &Digest) -> Vec<u8> {
+    construct_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
+}
+
+fn construct_verify_message(handshake_hash: &Digest, context_string_with_0: &[u8]) -> Vec<u8> {
+    let mut msg = Vec::new();
+    msg.resize(64, 0x20u8);
+    msg.extend_from_slice(context_string_with_0);
+    msg.extend_from_slice(handshake_hash.as_ref());
+    msg
 }
