@@ -1053,6 +1053,56 @@ fn client_auth_works() {
 }
 
 #[test]
+fn client_mandatory_auth_revocation_works() {
+    for kt in ALL_KEY_TYPES.iter() {
+        // Create a server configuration that includes a CRL that specifies the client certificate
+        // is revoked.
+        let crls = vec![kt.client_crl()];
+        let server_config = Arc::new(make_server_config_with_mandatory_client_auth_crls(
+            *kt, crls,
+        ));
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config = make_client_config_with_versions_with_auth(*kt, &[version]);
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+            // Because the client certificate is revoked, the handshake should fail.
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(
+                err,
+                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                    CertificateError::Revoked
+                )))
+            );
+        }
+    }
+}
+
+#[test]
+fn client_optional_auth_revocation_works() {
+    for kt in ALL_KEY_TYPES.iter() {
+        // Create a server configuration that includes a CRL that specifies the client certificate
+        // is revoked.
+        let crls = vec![kt.client_crl()];
+        let server_config = Arc::new(make_server_config_with_optional_client_auth(*kt, crls));
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config = make_client_config_with_versions_with_auth(*kt, &[version]);
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+            // Because the client certificate is revoked, the handshake should fail.
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(
+                err,
+                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                    CertificateError::Revoked
+                )))
+            );
+        }
+    }
+}
+
+#[test]
 fn client_error_is_sticky() {
     let (mut client, _) = make_pair(KeyType::Rsa);
     client
