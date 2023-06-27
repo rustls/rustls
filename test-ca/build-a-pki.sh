@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 set -xe
 
@@ -166,6 +166,33 @@ for kt in rsa ecdsa eddsa ; do
             -set_serial 789 \
             -extensions v3_client -extfile openssl.cnf
 
+  # Overwrite the CA state for each revocation - this avoids an 
+  # "already revoked" error since we're re-using serial numbers across
+  # key types.
+  echo -n '' > index.txt
+  echo '1000' > crlnumber
+
+  # Revoke the certificate in the openssl CA index. This produces a CRL but
+  # doesn't include the revoked certificate...
+  openssl ca \
+            -config ./crl-openssl.cnf \
+            -keyfile $kt/inter.key \
+            -cert $kt/inter.cert \
+            -gencrl \
+            -crldays 7 \
+            -revoke $kt/client.cert \
+            -crl_reason keyCompromise \
+            -out $kt/client.revoked.crl.pem
+
+  # Run -gencrl again to actually include the revoked certificate in the CRL.
+  openssl ca \
+            -config ./crl-openssl.cnf \
+            -keyfile $kt/inter.key \
+            -cert $kt/inter.cert \
+            -gencrl \
+            -crldays 7 \
+            -out $kt/client.revoked.crl.pem
+
   cat $kt/inter.cert $kt/ca.cert > $kt/end.chain
   cat $kt/end.cert $kt/inter.cert $kt/ca.cert > $kt/end.fullchain
 
@@ -174,3 +201,7 @@ for kt in rsa ecdsa eddsa ; do
 
   openssl asn1parse -in $kt/ca.cert -out $kt/ca.der > /dev/null
 done
+
+# Tidy up openssl CA state.
+rm index.txt* || true
+rm crlnumber* || true
