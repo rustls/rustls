@@ -1,0 +1,13 @@
+# The bare minimum OpenSSL config required to issue CRLs with 'openssl ca'
+
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+database  = ./index.txt
+crlnumber = ./crlnumber
+default_md  = default
+crl_extensions  = crl_ext
+
+[ crl_ext ]
+authorityKeyIdentifier=keyid:always
