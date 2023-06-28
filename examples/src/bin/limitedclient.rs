@@ -31,14 +31,14 @@ fn main() {
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
-    let server_name = "google.com".try_into().unwrap();
+    let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();
-    let mut sock = TcpStream::connect("google.com:443").unwrap();
+    let mut sock = TcpStream::connect("www.rust-lang.org:443").unwrap();
     let mut tls = rustls::Stream::new(&mut conn, &mut sock);
     tls.write_all(
         concat!(
             "GET / HTTP/1.1\r\n",
-            "Host: google.com\r\n",
+            "Host: www.rust-lang.org\r\n",
             "Connection: close\r\n",
             "Accept-Encoding: identity\r\n",
             "\r\n"
