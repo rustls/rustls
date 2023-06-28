@@ -40,6 +40,13 @@ pub(crate) struct Expander(Box<dyn hmac::Key>);
 #[derive(Clone)]
 pub(crate) struct OkmOneBlock(hmac::Tag);
 
+/// TODO: only required for quic tests
+impl From<&[u8]> for OkmOneBlock {
+    fn from(value: &[u8]) -> Self {
+        Self(hmac::Tag::new(value))
+    }
+}
+
 impl AsRef<[u8]> for OkmOneBlock {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()

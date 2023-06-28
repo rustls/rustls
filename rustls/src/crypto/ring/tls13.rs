@@ -13,6 +13,8 @@ use crate::suites::ConnectionTrafficSecrets;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 use crate::tls13::Tls13AeadAlgorithm;
 use crate::tls13::Tls13CipherSuite;
+#[cfg(feature = "quic")]
+use crate::{hkdf, quic};
 
 use ring::aead;
 
@@ -31,6 +33,8 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
     confidentiality_limit: u64::MAX,
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 36,
+    #[cfg(feature = "quic")]
+    quic: &RingQuicFactory(&ring::aead::CHACHA20_POLY1305, &ring::aead::quic::CHACHA20),
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
@@ -46,6 +50,8 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         confidentiality_limit: 1 << 23,
         #[cfg(feature = "quic")]
         integrity_limit: 1 << 52,
+        #[cfg(feature = "quic")]
+        quic: &RingQuicFactory(&ring::aead::AES_256_GCM, &aead::quic::AES_256),
     });
 
 /// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
@@ -63,6 +69,8 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
     confidentiality_limit: 1 << 23,
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 52,
+    #[cfg(feature = "quic")]
+    quic: &RingQuicFactory(&ring::aead::AES_128_GCM, &aead::quic::AES_128),
 };
 
 struct Tls13MessageEncrypter {
@@ -285,5 +293,32 @@ impl Tls13AeadAlgorithm for AeadAes256Gcm {
         };
 
         ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
+    }
+}
+
+#[cfg(feature = "quic")]
+struct RingQuicFactory(&'static aead::Algorithm, &'static aead::quic::Algorithm);
+
+#[cfg(feature = "quic")]
+impl quic::Algorithm for RingQuicFactory {
+    fn packet_key(
+        &self,
+        suite: &'static Tls13CipherSuite,
+        expander: &hkdf::Expander,
+        version: quic::Version,
+    ) -> Box<dyn quic::PacketKey> {
+        Box::new(super::quic::PacketKey::new(
+            suite, expander, version, self.0,
+        ))
+    }
+
+    fn header_protection_key(
+        &self,
+        expander: &hkdf::Expander,
+        version: quic::Version,
+    ) -> Box<dyn quic::HeaderProtectionKey> {
+        Box::new(super::quic::HeaderProtectionKey::new(
+            expander, version, self.1,
+        ))
     }
 }

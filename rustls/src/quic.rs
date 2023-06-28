@@ -1,17 +1,15 @@
 /// This module contains optional APIs for implementing QUIC TLS.
-use crate::cipher::{Iv, IvLen};
 use crate::client::{ClientConfig, ClientConnectionData, ServerName};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
 use crate::crypto::CryptoProvider;
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
+use crate::hkdf;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::server::{ServerConfig, ServerConnectionData};
-use crate::tls13::key_schedule::hkdf_expand;
-use crate::tls13::{Tls13CipherSuite, TLS13_AES_128_GCM_SHA256_INTERNAL};
-
-use ring::{aead, hkdf};
+use crate::tls13::key_schedule::hkdf_expand_one;
+use crate::tls13::Tls13CipherSuite;
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
@@ -379,6 +377,20 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
     }
 }
 
+pub(crate) trait Algorithm: Send + Sync {
+    fn packet_key(
+        &self,
+        suite: &'static Tls13CipherSuite,
+        secret: &hkdf::Expander,
+        version: Version,
+    ) -> Box<dyn PacketKey>;
+    fn header_protection_key(
+        &self,
+        secret: &hkdf::Expander,
+        version: Version,
+    ) -> Box<dyn HeaderProtectionKey>;
+}
+
 #[cfg(feature = "quic")]
 #[derive(Default)]
 pub(crate) struct Quic {
@@ -386,7 +398,7 @@ pub(crate) struct Quic {
     pub(crate) params: Option<Vec<u8>>,
     pub(crate) alert: Option<AlertDescription>,
     pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub(crate) early_secret: Option<ring::hkdf::Prk>,
+    pub(crate) early_secret: Option<hkdf::OkmOneBlock>,
     pub(crate) hs_secrets: Option<Secrets>,
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
@@ -429,12 +441,12 @@ impl Quic {
 }
 
 /// Secrets used to encrypt/decrypt traffic
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
-    client: hkdf::Prk,
+    pub(crate) client: hkdf::OkmOneBlock,
     /// Secret used to encrypt packets transmitted by the server
-    server: hkdf::Prk,
+    pub(crate) server: hkdf::OkmOneBlock,
     /// Cipher suite used with these secrets
     suite: &'static Tls13CipherSuite,
     side: Side,
@@ -443,8 +455,8 @@ pub struct Secrets {
 
 impl Secrets {
     pub(crate) fn new(
-        client: hkdf::Prk,
-        server: hkdf::Prk,
+        client: hkdf::OkmOneBlock,
+        server: hkdf::OkmOneBlock,
         suite: &'static Tls13CipherSuite,
         side: Side,
         version: Version,
@@ -465,13 +477,20 @@ impl Secrets {
         keys
     }
 
-    fn update(&mut self) {
-        let hkdf_alg = self.suite.hkdf_algorithm;
-        self.client = hkdf_expand(&self.client, hkdf_alg, self.version.key_update_label(), &[]);
-        self.server = hkdf_expand(&self.server, hkdf_alg, self.version.key_update_label(), &[]);
+    pub(crate) fn update(&mut self) {
+        self.client = hkdf_expand_one(
+            &hkdf::Expander::from_okm(&self.client, self.suite.hmac_provider),
+            self.version.key_update_label(),
+            &[],
+        );
+        self.server = hkdf_expand_one(
+            &hkdf::Expander::from_okm(&self.server, self.suite.hmac_provider),
+            self.version.key_update_label(),
+            &[],
+        );
     }
 
-    fn local_remote(&self) -> (&hkdf::Prk, &hkdf::Prk) {
+    fn local_remote(&self) -> (&hkdf::OkmOneBlock, &hkdf::OkmOneBlock) {
         match self.side {
             Side::Client => (&self.client, &self.server),
             Side::Server => (&self.server, &self.client),
@@ -482,35 +501,51 @@ impl Secrets {
 /// Keys used to communicate in a single direction
 pub struct DirectionalKeys {
     /// Encrypts or decrypts a packet's headers
-    pub header: HeaderProtectionKey,
+    pub header: Box<dyn HeaderProtectionKey>,
     /// Encrypts or decrypts the payload of a packet
-    pub packet: PacketKey,
+    pub packet: Box<dyn PacketKey>,
 }
 
 impl DirectionalKeys {
     pub(crate) fn new(
         suite: &'static Tls13CipherSuite,
-        secret: &hkdf::Prk,
+        secret: &hkdf::OkmOneBlock,
         version: Version,
     ) -> Self {
+        let expander = hkdf::Expander::from_okm(secret, suite.hmac_provider);
         Self {
-            header: HeaderProtectionKey::new(suite, secret, version),
-            packet: PacketKey::new(suite, secret, version),
+            header: suite
+                .quic
+                .header_protection_key(&expander, version),
+            packet: suite
+                .quic
+                .packet_key(suite, &expander, version),
         }
     }
 }
 
-/// A QUIC header protection key
-pub struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
+/// All AEADs we support have 16-byte tags.
+const TAG_LEN: usize = 16;
 
-impl HeaderProtectionKey {
-    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk, version: Version) -> Self {
-        todo!("have Tls13CipherSuite contain/generate header protection algorithm");
-        let alg = &aead::quic::AES_128;
+/// Authentication tag from an AEAD seal operation.
+pub struct Tag([u8; TAG_LEN]);
 
-        Self(hkdf_expand(secret, alg, version.header_key_label(), &[]))
+impl From<&[u8]> for Tag {
+    fn from(value: &[u8]) -> Self {
+        let mut array = [0u8; TAG_LEN];
+        array.copy_from_slice(value);
+        Self(array)
     }
+}
 
+impl AsRef<[u8]> for Tag {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// A QUIC header protection key
+pub trait HeaderProtectionKey {
     /// Adds QUIC Header Protection.
     ///
     /// `sample` must contain the sample of encrypted payload; see
@@ -531,15 +566,12 @@ impl HeaderProtectionKey {
     /// [Header Protection Application]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.1
     /// [Header Protection Sample]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.2
     /// [Packet Number Encoding and Decoding]: https://datatracker.ietf.org/doc/html/rfc9000#section-17.1
-    #[inline]
-    pub fn encrypt_in_place(
+    fn encrypt_in_place(
         &self,
         sample: &[u8],
         first: &mut u8,
         packet_number: &mut [u8],
-    ) -> Result<(), Error> {
-        self.xor_in_place(sample, first, packet_number, false)
-    }
+    ) -> Result<(), Error>;
 
     /// Removes QUIC Header Protection.
     ///
@@ -562,100 +594,19 @@ impl HeaderProtectionKey {
     /// [Header Protection Application]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.1
     /// [Header Protection Sample]: https://datatracker.ietf.org/doc/html/rfc9001#section-5.4.2
     /// [Packet Number Encoding and Decoding]: https://datatracker.ietf.org/doc/html/rfc9000#section-17.1
-    #[inline]
-    pub fn decrypt_in_place(
+    fn decrypt_in_place(
         &self,
         sample: &[u8],
         first: &mut u8,
         packet_number: &mut [u8],
-    ) -> Result<(), Error> {
-        self.xor_in_place(sample, first, packet_number, true)
-    }
-
-    fn xor_in_place(
-        &self,
-        sample: &[u8],
-        first: &mut u8,
-        packet_number: &mut [u8],
-        masked: bool,
-    ) -> Result<(), Error> {
-        // This implements [Header Protection Application] almost verbatim.
-
-        let mask = self
-            .0
-            .new_mask(sample)
-            .map_err(|_| Error::General("sample of invalid length".into()))?;
-
-        // The `unwrap()` will not panic because `new_mask` returns a
-        // non-empty result.
-        let (first_mask, pn_mask) = mask.split_first().unwrap();
-
-        // It is OK for the `mask` to be longer than `packet_number`,
-        // but a valid `packet_number` will never be longer than `mask`.
-        if packet_number.len() > pn_mask.len() {
-            return Err(Error::General("packet number too long".into()));
-        }
-
-        // Infallible from this point on. Before this point, `first` and
-        // `packet_number` are unchanged.
-
-        const LONG_HEADER_FORM: u8 = 0x80;
-        let bits = match *first & LONG_HEADER_FORM == LONG_HEADER_FORM {
-            true => 0x0f,  // Long header: 4 bits masked
-            false => 0x1f, // Short header: 5 bits masked
-        };
-
-        let first_plain = match masked {
-            // When unmasking, use the packet length bits after unmasking
-            true => *first ^ (first_mask & bits),
-            // When masking, use the packet length bits before masking
-            false => *first,
-        };
-        let pn_len = (first_plain & 0x03) as usize + 1;
-
-        *first ^= first_mask & bits;
-        for (dst, m) in packet_number
-            .iter_mut()
-            .zip(pn_mask)
-            .take(pn_len)
-        {
-            *dst ^= m;
-        }
-
-        Ok(())
-    }
+    ) -> Result<(), Error>;
 
     /// Expected sample length for the key's algorithm
-    #[inline]
-    pub fn sample_len(&self) -> usize {
-        self.0.algorithm().sample_len()
-    }
+    fn sample_len(&self) -> usize;
 }
 
 /// Keys to encrypt or decrypt the payload of a packet
-pub struct PacketKey {
-    /// Encrypts or decrypts a packet's payload
-    key: aead::LessSafeKey,
-    /// Computes unique nonces for each packet
-    iv: Iv,
-    /// The cipher suite used for this packet key
-    suite: &'static Tls13CipherSuite,
-}
-
-impl PacketKey {
-    fn new(suite: &'static Tls13CipherSuite, secret: &hkdf::Prk, version: Version) -> Self {
-        Self {
-            key: aead::LessSafeKey::new(hkdf_expand(
-                secret,
-                suite.common.aead_algorithm,
-                version.packet_key_label(),
-                &[],
-            )),
-            iv: hkdf_expand(secret, IvLen, version.packet_iv_label(), &[]),
-            suite,
-        }
-    }
-
+pub trait PacketKey {
     /// Encrypt a QUIC packet
     ///
     /// Takes a `packet_number`, used to derive the nonce; the packet `header`, which is used as
@@ -663,20 +614,12 @@ impl PacketKey {
     /// encryption succeeds.
     ///
     /// Fails iff the payload is longer than allowed by the cipher suite's AEAD algorithm.
-    pub fn encrypt_in_place(
+    fn encrypt_in_place(
         &self,
         packet_number: u64,
         header: &[u8],
         payload: &mut [u8],
-    ) -> Result<Tag, Error> {
-        let aad = aead::Aad::from(header);
-        let nonce = nonce_for(packet_number, &self.iv);
-        let tag = self
-            .key
-            .seal_in_place_separate_tag(nonce, aad, payload)
-            .map_err(|_| Error::EncryptError)?;
-        Ok(Tag(tag))
-    }
+    ) -> Result<Tag, Error>;
 
     /// Decrypt a QUIC packet
     ///
@@ -685,70 +628,49 @@ impl PacketKey {
     ///
     /// If the return value is `Ok`, the decrypted payload can be found in `payload`, up to the
     /// length found in the return value.
-    pub fn decrypt_in_place<'a>(
+    fn decrypt_in_place<'a>(
         &self,
         packet_number: u64,
         header: &[u8],
         payload: &'a mut [u8],
-    ) -> Result<&'a [u8], Error> {
-        let payload_len = payload.len();
-        let aad = aead::Aad::from(header);
-        let nonce = nonce_for(packet_number, &self.iv);
-        self.key
-            .open_in_place(nonce, aad, payload)
-            .map_err(|_| Error::DecryptError)?;
-
-        let plain_len = payload_len - self.key.algorithm().tag_len();
-        Ok(&payload[..plain_len])
-    }
+    ) -> Result<&'a [u8], Error>;
 
     /// Number of times the packet key can be used without sacrificing confidentiality
     ///
     /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-confidentiality-limit>.
-    #[inline]
-    pub fn confidentiality_limit(&self) -> u64 {
-        self.suite.confidentiality_limit
-    }
+    fn confidentiality_limit(&self) -> u64;
 
     /// Number of times the packet key can be used without sacrificing integrity
     ///
     /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-integrity-limit>.
-    #[inline]
-    pub fn integrity_limit(&self) -> u64 {
-        self.suite.integrity_limit
-    }
+    fn integrity_limit(&self) -> u64;
 
     /// Tag length for the underlying AEAD algorithm
-    #[inline]
-    pub fn tag_len(&self) -> usize {
-        self.key.algorithm().tag_len()
-    }
-}
-
-/// AEAD tag, must be appended to encrypted cipher text
-pub struct Tag(aead::Tag);
-
-impl AsRef<[u8]> for Tag {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
+    fn tag_len(&self) -> usize;
 }
 
 /// Packet protection keys for bidirectional 1-RTT communication
 pub struct PacketKeySet {
     /// Encrypts outgoing packets
-    pub local: PacketKey,
+    pub local: Box<dyn PacketKey>,
     /// Decrypts incoming packets
-    pub remote: PacketKey,
+    pub remote: Box<dyn PacketKey>,
 }
 
 impl PacketKeySet {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
+        let local_expander = hkdf::Expander::from_okm(local, secrets.suite.hmac_provider);
+        let remote_expander = hkdf::Expander::from_okm(remote, secrets.suite.hmac_provider);
         Self {
-            local: PacketKey::new(secrets.suite, local, secrets.version),
-            remote: PacketKey::new(secrets.suite, remote, secrets.version),
+            local: secrets
+                .suite
+                .quic
+                .packet_key(secrets.suite, &local_expander, secrets.version),
+            remote: secrets
+                .suite
+                .quic
+                .packet_key(secrets.suite, &remote_expander, secrets.version),
         }
     }
 }
@@ -763,17 +685,23 @@ pub struct Keys {
 
 impl Keys {
     /// Construct keys for use with initial packets
-    pub fn initial(version: Version, client_dst_connection_id: &[u8], side: Side) -> Self {
+    pub fn initial(
+        version: Version,
+        suite: &'static Tls13CipherSuite,
+        client_dst_connection_id: &[u8],
+        side: Side,
+    ) -> Self {
         const CLIENT_LABEL: &[u8] = b"client in";
         const SERVER_LABEL: &[u8] = b"server in";
         let salt = version.initial_salt();
-        let hs_secret = hkdf::Salt::new(hkdf::HKDF_SHA256, salt).extract(client_dst_connection_id);
+        let hs_secret =
+            hkdf::Extractor::with_salt(suite.hmac_provider, salt).extract(client_dst_connection_id);
 
         let secrets = Secrets {
             version,
-            client: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, CLIENT_LABEL, &[]),
-            server: hkdf_expand(&hs_secret, hkdf::HKDF_SHA256, SERVER_LABEL, &[]),
-            suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
+            client: hkdf_expand_one(&hs_secret, CLIENT_LABEL, &[]),
+            server: hkdf_expand_one(&hs_secret, SERVER_LABEL, &[]),
+            suite,
             side,
         };
         Self::new(&secrets)
@@ -817,16 +745,6 @@ pub enum KeyChange {
     },
 }
 
-/// Compute the nonce to use for encrypting or decrypting `packet_number`
-fn nonce_for(packet_number: u64, iv: &Iv) -> ring::aead::Nonce {
-    let mut out = [0; aead::NONCE_LEN];
-    out[4..].copy_from_slice(&packet_number.to_be_bytes());
-    for (out, inp) in out.iter_mut().zip(iv.0.iter()) {
-        *out ^= inp;
-    }
-    aead::Nonce::assume_unique_for_key(out)
-}
-
 /// QUIC protocol version
 ///
 /// Governs version-specific behavior in the TLS layer
@@ -862,21 +780,21 @@ impl Version {
         }
     }
 
-    fn packet_key_label(&self) -> &'static [u8] {
+    pub(crate) fn packet_key_label(&self) -> &'static [u8] {
         match self {
             Self::V1Draft | Self::V1 => b"quic key",
             Self::V2 => b"quicv2 key",
         }
     }
 
-    fn packet_iv_label(&self) -> &'static [u8] {
+    pub(crate) fn packet_iv_label(&self) -> &'static [u8] {
         match self {
             Self::V1Draft | Self::V1 => b"quic iv",
             Self::V2 => b"quicv2 iv",
         }
     }
 
-    fn header_key_label(&self) -> &'static [u8] {
+    pub(crate) fn header_key_label(&self) -> &'static [u8] {
         match self {
             Self::V1Draft | Self::V1 => b"quic hp",
             Self::V2 => b"quicv2 hp",
@@ -894,197 +812,5 @@ impl Version {
 impl Default for Version {
     fn default() -> Self {
         Self::V1
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    fn test_short_packet(version: Version, expected: &[u8]) {
-        const PN: u64 = 654360564;
-        const SECRET: &[u8] = &[
-            0x9a, 0xc3, 0x12, 0xa7, 0xf8, 0x77, 0x46, 0x8e, 0xbe, 0x69, 0x42, 0x27, 0x48, 0xad,
-            0x00, 0xa1, 0x54, 0x43, 0xf1, 0x82, 0x03, 0xa0, 0x7d, 0x60, 0x60, 0xf6, 0x88, 0xf3,
-            0x0f, 0x21, 0x63, 0x2b,
-        ];
-
-        let secret = hkdf::Prk::new_less_safe(hkdf::HKDF_SHA256, SECRET);
-        use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
-        let hpk =
-            HeaderProtectionKey::new(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL, &secret, version);
-        let packet = PacketKey::new(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL, &secret, version);
-
-        const PLAIN: &[u8] = &[0x42, 0x00, 0xbf, 0xf4, 0x01];
-
-        let mut buf = PLAIN.to_vec();
-        let (header, payload) = buf.split_at_mut(4);
-        let tag = packet
-            .encrypt_in_place(PN, &*header, payload)
-            .unwrap();
-        buf.extend(tag.as_ref());
-
-        let pn_offset = 1;
-        let (header, sample) = buf.split_at_mut(pn_offset + 4);
-        let (first, rest) = header.split_at_mut(1);
-        let sample = &sample[..hpk.sample_len()];
-        hpk.encrypt_in_place(sample, &mut first[0], dbg!(rest))
-            .unwrap();
-
-        assert_eq!(&buf, expected);
-
-        let (header, sample) = buf.split_at_mut(pn_offset + 4);
-        let (first, rest) = header.split_at_mut(1);
-        let sample = &sample[..hpk.sample_len()];
-        hpk.decrypt_in_place(sample, &mut first[0], rest)
-            .unwrap();
-
-        let (header, payload_tag) = buf.split_at_mut(4);
-        let plain = packet
-            .decrypt_in_place(PN, &*header, payload_tag)
-            .unwrap();
-
-        assert_eq!(plain, &PLAIN[4..]);
-    }
-
-    #[test]
-    fn short_packet_header_protection() {
-        // https://www.rfc-editor.org/rfc/rfc9001.html#name-chacha20-poly1305-short-hea
-        test_short_packet(
-            Version::V1,
-            &[
-                0x4c, 0xfe, 0x41, 0x89, 0x65, 0x5e, 0x5c, 0xd5, 0x5c, 0x41, 0xf6, 0x90, 0x80, 0x57,
-                0x5d, 0x79, 0x99, 0xc2, 0x5a, 0x5b, 0xfb,
-            ],
-        );
-    }
-
-    #[test]
-    fn key_update_test_vector() {
-        fn equal_prk(x: &hkdf::Prk, y: &hkdf::Prk) -> bool {
-            let mut x_data = [0; 16];
-            let mut y_data = [0; 16];
-            let x_okm = x
-                .expand(&[b"info"], &aead::quic::AES_128)
-                .unwrap();
-            x_okm.fill(&mut x_data[..]).unwrap();
-            let y_okm = y
-                .expand(&[b"info"], &aead::quic::AES_128)
-                .unwrap();
-            y_okm.fill(&mut y_data[..]).unwrap();
-            x_data == y_data
-        }
-
-        let mut secrets = Secrets {
-            // Constant dummy values for reproducibility
-            client: hkdf::Prk::new_less_safe(
-                hkdf::HKDF_SHA256,
-                &[
-                    0xb8, 0x76, 0x77, 0x08, 0xf8, 0x77, 0x23, 0x58, 0xa6, 0xea, 0x9f, 0xc4, 0x3e,
-                    0x4a, 0xdd, 0x2c, 0x96, 0x1b, 0x3f, 0x52, 0x87, 0xa6, 0xd1, 0x46, 0x7e, 0xe0,
-                    0xae, 0xab, 0x33, 0x72, 0x4d, 0xbf,
-                ],
-            ),
-            server: hkdf::Prk::new_less_safe(
-                hkdf::HKDF_SHA256,
-                &[
-                    0x42, 0xdc, 0x97, 0x21, 0x40, 0xe0, 0xf2, 0xe3, 0x98, 0x45, 0xb7, 0x67, 0x61,
-                    0x34, 0x39, 0xdc, 0x67, 0x58, 0xca, 0x43, 0x25, 0x9b, 0x87, 0x85, 0x06, 0x82,
-                    0x4e, 0xb1, 0xe4, 0x38, 0xd8, 0x55,
-                ],
-            ),
-            suite: TLS13_AES_128_GCM_SHA256_INTERNAL,
-            side: Side::Client,
-            version: Version::V1,
-        };
-        secrets.update();
-
-        assert!(equal_prk(
-            &secrets.client,
-            &hkdf::Prk::new_less_safe(
-                hkdf::HKDF_SHA256,
-                &[
-                    0x42, 0xca, 0xc8, 0xc9, 0x1c, 0xd5, 0xeb, 0x40, 0x68, 0x2e, 0x43, 0x2e, 0xdf,
-                    0x2d, 0x2b, 0xe9, 0xf4, 0x1a, 0x52, 0xca, 0x6b, 0x22, 0xd8, 0xe6, 0xcd, 0xb1,
-                    0xe8, 0xac, 0xa9, 0x6, 0x1f, 0xce
-                ]
-            )
-        ));
-        assert!(equal_prk(
-            &secrets.server,
-            &hkdf::Prk::new_less_safe(
-                hkdf::HKDF_SHA256,
-                &[
-                    0xeb, 0x7f, 0x5e, 0x2a, 0x12, 0x3f, 0x40, 0x7d, 0xb4, 0x99, 0xe3, 0x61, 0xca,
-                    0xe5, 0x90, 0xd4, 0xd9, 0x92, 0xe1, 0x4b, 0x7a, 0xce, 0x3, 0xc2, 0x44, 0xe0,
-                    0x42, 0x21, 0x15, 0xb6, 0xd3, 0x8a
-                ]
-            )
-        ));
-    }
-
-    #[test]
-    fn short_packet_header_protection_v2() {
-        // https://www.ietf.org/archive/id/draft-ietf-quic-v2-10.html#name-chacha20-poly1305-short-head
-        test_short_packet(
-            Version::V2,
-            &[
-                0x55, 0x58, 0xb1, 0xc6, 0x0a, 0xe7, 0xb6, 0xb9, 0x32, 0xbc, 0x27, 0xd7, 0x86, 0xf4,
-                0xbc, 0x2b, 0xb2, 0x0f, 0x21, 0x62, 0xba,
-            ],
-        );
-    }
-
-    #[test]
-    fn initial_test_vector_v2() {
-        // https://www.ietf.org/archive/id/draft-ietf-quic-v2-10.html#name-sample-packet-protection-2
-        let icid = [0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
-        let server = Keys::initial(Version::V2, &icid, Side::Server);
-        let mut server_payload = [
-            0x02, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x40, 0x5a, 0x02, 0x00, 0x00, 0x56, 0x03,
-            0x03, 0xee, 0xfc, 0xe7, 0xf7, 0xb3, 0x7b, 0xa1, 0xd1, 0x63, 0x2e, 0x96, 0x67, 0x78,
-            0x25, 0xdd, 0xf7, 0x39, 0x88, 0xcf, 0xc7, 0x98, 0x25, 0xdf, 0x56, 0x6d, 0xc5, 0x43,
-            0x0b, 0x9a, 0x04, 0x5a, 0x12, 0x00, 0x13, 0x01, 0x00, 0x00, 0x2e, 0x00, 0x33, 0x00,
-            0x24, 0x00, 0x1d, 0x00, 0x20, 0x9d, 0x3c, 0x94, 0x0d, 0x89, 0x69, 0x0b, 0x84, 0xd0,
-            0x8a, 0x60, 0x99, 0x3c, 0x14, 0x4e, 0xca, 0x68, 0x4d, 0x10, 0x81, 0x28, 0x7c, 0x83,
-            0x4d, 0x53, 0x11, 0xbc, 0xf3, 0x2b, 0xb9, 0xda, 0x1a, 0x00, 0x2b, 0x00, 0x02, 0x03,
-            0x04,
-        ];
-        let mut server_header = [
-            0xd1, 0x6b, 0x33, 0x43, 0xcf, 0x00, 0x08, 0xf0, 0x67, 0xa5, 0x50, 0x2a, 0x42, 0x62,
-            0xb5, 0x00, 0x40, 0x75, 0x00, 0x01,
-        ];
-        let tag = server
-            .local
-            .packet
-            .encrypt_in_place(1, &server_header, &mut server_payload)
-            .unwrap();
-        let (first, rest) = server_header.split_at_mut(1);
-        let rest_len = rest.len();
-        server
-            .local
-            .header
-            .encrypt_in_place(
-                &server_payload[2..18],
-                &mut first[0],
-                &mut rest[rest_len - 2..],
-            )
-            .unwrap();
-        let mut server_packet = server_header.to_vec();
-        server_packet.extend(server_payload);
-        server_packet.extend(tag.as_ref());
-        let expected_server_packet = [
-            0xdc, 0x6b, 0x33, 0x43, 0xcf, 0x00, 0x08, 0xf0, 0x67, 0xa5, 0x50, 0x2a, 0x42, 0x62,
-            0xb5, 0x00, 0x40, 0x75, 0xd9, 0x2f, 0xaa, 0xf1, 0x6f, 0x05, 0xd8, 0xa4, 0x39, 0x8c,
-            0x47, 0x08, 0x96, 0x98, 0xba, 0xee, 0xa2, 0x6b, 0x91, 0xeb, 0x76, 0x1d, 0x9b, 0x89,
-            0x23, 0x7b, 0xbf, 0x87, 0x26, 0x30, 0x17, 0x91, 0x53, 0x58, 0x23, 0x00, 0x35, 0xf7,
-            0xfd, 0x39, 0x45, 0xd8, 0x89, 0x65, 0xcf, 0x17, 0xf9, 0xaf, 0x6e, 0x16, 0x88, 0x6c,
-            0x61, 0xbf, 0xc7, 0x03, 0x10, 0x6f, 0xba, 0xf3, 0xcb, 0x4c, 0xfa, 0x52, 0x38, 0x2d,
-            0xd1, 0x6a, 0x39, 0x3e, 0x42, 0x75, 0x75, 0x07, 0x69, 0x80, 0x75, 0xb2, 0xc9, 0x84,
-            0xc7, 0x07, 0xf0, 0xa0, 0x81, 0x2d, 0x8c, 0xd5, 0xa6, 0x88, 0x1e, 0xaf, 0x21, 0xce,
-            0xda, 0x98, 0xf4, 0xbd, 0x23, 0xf6, 0xfe, 0x1a, 0x3e, 0x2c, 0x43, 0xed, 0xd9, 0xce,
-            0x7c, 0xa8, 0x4b, 0xed, 0x85, 0x21, 0xe2, 0xe1, 0x40,
-        ];
-        assert_eq!(server_packet[..], expected_server_packet[..]);
     }
 }

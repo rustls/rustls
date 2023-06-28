@@ -34,6 +34,8 @@ pub struct Tls13CipherSuite {
     pub(crate) confidentiality_limit: u64,
     #[cfg(feature = "quic")]
     pub(crate) integrity_limit: u64,
+    #[cfg(feature = "quic")]
+    pub(crate) quic: &'static dyn crate::quic::Algorithm,
 }
 
 impl Tls13CipherSuite {
