@@ -135,7 +135,7 @@ jobs:
           done
 
   benchmarks:
-    name: Smoke-test benchmarks
+    name: Run benchmarks
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout sources
@@ -144,10 +144,15 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
 
       - name: Smoke-test benchmark program
         run: cargo run --release --example bench
+
+      - name: Run micro-benchmarks
+        run: cargo bench
+        env:
+          RUSTFLAGS: --cfg=bench
 
   docs:
     name: Check for documentation errors

@@ -65,3 +65,19 @@ mod tests {
         assert_eq!(expect.to_vec(), output.to_vec());
     }
 }
+
+#[cfg(bench)]
+mod benchmarks {
+    #[bench]
+    fn bench_sha256(b: &mut test::Bencher) {
+        let label = &b"extended master secret"[..];
+        let seed = [0u8; 32];
+        let key = &b"secret"[..];
+
+        b.iter(|| {
+            let mut out = [0u8; 48];
+            super::prf(&mut out, ring::hmac::HMAC_SHA256, key, &label, &seed);
+            test::black_box(out);
+        });
+    }
+}
