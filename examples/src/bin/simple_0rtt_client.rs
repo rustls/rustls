@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use std::io::{stdout, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 
 use rustls::{OwnedTrustAnchor, RootCertStore};
@@ -28,6 +28,7 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
         early_data
             .write_all(request.as_bytes())
             .unwrap();
+        println!("  * 0-RTT request sent");
     }
 
     let mut stream = rustls::Stream::new(&mut conn, &mut sock);
@@ -41,13 +42,16 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
         stream
             .write_all(request.as_bytes())
             .unwrap();
+        println!("  * Normal request sent");
+    } else {
+        println!("  * 0-RTT data accepted");
     }
 
-    let mut plaintext = Vec::new();
-    stream
-        .read_to_end(&mut plaintext)
+    let mut first_response_line = String::new();
+    BufReader::new(stream)
+        .read_line(&mut first_response_line)
         .unwrap();
-    stdout().write_all(&plaintext).unwrap();
+    println!("  * Server response: {:?}", first_response_line);
 }
 
 fn main() {
@@ -78,6 +82,9 @@ fn main() {
 
     // Do two connections. The first will be a normal request, the
     // second will use early data if the server supports it.
-    start_connection(&config, "mesalink.io");
-    start_connection(&config, "mesalink.io");
+
+    println!("* Sending first request:");
+    start_connection(&config, "jbp.io");
+    println!("* Sending second request:");
+    start_connection(&config, "jbp.io");
 }
