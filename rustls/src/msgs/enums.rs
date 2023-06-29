@@ -139,6 +139,11 @@ enum_builder! {
     /// The `NamedCurve` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
+    ///
+    /// This enum is used for recognizing elliptic curve parameters advertised
+    /// by a peer during a TLS handshake. It is **not** a list of curves that
+    /// Rustls supports. See [`crate::kx_group`] for the list of supported
+    /// elliptic curve groups.
     @U16
     EnumName: NamedCurve;
     EnumVal{
