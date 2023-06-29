@@ -44,3 +44,9 @@ jobs:
       - run: cargo test --manifest-path=connect-tests/Cargo.toml
         env:
           RUST_BACKTRACE: 1
+
+      - run: cargo run --bin simpleclient
+
+      - run: cargo run --bin limitedclient
+
+      - run: cargo run --bin simple_0rtt_client
