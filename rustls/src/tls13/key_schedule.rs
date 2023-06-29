@@ -1001,3 +1001,42 @@ mod test {
         seal_output
     }
 }
+
+#[cfg(bench)]
+mod benchmarks {
+    #[bench]
+    fn bench_sha256(b: &mut test::Bencher) {
+        use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
+        use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
+        use crate::KeyLog;
+        use ring::aead;
+
+        fn extract_traffic_secret(ks: &KeySchedule, kind: SecretKind) {
+            struct Log;
+
+            impl KeyLog for Log {
+                fn log(&self, _label: &str, _client_random: &[u8], _secret: &[u8]) {}
+            }
+
+            let aead_alg = &aead::CHACHA20_POLY1305;
+            let hash = [0u8; 32];
+            let traffic_secret = ks.derive_logged_secret(kind, &hash, &Log, &[0u8; 32]);
+            test::black_box(derive_traffic_key(&traffic_secret, aead_alg));
+            test::black_box(derive_traffic_iv(&traffic_secret));
+        }
+
+        b.iter(|| {
+            let mut ks =
+                KeySchedule::new_with_empty_secret(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);
+            ks.input_secret(&[0u8; 32]);
+
+            extract_traffic_secret(&ks, SecretKind::ClientHandshakeTrafficSecret);
+            extract_traffic_secret(&ks, SecretKind::ServerHandshakeTrafficSecret);
+
+            ks.input_empty();
+
+            extract_traffic_secret(&ks, SecretKind::ClientApplicationTrafficSecret);
+            extract_traffic_secret(&ks, SecretKind::ServerApplicationTrafficSecret);
+        });
+    }
+}
