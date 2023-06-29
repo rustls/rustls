@@ -13,7 +13,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
 use crate::msgs::handshake::ConvertProtocolNameList;
-use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket, Sct};
+use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
@@ -141,13 +141,11 @@ pub(super) fn start_handshake(
         None => SessionId::random()?,
     };
 
-    let may_send_sct_list = config.verifier.request_scts();
     Ok(emit_client_hello_for_retry(
         transcript_buffer,
         None,
         key_share,
         extra_exts,
-        may_send_sct_list,
         None,
         ClientHelloInput {
             config,
@@ -194,7 +192,6 @@ fn emit_client_hello_for_retry(
     retryreq: Option<&HelloRetryRequest>,
     key_share: Option<kx::KeyExchange>,
     extra_exts: Vec<ClientExtension>,
-    may_send_sct_list: bool,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
@@ -236,10 +233,6 @@ fn emit_client_hello_for_retry(
 
     if let (Some(sni_name), true) = (input.server_name.for_sni(), config.enable_sni) {
         exts.push(ClientExtension::make_sni(sni_name));
-    }
-
-    if may_send_sct_list {
-        exts.push(ClientExtension::SignedCertificateTimestampRequest);
     }
 
     if let Some(key_share) = &key_share {
@@ -477,13 +470,6 @@ pub(super) fn process_alpn_protocol(
             .map(|v| bs_debug::BsDebug(v))
     );
     Ok(())
-}
-
-pub(super) fn sct_list_is_invalid(scts: &[Sct]) -> bool {
-    scts.is_empty()
-        || scts
-            .iter()
-            .any(|sct| sct.as_ref().is_empty())
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
@@ -800,12 +786,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
             cx.data.early_data.rejected();
         }
 
-        let may_send_sct_list = self
-            .next
-            .input
-            .hello
-            .server_may_send_sct_list();
-
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
                 let group = kx::KeyExchange::choose(group, &config.kx_groups).ok_or_else(|| {
@@ -824,7 +804,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
             Some(hrr),
             Some(key_share),
             self.extra_exts,
-            may_send_sct_list,
             Some(cs),
             self.next.input,
             cx,

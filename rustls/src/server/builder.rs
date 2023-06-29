@@ -77,19 +77,15 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// `cert_chain` is a vector of DER-encoded certificates.
     /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
-    /// `scts` is an `SignedCertificateTimestampList` encoding (see RFC6962)
-    /// and is ignored if empty.
     ///
     /// This function fails if `key_der` is invalid.
-    pub fn with_single_cert_with_ocsp_and_sct(
+    pub fn with_single_cert_with_ocsp(
         self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
         ocsp: Vec<u8>,
-        scts: Vec<u8>,
     ) -> Result<ServerConfig, Error> {
-        let resolver =
-            handy::AlwaysResolvesChain::new_with_extras(cert_chain, &key_der, ocsp, scts)?;
+        let resolver = handy::AlwaysResolvesChain::new_with_extras(cert_chain, &key_der, ocsp)?;
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 

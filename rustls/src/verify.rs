@@ -6,7 +6,7 @@ use crate::enums::SignatureScheme;
 use crate::error::{CertificateError, Error, InvalidMessage, PeerMisbehaved};
 use crate::key::Certificate;
 #[cfg(feature = "logging")]
-use crate::log::{debug, trace, warn};
+use crate::log::trace;
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::DistinguishedName;
@@ -108,16 +108,12 @@ pub trait ServerCertVerifier: Send + Sync {
     /// the implementor to handle invalid data. It is recommended that the implementor returns
     /// [`Error::InvalidCertificate(CertificateError::BadEncoding)`] when these cases are encountered.
     ///
-    /// `scts` contains the Signed Certificate Timestamps (SCTs) the server
-    /// sent with the end-entity certificate, if any.
-    ///
     /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
         server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, Error>;
@@ -184,16 +180,6 @@ pub trait ServerCertVerifier: Send + Sync {
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         WebPkiVerifier::verification_schemes()
-    }
-
-    /// Returns `true` if Rustls should ask the server to send SCTs.
-    ///
-    /// Signed Certificate Timestamps (SCTs) are used for Certificate
-    /// Transparency validation.
-    ///
-    /// The default implementation of this function returns true.
-    fn request_scts(&self) -> bool {
-        true
     }
 }
 
@@ -331,7 +317,6 @@ impl ServerCertVerifier for WebPkiVerifier {
         end_entity: &Certificate,
         intermediates: &[Certificate],
         server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
         ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, Error> {
@@ -347,10 +332,6 @@ impl ServerCertVerifier for WebPkiVerifier {
             )
             .map_err(pki_error)
             .map(|_| cert)?;
-
-        if let Some(policy) = &self.ct_policy {
-            policy.verify(end_entity, now, scts)?;
-        }
 
         if !ocsp_response.is_empty() {
             trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
@@ -384,7 +365,6 @@ impl ServerCertVerifier for WebPkiVerifier {
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct WebPkiVerifier {
     roots: RootCertStore,
-    ct_policy: Option<CertificateTransparencyPolicy>,
 }
 
 #[allow(unreachable_pub)]
@@ -392,12 +372,8 @@ impl WebPkiVerifier {
     /// Constructs a new `WebPkiVerifier`.
     ///
     /// `roots` is the set of trust anchors to trust for issuing server certs.
-    ///
-    /// `ct_logs` is the list of logs that are trusted for Certificate
-    /// Transparency. Currently CT log enforcement is opportunistic; see
-    /// <https://github.com/rustls/rustls/issues/479>.
-    pub fn new(roots: RootCertStore, ct_policy: Option<CertificateTransparencyPolicy>) -> Self {
-        Self { roots, ct_policy }
+    pub fn new(roots: RootCertStore) -> Self {
+        Self { roots }
     }
 
     /// Returns the signature verification methods supported by
@@ -414,83 +390,6 @@ impl WebPkiVerifier {
             SignatureScheme::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA256,
         ]
-    }
-}
-
-/// Policy for enforcing Certificate Transparency.
-///
-/// Because Certificate Transparency logs are sharded on a per-year basis and can be trusted or
-/// distrusted relatively quickly, rustls stores a validation deadline. Server certificates will
-/// be validated against the configured CT logs until the deadline expires. After the deadline,
-/// certificates will no longer be validated, and a warning message will be logged. The deadline
-/// may vary depending on how often you deploy builds with updated dependencies.
-#[allow(unreachable_pub)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-pub struct CertificateTransparencyPolicy {
-    logs: &'static [&'static sct::Log<'static>],
-    validation_deadline: SystemTime,
-}
-
-impl CertificateTransparencyPolicy {
-    /// Create a new policy.
-    #[allow(unreachable_pub)]
-    pub fn new(
-        logs: &'static [&'static sct::Log<'static>],
-        validation_deadline: SystemTime,
-    ) -> Self {
-        Self {
-            logs,
-            validation_deadline,
-        }
-    }
-
-    fn verify(
-        &self,
-        cert: &Certificate,
-        now: SystemTime,
-        scts: &mut dyn Iterator<Item = &[u8]>,
-    ) -> Result<(), Error> {
-        if self.logs.is_empty() {
-            return Ok(());
-        } else if self
-            .validation_deadline
-            .duration_since(now)
-            .is_err()
-        {
-            warn!("certificate transparency logs have expired, validation disabled");
-            return Ok(());
-        }
-
-        let now = unix_time_millis(now)?;
-        let mut last_sct_error = None;
-        for sct in scts {
-            #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match sct::verify_sct(&cert.0, sct, now, self.logs) {
-                Ok(index) => {
-                    debug!(
-                        "Valid SCT signed by {} on {}",
-                        self.logs[index].operated_by, self.logs[index].description
-                    );
-                    return Ok(());
-                }
-                Err(e) => {
-                    if e.should_be_fatal() {
-                        return Err(Error::InvalidSct(e));
-                    }
-                    debug!("SCT ignored because {:?}", e);
-                    last_sct_error = Some(e);
-                }
-            }
-        }
-
-        /* If we were supplied with some logs, and some SCTs,
-         * but couldn't verify any of them, fail the handshake. */
-        if let Some(last_sct_error) = last_sct_error {
-            warn!("No valid SCTs provided");
-            return Err(Error::InvalidSct(last_sct_error));
-        }
-
-        Ok(())
     }
 }
 
@@ -834,16 +733,6 @@ fn verify_tls13(
     cert.verify_signature(alg, msg, dss.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
-}
-
-fn unix_time_millis(now: SystemTime) -> Result<u64, Error> {
-    now.duration_since(std::time::UNIX_EPOCH)
-        .map(|dur| dur.as_secs())
-        .map_err(|_| Error::FailedToGetCurrentTime)
-        .and_then(|secs| {
-            secs.checked_mul(1000)
-                .ok_or(Error::FailedToGetCurrentTime)
-        })
 }
 
 #[cfg(test)]

@@ -25,8 +25,6 @@
 //! * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
 //! * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 //! * OCSP stapling by servers.
-//! * SCT stapling by servers.
-//! * SCT verification by clients.
 //!
 //! ## Possible future features
 //!
@@ -407,7 +405,7 @@ pub mod client {
     mod tls13;
 
     pub use crate::dns_name::InvalidDnsNameError;
-    pub use builder::{WantsClientCert, WantsTransparencyPolicyOrClientCert};
+    pub use builder::WantsClientCert;
     pub use client_conn::{
         ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
         ResolvesClientCert, Resumption, ServerName, Tls12Resumption, WriteEarlyData,
@@ -416,8 +414,7 @@ pub mod client {
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{
-        CertificateTransparencyPolicy, HandshakeSignatureValid, ServerCertVerified,
-        ServerCertVerifier, WebPkiVerifier,
+        HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier,
     };
     #[cfg(feature = "dangerous_configuration")]
     pub use client_conn::danger::DangerousClientConfig;

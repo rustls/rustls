@@ -112,7 +112,6 @@ impl AlwaysResolvesChain {
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
         ocsp: Vec<u8>,
-        scts: Vec<u8>,
     ) -> Result<Self, Error> {
         let mut r = Self::new(chain, priv_key)?;
 
@@ -120,9 +119,6 @@ impl AlwaysResolvesChain {
             let cert = Arc::make_mut(&mut r.0);
             if !ocsp.is_empty() {
                 cert.ocsp = Some(ocsp);
-            }
-            if !scts.is_empty() {
-                cert.sct_list = Some(scts);
             }
         }
 
