@@ -597,7 +597,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         .with_protocol_versions(&versions)
         .expect("inconsistent cipher-suites/versions specified")
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp_and_sct(certs, privkey, ocsp, vec![])
+        .with_single_cert_with_ocsp(certs, privkey, ocsp)
         .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());

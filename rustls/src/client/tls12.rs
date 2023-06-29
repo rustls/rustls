@@ -12,7 +12,7 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
-    CertificatePayload, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload, Sct,
+    CertificatePayload, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
     ServerECDHParams, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
@@ -102,18 +102,6 @@ mod server_hello {
                 debug!("Server may staple OCSP response");
             }
 
-            // Save any sent SCTs for verification against the certificate.
-            let server_cert_sct_list = if let Some(sct_list) = server_hello.get_sct_list() {
-                debug!("Server sent {:?} SCTs", sct_list.len());
-
-                if hs::sct_list_is_invalid(sct_list) {
-                    return Err(PeerMisbehaved::InvalidSctList.into());
-                }
-                Some(sct_list.to_owned())
-            } else {
-                None
-            };
-
             // See if we're successfully resuming.
             if let Some(ref resuming) = self.resuming_session {
                 if resuming.session_id == server_hello.session_id {
@@ -187,7 +175,6 @@ mod server_hello {
                 suite,
                 may_send_cert_status,
                 must_issue_new_ticket,
-                server_cert_sct_list,
             }))
         }
     }
@@ -204,7 +191,6 @@ struct ExpectCertificate {
     pub(super) suite: &'static Tls12CipherSuite,
     may_send_cert_status: bool,
     must_issue_new_ticket: bool,
-    server_cert_sct_list: Option<Vec<Sct>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -230,13 +216,11 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 using_ems: self.using_ems,
                 transcript: self.transcript,
                 suite: self.suite,
-                server_cert_sct_list: self.server_cert_sct_list,
                 server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }))
         } else {
-            let server_cert =
-                ServerCertDetails::new(server_cert_chain, vec![], self.server_cert_sct_list);
+            let server_cert = ServerCertDetails::new(server_cert_chain, vec![]);
 
             Ok(Box::new(ExpectServerKx {
                 config: self.config,
@@ -263,7 +247,6 @@ struct ExpectCertificateStatusOrServerKx {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_sct_list: Option<Vec<Sct>>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }
@@ -287,11 +270,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 using_ems: self.using_ems,
                 transcript: self.transcript,
                 suite: self.suite,
-                server_cert: ServerCertDetails::new(
-                    self.server_cert_chain,
-                    vec![],
-                    self.server_cert_sct_list,
-                ),
+                server_cert: ServerCertDetails::new(self.server_cert_chain, vec![]),
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
             .handle(cx, m),
@@ -311,7 +290,6 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
                 using_ems: self.using_ems,
                 transcript: self.transcript,
                 suite: self.suite,
-                server_cert_sct_list: self.server_cert_sct_list,
                 server_cert_chain: self.server_cert_chain,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
@@ -337,7 +315,6 @@ struct ExpectCertificateStatus {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_sct_list: Option<Vec<Sct>>,
     server_cert_chain: CertificatePayload,
     must_issue_new_ticket: bool,
 }
@@ -361,11 +338,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus {
             &server_cert_ocsp_response
         );
 
-        let server_cert = ServerCertDetails::new(
-            self.server_cert_chain,
-            server_cert_ocsp_response,
-            self.server_cert_sct_list,
-        );
+        let server_cert = ServerCertDetails::new(self.server_cert_chain, server_cert_ocsp_response);
 
         Ok(Box::new(ExpectServerKx {
             config: self.config,
@@ -741,7 +714,6 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 end_entity,
                 intermediates,
                 &st.server_name,
-                &mut st.server_cert.scts(),
                 &st.server_cert.ocsp_response,
                 now,
             )

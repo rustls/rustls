@@ -50,7 +50,6 @@ struct Options {
     check_close_notify: bool,
     host_name: String,
     use_sni: bool,
-    send_sct: bool,
     key_file: String,
     cert_file: String,
     protocols: Vec<String>,
@@ -60,7 +59,6 @@ struct Options {
     min_version: Option<ProtocolVersion>,
     max_version: Option<ProtocolVersion>,
     server_ocsp_response: Vec<u8>,
-    server_sct_list: Vec<u8>,
     use_signing_scheme: u16,
     curves: Option<Vec<u16>>,
     export_keying_material: usize,
@@ -91,7 +89,6 @@ impl Options {
             resume_with_tickets_disabled: false,
             host_name: "example.com".to_string(),
             use_sni: false,
-            send_sct: false,
             queue_data: false,
             queue_data_on_resume: false,
             only_write_one_byte_after_handshake: false,
@@ -109,7 +106,6 @@ impl Options {
             min_version: None,
             max_version: None,
             server_ocsp_response: vec![],
-            server_sct_list: vec![],
             use_signing_scheme: 0,
             curves: None,
             export_keying_material: 0,
@@ -215,9 +211,7 @@ impl server::ClientCertVerifier for DummyClientAuth {
     }
 }
 
-struct DummyServerAuth {
-    send_sct: bool,
-}
+struct DummyServerAuth {}
 
 impl client::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
@@ -225,15 +219,10 @@ impl client::ServerCertVerifier for DummyServerAuth {
         _end_entity: &Certificate,
         _certs: &[Certificate],
         _hostname: &ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp: &[u8],
         _now: SystemTime,
     ) -> Result<client::ServerCertVerified, Error> {
         Ok(client::ServerCertVerified::assertion())
-    }
-
-    fn request_scts(&self) -> bool {
-        self.send_sct
     }
 }
 
@@ -418,12 +407,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
         .with_protocol_versions(&opts.supported_versions())
         .unwrap()
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp_and_sct(
-            cert.clone(),
-            key,
-            opts.server_ocsp_response.clone(),
-            opts.server_sct_list.clone(),
-        )
+        .with_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone())
         .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
@@ -538,9 +522,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         .with_kx_groups(&kx_groups)
         .with_protocol_versions(&opts.supported_versions())
         .expect("inconsistent settings")
-        .with_custom_certificate_verifier(Arc::new(DummyServerAuth {
-            send_sct: opts.send_sct,
-        }));
+        .with_custom_certificate_verifier(Arc::new(DummyServerAuth {}));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
@@ -991,6 +973,7 @@ fn main() {
             "-on-resume-expect-no-offer-early-data" |
             "-key-update" | //< we could implement an API for this
             "-expect-tls13-downgrade" |
+            "-enable-signed-cert-timestamps" |
             "-expect-session-id" => {
                 println!("not checking {}; NYI", arg);
             }
@@ -1019,16 +1002,6 @@ fn main() {
             "-ocsp-response" => {
                 opts.server_ocsp_response = BASE64_STANDARD.decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
-            }
-            "-signed-cert-timestamps" => {
-                opts.server_sct_list = BASE64_STANDARD.decode(args.remove(0).as_bytes())
-                    .expect("invalid base64");
-
-                if opts.server_sct_list.len() == 2 &&
-                    opts.server_sct_list[0] == 0x00 &&
-                    opts.server_sct_list[1] == 0x00 {
-                    quit(":INVALID_SCT_LIST:");
-                }
             }
             "-select-alpn" => {
                 opts.protocols.push(args.remove(0));
@@ -1064,9 +1037,6 @@ fn main() {
             }
             "-use-null-client-ca-list" => {
                 opts.offer_no_client_cas = true;
-            }
-            "-enable-signed-cert-timestamps" => {
-                opts.send_sct = true;
             }
             "-enable-early-data" => {
                 opts.tickets = false;
@@ -1200,6 +1170,7 @@ fn main() {
             "-wpa-202304" |
             "-srtp-profiles" |
             "-permute-extensions" |
+            "-signed-cert-timestamps" |
             "-on-initial-expect-peer-cert-file" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
