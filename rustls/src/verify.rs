@@ -307,14 +307,15 @@ impl fmt::Debug for dyn ClientCertVerifier {
     }
 }
 
-/// Verify that the end-entity certificate `end_entity` is valid and chains to at least one of the [OwnedTrustAnchor] in the `roots` [RootCertStore].
+/// Verify that the end-entity certificate `end_entity` is a valid server cert
+/// and chains to at least one of the [OwnedTrustAnchor] in the `roots` [RootCertStore].
 ///
 /// `intermediates` contains all certificates other than `end_entity` that
 /// were sent as part of the server's [Certificate] message. It is in the
 /// same order that the server sent them and may be empty.
 #[allow(unreachable_pub, dead_code)]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-pub fn verify_signed_by_trust_anchor(
+pub fn verify_server_cert_signed_by_trust_anchor(
     end_entity: &Certificate,
     roots: &RootCertStore,
     intermediates: &[Certificate],
@@ -334,6 +335,8 @@ pub fn verify_signed_by_trust_anchor(
 }
 
 /// Verify that the `end_entity` has a name or alternative name matching the `server_name`
+/// note: this only verifies the name and should be used in conjuction with more verification
+/// like [verify_server_cert_signed_by_trust_anchor]
 #[allow(unreachable_pub, dead_code)]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub fn verify_server_name(end_entity: &Certificate, server_name: &ServerName) -> Result<(), Error> {
