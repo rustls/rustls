@@ -321,27 +321,19 @@ pub fn verify_server_cert_signed_by_trust_anchor(
     intermediates: &[Certificate],
     now: SystemTime,
 ) -> Result<(), Error> {
-    let chain: Vec<&[u8]> = intermediates
-        .iter()
-        .map(|cert| cert.0.as_ref())
-        .collect();
-
-    let trust_roots: Vec<webpki::TrustAnchor> = roots
-        .roots
-        .iter()
-        .map(OwnedTrustAnchor::to_trust_anchor)
-        .collect();
-
+    let chain = intermediate_chain(intermediates);
+    let trust_roots = trust_roots(roots);
     let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
-    cert.0.verify_is_valid_tls_server_cert(
-        SUPPORTED_SIG_ALGS,
-        &webpki::TlsServerTrustAnchors(&trust_roots),
-        &chain,
-        webpki_now,
-    )
-    .map_err(pki_error)
-    .map(|_| ())
+    cert.0
+        .verify_is_valid_tls_server_cert(
+            SUPPORTED_SIG_ALGS,
+            &webpki::TlsServerTrustAnchors(&trust_roots),
+            &chain,
+            webpki_now,
+        )
+        .map_err(pki_error)
+        .map(|_| ())
 }
 
 /// Verify that the `end_entity` has a name or alternative name matching the `server_name`
@@ -357,15 +349,17 @@ pub fn verify_server_name(cert: &ParsedCertificate, server_name: &ServerName) ->
             let dns_name = webpki::DnsNameRef::try_from_ascii_str(dns_name.as_ref())
                 .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
             let name = webpki::SubjectNameRef::DnsName(dns_name);
-            cert.0.verify_is_valid_for_subject_name(name)
+            cert.0
+                .verify_is_valid_for_subject_name(name)
                 .map_err(pki_error)?;
         }
         ServerName::IpAddress(ip_addr) => {
             let ip_addr = webpki::IpAddr::from(*ip_addr);
-            cert.0.verify_is_valid_for_subject_name(webpki::SubjectNameRef::IpAddress(
-                webpki::IpAddrRef::from(&ip_addr),
-            ))
-            .map_err(pki_error)?;
+            cert.0
+                .verify_is_valid_for_subject_name(webpki::SubjectNameRef::IpAddress(
+                    webpki::IpAddrRef::from(&ip_addr),
+                ))
+                .map_err(pki_error)?;
         }
     }
     Ok(())
@@ -430,32 +424,19 @@ impl WebPkiVerifier {
     }
 }
 
-type CertChainAndRoots<'a, 'b> = (
-    webpki::EndEntityCert<'a>,
-    Vec<&'a [u8]>,
-    Vec<webpki::TrustAnchor<'b>>,
-);
-
-fn prepare<'a, 'b>(
-    end_entity: &'a Certificate,
-    intermediates: &'a [Certificate],
-    roots: &'b RootCertStore,
-) -> Result<CertChainAndRoots<'a, 'b>, Error> {
-    // EE cert must appear first.
-    let cert = webpki::EndEntityCert::try_from(end_entity.0.as_ref()).map_err(pki_error)?;
-
-    let intermediates: Vec<&'a [u8]> = intermediates
+fn intermediate_chain(intermediates: &[Certificate]) -> Vec<&[u8]> {
+    intermediates
         .iter()
         .map(|cert| cert.0.as_ref())
-        .collect();
+        .collect()
+}
 
-    let trustroots: Vec<webpki::TrustAnchor> = roots
+fn trust_roots(roots: &RootCertStore) -> Vec<webpki::TrustAnchor> {
+    roots
         .roots
         .iter()
         .map(OwnedTrustAnchor::to_trust_anchor)
-        .collect();
-
-    Ok((cert, intermediates, trustroots))
+        .collect()
 }
 
 /// A `ClientCertVerifier` that will ensure that every client provides a trusted
@@ -504,16 +485,20 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
         intermediates: &[Certificate],
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
-        let (cert, chain, trustroots) = prepare(end_entity, intermediates, &self.roots)?;
+        let cert = ParsedCertificate::try_from(end_entity)?;
+        let chain = intermediate_chain(intermediates);
+        let trust_roots = trust_roots(&self.roots);
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
-        cert.verify_is_valid_tls_client_cert(
-            SUPPORTED_SIG_ALGS,
-            &webpki::TlsClientTrustAnchors(&trustroots),
-            &chain,
-            now,
-        )
-        .map_err(pki_error)
-        .map(|_| ClientCertVerified::assertion())
+
+        cert.0
+            .verify_is_valid_tls_client_cert(
+                SUPPORTED_SIG_ALGS,
+                &webpki::TlsClientTrustAnchors(&trust_roots),
+                &chain,
+                now,
+            )
+            .map_err(pki_error)
+            .map(|_| ClientCertVerified::assertion())
     }
 }
 
