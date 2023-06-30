@@ -7,8 +7,9 @@ use crate::common::{
     do_handshake, do_handshake_until_both_error, make_client_config_with_versions,
     make_pair_for_arc_configs, make_server_config, ErrorFromPeer, ALL_KEY_TYPES,
 };
-use rustls::client::WebPkiVerifier;
-use rustls::client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::{
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier,
+};
 use rustls::DigitallySignedStruct;
 use rustls::{AlertDescription, Certificate, Error, InvalidMessage, SignatureScheme};
 use std::sync::Arc;
