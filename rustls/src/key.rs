@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::Error;
+
 /// This type contains a private key by value.
 ///
 /// The private key must be DER-encoded ASN.1 in either
@@ -94,6 +96,20 @@ impl fmt::Debug for Certificate {
         f.debug_tuple("Certificate")
             .field(&BsDebug(&self.0))
             .finish()
+    }
+}
+
+/// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
+#[allow(unreachable_pub)]
+#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
+pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
+
+impl<'a> TryFrom<&'a Certificate> for ParsedCertificate<'a> {
+    type Error = Error;
+    fn try_from(value: &'a Certificate) -> Result<ParsedCertificate<'a>, Self::Error> {
+        webpki::EndEntityCert::try_from(value.0.as_ref())
+            .map_err(crate::verify::pki_error)
+            .map(ParsedCertificate)
     }
 }
 

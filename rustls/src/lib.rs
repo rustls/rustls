@@ -424,7 +424,7 @@ pub mod client {
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{
-        verify_signed_by_trust_anchor, HandshakeSignatureValid, ServerCertVerified,
+        verify_server_cert_signed_by_trust_anchor, HandshakeSignatureValid, ServerCertVerified,
         ServerCertVerifier, WebPkiVerifier,
     };
     #[cfg(feature = "dangerous_configuration")]
@@ -461,6 +461,8 @@ pub mod server {
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::dns_name::DnsName;
+    #[cfg(feature = "dangerous_configuration")]
+    pub use crate::key::ParsedCertificate;
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
 }
