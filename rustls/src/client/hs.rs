@@ -34,6 +34,9 @@ use crate::client::{tls13, ClientConfig, ServerName};
 use std::ops::Deref;
 use std::sync::Arc;
 
+use rand::seq::SliceRandom;
+use rand::thread_rng;
+
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
@@ -261,6 +264,9 @@ fn emit_client_hello_for_retry(
                 .collect::<Vec<_>>(),
         )));
     }
+
+    let mut rng = thread_rng();
+    exts.shuffle(&mut rng);
 
     // Extra extensions must be placed before the PSK extension
     exts.extend(extra_exts.iter().cloned());
