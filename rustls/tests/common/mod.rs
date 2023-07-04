@@ -423,7 +423,7 @@ pub fn make_pair_for_arc_configs(
     server_config: &Arc<ServerConfig>,
 ) -> (ClientConnection, ServerConnection) {
     (
-        ClientConnection::new(Arc::clone(client_config), dns_name("localhost")).unwrap(),
+        ClientConnection::new(Arc::clone(client_config), server_name("localhost")).unwrap(),
         ServerConnection::new(Arc::clone(server_config)).unwrap(),
     )
 }
@@ -497,7 +497,7 @@ pub fn do_handshake_until_both_error(
     }
 }
 
-pub fn dns_name(name: &'static str) -> rustls::ServerName {
+pub fn server_name(name: &'static str) -> rustls::ServerName {
     name.try_into().unwrap()
 }
 
