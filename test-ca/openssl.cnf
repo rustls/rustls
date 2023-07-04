@@ -21,5 +21,7 @@ keyUsage = cRLSign, keyCertSign, digitalSignature, nonRepudiation, keyEncipherme
 
 [ alt_names ]
 DNS.1 = testserver.com
+IP.1 = 198.51.100.1
 DNS.2 = second.testserver.com
+IP.2 = 2001:db8::1
 DNS.3 = localhost
