@@ -313,7 +313,8 @@ impl fmt::Debug for dyn ClientCertVerifier {
 /// `intermediates` contains all certificates other than `end_entity` that
 /// were sent as part of the server's [Certificate] message. It is in the
 /// same order that the server sent them and may be empty.
-#[allow(unreachable_pub, dead_code)]
+#[allow(dead_code)]
+#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub fn verify_server_cert_signed_by_trust_anchor(
     cert: &ParsedCertificate,
@@ -339,7 +340,7 @@ pub fn verify_server_cert_signed_by_trust_anchor(
 /// Verify that the `end_entity` has a name or alternative name matching the `server_name`
 /// note: this only verifies the name and should be used in conjuction with more verification
 /// like [verify_server_cert_signed_by_trust_anchor]
-#[allow(unreachable_pub, dead_code)]
+#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub fn verify_server_name(cert: &ParsedCertificate, server_name: &ServerName) -> Result<(), Error> {
     match server_name {
