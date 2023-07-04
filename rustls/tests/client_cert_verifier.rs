@@ -5,9 +5,9 @@
 mod common;
 
 use crate::common::{
-    dns_name, do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,
+    do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,
     make_client_config_with_versions, make_client_config_with_versions_with_auth,
-    make_pair_for_arc_configs, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
+    make_pair_for_arc_configs, server_name, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
 use rustls::client::WebPkiVerifier;
 use rustls::internal::msgs::handshake::DistinguishedName;
@@ -127,7 +127,7 @@ fn client_verifier_no_auth_yes_root() {
             let client_config = make_client_config_with_versions(*kt, &[version]);
             let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
             let mut client =
-                ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
             let errs = do_handshake_until_both_error(&mut client, &mut server);
             assert_eq!(
                 errs,
@@ -164,7 +164,7 @@ fn client_verifier_fails_properly() {
             let client_config = make_client_config_with_versions_with_auth(*kt, &[version]);
             let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
             let mut client =
-                ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
