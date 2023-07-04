@@ -918,6 +918,55 @@ fn client_checks_server_certificate_with_given_name() {
     }
 }
 
+#[test]
+fn client_checks_server_certificate_with_given_ip_address() {
+    fn check_server_name(
+        client_config: Arc<ClientConfig>,
+        server_config: Arc<ServerConfig>,
+        name: &'static str,
+    ) -> Result<(), ErrorFromPeer> {
+        let mut client = ClientConnection::new(client_config, server_name(name)).unwrap();
+        let mut server = ServerConnection::new(server_config).unwrap();
+        do_handshake_until_error(&mut client, &mut server)
+    }
+
+    for kt in ALL_KEY_TYPES.iter() {
+        let server_config = Arc::new(make_server_config(*kt));
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config = Arc::new(make_client_config_with_versions(*kt, &[version]));
+
+            // positive ipv4 case
+            assert_eq!(
+                check_server_name(client_config.clone(), server_config.clone(), "198.51.100.1"),
+                Ok(()),
+            );
+
+            // negative ipv4 case
+            assert_eq!(
+                check_server_name(client_config.clone(), server_config.clone(), "198.51.100.2"),
+                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                    CertificateError::NotValidForName
+                )))
+            );
+
+            // positive ipv6 case
+            assert_eq!(
+                check_server_name(client_config.clone(), server_config.clone(), "2001:db8::1"),
+                Ok(()),
+            );
+
+            // negative ipv6 case
+            assert_eq!(
+                check_server_name(client_config.clone(), server_config.clone(), "2001:db8::2"),
+                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                    CertificateError::NotValidForName
+                )))
+            );
+        }
+    }
+}
+
 struct ClientCheckCertResolve {
     query_count: AtomicUsize,
     expect_queries: usize,
