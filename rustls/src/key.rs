@@ -100,7 +100,7 @@ impl fmt::Debug for Certificate {
 }
 
 /// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
-#[allow(unreachable_pub)]
+#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
 
