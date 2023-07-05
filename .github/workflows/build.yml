@@ -218,6 +218,21 @@ jobs:
       - name: cargo test (debug; all features; -Z minimal-versions)
         run: cargo -Z minimal-versions test --all-features
 
+  cross:
+    name: Check cross compilation targets
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cross
+        uses: taiki-e/install-action@cross
+      - run: cross build --target i686-unknown-linux-gnu
+
   format:
     name: Format
     runs-on: ubuntu-latest
