@@ -20,6 +20,12 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
+* Release 0.21.4 (2023-07-07)
+  - `ClientConfig.with_single_cert` is now deprecated, prefer
+    `with_client_auth_cert` instead.
+  - The `Error::CertRevocationListError` enum is now exported.
+  - `RootCertStore::add_parsable_certificates` now takes a
+    `impl IntoIterator<Item = impl AsRef<[u8]>>`.
 * Release 0.21.3 (2023-07-05)
   - Added `with_crls` function to `AllowAnyAuthenticatedClient` and
     `AllowAnyAnonymousOrAuthenticatedClient` client certificate verifiers to
