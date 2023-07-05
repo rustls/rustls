@@ -15,7 +15,7 @@ use crate::msgs::handshake::{
     ECParameters, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
     HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
     NewSessionTicketPayload, NewSessionTicketPayloadTLS13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerECDHParams,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, Sct, ServerECDHParams,
     ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
@@ -131,7 +131,7 @@ fn refuses_server_ext_with_unparsed_bytes() {
 
 #[test]
 fn refuses_certificate_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x05, 0x00, 0x03, 0x00, 0x00, 0x01];
+    let bytes = [0x00u8, 0x12, 0x00, 0x03, 0x00, 0x00, 0x01];
     let mut rd = Reader::init(&bytes);
     assert!(CertificateExtension::read(&mut rd).is_err());
 }
@@ -385,6 +385,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
+            ClientExtension::SignedCertificateTimestampRequest,
             ClientExtension::TransportParameters(vec![1, 2, 3]),
             ClientExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
@@ -704,6 +705,11 @@ fn server_get_ecpoints_extension() {
 }
 
 #[test]
+fn server_get_sct_list() {
+    test_server_extension_getter(ExtensionType::SCT, |shp| shp.get_sct_list().is_some());
+}
+
+#[test]
 fn server_get_supported_versions() {
     test_server_extension_getter(ExtensionType::SupportedVersions, |shp| {
         shp.get_supported_versions().is_some()
@@ -736,6 +742,11 @@ fn certentry_get_ocsp_response() {
     });
 }
 
+#[test]
+fn certentry_get_scts() {
+    test_cert_extension_getter(ExtensionType::SCT, |ce| ce.get_scts().is_some());
+}
+
 fn get_sample_serverhellopayload() -> ServerHelloPayload {
     ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
@@ -753,6 +764,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
             ServerExtension::PresharedKey(3),
             ServerExtension::ExtendedMasterSecretAck,
             ServerExtension::CertificateStatusAck,
+            ServerExtension::SignedCertificateTimestamp(vec![Sct::from(vec![0])]),
             ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             ServerExtension::TransportParameters(vec![1, 2, 3]),
             ServerExtension::Unknown(UnknownExtension {
@@ -799,6 +811,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
                 CertificateExtension::CertificateStatus(CertificateStatus {
                     ocsp_response: PayloadU24(vec![1, 2, 3]),
                 }),
+                CertificateExtension::SignedCertificateTimestamp(vec![Sct::from(vec![0])]),
                 CertificateExtension::Unknown(UnknownExtension {
                     typ: ExtensionType::Unknown(12345),
                     payload: Payload(vec![1, 2, 3]),

@@ -372,12 +372,14 @@ mod client_hello {
                 emit_fake_ccs(cx.common);
             }
 
-            let mut ocsp_response = server_key.get_ocsp();
+            let (mut ocsp_response, mut sct_list) =
+                (server_key.get_ocsp(), server_key.get_sct_list());
             let doing_early_data = emit_encrypted_extensions(
                 &mut self.transcript,
                 self.suite,
                 cx,
                 &mut ocsp_response,
+                &mut sct_list,
                 client_hello,
                 resumedata.as_ref(),
                 self.extra_exts,
@@ -392,6 +394,7 @@ mod client_hello {
                     cx.common,
                     server_key.get_cert(),
                     ocsp_response,
+                    sct_list,
                 );
                 emit_certificate_verify_tls13(
                     &mut self.transcript,
@@ -663,13 +666,22 @@ mod client_hello {
         suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
+        sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         extra_exts: Vec<ServerExtension>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
         let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;
+        ep.process_common(
+            config,
+            cx,
+            ocsp_response,
+            sct_list,
+            hello,
+            resumedata,
+            extra_exts,
+        )?;
 
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {
@@ -739,6 +751,7 @@ mod client_hello {
         common: &mut CommonState,
         cert_chain: &[Certificate],
         ocsp_response: Option<&[u8]>,
+        sct_list: Option<&[u8]>,
     ) {
         let mut cert_entries = vec![];
         for cert in cert_chain {
@@ -758,6 +771,13 @@ mod client_hello {
                 end_entity_cert
                     .exts
                     .push(CertificateExtension::CertificateStatus(cst));
+            }
+
+            // Likewise, SCT
+            if let Some(sct_list) = sct_list {
+                end_entity_cert
+                    .exts
+                    .push(CertificateExtension::make_sct(sct_list.to_owned()));
             }
         }
 

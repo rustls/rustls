@@ -67,6 +67,7 @@ impl ExtensionProcessing {
         config: &ServerConfig,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
+        sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         extra_exts: Vec<ServerExtension>,
@@ -153,6 +154,24 @@ impl ExtensionProcessing {
         } else {
             // Throw away any OCSP response so we don't try to send it later.
             ocsp_response.take();
+        }
+
+        if !for_resume
+            && hello
+                .find_extension(ExtensionType::SCT)
+                .is_some()
+        {
+            if !cx.common.is_tls13() {
+                // Take the SCT list, if any, so we don't send it later,
+                // and put it in the legacy extension.
+                if let Some(sct_list) = sct_list.take() {
+                    self.exts
+                        .push(ServerExtension::make_sct(sct_list.to_vec()));
+                }
+            }
+        } else {
+            // Throw away any SCT list so we don't send it later.
+            sct_list.take();
         }
 
         self.exts.extend(extra_exts);
