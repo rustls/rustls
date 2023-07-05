@@ -377,7 +377,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
 
         let certfile = fs::File::open(cafile).expect("Cannot open CA file");
         let mut reader = BufReader::new(certfile);
-        root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut reader).unwrap());
+        root_store.add_parsable_certificates(rustls_pemfile::certs(&mut reader).unwrap());
     } else {
         root_store.add_server_trust_anchors(
             webpki_roots::TLS_SERVER_ROOTS

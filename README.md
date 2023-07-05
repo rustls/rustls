@@ -20,6 +20,9 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
+* Next release:
+  - `RootCertStore::add_parsable_certificates` now takes a
+    `impl IntoIterator<Item = impl AsRef<[u8]>>`.
 * Release 0.21.3 (2023-07-05)
   - Added `with_crls` function to `AllowAnyAuthenticatedClient` and
     `AllowAnyAnonymousOrAuthenticatedClient` client certificate verifiers to
