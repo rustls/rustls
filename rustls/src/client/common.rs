@@ -2,8 +2,8 @@ use super::ResolvesClientCert;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::handshake::ServerExtension;
 use crate::msgs::handshake::{CertificatePayload, DistinguishedName};
+use crate::msgs::handshake::{Sct, ServerExtension};
 use crate::{sign, SignatureScheme};
 
 use std::sync::Arc;
@@ -12,14 +12,28 @@ use std::sync::Arc;
 pub(super) struct ServerCertDetails {
     pub(super) cert_chain: CertificatePayload,
     pub(super) ocsp_response: Vec<u8>,
+    pub(super) scts: Option<Vec<Sct>>,
 }
 
 impl ServerCertDetails {
-    pub(super) fn new(cert_chain: CertificatePayload, ocsp_response: Vec<u8>) -> Self {
+    pub(super) fn new(
+        cert_chain: CertificatePayload,
+        ocsp_response: Vec<u8>,
+        scts: Option<Vec<Sct>>,
+    ) -> Self {
         Self {
             cert_chain,
             ocsp_response,
+            scts,
         }
+    }
+
+    pub(super) fn scts(&self) -> impl Iterator<Item = &[u8]> {
+        self.scts
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .map(|payload| payload.as_ref())
     }
 }
 
@@ -32,6 +46,11 @@ impl ClientHelloDetails {
         Self {
             sent_extensions: Vec::new(),
         }
+    }
+
+    pub(super) fn server_may_send_sct_list(&self) -> bool {
+        self.sent_extensions
+            .contains(&ExtensionType::SCT)
     }
 
     pub(super) fn server_sent_unsolicited_extensions(

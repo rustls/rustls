@@ -448,6 +448,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
+                may_send_sct_list: self.hello.server_may_send_sct_list(),
             }))
         }
     }
@@ -460,6 +461,7 @@ struct ExpectCertificateOrCertReq {
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
+    may_send_sct_list: bool,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
@@ -479,6 +481,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
+                may_send_sct_list: self.may_send_sct_list,
                 client_auth: None,
             })
             .handle(cx, m),
@@ -496,6 +499,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 suite: self.suite,
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
+                may_send_sct_list: self.may_send_sct_list,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -520,6 +524,7 @@ struct ExpectCertificateRequest {
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
+    may_send_sct_list: bool,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateRequest {
@@ -577,6 +582,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
+            may_send_sct_list: self.may_send_sct_list,
             client_auth: Some(client_auth),
         }))
     }
@@ -589,6 +595,7 @@ struct ExpectCertificate {
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
+    may_send_sct_list: bool,
     client_auth: Option<ClientAuthDetails>,
 }
 
@@ -618,8 +625,23 @@ impl State<ClientConnectionData> for ExpectCertificate {
             ));
         }
 
-        let server_cert =
-            ServerCertDetails::new(cert_chain.convert(), cert_chain.get_end_entity_ocsp());
+        let server_cert = ServerCertDetails::new(
+            cert_chain.convert(),
+            cert_chain.get_end_entity_ocsp(),
+            cert_chain
+                .get_end_entity_scts()
+                .map(|scts| scts.to_vec()),
+        );
+
+        if let Some(sct_list) = server_cert.scts.as_ref() {
+            if hs::sct_list_is_invalid(sct_list) {
+                return Err(PeerMisbehaved::InvalidSctList.into());
+            }
+
+            if !self.may_send_sct_list {
+                return Err(PeerMisbehaved::UnsolicitedSctList.into());
+            }
+        }
 
         Ok(Box::new(ExpectCertificateVerify {
             config: self.config,
@@ -670,6 +692,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                 end_entity,
                 intermediates,
                 &self.server_name,
+                &mut self.server_cert.scts(),
                 &self.server_cert.ocsp_response,
                 now,
             )

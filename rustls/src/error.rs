@@ -66,6 +66,9 @@ pub enum Error {
     /// implementation.
     InvalidCertificate(CertificateError),
 
+    /// The presented SCT(s) were invalid.
+    InvalidSct(sct::Error),
+
     /// A catch-all error for unlikely errors.
     General(String),
 
@@ -182,6 +185,7 @@ pub enum PeerMisbehaved {
     IncorrectBinder,
     InvalidMaxEarlyDataSize,
     InvalidKeyShare,
+    InvalidSctList,
     KeyEpochWithPendingFragment,
     KeyUpdateReceivedInQuicConnection,
     MessageInterleavedWithHandshakeMessage,
@@ -422,6 +426,7 @@ impl fmt::Display for Error {
             Self::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
             Self::HandshakeNotComplete => write!(f, "handshake not complete"),
             Self::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
+            Self::InvalidSct(ref err) => write!(f, "invalid certificate timestamp: {:?}", err),
             Self::FailedToGetCurrentTime => write!(f, "failed to get current time"),
             Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
             Self::BadMaxFragmentSize => {
@@ -475,6 +480,7 @@ mod tests {
     #[test]
     fn smoke() {
         use crate::enums::{AlertDescription, ContentType, HandshakeType};
+        use sct;
 
         let all = vec![
             Error::InappropriateMessage {
@@ -492,6 +498,7 @@ mod tests {
             super::PeerMisbehaved::UnsolicitedCertExtension.into(),
             Error::AlertReceived(AlertDescription::ExportRestriction),
             super::CertificateError::Expired.into(),
+            Error::InvalidSct(sct::Error::MalformedSct),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
             Error::FailedToGetRandomBytes,

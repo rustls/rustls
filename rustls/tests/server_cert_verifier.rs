@@ -157,6 +157,7 @@ pub struct MockServerVerifier {
     cert_rejection_error: Option<Error>,
     tls12_signature_error: Option<Error>,
     tls13_signature_error: Option<Error>,
+    wants_scts: bool,
     signature_schemes: Vec<SignatureScheme>,
 }
 
@@ -166,12 +167,14 @@ impl ServerCertVerifier for MockServerVerifier {
         end_entity: &rustls::Certificate,
         intermediates: &[rustls::Certificate],
         server_name: &rustls::ServerName,
+        scts: &mut dyn Iterator<Item = &[u8]>,
         oscp_response: &[u8],
         now: std::time::SystemTime,
     ) -> Result<ServerCertVerified, Error> {
+        let scts: Vec<Vec<u8>> = scts.map(|x| x.to_owned()).collect();
         println!(
-            "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?})",
-            end_entity, intermediates, server_name, oscp_response, now
+            "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?}, {:?})",
+            end_entity, intermediates, server_name, scts, oscp_response, now
         );
         if let Some(error) = &self.cert_rejection_error {
             Err(error.clone())
@@ -216,6 +219,11 @@ impl ServerCertVerifier for MockServerVerifier {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.signature_schemes.clone()
+    }
+
+    fn request_scts(&self) -> bool {
+        println!("request_scts? {:?}", self.wants_scts);
+        self.wants_scts
     }
 }
 
@@ -262,6 +270,7 @@ impl Default for MockServerVerifier {
             cert_rejection_error: None,
             tls12_signature_error: None,
             tls13_signature_error: None,
+            wants_scts: false,
             signature_schemes: WebPkiVerifier::verification_schemes(),
         }
     }

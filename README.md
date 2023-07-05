@@ -20,9 +20,6 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
-* Next release:
-  - *Breaking change*: remove support for SCT stapling.  Ecosystem support for this is rare compared to
-    inclusion of SCTs in certificates.
 * Release 0.21.2 (2023-06-14)
   - Bump MSRV to 1.60 to track similar change in dependencies.
   - Differentiate between unexpected and expected EOF in `Stream` and `OwnedStream`.
@@ -112,6 +109,8 @@ obsolete cryptography.
 * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
 * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 * OCSP stapling by servers.
+* SCT stapling by servers.
+* SCT verification by clients.
 
 ## Possible future features
 

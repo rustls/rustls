@@ -193,7 +193,8 @@ mod client_hello {
 
             debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
-            let mut ocsp_response = server_key.get_ocsp();
+            let (mut ocsp_response, mut sct_list) =
+                (server_key.get_ocsp(), server_key.get_sct_list());
 
             // If we're not offered a ticket or a potential session ID, allocate a session ID.
             if !self.config.session_storage.can_cache() {
@@ -210,6 +211,7 @@ mod client_hello {
                 self.suite,
                 self.using_ems,
                 &mut ocsp_response,
+                &mut sct_list,
                 client_hello,
                 None,
                 &self.randoms,
@@ -281,6 +283,7 @@ mod client_hello {
                 self.suite,
                 self.using_ems,
                 &mut None,
+                &mut None,
                 client_hello,
                 Some(&resumedata),
                 &self.randoms,
@@ -336,13 +339,22 @@ mod client_hello {
         suite: &'static Tls12CipherSuite,
         using_ems: bool,
         ocsp_response: &mut Option<&[u8]>,
+        sct_list: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         randoms: &ConnectionRandoms,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<bool, Error> {
         let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;
+        ep.process_common(
+            config,
+            cx,
+            ocsp_response,
+            sct_list,
+            hello,
+            resumedata,
+            extra_exts,
+        )?;
         ep.process_tls12(config, hello, using_ems);
 
         let sh = Message {

@@ -44,6 +44,11 @@ pub struct CertifiedKey {
     /// An optional OCSP response from the certificate issuer,
     /// attesting to its continued validity.
     pub ocsp: Option<Vec<u8>>,
+
+    /// An optional collection of SCTs from CT logs, proving the
+    /// certificate is included on those logs.  This must be
+    /// a `SignedCertificateTimestampList` encoding; see RFC6962.
+    pub sct_list: Option<Vec<u8>>,
 }
 
 impl CertifiedKey {
@@ -56,6 +61,7 @@ impl CertifiedKey {
             cert,
             key,
             ocsp: None,
+            sct_list: None,
         }
     }
 
