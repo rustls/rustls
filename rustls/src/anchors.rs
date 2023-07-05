@@ -124,7 +124,10 @@ impl RootCertStore {
     /// include ancient or syntactically invalid certificates.
     ///
     /// Returns the number of certificates added, and the number that were ignored.
-    pub fn add_parsable_certificates(&mut self, der_certs: &[impl AsRef<[u8]>]) -> (usize, usize) {
+    pub fn add_parsable_certificates<C: AsRef<[u8]>>(
+        &mut self,
+        der_certs: impl IntoIterator<Item = C>,
+    ) -> (usize, usize) {
         let mut valid_count = 0;
         let mut invalid_count = 0;
 
