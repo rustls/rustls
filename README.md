@@ -20,6 +20,14 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
+* Release 0.21.3 (2023-07-05)
+  - Added `with_crls` function to `AllowAnyAuthenticatedClient` and
+    `AllowAnyAnonymousOrAuthenticatedClient` client certificate verifiers to
+    support revocation checking of client certificates using certificate
+    revocation lists (CRLs).
+  - Exposed `verify_signed_by_trust_anchor` and `verify_server_name` certificate
+    validation helper functions when using the "dangerous_configuration"
+    feature.
 * Release 0.21.2 (2023-06-14)
   - Bump MSRV to 1.60 to track similar change in dependencies.
   - Differentiate between unexpected and expected EOF in `Stream` and `OwnedStream`.
