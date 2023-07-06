@@ -348,7 +348,7 @@ fn make_client_config(
         .with_root_certificates(root_store);
 
     let mut cfg = if clientauth == ClientAuth::Yes {
-        cfg.with_single_cert(
+        cfg.with_client_auth_cert(
             params.key_type.get_client_chain(),
             params.key_type.get_client_key(),
         )
