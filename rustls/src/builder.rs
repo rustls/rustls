@@ -58,7 +58,7 @@ use std::marker::PhantomData;
 ///     .with_safe_default_protocol_versions()
 ///     .unwrap()
 ///     .with_root_certificates(root_certs)
-///     .with_single_cert(certs, private_key)
+///     .with_client_auth_cert(certs, private_key)
 ///     .expect("bad certificate/key");
 /// ```
 ///

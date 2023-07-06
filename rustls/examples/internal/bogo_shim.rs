@@ -545,7 +545,8 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
         let key = load_key(&opts.key_file);
-        cfg.with_single_cert(cert, key).unwrap()
+        cfg.with_client_auth_cert(cert, key)
+            .unwrap()
     } else {
         cfg.with_no_client_auth()
     };
