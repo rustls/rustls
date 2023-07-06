@@ -417,7 +417,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
             let certs = load_certs(certs_file);
             let key = load_private_key(key_file);
             config
-                .with_single_cert(certs, key)
+                .with_client_auth_cert(certs, key)
                 .expect("invalid client auth certs/key")
         }
         (None, None) => config.with_no_client_auth(),

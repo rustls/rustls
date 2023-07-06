@@ -359,7 +359,7 @@ pub fn finish_client_config_with_creds(
 
     config
         .with_root_certificates(root_store)
-        .with_single_cert(kt.get_client_chain(), kt.get_client_key())
+        .with_client_auth_cert(kt.get_client_chain(), kt.get_client_key())
         .unwrap()
 }
 

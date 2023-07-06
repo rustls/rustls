@@ -89,13 +89,29 @@ impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
     /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
     ///
     /// This function fails if `key_der` is invalid.
-    pub fn with_single_cert(
+    pub fn with_client_auth_cert(
         self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
     ) -> Result<ClientConfig, Error> {
         self.with_logs(None)
-            .with_single_cert(cert_chain, key_der)
+            .with_client_auth_cert(cert_chain, key_der)
+    }
+
+    /// Sets a single certificate chain and matching private key for use
+    /// in client authentication.
+    ///
+    /// `cert_chain` is a vector of DER-encoded certificates.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
+    ///
+    /// This function fails if `key_der` is invalid.
+    #[deprecated(since = "0.21.4", note = "Use `with_client_auth_cert` instead")]
+    pub fn with_single_cert(
+        self,
+        cert_chain: Vec<key::Certificate>,
+        key_der: key::PrivateKey,
+    ) -> Result<ClientConfig, Error> {
+        self.with_client_auth_cert(cert_chain, key_der)
     }
 
     /// Do not support client auth.
@@ -152,13 +168,29 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
     ///
     /// This function fails if `key_der` is invalid.
-    pub fn with_single_cert(
+    pub fn with_client_auth_cert(
         self,
         cert_chain: Vec<key::Certificate>,
         key_der: key::PrivateKey,
     ) -> Result<ClientConfig, Error> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
+    }
+
+    /// Sets a single certificate chain and matching private key for use
+    /// in client authentication.
+    ///
+    /// `cert_chain` is a vector of DER-encoded certificates.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
+    ///
+    /// This function fails if `key_der` is invalid.
+    #[deprecated(since = "0.21.4", note = "Use `with_client_auth_cert` instead")]
+    pub fn with_single_cert(
+        self,
+        cert_chain: Vec<key::Certificate>,
+        key_der: key::PrivateKey,
+    ) -> Result<ClientConfig, Error> {
+        self.with_client_auth_cert(cert_chain, key_der)
     }
 
     /// Do not support client auth.
