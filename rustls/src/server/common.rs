@@ -5,7 +5,6 @@ use crate::{key, sign};
 pub(super) struct ActiveCertifiedKey<'a> {
     key: &'a sign::CertifiedKey,
     ocsp: Option<&'a [u8]>,
-    sct_list: Option<&'a [u8]>,
 }
 
 impl<'a> ActiveCertifiedKey<'a> {
@@ -13,7 +12,6 @@ impl<'a> ActiveCertifiedKey<'a> {
         ActiveCertifiedKey {
             key,
             ocsp: key.ocsp.as_deref(),
-            sct_list: key.sct_list.as_deref(),
         }
     }
 
@@ -32,10 +30,5 @@ impl<'a> ActiveCertifiedKey<'a> {
     #[inline]
     pub(super) fn get_ocsp(&self) -> Option<&[u8]> {
         self.ocsp
-    }
-
-    #[inline]
-    pub(super) fn get_sct_list(&self) -> Option<&[u8]> {
-        self.sct_list
     }
 }
