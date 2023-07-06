@@ -20,78 +20,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Release history
 
-* Release 0.21.4 (2023-07-07)
-  - `ClientConfig.with_single_cert` is now deprecated, prefer
-    `with_client_auth_cert` instead.
-  - The `Error::CertRevocationListError` enum is now exported.
-  - `RootCertStore::add_parsable_certificates` now takes a
-    `impl IntoIterator<Item = impl AsRef<[u8]>>`.
-* Release 0.21.3 (2023-07-05)
-  - Added `with_crls` function to `AllowAnyAuthenticatedClient` and
-    `AllowAnyAnonymousOrAuthenticatedClient` client certificate verifiers to
-    support revocation checking of client certificates using certificate
-    revocation lists (CRLs).
-  - Exposed `verify_signed_by_trust_anchor` and `verify_server_name` certificate
-    validation helper functions when using the "dangerous_configuration"
-    feature.
-* Release 0.21.2 (2023-06-14)
-  - Bump MSRV to 1.60 to track similar change in dependencies.
-  - Differentiate between unexpected and expected EOF in `Stream` and `OwnedStream`.
-  - `RootCertStore::add_parsable_certificates` now takes a `&[impl AsRef<[u8]>]`.
-  - Add QUIC V2 support.
-* Release 0.21.1 (2023-05-01)
-  - Remove `warn`-level logging from code paths that also return a `rustls::Error` with
-    the same information.
-  - Bug fix: ensure `ConnectionCommon::complete_io` flushes pending writes.
-  - Bug fix: correct encoding of acceptable issuer subjects when rustls operates as a server
-    requesting client authentication.  This was a regression introduced in 0.21.0.
-* Release 0.21.0 (2023-03-29)
-  - Support for connecting to peers named with IP addresses.  This means
-    rustls now depends on a fork of webpki - `rustls-webpki` - with a suitably
-    extended API.
-  - *Breaking change*: `StoresClientSessions` trait renamed to `ClientSessionStore` and
-    reworked to allow storage of multiple TLS1.3 tickets and avoid reuse of them.
-    This is a privacy improvement, see RFC8446 appendix C.4.
-  - *Breaking change*: the `DistinguishedNames` type alias no longer exists; the public
-    API now exports a `DistinguishedName` type, and the
-    `ClientCertVerifier::client_auth_root_subjects()` method now returns a
-    `&[DistinguishedName]` instead (with the lifetime constrained to the
-    verifier's).
-  - *Breaking change*: the `ClientCertVerifier` methods `client_auth_mandatory()`
-    and `client_auth_root_subjects()` no longer return an `Option`. You can now
-    use an `Acceptor` to decide whether to accept the connection based on information
-    from the `ClientHello` (like server name).
-  - *Breaking change*: rework `rustls::Error` to avoid String usage in
-    `PeerMisbehavedError`, `PeerIncompatibleError` and certificate errors.
-    Especially note that custom certificate verifiers should move to use the
-    new certificate errors. `Error` is now `non_exhaustive`, and so are the
-    inner enums used in its variants.
-  - *Breaking change*: replace `webpki::Error` appearing in the public API
-    in `RootCertStore::add`.
-  - The number of tickets sent by a TLS1.3 server is now configurable via
-    `ServerConfig::send_tls13_tickets`.  Previously one ticket was sent, now
-    the default is four.
-  - *Breaking change*: remove deprecated methods from `Acceptor`.
-  - *Breaking change*: `AllowAnyAuthenticatedClient` and `AllowAnyAnonymousOrAuthenticatedClient`
-    `new` functions now return `Self`. A `boxed` function was added to both types to easily acquire
-    an `Arc<dyn ClientCertVerifier>`.
-  - *Breaking change*: `NoClientAuth::new` was renamed to `boxed`.
-  - *Breaking change*: the QUIC API has changed to provide QUIC-specific `ClientConnection` and
-    `ServerConnection` types, instead of using an extension trait.
-  - *Breaking change*: the QUIC `Secrets` constructor was changed to take
-    a `Side` instead of `bool`.
-  - *Breaking change*: the `export_keying_material` function on a `Connection`
-    was changed from returning `Result<(), Error>` to `Result<T, Error>` where
-    `T: AsMut<[u8]>`.
-  - *Breaking change*: the `sni_hostname` function on a `Connection` was renamed
-    to `server_name`.
-  - *Breaking change*: remove alternative type names deprecated in 0.20.0 (`RSASigningKey` vs.
-    `RsaSigningKey` etc.)
-  - *Breaking change*: the client config `session_storage` and `enable_tickets`
-    fields have been replaced by a more misuse resistant `Resumption` type that
-    combines the two options.
-
-See [RELEASE_NOTES.md](RELEASE_NOTES.md) for further change history.
+Release history can be found [on GitHub](https://github.com/rustls/rustls/releases).
 
 # Documentation
 Lives here: https://docs.rs/rustls/
