@@ -424,7 +424,7 @@ pub enum CertRevocationListError {
     /// The CRL contained a revoked certificate with an unsupported revocation reason.
     /// See RFC 5280 Section 5.3.1[^1] for a list of supported revocation reasons.
     ///
-    /// [^1]: https://www.rfc-editor.org/rfc/rfc5280#section-5.3.1
+    /// [^1]: <https://www.rfc-editor.org/rfc/rfc5280#section-5.3.1>
     UnsupportedRevocationReason,
 }
 
