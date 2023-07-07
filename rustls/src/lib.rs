@@ -384,7 +384,10 @@ pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
     SignatureScheme,
 };
-pub use crate::error::{CertificateError, Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+pub use crate::error::{
+    CertRevocationListError, CertificateError, Error, InvalidMessage, PeerIncompatible,
+    PeerMisbehaved,
+};
 pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
