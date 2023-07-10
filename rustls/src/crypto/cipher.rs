@@ -126,11 +126,6 @@ impl Iv {
         iv.0.copy_from_slice(value);
         iv
     }
-
-    #[cfg(test)]
-    pub(crate) fn value(&self) -> &[u8; NONCE_LEN] {
-        &self.0
-    }
 }
 
 impl From<[u8; NONCE_LEN]> for Iv {

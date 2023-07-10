@@ -23,6 +23,7 @@ use core::marker::PhantomData;
 /// exchange groups and protocol versions:
 ///
 /// ```
+/// # #[cfg(feature = "ring")] {
 /// use rustls::{ClientConfig, ServerConfig, crypto::ring::Ring};
 /// // <Ring> specifies the cryptographic provider to use.
 /// ClientConfig::<Ring>::builder()
@@ -34,6 +35,7 @@ use core::marker::PhantomData;
 ///     .with_safe_defaults()
 /// //  ...
 /// # ;
+/// # }
 /// ```
 ///
 /// If you override the default for one protocol primitive (for instance supporting only TLS 1.3),
@@ -41,6 +43,7 @@ use core::marker::PhantomData;
 /// be "use the default."
 ///
 /// ```no_run
+/// # #[cfg(feature = "ring")] {
 /// # use rustls::ServerConfig;
 /// # use rustls::crypto::ring::Ring;
 /// ServerConfig::<Ring>::builder()
@@ -50,6 +53,7 @@ use core::marker::PhantomData;
 ///     .unwrap()
 /// //  ...
 /// # ;
+/// # }
 /// ```
 ///
 /// Overriding a default introduces a `Result` that must be unwrapped,
@@ -79,6 +83,7 @@ use core::marker::PhantomData;
 /// For example:
 ///
 /// ```
+/// # #[cfg(feature = "ring")] {
 /// # use rustls::ClientConfig;
 /// # use rustls::crypto::ring::Ring;
 /// # let root_certs = rustls::RootCertStore::empty();
@@ -86,6 +91,7 @@ use core::marker::PhantomData;
 ///     .with_safe_defaults()
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth();
+/// # }
 /// ```
 ///
 /// # ServerConfig certificate configuration
@@ -102,6 +108,7 @@ use core::marker::PhantomData;
 /// For example:
 ///
 /// ```no_run
+/// # #[cfg(feature = "ring")] {
 /// # use rustls::ServerConfig;
 /// # use rustls::crypto::ring::Ring;
 /// # let certs = vec![];
@@ -113,6 +120,7 @@ use core::marker::PhantomData;
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
 ///     .expect("bad certificate/key");
+/// # }
 /// ```
 ///
 /// # Types

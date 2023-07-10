@@ -103,29 +103,34 @@
 //! the Mozilla set of root certificates.
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "ring")] {
 //! let mut root_store = rustls::RootCertStore::empty();
 //! root_store.add_trust_anchors(
 //!     webpki_roots::TLS_SERVER_ROOTS
 //!         .iter()
 //!         .cloned()
 //! );
+//! # }
 //! ```
 //!
 //! Next, we make a `ClientConfig`.  You're likely to make one of these per process,
 //! and use it for all connections made by that process.
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "ring")] {
 //! # let root_store: rustls::RootCertStore = panic!();
 //! let config = rustls::ClientConfig::<rustls::crypto::ring::Ring>::builder()
 //!     .with_safe_defaults()
 //!     .with_root_certificates(root_store)
 //!     .with_no_client_auth();
+//! # }
 //! ```
 //!
 //! Now we can make a connection.  You need to provide the server's hostname so we
 //! know what to expect to find in the server's certificate.
 //!
 //! ```rust
+//! # #[cfg(feature = "ring")] {
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
@@ -142,6 +147,7 @@
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();
 //! let mut client = rustls::ClientConnection::new(rc_config, example_com);
+//! # }
 //! ```
 //!
 //! Now you should do appropriate IO for the `client` object.  If `client.wants_read()` yields
@@ -168,6 +174,7 @@
 //! errors.
 //!
 //! ```rust,no_run
+//! # #[cfg(feature = "ring")] {
 //! # let mut client = rustls::ClientConnection::new::<rustls::crypto::ring::Ring>(panic!(), panic!()).unwrap();
 //! # struct Socket { }
 //! # impl Socket {
@@ -209,6 +216,7 @@
 //!
 //!   socket.wait_for_something_to_happen();
 //! }
+//! # }
 //! ```
 //!
 //! # Examples
@@ -245,6 +253,11 @@
 //! - `read_buf`: When building with Rust Nightly, adds support for the unstable
 //!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
 //!   buffers. Will do nothing on non-Nightly releases.
+//!
+//! - `ring`: this makes the rustls crate depend on the *ring* crate, which is
+//!   which is used for cryptography.
+//!   Without this feature, these items must be provided externally to the core
+//!   rustls crate.
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
@@ -368,8 +381,11 @@ pub use crate::builder::{
 };
 pub use crate::common_state::{CommonState, IoState, Side};
 pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
+#[cfg(feature = "ring")]
 pub use crate::crypto::ring::Ticketer;
+#[cfg(feature = "ring")]
 pub use crate::crypto::ring::{SupportedKxGroup, ALL_KX_GROUPS};
+#[cfg(feature = "ring")]
 pub use crate::crypto::ring::{ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES};
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
@@ -440,6 +456,7 @@ pub mod server {
     mod tls12;
     mod tls13;
 
+    pub use crate::verify::NoClientAuth;
     pub use crate::webpki::WebPkiClientVerifier;
     pub use crate::webpki::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
     pub use builder::WantsServerCert;
@@ -465,12 +482,13 @@ pub use server::{ServerConfig, ServerConnection};
 ///
 /// [`ALL_CIPHER_SUITES`] is provided as an array of all of these values.
 pub mod cipher_suite {
-    #[cfg(feature = "tls12")]
+    #[cfg(all(feature = "tls12", feature = "ring"))]
     pub use crate::crypto::ring::tls12::{
         TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     };
+    #[cfg(feature = "ring")]
     pub use crate::crypto::ring::tls13::{
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     };
@@ -486,11 +504,13 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
+#[cfg(feature = "ring")]
 /// All defined key exchange groups supported by *ring* appear in this module.
 pub use crypto::ring::kx_group;
 
 /// Message signing interfaces and implementations.
 pub mod sign {
+    #[cfg(feature = "ring")]
     pub use crate::crypto::ring::sign::{
         any_ecdsa_type, any_eddsa_type, any_supported_type, RsaSigningKey,
     };

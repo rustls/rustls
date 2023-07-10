@@ -147,7 +147,7 @@ mod tests {
         };
 
         let with_dn = TrustAnchorWithDn::from(ta.clone());
-        let expected_prefix = vec![ring::io::der::Tag::Sequence as u8, ta.subject.len() as u8];
+        let expected_prefix = vec![0x30, ta.subject.len() as u8];
         assert_eq!(
             with_dn.subject().as_ref(),
             [expected_prefix, ta.subject.to_vec()].concat()

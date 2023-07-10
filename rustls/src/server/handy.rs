@@ -1,3 +1,4 @@
+#[cfg(feature = "ring")]
 use crate::crypto::ring;
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
@@ -100,6 +101,7 @@ pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
     /// key type and encoding.
+    #[cfg(feature = "ring")]
     pub(super) fn new(
         chain: Vec<CertificateDer<'static>>,
         priv_key: &PrivateKeyDer<'_>,
@@ -113,6 +115,7 @@ impl AlwaysResolvesChain {
     /// key type and encoding.
     ///
     /// If non-empty, the given OCSP response and SCTs are attached.
+    #[cfg(feature = "ring")]
     pub(super) fn new_with_extras(
         chain: Vec<CertificateDer<'static>>,
         priv_key: &PrivateKeyDer<'_>,

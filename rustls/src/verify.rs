@@ -251,7 +251,7 @@ impl fmt::Debug for dyn ClientCertVerifier {
 /// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the `NoClientAuth`
 /// `ClientCertVerifier` will not offer client authentication at all, vs offering but not
 /// requiring it.
-pub(crate) struct NoClientAuth;
+pub struct NoClientAuth;
 
 impl ClientCertVerifier for NoClientAuth {
     fn offer_client_auth(&self) -> bool {

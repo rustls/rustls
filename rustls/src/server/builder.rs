@@ -1,5 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::{CryptoProvider, KeyExchange};
+#[cfg(feature = "ring")]
 use crate::error::Error;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
@@ -50,6 +51,7 @@ pub struct WantsServerCert<C: CryptoProvider> {
 }
 
 impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
+    #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
@@ -72,6 +74,7 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
+    #[cfg(feature = "ring")]
     /// Sets a single certificate chain, matching private key, OCSP
     /// response and SCTs.  This certificate and key is used for all
     /// subsequent connections, irrespective of things like SNI hostname.

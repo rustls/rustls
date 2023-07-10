@@ -1,6 +1,10 @@
 //! Tests for configuring and using a [`ServerCertVerifier`] for a client.
 
-#![cfg(feature = "dangerous_configuration")]
+#![cfg(all(
+    feature = "dangerous_configuration",
+    feature = "webpki",
+    feature = "ring"
+))]
 
 mod common;
 use crate::common::{

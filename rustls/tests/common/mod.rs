@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#![cfg(feature = "ring")]
 
 use std::io;
 use std::ops::{Deref, DerefMut};

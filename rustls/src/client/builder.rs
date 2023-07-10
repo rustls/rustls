@@ -2,6 +2,7 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::crypto::{CryptoProvider, KeyExchange};
+#[cfg(feature = "ring")]
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
@@ -15,6 +16,7 @@ use alloc::sync::Arc;
 use core::marker::PhantomData;
 
 impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
+    #[cfg(feature = "ring")]
     /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,
@@ -62,6 +64,7 @@ pub struct WantsClientCert<C: CryptoProvider> {
 }
 
 impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
+    #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
@@ -78,6 +81,7 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
     }
 
+    #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
