@@ -1,13 +1,14 @@
 use crate::client;
-use crate::crypto::ring;
 use crate::enums::SignatureScheme;
-use crate::error::Error;
 use crate::limited_cache;
 use crate::msgs::persist;
 use crate::sign;
 use crate::NamedGroup;
 use crate::ServerName;
+#[cfg(feature = "ring")]
+use crate::{crypto::ring, error::Error};
 
+#[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::collections::VecDeque;
@@ -179,6 +180,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
 pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesClientCert {
+    #[cfg(feature = "ring")]
     pub(super) fn new(
         chain: Vec<CertificateDer<'static>>,
         priv_key: &PrivateKeyDer<'_>,
@@ -203,7 +205,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ring"))]
 mod test {
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;

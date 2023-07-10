@@ -1,3 +1,5 @@
+#![cfg(feature = "ring")]
+
 //! Tests of [`rustls::KeyLogFile`] that require us to set environment variables.
 //!
 //!                                 vvvv

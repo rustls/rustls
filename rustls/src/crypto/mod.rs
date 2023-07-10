@@ -4,6 +4,7 @@ use crate::{Error, NamedGroup};
 use core::fmt::Debug;
 
 /// *ring* based CryptoProvider.
+#[cfg(feature = "ring")]
 pub mod ring;
 
 /// TLS message encryption/decryption interfaces.

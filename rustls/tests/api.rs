@@ -1,3 +1,4 @@
+#![cfg(feature = "ring")]
 #![cfg_attr(read_buf, feature(read_buf))]
 //! Assorted public API tests.
 use std::cell::RefCell;
