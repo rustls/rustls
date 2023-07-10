@@ -532,6 +532,7 @@ impl From<ServerConnection> for crate::Connection {
 /// # Example
 ///
 /// ```no_run
+/// # #[cfg(feature = "ring")] {
 /// # fn choose_server_config<C: rustls::crypto::CryptoProvider>(
 /// #     _: rustls::server::ClientHello,
 /// # ) -> std::sync::Arc<rustls::ServerConfig<C>> {
@@ -559,6 +560,7 @@ impl From<ServerConnection> for crate::Connection {
 
 ///     // Proceed with handling the ServerConnection.
 /// }
+/// # }
 /// # }
 /// ```
 pub struct Acceptor {

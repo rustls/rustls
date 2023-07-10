@@ -218,7 +218,7 @@ pub enum ConnectionTrafficSecrets {
     },
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ring"))]
 mod test {
     use super::*;
     use crate::crypto::ring::suites::ALL_CIPHER_SUITES;

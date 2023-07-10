@@ -170,7 +170,7 @@ mod tests {
             b"".to_owned(),
             None::<Vec<u8>>,
         );
-        let expected_prefix = vec![ring::io::der::Tag::Sequence as u8, subject.len() as u8];
+        let expected_prefix = vec![0x30, subject.len() as u8];
         assert_eq!(
             ota.subject().as_ref(),
             [expected_prefix, subject.to_vec()].concat()

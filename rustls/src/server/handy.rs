@@ -1,13 +1,13 @@
-use crate::crypto::ring;
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
-use crate::key;
 use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
 use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
+#[cfg(feature = "ring")]
+use crate::{crypto::ring, key};
 
 use alloc::sync::Arc;
 use std::collections;
@@ -99,6 +99,7 @@ pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
     /// key type and encoding.
+    #[cfg(feature = "ring")]
     pub(super) fn new(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,
@@ -112,6 +113,7 @@ impl AlwaysResolvesChain {
     /// key type and encoding.
     ///
     /// If non-empty, the given OCSP response and SCTs are attached.
+    #[cfg(feature = "ring")]
     pub(super) fn new_with_extras(
         chain: Vec<key::Certificate>,
         priv_key: &key::PrivateKey,

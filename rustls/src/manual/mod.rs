@@ -28,3 +28,7 @@ pub mod _04_features;
 /// This section provides rationale for the defaults in rustls.
 #[path = "defaults.rs"]
 pub mod _05_defaults;
+
+/// This section explains how to replace the cryptography rustls uses.
+#[path = "providers.rs"]
+pub mod _06_custom_cryptography;

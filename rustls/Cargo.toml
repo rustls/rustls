@@ -17,14 +17,15 @@ rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
 log = { version = "0.4.4", optional = true }
-ring = "0.16.20"
+ring = { version = "0.16.20", optional = true }
 subtle = "2.5.0"
-webpki = { package = "rustls-webpki", version = "0.102.0-alpha.0", features = ["alloc", "std", "ring"] }
+webpki = { package = "rustls-webpki", version = "0.102.0-alpha.0", features = ["alloc", "std"] }
 
 [features]
-default = ["logging", "tls12"]
+default = ["logging", "tls12", "ring"]
 logging = ["log"]
 dangerous_configuration = []
+ring = ["dep:ring", "webpki/ring"]
 secret_extraction = []
 quic = []
 tls12 = []
@@ -41,11 +42,12 @@ base64 = "0.21"
 [[example]]
 name = "bogo_shim"
 path = "examples/internal/bogo_shim.rs"
-required-features = ["dangerous_configuration", "quic"]
+required-features = ["dangerous_configuration", "quic", "ring"]
 
 [[example]]
 name = "bench"
 path = "examples/internal/bench.rs"
+required-features = ["ring"]
 
 [[bench]]
 name = "benchmarks"

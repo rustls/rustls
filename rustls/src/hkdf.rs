@@ -107,7 +107,7 @@ impl Expander {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ring"))]
 mod test {
     use super::Extractor;
     use crate::crypto::ring;
