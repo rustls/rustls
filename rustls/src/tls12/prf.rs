@@ -15,7 +15,7 @@ pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn crypto::hmac::Key, label: &[u8]
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ring"))]
 mod tests {
     use crate::crypto::hmac::Hmac;
     use crate::crypto::ring;

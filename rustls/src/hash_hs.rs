@@ -38,7 +38,7 @@ impl HandshakeHashBuffer {
     }
 
     /// Hash or buffer a byte slice.
-    #[cfg(test)]
+    #[cfg(all(test, feature = "ring"))]
     fn update_raw(&mut self, buf: &[u8]) {
         self.buffer.extend_from_slice(buf);
     }
@@ -163,7 +163,7 @@ impl HandshakeHash {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ring"))]
 mod test {
     use super::HandshakeHashBuffer;
     use crate::crypto::ring;

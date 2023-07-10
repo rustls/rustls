@@ -216,7 +216,7 @@ pub enum ConnectionTrafficSecrets {
     },
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ring"))]
 mod test {
     use super::crypto::ring::tls13::*;
     use super::*;
