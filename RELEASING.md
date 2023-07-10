@@ -40,3 +40,16 @@
 1. Create a new GitHub release for that tag.  Use "Generate release notes" (against the tag for the previous release)
    as a starting point for the release description.  Then add the "headlines" produced earlier at the top.
 2. Update dependent crates (eg, hyper-rustls, rustls-native-certs, etc.) if this was a semver-incompatible release.
+
+## Maintenance point releases
+
+When point releases for bug fixes and small backwards compatible changes, but `main` contains unreleased breaking 
+changes we follow a modified release process using a longer-lived maintenance branch.
+
+1. Check if there is an existing release branch, e.g. `rel-0.21` for point releases in the `0.21.x` series.
+   - If there is, use that branch.
+   - If there is not, create a new branch from the tag for the previous release, e.g. `git checkout -b rel-0.21 v/0.21.0`.
+     Remember to also create a branch protection rule for the release branch, matching the settings from `main`.
+2. Make pull-requests for any changes you want to include in the point release, targeted against the release branch.
+3. Follow the usual release process, but use the release branch instead of `main` when making the release.
+   - For example, `cargo publish` should be run from the release branch, not `main`.
