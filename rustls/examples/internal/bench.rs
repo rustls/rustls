@@ -338,7 +338,7 @@ fn make_client_config(
     let mut root_store = RootCertStore::empty();
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
-    root_store.add_parsable_certificates(rustls_pemfile::certs(&mut rootbuf).unwrap());
+    root_store.add_parsable_certificates(&rustls_pemfile::certs(&mut rootbuf).unwrap());
 
     let cfg = ClientConfig::builder()
         .with_cipher_suites(&[params.ciphersuite])
