@@ -23,23 +23,22 @@ pub trait KeyExchange: Sized + Send + Sync + 'static {
     /// Start a key exchange using the [NamedGroup] if it is a suitable choice
     /// based on the groups supported.
     ///
+    /// This will prepare an ephemeral secret key in the supported group, and a corresponding
+    /// public key. The key exchange must be completed by calling [KeyExchange#complete].
+    ///
+    /// `name` gives the name of the chosen key exchange group that should be used.  `supported`
+    /// is the configurated collection of supported key exchange groups.  Implementation-specific
+    /// data can be looked up in this array (based on `name`) to allow unconfigured algorithms
+    /// to be discarded by the linker.
+    ///
     /// # Errors
     ///
     /// Returns an error if the [NamedGroup] is not supported, or if a key exchange
-    /// can't be started (see [KeyExchange#start]).
-    fn choose(
+    /// can't be started.
+    fn start(
         name: NamedGroup,
         supported: &[&'static Self::SupportedGroup],
     ) -> Result<Self, KeyExchangeError>;
-
-    /// Start a key exchange using the [SupportedGroup]. This will prepare an ephemeral
-    /// secret key in the supported group, and a corresponding public key. The key exchange
-    /// must be completed by calling [KeyExchange#complete].
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if key generation fails.
-    fn start(skxg: &'static Self::SupportedGroup) -> Result<Self, GetRandomFailed>;
 
     /// Completes the key exchange, given the peer's public key.
     ///
@@ -58,12 +57,13 @@ pub trait KeyExchange: Sized + Send + Sync + 'static {
 }
 
 /// Enumerates possible key exchange errors.
+#[derive(Debug)]
 pub enum KeyExchangeError {
     /// Returned when the specified group is unsupported.
     UnsupportedGroup,
 
-    /// Returned when key exchange fails.
-    KeyExchangeFailed(GetRandomFailed),
+    /// Random material generation failure during key generation/exchange.
+    GetRandomFailed,
 }
 
 /// A trait describing a supported key exchange group that can be identified by name.

@@ -30,6 +30,7 @@ use super::hs::ClientContext;
 use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
+use crate::rand::GetRandomFailed;
 
 use subtle::ConstantTimeEq;
 
@@ -767,12 +768,12 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
         let kx =
-            match <<C as CryptoProvider>::KeyExchange>::choose(named_group, &st.config.kx_groups) {
+            match <<C as CryptoProvider>::KeyExchange>::start(named_group, &st.config.kx_groups) {
                 Ok(kx) => kx,
                 Err(KeyExchangeError::UnsupportedGroup) => {
                     return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into())
                 }
-                Err(KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
+                Err(KeyExchangeError::GetRandomFailed) => return Err(GetRandomFailed.into()),
             };
 
         // 5b.

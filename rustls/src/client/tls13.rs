@@ -223,7 +223,7 @@ pub(super) fn initial_key_share<C: CryptoProvider>(
                 .name()
         });
 
-    KeyExchange::choose(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
+    KeyExchange::start(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a

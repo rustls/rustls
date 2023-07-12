@@ -488,7 +488,7 @@ mod client_hello {
         let mut extensions = Vec::new();
 
         // Prepare key exchange; the caller ascertained that the `share.group` is supported
-        let kx = <<C as CryptoProvider>::KeyExchange as KeyExchange>::choose(
+        let kx = <<C as CryptoProvider>::KeyExchange as KeyExchange>::start(
             share.group,
             &config.kx_groups,
         )

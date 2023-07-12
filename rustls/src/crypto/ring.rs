@@ -37,7 +37,7 @@ pub struct KeyExchange {
 impl super::KeyExchange for KeyExchange {
     type SupportedGroup = SupportedKxGroup;
 
-    fn choose(
+    fn start(
         name: NamedGroup,
         supported: &[&'static SupportedKxGroup],
     ) -> Result<Self, KeyExchangeError> {
@@ -49,19 +49,15 @@ impl super::KeyExchange for KeyExchange {
             None => return Err(KeyExchangeError::UnsupportedGroup),
         };
 
-        Self::start(group).map_err(KeyExchangeError::KeyExchangeFailed)
-    }
-
-    fn start(group: &'static SupportedKxGroup) -> Result<Self, GetRandomFailed> {
         let rng = SystemRandom::new();
         let priv_key = match EphemeralPrivateKey::generate(group.agreement_algorithm, &rng) {
             Ok(priv_key) => priv_key,
-            Err(_) => return Err(GetRandomFailed),
+            Err(_) => return Err(KeyExchangeError::GetRandomFailed),
         };
 
         let pub_key = match priv_key.compute_public_key() {
             Ok(pub_key) => pub_key,
-            Err(_) => return Err(GetRandomFailed),
+            Err(_) => return Err(KeyExchangeError::GetRandomFailed),
         };
 
         Ok(Self {
