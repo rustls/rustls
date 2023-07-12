@@ -379,6 +379,7 @@ pub use crate::builder::{
 };
 pub use crate::common_state::{CommonState, IoState, Side};
 pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
+pub use crate::crypto::ring::Ticketer;
 pub use crate::crypto::ring::{SupportedKxGroup, ALL_KX_GROUPS};
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
@@ -400,7 +401,7 @@ pub use crate::suites::{
 #[cfg(feature = "secret_extraction")]
 #[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
 pub use crate::suites::{ConnectionTrafficSecrets, ExtractedSecrets};
-pub use crate::ticketer::Ticketer;
+pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;

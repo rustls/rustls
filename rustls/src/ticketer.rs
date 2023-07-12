@@ -1,12 +1,9 @@
-#[cfg(test)]
-use crate::crypto::ring::Ring;
-use crate::crypto::CryptoProvider;
 use crate::rand;
 use crate::server::ProducesTickets;
 use crate::Error;
 
 use std::mem;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
 use std::time;
 
 /// The timebase for expiring and rolling tickets and ticketing
@@ -14,7 +11,7 @@ use std::time;
 ///
 /// This is guaranteed to be on or after the UNIX epoch.
 #[derive(Clone, Copy, Debug)]
-pub struct TimeBase(time::Duration);
+pub struct TimeBase(pub(crate) time::Duration);
 
 impl TimeBase {
     #[inline]
@@ -30,7 +27,7 @@ impl TimeBase {
     }
 }
 
-struct TicketSwitcherState {
+pub(crate) struct TicketSwitcherState {
     next: Option<Box<dyn ProducesTickets>>,
     current: Box<dyn ProducesTickets>,
     previous: Option<Box<dyn ProducesTickets>>,
@@ -40,18 +37,21 @@ struct TicketSwitcherState {
 /// A ticketer that has a 'current' sub-ticketer and a single
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
-struct TicketSwitcher {
-    generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
+pub struct TicketSwitcher {
+    pub(crate) generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
     lifetime: u32,
     state: Mutex<TicketSwitcherState>,
 }
 
 impl TicketSwitcher {
+    /// Creates a new `TicketSwitcher`, which rotates through sub-ticketers
+    /// based on the passage of time.
+    ///
     /// `lifetime` is in seconds, and is how long the current ticketer
     /// is used to generate new tickets.  Tickets are accepted for no
     /// longer than twice this duration.  `generator` produces a new
     /// `ProducesTickets` implementation.
-    fn new(
+    pub fn new(
         lifetime: u32,
         generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
     ) -> Result<Self, Error> {
@@ -79,7 +79,7 @@ impl TicketSwitcher {
     ///
     /// For efficiency, this is also responsible for locking the state mutex
     /// and returning the mutexguard.
-    fn maybe_roll(&self, now: TimeBase) -> Option<MutexGuard<TicketSwitcherState>> {
+    pub(crate) fn maybe_roll(&self, now: TimeBase) -> Option<MutexGuard<TicketSwitcherState>> {
         // The code below aims to make switching as efficient as possible
         // in the common case that the generator never fails. To achieve this
         // we run the following steps:
@@ -180,82 +180,4 @@ impl ProducesTickets for TicketSwitcher {
                     .and_then(|previous| previous.decrypt(ciphertext))
             })
     }
-}
-
-/// A concrete, safe ticket creation mechanism.
-pub struct Ticketer {}
-
-impl Ticketer {
-    /// Make the recommended Ticketer.  This produces tickets
-    /// with a 12 hour life and randomly generated keys.
-    ///
-    /// The encryption mechanism used in Chacha20Poly1305.
-    pub fn new<C: CryptoProvider>() -> Result<Arc<dyn ProducesTickets>, Error> {
-        Ok(Arc::new(TicketSwitcher::new(
-            6 * 60 * 60,
-            C::ticket_generator,
-        )?))
-    }
-}
-
-#[test]
-fn basic_pairwise_test() {
-    let t = Ticketer::new::<Ring>().unwrap();
-    assert!(t.enabled());
-    let cipher = t.encrypt(b"hello world").unwrap();
-    let plain = t.decrypt(&cipher).unwrap();
-    assert_eq!(plain, b"hello world");
-}
-
-#[test]
-fn ticketswitcher_switching_test() {
-    let t = Arc::new(TicketSwitcher::new(1, Ring::ticket_generator).unwrap());
-    let now = TimeBase::now().unwrap();
-    let cipher1 = t.encrypt(b"ticket 1").unwrap();
-    assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-    {
-        // Trigger new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(10)));
-    }
-    let cipher2 = t.encrypt(b"ticket 2").unwrap();
-    assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-    assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-    {
-        // Trigger new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(20)));
-    }
-    let cipher3 = t.encrypt(b"ticket 3").unwrap();
-    assert!(t.decrypt(&cipher1).is_none());
-    assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-    assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
-}
-
-#[cfg(test)]
-fn fail_generator() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed> {
-    Err(rand::GetRandomFailed)
-}
-
-#[test]
-fn ticketswitcher_recover_test() {
-    let mut t = TicketSwitcher::new(1, Ring::ticket_generator).unwrap();
-    let now = TimeBase::now().unwrap();
-    let cipher1 = t.encrypt(b"ticket 1").unwrap();
-    assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-    t.generator = fail_generator;
-    {
-        // Failed new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(10)));
-    }
-    t.generator = Ring::ticket_generator;
-    let cipher2 = t.encrypt(b"ticket 2").unwrap();
-    assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-    assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-    {
-        // recover
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(20)));
-    }
-    let cipher3 = t.encrypt(b"ticket 3").unwrap();
-    assert!(t.decrypt(&cipher1).is_none());
-    assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-    assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
 }
