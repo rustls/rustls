@@ -20,6 +20,7 @@ use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{Random, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::rand::GetRandomFailed;
 use crate::ticketer::TimeBase;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::SupportedCipherSuite;
@@ -790,7 +791,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                match KeyExchange::choose(group, &self.next.input.config.kx_groups) {
+                match KeyExchange::start(group, &config.kx_groups) {
                     Ok(kx) => kx,
                     Err(KeyExchangeError::UnsupportedGroup) => {
                         return Err(cx.common.send_fatal_alert(
@@ -798,7 +799,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
                             PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
                         ));
                     }
-                    Err(KeyExchangeError::KeyExchangeFailed(err)) => return Err(err.into()),
+                    Err(KeyExchangeError::GetRandomFailed) => return Err(GetRandomFailed.into()),
                 }
             }
             _ => offered_key_share,

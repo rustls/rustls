@@ -521,7 +521,7 @@ mod tests {
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
-        let key = ring::KeyExchange::start(&X25519).unwrap();
+        let key = ring::KeyExchange::start(crate::NamedGroup::X25519, &[&X25519]).unwrap();
         let server_params = ServerECDHParams::new(key.group(), key.pub_key());
         let mut server_buf = Vec::new();
         server_params.encode(&mut server_buf);

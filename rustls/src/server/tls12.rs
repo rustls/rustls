@@ -16,6 +16,7 @@ use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, Handshak
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::rand::GetRandomFailed;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -35,6 +36,7 @@ mod client_hello {
     use crate::crypto::{KeyExchange, SupportedGroup};
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
+    use crate::msgs::enums::NamedGroup;
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::ServerECDHParams;
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
@@ -180,7 +182,8 @@ mod client_hello {
                         AlertDescription::HandshakeFailure,
                         PeerIncompatible::NoKxGroupsInCommon,
                     )
-                })?;
+                })?
+                .name();
 
             let ecpoint = ECPointFormat::SUPPORTED
                 .iter()
@@ -224,6 +227,7 @@ mod client_hello {
             let server_kx = emit_server_kx::<C>(
                 &mut self.transcript,
                 cx.common,
+                &self.config,
                 sigschemes,
                 group,
                 server_key.get_key(),
@@ -403,13 +407,22 @@ mod client_hello {
     fn emit_server_kx<C: CryptoProvider>(
         transcript: &mut HandshakeHash,
         common: &mut CommonState,
+        config: &ServerConfig<C>,
         sigschemes: Vec<SignatureScheme>,
-        skxg: &'static <<C as CryptoProvider>::KeyExchange as KeyExchange>::SupportedGroup,
+        selected_group: NamedGroup,
         signing_key: &dyn sign::SigningKey,
         randoms: &ConnectionRandoms,
     ) -> Result<C::KeyExchange, Error> {
-        let kx = <<C as CryptoProvider>::KeyExchange as KeyExchange>::start(skxg)?;
-        let secdh = ServerECDHParams::new(skxg.name(), kx.pub_key());
+        let kx = match <<C as CryptoProvider>::KeyExchange as KeyExchange>::start(
+            selected_group,
+            &config.kx_groups,
+        ) {
+            Ok(kx) => kx,
+            Err(_) => {
+                return Err(GetRandomFailed.into());
+            }
+        };
+        let secdh = ServerECDHParams::new(selected_group, kx.pub_key());
 
         let mut msg = Vec::new();
         msg.extend(randoms.client);
