@@ -5,9 +5,9 @@ permissions:
 
 on:
   schedule:
-    # We only run connectivity tests on a weekly basis, choosing a weekday and
+    # We run connectivity tests on a daily basis, choosing a
     # a time slightly offset from the top of the hour.
-    - cron: '15 12 * * 3'
+    - cron: '15 18 * * *'
 
 jobs:
   build:
@@ -20,7 +20,6 @@ jobs:
           - stable
           - beta
           - nightly
-          - "1.60" # MSRV
         os: [ubuntu-20.04]
         # but only stable on macos/windows (slower platforms)
         include:
