@@ -43,7 +43,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 versions: self.state.versions,
                 verifier,
             },
-            side: PhantomData::default(),
+            side: PhantomData,
         }
     }
 }
