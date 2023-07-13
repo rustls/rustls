@@ -209,19 +209,19 @@ pub(super) fn initial_key_share<C: CryptoProvider>(
         .resumption
         .store
         .kx_hint(server_name)
-        .filter(|hint_group| {
+        .and_then(|hint_group| {
             config
                 .kx_groups
                 .iter()
-                .any(|supported_group| supported_group.name() == *hint_group)
+                .find(|kx_group| kx_group.name() == hint_group)
         })
         .unwrap_or_else(|| {
             config
                 .kx_groups
                 .first()
                 .expect("No kx groups configured")
-                .name()
-        });
+        })
+        .name();
 
     KeyExchange::start(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
 }
