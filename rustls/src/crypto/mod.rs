@@ -1,10 +1,11 @@
-use crate::rand::GetRandomFailed;
 use crate::{Error, NamedGroup};
 
 use core::fmt::Debug;
 
 /// *ring* based CryptoProvider.
 pub mod ring;
+
+pub use crate::rand::GetRandomFailed;
 
 /// Pluggable crypto galore.
 pub trait CryptoProvider: Send + Sync + 'static {
