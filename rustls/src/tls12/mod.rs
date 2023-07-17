@@ -1,7 +1,7 @@
 use crate::common_state::{CommonState, Side};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter};
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::hash;
 use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
@@ -11,19 +11,9 @@ use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 
-#[cfg(feature = "secret_extraction")]
-use crate::suites::ConnectionTrafficSecrets;
 use core::fmt;
 
 mod prf;
-
-pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
-    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
-    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
-
-    #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
-}
 
 /// A TLS 1.2 cipher suite supported by rustls.
 pub struct Tls12CipherSuite {
@@ -46,7 +36,7 @@ pub struct Tls12CipherSuite {
     pub fixed_iv_len: usize,
 
     /// How long the AEAD key is.
-    pub(crate) aead_key_len: usize,
+    pub aead_key_len: usize,
 
     /// This is a non-standard extension which extends the
     /// key block to provide an initial explicit nonce offset,
@@ -56,7 +46,7 @@ pub struct Tls12CipherSuite {
 
     /// Producing a suitable `MessageDecrypter` or `MessageEncrypter`
     /// from the raw keys.
-    pub(crate) aead_alg: &'static dyn Tls12AeadAlgorithm,
+    pub aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
 
 impl Tls12CipherSuite {

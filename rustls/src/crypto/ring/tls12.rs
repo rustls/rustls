@@ -1,4 +1,6 @@
-use crate::crypto::cipher::{make_nonce, Iv, MessageDecrypter, MessageEncrypter};
+use crate::crypto::cipher::{
+    make_nonce, Iv, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm,
+};
 use crate::enums::CipherSuite;
 use crate::enums::ContentType;
 use crate::enums::ProtocolVersion;
@@ -12,7 +14,6 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::ConnectionTrafficSecrets;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
-use crate::tls12::Tls12AeadAlgorithm;
 use crate::tls12::Tls12CipherSuite;
 
 use ring::aead;

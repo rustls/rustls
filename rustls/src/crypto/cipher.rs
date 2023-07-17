@@ -1,6 +1,38 @@
 use crate::error::Error;
 use crate::msgs::codec;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+pub use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+#[cfg(feature = "secret_extraction")]
+use crate::suites::ConnectionTrafficSecrets;
+
+/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suites.
+pub trait Tls13AeadAlgorithm: Send + Sync {
+    /// Build a `MessageEncrypter` for the given key/iv.
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter>;
+
+    /// Build a `MessageDecrypter` for the given key/iv.
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter>;
+
+    /// The length of key in bytes required by `encrypter()` and `decrypter()`.
+    fn key_len(&self) -> usize;
+
+    #[cfg(feature = "secret_extraction")]
+    /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
+    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets;
+}
+
+/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suites.
+pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
+    /// Build a `MessageEncrypter` for the given key/iv and extra key block (which can be used for
+    /// improving explicit nonce size security, if needed).
+    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+
+    /// Build a `MessageDecrypter` for the given key/iv.
+    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
+
+    #[cfg(feature = "secret_extraction")]
+    /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
+}
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
@@ -9,7 +41,8 @@ pub trait MessageDecrypter: Send + Sync {
 }
 
 /// Objects with this trait can encrypt TLS messages.
-pub(crate) trait MessageEncrypter: Send + Sync {
+pub trait MessageEncrypter: Send + Sync {
+    /// Encrypt the message `m`.
     fn encrypt(&self, m: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error>;
 }
 
@@ -31,7 +64,7 @@ const NONCE_LEN: usize = 12;
 
 /// A write or read IV.
 #[derive(Default)]
-pub(crate) struct Iv(pub(crate) [u8; NONCE_LEN]);
+pub struct Iv(pub(crate) [u8; NONCE_LEN]);
 
 impl From<[u8; NONCE_LEN]> for Iv {
     fn from(bytes: [u8; NONCE_LEN]) -> Self {
@@ -59,7 +92,10 @@ impl Iv {
     }
 }
 
-pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
+/// Combine an `Iv` and sequence number to produce a unique nonce.
+///
+/// This is `iv ^ seq` where `seq` is encoded as a 96-bit big-endian integer.
+pub fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
     let mut nonce = [0u8; NONCE_LEN];
     codec::put_u64(seq, &mut nonce[4..]);
 
@@ -76,7 +112,10 @@ pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
 /// Largest possible AEAD key in the ciphersuites we support.
 const MAX_AEAD_KEY_LEN: usize = 32;
 
-pub(crate) struct AeadKey {
+/// A key for an AEAD algorithm.
+///
+/// This is a value type for a byte string up to `MAX_AEAD_KEY_LEN` bytes in length.
+pub struct AeadKey {
     buf: [u8; MAX_AEAD_KEY_LEN],
     used: usize,
 }
