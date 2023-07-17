@@ -88,6 +88,10 @@ jobs:
       # will run a server process that doesn't exit when invoked with no args
       - name: Check server acceptor
         run: cargo run --bin server_acceptor -- --help
+        
+      - name: Check provider-example client
+        run: cargo run -p rustls-provider-example --example client
+
 
   feature-powerset:
     name: Feature Powerset
