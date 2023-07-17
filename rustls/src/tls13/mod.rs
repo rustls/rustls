@@ -1,8 +1,5 @@
 use crate::crypto;
-use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, MessageEncrypter};
 use crate::crypto::hash;
-#[cfg(feature = "secret_extraction")]
-use crate::suites::ConnectionTrafficSecrets;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 
 use core::fmt;
@@ -13,8 +10,17 @@ pub(crate) mod key_schedule;
 pub struct Tls13CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
-    pub(crate) hmac_provider: &'static dyn crypto::hmac::Hmac,
-    pub(crate) aead_alg: &'static dyn Tls13AeadAlgorithm,
+
+    /// How to compute HMAC with the suite's hash function.
+    pub hmac_provider: &'static dyn crypto::hmac::Hmac,
+
+    /// How to produce a [MessageDecrypter] or [MessageEncrypter]
+    /// from raw key material.
+    ///
+    /// [MessageDecrypter]: crate::crypto::cipher::MessageDecrypter
+    /// [MessageEncrypter]: crate::crypto::cipher::MessageEncrypter
+    pub aead_alg: &'static dyn crypto::cipher::Tls13AeadAlgorithm,
+
     #[cfg(feature = "quic")]
     pub(crate) confidentiality_limit: u64,
     #[cfg(feature = "quic")]
@@ -49,15 +55,6 @@ impl fmt::Debug for Tls13CipherSuite {
             .field("suite", &self.common.suite)
             .finish()
     }
-}
-
-pub(crate) trait Tls13AeadAlgorithm: Send + Sync {
-    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter>;
-    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter>;
-    fn key_len(&self) -> usize;
-
-    #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets;
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.

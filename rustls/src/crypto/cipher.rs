@@ -2,16 +2,83 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;
 pub use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+#[cfg(feature = "secret_extraction")]
+use crate::suites::ConnectionTrafficSecrets;
+
+/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
+pub trait Tls13AeadAlgorithm: Send + Sync {
+    /// Build a `MessageEncrypter` for the given key/iv.
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter>;
+
+    /// Build a `MessageDecrypter` for the given key/iv.
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter>;
+
+    /// The length of key in bytes required by `encrypter()` and `decrypter()`.
+    fn key_len(&self) -> usize;
+
+    #[cfg(feature = "secret_extraction")]
+    /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
+    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets;
+}
+
+/// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.2 cipher suite.
+pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
+    /// Build a `MessageEncrypter` for the given key/iv and extra key block (which can be used for
+    /// improving explicit nonce size security, if needed).
+    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+
+    /// Build a `MessageDecrypter` for the given key/iv.
+    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
+
+    /// Return a `KeyBlockShape` that defines how large the `key_block` is and how it
+    /// is split up prior to calling `encrypter()`, `decrypter()` and/or `extract_keys()`.
+    fn key_block_shape(&self) -> KeyBlockShape;
+
+    #[cfg(feature = "secret_extraction")]
+    /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
+}
+
+/// How a TLS1.2 `key_block` is partitioned.
+///
+/// nb. ciphersuites with non-zero `mac_key_length` not currently supported
+pub struct KeyBlockShape {
+    /// How long keys are.
+    ///
+    /// `enc_key_length` terminology is from the standard ([RFC5246 A.6]).
+    ///
+    /// [RFC5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
+    pub enc_key_len: usize,
+
+    /// How long the fixed part of the 'IV' is.
+    ///
+    /// `fixed_iv_length` terminology is from the standard ([RFC5246 A.6]).
+    ///
+    /// This isn't usually an IV, but we continue the
+    /// terminology misuse to match the standard.
+    ///
+    /// [RFC5246 A.6]: <https://www.rfc-editor.org/rfc/rfc5246#appendix-A.6>
+    pub fixed_iv_len: usize,
+
+    /// This is a non-standard extension which extends the
+    /// key block to provide an initial explicit nonce offset,
+    /// in a deterministic and safe way.  GCM needs this,
+    /// chacha20poly1305 works this way by design.
+    pub explicit_nonce_len: usize,
+}
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
-    /// Perform the decryption over the concerned TLS message.
-    fn decrypt(&self, m: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
+    /// Decrypt the given TLS message `msg`, using the sequence number
+    /// `seq` which can be used to derive a unique [`Nonce`].
+    fn decrypt(&self, msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
-pub(crate) trait MessageEncrypter: Send + Sync {
-    fn encrypt(&self, m: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error>;
+pub trait MessageEncrypter: Send + Sync {
+    /// Encrypt the given TLS message `msg`, using the sequence number
+    /// `seq which can be used to derive a unique [`Nonce`].
+    fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error>;
 }
 
 impl dyn MessageEncrypter {

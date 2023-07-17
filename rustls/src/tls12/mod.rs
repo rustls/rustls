@@ -1,15 +1,15 @@
 use crate::common_state::{CommonState, Side};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter};
+use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::hash;
 use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
-use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 #[cfg(feature = "secret_extraction")]
-use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
+use crate::suites::PartiallyExtractedSecrets;
+use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 
 use core::fmt;
 
@@ -29,12 +29,14 @@ pub struct Tls12CipherSuite {
     /// How to sign messages for authentication.
     pub sign: &'static [SignatureScheme],
 
-    pub(crate) aead_alg: &'static dyn Tls12AeadAlgorithm,
+    /// How to produce a [`MessageDecrypter`] or [`MessageEncrypter`]
+    /// from raw key material.
+    pub aead_alg: &'static dyn Tls12AeadAlgorithm,
 }
 
 impl Tls12CipherSuite {
-    /// Resolve the set of supported `SignatureScheme`s from the
-    /// offered `SupportedSignatureSchemes`.  If we return an empty
+    /// Resolve the set of supported [`SignatureScheme`]s from the
+    /// offered signature schemes.  If we return an empty
     /// set, the handshake terminates.
     pub fn resolve_sig_schemes(&self, offered: &[SignatureScheme]) -> Vec<SignatureScheme> {
         self.sign
@@ -63,36 +65,6 @@ impl fmt::Debug for Tls12CipherSuite {
             .field("suite", &self.common.suite)
             .finish()
     }
-}
-
-pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
-    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
-    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
-    fn key_block_shape(&self) -> KeyBlockShape;
-    #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
-}
-
-/// How a TLS1.2 `key_block` is partitioned.
-///
-/// nb. ciphersuites with non-zero `mac_key_length` not currently supported
-pub(crate) struct KeyBlockShape {
-    /// How long keys are.
-    ///
-    /// `enc_key_len` terminology is from the standard.
-    pub(crate) enc_key_len: usize,
-
-    /// How long the fixed part of the 'IV' is.
-    ///
-    /// This isn't usually an IV, but we continue the
-    /// terminology misuse to match the standard.
-    pub(crate) fixed_iv_len: usize,
-
-    /// This is a non-standard extension which extends the
-    /// key block to provide an initial explicit nonce offset,
-    /// in a deterministic and safe way.  GCM needs this,
-    /// chacha20poly1305 works this way by design.
-    pub(crate) explicit_nonce_len: usize,
 }
 
 /// TLS1.2 per-connection keying material

@@ -1,5 +1,5 @@
 use crate::crypto::cipher::{
-    make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce,
+    make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm,
 };
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
@@ -9,7 +9,7 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::ConnectionTrafficSecrets;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
-use crate::tls13::{Tls13AeadAlgorithm, Tls13CipherSuite};
+use crate::tls13::Tls13CipherSuite;
 
 use ring::aead;
 
