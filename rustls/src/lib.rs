@@ -427,6 +427,9 @@ pub use crate::verify::DigitallySignedStruct;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
 pub use crate::webpki::{OwnedTrustAnchor, RootCertStore};
 
+/// Items for use by custom cryptography providers:
+pub use crate::rand::GetRandomFailed;
+
 /// Items for use in a client.
 pub mod client {
     pub(super) mod builder;

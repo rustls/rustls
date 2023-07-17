@@ -17,5 +17,6 @@ pub(crate) fn random_u32<C: CryptoProvider>() -> Result<u32, GetRandomFailed> {
     Ok(u32::from_be_bytes(buf))
 }
 
+/// Random material generation failed.
 #[derive(Debug)]
 pub struct GetRandomFailed;
