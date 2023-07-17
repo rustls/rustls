@@ -47,6 +47,9 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+      - name: cargo build (debug; rustls-provider-example)
+        run: cargo build -p rustls-provider-example
+
   msrv:
     name: MSRV
     runs-on: ubuntu-20.04
@@ -168,8 +171,8 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: cargo doc (all features)
-        run: cargo doc --all-features --no-deps --workspace
+      - name: cargo doc (rustls; all features)
+        run: cargo doc --all-features --no-deps --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings
 
