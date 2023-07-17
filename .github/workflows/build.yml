@@ -47,6 +47,9 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+      - name: cargo build (debug; rustls-provider-example)
+        run: cargo build -p rustls-provider-example
+
   msrv:
     name: MSRV
     runs-on: ubuntu-20.04
@@ -168,8 +171,8 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: cargo doc (all features)
-        run: cargo doc --all-features --no-deps --document-private-items --workspace
+      - name: cargo doc (rustls; all features)
+        run: cargo doc --all-features --no-deps --document-private-items --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings
 
@@ -284,6 +287,7 @@ jobs:
       - run: cargo clippy --package rustls --no-default-features --all-targets -- --deny warnings
       - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features --all-targets -- --deny warnings
       - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --manifest-path=provider-example/Cargo.toml --all-features --all-targets -- --deny warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
@@ -301,3 +305,4 @@ jobs:
       - run: cargo clippy --package rustls --no-default-features --all-targets
       - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features --all-targets
       - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets
+      - run: cargo clippy --manifest-path=provider-example/Cargo.toml --all-features --all-targets

@@ -89,6 +89,10 @@ jobs:
       - name: Check server acceptor
         run: cargo run --bin server_acceptor -- --help
 
+      - name: Check provider-example client
+        run: cargo run -p rustls-provider-example --example client
+
+
   feature-powerset:
     name: Feature Powerset
     runs-on: ubuntu-20.04
