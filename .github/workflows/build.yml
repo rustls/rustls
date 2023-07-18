@@ -276,10 +276,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --package rustls --all-features -- --deny warnings
-      - run: cargo clippy --package rustls --no-default-features -- --deny warnings
-      - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features -- --deny warnings
-      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features -- --deny warnings
+      - run: cargo clippy --package rustls --all-features -- --deny warnings --allow unknown-lints
+      - run: cargo clippy --package rustls --no-default-features -- --deny warnings --allow unknown-lints
+      - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features -- --deny warnings --allow unknown-lints
+      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features -- --deny warnings --allow unknown-lints
 
   clippy-nightly:
     name: Clippy (Nightly)
