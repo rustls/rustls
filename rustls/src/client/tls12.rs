@@ -980,7 +980,7 @@ struct ExpectFinished {
 
 impl ExpectFinished {
     // -- Waiting for their finished --
-    fn save_session(&mut self, cx: &mut ClientContext<'_>) {
+    fn save_session(&mut self, cx: &ClientContext<'_>) {
         // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
         // original ticket again.
         let (mut ticket, lifetime) = match self.ticket.take() {
