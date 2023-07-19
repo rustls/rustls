@@ -8,9 +8,7 @@ use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
-use rustls::server::{
-    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, UnparsedCertRevocationList,
-};
+use rustls::server::{UnparsedCertRevocationList, WebPkiClientVerifier};
 use rustls::Connection;
 use rustls::Error;
 use rustls::RootCertStore;
@@ -306,13 +304,14 @@ pub fn make_server_config_with_mandatory_client_auth_crls(
 ) -> ServerConfig<Ring> {
     let client_auth_roots = get_client_root_store(kt);
 
-    let client_auth = AllowAnyAuthenticatedClient::new(client_auth_roots)
+    let client_auth = WebPkiClientVerifier::builder(client_auth_roots)
         .with_crls(crls)
+        .build()
         .unwrap();
 
     ServerConfig::builder()
         .with_safe_defaults()
-        .with_client_cert_verifier(Arc::new(client_auth))
+        .with_client_cert_verifier(client_auth)
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
 }
@@ -327,13 +326,15 @@ pub fn make_server_config_with_optional_client_auth(
 ) -> ServerConfig<Ring> {
     let client_auth_roots = get_client_root_store(kt);
 
-    let client_auth = AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots)
+    let client_auth = WebPkiClientVerifier::builder(client_auth_roots)
         .with_crls(crls)
+        .allow_unauthenticated()
+        .build()
         .unwrap();
 
     ServerConfig::builder()
         .with_safe_defaults()
-        .with_client_cert_verifier(Arc::new(client_auth))
+        .with_client_cert_verifier(client_auth)
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
 }

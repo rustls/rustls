@@ -1,4 +1,6 @@
+use alloc::sync::Arc;
 use core::fmt;
+use std::time::SystemTime;
 
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
@@ -12,11 +14,9 @@ use crate::log::trace;
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::DistinguishedName;
+use crate::server::ClientCertVerifierBuilder;
 
 use ring::digest::Digest;
-
-use alloc::sync::Arc;
-use std::time::SystemTime;
 
 type SignatureAlgorithms = &'static [&'static dyn webpki::SignatureVerificationAlgorithm];
 
@@ -445,6 +445,7 @@ fn trust_roots(roots: &RootCertStore) -> Vec<webpki::TrustAnchor> {
 }
 
 /// An unparsed DER encoded Certificate Revocation List (CRL).
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnparsedCertRevocationList(pub Vec<u8>);
 
 impl UnparsedCertRevocationList {
@@ -457,58 +458,120 @@ impl UnparsedCertRevocationList {
     }
 }
 
-/// A `ClientCertVerifier` that will ensure that every client provides a trusted
-/// certificate, without any name checking. Optionally, client certificates will
-/// have their revocation status checked using the DER encoded CRLs provided.
-pub struct AllowAnyAuthenticatedClient {
+/// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
+/// validation. It must be created via the [WebPkiClientVerifier::builder()] function.
+///
+/// Once built, the provided `Arc<dyn ClientCertVerifier>` can be used with a Rustls [crate::server::ServerConfig]
+/// to configure client certificate validation using [`with_client_cert_verifier`][crate::ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
+///
+/// Example:
+///
+/// To require all clients present a client certificate issued by a trusted CA:
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::WebPkiClientVerifier;
+/// # let roots = RootCertStore::empty();
+/// let client_verifier = WebPkiClientVerifier::builder(roots)
+///   .build()
+///   .unwrap();
+/// ```
+///
+/// Or, to allow clients presenting a client certificate authenticated by a trusted CA, or
+/// anonymous clients that present no client certificate:
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::WebPkiClientVerifier;
+/// # let roots = RootCertStore::empty();
+/// let client_verifier = WebPkiClientVerifier::builder(roots)
+///   .allow_unauthenticated()
+///   .build()
+///   .unwrap();
+/// ```
+///
+/// If you wish to disable advertising client authentication:
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::WebPkiClientVerifier;
+/// # let roots = RootCertStore::empty();
+/// let client_verifier = WebPkiClientVerifier::no_client_auth();
+/// ```
+///
+/// You can also configure the client verifier to check for certificate revocation with
+/// client certificate revocation lists (CRLs):
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::{WebPkiClientVerifier};
+/// # let roots = RootCertStore::empty();
+/// # let crls = Vec::new();
+/// let client_verifier = WebPkiClientVerifier::builder(roots)
+///   .with_crls(crls)
+///   .build()
+///   .unwrap();
+/// ```
+///
+/// [^1]: <https://github.com/rustls/webpki>
+pub struct WebPkiClientVerifier {
     roots: RootCertStore,
     subjects: Vec<DistinguishedName>,
     crls: Vec<webpki::OwnedCertRevocationList>,
+    anonymous_policy: AnonymousClientPolicy,
 }
 
-impl AllowAnyAuthenticatedClient {
-    /// Construct a new `AllowAnyAuthenticatedClient`.
+impl WebPkiClientVerifier {
+    /// Create builder to build up the `webpki` client certificate verifier configuration.
+    /// Client certificate authentication will be offered by the server, and client certificates
+    /// will be verified using the trust anchors found in the provided `roots`. If you
+    /// wish to disable client authentication use [WebPkiClientVerifier::no_client_auth()] instead.
+    ///
+    /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
+    pub fn builder(roots: RootCertStore) -> ClientCertVerifierBuilder {
+        ClientCertVerifierBuilder::new(roots)
+    }
+
+    /// Create a new `WebPkiClientVerifier` that disables client authentication. The server will
+    /// not offer client authentication and anonymous clients will be accepted.
+    ///
+    /// This is in contrast to using `WebPkiClientVerifier::builder().allow_unauthenticated().build()`,
+    /// which will produce a verifier that will offer client authentication, but not require it.
+    pub fn no_client_auth() -> Arc<dyn ClientCertVerifier> {
+        Arc::new(NoClientAuth {})
+    }
+
+    /// Construct a new `WebpkiClientVerifier`.
     ///
     /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn new(roots: RootCertStore) -> Self {
+    /// `crls` are an iterable of owned certificate revocation lists (CRLs) to use for
+    /// client certificate validation.
+    /// `anonymous_policy` controls whether client authentication is required, or if anonymous
+    /// clients can connect.
+    pub(crate) fn new(
+        roots: RootCertStore,
+        crls: Vec<webpki::OwnedCertRevocationList>,
+        anonymous_policy: AnonymousClientPolicy,
+    ) -> Self {
         Self {
             subjects: roots
                 .roots
                 .iter()
                 .map(|r| r.subject().clone())
                 .collect(),
-            crls: Vec::new(),
+            crls,
             roots,
+            anonymous_policy,
         }
-    }
-
-    /// Update the verifier to validate client certificates against the provided DER format
-    /// unparsed certificate revocation lists (CRLs).
-    pub fn with_crls(
-        self,
-        crls: impl IntoIterator<Item = UnparsedCertRevocationList>,
-    ) -> Result<Self, CertRevocationListError> {
-        Ok(Self {
-            crls: crls
-                .into_iter()
-                .map(|der_crl| der_crl.parse())
-                .collect::<Result<Vec<_>, CertRevocationListError>>()?,
-            ..self
-        })
-    }
-
-    /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
-    #[inline(always)]
-    pub fn boxed(self) -> Arc<dyn ClientCertVerifier> {
-        // This function is needed because `ClientCertVerifier` is only reachable if the
-        // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
-        Arc::new(self)
     }
 }
 
-impl ClientCertVerifier for AllowAnyAuthenticatedClient {
+impl ClientCertVerifier for WebPkiClientVerifier {
     fn offer_client_auth(&self) -> bool {
         true
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        match self.anonymous_policy {
+            AnonymousClientPolicy::Allow => false,
+            AnonymousClientPolicy::Deny => true,
+        }
     }
 
     fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
@@ -558,68 +621,13 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
     }
 }
 
-/// A `ClientCertVerifier` that will allow both anonymous and authenticated
-/// clients, without any name checking.
-///
-/// Client authentication will be requested during the TLS handshake. If the
-/// client offers a certificate then this acts like
-/// `AllowAnyAuthenticatedClient`, otherwise this acts like `NoClientAuth`.
-pub struct AllowAnyAnonymousOrAuthenticatedClient {
-    inner: AllowAnyAuthenticatedClient,
-}
-
-impl AllowAnyAnonymousOrAuthenticatedClient {
-    /// Construct a new `AllowAnyAnonymousOrAuthenticatedClient`.
-    ///
-    /// `roots` is the list of trust anchors to use for certificate validation.
-    pub fn new(roots: RootCertStore) -> Self {
-        Self {
-            inner: AllowAnyAuthenticatedClient::new(roots),
-        }
-    }
-
-    /// Update the verifier to validate client certificates against the provided DER format
-    /// unparsed certificate revocation lists (CRLs).
-    pub fn with_crls(
-        self,
-        crls: impl IntoIterator<Item = UnparsedCertRevocationList>,
-    ) -> Result<Self, CertRevocationListError> {
-        Ok(Self {
-            inner: self.inner.with_crls(crls)?,
-        })
-    }
-
-    /// Wrap this verifier in an [`Arc`] and coerce it to `dyn ClientCertVerifier`
-    #[inline(always)]
-    pub fn boxed(self) -> Arc<dyn ClientCertVerifier> {
-        // This function is needed because `ClientCertVerifier` is only reachable if the
-        // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
-        Arc::new(self)
-    }
-}
-
-impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
-    fn offer_client_auth(&self) -> bool {
-        self.inner.offer_client_auth()
-    }
-
-    fn client_auth_mandatory(&self) -> bool {
-        false
-    }
-
-    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
-        self.inner.client_auth_root_subjects()
-    }
-
-    fn verify_client_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        now: SystemTime,
-    ) -> Result<ClientCertVerified, Error> {
-        self.inner
-            .verify_client_cert(end_entity, intermediates, now)
-    }
+/// Controls how the [WebPkiClientVerifier] handles anonymous clients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnonymousClientPolicy {
+    /// Clients that do not present a client certificate are allowed.
+    Allow,
+    /// Clients that do not present a client certificate are denied.
+    Deny,
 }
 
 pub(crate) fn pki_error(error: webpki::Error) -> Error {
@@ -647,19 +655,11 @@ pub(crate) fn pki_error(error: webpki::Error) -> Error {
     }
 }
 
-/// Turns off client authentication.
-pub struct NoClientAuth;
-
-impl NoClientAuth {
-    /// Construct a [`NoClientAuth`], wrap it in an [`Arc`] and coerce it to
-    /// `dyn ClientCertVerifier`.
-    #[inline(always)]
-    pub fn boxed() -> Arc<dyn ClientCertVerifier> {
-        // This function is needed because `ClientCertVerifier` is only reachable if the
-        // `dangerous_configuration` feature is enabled, which makes coercing hard to outside users
-        Arc::new(Self)
-    }
-}
+/// Turns off client authentication. In contrast to using
+/// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the `NoClientAuth`
+/// `ClientCertVerifier` will not offer client authentication at all, vs offering but not
+/// requiring it.
+pub(crate) struct NoClientAuth;
 
 impl ClientCertVerifier for NoClientAuth {
     fn offer_client_auth(&self) -> bool {

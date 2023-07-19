@@ -14,7 +14,7 @@ use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
+use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
 use rustls::{
@@ -481,11 +481,14 @@ fn server_allow_any_anonymous_or_authenticated_client() {
     let kt = KeyType::Rsa;
     for client_cert_chain in [None, Some(kt.get_client_chain())].iter() {
         let client_auth_roots = get_client_root_store(kt);
-        let client_auth = AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots);
+        let client_auth = WebPkiClientVerifier::builder(client_auth_roots.clone())
+            .allow_unauthenticated()
+            .build()
+            .unwrap();
 
         let server_config = ServerConfig::<Ring>::builder()
             .with_safe_defaults()
-            .with_client_cert_verifier(Arc::new(client_auth))
+            .with_client_cert_verifier(client_auth)
             .with_single_cert(kt.get_chain(), kt.get_key())
             .unwrap();
         let server_config = Arc::new(server_config);
