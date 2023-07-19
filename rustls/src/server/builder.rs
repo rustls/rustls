@@ -5,7 +5,7 @@ use crate::key;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
 use crate::suites::SupportedCipherSuite;
-use crate::verify;
+use crate::verify::{self, WebPkiClientVerifier};
 use crate::versions;
 use crate::NoKeyLog;
 
@@ -31,7 +31,7 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier<C>> {
 
     /// Disable client authentication.
     pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
-        self.with_client_cert_verifier(verify::NoClientAuth::boxed())
+        self.with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
     }
 }
 
