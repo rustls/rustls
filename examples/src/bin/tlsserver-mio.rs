@@ -17,10 +17,7 @@ extern crate serde_derive;
 
 use docopt::Docopt;
 
-use rustls::server::{
-    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
-    UnparsedCertRevocationList,
-};
+use rustls::server::{UnparsedCertRevocationList, WebpkiClientVerifier};
 use rustls::{self, RootCertStore};
 
 // Token for our listening socket.
@@ -579,18 +576,21 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig<Ring>> {
         }
         let crls = load_crls(&args.flag_crl);
         if args.flag_require_auth {
-            AllowAnyAuthenticatedClient::new(client_auth_roots)
+            WebpkiClientVerifier::builder()
+                .with_roots(client_auth_roots)
                 .with_crls(crls)
                 .expect("invalid CRLs")
-                .boxed()
+                .require_authentication()
         } else {
-            AllowAnyAnonymousOrAuthenticatedClient::new(client_auth_roots)
+            WebpkiClientVerifier::builder()
+                .with_roots(client_auth_roots)
                 .with_crls(crls)
                 .expect("invalid CRLs")
-                .boxed()
+                .allow_unauthenticated()
+                .build()
         }
     } else {
-        NoClientAuth::boxed()
+        WebpkiClientVerifier::builder().allow_unauthenticated()
     };
 
     let suites = if !args.flag_suite.is_empty() {

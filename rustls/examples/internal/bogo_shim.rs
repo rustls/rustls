@@ -388,7 +388,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig<Ring>> {
                 mandatory: opts.require_any_client_cert,
             })
         } else {
-            server::NoClientAuth::boxed()
+            server::WebpkiClientVerifier::builder().allow_unauthenticated()
         };
 
     let cert = load_cert(&opts.cert_file);

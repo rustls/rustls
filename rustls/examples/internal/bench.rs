@@ -13,9 +13,7 @@ use std::time::{Duration, Instant};
 
 use rustls::client::Resumption;
 use rustls::crypto::ring::Ring;
-use rustls::server::{
-    AllowAnyAuthenticatedClient, NoClientAuth, NoServerSessionStorage, ServerSessionMemoryCache,
-};
+use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebpkiClientVerifier};
 use rustls::RootCertStore;
 use rustls::Ticketer;
 use rustls::{ClientConfig, ClientConnection};
@@ -305,9 +303,12 @@ fn make_server_config(
             for root in roots {
                 client_auth_roots.add(&root).unwrap();
             }
-            Arc::new(AllowAnyAuthenticatedClient::new(client_auth_roots))
+            WebpkiClientVerifier::builder()
+                .with_roots(client_auth_roots.clone())
+                .without_crls()
+                .require_authentication()
         }
-        ClientAuth::No => NoClientAuth::boxed(),
+        ClientAuth::No => WebpkiClientVerifier::builder().allow_unauthenticated(),
     };
 
     let mut cfg = ServerConfig::builder()

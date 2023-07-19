@@ -449,11 +449,9 @@ pub mod server {
     #[cfg(feature = "tls12")]
     mod tls12;
     mod tls13;
+    pub(crate) mod verifier_builder;
 
-    pub use crate::verify::{
-        AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, NoClientAuth,
-        UnparsedCertRevocationList,
-    };
+    pub use crate::verify::{UnparsedCertRevocationList, WebpkiClientVerifier};
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
@@ -462,6 +460,10 @@ pub mod server {
         Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData,
     };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
+    pub use verifier_builder::{
+        ClientAuthenticationOptional, ClientCertVerifierBuilder, WantsClientAuthentication,
+        WantsCrls, WantsUnauthenticatedPolicy,
+    };
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::dns_name::DnsName;
