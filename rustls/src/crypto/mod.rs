@@ -27,7 +27,7 @@ pub trait KeyExchange: Sized + Send + Sync + 'static {
     /// public key. The key exchange must be completed by calling [KeyExchange#complete].
     ///
     /// `name` gives the name of the chosen key exchange group that should be used.  `supported`
-    /// is the configurated collection of supported key exchange groups.  Implementation-specific
+    /// is the configured collection of supported key exchange groups. Implementation-specific
     /// data can be looked up in this array (based on `name`) to allow unconfigured algorithms
     /// to be discarded by the linker.
     ///
