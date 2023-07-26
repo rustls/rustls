@@ -3959,9 +3959,9 @@ fn test_client_sends_helloretryrequest() {
 }
 
 #[test]
-fn test_server_requests_retry_with_echoed_session_id() {
+fn test_client_rejects_hrr_with_varied_session_id() {
     use rustls::internal::msgs::handshake::SessionId;
-    let expected_session_id = SessionId::random().unwrap();
+    let different_session_id = SessionId::random().unwrap();
 
     let assert_client_sends_hello_with_secp384 = |msg: &mut Message| -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
@@ -3972,7 +3972,7 @@ fn test_server_requests_retry_with_echoed_session_id() {
                 assert_eq!(keyshares.len(), 1);
                 assert_eq!(keyshares[0].group, rustls::NamedGroup::secp384r1);
 
-                ch.session_id = expected_session_id;
+                ch.session_id = different_session_id;
                 *encoded = Payload::new(parsed.get_encoding());
             }
         }
@@ -3985,7 +3985,7 @@ fn test_server_requests_retry_with_echoed_session_id() {
                 let group = hrr.get_requested_key_share_group();
                 assert_eq!(group, Some(rustls::NamedGroup::X25519));
 
-                assert_eq!(hrr.session_id, expected_session_id);
+                assert_eq!(hrr.session_id, different_session_id);
             }
         }
         Altered::InPlace
@@ -4013,7 +4013,12 @@ fn test_server_requests_retry_with_echoed_session_id() {
         assert_server_requests_retry_and_echoes_session_id,
         &mut client,
     );
-    client.process_new_packets().unwrap();
+    assert_eq!(
+        client.process_new_packets(),
+        Err(Error::PeerMisbehaved(
+            PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId
+        ))
+    );
 }
 
 #[cfg(feature = "tls12")]
