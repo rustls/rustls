@@ -216,6 +216,7 @@ mod client_hello {
                         emit_hello_retry_request(
                             &mut self.transcript,
                             self.suite,
+                            client_hello.session_id,
                             cx.common,
                             group.name,
                         );
@@ -568,12 +569,13 @@ mod client_hello {
     fn emit_hello_retry_request(
         transcript: &mut HandshakeHash,
         suite: &'static Tls13CipherSuite,
+        session_id: SessionID,
         common: &mut CommonState,
         group: NamedGroup,
     ) {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
-            session_id: SessionID::empty(),
+            session_id,
             cipher_suite: suite.common.suite,
             extensions: Vec::new(),
         };
