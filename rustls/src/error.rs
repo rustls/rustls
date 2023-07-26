@@ -180,6 +180,7 @@ pub enum PeerMisbehaved {
     IllegalHelloRetryRequestWithUnofferedCipherSuite,
     IllegalHelloRetryRequestWithUnofferedNamedGroup,
     IllegalHelloRetryRequestWithUnsupportedVersion,
+    IllegalHelloRetryRequestWithWrongSessionId,
     IllegalMiddleboxChangeCipherSpec,
     IllegalTlsInnerPlaintext,
     IncorrectBinder,
