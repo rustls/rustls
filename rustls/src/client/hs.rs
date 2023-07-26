@@ -709,6 +709,27 @@ impl ExpectServerHelloOrHelloRetryRequest {
                 .illegal_param("server requested hrr with no changes"));
         }
 
+        // Or does not echo the session_id from our ClientHello:
+        //
+        // > the HelloRetryRequest has the same format as a ServerHello message,
+        // > and the legacy_version, legacy_session_id_echo, cipher_suite, and
+        // > legacy_compression_method fields have the same meaning
+        // <https://www.rfc-editor.org/rfc/rfc8446#section-4.1.4>
+        //
+        // and
+        //
+        // > A client which receives a legacy_session_id_echo field that does not
+        // > match what it sent in the ClientHello MUST abort the handshake with an
+        // > "illegal_parameter" alert.
+        // <https://www.rfc-editor.org/rfc/rfc8446#section-4.1.3>
+        if hrr.session_id != self.next.session_id {
+            cx.common
+                .send_fatal_alert(AlertDescription::IllegalParameter);
+            return Err(Error::PeerMisbehavedError(
+                "server did not echo the session_id from client hello".to_string(),
+            ));
+        }
+
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
         match hrr.get_supported_versions() {
             Some(ProtocolVersion::TLSv1_3) => {
