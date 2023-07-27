@@ -189,6 +189,8 @@ Options:
                         to certificate.  Optional.
     --auth CERTFILE     Enable client authentication, and accept certificates
                         signed by those roots provided in CERTFILE.
+    --crl CRLFILE ...   Perform client certificate revocation checking using the DER-encoded
+                        CRLFILE. May be used multiple times.
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
     --resumption        Support session resumption.
