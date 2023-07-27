@@ -107,6 +107,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "1.20"
+          cache: false
 
       - name: Run test suite
         working-directory: bogo
@@ -188,11 +189,6 @@ jobs:
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
-
-      - name: Install golang toolchain
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.20"
 
       - name: Measure coverage
         run: ./admin/coverage --lcov --output-path final.info
