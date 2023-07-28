@@ -380,7 +380,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig<Ring>> {
         let mut reader = BufReader::new(certfile);
         root_store.add_parsable_certificates(rustls_pemfile::certs(&mut reader).unwrap());
     } else {
-        root_store.add_server_trust_anchors(
+        root_store.add_trust_anchors(
             webpki_roots::TLS_SERVER_ROOTS
                 .iter()
                 .map(|ta| {

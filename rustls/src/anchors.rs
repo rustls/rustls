@@ -110,10 +110,7 @@ impl RootCertStore {
 
     /// Adds all the given TrustAnchors `anchors`.  This does not
     /// fail.
-    pub fn add_server_trust_anchors(
-        &mut self,
-        trust_anchors: impl Iterator<Item = OwnedTrustAnchor>,
-    ) {
+    pub fn add_trust_anchors(&mut self, trust_anchors: impl Iterator<Item = OwnedTrustAnchor>) {
         self.roots.extend(trust_anchors);
     }
 
