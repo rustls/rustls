@@ -173,6 +173,13 @@ jobs:
         env:
           RUSTDOCFLAGS: -Dwarnings
 
+      - name: Check README.md
+        run: |
+          cargo build --all-features
+          ./admin/pull-readme
+          ./admin/pull-usage
+          git diff --exit-code
+
   coverage:
     name: Measure coverage
     runs-on: ubuntu-20.04
