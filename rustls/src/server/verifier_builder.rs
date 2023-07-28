@@ -30,7 +30,7 @@ impl ClientCertVerifierBuilder {
     /// on the builder.
     pub fn with_roots(mut self, roots: RootCertStore) -> Self {
         self.roots
-            .add_server_trust_anchors(roots.roots.into_iter());
+            .add_trust_anchors(roots.roots.into_iter());
         self
     }
 
