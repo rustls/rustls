@@ -213,7 +213,7 @@ impl Context {
     }
 
     fn bench(&self, count: usize) {
-        let verifier = verify::WebPkiVerifier::new(self.roots.clone());
+        let verifier = verify::WebPkiServerVerifier::new(self.roots.clone());
         const OCSP_RESPONSE: &[u8] = &[];
         let mut times = Vec::new();
 

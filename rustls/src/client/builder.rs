@@ -24,7 +24,7 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
                 versions: self.state.versions,
-                verifier: Arc::new(verify::WebPkiVerifier::new(root_store)),
+                verifier: Arc::new(verify::WebPkiServerVerifier::new(root_store)),
             },
             side: PhantomData,
         }
