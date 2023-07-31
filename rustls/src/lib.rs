@@ -261,7 +261,9 @@
 #![forbid(unsafe_code, unused_must_use)]
 #![cfg_attr(not(any(read_buf, bench)), forbid(unstable_features))]
 #![deny(
+    clippy::alloc_instead_of_core,
     clippy::clone_on_ref_ptr,
+    clippy::std_instead_of_core,
     clippy::use_self,
     trivial_casts,
     trivial_numeric_casts,
