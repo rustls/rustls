@@ -1,5 +1,5 @@
-use std::cmp;
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
+use core::cmp;
 use std::io;
 use std::io::Read;
 
@@ -110,7 +110,7 @@ impl ChunkVecBuffer {
     pub(crate) fn read_buf(&mut self, mut cursor: io::BorrowedCursor<'_>) -> io::Result<()> {
         while !self.is_empty() && cursor.capacity() > 0 {
             let chunk = self.chunks[0].as_slice();
-            let used = std::cmp::min(chunk.len(), cursor.capacity());
+            let used = core::cmp::min(chunk.len(), cursor.capacity());
             cursor.append(&chunk[..used]);
             self.consume(used);
         }

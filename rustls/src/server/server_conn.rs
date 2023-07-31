@@ -20,10 +20,11 @@ use crate::KeyLog;
 
 use super::hs;
 
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-use std::{fmt, io};
+use alloc::sync::Arc;
+use core::fmt;
+use core::marker::PhantomData;
+use core::ops::{Deref, DerefMut};
+use std::io;
 
 /// A trait for the ability to store server session data.
 ///

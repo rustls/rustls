@@ -2,7 +2,8 @@ use crate::rand;
 use crate::server::ProducesTickets;
 use crate::Error;
 
-use std::mem;
+use core::mem;
+use core::time::Duration;
 use std::sync::{Mutex, MutexGuard};
 use std::time;
 
@@ -11,7 +12,7 @@ use std::time;
 ///
 /// This is guaranteed to be on or after the UNIX epoch.
 #[derive(Clone, Copy, Debug)]
-pub struct TimeBase(pub(crate) time::Duration);
+pub struct TimeBase(pub(crate) Duration);
 
 impl TimeBase {
     #[inline]

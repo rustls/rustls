@@ -13,7 +13,7 @@ use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 use ring::aead;
 use ring::digest::Digest;
 
-use std::fmt;
+use core::fmt;
 
 mod cipher;
 pub(crate) use cipher::{AesGcm, ChaCha20Poly1305, Tls12AeadAlgorithm};

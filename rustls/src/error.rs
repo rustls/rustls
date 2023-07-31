@@ -2,9 +2,9 @@ use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::rand;
 
+use alloc::sync::Arc;
+use core::fmt;
 use std::error::Error as StdError;
-use std::fmt;
-use std::sync::Arc;
 use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
@@ -568,7 +568,7 @@ mod tests {
             ApplicationVerificationFailure,
             ApplicationVerificationFailure
         );
-        let other = Other(std::sync::Arc::from(Box::from("")));
+        let other = Other(alloc::sync::Arc::from(Box::from("")));
         assert_ne!(other, other);
         assert_ne!(BadEncoding, Expired);
     }
@@ -589,7 +589,7 @@ mod tests {
         assert_eq!(UnsupportedDeltaCrl, UnsupportedDeltaCrl);
         assert_eq!(UnsupportedIndirectCrl, UnsupportedIndirectCrl);
         assert_eq!(UnsupportedRevocationReason, UnsupportedRevocationReason);
-        let other = Other(std::sync::Arc::from(Box::from("")));
+        let other = Other(alloc::sync::Arc::from(Box::from("")));
         assert_ne!(other, other);
         assert_ne!(BadSignature, InvalidCrlNumber);
     }

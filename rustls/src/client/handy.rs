@@ -8,8 +8,9 @@ use crate::sign;
 use crate::NamedGroup;
 use crate::ServerName;
 
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
+use std::sync::Mutex;
 
 /// An implementer of `ClientSessionStore` which does nothing.
 pub(super) struct NoClientSessionStorage;
@@ -209,7 +210,7 @@ mod test {
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
-    use std::convert::TryInto;
+    use core::convert::TryInto;
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {

@@ -600,7 +600,7 @@ fn test_truncated_helloretry_extension_is_detected() {
 
 fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
     let mut hrr = get_sample_helloretryrequest();
-    let mut exts = std::mem::take(&mut hrr.extensions);
+    let mut exts = core::mem::take(&mut hrr.extensions);
     exts.retain(|ext| ext.get_type() == typ);
 
     assert!(!getter(&hrr));
@@ -714,7 +714,7 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
     let mut ce = get_sample_certificatepayloadtls13()
         .entries
         .remove(0);
-    let mut exts = std::mem::take(&mut ce.exts);
+    let mut exts = core::mem::take(&mut ce.exts);
     exts.retain(|ext| ext.get_type() == typ);
 
     assert!(!getter(&ce));

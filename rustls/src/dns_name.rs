@@ -1,6 +1,7 @@
-/// DNS name validation according to RFC1035, but with underscores allowed.
+//! DNS name validation according to RFC1035, but with underscores allowed.
+
+use core::fmt;
 use std::error::Error as StdError;
-use std::fmt;
 
 /// A type which encapsulates an owned string that is a syntactically valid DNS name.
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]

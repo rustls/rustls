@@ -1,5 +1,5 @@
+use core::ops::Range;
 use std::io;
-use std::ops::Range;
 
 use super::base::Payload;
 use super::codec::Codec;

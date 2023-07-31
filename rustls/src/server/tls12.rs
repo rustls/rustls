@@ -28,7 +28,7 @@ use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
 use subtle::ConstantTimeEq;
 
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
 

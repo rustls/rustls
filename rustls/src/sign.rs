@@ -6,9 +6,9 @@ use crate::x509::{wrap_in_asn1_len, wrap_in_sequence};
 use ring::io::der;
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
+use alloc::sync::Arc;
+use core::fmt;
 use std::error::Error as StdError;
-use std::fmt;
-use std::sync::Arc;
 
 /// An abstract signing key.
 pub trait SigningKey: Send + Sync {

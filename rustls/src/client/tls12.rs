@@ -34,7 +34,7 @@ use crate::rand::GetRandomFailed;
 
 use subtle::ConstantTimeEq;
 
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 pub(super) use server_hello::CompleteServerHelloHandling;
 

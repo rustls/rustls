@@ -21,11 +21,12 @@ use crate::KeyLog;
 use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 use super::hs;
 
-use std::marker::PhantomData;
+use alloc::sync::Arc;
+use core::marker::PhantomData;
+use core::ops::{Deref, DerefMut};
+use core::{fmt, mem};
+use std::io;
 use std::net::IpAddr;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-use std::{fmt, io, mem};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -414,7 +415,7 @@ impl TryFrom<&str> for ServerName {
 #[cfg(feature = "dangerous_configuration")]
 pub(super) mod danger {
     use crate::crypto::CryptoProvider;
-    use std::sync::Arc;
+    use alloc::sync::Arc;
 
     use super::verify::ServerCertVerifier;
     use super::ClientConfig;

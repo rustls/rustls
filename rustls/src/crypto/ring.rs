@@ -8,8 +8,8 @@ use ring::aead;
 use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, UnparsedPublicKey};
 use ring::rand::{SecureRandom, SystemRandom};
 
-use std::fmt;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use core::fmt;
 
 /// Default crypto provider.
 #[derive(Debug)]
@@ -258,14 +258,14 @@ fn ticketswitcher_switching_test() {
     assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
     {
         // Trigger new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(10)));
+        t.maybe_roll(TimeBase(now.0 + core::time::Duration::from_secs(10)));
     }
     let cipher2 = t.encrypt(b"ticket 2").unwrap();
     assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
     assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
     {
         // Trigger new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(20)));
+        t.maybe_roll(TimeBase(now.0 + core::time::Duration::from_secs(20)));
     }
     let cipher3 = t.encrypt(b"ticket 3").unwrap();
     assert!(t.decrypt(&cipher1).is_none());
@@ -287,7 +287,7 @@ fn ticketswitcher_recover_test() {
     t.generator = fail_generator;
     {
         // Failed new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(10)));
+        t.maybe_roll(TimeBase(now.0 + core::time::Duration::from_secs(10)));
     }
     t.generator = make_ticket_generator;
     let cipher2 = t.encrypt(b"ticket 2").unwrap();
@@ -295,7 +295,7 @@ fn ticketswitcher_recover_test() {
     assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
     {
         // recover
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(20)));
+        t.maybe_roll(TimeBase(now.0 + core::time::Duration::from_secs(20)));
     }
     let cipher3 = t.encrypt(b"ticket 3").unwrap();
     assert!(t.decrypt(&cipher1).is_none());
