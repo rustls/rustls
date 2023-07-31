@@ -3,8 +3,8 @@ use crate::error::Error;
 use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHER_SUITES};
 use crate::versions;
 
-use std::fmt;
-use std::marker::PhantomData;
+use core::fmt;
+use core::marker::PhantomData;
 
 /// Building a [`ServerConfig`] or [`ClientConfig`] in a linker-friendly and
 /// complete way.
@@ -105,7 +105,7 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
 
 impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let side_name = std::any::type_name::<Side>();
+        let side_name = core::any::type_name::<Side>();
         let (ty, param) = side_name
             .split_once('<')
             .unwrap_or((side_name, ""));

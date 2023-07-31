@@ -301,6 +301,8 @@
 #![cfg_attr(read_buf, feature(read_buf))]
 #![cfg_attr(bench, feature(test))]
 
+extern crate alloc;
+
 // Import `test` sysroot crate for `Bencher` definitions.
 #[cfg(bench)]
 #[allow(unused_extern_crates)]

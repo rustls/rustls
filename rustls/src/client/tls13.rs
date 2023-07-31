@@ -44,7 +44,7 @@ use crate::ticketer::TimeBase;
 use subtle::ConstantTimeEq;
 
 use crate::sign::{CertifiedKey, Signer};
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -322,7 +322,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
         return;
     }
 
-    if std::mem::replace(sent_tls13_fake_ccs, true) {
+    if core::mem::replace(sent_tls13_fake_ccs, true) {
         return;
     }
 

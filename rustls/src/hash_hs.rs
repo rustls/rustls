@@ -1,8 +1,8 @@
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
+use core::mem;
 use ring::digest;
-use std::mem;
 
 /// Early stage buffering of handshake payloads.
 ///

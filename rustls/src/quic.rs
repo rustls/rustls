@@ -14,10 +14,10 @@ use crate::tls13::{Tls13CipherSuite, TLS13_AES_128_GCM_SHA256_INTERNAL};
 
 use ring::{aead, hkdf};
 
-use std::collections::VecDeque;
-use std::fmt::{self, Debug};
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
+use core::fmt::{self, Debug};
+use core::ops::{Deref, DerefMut};
 
 /// A QUIC client or server connection.
 #[derive(Debug)]

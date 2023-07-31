@@ -11,9 +11,9 @@ use crate::ticketer::TimeBase;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
-use std::cmp;
+use core::cmp;
 #[cfg(feature = "tls12")]
-use std::mem;
+use core::mem;
 
 pub struct Retrieved<T> {
     pub value: T,
@@ -47,7 +47,7 @@ impl Retrieved<&Tls13ClientSessionValue> {
     }
 }
 
-impl<T: std::ops::Deref<Target = ClientSessionCommon>> Retrieved<T> {
+impl<T: core::ops::Deref<Target = ClientSessionCommon>> Retrieved<T> {
     pub fn has_expired(&self) -> bool {
         let common = &*self.value;
         common.lifetime_secs != 0
@@ -58,7 +58,7 @@ impl<T: std::ops::Deref<Target = ClientSessionCommon>> Retrieved<T> {
     }
 }
 
-impl<T> std::ops::Deref for Retrieved<T> {
+impl<T> core::ops::Deref for Retrieved<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -128,7 +128,7 @@ impl Tls13ClientSessionValue {
     }
 }
 
-impl std::ops::Deref for Tls13ClientSessionValue {
+impl core::ops::Deref for Tls13ClientSessionValue {
     type Target = ClientSessionCommon;
 
     fn deref(&self) -> &Self::Target {
@@ -195,7 +195,7 @@ impl Tls12ClientSessionValue {
 }
 
 #[cfg(feature = "tls12")]
-impl std::ops::Deref for Tls12ClientSessionValue {
+impl core::ops::Deref for Tls12ClientSessionValue {
     type Target = ClientSessionCommon;
 
     fn deref(&self) -> &Self::Target {

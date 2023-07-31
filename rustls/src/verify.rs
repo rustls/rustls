@@ -1,4 +1,4 @@
-use std::fmt;
+use core::fmt;
 
 use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 use crate::client::ServerName;
@@ -15,7 +15,7 @@ use crate::msgs::handshake::DistinguishedName;
 
 use ring::digest::Digest;
 
-use std::sync::Arc;
+use alloc::sync::Arc;
 use std::time::SystemTime;
 
 type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];

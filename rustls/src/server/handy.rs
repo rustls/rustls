@@ -6,8 +6,9 @@ use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
 
+use alloc::sync::Arc;
 use std::collections;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 /// Something which never stores sessions.
 pub struct NoServerSessionStorage {}

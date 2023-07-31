@@ -10,8 +10,8 @@ use crate::{anchors, key, versions};
 
 use super::client_conn::Resumption;
 
-use std::marker::PhantomData;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use core::marker::PhantomData;
 
 impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
     /// Choose how to verify server certificates.

@@ -9,8 +9,8 @@ use crate::verify;
 use crate::versions;
 use crate::NoKeyLog;
 
-use std::marker::PhantomData;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use core::marker::PhantomData;
 
 impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier<C>> {
     /// Choose how to verify client certificates.

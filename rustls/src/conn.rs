@@ -10,10 +10,10 @@ use crate::msgs::message::{Message, MessagePayload, PlainMessage};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
-use std::fmt::Debug;
+use core::fmt::Debug;
+use core::mem;
+use core::ops::{Deref, DerefMut};
 use std::io;
-use std::mem;
-use std::ops::{Deref, DerefMut};
 
 /// A client or server connection.
 #[derive(Debug)]

@@ -34,7 +34,7 @@ use crate::verify;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
 
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 use subtle::ConstantTimeEq;
 

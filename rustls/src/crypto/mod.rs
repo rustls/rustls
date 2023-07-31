@@ -1,7 +1,7 @@
 use crate::rand::GetRandomFailed;
 use crate::{Error, NamedGroup};
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 /// *ring* based CryptoProvider.
 pub mod ring;

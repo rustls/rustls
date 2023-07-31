@@ -4,7 +4,8 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
-use std::time::{Duration, Instant, SystemTime};
+use core::time::Duration;
+use std::time::{Instant, SystemTime};
 
 use crate::key;
 use crate::verify;

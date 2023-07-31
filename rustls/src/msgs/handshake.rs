@@ -15,8 +15,8 @@ use crate::msgs::enums::{
 use crate::rand;
 use crate::verify::DigitallySignedStruct;
 
+use core::fmt;
 use std::collections;
-use std::fmt;
 
 /// Create a newtype wrapper around a given type.
 ///

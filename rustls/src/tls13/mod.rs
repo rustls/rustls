@@ -10,7 +10,7 @@ use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
 
 use ring::aead;
 
-use std::fmt;
+use core::fmt;
 
 pub(crate) mod key_schedule;
 
