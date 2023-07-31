@@ -9,7 +9,7 @@ use crate::common::{
     make_client_config_with_versions, make_client_config_with_versions_with_auth,
     make_pair_for_arc_configs, server_name, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
-use rustls::client::WebPkiVerifier;
+use rustls::client::WebPkiServerVerifier;
 use rustls::crypto::ring::Ring;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
@@ -204,7 +204,7 @@ impl ClientCertVerifier for MockClientVerifier {
         if let Some(schemes) = &self.offered_schemes {
             schemes.clone()
         } else {
-            WebPkiVerifier::verification_schemes()
+            WebPkiServerVerifier::verification_schemes()
         }
     }
 }

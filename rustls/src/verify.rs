@@ -181,7 +181,7 @@ pub trait ServerCertVerifier: Send + Sync {
     /// This trait method has a default implementation that reflects the schemes
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPkiVerifier::verification_schemes()
+        WebPkiServerVerifier::verification_schemes()
     }
 }
 
@@ -299,7 +299,7 @@ pub trait ClientCertVerifier: Send + Sync {
     /// This trait method has a default implementation that reflects the schemes
     /// supported by webpki.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPkiVerifier::verification_schemes()
+        WebPkiServerVerifier::verification_schemes()
     }
 }
 
@@ -370,7 +370,7 @@ pub fn verify_server_name(cert: &ParsedCertificate, server_name: &ServerName) ->
     Ok(())
 }
 
-impl ServerCertVerifier for WebPkiVerifier {
+impl ServerCertVerifier for WebPkiServerVerifier {
     /// Will verify the certificate is valid in the following ways:
     /// - Signed by a  trusted `RootCertStore` CA
     /// - Not Expired
@@ -399,12 +399,12 @@ impl ServerCertVerifier for WebPkiVerifier {
 /// Default `ServerCertVerifier`, see the trait impl for more information.
 #[allow(unreachable_pub)]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
-pub struct WebPkiVerifier {
+pub struct WebPkiServerVerifier {
     roots: RootCertStore,
 }
 
 #[allow(unreachable_pub)]
-impl WebPkiVerifier {
+impl WebPkiServerVerifier {
     /// Constructs a new `WebPkiVerifier`.
     ///
     /// `roots` is the set of trust anchors to trust for issuing server certs.

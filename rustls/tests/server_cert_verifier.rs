@@ -8,7 +8,7 @@ use crate::common::{
     make_pair_for_arc_configs, make_server_config, ErrorFromPeer, ALL_KEY_TYPES,
 };
 use rustls::client::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiVerifier,
+    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiServerVerifier,
 };
 use rustls::DigitallySignedStruct;
 use rustls::{AlertDescription, Certificate, Error, InvalidMessage, SignatureScheme};
@@ -262,7 +262,7 @@ impl Default for MockServerVerifier {
             cert_rejection_error: None,
             tls12_signature_error: None,
             tls13_signature_error: None,
-            signature_schemes: WebPkiVerifier::verification_schemes(),
+            signature_schemes: WebPkiServerVerifier::verification_schemes(),
         }
     }
 }
