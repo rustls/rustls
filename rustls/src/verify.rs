@@ -18,23 +18,23 @@ use ring::digest::Digest;
 use alloc::sync::Arc;
 use std::time::SystemTime;
 
-type SignatureAlgorithms = &'static [&'static webpki::SignatureAlgorithm];
+type SignatureAlgorithms = &'static [&'static dyn webpki::SignatureVerificationAlgorithm];
 
 /// Which signature verification mechanisms we support.  No particular
 /// order.
 static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
-    &webpki::ECDSA_P256_SHA256,
-    &webpki::ECDSA_P256_SHA384,
-    &webpki::ECDSA_P384_SHA256,
-    &webpki::ECDSA_P384_SHA384,
-    &webpki::ED25519,
-    &webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-    &webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-    &webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-    &webpki::RSA_PKCS1_2048_8192_SHA256,
-    &webpki::RSA_PKCS1_2048_8192_SHA384,
-    &webpki::RSA_PKCS1_2048_8192_SHA512,
-    &webpki::RSA_PKCS1_3072_8192_SHA384,
+    webpki::ECDSA_P256_SHA256,
+    webpki::ECDSA_P256_SHA384,
+    webpki::ECDSA_P384_SHA256,
+    webpki::ECDSA_P384_SHA384,
+    webpki::ED25519,
+    webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+    webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+    webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+    webpki::RSA_PKCS1_2048_8192_SHA256,
+    webpki::RSA_PKCS1_2048_8192_SHA384,
+    webpki::RSA_PKCS1_2048_8192_SHA512,
+    webpki::RSA_PKCS1_3072_8192_SHA384,
 ];
 
 // Marker types.  These are used to bind the fact some verification
@@ -335,7 +335,7 @@ pub fn verify_server_cert_signed_by_trust_anchor(
             &chain,
             webpki_now,
             webpki::KeyUsage::server_auth(),
-            &[], // no CRLs
+            None, // no CRLs
         )
         .map_err(pki_error)
         .map(|_| ())
@@ -533,6 +533,17 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
             .map(|crl| crl as &dyn webpki::CertRevocationList)
             .collect::<Vec<_>>();
 
+        let revocation = if crls.is_empty() {
+            None
+        } else {
+            Some(
+                webpki::RevocationOptionsBuilder::new(&crls)
+                    .expect("invalid crls")
+                    .allow_unknown_status()
+                    .build(),
+            )
+        };
+
         cert.0
             .verify_for_usage(
                 SUPPORTED_SIG_ALGS,
@@ -540,7 +551,7 @@ impl ClientCertVerifier for AllowAnyAuthenticatedClient {
                 &chain,
                 now,
                 webpki::KeyUsage::client_auth(),
-                &crls,
+                revocation,
             )
             .map_err(pki_error)
             .map(|_| ClientCertVerified::assertion())
@@ -614,7 +625,7 @@ impl ClientCertVerifier for AllowAnyAnonymousOrAuthenticatedClient {
 pub(crate) fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;
     match error {
-        BadDer | BadDerTime => CertificateError::BadEncoding.into(),
+        BadDer | BadDerTime | TrailingData(_) => CertificateError::BadEncoding.into(),
         CertNotValidYet => CertificateError::NotValidYet.into(),
         CertExpired | InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
@@ -705,20 +716,18 @@ impl Codec for DigitallySignedStruct {
     }
 }
 
-static ECDSA_SHA256: SignatureAlgorithms =
-    &[&webpki::ECDSA_P256_SHA256, &webpki::ECDSA_P384_SHA256];
+static ECDSA_SHA256: SignatureAlgorithms = &[webpki::ECDSA_P256_SHA256, webpki::ECDSA_P384_SHA256];
 
-static ECDSA_SHA384: SignatureAlgorithms =
-    &[&webpki::ECDSA_P256_SHA384, &webpki::ECDSA_P384_SHA384];
+static ECDSA_SHA384: SignatureAlgorithms = &[webpki::ECDSA_P256_SHA384, webpki::ECDSA_P384_SHA384];
 
-static ED25519: SignatureAlgorithms = &[&webpki::ED25519];
+static ED25519: SignatureAlgorithms = &[webpki::ED25519];
 
-static RSA_SHA256: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA256];
-static RSA_SHA384: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA384];
-static RSA_SHA512: SignatureAlgorithms = &[&webpki::RSA_PKCS1_2048_8192_SHA512];
-static RSA_PSS_SHA256: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY];
-static RSA_PSS_SHA384: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
-static RSA_PSS_SHA512: SignatureAlgorithms = &[&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
+static RSA_SHA256: SignatureAlgorithms = &[webpki::RSA_PKCS1_2048_8192_SHA256];
+static RSA_SHA384: SignatureAlgorithms = &[webpki::RSA_PKCS1_2048_8192_SHA384];
+static RSA_SHA512: SignatureAlgorithms = &[webpki::RSA_PKCS1_2048_8192_SHA512];
+static RSA_PSS_SHA256: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY];
+static RSA_PSS_SHA384: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
+static RSA_PSS_SHA512: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
 
 fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, Error> {
     match scheme {
@@ -746,10 +755,10 @@ fn verify_sig_using_any_alg(
     message: &[u8],
     sig: &[u8],
 ) -> Result<(), webpki::Error> {
-    // TLS doesn't itself give us enough info to map to a single webpki::SignatureAlgorithm.
+    // TLS doesn't itself give us enough info to map to a single webpki::SignatureVerificationAlgorithm.
     // Therefore, convert_algs maps to several and we try them all.
     for alg in algs {
-        match cert.verify_signature(alg, message, sig) {
+        match cert.verify_signature(*alg, message, sig) {
             Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
             res => return res,
         }
@@ -773,16 +782,16 @@ fn verify_signed_struct(
 
 fn convert_alg_tls13(
     scheme: SignatureScheme,
-) -> Result<&'static webpki::SignatureAlgorithm, Error> {
+) -> Result<&'static dyn webpki::SignatureVerificationAlgorithm, Error> {
     use crate::enums::SignatureScheme::*;
 
     match scheme {
-        ECDSA_NISTP256_SHA256 => Ok(&webpki::ECDSA_P256_SHA256),
-        ECDSA_NISTP384_SHA384 => Ok(&webpki::ECDSA_P384_SHA384),
-        ED25519 => Ok(&webpki::ED25519),
-        RSA_PSS_SHA256 => Ok(&webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
-        RSA_PSS_SHA384 => Ok(&webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
-        RSA_PSS_SHA512 => Ok(&webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
+        ECDSA_NISTP256_SHA256 => Ok(webpki::ECDSA_P256_SHA256),
+        ECDSA_NISTP384_SHA384 => Ok(webpki::ECDSA_P384_SHA384),
+        ED25519 => Ok(webpki::ED25519),
+        RSA_PSS_SHA256 => Ok(webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
+        RSA_PSS_SHA384 => Ok(webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
+        RSA_PSS_SHA512 => Ok(webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
         _ => Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into()),
     }
 }
