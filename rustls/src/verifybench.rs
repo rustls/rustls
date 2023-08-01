@@ -187,7 +187,7 @@ struct Context {
 impl Context {
     fn new(name: &'static str, domain: &'static str, certs: &[&'static [u8]]) -> Self {
         let mut roots = anchors::RootCertStore::empty();
-        roots.add_server_trust_anchors(
+        roots.add_trust_anchors(
             webpki_roots::TLS_SERVER_ROOTS
                 .0
                 .iter()
