@@ -110,11 +110,18 @@ impl RootCertStore {
 
     /// Adds all the given TrustAnchors `anchors`.  This does not
     /// fail.
+    pub fn add_trust_anchors(&mut self, trust_anchors: impl Iterator<Item = OwnedTrustAnchor>) {
+        self.roots.extend(trust_anchors);
+    }
+
+    /// Adds all the given TrustAnchors `anchors`.  This does not
+    /// fail.
+    #[deprecated(since = "0.21.6", note = "Please use `add_trust_anchors` instead")]
     pub fn add_server_trust_anchors(
         &mut self,
         trust_anchors: impl Iterator<Item = OwnedTrustAnchor>,
     ) {
-        self.roots.extend(trust_anchors);
+        self.add_trust_anchors(trust_anchors);
     }
 
     /// Parse the given DER-encoded certificates and add all that can be parsed

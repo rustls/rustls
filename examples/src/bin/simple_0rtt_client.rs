@@ -58,7 +58,7 @@ fn main() {
     env_logger::init();
 
     let mut root_store = RootCertStore::empty();
-    root_store.add_server_trust_anchors(
+    root_store.add_trust_anchors(
         webpki_roots::TLS_SERVER_ROOTS
             .0
             .iter()
