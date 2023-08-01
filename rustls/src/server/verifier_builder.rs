@@ -9,29 +9,18 @@ use crate::{CertRevocationListError, RootCertStore};
 /// For more information, see the [`WebPkiClientVerifier`] documentation.
 #[derive(Debug, Clone)]
 pub struct ClientCertVerifierBuilder {
-    roots: RootCertStore,
+    roots: Arc<RootCertStore>,
     crls: Vec<UnparsedCertRevocationList>,
     anon_policy: AnonymousClientPolicy,
 }
 
 impl ClientCertVerifierBuilder {
-    pub(crate) fn new(roots: RootCertStore) -> Self {
+    pub(crate) fn new(roots: Arc<RootCertStore>) -> Self {
         Self {
             roots,
             crls: Vec::new(),
             anon_policy: AnonymousClientPolicy::Deny,
         }
-    }
-
-    /// Add additional `roots` to use to verify client certificates.
-    ///
-    /// All clients must provide a client certificate unless you have allowed unauthenticated
-    /// clients by calling [allow_unauthenticated()][ClientCertVerifierBuilder::allow_unauthenticated]
-    /// on the builder.
-    pub fn with_roots(mut self, roots: RootCertStore) -> Self {
-        self.roots
-            .add_trust_anchors(roots.roots.into_iter());
-        self
     }
 
     /// Verify the revocation state of presented client certificates against the provided
@@ -103,6 +92,7 @@ mod tests {
     use crate::server::{ClientCertVerifierBuilderError, UnparsedCertRevocationList};
     use crate::verify::WebPkiClientVerifier;
     use crate::{Certificate, RootCertStore};
+    use std::sync::Arc;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<UnparsedCertRevocationList> {
         crls_der
@@ -126,17 +116,17 @@ mod tests {
         ])
     }
 
-    fn load_roots(roots_der: &[&[u8]]) -> RootCertStore {
+    fn load_roots(roots_der: &[&[u8]]) -> Arc<RootCertStore> {
         let mut roots = RootCertStore::empty();
         roots_der.iter().for_each(|der| {
             roots
                 .add(&Certificate(der.to_vec()))
                 .unwrap()
         });
-        roots
+        roots.into()
     }
 
-    fn test_roots() -> RootCertStore {
+    fn test_roots() -> Arc<RootCertStore> {
         load_roots(&[
             include_bytes!("../../../test-ca/ecdsa/ca.der").as_slice(),
             include_bytes!("../../../test-ca/rsa/ca.der").as_slice(),
@@ -156,20 +146,6 @@ mod tests {
         let builder = WebPkiClientVerifier::builder(test_roots());
         // The builder should be Debug.
         println!("{:?}", builder);
-        builder.build().unwrap();
-    }
-
-    #[test]
-    fn test_required_auth_add_roots() {
-        // We should be able to call `with_roots` to add more roots.
-        let initial_roots = test_roots();
-        let extra_roots = load_roots(&[include_bytes!("../../../test-ca/eddsa/ca.der").as_slice()]);
-        let builder =
-            WebPkiClientVerifier::builder(initial_roots.clone()).with_roots(extra_roots.clone());
-        // The builder should be Debug.
-        println!("{:?}", builder);
-        // There should be the expected number of roots.
-        assert_eq!(builder.roots.len(), initial_roots.len() + extra_roots.len());
         builder.build().unwrap();
     }
 
@@ -260,7 +236,7 @@ mod tests {
     #[test]
     fn test_builder_no_roots() {
         // Trying to create a builder with no trust anchors should fail at build time
-        let result = WebPkiClientVerifier::builder(RootCertStore::empty()).build();
+        let result = WebPkiClientVerifier::builder(RootCertStore::empty().into()).build();
         assert!(matches!(
             result,
             Err(ClientCertVerifierBuilderError::NoRootAnchors)

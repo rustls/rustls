@@ -471,7 +471,7 @@ impl UnparsedCertRevocationList {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
 /// # let roots = RootCertStore::empty();
-/// let client_verifier = WebPkiClientVerifier::builder(roots)
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
 ///   .build()
 ///   .unwrap();
 /// ```
@@ -482,7 +482,7 @@ impl UnparsedCertRevocationList {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
 /// # let roots = RootCertStore::empty();
-/// let client_verifier = WebPkiClientVerifier::builder(roots)
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
 ///   .allow_unauthenticated()
 ///   .build()
 ///   .unwrap();
@@ -503,7 +503,7 @@ impl UnparsedCertRevocationList {
 /// # use rustls::server::{WebPkiClientVerifier};
 /// # let roots = RootCertStore::empty();
 /// # let crls = Vec::new();
-/// let client_verifier = WebPkiClientVerifier::builder(roots)
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
 ///   .with_crls(crls)
 ///   .build()
 ///   .unwrap();
@@ -511,7 +511,7 @@ impl UnparsedCertRevocationList {
 ///
 /// [^1]: <https://github.com/rustls/webpki>
 pub struct WebPkiClientVerifier {
-    roots: RootCertStore,
+    roots: Arc<RootCertStore>,
     subjects: Vec<DistinguishedName>,
     crls: Vec<webpki::OwnedCertRevocationList>,
     anonymous_policy: AnonymousClientPolicy,
@@ -524,7 +524,7 @@ impl WebPkiClientVerifier {
     /// wish to disable client authentication use [WebPkiClientVerifier::no_client_auth()] instead.
     ///
     /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
-    pub fn builder(roots: RootCertStore) -> ClientCertVerifierBuilder {
+    pub fn builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
         ClientCertVerifierBuilder::new(roots)
     }
 
@@ -545,7 +545,7 @@ impl WebPkiClientVerifier {
     /// `anonymous_policy` controls whether client authentication is required, or if anonymous
     /// clients can connect.
     pub(crate) fn new(
-        roots: RootCertStore,
+        roots: Arc<RootCertStore>,
         crls: Vec<webpki::OwnedCertRevocationList>,
         anonymous_policy: AnonymousClientPolicy,
     ) -> Self {

@@ -576,12 +576,12 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig<Ring>> {
         }
         let crls = load_crls(&args.flag_crl);
         if args.flag_require_auth {
-            WebPkiClientVerifier::builder(client_auth_roots)
+            WebPkiClientVerifier::builder(client_auth_roots.into())
                 .with_crls(crls)
                 .build()
                 .unwrap()
         } else {
-            WebPkiClientVerifier::builder(client_auth_roots)
+            WebPkiClientVerifier::builder(client_auth_roots.into())
                 .with_crls(crls)
                 .allow_unauthenticated()
                 .build()

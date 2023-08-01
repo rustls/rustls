@@ -287,7 +287,7 @@ pub fn make_server_config_with_kx_groups(
     )
 }
 
-pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
+pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
     let mut roots = kt.get_chain();
     // drop server cert
     roots.drain(0..1);
@@ -295,7 +295,7 @@ pub fn get_client_root_store(kt: KeyType) -> RootCertStore {
     for root in roots {
         client_auth_roots.add(&root).unwrap();
     }
-    client_auth_roots
+    client_auth_roots.into()
 }
 
 pub fn make_server_config_with_mandatory_client_auth_crls(
