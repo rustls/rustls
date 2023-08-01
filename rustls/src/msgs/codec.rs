@@ -270,9 +270,7 @@ impl<T: Codec + TlsListElement + Debug> Codec for Vec<T> {
 /// prefixed with a length, the size of which depends on the type of the list elements.
 /// As such, the `Codec` implementation for `Vec<T>` requires an implementation of this trait
 /// for its element type `T`.
-///
-// TODO: make this `pub(crate)` once our MSRV allows it?
-pub trait TlsListElement {
+pub(crate) trait TlsListElement {
     const SIZE_LEN: ListLength;
 }
 
@@ -281,9 +279,7 @@ pub trait TlsListElement {
 /// The types that appear in lists are limited to three kinds of length prefixes:
 /// 1, 2, and 3 bytes. For the latter kind, we require a `TlsListElement` implementer
 /// to specify a maximum length.
-///
-// TODO: make this `pub(crate)` once our MSRV allows it?
-pub enum ListLength {
+pub(crate) enum ListLength {
     U8,
     U16,
     U24 { max: usize },
