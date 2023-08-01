@@ -303,7 +303,7 @@ fn make_server_config(
             for root in roots {
                 client_auth_roots.add(&root).unwrap();
             }
-            WebPkiClientVerifier::builder(client_auth_roots.clone())
+            WebPkiClientVerifier::builder(client_auth_roots.into())
                 .build()
                 .unwrap()
         }
