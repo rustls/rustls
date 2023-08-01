@@ -75,6 +75,7 @@ rustls does not and will not support:
 * Compression.
 * Discrete-log Diffie-Hellman.
 * Automatic protocol version downgrade.
+* Self-signed certificates.
 
 There are plenty of other libraries that provide these features should you
 need them.
