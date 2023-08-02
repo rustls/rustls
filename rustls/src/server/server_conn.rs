@@ -562,7 +562,7 @@ impl From<ServerConnection> for crate::Connection {
 ///     // Proceed with handling the ServerConnection.
 /// }
 /// # }
-//// ```
+/// ```
 pub struct Acceptor {
     inner: Option<ConnectionCommon<ServerConnectionData>>,
 }
