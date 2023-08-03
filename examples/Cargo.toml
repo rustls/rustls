@@ -18,7 +18,6 @@ log = { version = "0.4.4" }
 mio = { version = "0.8", features = ["net", "os-poll"] }
 rustls = { path = "../rustls", features = [ "logging" ]}
 rustls-pemfile = "1.0.3"
-sct = "0.7"
 serde = "1.0"
 serde_derive = "1.0"
 webpki-roots = "0.25"
