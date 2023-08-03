@@ -6,66 +6,77 @@ use crate::versions;
 use core::fmt;
 use core::marker::PhantomData;
 
-/// Building a [`ServerConfig`] or [`ClientConfig`] in a linker-friendly and
-/// complete way.
+/// A [builder] for [`ServerConfig`] or [`ClientConfig`] values.
 ///
-/// Linker-friendly: meaning unused cipher suites, protocol
-/// versions, key exchange mechanisms, etc. can be discarded
-/// by the linker as they'll be unreferenced.
+/// To get one of these, call [`ServerConfig::builder()`] or [`ClientConfig::builder()`].
 ///
-/// Complete: the type system ensures all decisions required to run a
-/// server or client have been made by the time the process finishes.
+/// To build a config, you must make at least three decisions (in order):
 ///
-/// Example, to make a [`ServerConfig`]:
+/// - Which protocol primitives should be supported (cipher suites, key exchange groups, protocol versions)?
+/// - How should this client or server verify certificates provided by its peer?
+/// - What certificates should this client or server present to its peer?
 ///
-/// ```no_run
-/// # use rustls::ServerConfig;
-/// # use rustls::crypto::ring::Ring;
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
-/// ServerConfig::<Ring>::builder()
-///     .with_safe_default_cipher_suites()
-///     .with_safe_default_kx_groups()
-///     .with_safe_default_protocol_versions()
-///     .unwrap()
-///     .with_no_client_auth()
-///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
+/// For settings besides these, see the fields of [`ServerConfig`] and [`ClientConfig`].
+///
+/// The usual choice for protocol primitives is to call
+/// [`ConfigBuilder::with_safe_defaults`], which will choose rustls' defaults for cipher suites, key
+/// exchange groups and protocol versions:
+///
 /// ```
+/// use rustls::{ClientConfig, ServerConfig, crypto::ring::Ring};
+/// // <Ring> specifies the cryptographic provider to use.
+/// ClientConfig::<Ring>::builder()
+///     .with_safe_defaults()
+/// //  ...
+/// # ;
 ///
-/// This may be shortened to:
-///
-/// ```no_run
-/// # use rustls::ServerConfig;
-/// # use rustls::crypto::ring::Ring;
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
 /// ServerConfig::<Ring>::builder()
 ///     .with_safe_defaults()
-///     .with_no_client_auth()
-///     .with_single_cert(certs, private_key)
-///     .expect("bad certificate/key");
+/// //  ...
+/// # ;
 /// ```
 ///
-/// To make a [`ClientConfig`]:
+/// If you override the default for one protocol primitive (for instance supporting only TLS 1.3),
+/// you will need to explicitly specify configuration for all three. That configuration may simply
+/// be "use the default."
 ///
 /// ```no_run
-/// # use rustls::ClientConfig;
+/// # use rustls::ServerConfig;
 /// # use rustls::crypto::ring::Ring;
-/// # let root_certs = rustls::RootCertStore::empty();
-/// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
-/// ClientConfig::<Ring>::builder()
+/// ServerConfig::<Ring>::builder()
 ///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
-///     .with_safe_default_protocol_versions()
+///     .with_protocol_versions(&[&rustls::version::TLS13])
 ///     .unwrap()
-///     .with_root_certificates(root_certs)
-///     .with_client_auth_cert(certs, private_key)
-///     .expect("bad certificate/key");
+/// //  ...
+/// # ;
 /// ```
 ///
-/// This may be shortened to:
+/// Overriding a default introduces a `Result` that must be unwrapped,
+/// because the config builder checks for consistency of the choices made. For instance, it's an error to
+/// configure only TLS 1.2 cipher suites while specifying that TLS 1.3 should be the only supported protocol
+/// version.
+///
+/// If you configure a smaller set of protocol primitives than the default, you may get a smaller binary,
+/// since the code for the unused ones can be optimized away at link time.
+///
+/// After choosing protocol primitives, you must choose (a) how to verify certificates and (b) what certificates
+/// (if any) to send to the peer. The methods to do this are specific to whether you're building a ClientConfig
+/// or a ServerConfig, as tracked by the [`ConfigSide`] type parameter on the various impls of ConfigBuilder.
+///
+/// # ClientConfig certificate configuration
+///
+/// For a client, _certificate verification_ must be configured either by calling one of:
+///  - [`ConfigBuilder::with_root_certificates`] or
+///  - [`ConfigBuilder::with_custom_certificate_verifier`] - requires dangerous_configuration feature flag
+///
+/// Next, _certificate sending_ (also known as "client authentication", "mutual TLS", or "mTLS") must be configured
+/// or disabled using one of:
+/// - [`ConfigBuilder::with_no_client_auth`] - to not send client authentication (most common)
+/// - [`ConfigBuilder::with_client_auth_cert`] - to always send a specific certificate
+/// - [`ConfigBuilder::with_client_cert_resolver`] - to send a certificate chosen dynamically
+///
+/// For example:
 ///
 /// ```
 /// # use rustls::ClientConfig;
@@ -77,26 +88,68 @@ use core::marker::PhantomData;
 ///     .with_no_client_auth();
 /// ```
 ///
-/// The types used here fit together like this:
+/// # ServerConfig certificate configuration
 ///
-/// 1. Call [`ClientConfig::builder()`] or [`ServerConfig::builder()`] to initialize a builder.
-/// 1. You must make a decision on which cipher suites to use, typically
-///    by calling [`ConfigBuilder<S, WantsCipherSuites>::with_safe_default_cipher_suites()`].
-/// 2. Now you must make a decision
-///    on key exchange groups: typically by calling
-///    [`ConfigBuilder<S, WantsKxGroups>::with_safe_default_kx_groups()`].
-/// 3. Now you must make
-///    a decision on which protocol versions to support, typically by calling
-///    [`ConfigBuilder<S, WantsVersions>::with_safe_default_protocol_versions()`].
-/// 5. Now see [`ConfigBuilder<ClientConfig, WantsVerifier>`] or
-///    [`ConfigBuilder<ServerConfig, WantsVerifier>`] for further steps.
+/// For a server, _certificate verification_ must be configured by calling one of:
+/// - [`ConfigBuilder::with_no_client_auth`] - to not require client authentication (most common)
+/// - [`ConfigBuilder::with_client_cert_verifier`] - to use a custom verifier
 ///
+/// Next, _certificate sending_ must be configured by calling one of:
+/// - [`ConfigBuilder::with_single_cert`] - to send a specific certificate
+/// - [`ConfigBuilder::with_single_cert_with_ocsp`] - to send a specific certificate, plus stapled OCSP
+/// - [`ConfigBuilder::with_cert_resolver`] - to send a certificate chosen dynamically
+///
+/// For example:
+///
+/// ```no_run
+/// # use rustls::ServerConfig;
+/// # use rustls::crypto::ring::Ring;
+/// # let certs = vec![];
+/// # let private_key = rustls::PrivateKey(vec![]);
+/// ServerConfig::<Ring>::builder()
+///     .with_safe_defaults()
+///     .with_no_client_auth()
+///     .with_single_cert(certs, private_key)
+///     .expect("bad certificate/key");
+/// ```
+///
+/// # Types
+///
+/// ConfigBuilder uses the [typestate] pattern to ensure at compile time that each required
+/// configuration item is provided exactly once. This is tracked in the `State` type parameter,
+/// which can have these values:
+///
+/// - [`WantsCipherSuites`]
+/// - [`WantsKxGroups`]
+/// - [`WantsVersions`]
+/// - [`WantsVerifier`]
+/// - [`WantsClientCert`]
+/// - [`WantsServerCert`]
+///
+/// The other type parameter is `Side`, which is either `ServerConfig<C>` or `ClientConfig<C>`
+/// depending on whether the ConfigBuilder was built with [`ServerConfig::builder()`] or
+/// [`ClientConfig::builder()`].
+///
+/// You won't need to write out either of these type parameters explicitly. If you write a
+/// correct chain of configuration calls they will be used automatically. If you write an
+/// incorrect chain of configuration calls you will get an error message from the compiler
+/// mentioning some of these types.
+///
+/// Additionally, ServerConfig and ClientConfig are parameterized by `C`, a [`CryptoProvider`],
+/// which determines a cryptographic backend to use (for instance, `ring`). That type parameter
+/// is used in several of the `State` types as well.
+///
+/// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
+/// [typestate]: http://cliffle.com/blog/rust-typestate/
 /// [`ServerConfig`]: crate::ServerConfig
+/// [`ServerConfig::builder`]: crate::ServerConfig::builder
 /// [`ClientConfig`]: crate::ClientConfig
 /// [`ClientConfig::builder()`]: crate::ClientConfig::builder()
 /// [`ServerConfig::builder()`]: crate::ServerConfig::builder()
 /// [`ConfigBuilder<ClientConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-3
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
+/// [`WantsClientCert`]: crate::client::WantsClientCert
+/// [`WantsServerCert`]: crate::server::WantsServerCert
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
