@@ -105,7 +105,7 @@ pub trait ServerCertVerifier: Send + Sync {
     /// connection.
     ///
     /// This method is only called for TLS1.2 handshakes.  Note that, in TLS1.2,
-    /// SignatureSchemes such as `SignatureScheme::ECDSA_NISTP256_SHA256` are not
+    /// SignatureSchemes such as `SignatureScheme::ECDSA_SECP256R1_SHA256` are not
     /// in fact bound to the specific curve implied in their name.
     fn verify_tls12_signature(
         &self,
@@ -119,7 +119,7 @@ pub trait ServerCertVerifier: Send + Sync {
     /// This method is only called for TLS1.3 handshakes.
     ///
     /// This method is very similar to `verify_tls12_signature`: but note the
-    /// tighter ECDSA SignatureScheme semantics -- e.g. `SignatureScheme::ECDSA_NISTP256_SHA256`
+    /// tighter ECDSA SignatureScheme semantics -- e.g. `SignatureScheme::ECDSA_SECP256R1_SHA256`
     /// must only validate signatures using public keys on the right curve --
     /// rustls does not enforce this requirement for you.
     ///
@@ -213,7 +213,7 @@ pub trait ClientCertVerifier: Send + Sync {
     /// connection.
     ///
     /// This method is only called for TLS1.2 handshakes.  Note that, in TLS1.2,
-    /// SignatureSchemes such as `SignatureScheme::ECDSA_NISTP256_SHA256` are not
+    /// SignatureSchemes such as `SignatureScheme::ECDSA_SECP256R1_SHA256` are not
     /// in fact bound to the specific curve implied in their name.
     fn verify_tls12_signature(
         &self,
@@ -228,7 +228,7 @@ pub trait ClientCertVerifier: Send + Sync {
     ///
     /// This method is very similar to `verify_tls12_signature`, but note the
     /// tighter ECDSA SignatureScheme semantics in TLS 1.3. For example,
-    /// `SignatureScheme::ECDSA_NISTP256_SHA256`
+    /// `SignatureScheme::ECDSA_SECP256R1_SHA256`
     /// must only validate signatures using public keys on the right curve --
     /// rustls does not enforce this requirement for you.
     fn verify_tls13_signature(

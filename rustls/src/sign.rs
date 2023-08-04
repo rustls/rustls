@@ -86,7 +86,7 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, 
 pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(ecdsa_p256) = EcdsaSigningKey::new(
         der,
-        SignatureScheme::ECDSA_NISTP256_SHA256,
+        SignatureScheme::ECDSA_SECP256R1_SHA256,
         &signature::ECDSA_P256_SHA256_ASN1_SIGNING,
     ) {
         return Ok(Arc::new(ecdsa_p256));
@@ -94,7 +94,7 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, Sign
 
     if let Ok(ecdsa_p384) = EcdsaSigningKey::new(
         der,
-        SignatureScheme::ECDSA_NISTP384_SHA384,
+        SignatureScheme::ECDSA_SECP384R1_SHA384,
         &signature::ECDSA_P384_SHA384_ASN1_SIGNING,
     ) {
         return Ok(Arc::new(ecdsa_p384));
@@ -124,9 +124,9 @@ pub struct RsaSigningKey {
 }
 
 static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
-    SignatureScheme::RSA_PSS_SHA512,
-    SignatureScheme::RSA_PSS_SHA384,
-    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PSS_RSAE_SHA512,
+    SignatureScheme::RSA_PSS_RSAE_SHA384,
+    SignatureScheme::RSA_PSS_RSAE_SHA256,
     SignatureScheme::RSA_PKCS1_SHA512,
     SignatureScheme::RSA_PKCS1_SHA384,
     SignatureScheme::RSA_PKCS1_SHA256,
@@ -168,9 +168,9 @@ impl RsaSigner {
             SignatureScheme::RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_SHA256,
             SignatureScheme::RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_SHA512,
-            SignatureScheme::RSA_PSS_SHA256 => &signature::RSA_PSS_SHA256,
-            SignatureScheme::RSA_PSS_SHA384 => &signature::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA512 => &signature::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PSS_RSAE_SHA256 => &signature::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_RSAE_SHA384 => &signature::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_RSAE_SHA512 => &signature::RSA_PSS_SHA512,
             _ => unreachable!(),
         };
 
@@ -241,8 +241,8 @@ impl EcdsaSigningKey {
         maybe_sec1_der: &[u8],
     ) -> Result<EcdsaKeyPair, ()> {
         let pkcs8_prefix = match scheme {
-            SignatureScheme::ECDSA_NISTP256_SHA256 => &PKCS8_PREFIX_ECDSA_NISTP256,
-            SignatureScheme::ECDSA_NISTP384_SHA384 => &PKCS8_PREFIX_ECDSA_NISTP384,
+            SignatureScheme::ECDSA_SECP256R1_SHA256 => &PKCS8_PREFIX_ECDSA_NISTP256,
+            SignatureScheme::ECDSA_SECP384R1_SHA384 => &PKCS8_PREFIX_ECDSA_NISTP384,
             _ => unreachable!(), // all callers are in this file
         };
 

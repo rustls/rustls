@@ -841,9 +841,9 @@ fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
         KeyType::Rsa,
         CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         vec![
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_RSAE_SHA512,
+            SignatureScheme::RSA_PSS_RSAE_SHA384,
+            SignatureScheme::RSA_PSS_RSAE_SHA256,
             SignatureScheme::RSA_PKCS1_SHA512,
             SignatureScheme::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA256,
@@ -858,8 +858,8 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
         KeyType::Ecdsa,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         vec![
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::ECDSA_SECP384R1_SHA384,
+            SignatureScheme::ECDSA_SECP256R1_SHA256,
             SignatureScheme::ED25519,
         ],
     );
@@ -1053,23 +1053,23 @@ fn client_cert_resolve() {
         for version in rustls::ALL_VERSIONS {
             let expected_sigschemes = match version.version {
                 ProtocolVersion::TLSv1_2 => vec![
-                    SignatureScheme::ECDSA_NISTP384_SHA384,
-                    SignatureScheme::ECDSA_NISTP256_SHA256,
+                    SignatureScheme::ECDSA_SECP384R1_SHA384,
+                    SignatureScheme::ECDSA_SECP256R1_SHA256,
                     SignatureScheme::ED25519,
-                    SignatureScheme::RSA_PSS_SHA512,
-                    SignatureScheme::RSA_PSS_SHA384,
-                    SignatureScheme::RSA_PSS_SHA256,
+                    SignatureScheme::RSA_PSS_RSAE_SHA512,
+                    SignatureScheme::RSA_PSS_RSAE_SHA384,
+                    SignatureScheme::RSA_PSS_RSAE_SHA256,
                     SignatureScheme::RSA_PKCS1_SHA512,
                     SignatureScheme::RSA_PKCS1_SHA384,
                     SignatureScheme::RSA_PKCS1_SHA256,
                 ],
                 ProtocolVersion::TLSv1_3 => vec![
-                    SignatureScheme::ECDSA_NISTP384_SHA384,
-                    SignatureScheme::ECDSA_NISTP256_SHA256,
+                    SignatureScheme::ECDSA_SECP384R1_SHA384,
+                    SignatureScheme::ECDSA_SECP256R1_SHA256,
                     SignatureScheme::ED25519,
-                    SignatureScheme::RSA_PSS_SHA512,
-                    SignatureScheme::RSA_PSS_SHA384,
-                    SignatureScheme::RSA_PSS_SHA256,
+                    SignatureScheme::RSA_PSS_RSAE_SHA512,
+                    SignatureScheme::RSA_PSS_RSAE_SHA384,
+                    SignatureScheme::RSA_PSS_RSAE_SHA256,
                 ],
                 _ => unreachable!(),
             };

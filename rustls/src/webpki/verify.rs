@@ -162,12 +162,12 @@ impl WebPkiServerVerifier {
     /// Which signature verification schemes the `webpki` crate supports.
     pub fn default_supported_verify_schemes() -> Vec<SignatureScheme> {
         vec![
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::ECDSA_SECP384R1_SHA384,
+            SignatureScheme::ECDSA_SECP256R1_SHA256,
             SignatureScheme::ED25519,
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_RSAE_SHA512,
+            SignatureScheme::RSA_PSS_RSAE_SHA384,
+            SignatureScheme::RSA_PSS_RSAE_SHA256,
             SignatureScheme::RSA_PKCS1_SHA512,
             SignatureScheme::RSA_PKCS1_SHA384,
             SignatureScheme::RSA_PKCS1_SHA256,
@@ -474,15 +474,15 @@ static ED25519: SignatureAlgorithms = &[webpki::ED25519];
 static RSA_SHA256: SignatureAlgorithms = &[webpki::RSA_PKCS1_2048_8192_SHA256];
 static RSA_SHA384: SignatureAlgorithms = &[webpki::RSA_PKCS1_2048_8192_SHA384];
 static RSA_SHA512: SignatureAlgorithms = &[webpki::RSA_PKCS1_2048_8192_SHA512];
-static RSA_PSS_SHA256: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY];
-static RSA_PSS_SHA384: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
-static RSA_PSS_SHA512: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
+static RSA_PSS_RSAE_SHA256: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY];
+static RSA_PSS_RSAE_SHA384: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY];
+static RSA_PSS_RSAE_SHA512: SignatureAlgorithms = &[webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY];
 
 fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, Error> {
     match scheme {
         // nb. for TLS1.2 the curve is not fixed by SignatureScheme.
-        SignatureScheme::ECDSA_NISTP256_SHA256 => Ok(ECDSA_SHA256),
-        SignatureScheme::ECDSA_NISTP384_SHA384 => Ok(ECDSA_SHA384),
+        SignatureScheme::ECDSA_SECP256R1_SHA256 => Ok(ECDSA_SHA256),
+        SignatureScheme::ECDSA_SECP384R1_SHA384 => Ok(ECDSA_SHA384),
 
         SignatureScheme::ED25519 => Ok(ED25519),
 
@@ -490,9 +490,9 @@ fn convert_scheme(scheme: SignatureScheme) -> Result<SignatureAlgorithms, Error>
         SignatureScheme::RSA_PKCS1_SHA384 => Ok(RSA_SHA384),
         SignatureScheme::RSA_PKCS1_SHA512 => Ok(RSA_SHA512),
 
-        SignatureScheme::RSA_PSS_SHA256 => Ok(RSA_PSS_SHA256),
-        SignatureScheme::RSA_PSS_SHA384 => Ok(RSA_PSS_SHA384),
-        SignatureScheme::RSA_PSS_SHA512 => Ok(RSA_PSS_SHA512),
+        SignatureScheme::RSA_PSS_RSAE_SHA256 => Ok(RSA_PSS_RSAE_SHA256),
+        SignatureScheme::RSA_PSS_RSAE_SHA384 => Ok(RSA_PSS_RSAE_SHA384),
+        SignatureScheme::RSA_PSS_RSAE_SHA512 => Ok(RSA_PSS_RSAE_SHA512),
 
         _ => Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into()),
     }
@@ -535,12 +535,12 @@ fn convert_alg_tls13(
     use crate::enums::SignatureScheme::*;
 
     match scheme {
-        ECDSA_NISTP256_SHA256 => Ok(webpki::ECDSA_P256_SHA256),
-        ECDSA_NISTP384_SHA384 => Ok(webpki::ECDSA_P384_SHA384),
+        ECDSA_SECP256R1_SHA256 => Ok(webpki::ECDSA_P256_SHA256),
+        ECDSA_SECP384R1_SHA384 => Ok(webpki::ECDSA_P384_SHA384),
         ED25519 => Ok(webpki::ED25519),
-        RSA_PSS_SHA256 => Ok(webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
-        RSA_PSS_SHA384 => Ok(webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
-        RSA_PSS_SHA512 => Ok(webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
+        RSA_PSS_RSAE_SHA256 => Ok(webpki::RSA_PSS_2048_8192_SHA256_LEGACY_KEY),
+        RSA_PSS_RSAE_SHA384 => Ok(webpki::RSA_PSS_2048_8192_SHA384_LEGACY_KEY),
+        RSA_PSS_RSAE_SHA512 => Ok(webpki::RSA_PSS_2048_8192_SHA512_LEGACY_KEY),
         _ => Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into()),
     }
 }

@@ -503,16 +503,19 @@ enum_builder! {
     EnumName: SignatureScheme;
     EnumVal{
         RSA_PKCS1_SHA1 => 0x0201,
-        ECDSA_SHA1_Legacy => 0x0203,
         RSA_PKCS1_SHA256 => 0x0401,
-        ECDSA_NISTP256_SHA256 => 0x0403,
         RSA_PKCS1_SHA384 => 0x0501,
-        ECDSA_NISTP384_SHA384 => 0x0503,
         RSA_PKCS1_SHA512 => 0x0601,
-        ECDSA_NISTP521_SHA512 => 0x0603,
-        RSA_PSS_SHA256 => 0x0804,
-        RSA_PSS_SHA384 => 0x0805,
-        RSA_PSS_SHA512 => 0x0806,
+        ECDSA_SHA1 => 0x0203,
+        ECDSA_SECP256R1_SHA256 => 0x0403,
+        ECDSA_SECP384R1_SHA384 => 0x0503,
+        ECDSA_SECP521R1_SHA512 => 0x0603,
+        RSA_PSS_RSAE_SHA256 => 0x0804,
+        RSA_PSS_RSAE_SHA384 => 0x0805,
+        RSA_PSS_RSAE_SHA512 => 0x0806,
+        RSA_PSS_PSS_SHA256 => 0x0809,
+        RSA_PSS_PSS_SHA384 => 0x080a,
+        RSA_PSS_PSS_SHA512 => 0x080b,
         ED25519 => 0x0807,
         ED448 => 0x0808
     }
@@ -525,12 +528,15 @@ impl SignatureScheme {
             | Self::RSA_PKCS1_SHA256
             | Self::RSA_PKCS1_SHA384
             | Self::RSA_PKCS1_SHA512
-            | Self::RSA_PSS_SHA256
-            | Self::RSA_PSS_SHA384
-            | Self::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
-            Self::ECDSA_NISTP256_SHA256
-            | Self::ECDSA_NISTP384_SHA384
-            | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
+            | Self::RSA_PSS_RSAE_SHA256
+            | Self::RSA_PSS_RSAE_SHA384
+            | Self::RSA_PSS_RSAE_SHA512
+            | Self::RSA_PSS_PSS_SHA256
+            | Self::RSA_PSS_PSS_SHA384
+            | Self::RSA_PSS_PSS_SHA512 => SignatureAlgorithm::RSA,
+            Self::ECDSA_SECP256R1_SHA256
+            | Self::ECDSA_SECP384R1_SHA384
+            | Self::ECDSA_SECP521R1_SHA512 => SignatureAlgorithm::ECDSA,
             _ => SignatureAlgorithm::Unknown(0),
         }
     }
@@ -545,12 +551,17 @@ impl SignatureScheme {
     pub(crate) fn supported_in_tls13(&self) -> bool {
         matches!(
             *self,
-            Self::ECDSA_NISTP384_SHA384
-                | Self::ECDSA_NISTP256_SHA256
-                | Self::RSA_PSS_SHA512
-                | Self::RSA_PSS_SHA384
-                | Self::RSA_PSS_SHA256
+            Self::ECDSA_SECP256R1_SHA256
+                | Self::ECDSA_SECP384R1_SHA384
+                | Self::ECDSA_SECP521R1_SHA512
+                | Self::RSA_PSS_RSAE_SHA256
+                | Self::RSA_PSS_RSAE_SHA384
+                | Self::RSA_PSS_RSAE_SHA512
+                | Self::RSA_PSS_PSS_SHA256
+                | Self::RSA_PSS_PSS_SHA384
+                | Self::RSA_PSS_PSS_SHA512
                 | Self::ED25519
+                | Self::ED448
         )
     }
 }

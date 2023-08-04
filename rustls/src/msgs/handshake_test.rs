@@ -364,7 +364,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
         extensions: vec![
             ClientExtension::ECPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-            ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
+            ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_SECP256R1_SHA256]),
             ClientExtension::make_sni(DnsNameRef::try_from("hello").unwrap()),
             ClientExtension::SessionTicket(ClientSessionTicket::Request),
             ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload(vec![]))),
@@ -817,7 +817,7 @@ fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
             },
             public: PayloadU8(vec![1, 2, 3]),
         },
-        dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
+        dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_RSAE_SHA256, vec![1, 2, 3]),
     })
 }
 
@@ -828,7 +828,7 @@ fn get_sample_serverkeyexchangepayload_unknown() -> ServerKeyExchangePayload {
 fn get_sample_certificaterequestpayload() -> CertificateRequestPayload {
     CertificateRequestPayload {
         certtypes: vec![ClientCertificateType::RSASign],
-        sigschemes: vec![SignatureScheme::ECDSA_NISTP256_SHA256],
+        sigschemes: vec![SignatureScheme::ECDSA_SECP256R1_SHA256],
         canames: vec![DistinguishedName::from(vec![1, 2, 3])],
     }
 }
@@ -837,7 +837,7 @@ fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTLS13
     CertificateRequestPayloadTLS13 {
         context: PayloadU8(vec![1, 2, 3]),
         extensions: vec![
-            CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
+            CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_SECP256R1_SHA256]),
             CertReqExtension::AuthorityNames(vec![DistinguishedName::from(vec![1, 2, 3])]),
             CertReqExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
@@ -1048,7 +1048,7 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload> {
         HandshakeMessagePayload {
             typ: HandshakeType::CertificateVerify,
             payload: HandshakePayload::CertificateVerify(DigitallySignedStruct::new(
-                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ECDSA_SECP256R1_SHA256,
                 vec![1, 2, 3],
             )),
         },

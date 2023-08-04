@@ -118,15 +118,16 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
 
 static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
     SignatureScheme::ED25519,
-    SignatureScheme::ECDSA_NISTP521_SHA512,
-    SignatureScheme::ECDSA_NISTP384_SHA384,
-    SignatureScheme::ECDSA_NISTP256_SHA256,
+    SignatureScheme::ED448,
+    SignatureScheme::ECDSA_SECP521R1_SHA512,
+    SignatureScheme::ECDSA_SECP384R1_SHA384,
+    SignatureScheme::ECDSA_SECP256R1_SHA256,
 ];
 
 static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
-    SignatureScheme::RSA_PSS_SHA512,
-    SignatureScheme::RSA_PSS_SHA384,
-    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PSS_RSAE_SHA512,
+    SignatureScheme::RSA_PSS_RSAE_SHA384,
+    SignatureScheme::RSA_PSS_RSAE_SHA256,
     SignatureScheme::RSA_PKCS1_SHA512,
     SignatureScheme::RSA_PKCS1_SHA384,
     SignatureScheme::RSA_PKCS1_SHA256,
