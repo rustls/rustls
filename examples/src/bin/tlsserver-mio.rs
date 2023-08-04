@@ -663,7 +663,7 @@ fn main() {
         return;
     }
 
-    let mut addr: net::SocketAddr = "0.0.0.0:443".parse().unwrap();
+    let mut addr: net::SocketAddr = "[::]:443".parse().unwrap();
     addr.set_port(args.flag_port.unwrap_or(443));
 
     let config = make_config(&args);
