@@ -8,7 +8,7 @@ use rustls::crypto::CryptoProvider;
 use std::fs;
 use std::io;
 use std::io::{BufReader, Read, Write};
-use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use std::str;
 
 #[macro_use]
@@ -241,22 +241,6 @@ struct Args {
     flag_auth_key: Option<String>,
     flag_auth_certs: Option<String>,
     arg_hostname: String,
-}
-
-// TODO: um, well, it turns out that openssl s_client/s_server
-// that we use for testing doesn't do ipv6.  So we can't actually
-// test ipv6 and hence kill this.
-fn lookup_ipv4(host: &str, port: u16) -> SocketAddr {
-    use std::net::ToSocketAddrs;
-
-    let addrs = (host, port).to_socket_addrs().unwrap();
-    for addr in addrs {
-        if let SocketAddr::V4(_) = addr {
-            return addr;
-        }
-    }
-
-    unreachable!("Cannot lookup address");
 }
 
 /// Find a ciphersuite with the given name
@@ -493,11 +477,15 @@ fn main() {
     }
 
     let port = args.flag_port.unwrap_or(443);
-    let addr = lookup_ipv4(args.arg_hostname.as_str(), port);
 
     let config = make_config(&args);
 
-    let sock = TcpStream::connect(addr).unwrap();
+    let sock_addr = (args.arg_hostname.as_str(), port)
+        .to_socket_addrs()
+        .unwrap()
+        .next()
+        .unwrap();
+    let sock = TcpStream::connect(sock_addr).unwrap();
     let server_name = args
         .arg_hostname
         .as_str()
