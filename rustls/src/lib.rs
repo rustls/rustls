@@ -324,7 +324,6 @@ mod log {
 
 #[macro_use]
 mod msgs;
-mod anchors;
 mod cipher;
 mod common_state;
 mod conn;
@@ -356,6 +355,7 @@ mod key_log_file;
 mod suites;
 mod ticketer;
 mod versions;
+mod webpki;
 
 /// Internal classes which may be useful outside the library.
 /// The contents of this section DO NOT form part of the stable interface.
@@ -375,7 +375,6 @@ pub mod internal {
 }
 
 // The public interface is:
-pub use crate::anchors::{OwnedTrustAnchor, RootCertStore};
 pub use crate::builder::{
     ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
 };
@@ -409,6 +408,7 @@ pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::DigitallySignedStruct;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
+pub use crate::webpki::{OwnedTrustAnchor, RootCertStore};
 
 /// Items for use in a client.
 pub mod client {
@@ -430,9 +430,10 @@ pub mod client {
     pub use handy::ClientSessionMemoryCache;
 
     #[cfg(feature = "dangerous_configuration")]
-    pub use crate::verify::{
-        verify_server_cert_signed_by_trust_anchor, verify_server_name, HandshakeSignatureValid,
-        ServerCertVerified, ServerCertVerifier, WebPkiServerVerifier,
+    pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    #[cfg(feature = "dangerous_configuration")]
+    pub use crate::webpki::{
+        verify_server_cert_signed_by_trust_anchor, verify_server_name, WebPkiServerVerifier,
     };
     #[cfg(feature = "dangerous_configuration")]
     pub use client_conn::danger::DangerousClientConfig;
@@ -453,9 +454,9 @@ pub mod server {
     #[cfg(feature = "tls12")]
     mod tls12;
     mod tls13;
-    pub(crate) mod verifier_builder;
 
-    pub use crate::verify::{UnparsedCertRevocationList, WebPkiClientVerifier};
+    pub use crate::webpki::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
+    pub use crate::webpki::{UnparsedCertRevocationList, WebPkiClientVerifier};
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
@@ -464,14 +465,13 @@ pub mod server {
         Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData,
     };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
-    pub use verifier_builder::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::dns_name::DnsName;
     #[cfg(feature = "dangerous_configuration")]
-    pub use crate::key::ParsedCertificate;
-    #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
+    #[cfg(feature = "dangerous_configuration")]
+    pub use crate::webpki::ParsedCertificate;
 }
 
 pub use server::{ServerConfig, ServerConnection};

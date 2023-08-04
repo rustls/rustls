@@ -8,9 +8,8 @@ use core::time::Duration;
 use std::time::{Instant, SystemTime};
 
 use crate::key;
-use crate::verify;
 use crate::verify::ServerCertVerifier;
-use crate::{anchors, OwnedTrustAnchor};
+use crate::webpki::{OwnedTrustAnchor, RootCertStore, WebPkiServerVerifier};
 
 use webpki_roots;
 
@@ -180,14 +179,14 @@ fn test_wapo_cert() {
 struct Context {
     name: &'static str,
     domain: &'static str,
-    roots: anchors::RootCertStore,
+    roots: RootCertStore,
     chain: Vec<key::Certificate>,
     now: SystemTime,
 }
 
 impl Context {
     fn new(name: &'static str, domain: &'static str, certs: &[&'static [u8]]) -> Self {
-        let mut roots = anchors::RootCertStore::empty();
+        let mut roots = RootCertStore::empty();
         roots.add_trust_anchors(
             webpki_roots::TLS_SERVER_ROOTS
                 .iter()
@@ -213,7 +212,7 @@ impl Context {
     }
 
     fn bench(&self, count: usize) {
-        let verifier = verify::WebPkiServerVerifier::new(self.roots.clone());
+        let verifier = WebPkiServerVerifier::new(self.roots.clone());
         const OCSP_RESPONSE: &[u8] = &[];
         let mut times = Vec::new();
 

@@ -5,8 +5,7 @@ use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
-use crate::verify;
-use crate::{anchors, key, versions};
+use crate::{key, verify, versions, webpki};
 
 use super::client_conn::Resumption;
 
@@ -17,14 +16,14 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
     /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,
-        root_store: anchors::RootCertStore,
+        root_store: webpki::RootCertStore,
     ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
                 versions: self.state.versions,
-                verifier: Arc::new(verify::WebPkiServerVerifier::new(root_store)),
+                verifier: Arc::new(webpki::WebPkiServerVerifier::new(root_store)),
             },
             side: PhantomData,
         }
