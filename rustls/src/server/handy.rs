@@ -1,12 +1,11 @@
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::key;
-use crate::key::ParsedCertificate;
 use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
-use crate::verify::verify_server_name;
+use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
 
 use alloc::sync::Arc;

@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier};
 use crate::server::UnparsedCertRevocationList;
-use crate::verify::{AnonymousClientPolicy, ClientCertVerifier, WebPkiClientVerifier};
+use crate::verify::ClientCertVerifier;
 use crate::{CertRevocationListError, RootCertStore};
 
 /// A builder for configuring a `webpki` client certificate verifier.
@@ -90,7 +91,7 @@ impl From<CertRevocationListError> for ClientCertVerifierBuilderError {
 #[cfg(test)]
 mod tests {
     use crate::server::{ClientCertVerifierBuilderError, UnparsedCertRevocationList};
-    use crate::verify::WebPkiClientVerifier;
+    use crate::webpki::verify::WebPkiClientVerifier;
     use crate::{Certificate, RootCertStore};
     use std::sync::Arc;
 

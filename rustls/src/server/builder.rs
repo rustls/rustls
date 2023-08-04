@@ -5,8 +5,9 @@ use crate::key;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
 use crate::suites::SupportedCipherSuite;
-use crate::verify::{self, WebPkiClientVerifier};
+use crate::verify::ClientCertVerifier;
 use crate::versions;
+use crate::webpki::WebPkiClientVerifier;
 use crate::NoKeyLog;
 
 use alloc::sync::Arc;
@@ -16,7 +17,7 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier<C>> {
     /// Choose how to verify client certificates.
     pub fn with_client_cert_verifier(
         self,
-        client_cert_verifier: Arc<dyn verify::ClientCertVerifier>,
+        client_cert_verifier: Arc<dyn ClientCertVerifier>,
     ) -> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
         ConfigBuilder {
             state: WantsServerCert {
@@ -44,7 +45,7 @@ pub struct WantsServerCert<C: CryptoProvider> {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
     versions: versions::EnabledVersions,
-    verifier: Arc<dyn verify::ClientCertVerifier>,
+    verifier: Arc<dyn ClientCertVerifier>,
 }
 
 impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
