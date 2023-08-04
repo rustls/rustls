@@ -87,8 +87,7 @@ impl MessageDeframer {
                 }
             };
 
-            // If we're in the middle of joining a handshake payload and the next message is not of
-            // type handshake, yield an error. Return CCS messages immediately without decrypting.
+            // Return CCS messages immediately without decrypting.
             let end = start + rd.used();
             if m.typ == ContentType::ChangeCipherSpec && self.joining_hs.is_none() {
                 // This is unencrypted. We check the contents later.
