@@ -1,10 +1,13 @@
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::key;
+use crate::key::ParsedCertificate;
 use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
+use crate::verify::verify_server_name;
+use crate::ServerName;
 
 use alloc::sync::Arc;
 use std::collections;
@@ -153,9 +156,12 @@ impl ResolvesServerCertUsingSni {
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
     pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
-        let checked_name = DnsNameRef::try_from(name)
-            .map_err(|_| Error::General("Bad DNS name".into()))
-            .map(|dns| dns.to_lowercase_owned())?;
+        let server_name = {
+            let checked_name = DnsNameRef::try_from(name)
+                .map_err(|_| Error::General("Bad DNS name".into()))
+                .map(|name| name.to_lowercase_owned())?;
+            ServerName::DnsName(checked_name)
+        };
 
         // Check the certificate chain for validity:
         // - it should be non-empty list
@@ -166,36 +172,14 @@ impl ResolvesServerCertUsingSni {
         // These checks are not security-sensitive.  They are the
         // *server* attempting to detect accidental misconfiguration.
 
-        // Always reject an empty certificate chain.
-        let end_entity_cert = ck.end_entity_cert().map_err(|_| {
-            Error::General("No end-entity certificate in certificate chain".to_string())
-        })?;
+        ck.end_entity_cert()
+            .and_then(ParsedCertificate::try_from)
+            .and_then(|cert| verify_server_name(&cert, &server_name))?;
 
-        // Reject syntactically-invalid end-entity certificates.
-        let end_entity_cert =
-            webpki::EndEntityCert::try_from(end_entity_cert.as_ref()).map_err(|_| {
-                Error::General(
-                    "End-entity certificate in certificate chain is syntactically invalid"
-                        .to_string(),
-                )
-            })?;
-
-        // Note that this doesn't fully validate that the certificate is valid; it only validates that the name is one
-        // that the certificate is valid for, if the certificate is
-        // valid.
-        let general_error =
-            || Error::General("The server certificate is not valid for the given name".to_string());
-
-        let name = webpki::DnsNameRef::try_from_ascii(checked_name.as_ref().as_bytes())
-            .map_err(|_| general_error())?;
-
-        end_entity_cert
-            .verify_is_valid_for_subject_name(webpki::SubjectNameRef::DnsName(name))
-            .map_err(|_| general_error())?;
-
-        let as_str: &str = checked_name.as_ref();
-        self.by_name
-            .insert(as_str.to_string(), Arc::new(ck));
+        if let ServerName::DnsName(name) = server_name {
+            self.by_name
+                .insert(name.as_ref().to_string(), Arc::new(ck));
+        }
         Ok(())
     }
 }

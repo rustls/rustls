@@ -2116,9 +2116,7 @@ fn sni_resolver_rejects_wrong_names() {
         )
     );
     assert_eq!(
-        Err(Error::General(
-            "The server certificate is not valid for the given name".into()
-        )),
+        Err(Error::InvalidCertificate(CertificateError::NotValidForName)),
         resolver.add(
             "not-localhost",
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
@@ -2194,9 +2192,7 @@ fn sni_resolver_rejects_bad_certs() {
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
-        Err(Error::General(
-            "No end-entity certificate in certificate chain".into()
-        )),
+        Err(Error::NoCertificatesPresented),
         resolver.add(
             "localhost",
             sign::CertifiedKey::new(vec![], signing_key.clone())
@@ -2205,9 +2201,7 @@ fn sni_resolver_rejects_bad_certs() {
 
     let bad_chain = vec![rustls::Certificate(vec![0xa0])];
     assert_eq!(
-        Err(Error::General(
-            "End-entity certificate in certificate chain is syntactically invalid".into()
-        )),
+        Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(
             "localhost",
             sign::CertifiedKey::new(bad_chain, signing_key.clone())
