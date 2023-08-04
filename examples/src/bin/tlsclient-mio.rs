@@ -124,7 +124,7 @@ impl TlsClient {
                 .unwrap();
         }
 
-        // If wethat fails, the peer might have started a clean TLS-level
+        // If that fails, the peer might have started a clean TLS-level
         // session closure.
         if io_state.peer_has_closed() {
             self.clean_closure = true;
