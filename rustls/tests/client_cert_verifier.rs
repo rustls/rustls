@@ -14,9 +14,12 @@ use rustls::crypto::ring::Ring;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
-    AlertDescription, Certificate, ClientConnection, DigitallySignedStruct, Error, InvalidMessage,
-    ServerConfig, ServerConnection, SignatureScheme,
+    AlertDescription, ClientConnection, DigitallySignedStruct, Error, InvalidMessage, ServerConfig,
+    ServerConnection, SignatureScheme,
 };
+
+use pki_types::CertificateDer;
+
 use std::sync::Arc;
 
 // Client is authorized!
@@ -193,8 +196,8 @@ impl ClientCertVerifier for MockClientVerifier {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &Certificate,
-        _intermediates: &[Certificate],
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
         _now: std::time::SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         (self.verified)()
@@ -203,7 +206,7 @@ impl ClientCertVerifier for MockClientVerifier {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
@@ -212,7 +215,7 @@ impl ClientCertVerifier for MockClientVerifier {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)

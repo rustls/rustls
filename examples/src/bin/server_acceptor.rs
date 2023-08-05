@@ -13,13 +13,12 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use docopt::Docopt;
-use serde::Deserialize;
+use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use serde_derive::Deserialize;
 
 use rustls::crypto::CryptoProvider;
-use rustls::server::{
-    Acceptor, ClientHello, ServerConfig, UnparsedCertRevocationList, WebPkiClientVerifier,
-};
-use rustls::{Certificate, PrivateKey, RootCertStore};
+use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
+use rustls::RootCertStore;
 
 fn main() {
     let version = concat!(
@@ -141,8 +140,8 @@ struct TestPki {
     roots: Arc<RootCertStore>,
     ca_cert: rcgen::Certificate,
     client_cert: rcgen::Certificate,
-    server_cert_der: Vec<u8>,
-    server_key_der: Vec<u8>,
+    server_cert_der: CertificateDer<'static>,
+    server_key_der: PrivateKeyDer<'static>,
 }
 
 impl TestPki {
@@ -172,10 +171,12 @@ impl TestPki {
         server_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
         server_ee_params.alg = alg;
         let server_cert = rcgen::Certificate::from_params(server_ee_params).unwrap();
-        let server_cert_der = server_cert
-            .serialize_der_with_signer(&ca_cert)
-            .unwrap();
-        let server_key_der = server_cert.serialize_private_key_der();
+        let server_cert_der = CertificateDer::from(
+            server_cert
+                .serialize_der_with_signer(&ca_cert)
+                .unwrap(),
+        );
+        let server_key_der = PrivatePkcs8KeyDer::from(server_cert.serialize_private_key_der());
 
         // Create a client end entity cert issued by the CA.
         let mut client_ee_params = rcgen::CertificateParams::new(Vec::new());
@@ -191,14 +192,14 @@ impl TestPki {
         // Create a root cert store that includes the CA certificate.
         let mut roots = RootCertStore::empty();
         roots
-            .add(&Certificate(ca_cert.serialize_der().unwrap()))
+            .add(CertificateDer::from(ca_cert.serialize_der().unwrap()))
             .unwrap();
         Self {
             roots: roots.into(),
             ca_cert,
             client_cert,
             server_cert_der,
-            server_key_der,
+            server_key_der: server_key_der.into(),
         }
     }
 
@@ -222,7 +223,7 @@ impl TestPki {
 
         // Construct a fresh verifier using the test PKI roots, and the updated CRL.
         let verifier = WebPkiClientVerifier::builder(self.roots.clone())
-            .with_crls([UnparsedCertRevocationList(crl)])
+            .with_crls([CertificateRevocationListDer::from(crl)])
             .build()
             .unwrap();
 
@@ -233,8 +234,13 @@ impl TestPki {
             .with_safe_defaults()
             .with_client_cert_verifier(verifier)
             .with_single_cert(
-                vec![Certificate(self.server_cert_der.clone())],
-                PrivateKey(self.server_key_der.clone()),
+                vec![self.server_cert_der.clone()],
+                PrivatePkcs8KeyDer::from(
+                    self.server_key_der
+                        .secret_der()
+                        .to_owned(),
+                )
+                .into(),
             )
             .unwrap();
 

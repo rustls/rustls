@@ -1,4 +1,6 @@
-use crate::{key, sign};
+use crate::sign;
+
+use pki_types::CertificateDer;
 
 /// ActiveCertifiedKey wraps CertifiedKey and tracks OSCP and SCT state
 /// in a single handshake.
@@ -17,7 +19,7 @@ impl<'a> ActiveCertifiedKey<'a> {
 
     /// Get the certificate chain
     #[inline]
-    pub(super) fn get_cert(&self) -> &[key::Certificate] {
+    pub(super) fn get_cert(&self) -> &[CertificateDer<'static>] {
         &self.key.cert
     }
 

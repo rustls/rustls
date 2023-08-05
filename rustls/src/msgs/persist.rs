@@ -1,7 +1,6 @@
 use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
-use crate::key;
 use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::CertificatePayload;
@@ -10,6 +9,8 @@ use crate::ticketer::TimeBase;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
+
+use pki_types::CertificateDer;
 
 use core::cmp;
 #[cfg(feature = "tls12")]
@@ -81,7 +82,7 @@ impl Tls13ClientSessionValue {
         suite: &'static Tls13CipherSuite,
         ticket: Vec<u8>,
         secret: Vec<u8>,
-        server_cert_chain: Vec<key::Certificate>,
+        server_cert_chain: Vec<CertificateDer<'static>>,
         time_now: TimeBase,
         lifetime_secs: u32,
         age_add: u32,
@@ -156,7 +157,7 @@ impl Tls12ClientSessionValue {
         session_id: SessionId,
         ticket: Vec<u8>,
         master_secret: Vec<u8>,
-        server_cert_chain: Vec<key::Certificate>,
+        server_cert_chain: Vec<CertificateDer<'static>>,
         time_now: TimeBase,
         lifetime_secs: u32,
         extended_ms: bool,
@@ -218,7 +219,7 @@ impl ClientSessionCommon {
         secret: Vec<u8>,
         time_now: TimeBase,
         lifetime_secs: u32,
-        server_cert_chain: Vec<key::Certificate>,
+        server_cert_chain: Vec<CertificateDer<'static>>,
     ) -> Self {
         Self {
             ticket: PayloadU16(ticket),
@@ -229,7 +230,7 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn server_cert_chain(&self) -> &[key::Certificate] {
+    pub(crate) fn server_cert_chain(&self) -> &[CertificateDer<'static>] {
         self.server_cert_chain.as_ref()
     }
 

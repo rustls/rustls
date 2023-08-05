@@ -1,16 +1,16 @@
 use alloc::sync::Arc;
 
-use crate::error::{Error, CertificateError, CertRevocationListError};
+use crate::error::{CertRevocationListError, CertificateError, Error};
 
 mod anchors;
 mod client_verifier_builder;
 mod verify;
 
-pub use anchors::{OwnedTrustAnchor, RootCertStore};
+pub use anchors::{RootCertStore, TrustAnchorWithDn};
 
 pub use client_verifier_builder::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
 
-pub use verify::{UnparsedCertRevocationList, WebPkiClientVerifier};
+pub use verify::WebPkiClientVerifier;
 
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]

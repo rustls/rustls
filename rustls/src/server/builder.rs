@@ -1,7 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::error::Error;
-use crate::key;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
 use crate::suites::SupportedCipherSuite;
@@ -9,6 +8,8 @@ use crate::verify::ClientCertVerifier;
 use crate::versions;
 use crate::webpki::WebPkiClientVerifier;
 use crate::NoKeyLog;
+
+use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
 use core::marker::PhantomData;
@@ -64,8 +65,8 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
     /// This function fails if `key_der` is invalid.
     pub fn with_single_cert(
         self,
-        cert_chain: Vec<key::Certificate>,
-        key_der: key::PrivateKey,
+        cert_chain: Vec<CertificateDer<'static>>,
+        key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig<C>, Error> {
         let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
         Ok(self.with_cert_resolver(Arc::new(resolver)))
@@ -82,8 +83,8 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
     /// This function fails if `key_der` is invalid.
     pub fn with_single_cert_with_ocsp(
         self,
-        cert_chain: Vec<key::Certificate>,
-        key_der: key::PrivateKey,
+        cert_chain: Vec<CertificateDer<'static>>,
+        key_der: PrivateKeyDer<'static>,
         ocsp: Vec<u8>,
     ) -> Result<ServerConfig<C>, Error> {
         let resolver = handy::AlwaysResolvesChain::new_with_extras(cert_chain, &key_der, ocsp)?;

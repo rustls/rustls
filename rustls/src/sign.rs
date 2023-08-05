@@ -1,8 +1,8 @@
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
-use crate::key;
 use crate::x509::{wrap_in_asn1_len, wrap_in_sequence};
 
+use pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use ring::io::der;
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
@@ -36,7 +36,7 @@ pub trait Signer: Send + Sync {
 #[derive(Clone)]
 pub struct CertifiedKey {
     /// The certificate chain.
-    pub cert: Vec<key::Certificate>,
+    pub cert: Vec<CertificateDer<'static>>,
 
     /// The certified key.
     pub key: Arc<dyn SigningKey>,
@@ -51,7 +51,7 @@ impl CertifiedKey {
     ///
     /// The cert chain must not be empty. The first certificate in the chain
     /// must be the end-entity certificate.
-    pub fn new(cert: Vec<key::Certificate>, key: Arc<dyn SigningKey>) -> Self {
+    pub fn new(cert: Vec<CertificateDer<'static>>, key: Arc<dyn SigningKey>) -> Self {
         Self {
             cert,
             key,
@@ -60,7 +60,7 @@ impl CertifiedKey {
     }
 
     /// The end-entity certificate.
-    pub fn end_entity_cert(&self) -> Result<&key::Certificate, Error> {
+    pub fn end_entity_cert(&self) -> Result<&CertificateDer<'_>, Error> {
         self.cert
             .get(0)
             .ok_or(Error::NoCertificatesPresented)
@@ -69,13 +69,15 @@ impl CertifiedKey {
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
-pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
+pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(rsa) = RsaSigningKey::new(der) {
         Ok(Arc::new(rsa))
     } else if let Ok(ecdsa) = any_ecdsa_type(der) {
         Ok(ecdsa)
+    } else if let PrivateKeyDer::Pkcs8(pkcs8) = der {
+        any_eddsa_type(pkcs8)
     } else {
-        any_eddsa_type(der)
+        Err(SignError(()))
     }
 }
 
@@ -83,7 +85,7 @@ pub fn any_supported_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, 
 ///
 /// Both SEC1 (PEM section starting with 'BEGIN EC PRIVATE KEY') and PKCS8
 /// (PEM section starting with 'BEGIN PRIVATE KEY') encodings are supported.
-pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
+pub fn any_ecdsa_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(ecdsa_p256) = EcdsaSigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -104,7 +106,7 @@ pub fn any_ecdsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, Sign
 }
 
 /// Parse `der` as any EdDSA key type, returning the first which works.
-pub fn any_eddsa_type(der: &key::PrivateKey) -> Result<Arc<dyn SigningKey>, SignError> {
+pub fn any_eddsa_type(der: &PrivatePkcs8KeyDer<'_>) -> Result<Arc<dyn SigningKey>, SignError> {
     if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
         return Ok(Arc::new(ed25519));
     }
@@ -135,11 +137,17 @@ static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
 impl RsaSigningKey {
     /// Make a new `RsaSigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
-    pub fn new(der: &key::PrivateKey) -> Result<Self, SignError> {
-        RsaKeyPair::from_der(&der.0)
-            .or_else(|_| RsaKeyPair::from_pkcs8(&der.0))
-            .map(|s| Self { key: Arc::new(s) })
-            .map_err(|_| SignError(()))
+    pub fn new(der: &PrivateKeyDer<'_>) -> Result<Self, SignError> {
+        let key_pair = match der {
+            PrivateKeyDer::Pkcs1(pkcs1) => RsaKeyPair::from_der(pkcs1.secret_pkcs1_der()),
+            PrivateKeyDer::Pkcs8(pkcs8) => RsaKeyPair::from_pkcs8(pkcs8.secret_pkcs8_der()),
+            _ => return Err(SignError(())),
+        }
+        .map_err(|_| SignError(()))?;
+
+        Ok(Self {
+            key: Arc::new(key_pair),
+        })
     }
 }
 
@@ -219,17 +227,24 @@ impl EcdsaSigningKey {
     /// format, expecting a key usable with precisely the given signature
     /// scheme.
     fn new(
-        der: &key::PrivateKey,
+        der: &PrivateKeyDer<'_>,
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
     ) -> Result<Self, ()> {
-        EcdsaKeyPair::from_pkcs8(sigalg, &der.0)
-            .map_err(|_| ())
-            .or_else(|_| Self::convert_sec1_to_pkcs8(scheme, sigalg, &der.0))
-            .map(|kp| Self {
-                key: Arc::new(kp),
-                scheme,
-            })
+        let key_pair = match der {
+            PrivateKeyDer::Sec1(sec1) => {
+                Self::convert_sec1_to_pkcs8(scheme, sigalg, sec1.secret_sec1_der())?
+            }
+            PrivateKeyDer::Pkcs8(pkcs8) => {
+                EcdsaKeyPair::from_pkcs8(sigalg, pkcs8.secret_pkcs8_der()).map_err(|_| ())?
+            }
+            _ => return Err(()),
+        };
+
+        Ok(Self {
+            key: Arc::new(key_pair),
+            scheme,
+        })
     }
 
     /// Convert a SEC1 encoding to PKCS8, and ask ring to parse it.  This
@@ -336,13 +351,14 @@ struct Ed25519SigningKey {
 impl Ed25519SigningKey {
     /// Make a new `Ed25519SigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    fn new(der: &key::PrivateKey, scheme: SignatureScheme) -> Result<Self, SignError> {
-        Ed25519KeyPair::from_pkcs8_maybe_unchecked(&der.0)
-            .map(|kp| Self {
-                key: Arc::new(kp),
+    fn new(der: &PrivatePkcs8KeyDer<'_>, scheme: SignatureScheme) -> Result<Self, SignError> {
+        match Ed25519KeyPair::from_pkcs8_maybe_unchecked(der.secret_pkcs8_der()) {
+            Ok(key_pair) => Ok(Self {
+                key: Arc::new(key_pair),
                 scheme,
-            })
-            .map_err(|_| SignError(()))
+            }),
+            Err(_) => Err(SignError(())),
+        }
     }
 }
 
@@ -390,58 +406,71 @@ impl fmt::Display for SignError {
 
 impl StdError for SignError {}
 
-#[test]
-fn can_load_ecdsa_nistp256_pkcs8() {
-    let key = key::PrivateKey(include_bytes!("testdata/nistp256key.pkcs8.der").to_vec());
-    assert!(any_supported_type(&key).is_ok());
-    assert!(any_ecdsa_type(&key).is_ok());
-    assert!(any_eddsa_type(&key).is_err());
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pki_types::{PrivatePkcs1KeyDer, PrivateSec1KeyDer};
 
-#[test]
-fn can_load_ecdsa_nistp256_sec1() {
-    let key = key::PrivateKey(include_bytes!("testdata/nistp256key.der").to_vec());
-    assert!(any_supported_type(&key).is_ok());
-    assert!(any_ecdsa_type(&key).is_ok());
-    assert!(any_eddsa_type(&key).is_err());
-}
+    #[test]
+    fn can_load_ecdsa_nistp256_pkcs8() {
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/nistp256key.pkcs8.der")[..]);
+        assert!(any_eddsa_type(&key).is_err());
+        let key = PrivateKeyDer::Pkcs8(key);
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_ok());
+    }
 
-#[test]
-fn can_load_ecdsa_nistp384_pkcs8() {
-    let key = key::PrivateKey(include_bytes!("testdata/nistp384key.pkcs8.der").to_vec());
-    assert!(any_supported_type(&key).is_ok());
-    assert!(any_ecdsa_type(&key).is_ok());
-    assert!(any_eddsa_type(&key).is_err());
-}
+    #[test]
+    fn can_load_ecdsa_nistp256_sec1() {
+        let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
+            &include_bytes!("testdata/nistp256key.der")[..],
+        ));
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_ok());
+    }
 
-#[test]
-fn can_load_ecdsa_nistp384_sec1() {
-    let key = key::PrivateKey(include_bytes!("testdata/nistp384key.der").to_vec());
-    assert!(any_supported_type(&key).is_ok());
-    assert!(any_ecdsa_type(&key).is_ok());
-    assert!(any_eddsa_type(&key).is_err());
-}
+    #[test]
+    fn can_load_ecdsa_nistp384_pkcs8() {
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/nistp384key.pkcs8.der")[..]);
+        assert!(any_eddsa_type(&key).is_err());
+        let key = PrivateKeyDer::Pkcs8(key);
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_ok());
+    }
 
-#[test]
-fn can_load_eddsa_pkcs8() {
-    let key = key::PrivateKey(include_bytes!("testdata/eddsakey.der").to_vec());
-    assert!(any_supported_type(&key).is_ok());
-    assert!(any_eddsa_type(&key).is_ok());
-    assert!(any_ecdsa_type(&key).is_err());
-}
+    #[test]
+    fn can_load_ecdsa_nistp384_sec1() {
+        let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
+            &include_bytes!("testdata/nistp384key.der")[..],
+        ));
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_ok());
+    }
 
-#[test]
-fn can_load_rsa2048_pkcs8() {
-    let key = key::PrivateKey(include_bytes!("testdata/rsa2048key.pkcs8.der").to_vec());
-    assert!(any_supported_type(&key).is_ok());
-    assert!(any_eddsa_type(&key).is_err());
-    assert!(any_ecdsa_type(&key).is_err());
-}
+    #[test]
+    fn can_load_eddsa_pkcs8() {
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/eddsakey.der")[..]);
+        assert!(any_eddsa_type(&key).is_ok());
+        let key = PrivateKeyDer::Pkcs8(key);
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_err());
+    }
 
-#[test]
-fn can_load_rsa2048_pkcs1() {
-    let key = key::PrivateKey(include_bytes!("testdata/rsa2048key.pkcs1.der").to_vec());
-    assert!(any_supported_type(&key).is_ok());
-    assert!(any_eddsa_type(&key).is_err());
-    assert!(any_ecdsa_type(&key).is_err());
+    #[test]
+    fn can_load_rsa2048_pkcs8() {
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/rsa2048key.pkcs8.der")[..]);
+        assert!(any_eddsa_type(&key).is_err());
+        let key = PrivateKeyDer::Pkcs8(key);
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_err());
+    }
+
+    #[test]
+    fn can_load_rsa2048_pkcs1() {
+        let key = PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(
+            &include_bytes!("testdata/rsa2048key.pkcs1.der")[..],
+        ));
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_err());
+    }
 }

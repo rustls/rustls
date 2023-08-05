@@ -6,10 +6,11 @@ use std::{fs, net};
 use docopt::Docopt;
 use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
+use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use serde::Deserialize;
 
 use rustls::crypto::ring::Ring;
-use rustls::server::{UnparsedCertRevocationList, WebPkiClientVerifier};
+use rustls::server::WebPkiClientVerifier;
 use rustls::{self, RootCertStore};
 
 // Token for our listening socket.
@@ -501,25 +502,23 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
     out
 }
 
-fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
+fn load_certs(filename: &str) -> Vec<CertificateDer<'static>> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
     rustls_pemfile::certs(&mut reader)
-        .unwrap()
-        .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|result| result.unwrap())
         .collect()
 }
 
-fn load_private_key(filename: &str) -> rustls::PrivateKey {
+fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
 
     loop {
         match rustls_pemfile::read_one(&mut reader).expect("cannot parse private key .pem file") {
-            Some(rustls_pemfile::Item::RSAKey(key)) => return rustls::PrivateKey(key),
-            Some(rustls_pemfile::Item::PKCS8Key(key)) => return rustls::PrivateKey(key),
-            Some(rustls_pemfile::Item::ECKey(key)) => return rustls::PrivateKey(key),
+            Some(rustls_pemfile::Item::Pkcs1Key(key)) => return key.into(),
+            Some(rustls_pemfile::Item::Pkcs8Key(key)) => return key.into(),
+            Some(rustls_pemfile::Item::Sec1Key(key)) => return key.into(),
             None => break,
             _ => {}
         }
@@ -544,7 +543,7 @@ fn load_ocsp(filename: &Option<String>) -> Vec<u8> {
     ret
 }
 
-fn load_crls(filenames: &[String]) -> Vec<UnparsedCertRevocationList> {
+fn load_crls(filenames: &[String]) -> Vec<CertificateRevocationListDer<'static>> {
     filenames
         .iter()
         .map(|filename| {
@@ -553,7 +552,7 @@ fn load_crls(filenames: &[String]) -> Vec<UnparsedCertRevocationList> {
                 .expect("cannot open CRL file")
                 .read_to_end(&mut der)
                 .unwrap();
-            UnparsedCertRevocationList(der)
+            CertificateRevocationListDer::from(der)
         })
         .collect()
 }
@@ -563,7 +562,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig<Ring>> {
         let roots = load_certs(args.flag_auth.as_ref().unwrap());
         let mut client_auth_roots = RootCertStore::empty();
         for root in roots {
-            client_auth_roots.add(&root).unwrap();
+            client_auth_roots.add(root).unwrap();
         }
         let crls = load_crls(&args.flag_crl);
         if args.flag_require_auth {

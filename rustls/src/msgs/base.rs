@@ -1,9 +1,10 @@
 use core::fmt;
 
 use crate::error::InvalidMessage;
-use crate::key;
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
+
+use pki_types::CertificateDer;
 
 /// An externally length'd payload
 #[derive(Clone, Eq, PartialEq)]
@@ -33,17 +34,17 @@ impl Payload {
     }
 }
 
-impl Codec for key::Certificate {
+impl<'a> Codec for CertificateDer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.0.len() as u32).encode(bytes);
-        bytes.extend_from_slice(&self.0);
+        codec::u24(self.as_ref().len() as u32).encode(bytes);
+        bytes.extend(self.as_ref());
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Ok(Self(body))
+        Ok(Self::from(body))
     }
 }
 

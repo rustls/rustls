@@ -1,6 +1,5 @@
 use crate::dns_name::DnsNameRef;
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
-use crate::key::Certificate;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
@@ -19,6 +18,8 @@ use crate::msgs::handshake::{
     ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
+
+use pki_types::CertificateDer;
 
 #[test]
 fn rejects_short_random() {
@@ -794,7 +795,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
     CertificatePayloadTLS13 {
         context: PayloadU8(vec![1, 2, 3]),
         entries: vec![CertificateEntry {
-            cert: Certificate(vec![3, 4, 5]),
+            cert: CertificateDer::from(vec![3, 4, 5]),
             exts: vec![
                 CertificateExtension::CertificateStatus(CertificateStatus {
                     ocsp_response: PayloadU24(vec![1, 2, 3]),
@@ -897,7 +898,7 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
         },
         HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(vec![Certificate(vec![1, 2, 3])]),
+            payload: HandshakePayload::Certificate(vec![CertificateDer::from(vec![1, 2, 3])]),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,

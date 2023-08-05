@@ -7,10 +7,10 @@
 use core::time::Duration;
 use std::time::{Instant, SystemTime};
 
-use crate::key;
 use crate::verify::ServerCertVerifier;
-use crate::webpki::{OwnedTrustAnchor, RootCertStore, WebPkiServerVerifier};
+use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
+use pki_types::CertificateDer;
 use webpki_roots;
 
 fn duration_nanos(d: Duration) -> u64 {
@@ -180,7 +180,7 @@ struct Context {
     name: &'static str,
     domain: &'static str,
     roots: RootCertStore,
-    chain: Vec<key::Certificate>,
+    chain: Vec<CertificateDer<'static>>,
     now: SystemTime,
 }
 
@@ -190,13 +190,7 @@ impl Context {
         roots.add_trust_anchors(
             webpki_roots::TLS_SERVER_ROOTS
                 .iter()
-                .map(|ta| {
-                    OwnedTrustAnchor::from_subject_spki_name_constraints(
-                        ta.subject,
-                        ta.spki,
-                        ta.name_constraints,
-                    )
-                }),
+                .cloned(),
         );
         Self {
             name,
@@ -205,7 +199,7 @@ impl Context {
             chain: certs
                 .iter()
                 .copied()
-                .map(|bytes| key::Certificate(bytes.to_vec()))
+                .map(|bytes| CertificateDer::from(bytes.to_vec()))
                 .collect(),
             now: SystemTime::UNIX_EPOCH + Duration::from_secs(1640870720),
         }

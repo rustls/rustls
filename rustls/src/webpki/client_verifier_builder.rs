@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use pki_types::CertificateRevocationListDer;
+use webpki::BorrowedCertRevocationList;
+
 use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier};
-use crate::server::UnparsedCertRevocationList;
 use crate::verify::ClientCertVerifier;
 use crate::{CertRevocationListError, RootCertStore};
 
@@ -11,7 +13,7 @@ use crate::{CertRevocationListError, RootCertStore};
 #[derive(Debug, Clone)]
 pub struct ClientCertVerifierBuilder {
     roots: Arc<RootCertStore>,
-    crls: Vec<UnparsedCertRevocationList>,
+    crls: Vec<CertificateRevocationListDer<'static>>,
     anon_policy: AnonymousClientPolicy,
 }
 
@@ -27,7 +29,10 @@ impl ClientCertVerifierBuilder {
     /// Verify the revocation state of presented client certificates against the provided
     /// certificate revocation lists (CRLs). Calling `with_crls` multiple times appends the
     /// given CRLs to the existing collection.
-    pub fn with_crls(mut self, crls: impl IntoIterator<Item = UnparsedCertRevocationList>) -> Self {
+    pub fn with_crls(
+        mut self,
+        crls: impl IntoIterator<Item = CertificateRevocationListDer<'static>>,
+    ) -> Self {
         self.crls.extend(crls);
         self
     }
@@ -63,7 +68,11 @@ impl ClientCertVerifierBuilder {
             self.roots,
             self.crls
                 .into_iter()
-                .map(|der_crl| der_crl.parse())
+                .map(|der_crl| {
+                    BorrowedCertRevocationList::from_der(der_crl.as_ref())
+                        .and_then(|crl| crl.to_owned())
+                        .map_err(CertRevocationListError::from)
+                })
                 .collect::<Result<Vec<_>, CertRevocationListError>>()?,
             self.anon_policy,
         )))
@@ -90,27 +99,27 @@ impl From<CertRevocationListError> for ClientCertVerifierBuilderError {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::{ClientCertVerifierBuilderError, UnparsedCertRevocationList};
+    use crate::server::ClientCertVerifierBuilderError;
     use crate::webpki::verify::WebPkiClientVerifier;
-    use crate::{Certificate, RootCertStore};
+    use crate::RootCertStore;
+
+    use pki_types::{CertificateDer, CertificateRevocationListDer};
+
     use std::sync::Arc;
 
-    fn load_crls(crls_der: &[&[u8]]) -> Vec<UnparsedCertRevocationList> {
+    fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der
             .iter()
             .map(|pem_bytes| {
-                UnparsedCertRevocationList(
-                    rustls_pemfile::crls(&mut &pem_bytes[..])
-                        .unwrap()
-                        .first()
-                        .unwrap()
-                        .to_vec(),
-                )
+                rustls_pemfile::crls(&mut &pem_bytes[..])
+                    .next()
+                    .unwrap()
+                    .unwrap()
             })
             .collect()
     }
 
-    fn test_crls() -> Vec<UnparsedCertRevocationList> {
+    fn test_crls() -> Vec<CertificateRevocationListDer<'static>> {
         load_crls(&[
             include_bytes!("../../../test-ca/ecdsa/client.revoked.crl.pem").as_slice(),
             include_bytes!("../../../test-ca/rsa/client.revoked.crl.pem").as_slice(),
@@ -121,7 +130,7 @@ mod tests {
         let mut roots = RootCertStore::empty();
         roots_der.iter().for_each(|der| {
             roots
-                .add(&Certificate(der.to_vec()))
+                .add(CertificateDer::from(der.to_vec()))
                 .unwrap()
         });
         roots.into()
@@ -185,7 +194,7 @@ mod tests {
     fn test_with_invalid_crls() {
         // Trying to build a verifier with invalid CRLs should error at build time.
         let result = WebPkiClientVerifier::builder(test_roots())
-            .with_crls(vec![UnparsedCertRevocationList(vec![0xFF])])
+            .with_crls(vec![CertificateRevocationListDer::from(vec![0xFF])])
             .build();
         assert!(matches!(
             result,

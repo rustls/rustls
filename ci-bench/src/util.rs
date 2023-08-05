@@ -1,5 +1,7 @@
 use std::{fs, io};
 
+use pki_types::{CertificateDer, PrivateKeyDer};
+
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum KeyType {
     Rsa,
@@ -14,24 +16,22 @@ impl KeyType {
         }
     }
 
-    pub(crate) fn get_chain(&self) -> Vec<rustls::Certificate> {
+    pub(crate) fn get_chain(&self) -> Vec<CertificateDer<'static>> {
         rustls_pemfile::certs(&mut io::BufReader::new(
             fs::File::open(self.path_for("end.fullchain")).unwrap(),
         ))
-        .unwrap()
-        .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|result| result.unwrap())
         .collect()
     }
 
-    pub(crate) fn get_key(&self) -> rustls::PrivateKey {
-        rustls::PrivateKey(
-            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-                fs::File::open(self.path_for("end.key")).unwrap(),
-            ))
-            .unwrap()[0]
-                .clone(),
-        )
+    pub(crate) fn get_key(&self) -> PrivateKeyDer<'static> {
+        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+            fs::File::open(self.path_for("end.key")).unwrap(),
+        ))
+        .next()
+        .unwrap()
+        .unwrap()
+        .into()
     }
 }
 
