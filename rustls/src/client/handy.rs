@@ -1,12 +1,13 @@
 use crate::client;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
-use crate::key;
 use crate::limited_cache;
 use crate::msgs::persist;
 use crate::sign;
 use crate::NamedGroup;
 use crate::ServerName;
+
+use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
@@ -178,8 +179,8 @@ pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesClientCert {
     pub(super) fn new(
-        chain: Vec<key::Certificate>,
-        priv_key: &key::PrivateKey,
+        chain: Vec<CertificateDer<'static>>,
+        priv_key: &PrivateKeyDer<'_>,
     ) -> Result<Self, Error> {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;

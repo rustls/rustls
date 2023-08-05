@@ -13,20 +13,14 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 use rustls::crypto::ring::Ring;
-use rustls::{OwnedTrustAnchor, RootCertStore};
+use rustls::RootCertStore;
 
 fn main() {
     let mut root_store = RootCertStore::empty();
     root_store.add_trust_anchors(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
-            .map(|ta| {
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            }),
+            .cloned(),
     );
     let mut config = rustls::ClientConfig::<Ring>::builder()
         .with_safe_defaults()

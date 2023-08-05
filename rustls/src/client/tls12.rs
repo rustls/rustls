@@ -104,7 +104,7 @@ mod server_hello {
             }
 
             // See if we're successfully resuming.
-            if let Some(ref resuming) = self.resuming_session {
+            if let Some(resuming) = self.resuming_session {
                 if resuming.session_id == server_hello.session_id {
                     debug!("Server agreed to resume");
 
@@ -138,7 +138,7 @@ mod server_hello {
                         Ok(Box::new(ExpectNewTicket {
                             config: self.config,
                             secrets,
-                            resuming_session: self.resuming_session,
+                            resuming_session: Some(resuming),
                             session_id: server_hello.session_id,
                             server_name: self.server_name,
                             using_ems: self.using_ems,
@@ -151,7 +151,7 @@ mod server_hello {
                         Ok(Box::new(ExpectCcs {
                             config: self.config,
                             secrets,
-                            resuming_session: self.resuming_session,
+                            resuming_session: Some(resuming),
                             session_id: server_hello.session_id,
                             server_name: self.server_name,
                             using_ems: self.using_ems,
@@ -167,7 +167,7 @@ mod server_hello {
 
             Ok(Box::new(ExpectCertificate {
                 config: self.config,
-                resuming_session: self.resuming_session,
+                resuming_session: None,
                 session_id: server_hello.session_id,
                 server_name: self.server_name,
                 randoms: self.randoms,

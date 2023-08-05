@@ -5,9 +5,11 @@ use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
-use crate::{key, verify, versions, webpki};
+use crate::{verify, versions, webpki};
 
 use super::client_conn::Resumption;
+
+use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
 use core::marker::PhantomData;
@@ -69,8 +71,8 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
     /// This function fails if `key_der` is invalid.
     pub fn with_client_auth_cert(
         self,
-        cert_chain: Vec<key::Certificate>,
-        key_der: key::PrivateKey,
+        cert_chain: Vec<CertificateDer<'static>>,
+        key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig<C>, Error> {
         let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
@@ -86,8 +88,8 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
     #[deprecated(since = "0.21.4", note = "Use `with_client_auth_cert` instead")]
     pub fn with_single_cert(
         self,
-        cert_chain: Vec<key::Certificate>,
-        key_der: key::PrivateKey,
+        cert_chain: Vec<CertificateDer<'static>>,
+        key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig<C>, Error> {
         self.with_client_auth_cert(cert_chain, key_der)
     }

@@ -12,7 +12,6 @@ use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::Codec;
@@ -38,6 +37,7 @@ use super::server_conn::ServerConnectionData;
 
 use alloc::sync::Arc;
 
+use pki_types::CertificateDer;
 use subtle::ConstantTimeEq;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
@@ -745,7 +745,7 @@ mod client_hello {
     fn emit_certificate_tls13(
         transcript: &mut HandshakeHash,
         common: &mut CommonState,
-        cert_chain: &[Certificate],
+        cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
     ) {
         let mut cert_entries = vec![];
@@ -953,7 +953,7 @@ struct ExpectCertificateVerify<C: CryptoProvider> {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    client_cert: Vec<Certificate>,
+    client_cert: Vec<CertificateDer<'static>>,
     send_tickets: usize,
 }
 

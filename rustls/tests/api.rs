@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use pki_types::CertificateDer;
 use rustls::client::{ResolvesClientCert, Resumption};
 use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
@@ -2285,7 +2286,7 @@ fn sni_resolver_rejects_bad_certs() {
         )
     );
 
-    let bad_chain = vec![rustls::Certificate(vec![0xa0])];
+    let bad_chain = vec![CertificateDer::from(vec![0xa0])];
     assert_eq!(
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(

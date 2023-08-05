@@ -6,7 +6,6 @@ use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
-use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
@@ -26,6 +25,7 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
+use pki_types::CertificateDer;
 use subtle::ConstantTimeEq;
 
 use alloc::sync::Arc;
@@ -375,7 +375,7 @@ mod client_hello {
     fn emit_certificate(
         transcript: &mut HandshakeHash,
         common: &mut CommonState,
-        cert_chain: &[Certificate],
+        cert_chain: &[CertificateDer<'static>],
     ) {
         let c = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -586,7 +586,7 @@ struct ExpectClientKx<C: CryptoProvider> {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: C::KeyExchange,
-    client_cert: Option<Vec<Certificate>>,
+    client_cert: Option<Vec<CertificateDer<'static>>>,
     send_ticket: bool,
 }
 
@@ -653,7 +653,7 @@ struct ExpectCertificateVerify<C: CryptoProvider> {
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
-    client_cert: Vec<Certificate>,
+    client_cert: Vec<CertificateDer<'static>>,
     send_ticket: bool,
 }
 

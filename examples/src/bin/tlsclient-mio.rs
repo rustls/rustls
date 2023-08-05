@@ -5,11 +5,12 @@ use std::{fs, process, str};
 
 use docopt::Docopt;
 use mio::net::TcpStream;
+use pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
 
 use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
-use rustls::{OwnedTrustAnchor, RootCertStore};
+use rustls::RootCertStore;
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -282,25 +283,23 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
     out
 }
 
-fn load_certs(filename: &str) -> Vec<rustls::Certificate> {
+fn load_certs(filename: &str) -> Vec<CertificateDer<'static>> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
     rustls_pemfile::certs(&mut reader)
-        .unwrap()
-        .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|result| result.unwrap())
         .collect()
 }
 
-fn load_private_key(filename: &str) -> rustls::PrivateKey {
+fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
 
     loop {
         match rustls_pemfile::read_one(&mut reader).expect("cannot parse private key .pem file") {
-            Some(rustls_pemfile::Item::RSAKey(key)) => return rustls::PrivateKey(key),
-            Some(rustls_pemfile::Item::PKCS8Key(key)) => return rustls::PrivateKey(key),
-            Some(rustls_pemfile::Item::ECKey(key)) => return rustls::PrivateKey(key),
+            Some(rustls_pemfile::Item::Pkcs1Key(key)) => return key.into(),
+            Some(rustls_pemfile::Item::Pkcs8Key(key)) => return key.into(),
+            Some(rustls_pemfile::Item::Sec1Key(key)) => return key.into(),
             None => break,
             _ => {}
         }
@@ -314,6 +313,7 @@ fn load_private_key(filename: &str) -> rustls::PrivateKey {
 
 #[cfg(feature = "dangerous_configuration")]
 mod danger {
+    use pki_types::CertificateDer;
     use rustls::client::{HandshakeSignatureValid, WebPkiServerVerifier};
     use rustls::DigitallySignedStruct;
 
@@ -322,8 +322,8 @@ mod danger {
     impl rustls::client::ServerCertVerifier for NoCertificateVerification {
         fn verify_server_cert(
             &self,
-            _end_entity: &rustls::Certificate,
-            _intermediates: &[rustls::Certificate],
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
             _server_name: &rustls::ServerName,
             _ocsp: &[u8],
             _now: std::time::SystemTime,
@@ -334,7 +334,7 @@ mod danger {
         fn verify_tls12_signature(
             &self,
             message: &[u8],
-            cert: &rustls::Certificate,
+            cert: &CertificateDer<'_>,
             dss: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
             WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
@@ -343,7 +343,7 @@ mod danger {
         fn verify_tls13_signature(
             &self,
             message: &[u8],
-            cert: &rustls::Certificate,
+            cert: &CertificateDer<'_>,
             dss: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
             WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
@@ -379,18 +379,14 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig<Ring>> {
 
         let certfile = fs::File::open(cafile).expect("Cannot open CA file");
         let mut reader = BufReader::new(certfile);
-        root_store.add_parsable_certificates(rustls_pemfile::certs(&mut reader).unwrap());
+        root_store.add_parsable_certificates(
+            rustls_pemfile::certs(&mut reader).map(|result| result.unwrap()),
+        );
     } else {
         root_store.add_trust_anchors(
             webpki_roots::TLS_SERVER_ROOTS
                 .iter()
-                .map(|ta| {
-                    OwnedTrustAnchor::from_subject_spki_name_constraints(
-                        ta.subject,
-                        ta.spki,
-                        ta.name_constraints,
-                    )
-                }),
+                .cloned(),
         );
     }
 

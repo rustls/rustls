@@ -1,10 +1,11 @@
 use core::fmt;
 use std::time::SystemTime;
 
+use pki_types::CertificateDer;
+
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
 use crate::error::{Error, InvalidMessage};
-use crate::key::Certificate;
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::DistinguishedName;
@@ -81,8 +82,8 @@ pub trait ServerCertVerifier: Send + Sync {
     /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
     fn verify_server_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
         server_name: &ServerName,
         ocsp_response: &[u8],
         now: SystemTime,
@@ -106,7 +107,7 @@ pub trait ServerCertVerifier: Send + Sync {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
 
@@ -127,7 +128,7 @@ pub trait ServerCertVerifier: Send + Sync {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
 
@@ -190,8 +191,8 @@ pub trait ClientCertVerifier: Send + Sync {
     /// [BadEncoding]: crate::CertificateError#variant.BadEncoding
     fn verify_client_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error>;
 
@@ -213,7 +214,7 @@ pub trait ClientCertVerifier: Send + Sync {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
 
@@ -229,7 +230,7 @@ pub trait ClientCertVerifier: Send + Sync {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
 
@@ -263,8 +264,8 @@ impl ClientCertVerifier for NoClientAuth {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &Certificate,
-        _intermediates: &[Certificate],
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
         _now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
@@ -273,7 +274,7 @@ impl ClientCertVerifier for NoClientAuth {
     fn verify_tls12_signature(
         &self,
         _message: &[u8],
-        _cert: &Certificate,
+        _cert: &CertificateDer<'_>,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         unimplemented!();
@@ -282,7 +283,7 @@ impl ClientCertVerifier for NoClientAuth {
     fn verify_tls13_signature(
         &self,
         _message: &[u8],
-        _cert: &Certificate,
+        _cert: &CertificateDer<'_>,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         unimplemented!();

@@ -105,7 +105,9 @@ use core::marker::PhantomData;
 /// # use rustls::ServerConfig;
 /// # use rustls::crypto::ring::Ring;
 /// # let certs = vec![];
-/// # let private_key = rustls::PrivateKey(vec![]);
+/// # let private_key = pki_types::PrivateKeyDer::from(
+/// #    pki_types::PrivatePkcs8KeyDer::from(vec![])
+/// # );
 /// ServerConfig::<Ring>::builder()
 ///     .with_safe_defaults()
 ///     .with_no_client_auth()

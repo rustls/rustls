@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
-use rustls::{OwnedTrustAnchor, RootCertStore};
+use rustls::RootCertStore;
 
 fn start_connection(config: &Arc<rustls::ClientConfig<impl CryptoProvider>>, domain_name: &str) {
     let server_name = domain_name
@@ -62,13 +62,7 @@ fn main() {
     root_store.add_trust_anchors(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
-            .map(|ta| {
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    ta.subject,
-                    ta.spki,
-                    ta.name_constraints,
-                )
-            }),
+            .cloned(),
     );
 
     let mut config = rustls::ClientConfig::<Ring>::builder()

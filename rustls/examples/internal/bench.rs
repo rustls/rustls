@@ -11,6 +11,8 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use pki_types::{CertificateDer, PrivateKeyDer};
+
 use rustls::client::Resumption;
 use rustls::crypto::ring::Ring;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
@@ -249,44 +251,40 @@ impl KeyType {
         }
     }
 
-    fn get_chain(&self) -> Vec<rustls::Certificate> {
+    fn get_chain(&self) -> Vec<CertificateDer<'static>> {
         rustls_pemfile::certs(&mut io::BufReader::new(
             fs::File::open(self.path_for("end.fullchain")).unwrap(),
         ))
-        .unwrap()
-        .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|result| result.unwrap())
         .collect()
     }
 
-    fn get_key(&self) -> rustls::PrivateKey {
-        rustls::PrivateKey(
-            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-                fs::File::open(self.path_for("end.key")).unwrap(),
-            ))
-            .unwrap()[0]
-                .clone(),
-        )
+    fn get_key(&self) -> PrivateKeyDer<'static> {
+        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+            fs::File::open(self.path_for("end.key")).unwrap(),
+        ))
+        .next()
+        .unwrap()
+        .unwrap()
+        .into()
     }
 
-    fn get_client_chain(&self) -> Vec<rustls::Certificate> {
+    fn get_client_chain(&self) -> Vec<CertificateDer<'static>> {
         rustls_pemfile::certs(&mut io::BufReader::new(
             fs::File::open(self.path_for("client.fullchain")).unwrap(),
         ))
-        .unwrap()
-        .iter()
-        .map(|v| rustls::Certificate(v.clone()))
+        .map(|result| result.unwrap())
         .collect()
     }
 
-    fn get_client_key(&self) -> rustls::PrivateKey {
-        rustls::PrivateKey(
-            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-                fs::File::open(self.path_for("client.key")).unwrap(),
-            ))
-            .unwrap()[0]
-                .clone(),
-        )
+    fn get_client_key(&self) -> PrivateKeyDer<'static> {
+        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+            fs::File::open(self.path_for("client.key")).unwrap(),
+        ))
+        .next()
+        .unwrap()
+        .unwrap()
+        .into()
     }
 }
 
@@ -301,7 +299,7 @@ fn make_server_config(
             let roots = params.key_type.get_chain();
             let mut client_auth_roots = RootCertStore::empty();
             for root in roots {
-                client_auth_roots.add(&root).unwrap();
+                client_auth_roots.add(root).unwrap();
             }
             WebPkiClientVerifier::builder(client_auth_roots.into())
                 .build()
@@ -339,7 +337,9 @@ fn make_client_config(
     let mut root_store = RootCertStore::empty();
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
-    root_store.add_parsable_certificates(rustls_pemfile::certs(&mut rootbuf).unwrap());
+    root_store.add_parsable_certificates(
+        rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
+    );
 
     let cfg = ClientConfig::builder()
         .with_cipher_suites(&[params.ciphersuite])

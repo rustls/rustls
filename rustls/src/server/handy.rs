@@ -1,12 +1,13 @@
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
-use crate::key;
 use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
 use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
+
+use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
 use std::collections;
@@ -99,8 +100,8 @@ impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
     /// key type and encoding.
     pub(super) fn new(
-        chain: Vec<key::Certificate>,
-        priv_key: &key::PrivateKey,
+        chain: Vec<CertificateDer<'static>>,
+        priv_key: &PrivateKeyDer<'_>,
     ) -> Result<Self, Error> {
         let key = sign::any_supported_type(priv_key)
             .map_err(|_| Error::General("invalid private key".into()))?;
@@ -112,8 +113,8 @@ impl AlwaysResolvesChain {
     ///
     /// If non-empty, the given OCSP response and SCTs are attached.
     pub(super) fn new_with_extras(
-        chain: Vec<key::Certificate>,
-        priv_key: &key::PrivateKey,
+        chain: Vec<CertificateDer<'static>>,
+        priv_key: &PrivateKeyDer<'_>,
         ocsp: Vec<u8>,
     ) -> Result<Self, Error> {
         let mut r = Self::new(chain, priv_key)?;

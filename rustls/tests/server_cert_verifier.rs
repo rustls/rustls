@@ -11,7 +11,10 @@ use rustls::client::{
     HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiServerVerifier,
 };
 use rustls::DigitallySignedStruct;
-use rustls::{AlertDescription, Certificate, Error, InvalidMessage, SignatureScheme};
+use rustls::{AlertDescription, Error, InvalidMessage, SignatureScheme};
+
+use pki_types::CertificateDer;
+
 use std::sync::Arc;
 
 #[test]
@@ -163,8 +166,8 @@ pub struct MockServerVerifier {
 impl ServerCertVerifier for MockServerVerifier {
     fn verify_server_cert(
         &self,
-        end_entity: &rustls::Certificate,
-        intermediates: &[rustls::Certificate],
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
         server_name: &rustls::ServerName,
         oscp_response: &[u8],
         now: std::time::SystemTime,
@@ -183,7 +186,7 @@ impl ServerCertVerifier for MockServerVerifier {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         println!(
@@ -200,7 +203,7 @@ impl ServerCertVerifier for MockServerVerifier {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         println!(

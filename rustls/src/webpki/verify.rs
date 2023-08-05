@@ -1,13 +1,14 @@
 use alloc::sync::Arc;
 use std::time::SystemTime;
 
-use super::anchors::{OwnedTrustAnchor, RootCertStore};
+use pki_types::{CertificateDer, TrustAnchor};
+
+use super::anchors::RootCertStore;
 use super::client_verifier_builder::ClientCertVerifierBuilder;
 use super::pki_error;
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
 use crate::error::{CertRevocationListError, CertificateError, Error, PeerMisbehaved};
-use crate::key::Certificate;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::handshake::DistinguishedName;
@@ -36,20 +37,19 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
 ];
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert
-/// and chains to at least one of the [OwnedTrustAnchor] in the `roots` [RootCertStore].
+/// and chains to at least one of the [TrustAnchor]s in the `roots` [RootCertStore].
 ///
 /// `intermediates` contains all certificates other than `end_entity` that
-/// were sent as part of the server's [Certificate] message. It is in the
+/// were sent as part of the server's `Certificate` message. It is in the
 /// same order that the server sent them and may be empty.
 #[allow(dead_code)]
 #[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 pub fn verify_server_cert_signed_by_trust_anchor(
     cert: &ParsedCertificate,
     roots: &RootCertStore,
-    intermediates: &[Certificate],
+    intermediates: &[CertificateDer<'_>],
     now: SystemTime,
 ) -> Result<(), Error> {
-    let chain = intermediate_chain(intermediates);
     let trust_roots = trust_roots(roots);
     let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
@@ -57,7 +57,7 @@ pub fn verify_server_cert_signed_by_trust_anchor(
         .verify_for_usage(
             SUPPORTED_SIG_ALGS,
             &trust_roots,
-            &chain,
+            intermediates,
             webpki_now,
             webpki::KeyUsage::server_auth(),
             None, // no CRLs
@@ -101,8 +101,8 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     /// - Valid for DNS entry
     fn verify_server_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
         server_name: &ServerName,
         ocsp_response: &[u8],
         now: SystemTime,
@@ -122,7 +122,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         Self::default_verify_tls12_signature(message, cert, dss)
@@ -131,7 +131,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         Self::default_verify_tls13_signature(message, cert, dss)
@@ -178,7 +178,7 @@ impl WebPkiServerVerifier {
     /// `ClientCertVerifier::verify_tls12_signature`.
     pub fn default_verify_tls12_signature(
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         verify_signed_struct(message, cert, dss)
@@ -188,40 +188,32 @@ impl WebPkiServerVerifier {
     /// `ClientCertVerifier::verify_tls13_signature`.
     pub fn default_verify_tls13_signature(
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         verify_tls13(message, cert, dss)
     }
 }
 
-fn intermediate_chain(intermediates: &[Certificate]) -> Vec<&[u8]> {
-    intermediates
-        .iter()
-        .map(|cert| cert.0.as_ref())
-        .collect()
-}
-
-fn trust_roots(roots: &RootCertStore) -> Vec<webpki::TrustAnchor> {
+fn trust_roots(roots: &RootCertStore) -> Vec<TrustAnchor<'_>> {
     roots
         .roots
         .iter()
-        .map(OwnedTrustAnchor::to_trust_anchor)
+        .map(|with_dn| {
+            let inner = with_dn.inner();
+            TrustAnchor {
+                subject: inner.subject.as_ref().into(),
+                subject_public_key_info: inner
+                    .subject_public_key_info
+                    .as_ref()
+                    .into(),
+                name_constraints: inner
+                    .name_constraints
+                    .as_ref()
+                    .map(|nc| nc.as_ref().into()),
+            }
+        })
         .collect()
-}
-
-/// An unparsed DER encoded Certificate Revocation List (CRL).
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct UnparsedCertRevocationList(pub Vec<u8>);
-
-impl UnparsedCertRevocationList {
-    /// Parse the CRL DER, yielding a [`webpki::CertRevocationList`] or an error if the CRL
-    /// is malformed, or uses unsupported features.
-    pub fn parse(&self) -> Result<webpki::OwnedCertRevocationList, CertRevocationListError> {
-        webpki::BorrowedCertRevocationList::from_der(&self.0)
-            .and_then(|crl| crl.to_owned())
-            .map_err(CertRevocationListError::from)
-    }
 }
 
 /// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
@@ -346,12 +338,11 @@ impl ClientCertVerifier for WebPkiClientVerifier {
 
     fn verify_client_cert(
         &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
-        let chain = intermediate_chain(intermediates);
         let trust_roots = trust_roots(&self.roots);
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
@@ -377,7 +368,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
             .verify_for_usage(
                 SUPPORTED_SIG_ALGS,
                 &trust_roots,
-                &chain,
+                intermediates,
                 now,
                 webpki::KeyUsage::client_auth(),
                 revocation,
@@ -389,7 +380,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
@@ -398,7 +389,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
@@ -493,11 +484,11 @@ fn verify_sig_using_any_alg(
 
 fn verify_signed_struct(
     message: &[u8],
-    cert: &Certificate,
+    cert: &CertificateDer<'_>,
     dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, Error> {
     let possible_algs = convert_scheme(dss.scheme)?;
-    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
+    let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
 
     verify_sig_using_any_alg(&cert, possible_algs, message, dss.signature())
         .map_err(pki_error)
@@ -522,12 +513,12 @@ fn convert_alg_tls13(
 
 fn verify_tls13(
     msg: &[u8],
-    cert: &Certificate,
+    cert: &CertificateDer<'_>,
     dss: &DigitallySignedStruct,
 ) -> Result<HandshakeSignatureValid, Error> {
     let alg = convert_alg_tls13(dss.scheme)?;
 
-    let cert = webpki::EndEntityCert::try_from(cert.0.as_ref()).map_err(pki_error)?;
+    let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
 
     cert.verify_signature(alg, msg, dss.signature())
         .map_err(pki_error)
@@ -619,10 +610,10 @@ fn crl_error_from_webpki() {
 #[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
 
-impl<'a> TryFrom<&'a Certificate> for ParsedCertificate<'a> {
+impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
     type Error = Error;
-    fn try_from(value: &'a Certificate) -> Result<ParsedCertificate<'a>, Self::Error> {
-        webpki::EndEntityCert::try_from(value.0.as_ref())
+    fn try_from(value: &'a CertificateDer<'a>) -> Result<ParsedCertificate<'a>, Self::Error> {
+        webpki::EndEntityCert::try_from(value)
             .map_err(pki_error)
             .map(ParsedCertificate)
     }
@@ -630,13 +621,13 @@ impl<'a> TryFrom<&'a Certificate> for ParsedCertificate<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::Certificate;
+    use super::CertificateDer;
 
     #[test]
     fn certificate_debug() {
         assert_eq!(
-            "Certificate(b\"ab\")",
-            format!("{:?}", Certificate(b"ab".to_vec()))
+            "CertificateDer(Der([97, 98]))",
+            format!("{:?}", CertificateDer::from(b"ab".to_vec()))
         );
     }
 }

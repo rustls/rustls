@@ -13,14 +13,14 @@ use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
 use rustls::{
-    self, client, kx_group, server, sign, version, AlertDescription, Certificate, CertificateError,
-    Connection, DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup,
-    PeerIncompatible, PeerMisbehaved, PrivateKey, ProtocolVersion, ServerName, Side,
-    SignatureAlgorithm, SignatureScheme, SupportedKxGroup, SupportedProtocolVersion, Ticketer,
-    ALL_KX_GROUPS,
+    self, client, kx_group, server, sign, version, AlertDescription, CertificateError, Connection,
+    DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, ProtocolVersion, ServerName, Side, SignatureAlgorithm, SignatureScheme,
+    SupportedKxGroup, SupportedProtocolVersion, Ticketer, ALL_KX_GROUPS,
 };
 
 use base64::prelude::{Engine, BASE64_STANDARD};
+use pki_types::{CertificateDer, PrivateKeyDer};
 
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
@@ -156,22 +156,22 @@ impl Options {
     }
 }
 
-fn load_cert(filename: &str) -> Vec<Certificate> {
+fn load_cert(filename: &str) -> Vec<CertificateDer<'static>> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
     rustls_pemfile::certs(&mut reader)
-        .unwrap()
-        .iter()
-        .map(|v| Certificate(v.clone()))
+        .map(|result| result.unwrap())
         .collect()
 }
 
-fn load_key(filename: &str) -> PrivateKey {
+fn load_key(filename: &str) -> PrivateKeyDer<'static> {
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
-    let keys = rustls_pemfile::pkcs8_private_keys(&mut reader).unwrap();
+    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
+        .map(|result| result.unwrap())
+        .collect::<Vec<_>>();
     assert!(keys.len() == 1);
-    PrivateKey(keys[0].clone())
+    keys.pop().unwrap().into()
 }
 
 fn split_protocols(protos: &str) -> Vec<String> {
@@ -207,8 +207,8 @@ impl server::ClientCertVerifier for DummyClientAuth {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &Certificate,
-        _intermediates: &[Certificate],
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
         _now: SystemTime,
     ) -> Result<server::ClientCertVerified, Error> {
         Ok(server::ClientCertVerified::assertion())
@@ -217,7 +217,7 @@ impl server::ClientCertVerifier for DummyClientAuth {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &rustls::Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
@@ -226,7 +226,7 @@ impl server::ClientCertVerifier for DummyClientAuth {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &rustls::Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
@@ -242,8 +242,8 @@ struct DummyServerAuth {}
 impl client::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
-        _end_entity: &Certificate,
-        _certs: &[Certificate],
+        _end_entity: &CertificateDer<'_>,
+        _certs: &[CertificateDer<'_>],
         _hostname: &ServerName,
         _ocsp: &[u8],
         _now: SystemTime,
@@ -254,7 +254,7 @@ impl client::ServerCertVerifier for DummyServerAuth {
     fn verify_tls12_signature(
         &self,
         message: &[u8],
-        cert: &rustls::Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
@@ -263,7 +263,7 @@ impl client::ServerCertVerifier for DummyServerAuth {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &rustls::Certificate,
+        cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)

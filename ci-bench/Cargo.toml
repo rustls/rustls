@@ -11,7 +11,7 @@ anyhow = "1.0.73"
 byteorder = "1.4.3"
 clap = { version = "4.3.21", features = ["derive"] }
 itertools = "0.11.0"
+pki-types = { package = "rustls-pki-types", version = "0.1" }
 rayon = "1.7.0"
 rustls = { path = "../rustls" }
-rustls-pemfile = "1.0.3"
-
+rustls-pemfile = "2.0.0-alpha.0"

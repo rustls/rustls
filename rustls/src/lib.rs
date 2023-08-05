@@ -107,13 +107,7 @@
 //! root_store.add_trust_anchors(
 //!     webpki_roots::TLS_SERVER_ROOTS
 //!         .iter()
-//!         .map(|ta| {
-//!             rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-//!                 ta.subject,
-//!                 ta.spki,
-//!                 ta.name_constraints,
-//!             )
-//!         })
+//!         .cloned()
 //! );
 //! ```
 //!
@@ -139,13 +133,7 @@
 //! # root_store.add_trust_anchors(
 //! #  webpki_roots::TLS_SERVER_ROOTS
 //! #      .iter()
-//! #      .map(|ta| {
-//! #          rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-//! #              ta.subject,
-//! #              ta.spki,
-//! #              ta.name_constraints,
-//! #          )
-//! #      })
+//! #      .cloned()
 //! # );
 //! # let config = rustls::ClientConfig::<rustls::crypto::ring::Ring>::builder()
 //! #     .with_safe_defaults()
@@ -350,7 +338,6 @@ mod check;
 mod bs_debug;
 mod builder;
 mod enums;
-mod key;
 mod key_log;
 mod key_log_file;
 mod suites;
@@ -392,7 +379,6 @@ pub use crate::error::{
     CertRevocationListError, CertificateError, Error, InvalidMessage, PeerIncompatible,
     PeerMisbehaved,
 };
-pub use crate::key::{Certificate, PrivateKey};
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
 pub use crate::msgs::enums::NamedGroup;
@@ -407,7 +393,7 @@ pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::DigitallySignedStruct;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
-pub use crate::webpki::{OwnedTrustAnchor, RootCertStore};
+pub use crate::webpki::{RootCertStore, TrustAnchorWithDn};
 
 /// Items for use in a client.
 pub mod client {
@@ -454,8 +440,8 @@ pub mod server {
     mod tls12;
     mod tls13;
 
+    pub use crate::webpki::WebPkiClientVerifier;
     pub use crate::webpki::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
-    pub use crate::webpki::{UnparsedCertRevocationList, WebPkiClientVerifier};
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};

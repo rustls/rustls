@@ -3,7 +3,6 @@ use crate::crypto::CryptoProvider;
 use crate::dns_name::{DnsName, DnsNameRef};
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::InvalidMessage;
-use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
@@ -14,6 +13,8 @@ use crate::msgs::enums::{
 };
 use crate::rand;
 use crate::verify::DigitallySignedStruct;
+
+use pki_types::CertificateDer;
 
 use core::fmt;
 use std::collections;
@@ -1252,9 +1253,9 @@ impl ServerHelloPayload {
     }
 }
 
-pub type CertificatePayload = Vec<key::Certificate>;
+pub type CertificatePayload = Vec<CertificateDer<'static>>;
 
-impl TlsListElement for key::Certificate {
+impl TlsListElement for CertificateDer<'_> {
     const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
 }
 
@@ -1322,7 +1323,7 @@ impl TlsListElement for CertificateExtension {
 
 #[derive(Debug)]
 pub struct CertificateEntry {
-    pub cert: key::Certificate,
+    pub cert: CertificateDer<'static>,
     pub exts: Vec<CertificateExtension>,
 }
 
@@ -1334,14 +1335,14 @@ impl Codec for CertificateEntry {
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            cert: key::Certificate::read(r)?,
+            cert: CertificateDer::read(r)?,
             exts: Vec::read(r)?,
         })
     }
 }
 
 impl CertificateEntry {
-    pub fn new(cert: key::Certificate) -> Self {
+    pub fn new(cert: CertificateDer<'static>) -> Self {
         Self {
             cert,
             exts: Vec::new(),

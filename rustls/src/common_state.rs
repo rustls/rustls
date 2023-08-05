@@ -1,6 +1,5 @@
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::key;
 #[cfg(feature = "logging")]
 use crate::log::{debug, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -20,6 +19,8 @@ use crate::suites::SupportedCipherSuite;
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
+use pki_types::CertificateDer;
+
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
@@ -36,7 +37,7 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     pub(crate) has_seen_eof: bool,
     pub(crate) received_middlebox_ccs: u8,
-    pub(crate) peer_certificates: Option<Vec<key::Certificate>>,
+    pub(crate) peer_certificates: Option<Vec<CertificateDer<'static>>>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
@@ -116,7 +117,7 @@ impl CommonState {
     /// if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    pub fn peer_certificates(&self) -> Option<&[key::Certificate]> {
+    pub fn peer_certificates(&self) -> Option<&[CertificateDer<'_>]> {
         self.peer_certificates.as_deref()
     }
 
