@@ -14,12 +14,14 @@ use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
+use rustls::internal::msgs::enums::AlertLevel;
+use rustls::internal::msgs::message::PlainMessage;
 use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
 use rustls::{
-    sign, CertificateError, ConnectionCommon, Error, KeyLog, PeerIncompatible, PeerMisbehaved,
-    SideData,
+    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, KeyLog,
+    PeerIncompatible, PeerMisbehaved, SideData,
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -679,6 +681,88 @@ fn client_closes_uncleanly() {
         client.process_new_packets().unwrap();
         check_read(&mut client.reader(), b"from-server!");
     }
+}
+
+#[test]
+fn test_tls13_valid_early_plaintext_alert() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa);
+
+    // Perform the start of a TLS 1.3 handshake, sending a client hello to the server.
+    // The client will not have written a CCS or any encrypted messages to the server yet.
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    // Inject a plaintext alert from the client. The server should accept this since:
+    //  * It hasn't decrypted any messages from the peer yet.
+    //  * The message content type is Alert.
+    //  * The payload size is indicative of a plaintext alert message.
+    //  * The negotiated protocol version is TLS 1.3.
+    server
+        .read_tls(&mut io::Cursor::new(
+            <Message as Into<PlainMessage>>::into(Message::build_alert(
+                AlertLevel::Fatal,
+                AlertDescription::UnknownCA,
+            ))
+            .borrow()
+            .to_unencrypted_opaque()
+            .encode(),
+        ))
+        .unwrap();
+
+    // The server should process the plaintext alert without error.
+    assert_eq!(
+        server.process_new_packets(),
+        Err(Error::AlertReceived(AlertDescription::UnknownCA)),
+    );
+}
+
+#[test]
+fn test_tls13_too_short_early_plaintext_alert() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa);
+
+    // Perform the start of a TLS 1.3 handshake, sending a client hello to the server.
+    // The client will not have written a CCS or any encrypted messages to the server yet.
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    // Inject a plaintext alert from the client. The server should attempt to decrypt this message
+    // because the payload length is too large to be considered an early plaintext alert.
+    let mut payload = vec![ContentType::Alert.get_u8()];
+    ProtocolVersion::TLSv1_2.encode(&mut payload);
+    payload.extend(&[0x00, 0x03]); // Length of 3.
+    payload.extend(&[AlertLevel::Fatal.get_u8(), 0xDE, 0xAD]); // Three byte fatal alert.
+
+    server
+        .read_tls(&mut io::Cursor::new(payload))
+        .unwrap();
+
+    // The server should produce a decrypt error trying to decrypt the plaintext alert.
+    assert_eq!(server.process_new_packets(), Err(Error::DecryptError),);
+}
+
+#[test]
+fn test_tls13_late_plaintext_alert() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa);
+
+    // Complete a bi-directional TLS1.3 handshake. After this point no plaintext messages
+    // should occur.
+    do_handshake(&mut client, &mut server);
+
+    // Inject a plaintext alert from the client. The server should attempt to decrypt this message.
+    server
+        .read_tls(&mut io::Cursor::new(
+            <Message as Into<PlainMessage>>::into(Message::build_alert(
+                AlertLevel::Fatal,
+                AlertDescription::UnknownCA,
+            ))
+            .borrow()
+            .to_unencrypted_opaque()
+            .encode(),
+        ))
+        .unwrap();
+
+    // The server should produce a decrypt error, trying to decrypt a plaintext alert.
+    assert_eq!(server.process_new_packets(), Err(Error::DecryptError));
 }
 
 #[derive(Default)]
