@@ -39,7 +39,11 @@ impl MessageDeframer {
     /// Returns an `Error` if the deframer failed to parse some message contents or if decryption
     /// failed, `Ok(None)` if no full message is buffered or if trial decryption failed, and
     /// `Ok(Some(_))` if a valid message was found and decrypted successfully.
-    pub fn pop(&mut self, record_layer: &mut RecordLayer) -> Result<Option<Deframed>, Error> {
+    pub fn pop(
+        &mut self,
+        record_layer: &mut RecordLayer,
+        negotiated_version: Option<ProtocolVersion>,
+    ) -> Result<Option<Deframed>, Error> {
         if let Some(last_err) = self.last_error.clone() {
             return Err(last_err);
         } else if self.used == 0 {
@@ -87,9 +91,29 @@ impl MessageDeframer {
                 }
             };
 
-            // Return CCS messages immediately without decrypting.
+            // Return CCS messages and early plaintext alerts immediately without decrypting.
             let end = start + rd.used();
-            if m.typ == ContentType::ChangeCipherSpec && self.joining_hs.is_none() {
+            let version_is_tls13 = matches!(negotiated_version, Some(ProtocolVersion::TLSv1_3));
+            let allowed_plaintext = match m.typ {
+                // CCS messages are always plaintext.
+                ContentType::ChangeCipherSpec => true,
+                // Alerts are allowed to be plaintext if-and-only-if:
+                // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
+                //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
+                // * We have not yet decrypted any messages from the peer - if we have we don't
+                //   expect any plaintext.
+                // * The payload size is indicative of a plaintext alert message.
+                ContentType::Alert
+                    if version_is_tls13
+                        && !record_layer.has_decrypted()
+                        && m.payload.0.len() <= 2 =>
+                {
+                    true
+                }
+                // In other circumstances, we expect all messages to be encrypted.
+                _ => false,
+            };
+            if self.joining_hs.is_none() && allowed_plaintext {
                 // This is unencrypted. We check the contents later.
                 self.discard(end);
                 return Ok(Some(Deframed {
@@ -514,13 +538,21 @@ mod tests {
     }
 
     fn pop_first(d: &mut MessageDeframer, rl: &mut RecordLayer) {
-        let m = d.pop(rl).unwrap().unwrap().message;
+        let m = d
+            .pop(rl, None)
+            .unwrap()
+            .unwrap()
+            .message;
         assert_eq!(m.typ, ContentType::Handshake);
         Message::try_from(m).unwrap();
     }
 
     fn pop_second(d: &mut MessageDeframer, rl: &mut RecordLayer) {
-        let m = d.pop(rl).unwrap().unwrap().message;
+        let m = d
+            .pop(rl, None)
+            .unwrap()
+            .unwrap()
+            .message;
         assert_eq!(m.typ, ContentType::Alert);
         Message::try_from(m).unwrap();
     }
@@ -640,7 +672,7 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl).unwrap_err(),
+            d.pop(&mut rl, None).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::InvalidContentType)
         );
     }
@@ -655,7 +687,7 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl).unwrap_err(),
+            d.pop(&mut rl, None).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::UnknownProtocolVersion)
         );
     }
@@ -670,7 +702,7 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl).unwrap_err(),
+            d.pop(&mut rl, None).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::MessageTooLarge)
         );
     }
@@ -684,7 +716,11 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        let m = d.pop(&mut rl).unwrap().unwrap().message;
+        let m = d
+            .pop(&mut rl, None)
+            .unwrap()
+            .unwrap()
+            .message;
         assert_eq!(m.typ, ContentType::ApplicationData);
         assert_eq!(m.payload.0.len(), 0);
         assert!(!d.has_pending());
@@ -701,12 +737,12 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl).unwrap_err(),
+            d.pop(&mut rl, None).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
         );
         // CorruptMessage has been fused
         assert_eq!(
-            d.pop(&mut rl).unwrap_err(),
+            d.pop(&mut rl, None).unwrap_err(),
             Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
         );
     }

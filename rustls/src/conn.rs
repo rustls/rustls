@@ -636,10 +636,10 @@ impl<Data> ConnectionCore<Data> {
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
     fn deframe(&mut self) -> Result<Option<PlainMessage>, Error> {
-        match self
-            .message_deframer
-            .pop(&mut self.common_state.record_layer)
-        {
+        match self.message_deframer.pop(
+            &mut self.common_state.record_layer,
+            self.common_state.negotiated_version,
+        ) {
             Ok(Some(Deframed {
                 want_close_before_decrypt,
                 aligned,
