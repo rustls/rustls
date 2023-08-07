@@ -266,10 +266,14 @@
 //!   buffers. Will do nothing on non-Nightly releases.
 //!
 //! - `ring`: this makes the rustls crate depend on the *ring* crate, which is
-//!   which is used for cryptography.
+//!   which is used for cryptography by default.
+//!
 //!   Without this feature, these items must be provided externally to the core
 //!   rustls crate.  See [the cryptography provider](`manual::_06_custom_cryptography`)
 //!   for more details.
+//!
+//! - `webpki`: this makes the rustls crate depend on the rustls-webpki crate, which
+//!   is used for certificate verification.
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
@@ -371,6 +375,7 @@ mod signer;
 mod suites;
 mod ticketer;
 mod versions;
+#[cfg(feature = "webpki")]
 mod webpki;
 
 /// Internal classes which may be useful outside the library.
@@ -425,7 +430,8 @@ pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::DigitallySignedStruct;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
-pub use crate::webpki::{OwnedTrustAnchor, RootCertStore};
+#[cfg(feature = "webpki")]
+pub use crate::webpki::{OwnedTrustAnchor, RootCertStore, WebPkiSupportedAlgorithms};
 
 /// Items for use by custom cryptography providers:
 pub use crate::rand::GetRandomFailed;
@@ -451,7 +457,7 @@ pub mod client {
 
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-    #[cfg(feature = "dangerous_configuration")]
+    #[cfg(all(feature = "dangerous_configuration", feature = "webpki"))]
     pub use crate::webpki::{
         verify_server_cert_signed_by_trust_anchor, verify_server_name, WebPkiServerVerifier,
     };
@@ -476,7 +482,9 @@ pub mod server {
     mod tls13;
 
     pub use crate::verify::NoClientAuth;
+    #[cfg(feature = "webpki")]
     pub use crate::webpki::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
+    #[cfg(feature = "webpki")]
     pub use crate::webpki::{UnparsedCertRevocationList, WebPkiClientVerifier};
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;
@@ -491,7 +499,7 @@ pub mod server {
     pub use crate::dns_name::DnsName;
     #[cfg(feature = "dangerous_configuration")]
     pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
-    #[cfg(feature = "dangerous_configuration")]
+    #[cfg(all(feature = "dangerous_configuration", feature = "webpki"))]
     pub use crate::webpki::ParsedCertificate;
 }
 
