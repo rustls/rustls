@@ -669,6 +669,7 @@ fn main() {
     let config = make_config(&args);
 
     let mut listener = TcpListener::bind(addr).expect("cannot listen on port");
+    println!("listening on {addr}");
     let mut poll = mio::Poll::new().unwrap();
     poll.registry()
         .register(&mut listener, LISTENER, mio::Interest::READABLE)
