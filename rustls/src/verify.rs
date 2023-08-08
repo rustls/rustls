@@ -21,7 +21,6 @@ use crate::msgs::handshake::DistinguishedName;
 
 /// Zero-sized marker type representing verification of a signature.
 #[derive(Debug)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct HandshakeSignatureValid(());
 
 impl HandshakeSignatureValid {
@@ -43,7 +42,6 @@ impl FinishedMessageVerified {
 /// Zero-sized marker type representing verification of a server cert chain.
 #[allow(unreachable_pub)]
 #[derive(Debug)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct ServerCertVerified(());
 
 #[allow(unreachable_pub)]
@@ -56,7 +54,6 @@ impl ServerCertVerified {
 
 /// Zero-sized marker type representing verification of a client cert chain.
 #[derive(Debug)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct ClientCertVerified(());
 
 impl ClientCertVerified {
@@ -69,7 +66,6 @@ impl ClientCertVerified {
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
 #[allow(unreachable_pub)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub trait ServerCertVerifier: Send + Sync {
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// hostname `dns_name` and chains to at least one trust anchor.
@@ -150,7 +146,6 @@ impl fmt::Debug for dyn ServerCertVerifier {
 
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub trait ClientCertVerifier: Send + Sync {
     /// Returns `true` to enable the server to request a client certificate and
     /// `false` to skip requesting a client certificate. Defaults to `true`.

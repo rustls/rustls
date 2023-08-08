@@ -42,7 +42,6 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
 /// same order that the server sent them and may be empty.
 #[allow(dead_code)]
 #[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub fn verify_server_cert_signed_by_trust_anchor(
     cert: &ParsedCertificate,
     roots: &RootCertStore,
@@ -70,7 +69,6 @@ pub fn verify_server_cert_signed_by_trust_anchor(
 /// note: this only verifies the name and should be used in conjuction with more verification
 /// like [verify_server_cert_signed_by_trust_anchor]
 #[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub fn verify_server_name(cert: &ParsedCertificate, server_name: &ServerName) -> Result<(), Error> {
     match server_name {
         ServerName::DnsName(dns_name) => {
@@ -145,7 +143,6 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
 #[allow(unreachable_pub)]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct WebPkiServerVerifier {
     roots: RootCertStore,
 }
@@ -642,7 +639,6 @@ fn crl_error_from_webpki() {
 
 /// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
 #[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
-#[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
 
 impl<'a> TryFrom<&'a Certificate> for ParsedCertificate<'a> {
