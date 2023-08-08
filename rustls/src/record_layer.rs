@@ -49,31 +49,64 @@ impl RecordLayer {
         }
     }
 
-    pub(crate) fn is_encrypting(&self) -> bool {
-        self.encrypt_state == DirectionState::Active
-    }
-
-    #[cfg(feature = "secret_extraction")]
-    pub(crate) fn write_seq(&self) -> u64 {
-        self.write_seq
-    }
-
-    #[cfg(feature = "secret_extraction")]
-    pub(crate) fn read_seq(&self) -> u64 {
-        self.read_seq
-    }
-
-    fn doing_trial_decryption(&mut self, requested: usize) -> bool {
-        match self
-            .trial_decryption_len
-            .and_then(|value| value.checked_sub(requested))
-        {
-            Some(remaining) => {
-                self.trial_decryption_len = Some(remaining);
-                true
-            }
-            _ => false,
+    /// Decrypt a TLS message.
+    ///
+    /// `encr` is a decoded message allegedly received from the peer.
+    /// If it can be decrypted, its decryption is returned.  Otherwise,
+    /// an error is returned.
+    pub(crate) fn decrypt_incoming(
+        &mut self,
+        encr: OpaqueMessage,
+    ) -> Result<Option<Decrypted>, Error> {
+        if self.decrypt_state != DirectionState::Active {
+            return Ok(Some(Decrypted {
+                want_close_before_decrypt: false,
+                plaintext: encr.into_plain_message(),
+            }));
         }
+
+        // Set to `true` if the peer appears to getting close to encrypting
+        // too many messages with this key.
+        //
+        // Perhaps if we send an alert well before their counter wraps, a
+        // buggy peer won't make a terrible mistake here?
+        //
+        // Note that there's no reason to refuse to decrypt: the security
+        // failure has already happened.
+        let want_close_before_decrypt = self.read_seq == SEQ_SOFT_LIMIT;
+
+        let encrypted_len = encr.payload.0.len();
+        match self
+            .message_decrypter
+            .decrypt(encr, self.read_seq)
+        {
+            Ok(plaintext) => {
+                self.read_seq += 1;
+                Ok(Some(Decrypted {
+                    want_close_before_decrypt,
+                    plaintext,
+                }))
+            }
+            Err(Error::DecryptError) if self.doing_trial_decryption(encrypted_len) => {
+                trace!("Dropping undecryptable message after aborted early_data");
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Encrypt a TLS message.
+    ///
+    /// `plain` is a TLS message we'd like to send.  This function
+    /// panics if the requisite keying material hasn't been established yet.
+    pub(crate) fn encrypt_outgoing(&mut self, plain: BorrowedPlainMessage) -> OpaqueMessage {
+        debug_assert!(self.encrypt_state == DirectionState::Active);
+        assert!(!self.encrypt_exhausted());
+        let seq = self.write_seq;
+        self.write_seq += 1;
+        self.message_encrypter
+            .encrypt(plain, seq)
+            .unwrap()
     }
 
     /// Prepare to use the given `MessageEncrypter` for future message encryption.
@@ -150,64 +183,31 @@ impl RecordLayer {
         self.write_seq >= SEQ_HARD_LIMIT
     }
 
-    /// Decrypt a TLS message.
-    ///
-    /// `encr` is a decoded message allegedly received from the peer.
-    /// If it can be decrypted, its decryption is returned.  Otherwise,
-    /// an error is returned.
-    pub(crate) fn decrypt_incoming(
-        &mut self,
-        encr: OpaqueMessage,
-    ) -> Result<Option<Decrypted>, Error> {
-        if self.decrypt_state != DirectionState::Active {
-            return Ok(Some(Decrypted {
-                want_close_before_decrypt: false,
-                plaintext: encr.into_plain_message(),
-            }));
-        }
-
-        // Set to `true` if the peer appears to getting close to encrypting
-        // too many messages with this key.
-        //
-        // Perhaps if we send an alert well before their counter wraps, a
-        // buggy peer won't make a terrible mistake here?
-        //
-        // Note that there's no reason to refuse to decrypt: the security
-        // failure has already happened.
-        let want_close_before_decrypt = self.read_seq == SEQ_SOFT_LIMIT;
-
-        let encrypted_len = encr.payload.0.len();
-        match self
-            .message_decrypter
-            .decrypt(encr, self.read_seq)
-        {
-            Ok(plaintext) => {
-                self.read_seq += 1;
-                Ok(Some(Decrypted {
-                    want_close_before_decrypt,
-                    plaintext,
-                }))
-            }
-            Err(Error::DecryptError) if self.doing_trial_decryption(encrypted_len) => {
-                trace!("Dropping undecryptable message after aborted early_data");
-                Ok(None)
-            }
-            Err(err) => Err(err),
-        }
+    pub(crate) fn is_encrypting(&self) -> bool {
+        self.encrypt_state == DirectionState::Active
     }
 
-    /// Encrypt a TLS message.
-    ///
-    /// `plain` is a TLS message we'd like to send.  This function
-    /// panics if the requisite keying material hasn't been established yet.
-    pub(crate) fn encrypt_outgoing(&mut self, plain: BorrowedPlainMessage) -> OpaqueMessage {
-        debug_assert!(self.encrypt_state == DirectionState::Active);
-        assert!(!self.encrypt_exhausted());
-        let seq = self.write_seq;
-        self.write_seq += 1;
-        self.message_encrypter
-            .encrypt(plain, seq)
-            .unwrap()
+    #[cfg(feature = "secret_extraction")]
+    pub(crate) fn write_seq(&self) -> u64 {
+        self.write_seq
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    pub(crate) fn read_seq(&self) -> u64 {
+        self.read_seq
+    }
+
+    fn doing_trial_decryption(&mut self, requested: usize) -> bool {
+        match self
+            .trial_decryption_len
+            .and_then(|value| value.checked_sub(requested))
+        {
+            Some(remaining) => {
+                self.trial_decryption_len = Some(remaining);
+                true
+            }
+            _ => false,
+        }
     }
 }
 
