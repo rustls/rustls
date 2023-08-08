@@ -248,7 +248,6 @@ pub struct ServerConfig<C: CryptoProvider> {
     /// Allows traffic secrets to be extracted after the handshake,
     /// e.g. for kTLS setup.
     #[cfg(feature = "secret_extraction")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
     pub enable_secret_extraction: bool,
 
     /// Amount of early data to accept for sessions created by
@@ -486,7 +485,6 @@ impl ServerConnection {
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     #[cfg(feature = "secret_extraction")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "secret_extraction")))]
     pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         self.inner.extract_secrets()
     }
