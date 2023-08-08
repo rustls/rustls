@@ -1,14 +1,13 @@
 use crate::crypto;
 use crate::crypto::cipher::{
-    make_nonce, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Tls13AeadAlgorithm,
+    make_nonce, make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Tls13AeadAlgorithm,
 };
 use crate::enums::CipherSuite;
 use crate::enums::ContentType;
 use crate::enums::ProtocolVersion;
-use crate::error::{Error, PeerMisbehaved};
+use crate::error::Error;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
-use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::ConnectionTrafficSecrets;
@@ -84,29 +83,6 @@ struct Tls13MessageDecrypter {
     iv: Iv,
 }
 
-fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
-    loop {
-        match v.pop() {
-            Some(0) => {}
-            Some(content_type) => return ContentType::from(content_type),
-            None => return ContentType::Unknown(0),
-        }
-    }
-}
-
-fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
-    ring::aead::Aad::from([
-        0x17, // ContentType::ApplicationData
-        0x3,  // ProtocolVersion (major)
-        0x3,  // ProtocolVersion (minor)
-        (len >> 8) as u8,
-        len as u8,
-    ])
-}
-
-// https://datatracker.ietf.org/doc/html/rfc8446#section-5.2
-const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
-
 impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
@@ -115,7 +91,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         msg.typ.encode(&mut payload);
 
         let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.iv, seq));
-        let aad = make_tls13_aad(total_len);
+        let aad = aead::Aad::from(make_tls13_aad(total_len));
 
         self.enc_key
             .seal_in_place_append_tag(nonce, aad, &mut payload)
@@ -137,7 +113,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.iv, seq));
-        let aad = make_tls13_aad(payload.len());
+        let aad = aead::Aad::from(make_tls13_aad(payload.len()));
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)
@@ -145,22 +121,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             .len();
 
         payload.truncate(plain_len);
-
-        if payload.len() > MAX_FRAGMENT_LEN + 1 {
-            return Err(Error::PeerSentOversizedRecord);
-        }
-
-        msg.typ = unpad_tls13(payload);
-        if msg.typ == ContentType::Unknown(0) {
-            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
-        }
-
-        if payload.len() > MAX_FRAGMENT_LEN {
-            return Err(Error::PeerSentOversizedRecord);
-        }
-
-        msg.version = ProtocolVersion::TLSv1_3;
-        Ok(msg.into_plain_message())
+        self.tls13_check_length_and_unpad(msg)
     }
 }
 

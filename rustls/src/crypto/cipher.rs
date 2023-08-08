@@ -1,5 +1,7 @@
-use crate::error::Error;
+use crate::enums::{ContentType, ProtocolVersion};
+use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::codec;
+use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 pub use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::ConnectionTrafficSecrets;
@@ -38,6 +40,42 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
 pub trait MessageDecrypter: Send + Sync {
     /// Perform the decryption over the concerned TLS message.
     fn decrypt(&self, m: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
+
+    /// For TLS1.3 (only), checks the length m.payload is valid and removes the padding.
+    fn tls13_check_length_and_unpad(&self, mut msg: OpaqueMessage) -> Result<PlainMessage, Error> {
+        let payload = &mut msg.payload.0;
+
+        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        msg.typ = unpad_tls13(payload);
+        if msg.typ == ContentType::Unknown(0) {
+            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
+        }
+
+        if payload.len() > MAX_FRAGMENT_LEN {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        msg.version = ProtocolVersion::TLSv1_3;
+        Ok(msg.into_plain_message())
+    }
+}
+
+/// `v` is a message payload, immediately post-decryption.  This function
+/// removes zero padding bytes, until a non-zero byte is encountered which is
+/// the content type, which is returned.  See RFC8446 s5.2.
+///
+/// ContentType(0) is returned if the message payload is empty or all zeroes.
+fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
+    loop {
+        match v.pop() {
+            Some(0) => {}
+            Some(content_type) => return ContentType::from(content_type),
+            None => return ContentType::Unknown(0),
+        }
+    }
 }
 
 /// Objects with this trait can encrypt TLS messages.
@@ -95,6 +133,7 @@ impl Iv {
 /// Combine an `Iv` and sequence number to produce a unique nonce.
 ///
 /// This is `iv ^ seq` where `seq` is encoded as a 96-bit big-endian integer.
+#[inline]
 pub fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
     let mut nonce = [0u8; NONCE_LEN];
     codec::put_u64(seq, &mut nonce[4..]);
@@ -107,6 +146,41 @@ pub fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
         });
 
     nonce
+}
+
+/// Returns a TLS1.3 `additional_data` encoding.
+///
+/// See RFC8446 s5.2 for the `additional_data` definition.
+#[inline]
+pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
+    [
+        ContentType::ApplicationData.get_u8(),
+        // nb. this is `legacy_record_version`, ie TLS1.2 even for TLS1.3.
+        (ProtocolVersion::TLSv1_2.get_u16() >> 8) as u8,
+        (ProtocolVersion::TLSv1_2.get_u16() & 0xff) as u8,
+        (payload_len >> 8) as u8,
+        (payload_len & 0xff) as u8,
+    ]
+}
+
+const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
+
+/// Returns a TLS1.2 `additional_data` encoding.
+///
+/// See RFC5246 s6.2.3.3 for the `additional_data` definition.
+#[inline]
+pub fn make_tls12_aad(
+    seq: u64,
+    typ: ContentType,
+    vers: ProtocolVersion,
+    len: usize,
+) -> [u8; TLS12_AAD_SIZE] {
+    let mut out = [0; TLS12_AAD_SIZE];
+    codec::put_u64(seq, &mut out[0..]);
+    out[8] = typ.get_u8();
+    codec::put_u16(vers.get_u16(), &mut out[9..]);
+    codec::put_u16(len as u16, &mut out[11..]);
+    out
 }
 
 /// Largest possible AEAD key in the ciphersuites we support.

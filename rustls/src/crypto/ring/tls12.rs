@@ -1,13 +1,10 @@
 use crate::crypto::cipher::{
-    make_nonce, Iv, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm,
+    make_nonce, make_tls12_aad, Iv, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm,
 };
 use crate::enums::CipherSuite;
-use crate::enums::ContentType;
-use crate::enums::ProtocolVersion;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::msgs::base::Payload;
-use crate::msgs::codec;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
@@ -129,22 +126,6 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         aead_alg: &Aes256Gcm,
         hmac_provider: &super::hmac::HMAC_SHA384,
     });
-
-const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
-
-fn make_tls12_aad(
-    seq: u64,
-    typ: ContentType,
-    vers: ProtocolVersion,
-    len: usize,
-) -> aead::Aad<[u8; TLS12_AAD_SIZE]> {
-    let mut out = [0; TLS12_AAD_SIZE];
-    codec::put_u64(seq, &mut out[0..]);
-    out[8] = typ.get_u8();
-    codec::put_u16(vers.get_u16(), &mut out[9..]);
-    codec::put_u16(len as u16, &mut out[11..]);
-    ring::aead::Aad::from(out)
-}
 
 fn make_aesgcm_decrypter(
     dec_key: &[u8],
@@ -338,7 +319,12 @@ impl MessageDecrypter for GcmMessageDecrypter {
             aead::Nonce::assume_unique_for_key(nonce)
         };
 
-        let aad = make_tls12_aad(seq, msg.typ, msg.version, payload.len() - GCM_OVERHEAD);
+        let aad = aead::Aad::from(make_tls12_aad(
+            seq,
+            msg.typ,
+            msg.version,
+            payload.len() - GCM_OVERHEAD,
+        ));
 
         let plain_len = self
             .dec_key
@@ -358,7 +344,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.iv, seq));
-        let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
+        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 
         let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(GCM_EXPLICIT_NONCE_LEN + total_len);
@@ -405,12 +391,12 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.dec_offset, seq));
-        let aad = make_tls12_aad(
+        let aad = aead::Aad::from(make_tls12_aad(
             seq,
             msg.typ,
             msg.version,
             payload.len() - CHACHAPOLY1305_OVERHEAD,
-        );
+        ));
 
         let plain_len = self
             .dec_key
@@ -430,7 +416,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let nonce = aead::Nonce::assume_unique_for_key(make_nonce(&self.enc_offset, seq));
-        let aad = make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len());
+        let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 
         let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
         let mut buf = Vec::with_capacity(total_len);
