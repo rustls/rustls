@@ -1,11 +1,12 @@
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
-use crate::error::{Error, InvalidMessage};
+use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::AlertLevel;
+use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::handshake::HandshakeMessagePayload;
 
 #[derive(Debug)]
@@ -146,6 +147,30 @@ impl OpaqueMessage {
         }
     }
 
+    /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
+    ///
+    /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
+    /// or the message (post-unpadding) is too long.
+    pub fn into_tls13_unpadded_message(mut self) -> Result<PlainMessage, Error> {
+        let payload = &mut self.payload.0;
+
+        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.typ = unpad_tls13(payload);
+        if self.typ == ContentType::Unknown(0) {
+            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
+        }
+
+        if payload.len() > MAX_FRAGMENT_LEN {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.version = ProtocolVersion::TLSv1_3;
+        Ok(self.into_plain_message())
+    }
+
     /// This is the maximum on-the-wire size of a TLSCiphertext.
     /// That's 2^14 payload bytes, a header, and a 2KB allowance
     /// for ciphertext overheads.
@@ -156,6 +181,21 @@ impl OpaqueMessage {
 
     /// Maximum on-wire message size.
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
+}
+
+/// `v` is a message payload, immediately post-decryption.  This function
+/// removes zero padding bytes, until a non-zero byte is encountered which is
+/// the content type, which is returned.  See RFC8446 s5.2.
+///
+/// ContentType(0) is returned if the message payload is empty or all zeroes.
+fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
+    loop {
+        match v.pop() {
+            Some(0) => {}
+            Some(content_type) => return ContentType::from(content_type),
+            None => return ContentType::Unknown(0),
+        }
+    }
 }
 
 impl From<Message> for PlainMessage {

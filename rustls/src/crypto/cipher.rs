@@ -1,6 +1,7 @@
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+pub use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 
 /// Objects with this trait can decrypt TLS messages.
 pub trait MessageDecrypter: Send + Sync {
@@ -27,7 +28,7 @@ impl dyn MessageDecrypter {
 
 /// A write or read IV.
 #[derive(Default)]
-pub(crate) struct Iv(pub(crate) [u8; NONCE_LEN]);
+pub struct Iv(pub(crate) [u8; NONCE_LEN]);
 
 impl Iv {
     #[cfg(feature = "tls12")]
@@ -55,7 +56,11 @@ impl From<[u8; NONCE_LEN]> for Iv {
     }
 }
 
-pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
+/// Combine an `Iv` and sequence number to produce a unique nonce.
+///
+/// This is `iv ^ seq` where `seq` is encoded as a 96-bit big-endian integer.
+#[inline]
+pub fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
     let mut nonce = [0u8; NONCE_LEN];
     codec::put_u64(seq, &mut nonce[4..]);
 
@@ -73,10 +78,45 @@ pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
 /// (AES-GCM, Chacha20Poly1305)
 const NONCE_LEN: usize = 12;
 
+/// Returns a TLS1.3 `additional_data` encoding.
+///
+/// See RFC8446 s5.2 for the `additional_data` definition.
+#[inline]
+pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
+    [
+        ContentType::ApplicationData.get_u8(),
+        // nb. this is `legacy_record_version`, ie TLS1.2 even for TLS1.3.
+        (ProtocolVersion::TLSv1_2.get_u16() >> 8) as u8,
+        (ProtocolVersion::TLSv1_2.get_u16() & 0xff) as u8,
+        (payload_len >> 8) as u8,
+        (payload_len & 0xff) as u8,
+    ]
+}
+
+/// Returns a TLS1.2 `additional_data` encoding.
+///
+/// See RFC5246 s6.2.3.3 for the `additional_data` definition.
+#[inline]
+pub fn make_tls12_aad(
+    seq: u64,
+    typ: ContentType,
+    vers: ProtocolVersion,
+    len: usize,
+) -> [u8; TLS12_AAD_SIZE] {
+    let mut out = [0; TLS12_AAD_SIZE];
+    codec::put_u64(seq, &mut out[0..]);
+    out[8] = typ.get_u8();
+    codec::put_u16(vers.get_u16(), &mut out[9..]);
+    codec::put_u16(len as u16, &mut out[11..]);
+    out
+}
+
+const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
+
 /// A key for an AEAD algorithm.
 ///
 /// This is a value type for a byte string up to `AeadKey::MAX_LEN` bytes in length.
-pub(crate) struct AeadKey {
+pub struct AeadKey {
     buf: [u8; Self::MAX_LEN],
     used: usize,
 }
