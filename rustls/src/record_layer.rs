@@ -26,6 +26,7 @@ pub struct RecordLayer {
     message_decrypter: Box<dyn MessageDecrypter>,
     write_seq: u64,
     read_seq: u64,
+    has_decrypted: bool,
     encrypt_state: DirectionState,
     decrypt_state: DirectionState,
 
@@ -43,6 +44,7 @@ impl RecordLayer {
             message_decrypter: <dyn MessageDecrypter>::invalid(),
             write_seq: 0,
             read_seq: 0,
+            has_decrypted: false,
             encrypt_state: DirectionState::Invalid,
             decrypt_state: DirectionState::Invalid,
             trial_decryption_len: None,
@@ -82,6 +84,9 @@ impl RecordLayer {
         {
             Ok(plaintext) => {
                 self.read_seq += 1;
+                if !self.has_decrypted {
+                    self.has_decrypted = true;
+                }
                 Ok(Some(Decrypted {
                     want_close_before_decrypt,
                     plaintext,
@@ -187,6 +192,12 @@ impl RecordLayer {
         self.encrypt_state == DirectionState::Active
     }
 
+    /// Return true if we have ever decrypted a message. This is used in place
+    /// of checking the read_seq since that will be reset on key updates.
+    pub(crate) fn has_decrypted(&self) -> bool {
+        self.has_decrypted
+    }
+
     #[cfg(feature = "secret_extraction")]
     pub(crate) fn write_seq(&self) -> u64 {
         self.write_seq
@@ -218,4 +229,63 @@ pub struct Decrypted {
     pub want_close_before_decrypt: bool,
     /// The decrypted message.
     pub plaintext: PlainMessage,
+}
+
+#[test]
+fn test_has_decrypted() {
+    use crate::msgs::base::Payload;
+    use crate::{ContentType, ProtocolVersion};
+
+    struct PassThroughDecrypter;
+    impl MessageDecrypter for PassThroughDecrypter {
+        fn decrypt(&self, m: OpaqueMessage, _: u64) -> Result<PlainMessage, Error> {
+            Ok(m.into_plain_message())
+        }
+    }
+
+    // A record layer starts out invalid, having never decrypted.
+    let mut record_layer = RecordLayer::new();
+    assert!(matches!(
+        record_layer.decrypt_state,
+        DirectionState::Invalid
+    ));
+    assert_eq!(record_layer.read_seq, 0);
+    assert!(!record_layer.has_decrypted());
+
+    // Preparing the record layer should update the decrypt state, but shouldn't affect whether it
+    // has decrypted.
+    record_layer.prepare_message_decrypter(Box::new(PassThroughDecrypter));
+    assert!(matches!(
+        record_layer.decrypt_state,
+        DirectionState::Prepared
+    ));
+    assert_eq!(record_layer.read_seq, 0);
+    assert!(!record_layer.has_decrypted());
+
+    // Starting decryption should update the decrypt state, but not affect whether it has decrypted.
+    record_layer.start_decrypting();
+    assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
+    assert_eq!(record_layer.read_seq, 0);
+    assert!(!record_layer.has_decrypted());
+
+    // Decrypting a message should update the read_seq and track that we have now performed
+    // a decryption.
+    let msg = OpaqueMessage {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_2,
+        payload: Payload(vec![0xC0, 0xFF, 0xEE]),
+    };
+    record_layer
+        .decrypt_incoming(msg)
+        .unwrap();
+    assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
+    assert_eq!(record_layer.read_seq, 1);
+    assert!(record_layer.has_decrypted());
+
+    // Resetting the record layer message decrypter (as if a key update occurred) should reset
+    // the read_seq number, but not our knowledge of whether we have decrypted previously.
+    record_layer.set_message_decrypter(Box::new(PassThroughDecrypter));
+    assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
+    assert_eq!(record_layer.read_seq, 0);
+    assert!(record_layer.has_decrypted());
 }
