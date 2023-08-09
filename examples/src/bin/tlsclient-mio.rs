@@ -113,8 +113,7 @@ impl TlsClient {
         //
         // Read it and then write it to stdout.
         if io_state.plaintext_bytes_to_read() > 0 {
-            let mut plaintext = Vec::new();
-            plaintext.resize(io_state.plaintext_bytes_to_read(), 0u8);
+            let mut plaintext = vec![0u8; io_state.plaintext_bytes_to_read()];
             self.tls_conn
                 .reader()
                 .read_exact(&mut plaintext)
