@@ -241,8 +241,7 @@ impl OpenConnection {
         // Read and process all available plaintext.
         if let Ok(io_state) = self.tls_conn.process_new_packets() {
             if io_state.plaintext_bytes_to_read() > 0 {
-                let mut buf = Vec::new();
-                buf.resize(io_state.plaintext_bytes_to_read(), 0u8);
+                let mut buf = vec![0u8; io_state.plaintext_bytes_to_read()];
 
                 self.tls_conn
                     .reader()
@@ -276,7 +275,7 @@ impl OpenConnection {
         // If we have a successful but empty read, that's an EOF.
         // Otherwise, we shove the data into the TLS session.
         match maybe_len {
-            Some(len) if len == 0 => {
+            Some(0) => {
                 debug!("back eof");
                 self.closing = true;
             }
