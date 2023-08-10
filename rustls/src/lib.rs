@@ -434,6 +434,7 @@ pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIO
 pub use crate::webpki::{OwnedTrustAnchor, RootCertStore, WebPkiSupportedAlgorithms};
 
 /// Items for use by custom cryptography providers:
+pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 pub use crate::rand::GetRandomFailed;
 
 /// Items for use in a client.
