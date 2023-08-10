@@ -1,5 +1,5 @@
 use crate::crypto::cipher::{
-    make_tls12_aad, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
+    make_tls12_aad, AeadKey, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
     Tls12AeadAlgorithm,
 };
 use crate::crypto::KeyExchangeAlgorithm;
@@ -115,8 +115,9 @@ pub(crate) static AES256_GCM: GcmAlgorithm = GcmAlgorithm(&aead::AES_256_GCM);
 pub(crate) struct GcmAlgorithm(&'static aead::Algorithm);
 
 impl Tls12AeadAlgorithm for GcmAlgorithm {
-    fn decrypter(&self, dec_key: &[u8], dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
-        let dec_key = aead::LessSafeKey::new(aead::UnboundKey::new(self.0, dec_key).unwrap());
+    fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        let dec_key =
+            aead::LessSafeKey::new(aead::UnboundKey::new(self.0, dec_key.as_ref()).unwrap());
 
         let mut ret = GcmMessageDecrypter {
             dec_key,
@@ -130,14 +131,15 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
 
     fn encrypter(
         &self,
-        enc_key: &[u8],
+        enc_key: AeadKey,
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
         debug_assert_eq!(write_iv.len(), 4);
         debug_assert_eq!(explicit.len(), 8);
 
-        let enc_key = aead::LessSafeKey::new(aead::UnboundKey::new(self.0, enc_key).unwrap());
+        let enc_key =
+            aead::LessSafeKey::new(aead::UnboundKey::new(self.0, enc_key.as_ref()).unwrap());
 
         // The GCM nonce is constructed from a 32-bit 'salt' derived
         // from the master-secret, and a 64-bit explicit part,
@@ -162,16 +164,16 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
-        match key.len() {
+    fn extract_keys(&self, key: AeadKey, iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
+        match key.as_ref().len() {
             16 => {
                 // nb. "fixed IV" becomes the GCM nonce "salt"
-                let (key, salt, iv) = slices_to_arrays(key, iv, explicit);
+                let (key, salt, iv) = slices_to_arrays(key.as_ref(), iv, explicit);
                 ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
             }
             32 => {
                 // nb. "fixed IV" becomes the GCM nonce "salt"
-                let (key, salt, iv) = slices_to_arrays(key, iv, explicit);
+                let (key, salt, iv) = slices_to_arrays(key.as_ref(), iv, explicit);
                 ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
             }
             _ => unreachable!(),
@@ -182,9 +184,9 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
 pub(crate) struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
-    fn decrypter(&self, dec_key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
         let dec_key = aead::LessSafeKey::new(
-            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key).unwrap(),
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key.as_ref()).unwrap(),
         );
         Box::new(ChaCha20Poly1305MessageDecrypter {
             dec_key,
@@ -192,9 +194,9 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         })
     }
 
-    fn encrypter(&self, enc_key: &[u8], enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, enc_key: AeadKey, enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
         let enc_key = aead::LessSafeKey::new(
-            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key).unwrap(),
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key.as_ref()).unwrap(),
         );
         Box::new(ChaCha20Poly1305MessageEncrypter {
             enc_key,
@@ -211,8 +213,8 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], _explicit: &[u8]) -> ConnectionTrafficSecrets {
-        let (key, iv) = (slice_to_array(key), slice_to_array(iv));
+    fn extract_keys(&self, key: AeadKey, iv: &[u8], _explicit: &[u8]) -> ConnectionTrafficSecrets {
+        let (key, iv) = (slice_to_array(key.as_ref()), slice_to_array(iv));
         ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
     }
 }

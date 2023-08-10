@@ -25,10 +25,20 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
 pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     /// Build a `MessageEncrypter` for the given key/iv and extra key block (which can be used for
     /// improving explicit nonce size security, if needed).
-    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+    ///
+    /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].
+    ///
+    /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
+    ///
+    /// The length of `extra` is set by [`KeyBlockShape::explicit_nonce_len`].
+    fn encrypter(&self, key: AeadKey, iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
 
     /// Build a `MessageDecrypter` for the given key/iv.
-    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
+    ///
+    /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].
+    ///
+    /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
+    fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter>;
 
     /// Return a `KeyBlockShape` that defines how large the `key_block` is and how it
     /// is split up prior to calling `encrypter()`, `decrypter()` and/or `extract_keys()`.
@@ -36,7 +46,13 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
 
     #[cfg(feature = "secret_extraction")]
     /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
-    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
+    ///
+    /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].
+    ///
+    /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
+    ///
+    /// The length of `extra` is set by [`KeyBlockShape::explicit_nonce_len`].
+    fn extract_keys(&self, key: AeadKey, iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
 }
 
 /// How a TLS1.2 `key_block` is partitioned.
@@ -195,6 +211,15 @@ pub struct AeadKey {
 }
 
 impl AeadKey {
+    #[cfg(feature = "tls12")]
+    pub(crate) fn new(buf: &[u8]) -> Self {
+        debug_assert!(buf.len() <= Self::MAX_LEN);
+        let mut key = Self::from([0u8; Self::MAX_LEN]);
+        key.buf[..buf.len()].copy_from_slice(buf);
+        key.used = buf.len();
+        key
+    }
+
     pub(crate) fn with_length(self, len: usize) -> Self {
         assert!(len <= self.used);
         Self {

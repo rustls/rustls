@@ -1,7 +1,7 @@
 use crate::common_state::{CommonState, Side};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
-use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
+use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::hash;
 use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
@@ -155,10 +155,10 @@ impl ConnectionSecrets {
         (
             self.suite
                 .aead_alg
-                .decrypter(read_key, read_iv),
+                .decrypter(AeadKey::new(read_key), read_iv),
             self.suite
                 .aead_alg
-                .encrypter(write_key, write_iv, extra),
+                .encrypter(AeadKey::new(write_key), write_iv, extra),
         )
     }
 
@@ -258,11 +258,11 @@ impl ConnectionSecrets {
         let client_secrets =
             self.suite
                 .aead_alg
-                .extract_keys(client_key, client_iv, explicit_nonce);
+                .extract_keys(AeadKey::new(client_key), client_iv, explicit_nonce);
         let server_secrets =
             self.suite
                 .aead_alg
-                .extract_keys(server_key, server_iv, explicit_nonce);
+                .extract_keys(AeadKey::new(server_key), server_iv, explicit_nonce);
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),
