@@ -1,5 +1,5 @@
 use crate::crypto::cipher::{
-    make_nonce, make_tls12_aad, Iv, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm,
+    make_nonce, make_tls12_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm,
 };
 use crate::enums::CipherSuite;
 use crate::enums::SignatureScheme;
@@ -128,11 +128,12 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     });
 
 fn make_aesgcm_decrypter(
-    dec_key: &[u8],
+    dec_key: AeadKey,
     dec_iv: &[u8],
     aead_alg: &'static aead::Algorithm,
 ) -> Box<dyn MessageDecrypter> {
-    let dec_key = aead::LessSafeKey::new(aead::UnboundKey::new(aead_alg, dec_key).unwrap());
+    let dec_key =
+        aead::LessSafeKey::new(aead::UnboundKey::new(aead_alg, dec_key.as_ref()).unwrap());
 
     let mut ret = GcmMessageDecrypter {
         dec_key,
@@ -145,7 +146,7 @@ fn make_aesgcm_decrypter(
 }
 
 fn make_aesgcm_encrypter(
-    enc_key: &[u8],
+    enc_key: AeadKey,
     write_iv: &[u8],
     explicit: &[u8],
     aead_alg: &'static aead::Algorithm,
@@ -153,7 +154,8 @@ fn make_aesgcm_encrypter(
     debug_assert_eq!(write_iv.len(), 4);
     debug_assert_eq!(explicit.len(), 8);
 
-    let enc_key = aead::LessSafeKey::new(aead::UnboundKey::new(aead_alg, enc_key).unwrap());
+    let enc_key =
+        aead::LessSafeKey::new(aead::UnboundKey::new(aead_alg, enc_key.as_ref()).unwrap());
 
     // The GCM nonce is constructed from a 32-bit 'salt' derived
     // from the master-secret, and a 64-bit explicit part,
@@ -172,13 +174,13 @@ fn make_aesgcm_encrypter(
 pub(crate) struct Aes128Gcm;
 
 impl Tls12AeadAlgorithm for Aes128Gcm {
-    fn decrypter(&self, dec_key: &[u8], dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
         make_aesgcm_decrypter(dec_key, dec_iv, &aead::AES_128_GCM)
     }
 
     fn encrypter(
         &self,
-        enc_key: &[u8],
+        enc_key: AeadKey,
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
@@ -186,10 +188,10 @@ impl Tls12AeadAlgorithm for Aes128Gcm {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
+    fn extract_keys(&self, key: AeadKey, iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
         let key = {
             let mut k = [0u8; 16];
-            k.copy_from_slice(key);
+            k.copy_from_slice(key.as_ref());
             k
         };
 
@@ -212,13 +214,13 @@ impl Tls12AeadAlgorithm for Aes128Gcm {
 pub(crate) struct Aes256Gcm;
 
 impl Tls12AeadAlgorithm for Aes256Gcm {
-    fn decrypter(&self, dec_key: &[u8], dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
         make_aesgcm_decrypter(dec_key, dec_iv, &aead::AES_256_GCM)
     }
 
     fn encrypter(
         &self,
-        enc_key: &[u8],
+        enc_key: AeadKey,
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
@@ -226,10 +228,10 @@ impl Tls12AeadAlgorithm for Aes256Gcm {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
+    fn extract_keys(&self, key: AeadKey, iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
         let key = {
             let mut k = [0u8; 32];
-            k.copy_from_slice(key);
+            k.copy_from_slice(key.as_ref());
             k
         };
 
@@ -252,9 +254,9 @@ impl Tls12AeadAlgorithm for Aes256Gcm {
 pub(crate) struct ChaCha20Poly1305;
 
 impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
-    fn decrypter(&self, dec_key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter> {
+    fn decrypter(&self, dec_key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
         let dec_key = aead::LessSafeKey::new(
-            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key).unwrap(),
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, dec_key.as_ref()).unwrap(),
         );
         Box::new(ChaCha20Poly1305MessageDecrypter {
             dec_key,
@@ -262,9 +264,9 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         })
     }
 
-    fn encrypter(&self, enc_key: &[u8], enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
+    fn encrypter(&self, enc_key: AeadKey, enc_iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
         let enc_key = aead::LessSafeKey::new(
-            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key).unwrap(),
+            aead::UnboundKey::new(&aead::CHACHA20_POLY1305, enc_key.as_ref()).unwrap(),
         );
         Box::new(ChaCha20Poly1305MessageEncrypter {
             enc_key,
@@ -273,10 +275,10 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: &[u8], iv: &[u8], _explicit: &[u8]) -> ConnectionTrafficSecrets {
+    fn extract_keys(&self, key: AeadKey, iv: &[u8], _explicit: &[u8]) -> ConnectionTrafficSecrets {
         let key = {
             let mut k = [0u8; 32];
-            k.copy_from_slice(key);
+            k.copy_from_slice(key.as_ref());
             k
         };
 
