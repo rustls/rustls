@@ -1457,12 +1457,8 @@ impl CertificatePayloadTLS13 {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum KeyExchangeAlgorithm {
-    BulkOnly,
-    DH,
-    DHE,
-    RSA,
-    ECDH,
     ECDHE,
 }
 
@@ -1595,7 +1591,6 @@ impl ServerKeyExchangePayload {
 
             let result = match kxa {
                 KeyExchangeAlgorithm::ECDHE => ECDHEServerKeyExchange::read(&mut rd),
-                _ => return None,
             };
 
             if !rd.any_left() {
