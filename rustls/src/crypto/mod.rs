@@ -7,6 +7,8 @@ pub mod ring;
 
 pub use crate::rand::GetRandomFailed;
 
+pub use crate::msgs::handshake::KeyExchangeAlgorithm;
+
 /// Pluggable crypto galore.
 pub trait CryptoProvider: Send + Sync + 'static {
     /// KeyExchange operations that are supported by the provider.
