@@ -534,7 +534,7 @@ impl KeyScheduleTraffic {
         let client_secrets;
         let server_secrets;
 
-        let algo = self.ks.suite.common.aead_algorithm;
+        let algo = self.ks.suite.aead_algorithm;
         if algo == &ring::aead::AES_128_GCM {
             let extract = |secret: &hkdf::Prk| -> Result<ConnectionTrafficSecrets, Error> {
                 let (key, iv_in) = expand::<16, 12>(secret)?;
@@ -599,7 +599,7 @@ impl KeySchedule {
     }
 
     fn set_encrypter(&self, secret: &hkdf::Prk, common: &mut CommonState) {
-        let key = derive_traffic_key(secret, self.suite.common.aead_algorithm);
+        let key = derive_traffic_key(secret, self.suite.aead_algorithm);
         let iv = derive_traffic_iv(secret);
 
         common
@@ -617,7 +617,7 @@ impl KeySchedule {
     }
 
     fn derive_decrypter(&self, secret: &hkdf::Prk) -> Box<dyn MessageDecrypter> {
-        let key = derive_traffic_key(secret, self.suite.common.aead_algorithm);
+        let key = derive_traffic_key(secret, self.suite.aead_algorithm);
         let iv = derive_traffic_iv(secret);
         Box::new(Tls13MessageDecrypter {
             dec_key: aead::LessSafeKey::new(key),
