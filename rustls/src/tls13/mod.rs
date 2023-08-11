@@ -23,13 +23,13 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
         bulk: BulkAlgorithm::Chacha20Poly1305,
-        aead_algorithm: &ring::aead::CHACHA20_POLY1305,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     #[cfg(feature = "quic")]
     confidentiality_limit: u64::MAX,
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 36,
+    aead_algorithm: &ring::aead::CHACHA20_POLY1305,
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
@@ -38,13 +38,13 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
         },
         hkdf_algorithm: ring::hkdf::HKDF_SHA384,
         #[cfg(feature = "quic")]
         confidentiality_limit: 1 << 23,
         #[cfg(feature = "quic")]
         integrity_limit: 1 << 52,
+        aead_algorithm: &ring::aead::AES_256_GCM,
     });
 
 /// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
@@ -55,13 +55,13 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
         bulk: BulkAlgorithm::Aes128Gcm,
-        aead_algorithm: &ring::aead::AES_128_GCM,
     },
     hkdf_algorithm: ring::hkdf::HKDF_SHA256,
     #[cfg(feature = "quic")]
     confidentiality_limit: 1 << 23,
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 52,
+    aead_algorithm: &ring::aead::AES_128_GCM,
 };
 
 /// A TLS 1.3 cipher suite supported by rustls.
@@ -73,6 +73,7 @@ pub struct Tls13CipherSuite {
     pub(crate) confidentiality_limit: u64,
     #[cfg(feature = "quic")]
     pub(crate) integrity_limit: u64,
+    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
 }
 
 impl Tls13CipherSuite {

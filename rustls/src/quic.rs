@@ -651,7 +651,7 @@ impl PacketKey {
         Self {
             key: aead::LessSafeKey::new(hkdf_expand(
                 secret,
-                suite.common.aead_algorithm,
+                suite.aead_algorithm,
                 version.packet_key_label(),
                 &[],
             )),
