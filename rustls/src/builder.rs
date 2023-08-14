@@ -1,6 +1,6 @@
 use crate::crypto::{CryptoProvider, KeyExchange};
 use crate::error::Error;
-use crate::suites::{SupportedCipherSuite, DEFAULT_CIPHER_SUITES};
+use crate::suites::SupportedCipherSuite;
 use crate::versions;
 
 use core::fmt;
@@ -186,8 +186,8 @@ pub struct WantsCipherSuites(pub(crate) ());
 impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
     ///
-    /// If used, this will enable all safe supported cipher suites ([`DEFAULT_CIPHER_SUITES`]), all
-    /// safe supported key exchange groups ([`KeyExchange::all_kx_groups`]) and all safe supported
+    /// If used, this will enable all safe supported cipher suites (`default_cipher_suites()` as specified by the
+    /// `CryptoProvider` type), all safe supported key exchange groups ([`KeyExchange::all_kx_groups`]) and all safe supported
     /// protocol versions ([`DEFAULT_VERSIONS`]).
     ///
     /// These are safe defaults, useful for 99% of applications.
@@ -196,7 +196,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier<S::CryptoProvider>> {
         ConfigBuilder {
             state: WantsVerifier {
-                cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
+                cipher_suites: <S::CryptoProvider as CryptoProvider>::default_cipher_suites().to_vec(),
                 kx_groups: <<S::CryptoProvider as CryptoProvider>::KeyExchange as KeyExchange>::all_kx_groups().to_vec(),
                 versions: versions::EnabledVersions::new(versions::DEFAULT_VERSIONS),
             },
@@ -217,13 +217,14 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
         }
     }
 
-    /// Choose the default set of cipher suites ([`DEFAULT_CIPHER_SUITES`]).
+    /// Choose the default set of cipher suites as specified by the `CryptoProvider`.
     ///
-    /// Note that this default provides only high-quality suites: there is no need
+    /// The intention is that this default provides only high-quality suites: there is no need
     /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
-    /// implement these.
+    /// implement these.  But the precise details are controlled by what is implemented by the
+    /// `CryptoProvider`.
     pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups> {
-        self.with_cipher_suites(DEFAULT_CIPHER_SUITES)
+        self.with_cipher_suites(<S::CryptoProvider as CryptoProvider>::default_cipher_suites())
     }
 }
 
