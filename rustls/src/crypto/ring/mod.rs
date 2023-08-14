@@ -3,6 +3,7 @@ use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
+use crate::suites::SupportedCipherSuite;
 
 use ring::aead;
 use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, UnparsedPublicKey};
@@ -25,6 +26,10 @@ impl CryptoProvider for Ring {
         SystemRandom::new()
             .fill(buf)
             .map_err(|_| GetRandomFailed)
+    }
+
+    fn default_cipher_suites() -> &'static [SupportedCipherSuite] {
+        crate::suites::DEFAULT_CIPHER_SUITES
     }
 }
 
