@@ -6,7 +6,7 @@ use crate::hkdf;
 #[cfg(feature = "quic")]
 use crate::quic;
 #[cfg(feature = "secret_extraction")]
-use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
+use crate::suites::PartiallyExtractedSecrets;
 use crate::{KeyLog, Tls13CipherSuite};
 
 /// Key schedule maintenance for TLS1.3
@@ -504,85 +504,38 @@ impl KeyScheduleTraffic {
     #[cfg(feature = "secret_extraction")]
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         fn expand(
-            expander: &hkdf::Expander,
-            aead_algorithm: &'static ring::aead::Algorithm,
+            secret: &hkdf::OkmBlock,
+            hmac: &'static dyn hmac::Hmac,
+            aead_key_len: usize,
         ) -> (AeadKey, Iv) {
+            let expander = hkdf::Expander::from_okm(secret, hmac);
+
             (
-                hkdf_expand_label_aead_key(expander, aead_algorithm.key_len(), b"key", &[]),
-                hkdf_expand_label(expander, b"iv", &[]),
+                hkdf_expand_label_aead_key(&expander, aead_key_len, b"key", &[]),
+                hkdf_expand_label(&expander, b"iv", &[]),
             )
         }
 
-        let client_secrets;
-        let server_secrets;
-
-        let algo = self.ks.suite.aead_algorithm;
-        if algo == &ring::aead::AES_128_GCM {
-            let extract = |secret: &hkdf::OkmBlock| -> Result<ConnectionTrafficSecrets, Error> {
-                let expander = hkdf::Expander::from_okm(secret, self.ks.suite.hmac_provider);
-                let (key, iv_in) = expand(&expander, algo);
-
-                let mut salt = [0u8; 4];
-                salt.copy_from_slice(&iv_in.0[..4]);
-
-                let mut iv = [0u8; 8];
-                iv.copy_from_slice(&iv_in.0[4..]);
-
-                let mut key_array = [0u8; 16];
-                key_array.copy_from_slice(key.as_ref());
-
-                Ok(ConnectionTrafficSecrets::Aes128Gcm {
-                    key: key_array,
-                    salt,
-                    iv,
-                })
-            };
-
-            client_secrets = extract(&self.current_client_traffic_secret)?;
-            server_secrets = extract(&self.current_server_traffic_secret)?;
-        } else if algo == &ring::aead::AES_256_GCM {
-            let extract = |secret: &hkdf::OkmBlock| -> Result<ConnectionTrafficSecrets, Error> {
-                let expander = hkdf::Expander::from_okm(secret, self.ks.suite.hmac_provider);
-                let (key, iv_in) = expand(&expander, algo);
-
-                let mut salt = [0u8; 4];
-                salt.copy_from_slice(&iv_in.0[..4]);
-
-                let mut iv = [0u8; 8];
-                iv.copy_from_slice(&iv_in.0[4..]);
-
-                let mut key_array = [0u8; 32];
-                key_array.copy_from_slice(key.as_ref());
-
-                Ok(ConnectionTrafficSecrets::Aes256Gcm {
-                    key: key_array,
-                    salt,
-                    iv,
-                })
-            };
-
-            client_secrets = extract(&self.current_client_traffic_secret)?;
-            server_secrets = extract(&self.current_server_traffic_secret)?;
-        } else if algo == &ring::aead::CHACHA20_POLY1305 {
-            let extract = |secret: &hkdf::OkmBlock| -> Result<ConnectionTrafficSecrets, Error> {
-                let expander = hkdf::Expander::from_okm(secret, self.ks.suite.hmac_provider);
-                let (key, iv) = expand(&expander, algo);
-                let mut key_array = [0u8; 32];
-                key_array.copy_from_slice(key.as_ref());
-                Ok(ConnectionTrafficSecrets::Chacha20Poly1305 {
-                    key: key_array,
-                    iv: iv.0,
-                })
-            };
-
-            client_secrets = extract(&self.current_client_traffic_secret)?;
-            server_secrets = extract(&self.current_server_traffic_secret)?;
-        } else {
-            return Err(Error::General(format!(
-                "exporting secrets for {:?}: unimplemented",
-                algo
-            )));
-        }
+        let (client_key, client_iv) = expand(
+            &self.current_client_traffic_secret,
+            self.ks.suite.hmac_provider,
+            self.ks.suite.aead_alg.key_len(),
+        );
+        let (server_key, server_iv) = expand(
+            &self.current_server_traffic_secret,
+            self.ks.suite.hmac_provider,
+            self.ks.suite.aead_alg.key_len(),
+        );
+        let client_secrets = self
+            .ks
+            .suite
+            .aead_alg
+            .extract_keys(client_key, client_iv);
+        let server_secrets = self
+            .ks
+            .suite
+            .aead_alg
+            .extract_keys(server_key, server_iv);
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),
