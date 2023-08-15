@@ -1,4 +1,3 @@
-use super::{Tls13MessageDecrypter, Tls13MessageEncrypter};
 use crate::common_state::{CommonState, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
 use crate::crypto::{hash, hmac};
@@ -509,7 +508,7 @@ impl KeyScheduleTraffic {
             aead_algorithm: &'static ring::aead::Algorithm,
         ) -> (AeadKey, Iv) {
             (
-                hkdf_expand_label_aead_key(expander, aead_algorithm, b"key", &[]),
+                hkdf_expand_label_aead_key(expander, aead_algorithm.key_len(), b"key", &[]),
                 hkdf_expand_label(expander, b"iv", &[]),
             )
         }
@@ -603,15 +602,12 @@ impl KeySchedule {
 
     fn set_encrypter(&self, secret: &hkdf::OkmBlock, common: &mut CommonState) {
         let expander = hkdf::Expander::from_okm(secret, self.suite.hmac_provider);
-        let key = derive_traffic_key(&expander, self.suite.aead_algorithm);
+        let key = derive_traffic_key(&expander, self.suite.aead_alg.key_len());
         let iv = derive_traffic_iv(&expander);
 
         common
             .record_layer
-            .set_message_encrypter(Box::new(Tls13MessageEncrypter {
-                enc_key: ring::aead::LessSafeKey::new(key),
-                iv,
-            }));
+            .set_message_encrypter(self.suite.aead_alg.encrypter(key, iv));
     }
 
     fn set_decrypter(&self, secret: &hkdf::OkmBlock, common: &mut CommonState) {
@@ -622,12 +618,9 @@ impl KeySchedule {
 
     fn derive_decrypter(&self, secret: &hkdf::OkmBlock) -> Box<dyn MessageDecrypter> {
         let expander = hkdf::Expander::from_okm(secret, self.suite.hmac_provider);
-        let key = derive_traffic_key(&expander, self.suite.aead_algorithm);
+        let key = derive_traffic_key(&expander, self.suite.aead_alg.key_len());
         let iv = derive_traffic_iv(&expander);
-        Box::new(Tls13MessageDecrypter {
-            dec_key: ring::aead::LessSafeKey::new(key),
-            iv,
-        })
+        self.suite.aead_alg.decrypter(key, iv)
     }
 
     fn new_with_empty_secret(suite: &'static Tls13CipherSuite) -> Self {
@@ -779,11 +772,10 @@ fn hkdf_expand_label_block(
 /// [HKDF-Expand-Label] where the output is an AEAD key.
 fn hkdf_expand_label_aead_key(
     expander: &hkdf::Expander,
-    aead_algorithm: &'static ring::aead::Algorithm,
+    key_len: usize,
     label: &[u8],
     context: &[u8],
 ) -> AeadKey {
-    let key_len = aead_algorithm.key_len();
     hkdf_expand_label_inner(expander, label, context, key_len, |e, info| {
         let key: AeadKey = e.expand(info);
         key.with_length(key_len)
@@ -804,12 +796,8 @@ fn hkdf_expand_label_slice(
     })
 }
 
-pub(crate) fn derive_traffic_key(
-    expander: &hkdf::Expander,
-    aead_algorithm: &'static ring::aead::Algorithm,
-) -> ring::aead::UnboundKey {
-    let key = hkdf_expand_label_aead_key(expander, aead_algorithm, b"key", &[]);
-    ring::aead::UnboundKey::new(aead_algorithm, key.as_ref()).unwrap()
+pub(crate) fn derive_traffic_key(expander: &hkdf::Expander, aead_key_len: usize) -> AeadKey {
+    hkdf_expand_label_aead_key(expander, aead_key_len, b"key", &[])
 }
 
 pub(crate) fn derive_traffic_iv(expander: &hkdf::Expander) -> Iv {
@@ -997,7 +985,8 @@ mod test {
             &traffic_secret,
             &crate::crypto::ring::hmac::HMAC_SHA256,
         );
-        let key = derive_traffic_key(&expander, aead_alg);
+        let key = derive_traffic_key(&expander, aead_alg.key_len());
+        let key = aead::UnboundKey::new(aead_alg, key.as_ref()).unwrap();
         let seal_output = seal_zeroes(key);
         let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();
         let expected_seal_output = seal_zeroes(expected_key);
@@ -1045,7 +1034,10 @@ mod benchmarks {
                 &traffic_secret,
                 TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.hmac_provider,
             );
-            test::black_box(derive_traffic_key(&traffic_secret_expander, aead_alg));
+            test::black_box(derive_traffic_key(
+                &traffic_secret_expander,
+                aead_alg.key_len(),
+            ));
             test::black_box(derive_traffic_iv(&traffic_secret_expander));
         }
 
