@@ -3,120 +3,17 @@ use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::crypto::hash;
-use crate::enums::{AlertDescription, CipherSuite, SignatureScheme};
+use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
+use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 #[cfg(feature = "secret_extraction")]
-use crate::suites::PartiallyExtractedSecrets;
-use crate::suites::{BulkAlgorithm, CipherSuiteCommon, SupportedCipherSuite};
+use crate::suites::{ConnectionTrafficSecrets, PartiallyExtractedSecrets};
 
 use core::fmt;
 
-mod cipher;
-pub(crate) use cipher::{ChaCha20Poly1305, Tls12AeadAlgorithm, AES128_GCM, AES256_GCM};
-
 mod prf;
-
-/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
-pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-            bulk: BulkAlgorithm::Chacha20Poly1305,
-            hash_provider: &crypto::ring::hash::SHA256,
-        },
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: TLS12_ECDSA_SCHEMES,
-        aead_alg: &ChaCha20Poly1305,
-        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
-    });
-
-/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-            bulk: BulkAlgorithm::Chacha20Poly1305,
-            hash_provider: &crypto::ring::hash::SHA256,
-        },
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: TLS12_RSA_SCHEMES,
-        aead_alg: &ChaCha20Poly1305,
-        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
-    });
-
-/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-            bulk: BulkAlgorithm::Aes128Gcm,
-            hash_provider: &crypto::ring::hash::SHA256,
-        },
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: TLS12_RSA_SCHEMES,
-        aead_alg: &AES128_GCM,
-        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
-    });
-
-/// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-            bulk: BulkAlgorithm::Aes256Gcm,
-            hash_provider: &crypto::ring::hash::SHA384,
-        },
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: TLS12_RSA_SCHEMES,
-        aead_alg: &AES256_GCM,
-        hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
-    });
-
-/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-            bulk: BulkAlgorithm::Aes128Gcm,
-            hash_provider: &crypto::ring::hash::SHA256,
-        },
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: TLS12_ECDSA_SCHEMES,
-        aead_alg: &AES128_GCM,
-        hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
-    });
-
-/// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
-    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-        common: CipherSuiteCommon {
-            suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-            bulk: BulkAlgorithm::Aes256Gcm,
-            hash_provider: &crypto::ring::hash::SHA384,
-        },
-        kx: KeyExchangeAlgorithm::ECDHE,
-        sign: TLS12_ECDSA_SCHEMES,
-        aead_alg: &AES256_GCM,
-        hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
-    });
-
-static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
-    SignatureScheme::ED25519,
-    SignatureScheme::ECDSA_NISTP521_SHA512,
-    SignatureScheme::ECDSA_NISTP384_SHA384,
-    SignatureScheme::ECDSA_NISTP256_SHA256,
-];
-
-static TLS12_RSA_SCHEMES: &[SignatureScheme] = &[
-    SignatureScheme::RSA_PSS_SHA512,
-    SignatureScheme::RSA_PSS_SHA384,
-    SignatureScheme::RSA_PSS_SHA256,
-    SignatureScheme::RSA_PKCS1_SHA512,
-    SignatureScheme::RSA_PKCS1_SHA384,
-    SignatureScheme::RSA_PKCS1_SHA256,
-];
 
 /// A TLS 1.2 cipher suite supported by rustls.
 pub struct Tls12CipherSuite {
@@ -167,6 +64,36 @@ impl fmt::Debug for Tls12CipherSuite {
             .field("bulk", &self.common.bulk)
             .finish()
     }
+}
+
+pub(crate) trait Tls12AeadAlgorithm: Send + Sync + 'static {
+    fn decrypter(&self, key: &[u8], iv: &[u8]) -> Box<dyn MessageDecrypter>;
+    fn encrypter(&self, key: &[u8], iv: &[u8], extra: &[u8]) -> Box<dyn MessageEncrypter>;
+    fn key_block_shape(&self) -> KeyBlockShape;
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: &[u8], iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
+}
+
+/// How a TLS1.2 `key_block` is partitioned.
+///
+/// nb. ciphersuites with non-zero `mac_key_length` not currently supported
+pub(crate) struct KeyBlockShape {
+    /// How long keys are.
+    ///
+    /// `enc_key_len` terminology is from the standard.
+    pub(crate) enc_key_len: usize,
+
+    /// How long the fixed part of the 'IV' is.
+    ///
+    /// This isn't usually an IV, but we continue the
+    /// terminology misuse to match the standard.
+    pub(crate) fixed_iv_len: usize,
+
+    /// This is a non-standard extension which extends the
+    /// key block to provide an initial explicit nonce offset,
+    /// in a deterministic and safe way.  GCM needs this,
+    /// chacha20poly1305 works this way by design.
+    pub(crate) explicit_nonce_len: usize,
 }
 
 /// TLS1.2 per-connection keying material

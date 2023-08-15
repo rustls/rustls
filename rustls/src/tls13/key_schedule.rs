@@ -788,7 +788,7 @@ where
 #[cfg(test)]
 mod test {
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-    use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
+    use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
     use crate::KeyLog;
     use ring::aead;
 
@@ -968,8 +968,8 @@ mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
+        use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::hkdf;
-        use crate::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::KeyLog;
         use ring::aead;
 
