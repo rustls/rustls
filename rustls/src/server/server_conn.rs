@@ -517,7 +517,7 @@ impl From<ServerConnection> for crate::Connection {
     }
 }
 
-/// Handle on a server-side connection before configuration is available.
+/// Handle a server-side connection before configuration is available.
 ///
 /// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
 /// the [`ClientHello`] of an incoming connection. This is useful for servers
