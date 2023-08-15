@@ -8,6 +8,8 @@ use crate::msgs::codec::Codec;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::BulkAlgorithm;
+#[cfg(feature = "secret_extraction")]
+use crate::suites::ConnectionTrafficSecrets;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
 
 use ring::aead;
@@ -27,12 +29,11 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
         hash_provider: &crypto::ring::hash::SHA256,
     },
     hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
-    aead_alg: &AeadAlgorithm(&ring::aead::CHACHA20_POLY1305),
+    aead_alg: &Chacha20Poly1305Aead(AeadAlgorithm(&ring::aead::CHACHA20_POLY1305)),
     #[cfg(feature = "quic")]
     confidentiality_limit: u64::MAX,
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 36,
-    aead_algorithm: &ring::aead::CHACHA20_POLY1305,
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
@@ -44,12 +45,11 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
             hash_provider: &crypto::ring::hash::SHA384,
         },
         hmac_provider: &crypto::ring::hmac::HMAC_SHA384,
-        aead_alg: &AeadAlgorithm(&ring::aead::AES_256_GCM),
+        aead_alg: &Aes256GcmAead(AeadAlgorithm(&ring::aead::AES_256_GCM)),
         #[cfg(feature = "quic")]
         confidentiality_limit: 1 << 23,
         #[cfg(feature = "quic")]
         integrity_limit: 1 << 52,
-        aead_algorithm: &ring::aead::AES_256_GCM,
     });
 
 /// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
@@ -63,12 +63,11 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
         hash_provider: &crypto::ring::hash::SHA256,
     },
     hmac_provider: &crypto::ring::hmac::HMAC_SHA256,
-    aead_alg: &AeadAlgorithm(&ring::aead::AES_128_GCM),
+    aead_alg: &Aes128GcmAead(AeadAlgorithm(&ring::aead::AES_128_GCM)),
     #[cfg(feature = "quic")]
     confidentiality_limit: 1 << 23,
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 52,
-    aead_algorithm: &ring::aead::AES_128_GCM,
 };
 
 /// A TLS 1.3 cipher suite supported by rustls.
@@ -81,7 +80,6 @@ pub struct Tls13CipherSuite {
     pub(crate) confidentiality_limit: u64,
     #[cfg(feature = "quic")]
     pub(crate) integrity_limit: u64,
-    pub(crate) aead_algorithm: &'static ring::aead::Algorithm,
 }
 
 impl Tls13CipherSuite {
@@ -136,9 +134,76 @@ fn make_tls13_aad(len: usize) -> ring::aead::Aad<[u8; TLS13_AAD_SIZE]> {
 // https://datatracker.ietf.org/doc/html/rfc8446#section-5.2
 const TLS13_AAD_SIZE: usize = 1 + 2 + 2;
 
+struct Chacha20Poly1305Aead(AeadAlgorithm);
+
+impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+        self.0.encrypter(key, iv)
+    }
+
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+        self.0.decrypter(key, iv)
+    }
+
+    fn key_len(&self) -> usize {
+        self.0.key_len()
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets {
+        let (key, iv) = (slice_to_array(key.as_ref()), slice_to_array(&iv.0));
+        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
+    }
+}
+
+struct Aes256GcmAead(AeadAlgorithm);
+
+impl Tls13AeadAlgorithm for Aes256GcmAead {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+        self.0.encrypter(key, iv)
+    }
+
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+        self.0.decrypter(key, iv)
+    }
+
+    fn key_len(&self) -> usize {
+        self.0.key_len()
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets {
+        let (key, salt, iv) = slices_to_arrays(key.as_ref(), &iv.0[..4], &iv.0[4..]);
+        ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
+    }
+}
+
+struct Aes128GcmAead(AeadAlgorithm);
+
+impl Tls13AeadAlgorithm for Aes128GcmAead {
+    fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
+        self.0.encrypter(key, iv)
+    }
+
+    fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
+        self.0.decrypter(key, iv)
+    }
+
+    fn key_len(&self) -> usize {
+        self.0.key_len()
+    }
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets {
+        let (key, salt, iv) = slices_to_arrays(key.as_ref(), &iv.0[..4], &iv.0[4..]);
+        ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
+    }
+}
+
+// common encrypter/decrypter/key_len items for above Tls13AeadAlgorithm impls
 struct AeadAlgorithm(&'static ring::aead::Algorithm);
 
-impl Tls13AeadAlgorithm for AeadAlgorithm {
+impl AeadAlgorithm {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
         Box::new(Tls13MessageEncrypter {
@@ -164,6 +229,9 @@ pub(crate) trait Tls13AeadAlgorithm: Send + Sync {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter>;
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter>;
     fn key_len(&self) -> usize;
+
+    #[cfg(feature = "secret_extraction")]
+    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets;
 }
 
 struct Tls13MessageEncrypter {
@@ -231,6 +299,23 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         msg.version = ProtocolVersion::TLSv1_3;
         Ok(msg.into_plain_message())
     }
+}
+
+#[cfg(feature = "secret_extraction")]
+fn slices_to_arrays<const NK: usize, const NS: usize, const NI: usize>(
+    k: &[u8],
+    s: &[u8],
+    i: &[u8],
+) -> ([u8; NK], [u8; NS], [u8; NI]) {
+    (slice_to_array(k), slice_to_array(s), slice_to_array(i))
+}
+
+#[cfg(feature = "secret_extraction")]
+fn slice_to_array<const N: usize>(slice: &[u8]) -> [u8; N] {
+    // this is guaranteed true because `ConnectionTrafficSecrets` items and
+    // `key_len()` are in agreement.
+    debug_assert_eq!(N, slice.len());
+    slice.try_into().unwrap()
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
