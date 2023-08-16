@@ -8,6 +8,9 @@ pub mod ring;
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
 
+/// Hashing interfaces.
+pub mod hash;
+
 /// HMAC interfaces.
 pub mod hmac;
 
