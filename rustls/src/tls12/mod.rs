@@ -25,6 +25,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
+            hash_provider: &crypto::ring::hash::SHA256,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -40,6 +41,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
+            hash_provider: &crypto::ring::hash::SHA256,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -55,6 +57,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
+            hash_provider: &crypto::ring::hash::SHA256,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -70,6 +73,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
+            hash_provider: &crypto::ring::hash::SHA384,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -85,6 +89,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
+            hash_provider: &crypto::ring::hash::SHA256,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -100,6 +105,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
+            hash_provider: &crypto::ring::hash::SHA384,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
