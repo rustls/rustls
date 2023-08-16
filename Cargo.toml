@@ -7,3 +7,7 @@ members = [
 ]
 exclude = ["admin/rustfmt"]
 resolver = "2"
+
+[patch.crates-io]
+# TODO(XXX): Remove this once rcgen has cut a release w/ CRL support included. Only used in examples.
+rcgen = { git = 'https://github.com/est31/rcgen.git' }
