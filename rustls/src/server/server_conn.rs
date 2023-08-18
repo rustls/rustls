@@ -192,7 +192,7 @@ impl<'a> ClientHello<'a> {
 ///
 /// # Defaults
 ///
-/// * [`ServerConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
+/// * [`ServerConfig::max_fragment_size`]: the default is `None` (meaning 16kB).
 /// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
@@ -212,13 +212,17 @@ pub struct ServerConfig<C: CryptoProvider> {
     /// which is supported by the client.
     pub ignore_client_order: bool,
 
-    /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
-    /// message lengths except to the 2**16 limit specified in the standard.
+    /// The maximum size of plaintext input to be emitted in a single TLS record.
+    /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
-    /// Out of range values are reported as errors from ServerConnection::new.
+    /// Out of range values are reported as errors from [ServerConnection::new].
     ///
-    /// Setting this value to the TCP MSS may improve latency for stream-y workloads.
+    /// Setting this value to a little less than the TCP MSS may improve latency
+    /// for stream-y workloads.
+    ///
+    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    /// [ServerConnection::new]: crate::server::ServerConnection::new
     pub max_fragment_size: Option<usize>,
 
     /// How to store client sessions.
