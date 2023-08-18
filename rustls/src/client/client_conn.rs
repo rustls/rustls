@@ -117,7 +117,7 @@ pub trait ResolvesClientCert: Send + Sync {
 ///
 /// # Defaults
 ///
-/// * [`ClientConfig::max_fragment_size`]: the default is `None`: TLS packets are not fragmented to a specific size.
+/// * [`ClientConfig::max_fragment_size`]: the default is `None` (meaning 16kB).
 /// * [`ClientConfig::resumption`]: supports resumption with up to 256 server names, using session
 ///    ids or tickets, with a max of eight tickets per server.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
@@ -140,13 +140,17 @@ pub struct ClientConfig<C: CryptoProvider> {
     /// How and when the client can resume a previous session.
     pub resumption: Resumption,
 
-    /// The maximum size of TLS message we'll emit.  If None, we don't limit TLS
-    /// message lengths except to the 2**16 limit specified in the standard.
+    /// The maximum size of plaintext input to be emitted in a single TLS record.
+    /// A value of None is equivalent to the [TLS maximum] of 16 kB.
     ///
     /// rustls enforces an arbitrary minimum of 32 bytes for this field.
-    /// Out of range values are reported as errors from ClientConnection::new.
+    /// Out of range values are reported as errors from [ClientConnection::new].
     ///
-    /// Setting this value to the TCP MSS may improve latency for stream-y workloads.
+    /// Setting this value to a little less than the TCP MSS may improve latency
+    /// for stream-y workloads.
+    ///
+    /// [TLS maximum]: https://datatracker.ietf.org/doc/html/rfc8446#section-5.1
+    /// [ClientConnection::new]: crate::client::ClientConnection::new
     pub max_fragment_size: Option<usize>,
 
     /// How to decide what client auth certificate/keys to use.
