@@ -56,22 +56,28 @@ impl From<[u8; NONCE_LEN]> for Iv {
     }
 }
 
-/// Combine an `Iv` and sequence number to produce a unique nonce.
-///
-/// This is `iv ^ seq` where `seq` is encoded as a 96-bit big-endian integer.
-#[inline]
-pub fn make_nonce(iv: &Iv, seq: u64) -> [u8; NONCE_LEN] {
-    let mut nonce = [0u8; NONCE_LEN];
-    codec::put_u64(seq, &mut nonce[4..]);
+/// A nonce.  This is unique for all messages on a connection.
+pub struct Nonce(pub [u8; NONCE_LEN]);
 
-    nonce
-        .iter_mut()
-        .zip(iv.0.iter())
-        .for_each(|(nonce, iv)| {
-            *nonce ^= *iv;
-        });
+impl Nonce {
+    /// Combine an `Iv` and sequence number to produce a unique nonce.
+    ///
+    /// This is `iv ^ seq` where `seq` is encoded as a 96-bit big-endian integer.
+    #[inline]
+    pub fn new(iv: &Iv, seq: u64) -> Self {
+        let mut nonce = Self([0u8; NONCE_LEN]);
+        codec::put_u64(seq, &mut nonce.0[4..]);
 
-    nonce
+        nonce
+            .0
+            .iter_mut()
+            .zip(iv.0.iter())
+            .for_each(|(nonce, iv)| {
+                *nonce ^= *iv;
+            });
+
+        nonce
+    }
 }
 
 /// Size of TLS nonces (incorrectly termed "IV" in standard) for all supported ciphersuites
