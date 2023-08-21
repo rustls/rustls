@@ -180,7 +180,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         let aad = aead::Aad::from(make_tls13_aad(total_len));
         self.enc_key
             .seal_in_place_append_tag(nonce, aad, &mut payload)
-            .map_err(|_| Error::General("encrypt failed".to_string()))?;
+            .map_err(|_| Error::EncryptError)?;
 
         Ok(OpaqueMessage {
             typ: ContentType::ApplicationData,
