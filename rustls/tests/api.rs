@@ -3321,17 +3321,17 @@ mod test_quic {
 
     #[test]
     fn test_quic_handshake() {
-        fn equal_packet_keys(x: &quic::PacketKey, y: &quic::PacketKey) -> bool {
+        fn equal_packet_keys(x: &dyn quic::PacketKey, y: &dyn quic::PacketKey) -> bool {
             // Check that these two sets of keys are equal.
             let mut buf = [0; 32];
             let (header, payload_tag) = buf.split_at_mut(8);
             let (payload, tag_buf) = payload_tag.split_at_mut(8);
             let tag = x
-                .encrypt_in_place(42, &*header, payload)
+                .encrypt_in_place(42, header, payload)
                 .unwrap();
             tag_buf.copy_from_slice(tag.as_ref());
 
-            let result = y.decrypt_in_place(42, &*header, payload_tag);
+            let result = y.decrypt_in_place(42, header, payload_tag);
             match result {
                 Ok(payload) => payload == [0; 8],
                 Err(_) => false,
@@ -3347,8 +3347,8 @@ mod test_quic {
             }
 
             let (x, y) = (keys(x), keys(y));
-            equal_packet_keys(&x.local.packet, &y.remote.packet)
-                && equal_packet_keys(&x.remote.packet, &y.local.packet)
+            equal_packet_keys(x.local.packet.as_ref(), y.remote.packet.as_ref())
+                && equal_packet_keys(x.remote.packet.as_ref(), y.local.packet.as_ref())
         }
 
         let kt = KeyType::Rsa;
@@ -3434,8 +3434,8 @@ mod test_quic {
             let client_early = client.zero_rtt_keys().unwrap();
             let server_early = server.zero_rtt_keys().unwrap();
             assert!(equal_packet_keys(
-                &client_early.packet,
-                &server_early.packet
+                client_early.packet.as_ref(),
+                server_early.packet.as_ref()
             ));
         }
         step(&mut server, &mut client)
@@ -3518,13 +3518,25 @@ mod test_quic {
 
         let mut client_next = client_secrets.next_packet_keys();
         let mut server_next = server_secrets.next_packet_keys();
-        assert!(equal_packet_keys(&client_next.local, &server_next.remote));
-        assert!(equal_packet_keys(&server_next.local, &client_next.remote));
+        assert!(equal_packet_keys(
+            client_next.local.as_ref(),
+            server_next.remote.as_ref()
+        ));
+        assert!(equal_packet_keys(
+            server_next.local.as_ref(),
+            client_next.remote.as_ref()
+        ));
 
         client_next = client_secrets.next_packet_keys();
         server_next = server_secrets.next_packet_keys();
-        assert!(equal_packet_keys(&client_next.local, &server_next.remote));
-        assert!(equal_packet_keys(&server_next.local, &client_next.remote));
+        assert!(equal_packet_keys(
+            client_next.local.as_ref(),
+            server_next.remote.as_ref()
+        ));
+        assert!(equal_packet_keys(
+            server_next.local.as_ref(),
+            client_next.remote.as_ref()
+        ));
     }
 
     #[test]
@@ -3747,6 +3759,7 @@ mod test_quic {
 
     #[test]
     fn packet_key_api() {
+        use rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
         use rustls::quic::{Keys, Version};
         use rustls::Side;
 
@@ -3779,7 +3792,14 @@ mod test_quic {
             0x08, 0x06, 0x04, 0x80, 0x00, 0xff, 0xff,
         ];
 
-        let client_keys = Keys::initial(Version::V1, CONNECTION_ID, Side::Client);
+        let client_keys = Keys::initial(
+            Version::V1,
+            TLS13_AES_128_GCM_SHA256
+                .tls13()
+                .unwrap(),
+            CONNECTION_ID,
+            Side::Client,
+        );
         assert_eq!(
             client_keys
                 .local
@@ -3807,7 +3827,7 @@ mod test_quic {
         let tag = client_keys
             .local
             .packet
-            .encrypt_in_place(PACKET_NUMBER, &*header, payload)
+            .encrypt_in_place(PACKET_NUMBER, header, payload)
             .unwrap();
 
         let sample_len = client_keys.local.header.sample_len();
@@ -3915,7 +3935,14 @@ mod test_quic {
         let (first, rest) = header.split_at_mut(1);
         let sample = &payload[..sample_len];
 
-        let server_keys = Keys::initial(Version::V1, CONNECTION_ID, Side::Server);
+        let server_keys = Keys::initial(
+            Version::V1,
+            TLS13_AES_128_GCM_SHA256
+                .tls13()
+                .unwrap(),
+            CONNECTION_ID,
+            Side::Server,
+        );
         server_keys
             .remote
             .header
@@ -3924,7 +3951,7 @@ mod test_quic {
         let payload = server_keys
             .remote
             .packet
-            .decrypt_in_place(PACKET_NUMBER, &*header, payload)
+            .decrypt_in_place(PACKET_NUMBER, header, payload)
             .unwrap();
 
         assert_eq!(&payload[..PAYLOAD.len()], PAYLOAD);
