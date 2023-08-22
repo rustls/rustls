@@ -712,7 +712,7 @@ pub(crate) fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
 }
 
 /// [HKDF-Expand-Label] where the output is one block in size.
-fn hkdf_expand_label_block(
+pub(crate) fn hkdf_expand_label_block(
     expander: &hkdf::Expander,
     label: &[u8],
     context: &[u8],
@@ -723,7 +723,7 @@ fn hkdf_expand_label_block(
 }
 
 /// [HKDF-Expand-Label] where the output is an AEAD key.
-fn hkdf_expand_label_aead_key(
+pub(crate) fn hkdf_expand_label_aead_key(
     expander: &hkdf::Expander,
     key_len: usize,
     label: &[u8],
