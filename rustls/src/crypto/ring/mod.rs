@@ -14,6 +14,8 @@ use core::fmt;
 
 pub(crate) mod hash;
 pub(crate) mod hmac;
+#[cfg(feature = "quic")]
+pub(crate) mod quic;
 #[cfg(feature = "tls12")]
 pub(crate) mod tls12;
 pub(crate) mod tls13;

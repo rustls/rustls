@@ -29,7 +29,7 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 36,
     #[cfg(feature = "quic")]
-    quic: &crate::quic::RingKeyBuilder(&ring::aead::CHACHA20_POLY1305, &ring::aead::quic::CHACHA20),
+    quic: &super::quic::KeyBuilder(&ring::aead::CHACHA20_POLY1305, &ring::aead::quic::CHACHA20),
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
@@ -46,7 +46,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         #[cfg(feature = "quic")]
         integrity_limit: 1 << 52,
         #[cfg(feature = "quic")]
-        quic: &crate::quic::RingKeyBuilder(&ring::aead::AES_256_GCM, &aead::quic::AES_256),
+        quic: &super::quic::KeyBuilder(&ring::aead::AES_256_GCM, &aead::quic::AES_256),
     });
 
 /// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
@@ -65,7 +65,7 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
     #[cfg(feature = "quic")]
     integrity_limit: 1 << 52,
     #[cfg(feature = "quic")]
-    quic: &crate::quic::RingKeyBuilder(&ring::aead::AES_128_GCM, &aead::quic::AES_128),
+    quic: &super::quic::KeyBuilder(&ring::aead::AES_128_GCM, &aead::quic::AES_128),
 };
 
 struct Chacha20Poly1305Aead(AeadAlgorithm);
