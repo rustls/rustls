@@ -6,7 +6,6 @@ use crate::error::Error;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
-use crate::suites::BulkAlgorithm;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::ConnectionTrafficSecrets;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
@@ -21,7 +20,6 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
 pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-        bulk: BulkAlgorithm::Chacha20Poly1305,
         hash_provider: &super::hash::SHA256,
     },
     hmac_provider: &super::hmac::HMAC_SHA256,
@@ -39,7 +37,6 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(&Tls13CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
-            bulk: BulkAlgorithm::Aes256Gcm,
             hash_provider: &super::hash::SHA384,
         },
         hmac_provider: &super::hmac::HMAC_SHA384,
@@ -59,7 +56,6 @@ pub static TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
 pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13CipherSuite {
     common: CipherSuiteCommon {
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
-        bulk: BulkAlgorithm::Aes128Gcm,
         hash_provider: &super::hash::SHA256,
     },
     hmac_provider: &super::hmac::HMAC_SHA256,

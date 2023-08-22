@@ -47,7 +47,6 @@ impl fmt::Debug for Tls13CipherSuite {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tls13CipherSuite")
             .field("suite", &self.common.suite)
-            .field("bulk", &self.common.bulk)
             .finish()
     }
 }
