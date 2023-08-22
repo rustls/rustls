@@ -9,27 +9,10 @@ use crate::tls13::Tls13CipherSuite;
 use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
 
-/// Bulk symmetric encryption scheme used by a cipher suite.
-#[allow(non_camel_case_types)]
-#[derive(Debug, Eq, PartialEq)]
-pub enum BulkAlgorithm {
-    /// AES with 128-bit keys in Galois counter mode.
-    Aes128Gcm,
-
-    /// AES with 256-bit keys in Galois counter mode.
-    Aes256Gcm,
-
-    /// Chacha20 for confidentiality with poly1305 for authenticity.
-    Chacha20Poly1305,
-}
-
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
 pub struct CipherSuiteCommon {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
-
-    /// How to do bulk encryption.
-    pub bulk: BulkAlgorithm,
 
     /// Which hash function the suite uses.
     pub hash_provider: &'static dyn crypto::hash::Hash,
