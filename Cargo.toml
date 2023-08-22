@@ -10,4 +10,4 @@ resolver = "2"
 
 [patch.crates-io]
 # TODO(XXX): Remove this once rcgen has cut a release w/ CRL support included. Only used in examples.
-rcgen = { git = 'https://github.com/est31/rcgen.git' }
+rcgen = { git = 'https://github.com/est31/rcgen.git', rev = '83e548a06848d923eada1ac66d1a912735b67e79' }
