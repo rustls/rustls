@@ -1,18 +1,18 @@
+use super::ring_like;
 use crate::crypto;
-use ring;
 
 use alloc::boxed::Box;
 
-pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring::hmac::HMAC_SHA256);
-pub(crate) static HMAC_SHA384: Hmac = Hmac(&ring::hmac::HMAC_SHA384);
+pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring_like::hmac::HMAC_SHA256);
+pub(crate) static HMAC_SHA384: Hmac = Hmac(&ring_like::hmac::HMAC_SHA384);
 #[cfg(all(test, feature = "tls12"))]
-pub(crate) static HMAC_SHA512: Hmac = Hmac(&ring::hmac::HMAC_SHA512);
+pub(crate) static HMAC_SHA512: Hmac = Hmac(&ring_like::hmac::HMAC_SHA512);
 
-pub(crate) struct Hmac(&'static ring::hmac::Algorithm);
+pub(crate) struct Hmac(&'static ring_like::hmac::Algorithm);
 
 impl crypto::hmac::Hmac for Hmac {
     fn with_key(&self, key: &[u8]) -> Box<dyn crypto::hmac::Key> {
-        Box::new(Key(ring::hmac::Key::new(*self.0, key)))
+        Box::new(Key(ring_like::hmac::Key::new(*self.0, key)))
     }
 
     fn hash_output_len(&self) -> usize {
@@ -20,11 +20,11 @@ impl crypto::hmac::Hmac for Hmac {
     }
 }
 
-struct Key(ring::hmac::Key);
+struct Key(ring_like::hmac::Key);
 
 impl crypto::hmac::Key for Key {
     fn sign_concat(&self, first: &[u8], middle: &[&[u8]], last: &[u8]) -> crypto::hmac::Tag {
-        let mut ctx = ring::hmac::Context::with_key(&self.0);
+        let mut ctx = ring_like::hmac::Context::with_key(&self.0);
         ctx.update(first);
         for d in middle {
             ctx.update(d);

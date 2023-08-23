@@ -3,10 +3,10 @@ use crate::error::Error;
 use crate::sign::{Signer, SigningKey};
 use crate::x509::{asn1_wrap, wrap_in_sequence};
 
+use super::ring_like::io::der;
+use super::ring_like::rand::{SecureRandom, SystemRandom};
+use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
-use ring::io::der;
-use ring::rand::{SecureRandom, SystemRandom};
-use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
 use alloc::boxed::Box;
 use alloc::string::ToString;
@@ -143,7 +143,7 @@ impl Signer for RsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let mut sig = vec![0; self.key.public().modulus_len()];
 
-        let rng = ring::rand::SystemRandom::new();
+        let rng = SystemRandom::new();
         self.key
             .sign(self.encoding, &rng, message, &mut sig)
             .map(|_| sig)
@@ -266,7 +266,7 @@ struct EcdsaSigner {
 
 impl Signer for EcdsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        let rng = ring::rand::SystemRandom::new();
+        let rng = super::ring_like::rand::SystemRandom::new();
         self.key
             .sign(&rng, message)
             .map_err(|_| Error::General("signing failed".into()))

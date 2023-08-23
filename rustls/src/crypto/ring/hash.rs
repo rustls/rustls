@@ -1,21 +1,21 @@
+use super::ring_like::digest;
 use crate::crypto;
 use crate::msgs::enums::HashAlgorithm;
-use ring;
 
 use alloc::boxed::Box;
 
-pub(crate) static SHA256: Hash = Hash(&ring::digest::SHA256, HashAlgorithm::SHA256);
-pub(crate) static SHA384: Hash = Hash(&ring::digest::SHA384, HashAlgorithm::SHA384);
+pub(crate) static SHA256: Hash = Hash(&digest::SHA256, HashAlgorithm::SHA256);
+pub(crate) static SHA384: Hash = Hash(&digest::SHA384, HashAlgorithm::SHA384);
 
-pub(crate) struct Hash(&'static ring::digest::Algorithm, HashAlgorithm);
+pub(crate) struct Hash(&'static digest::Algorithm, HashAlgorithm);
 
 impl crypto::hash::Hash for Hash {
     fn start(&self) -> Box<dyn crypto::hash::Context> {
-        Box::new(Context(ring::digest::Context::new(self.0)))
+        Box::new(Context(digest::Context::new(self.0)))
     }
 
     fn hash(&self, bytes: &[u8]) -> crypto::hash::Output {
-        let mut ctx = ring::digest::Context::new(self.0);
+        let mut ctx = digest::Context::new(self.0);
         ctx.update(bytes);
         convert(ctx.finish())
     }
@@ -29,7 +29,7 @@ impl crypto::hash::Hash for Hash {
     }
 }
 
-struct Context(ring::digest::Context);
+struct Context(digest::Context);
 
 impl crypto::hash::Context for Context {
     fn fork_finish(&self) -> crypto::hash::Output {
@@ -49,6 +49,6 @@ impl crypto::hash::Context for Context {
     }
 }
 
-fn convert(val: ring::digest::Digest) -> crypto::hash::Output {
+fn convert(val: digest::Digest) -> crypto::hash::Output {
     crypto::hash::Output::new(val.as_ref())
 }

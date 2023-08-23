@@ -7,7 +7,7 @@ use crate::tls13::Tls13CipherSuite;
 
 use alloc::boxed::Box;
 
-use ring::aead;
+use super::ring_like::aead;
 
 pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
 
