@@ -106,11 +106,12 @@ pub trait ResolvesClientCert: Send + Sync {
     fn has_certs(&self) -> bool;
 }
 
-/// Common configuration for (typically) all connections made by
-/// a program.
+/// Common configuration for (typically) all connections made by a program.
 ///
-/// Making one of these can be expensive, and should be
-/// once per process rather than once per connection.
+/// Making one of these is cheap, though one of the inputs may be expensive: gathering trust roots
+/// from the operating system to add to the [`RootCertStore`] passed to `with_root_certificates()`
+/// (the rustls-native-certs crate is often used for this) may take on the order of a few hundred
+/// milliseconds.
 ///
 /// These must be created via the [`ClientConfig::builder()`] function.
 ///
@@ -121,6 +122,8 @@ pub trait ResolvesClientCert: Send + Sync {
 ///    ids or tickets, with a max of eight tickets per server.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
+///
+/// [`RootCertStore`]: crate::RootCertStore
 #[derive(Clone)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
