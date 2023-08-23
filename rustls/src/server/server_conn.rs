@@ -185,8 +185,9 @@ impl<'a> ClientHello<'a> {
 
 /// Common configuration for a set of server sessions.
 ///
-/// Making one of these can be expensive, and should be
-/// once per process rather than once per connection.
+/// Making one of these is cheap, though one of the inputs may be expensive: gathering trust roots
+/// from the operating system to add to the [`RootCertStore`] passed to a `ClientCertVerifier`
+/// builder may take on the order of a few hundred milliseconds.
 ///
 /// These must be created via the [`ServerConfig::builder()`] function.
 ///
@@ -197,6 +198,8 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
+///
+/// [`RootCertStore`]: crate::RootCertStore
 pub struct ServerConfig<C: CryptoProvider> {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
