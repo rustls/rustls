@@ -2,7 +2,11 @@ use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::rand::GetRandomFailed;
 use crate::suites::SupportedCipherSuite;
 
-use ring::rand::{SecureRandom, SystemRandom};
+pub(crate) use ring as ring_like;
+use ring_like::rand::{SecureRandom, SystemRandom};
+
+/// Using software keys for authentication.
+pub mod sign;
 
 pub(crate) mod hash;
 pub(crate) mod hmac;
@@ -13,9 +17,6 @@ pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
 pub(crate) mod tls12;
 pub(crate) mod tls13;
-
-/// Using software keys for authentication.
-pub mod sign;
 
 /// A `CryptoProvider` backed by the [*ring*] crate.
 ///

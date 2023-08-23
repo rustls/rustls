@@ -14,7 +14,7 @@ use crate::tls12::Tls12CipherSuite;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use ring::aead;
+use super::ring_like::aead;
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =

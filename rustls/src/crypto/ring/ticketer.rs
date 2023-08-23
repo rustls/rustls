@@ -2,7 +2,8 @@ use crate::error::Error;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
 
-use ring::aead;
+use super::ring_like::aead;
+use super::ring_like::rand::{SecureRandom, SystemRandom};
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -26,7 +27,9 @@ impl Ticketer {
 
 fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
     let mut key = [0u8; 32];
-    super::RING.fill_random(&mut key)?;
+    SystemRandom::new()
+        .fill(&mut key)
+        .map_err(|_| GetRandomFailed)?;
 
     let alg = &aead::CHACHA20_POLY1305;
     let key = aead::UnboundKey::new(alg, &key).unwrap();
@@ -60,11 +63,11 @@ impl ProducesTickets for AeadTicketer {
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Random nonce, because a counter is a privacy leak.
         let mut nonce_buf = [0u8; 12];
-        super::RING
-            .fill_random(&mut nonce_buf)
+        SystemRandom::new()
+            .fill(&mut nonce_buf)
             .ok()?;
         let nonce = aead::Nonce::assume_unique_for_key(nonce_buf);
-        let aad = ring::aead::Aad::empty();
+        let aad = aead::Aad::empty();
 
         let mut ciphertext =
             Vec::with_capacity(nonce_buf.len() + message.len() + self.key.algorithm().tag_len());
