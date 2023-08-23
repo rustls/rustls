@@ -316,7 +316,7 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 mod tests {
     use super::*;
     use crate::common_state::{CommonState, Side};
-    use crate::crypto::ring::X25519;
+    use crate::crypto::ring::kx_group::X25519;
     use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
     #[test]
