@@ -604,7 +604,7 @@ mod client_hello {
         common.send_msg(m, false);
     }
 
-    #[allow(clippy::needless_pass_by_ref_mut)] // cx only mutated if cfg(feature = "quic")
+    #[cfg_attr(not(feature = "quic"), allow(clippy::needless_pass_by_ref_mut))]
     fn decide_if_early_data_allowed<C: CryptoProvider>(
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
