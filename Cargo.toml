@@ -1,8 +1,14 @@
 [workspace]
 members = [
+  # CI benchmarks
+  "ci-bench",
   # tests and example code
   "examples",
   # the main library and tests
+  "rustls",
+]
+default-members = [
+  "examples",
   "rustls",
 ]
 exclude = ["admin/rustfmt"]

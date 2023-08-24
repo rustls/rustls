@@ -1,0 +1,17 @@
+[package]
+name = "rustls-ci-bench"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0 OR ISC OR MIT"
+description = "Rustls CPU instruction counting benchmarks."
+publish = false
+
+[dependencies]
+anyhow = "1.0.73"
+byteorder = "1.4.3"
+clap = { version = "4.3.21", features = ["derive"] }
+itertools = "0.11.0"
+rayon = "1.7.0"
+rustls = { path = "../rustls" }
+rustls-pemfile = "1.0.3"
+
