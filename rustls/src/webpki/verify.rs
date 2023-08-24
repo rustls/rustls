@@ -144,7 +144,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 /// Default `ServerCertVerifier`, see the trait impl for more information.
 #[allow(unreachable_pub)]
 pub struct WebPkiServerVerifier {
-    roots: RootCertStore,
+    roots: Arc<RootCertStore>,
 }
 
 #[allow(unreachable_pub)]
@@ -152,8 +152,10 @@ impl WebPkiServerVerifier {
     /// Constructs a new `WebPkiServerVerifier`.
     ///
     /// `roots` is the set of trust anchors to trust for issuing server certs.
-    pub fn new(roots: RootCertStore) -> Self {
-        Self { roots }
+    pub fn new(roots: impl Into<Arc<RootCertStore>>) -> Self {
+        Self {
+            roots: roots.into(),
+        }
     }
 
     /// Which signature verification schemes the `webpki` crate supports.

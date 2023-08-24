@@ -16,7 +16,7 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
     /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,
-        root_store: webpki::RootCertStore,
+        root_store: impl Into<Arc<webpki::RootCertStore>>,
     ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
         ConfigBuilder {
             state: WantsClientCert {
