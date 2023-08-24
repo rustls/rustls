@@ -17,14 +17,14 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,
-        root_store: anchors::RootCertStore,
+        root_store: impl Into<Arc<anchors::RootCertStore>>,
     ) -> ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {
         ConfigBuilder {
             state: WantsTransparencyPolicyOrClientCert {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
                 versions: self.state.versions,
-                root_store,
+                root_store: root_store.into(),
             },
             side: PhantomData,
         }
@@ -60,7 +60,7 @@ pub struct WantsTransparencyPolicyOrClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static SupportedKxGroup>,
     versions: versions::EnabledVersions,
-    root_store: anchors::RootCertStore,
+    root_store: Arc<anchors::RootCertStore>,
 }
 
 impl ConfigBuilder<ClientConfig, WantsTransparencyPolicyOrClientCert> {

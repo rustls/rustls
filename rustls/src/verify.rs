@@ -419,7 +419,7 @@ impl ServerCertVerifier for WebPkiVerifier {
 #[allow(unreachable_pub)]
 #[cfg_attr(docsrs, doc(cfg(feature = "dangerous_configuration")))]
 pub struct WebPkiVerifier {
-    roots: RootCertStore,
+    roots: Arc<RootCertStore>,
     ct_policy: Option<CertificateTransparencyPolicy>,
 }
 
@@ -432,8 +432,14 @@ impl WebPkiVerifier {
     /// `ct_logs` is the list of logs that are trusted for Certificate
     /// Transparency. Currently CT log enforcement is opportunistic; see
     /// <https://github.com/rustls/rustls/issues/479>.
-    pub fn new(roots: RootCertStore, ct_policy: Option<CertificateTransparencyPolicy>) -> Self {
-        Self { roots, ct_policy }
+    pub fn new(
+        roots: impl Into<Arc<RootCertStore>>,
+        ct_policy: Option<CertificateTransparencyPolicy>,
+    ) -> Self {
+        Self {
+            roots: roots.into(),
+            ct_policy,
+        }
     }
 
     /// Returns the signature verification methods supported by
