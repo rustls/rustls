@@ -6,7 +6,6 @@
 
 use rustls::client::danger::HandshakeSignatureValid;
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
-use rustls::crypto::ring::{kx_group, Ticketer, ALL_KX_GROUPS};
 use rustls::crypto::SupportedKxGroup;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
@@ -17,6 +16,11 @@ use rustls::{
     PeerMisbehaved, ProtocolVersion, ServerName, Side, SignatureAlgorithm, SignatureScheme,
     SupportedProtocolVersion,
 };
+
+#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+use rustls::crypto::aws_lc_rs as provider;
+#[cfg(feature = "ring")]
+use rustls::crypto::ring as provider;
 
 use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
@@ -358,9 +362,9 @@ fn lookup_scheme(scheme: u16) -> SignatureScheme {
 
 fn lookup_kx_group(group: u16) -> &'static dyn SupportedKxGroup {
     match group {
-        0x001d => kx_group::X25519,
-        0x0017 => kx_group::SECP256R1,
-        0x0018 => kx_group::SECP384R1,
+        0x001d => provider::kx_group::X25519,
+        0x0017 => provider::kx_group::SECP256R1,
+        0x0018 => provider::kx_group::SECP384R1,
         _ => {
             println_err!("Unsupported kx group {:04x}", group);
             process::exit(BOGO_NACK);
@@ -445,7 +449,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
             .map(|curveid| lookup_kx_group(*curveid))
             .collect()
     } else {
-        ALL_KX_GROUPS.to_vec()
+        provider::ALL_KX_GROUPS.to_vec()
     };
 
     let mut cfg = ServerConfig::builder()
@@ -470,7 +474,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     }
 
     if opts.tickets {
-        cfg.ticketer = Ticketer::new().unwrap();
+        cfg.ticketer = provider::Ticketer::new().unwrap();
     } else if opts.resumes == 0 {
         cfg.session_storage = Arc::new(server::NoServerSessionStorage {});
     }
@@ -561,7 +565,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
             .map(|curveid| lookup_kx_group(*curveid))
             .collect()
     } else {
-        ALL_KX_GROUPS.to_vec()
+        provider::ALL_KX_GROUPS.to_vec()
     };
 
     let cfg = ClientConfig::builder()

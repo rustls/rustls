@@ -14,10 +14,11 @@ use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use rustls::client::Resumption;
-use rustls::crypto::ring::{cipher_suite, Ticketer};
+use rustls::crypto::{aws_lc_rs, ring};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
-    ClientConfig, ClientConnection, ProtocolVersion, RootCertStore, ServerConfig, ServerConnection,
+    CipherSuite, ClientConfig, ClientConnection, ProtocolVersion, RootCertStore, ServerConfig,
+    ServerConnection,
 };
 
 use crate::benchmark::{
@@ -143,7 +144,7 @@ fn main() -> anyhow::Result<()> {
 
             let handshake_buf = &mut [0u8; 262144];
             let resumption_kind = black_box(bench.kind.resumption_kind());
-            let params = black_box(bench.params);
+            let params = black_box(&bench.params);
             let io = StepperIo {
                 reader: &mut stdin,
                 writer: &mut stdout,
@@ -153,7 +154,7 @@ fn main() -> anyhow::Result<()> {
                 Side::Server => run_bench(
                     ServerSideStepper {
                         io,
-                        config: ServerSideStepper::make_config(&params, resumption_kind),
+                        config: ServerSideStepper::make_config(params, resumption_kind),
                     },
                     bench.kind,
                 ),
@@ -161,7 +162,7 @@ fn main() -> anyhow::Result<()> {
                     ClientSideStepper {
                         io,
                         resumption_kind,
-                        config: ClientSideStepper::make_config(&params, resumption_kind),
+                        config: ClientSideStepper::make_config(params, resumption_kind),
                     },
                     bench.kind,
                 ),
@@ -198,7 +199,7 @@ fn main() -> anyhow::Result<()> {
 /// Returns all benchmarks
 fn all_benchmarks() -> anyhow::Result<Vec<Benchmark>> {
     let mut benchmarks = Vec::new();
-    for &param in ALL_BENCHMARK_PARAMS {
+    for param in all_benchmarks_params() {
         add_benchmark_group(&mut benchmarks, param);
     }
 
@@ -207,38 +208,86 @@ fn all_benchmarks() -> anyhow::Result<Vec<Benchmark>> {
 }
 
 /// The benchmark params to use for each group of benchmarks
-static ALL_BENCHMARK_PARAMS: &[BenchmarkParams] = &[
-    BenchmarkParams::new(
-        KeyType::Rsa,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        &rustls::version::TLS12,
-        "1.2_rsa_aes",
-    ),
-    BenchmarkParams::new(
-        KeyType::Rsa,
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
-        "1.3_rsa_aes",
-    ),
-    BenchmarkParams::new(
-        KeyType::Ecdsa,
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
-        "1.3_ecdsa_aes",
-    ),
-    BenchmarkParams::new(
-        KeyType::Rsa,
-        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS13,
-        "1.3_rsa_chacha",
-    ),
-    BenchmarkParams::new(
-        KeyType::Ecdsa,
-        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS13,
-        "1.3_ecdsa_chacha",
-    ),
-];
+fn all_benchmarks_params() -> Vec<BenchmarkParams> {
+    let mut all = Vec::new();
+
+    for (provider, suites, ticketer, provider_name) in [
+        (
+            ring::RING,
+            ring::ALL_CIPHER_SUITES,
+            &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
+            "ring",
+        ),
+        (
+            aws_lc_rs::AWS_LC_RS,
+            aws_lc_rs::ALL_CIPHER_SUITES,
+            &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
+            "aws_lc_rs",
+        ),
+    ] {
+        for (key_type, suite_name, version, name) in [
+            (
+                KeyType::Rsa,
+                CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                &rustls::version::TLS12,
+                "1.2_rsa_aes",
+            ),
+            (
+                KeyType::Rsa,
+                CipherSuite::TLS13_AES_128_GCM_SHA256,
+                &rustls::version::TLS13,
+                "1.3_rsa_aes",
+            ),
+            (
+                KeyType::Ecdsa,
+                CipherSuite::TLS13_AES_128_GCM_SHA256,
+                &rustls::version::TLS13,
+                "1.3_ecdsa_aes",
+            ),
+            (
+                KeyType::Rsa,
+                CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+                &rustls::version::TLS13,
+                "1.3_rsa_chacha",
+            ),
+            (
+                KeyType::Ecdsa,
+                CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+                &rustls::version::TLS13,
+                "1.3_ecdsa_chacha",
+            ),
+        ] {
+            all.push(BenchmarkParams::new(
+                provider,
+                ticketer,
+                key_type,
+                find_suite(suites, suite_name),
+                version,
+                format!("{provider_name}_{name}"),
+            ));
+        }
+    }
+
+    all
+}
+
+fn find_suite(
+    all: &[rustls::SupportedCipherSuite],
+    name: CipherSuite,
+) -> rustls::SupportedCipherSuite {
+    all.iter()
+        .find(|suite| suite.suite() == name)
+        .expect(&format!("cannot find cipher suite {name:?}"))
+        .clone()
+}
+
+fn ring_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
+    ring::Ticketer::new().unwrap()
+}
+
+fn aws_lc_rs_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
+    aws_lc_rs::Ticketer::new().unwrap()
+}
 
 /// Adds a group of benchmarks for the specified parameters
 ///
@@ -249,14 +298,14 @@ static ALL_BENCHMARK_PARAMS: &[BenchmarkParams] = &[
 /// - Handshake with ticket resumption
 /// - Transfer a 1MB data stream from the server to the client
 fn add_benchmark_group(benchmarks: &mut Vec<Benchmark>, params: BenchmarkParams) {
-    let params_label = params.label;
+    let params_label = params.label.clone();
 
     // Create handshake benchmarks for all resumption kinds
     for &resumption_param in ResumptionKind::ALL {
         let handshake_bench = Benchmark::new(
             format!("handshake_{}_{params_label}", resumption_param.label()),
             BenchmarkKind::Handshake(resumption_param),
-            params,
+            params.clone(),
         );
 
         let handshake_bench = if resumption_param != ResumptionKind::No {
@@ -276,7 +325,7 @@ fn add_benchmark_group(benchmarks: &mut Vec<Benchmark>, params: BenchmarkParams)
         Benchmark::new(
             format!("transfer_no_resume_{params_label}"),
             BenchmarkKind::Transfer,
-            params,
+            params.clone(),
         )
         .exclude_setup_instructions(format!("handshake_no_resume_{params_label}")),
     );
@@ -357,7 +406,7 @@ impl ClientSideStepper<'_> {
             rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
         );
 
-        let mut cfg = ClientConfig::builder()
+        let mut cfg = ClientConfig::builder_with_provider(params.provider)
             .with_cipher_suites(&[params.ciphersuite])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[params.version])
@@ -428,7 +477,7 @@ impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
 
-        let mut cfg = ServerConfig::builder()
+        let mut cfg = ServerConfig::builder_with_provider(params.provider)
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[params.version])
@@ -440,7 +489,7 @@ impl ServerSideStepper<'_> {
         if resume == ResumptionKind::SessionId {
             cfg.session_storage = ServerSessionMemoryCache::new(128);
         } else if resume == ResumptionKind::Tickets {
-            cfg.ticketer = Ticketer::new().unwrap();
+            cfg.ticketer = (params.ticketer)();
         } else {
             cfg.session_storage = Arc::new(NoServerSessionStorage {});
         }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use fxhash::{FxHashMap, FxHashSet};
 use itertools::Itertools;
 
@@ -120,8 +122,12 @@ impl ResumptionKind {
 }
 
 /// Parameters associated to a benchmark
-#[derive(Copy, Clone)]
+#[derive(Clone, Debug)]
 pub struct BenchmarkParams {
+    /// Which `CryptoProvider` to test
+    pub provider: &'static dyn rustls::crypto::CryptoProvider,
+    /// How to make a suitable [`rustls::server::ProducesTickets`].
+    pub ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
     /// The type of key used to sign the TLS certificate
     pub key_type: KeyType,
     /// Cipher suite
@@ -129,18 +135,22 @@ pub struct BenchmarkParams {
     /// TLS version
     pub version: &'static rustls::SupportedProtocolVersion,
     /// A user-facing label that identifies these params
-    pub label: &'static str,
+    pub label: String,
 }
 
 impl BenchmarkParams {
     /// Create a new set of benchmark params
     pub const fn new(
+        provider: &'static dyn rustls::crypto::CryptoProvider,
+        ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
         key_type: KeyType,
         ciphersuite: rustls::SupportedCipherSuite,
         version: &'static rustls::SupportedProtocolVersion,
-        label: &'static str,
+        label: String,
     ) -> Self {
         Self {
+            provider,
+            ticketer,
             key_type,
             ciphersuite,
             version,

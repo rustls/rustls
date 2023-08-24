@@ -1,4 +1,4 @@
-#![cfg(feature = "ring")]
+#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
 #![cfg_attr(read_buf, feature(read_buf))]
 //! Assorted public API tests.
 use std::cell::RefCell;
@@ -11,17 +11,15 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
-use rustls::client::{
-    verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption, WebPkiServerVerifier,
-};
-use rustls::crypto::ring::sign::RsaSigningKey;
-use rustls::crypto::ring::{cipher_suite, ALL_CIPHER_SUITES};
+use primary_provider::cipher_suite;
+use primary_provider::sign::RsaSigningKey;
+use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
-use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert, WebPkiClientVerifier};
+use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::SupportedCipherSuite;
 use rustls::{
     sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, KeyLog,
@@ -223,7 +221,7 @@ fn check_read_buf_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
 #[test]
 fn config_builder_for_client_rejects_empty_kx_groups() {
     assert_eq!(
-        ClientConfig::builder()
+        client_config_builder()
             .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
@@ -235,7 +233,7 @@ fn config_builder_for_client_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_client_rejects_empty_cipher_suites() {
     assert_eq!(
-        ClientConfig::builder()
+        client_config_builder()
             .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
@@ -248,7 +246,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_client_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        ClientConfig::builder()
+        client_config_builder()
             .with_cipher_suites(&[cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
@@ -260,7 +258,7 @@ fn config_builder_for_client_rejects_incompatible_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_empty_kx_groups() {
     assert_eq!(
-        ServerConfig::builder()
+        server_config_builder()
             .with_safe_default_cipher_suites()
             .with_kx_groups(&[])
             .with_safe_default_protocol_versions()
@@ -272,7 +270,7 @@ fn config_builder_for_server_rejects_empty_kx_groups() {
 #[test]
 fn config_builder_for_server_rejects_empty_cipher_suites() {
     assert_eq!(
-        ServerConfig::builder()
+        server_config_builder()
             .with_cipher_suites(&[])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
@@ -285,7 +283,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
 #[test]
 fn config_builder_for_server_rejects_incompatible_cipher_suites() {
     assert_eq!(
-        ServerConfig::builder()
+        server_config_builder()
             .with_cipher_suites(&[cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
@@ -446,15 +444,16 @@ fn server_can_get_client_cert_after_resumption() {
 }
 
 #[test]
+#[cfg(feature = "ring")]
 fn test_config_builders_debug() {
-    let b = ServerConfig::builder();
+    let b = server_config_builder();
     assert_eq!(
         "ConfigBuilder<ServerConfig, _> { state: WantsCipherSuites(Ring) }",
         format!("{:?}", b)
     );
     let b = b.with_cipher_suites(&[cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
     assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsKxGroups { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], provider: Ring } }", format!("{:?}", b));
-    let b = b.with_kx_groups(&[rustls::crypto::ring::kx_group::X25519]);
+    let b = b.with_kx_groups(&[primary_provider::kx_group::X25519]);
     assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsVersions { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], provider: Ring } }", format!("{:?}", b));
     let b = b
         .with_protocol_versions(&[&rustls::version::TLS13])
@@ -462,14 +461,14 @@ fn test_config_builders_debug() {
     let b = b.with_no_client_auth();
     assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsServerCert { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], provider: Ring, versions: [TLSv1_3], verifier: dyn ClientCertVerifier } }", format!("{:?}", b));
 
-    let b = ClientConfig::builder();
+    let b = client_config_builder();
     assert_eq!(
         "ConfigBuilder<ClientConfig, _> { state: WantsCipherSuites(Ring) }",
         format!("{:?}", b)
     );
     let b = b.with_cipher_suites(&[cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
     assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsKxGroups { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], provider: Ring } }", format!("{:?}", b));
-    let b = b.with_kx_groups(&[rustls::crypto::ring::kx_group::X25519]);
+    let b = b.with_kx_groups(&[primary_provider::kx_group::X25519]);
     assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsVersions { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], provider: Ring } }", format!("{:?}", b));
     let b = b
         .with_protocol_versions(&[&rustls::version::TLS13])
@@ -486,12 +485,12 @@ fn server_allow_any_anonymous_or_authenticated_client() {
     let kt = KeyType::Rsa;
     for client_cert_chain in [None, Some(kt.get_client_chain())].iter() {
         let client_auth_roots = get_client_root_store(kt);
-        let client_auth = WebPkiClientVerifier::builder(client_auth_roots.clone())
+        let client_auth = webpki_client_verifier_builder(client_auth_roots.clone())
             .allow_unauthenticated()
             .build()
             .unwrap();
 
-        let server_config = ServerConfig::builder()
+        let server_config = server_config_builder()
             .with_safe_defaults()
             .with_client_cert_verifier(client_auth)
             .with_single_cert(kt.get_chain(), kt.get_key())
@@ -899,7 +898,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
 ) {
     let client_config = finish_client_config(
         kt,
-        ClientConfig::builder()
+        client_config_builder()
             .with_cipher_suites(&[find_suite(suite)])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
@@ -1066,7 +1065,7 @@ fn client_check_server_certificate_ee_revoked() {
 
         // Setup a server verifier that will check the EE certificate's revocation status.
         let crls = vec![kt.end_entity_crl()];
-        let builder = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+        let builder = webpki_server_verifier_builder(get_client_root_store(*kt))
             .with_crls(crls)
             .only_check_end_entity_revocation();
 
@@ -1097,12 +1096,12 @@ fn client_check_server_certificate_ee_unknown_revocation() {
         // allow unknown revocation status (the default). We'll provide CRLs that are not relevant
         // to the EE cert to ensure its status is unknown.
         let unrelated_crls = vec![kt.intermediate_crl()];
-        let forbid_unknown_verifier = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+        let forbid_unknown_verifier = webpki_server_verifier_builder(get_client_root_store(*kt))
             .with_crls(unrelated_crls.clone())
             .only_check_end_entity_revocation();
 
         // Also set up a verifier builder that will allow unknown revocation status.
-        let allow_unknown_verifier = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+        let allow_unknown_verifier = webpki_server_verifier_builder(get_client_root_store(*kt))
             .with_crls(unrelated_crls)
             .only_check_end_entity_revocation()
             .allow_unknown_revocation_status();
@@ -1145,13 +1144,14 @@ fn client_check_server_certificate_intermediate_revoked() {
         // that marks the intermediate certificate as revoked. We allow unknown revocation status
         // so the EE cert's unknown status doesn't cause an error.
         let crls = vec![kt.intermediate_crl()];
-        let full_chain_verifier_builder = WebPkiServerVerifier::builder(get_client_root_store(*kt))
-            .with_crls(crls.clone())
-            .allow_unknown_revocation_status();
+        let full_chain_verifier_builder =
+            webpki_server_verifier_builder(get_client_root_store(*kt))
+                .with_crls(crls.clone())
+                .allow_unknown_revocation_status();
 
         // Also set up a verifier builder that will use the same CRL, but only check the EE certificate
         // revocation status.
-        let ee_verifier_builder = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+        let ee_verifier_builder = webpki_server_verifier_builder(get_client_root_store(*kt))
             .with_crls(crls.clone())
             .only_check_end_entity_revocation()
             .allow_unknown_revocation_status();
@@ -1351,7 +1351,7 @@ fn client_cert_resolve_server_no_hints() {
     // arguments.
     for key_type in ALL_KEY_TYPES.into_iter() {
         // Build a verifier with no hint subjects.
-        let verifier = WebPkiClientVerifier::builder(get_client_root_store(key_type))
+        let verifier = webpki_client_verifier_builder(get_client_root_store(key_type))
             .clear_root_hint_subjects();
         let server_config = make_server_config_with_client_verifier(key_type, verifier);
         let expected_root_hint_subjects = Vec::default(); // no hints expected.
@@ -1378,7 +1378,7 @@ fn client_cert_resolve_server_added_hint() {
         ];
         // Create a verifier that adds the extra_name as a hint subject in addition to the ones
         // from the root cert store.
-        let verifier = WebPkiClientVerifier::builder(get_client_root_store(key_type))
+        let verifier = webpki_client_verifier_builder(get_client_root_store(key_type))
             .add_root_hint_subjects([DistinguishedName::from(extra_name.clone())].into_iter());
         let server_config = make_server_config_with_client_verifier(key_type, verifier);
         test_client_cert_resolve(key_type, server_config.into(), expected_hint_subjects);
@@ -1407,7 +1407,7 @@ fn client_mandatory_auth_client_revocation_works() {
         let relevant_crls = vec![kt.client_crl()];
         // Only check the EE certificate status. See client_mandatory_auth_intermediate_revocation_works
         // for testing revocation status of the whole chain.
-        let ee_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+        let ee_verifier_builder = webpki_client_verifier_builder(get_client_root_store(*kt))
             .with_crls(relevant_crls)
             .only_check_end_entity_revocation();
         let revoked_server_config = Arc::new(make_server_config_with_client_verifier(
@@ -1418,7 +1418,7 @@ fn client_mandatory_auth_client_revocation_works() {
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // and uses the default behaviour of treating unknown revocation status as an error.
         let unrelated_crls = vec![kt.intermediate_crl()];
-        let ee_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+        let ee_verifier_builder = webpki_client_verifier_builder(get_client_root_store(*kt))
             .with_crls(unrelated_crls.clone())
             .only_check_end_entity_revocation();
         let missing_client_crl_server_config = Arc::new(make_server_config_with_client_verifier(
@@ -1428,7 +1428,7 @@ fn client_mandatory_auth_client_revocation_works() {
 
         // Create a server configuration that includes a CRL that doesn't cover the client certificate,
         // but change the builder to allow unknown revocation status.
-        let ee_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+        let ee_verifier_builder = webpki_client_verifier_builder(get_client_root_store(*kt))
             .with_crls(unrelated_crls.clone())
             .only_check_end_entity_revocation()
             .allow_unknown_revocation_status();
@@ -1478,9 +1478,10 @@ fn client_mandatory_auth_intermediate_revocation_works() {
         // is revoked. We check the full chain for revocation status (default), and allow unknown
         // revocation status so the EE's unknown revocation status isn't an error.
         let crls = vec![kt.intermediate_crl()];
-        let full_chain_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
-            .with_crls(crls.clone())
-            .allow_unknown_revocation_status();
+        let full_chain_verifier_builder =
+            webpki_client_verifier_builder(get_client_root_store(*kt))
+                .with_crls(crls.clone())
+                .allow_unknown_revocation_status();
         let full_chain_server_config = Arc::new(make_server_config_with_client_verifier(
             *kt,
             full_chain_verifier_builder,
@@ -1488,7 +1489,7 @@ fn client_mandatory_auth_intermediate_revocation_works() {
 
         // Also create a server configuration that uses the same CRL, but that only checks the EE
         // cert revocation status.
-        let ee_only_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+        let ee_only_verifier_builder = webpki_client_verifier_builder(get_client_root_store(*kt))
             .with_crls(crls)
             .only_check_end_entity_revocation()
             .allow_unknown_revocation_status();
@@ -2307,7 +2308,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let kt = KeyType::Rsa;
     let server_config = finish_server_config(
         kt,
-        ServerConfig::builder()
+        server_config_builder()
             .with_cipher_suites(&[cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
@@ -2316,7 +2317,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
 
     let client_config = finish_client_config(
         kt,
-        ClientConfig::builder()
+        client_config_builder()
             .with_cipher_suites(&[cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
@@ -2820,7 +2821,10 @@ fn do_suite_test(
 }
 
 fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
-    for scs in ALL_CIPHER_SUITES.iter().copied() {
+    for scs in primary_provider::ALL_CIPHER_SUITES
+        .iter()
+        .copied()
+    {
         if scs.suite() == suite {
             return scs;
         }
@@ -2897,7 +2901,10 @@ fn negotiated_ciphersuite_default() {
 
 #[test]
 fn all_suites_covered() {
-    assert_eq!(ALL_CIPHER_SUITES.len(), TEST_CIPHERSUITES.len());
+    assert_eq!(
+        primary_provider::ALL_CIPHER_SUITES.len(),
+        TEST_CIPHERSUITES.len()
+    );
 }
 
 #[test]
@@ -2907,7 +2914,7 @@ fn negotiated_ciphersuite_client() {
         let scs = find_suite(suite);
         let client_config = finish_client_config(
             kt,
-            ClientConfig::builder()
+            client_config_builder()
                 .with_cipher_suites(&[scs])
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[version])
@@ -2925,7 +2932,7 @@ fn negotiated_ciphersuite_server() {
         let scs = find_suite(suite);
         let server_config = finish_server_config(
             kt,
-            ServerConfig::builder()
+            server_config_builder()
                 .with_cipher_suites(&[scs])
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[version])
@@ -3557,7 +3564,7 @@ fn tls13_stateless_resumption() {
     let client_config = Arc::new(client_config);
 
     let mut server_config = make_server_config(kt);
-    server_config.ticketer = rustls::crypto::ring::Ticketer::new().unwrap();
+    server_config.ticketer = primary_provider::Ticketer::new().unwrap();
     let storage = Arc::new(ServerStorage::new());
     server_config.session_storage = storage.clone();
     let server_config = Arc::new(server_config);
@@ -4053,6 +4060,7 @@ mod test_quic {
     }
 
     #[test]
+    #[cfg(feature = "ring")] // uses ring APIs directly
     fn test_quic_server_no_params_received() {
         let server_config =
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
@@ -4065,7 +4073,6 @@ mod test_quic {
         )
         .unwrap();
 
-        use rustls::crypto::ring::RING;
         use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
@@ -4073,7 +4080,9 @@ mod test_quic {
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let mut random = [0; 32];
-        RING.fill_random(&mut random).unwrap();
+        PROVIDER
+            .fill_random(&mut random)
+            .unwrap();
         let random = Random::from(random);
 
         let rng = ring::rand::SystemRandom::new();
@@ -4087,7 +4096,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_3,
                 random,
-                session_id: SessionId::random(RING).unwrap(),
+                session_id: SessionId::random(PROVIDER).unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![
@@ -4113,13 +4122,13 @@ mod test_quic {
     }
 
     #[test]
+    #[cfg(feature = "ring")] // uses ring APIs directly
     fn test_quic_server_no_tls12() {
         let mut server_config =
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
         server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
 
-        use rustls::crypto::ring::RING;
         use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
@@ -4127,7 +4136,9 @@ mod test_quic {
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let mut random = [0; 32];
-        RING.fill_random(&mut random).unwrap();
+        PROVIDER
+            .fill_random(&mut random)
+            .unwrap();
         let random = Random::from(random);
 
         let rng = ring::rand::SystemRandom::new();
@@ -4148,7 +4159,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_2,
                 random,
-                session_id: SessionId::random(RING).unwrap(),
+                session_id: SessionId::random(PROVIDER).unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![
@@ -4426,26 +4437,20 @@ fn test_client_does_not_offer_sha1() {
 
 #[test]
 fn test_client_config_keyshare() {
-    let client_config = make_client_config_with_kx_groups(
-        KeyType::Rsa,
-        &[rustls::crypto::ring::kx_group::SECP384R1],
-    );
-    let server_config = make_server_config_with_kx_groups(
-        KeyType::Rsa,
-        &[rustls::crypto::ring::kx_group::SECP384R1],
-    );
+    let client_config =
+        make_client_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::SECP384R1]);
+    let server_config =
+        make_server_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::SECP384R1]);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake_until_error(&mut client, &mut server).unwrap();
 }
 
 #[test]
 fn test_client_config_keyshare_mismatch() {
-    let client_config = make_client_config_with_kx_groups(
-        KeyType::Rsa,
-        &[rustls::crypto::ring::kx_group::SECP384R1],
-    );
+    let client_config =
+        make_client_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::SECP384R1]);
     let server_config =
-        make_server_config_with_kx_groups(KeyType::Rsa, &[rustls::crypto::ring::kx_group::X25519]);
+        make_server_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::X25519]);
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }
@@ -4457,8 +4462,8 @@ fn test_client_sends_helloretryrequest() {
     let mut client_config = make_client_config_with_kx_groups(
         KeyType::Rsa,
         &[
-            rustls::crypto::ring::kx_group::SECP384R1,
-            rustls::crypto::ring::kx_group::X25519,
+            primary_provider::kx_group::SECP384R1,
+            primary_provider::kx_group::X25519,
         ],
     );
 
@@ -4467,7 +4472,7 @@ fn test_client_sends_helloretryrequest() {
 
     // but server only accepts x25519, so a HRR is required
     let server_config =
-        make_server_config_with_kx_groups(KeyType::Rsa, &[rustls::crypto::ring::kx_group::X25519]);
+        make_server_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::X25519]);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
@@ -4553,9 +4558,8 @@ fn test_client_sends_helloretryrequest() {
 
 #[test]
 fn test_client_rejects_hrr_with_varied_session_id() {
-    use rustls::crypto::ring::RING;
     use rustls::internal::msgs::handshake::SessionId;
-    let different_session_id = SessionId::random(RING).unwrap();
+    let different_session_id = SessionId::random(PROVIDER).unwrap();
 
     let assert_client_sends_hello_with_secp384 = |msg: &mut Message| -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
@@ -4589,13 +4593,13 @@ fn test_client_rejects_hrr_with_varied_session_id() {
     let client_config = make_client_config_with_kx_groups(
         KeyType::Rsa,
         &[
-            rustls::crypto::ring::kx_group::SECP384R1,
-            rustls::crypto::ring::kx_group::X25519,
+            primary_provider::kx_group::SECP384R1,
+            primary_provider::kx_group::X25519,
         ],
     );
 
     let server_config =
-        make_server_config_with_kx_groups(KeyType::Rsa, &[rustls::crypto::ring::kx_group::X25519]);
+        make_server_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::X25519]);
 
     let (client, server) = make_pair_for_configs(client_config, server_config);
     let (mut client, mut server) = (client.into(), server.into());
@@ -4627,15 +4631,13 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     // first, client sends a x25519 and server agrees. x25519 is inserted
     //   into kx group cache.
     let mut client_config_1 =
-        make_client_config_with_kx_groups(KeyType::Rsa, &[rustls::crypto::ring::kx_group::X25519]);
+        make_client_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::X25519]);
     client_config_1.resumption = Resumption::store(shared_storage.clone());
 
     // second, client only supports secp-384 and so kx group cache
     //   contains an unusable value.
-    let mut client_config_2 = make_client_config_with_kx_groups(
-        KeyType::Rsa,
-        &[rustls::crypto::ring::kx_group::SECP384R1],
-    );
+    let mut client_config_2 =
+        make_client_config_with_kx_groups(KeyType::Rsa, &[primary_provider::kx_group::SECP384R1]);
     client_config_2.resumption = Resumption::store(shared_storage.clone());
 
     let server_config = make_server_config(KeyType::Rsa);
@@ -4977,7 +4979,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 
     let server_config_1 = Arc::new(common::finish_server_config(
         KeyType::Ed25519,
-        ServerConfig::builder()
+        server_config_builder()
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS13])
@@ -4986,7 +4988,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 
     let mut server_config_2 = common::finish_server_config(
         KeyType::Ed25519,
-        ServerConfig::builder()
+        server_config_builder()
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
@@ -5225,7 +5227,7 @@ fn test_secret_extraction_enabled() {
         println!("Testing suite {:?}", suite.suite().as_str());
 
         // Only offer the cipher suite (and protocol version) that we're testing
-        let mut server_config = ServerConfig::builder()
+        let mut server_config = server_config_builder()
             .with_cipher_suites(&[suite])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[version])
@@ -5289,7 +5291,7 @@ fn test_secret_extraction_disabled_or_too_early() {
     let kt = KeyType::Rsa;
 
     for (server_enable, client_enable) in [(true, false), (false, true)] {
-        let mut server_config = ServerConfig::builder()
+        let mut server_config = server_config_builder()
             .with_cipher_suites(&[suite])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
@@ -5345,7 +5347,7 @@ fn test_received_plaintext_backpressure() {
     let kt = KeyType::Rsa;
 
     let server_config = Arc::new(
-        ServerConfig::builder()
+        server_config_builder()
             .with_cipher_suites(&[suite])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
@@ -5430,7 +5432,7 @@ fn test_debug_server_name_from_string() {
     )
 }
 
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", feature = "aws_lc_rs"))]
 #[test]
 fn test_explicit_provider_selection() {
     let client_config = finish_client_config(
@@ -5440,7 +5442,7 @@ fn test_explicit_provider_selection() {
     );
     let server_config = finish_server_config(
         KeyType::Rsa,
-        rustls::ServerConfig::builder_with_provider(rustls::crypto::ring::RING)
+        rustls::ServerConfig::builder_with_provider(rustls::crypto::aws_lc_rs::AWS_LC_RS)
             .with_safe_defaults(),
     );
 
@@ -5499,14 +5501,14 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
 
 #[test]
 fn test_client_construction_fails_if_random_source_fails_in_first_request() {
-    static PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
-        parent: rustls::crypto::ring::RING,
+    static TEST_PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
+        parent: PROVIDER,
         rand_queue: Mutex::new(b""),
     };
 
     let client_config = finish_client_config(
         KeyType::Rsa,
-        rustls::ClientConfig::builder_with_provider(&PROVIDER).with_safe_defaults(),
+        rustls::ClientConfig::builder_with_provider(&TEST_PROVIDER).with_safe_defaults(),
     );
 
     assert_eq!(
@@ -5517,14 +5519,14 @@ fn test_client_construction_fails_if_random_source_fails_in_first_request() {
 
 #[test]
 fn test_client_construction_fails_if_random_source_fails_in_second_request() {
-    static PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
-        parent: rustls::crypto::ring::RING,
+    static TEST_PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
+        parent: PROVIDER,
         rand_queue: Mutex::new(b"nice random number generator huh"),
     };
 
     let client_config = finish_client_config(
         KeyType::Rsa,
-        rustls::ClientConfig::builder_with_provider(&PROVIDER).with_safe_defaults(),
+        rustls::ClientConfig::builder_with_provider(&TEST_PROVIDER).with_safe_defaults(),
     );
 
     assert_eq!(
@@ -5535,8 +5537,8 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
 
 #[test]
 fn test_client_construction_requires_64_bytes_of_random_material() {
-    static PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
-        parent: rustls::crypto::ring::RING,
+    static TEST_PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
+        parent: PROVIDER,
         rand_queue: Mutex::new(
             b"nice random number generator !!!\
               it's really not very good is it?",
@@ -5545,7 +5547,7 @@ fn test_client_construction_requires_64_bytes_of_random_material() {
 
     let client_config = finish_client_config(
         KeyType::Rsa,
-        rustls::ClientConfig::builder_with_provider(&PROVIDER).with_safe_defaults(),
+        rustls::ClientConfig::builder_with_provider(&TEST_PROVIDER).with_safe_defaults(),
     );
 
     ClientConnection::new(Arc::new(client_config), server_name("localhost"))

@@ -7,10 +7,10 @@ mod common;
 use crate::common::{
     do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,
     make_client_config_with_versions, make_client_config_with_versions_with_auth,
-    make_pair_for_arc_configs, server_name, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
+    make_pair_for_arc_configs, server_config_builder, server_name, webpki_client_verifier_builder,
+    ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
 use rustls::client::danger::HandshakeSignatureValid;
-use rustls::client::WebPkiServerVerifier;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
@@ -41,7 +41,7 @@ fn server_config_with_verifier(
     kt: KeyType,
     client_cert_verifier: MockClientVerifier,
 ) -> ServerConfig {
-    ServerConfig::builder()
+    server_config_builder()
         .with_safe_defaults()
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
         .with_single_cert(kt.get_chain(), kt.get_key())
@@ -140,6 +140,7 @@ fn client_verifier_fails_properly() {
 }
 
 pub struct MockClientVerifier {
+    parent: Arc<dyn ClientCertVerifier>,
     pub verified: fn() -> Result<ClientCertVerified, Error>,
     pub subjects: Vec<DistinguishedName>,
     pub mandatory: bool,
@@ -149,6 +150,9 @@ pub struct MockClientVerifier {
 impl MockClientVerifier {
     pub fn new(verified: fn() -> Result<ClientCertVerified, Error>, kt: KeyType) -> Self {
         Self {
+            parent: webpki_client_verifier_builder(get_client_root_store(kt))
+                .build()
+                .unwrap(),
             verified,
             subjects: get_client_root_store(kt).subjects(),
             mandatory: true,
@@ -181,7 +185,8 @@ impl ClientCertVerifier for MockClientVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+        self.parent
+            .verify_tls12_signature(message, cert, dss)
     }
 
     fn verify_tls13_signature(
@@ -190,14 +195,15 @@ impl ClientCertVerifier for MockClientVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+        self.parent
+            .verify_tls13_signature(message, cert, dss)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         if let Some(schemes) = &self.offered_schemes {
             schemes.clone()
         } else {
-            WebPkiServerVerifier::default_supported_verify_schemes()
+            self.parent.supported_verify_schemes()
         }
     }
 }
