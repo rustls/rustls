@@ -5,9 +5,20 @@
 
 set -xe
 
-if [ "x$USE_EXISTING_BOGO_SHIM" = "x" ] ; then
-  cargo build --example bogo_shim --features quic
-fi
+case ${BOGO_SHIM_PROVIDER:-ring} in
+  ring)
+      cargo build --example bogo_shim --features quic
+      ;;
+  aws-lc-rs)
+      cargo build --example bogo_shim --no-default-features --features quic,aws_lc_rs,tls12,logging
+      ;;
+  existing)
+      ;;
+  *)
+      echo "unsupported BOGO_SHIM_PROVIDER: supported are (ring|aws-lc-rs|existing)"
+      exit 1
+      ;;
+esac
 
 if [ ! -e bogo/ssl/test/runner/runner.test ] ; then
   ./fetch-and-build
