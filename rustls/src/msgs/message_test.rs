@@ -82,12 +82,6 @@ fn alert_is_not_handshake() {
 }
 
 #[test]
-fn alert_is_not_opaque() {
-    let m = Message::build_alert(AlertLevel::Fatal, AlertDescription::DecodeError);
-    assert!(Message::try_from(m).is_ok());
-}
-
-#[test]
 fn construct_all_types() {
     let samples = [
         &b"\x14\x03\x04\x00\x01\x01"[..],

@@ -1278,6 +1278,7 @@ fn client_flush_does_nothing() {
     assert!(matches!(client.writer().flush(), Ok(())));
 }
 
+#[allow(clippy::no_effect)]
 #[test]
 fn server_is_send_and_sync() {
     let (_, server) = make_pair(KeyType::Rsa);
@@ -1285,6 +1286,7 @@ fn server_is_send_and_sync() {
     &server as &dyn Sync;
 }
 
+#[allow(clippy::no_effect)]
 #[test]
 fn client_is_send_and_sync() {
     let (client, _) = make_pair(KeyType::Rsa);
@@ -1513,7 +1515,7 @@ where
         Ok(())
     }
 
-    fn write_vectored<'b>(&mut self, b: &[io::IoSlice<'b>]) -> io::Result<usize> {
+    fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
         let mut total = 0;
         let mut lengths = vec![];
         for bytes in b {
@@ -4281,7 +4283,7 @@ fn test_client_mtu_reduction() {
         fn flush(&mut self) -> io::Result<()> {
             panic!()
         }
-        fn write_vectored<'b>(&mut self, b: &[io::IoSlice<'b>]) -> io::Result<usize> {
+        fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
             let writes = b
                 .iter()
                 .map(|slice| slice.len())
