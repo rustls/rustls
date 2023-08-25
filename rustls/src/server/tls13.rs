@@ -604,6 +604,7 @@ mod client_hello {
         common.send_msg(m, false);
     }
 
+    #[allow(unknown_lints)] // The lint allowed below is nightly only for now
     #[cfg_attr(not(feature = "quic"), allow(clippy::needless_pass_by_ref_mut))]
     fn decide_if_early_data_allowed<C: CryptoProvider>(
         cx: &mut ServerContext<'_>,
