@@ -426,9 +426,11 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectClientHello<C> {
 ///
 /// This represents the first part of the `ClientHello` handling, where we do all validation that
 /// doesn't depend on a `ServerConfig` being available and extract everything needed to build a
-/// [`ClientHello`] value for a [`ResolvesServerConfig`]/`ResolvesServerCert`].
+/// [`ClientHello`] value for a [`ResolvesServerCert`].
 ///
 /// Note that this will modify `data.sni` even if config or certificate resolution fail.
+///
+/// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
 pub(super) fn process_client_hello<'a>(
     m: &'a Message,
     done_retry: bool,

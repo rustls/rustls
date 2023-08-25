@@ -221,6 +221,9 @@ impl<'a> io::Read for Reader<'a> {
 
 /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
 /// allowing them to be the subject of a [`Writer`].
+///
+/// [`ServerConnection`]: crate::ServerConnection
+/// [`ClientConnection`]: crate::ClientConnection
 pub(crate) trait PlaintextSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;

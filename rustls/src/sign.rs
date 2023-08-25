@@ -233,7 +233,7 @@ impl EcdsaSigningKey {
     }
 
     /// Convert a SEC1 encoding to PKCS8, and ask ring to parse it.  This
-    /// can be removed once https://github.com/briansmith/ring/pull/1456
+    /// can be removed once <https://github.com/briansmith/ring/pull/1456>
     /// (or equivalent) is landed.
     fn convert_sec1_to_pkcs8(
         scheme: SignatureScheme,
