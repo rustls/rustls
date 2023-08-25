@@ -690,12 +690,9 @@ fn handle_err(err: Error) -> ! {
 
 fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
     while sess.wants_write() {
-        match sess.write_tls(conn) {
-            Err(err) => {
-                println!("IO error: {:?}", err);
-                process::exit(0);
-            }
-            Ok(_) => {}
+        if let Err(err) = sess.write_tls(conn) {
+            println!("IO error: {:?}", err);
+            process::exit(0);
         }
     }
     conn.flush().unwrap();
@@ -813,8 +810,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
         }
 
         if !sess.is_handshaking() && opts.export_keying_material > 0 && !sent_exporter {
-            let mut export = Vec::new();
-            export.resize(opts.export_keying_material, 0u8);
+            let mut export = vec![0; opts.export_keying_material];
             sess.export_keying_material(
                 &mut export,
                 opts.export_keying_material_label
