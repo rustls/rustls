@@ -169,7 +169,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: cargo doc (all features)
-        run: cargo doc --all-features --no-deps --workspace
+        run: cargo doc --all-features --no-deps --document-private-items --workspace
         env:
           RUSTDOCFLAGS: -Dwarnings
 
