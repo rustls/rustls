@@ -33,7 +33,7 @@ mod online {
     fn expired() {
         connect("expired.badssl.com")
             .fails()
-            .expect(r#"TLS error: InvalidCertificate\(Expired\)"#)
+            .expect(r"TLS error: InvalidCertificate\(Expired\)")
             .go()
             .unwrap();
     }
@@ -42,7 +42,7 @@ mod online {
     fn wrong_host() {
         connect("wrong.host.badssl.com")
             .fails()
-            .expect(r#"TLS error: InvalidCertificate\(NotValidForName\)"#)
+            .expect(r"TLS error: InvalidCertificate\(NotValidForName\)")
             .go()
             .unwrap();
     }
@@ -51,7 +51,7 @@ mod online {
     fn self_signed() {
         connect("self-signed.badssl.com")
             .fails()
-            .expect(r#"TLS error: InvalidCertificate\(UnknownIssuer\)"#)
+            .expect(r"TLS error: InvalidCertificate\(UnknownIssuer\)")
             .go()
             .unwrap();
     }
@@ -118,7 +118,7 @@ mod online {
     fn sha1_2016() {
         connect("sha1-2016.badssl.com")
             .fails()
-            .expect(r#"TLS error: InvalidCertificate\(Expired\)"#)
+            .expect(r"TLS error: InvalidCertificate\(Expired\)")
             .go()
             .unwrap();
     }

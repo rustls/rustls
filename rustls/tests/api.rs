@@ -3323,7 +3323,7 @@ mod test_quic {
     fn test_quic_handshake() {
         fn equal_packet_keys(x: &quic::PacketKey, y: &quic::PacketKey) -> bool {
             // Check that these two sets of keys are equal.
-            let mut buf = vec![0; 32];
+            let mut buf = [0; 32];
             let (header, payload_tag) = buf.split_at_mut(8);
             let (payload, tag_buf) = payload_tag.split_at_mut(8);
             let tag = x
@@ -3333,7 +3333,7 @@ mod test_quic {
 
             let result = y.decrypt_in_place(42, &*header, payload_tag);
             match result {
-                Ok(payload) => payload == &[0; 8],
+                Ok(payload) => payload == [0; 8],
                 Err(_) => false,
             }
         }
@@ -3677,9 +3677,7 @@ mod test_quic {
         let mut buf = Vec::with_capacity(512);
         client_hello.encode(&mut buf);
         assert_eq!(
-            server
-                .read_hs(&mut buf.as_slice())
-                .err(),
+            server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerMisbehaved(
                 PeerMisbehaved::MissingQuicTransportParameters
             ))
@@ -3722,7 +3720,7 @@ mod test_quic {
             typ: HandshakeType::ClientHello,
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_2,
-                random: random.clone(),
+                random,
                 session_id: SessionId::random::<Ring>().unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
@@ -3740,9 +3738,7 @@ mod test_quic {
         let mut buf = Vec::with_capacity(512);
         client_hello.encode(&mut buf);
         assert_eq!(
-            server
-                .read_hs(&mut buf.as_slice())
-                .err(),
+            server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerIncompatible(
                 PeerIncompatible::SupportedVersionsExtensionRequired
             )),
@@ -3783,7 +3779,7 @@ mod test_quic {
             0x08, 0x06, 0x04, 0x80, 0x00, 0xff, 0xff,
         ];
 
-        let client_keys = Keys::initial(Version::V1, &CONNECTION_ID, Side::Client);
+        let client_keys = Keys::initial(Version::V1, CONNECTION_ID, Side::Client);
         assert_eq!(
             client_keys
                 .local
@@ -3919,7 +3915,7 @@ mod test_quic {
         let (first, rest) = header.split_at_mut(1);
         let sample = &payload[..sample_len];
 
-        let server_keys = Keys::initial(Version::V1, &CONNECTION_ID, Side::Server);
+        let server_keys = Keys::initial(Version::V1, CONNECTION_ID, Side::Server);
         server_keys
             .remote
             .header

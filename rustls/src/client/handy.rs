@@ -224,9 +224,10 @@ mod test {
         #[cfg(feature = "tls12")]
         {
             use crate::msgs::persist::Tls12ClientSessionValue;
-            let tls12_suite = match crate::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 {
-                SupportedCipherSuite::Tls12(inner) => inner,
-                _ => unreachable!(),
+            let SupportedCipherSuite::Tls12(tls12_suite) =
+                crate::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+            else {
+                unreachable!()
             };
 
             c.set_tls12_session(
@@ -246,6 +247,7 @@ mod test {
             c.remove_tls12_session(&name);
         }
 
+        #[cfg_attr(not(feature = "tls12"), allow(clippy::infallible_destructuring_match))]
         let tls13_suite = match crate::cipher_suite::TLS13_AES_256_GCM_SHA384 {
             SupportedCipherSuite::Tls13(inner) => inner,
             #[cfg(feature = "tls12")]

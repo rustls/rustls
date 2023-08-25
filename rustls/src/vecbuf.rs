@@ -167,7 +167,8 @@ mod test {
     #[cfg(read_buf)]
     #[test]
     fn read_buf() {
-        use std::{io::BorrowedBuf, mem::MaybeUninit};
+        use core::mem::MaybeUninit;
+        use std::io::BorrowedBuf;
 
         {
             let mut cvb = ChunkVecBuffer::new(None);
