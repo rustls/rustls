@@ -1,0 +1,34 @@
+name: icount bench
+on: [pull_request]
+
+jobs:
+  icount-benchmarks:
+    name: Run icount benchmarks
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install valgrind
+        run: sudo apt install -y valgrind
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Checkout ${{ github.base_ref }}
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.base_ref }}
+          persist-credentials: false
+
+      - name: Run icount benchmarks for ${{ github.base_ref }}
+        run: cd ci-bench && cargo run --release -- run-all > ${{ runner.temp }}/base.csv
+
+      - name: Checkout PR
+        uses: actions/checkout@v3
+        with:
+          clean: false
+          persist-credentials: false
+
+      - name: Run icount benchmarks for PR
+        run: cd ci-bench && cargo run --release -- run-all > ${{ runner.temp }}/pr.csv
+
+      - name: Compare results
+        run: cd ci-bench && cargo run --release -- compare ${{ runner.temp }}/base.csv ${{ runner.temp }}/pr.csv > $GITHUB_STEP_SUMMARY
