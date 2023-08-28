@@ -155,7 +155,14 @@ fn main() -> anyhow::Result<()> {
             let baseline = read_results(baseline_input.as_ref())?;
             let candidate = read_results(candidate_input.as_ref())?;
             let result = compare_results(&baseline, &candidate);
-            print_report(result);
+            print_report(&result);
+
+            if !result.noteworthy.is_empty() {
+                // Signal to the parent process that there are noteworthy instruction count
+                // differences (exit code 1 is already used when main returns an error)
+                eprintln!("Noteworthy instruction count differences found. Check the job summary for details.");
+                std::process::exit(2);
+            }
         }
     }
 
@@ -470,12 +477,16 @@ fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyhow::Re
 
 /// The results of a comparison between two `run-all` executions
 struct CompareResult {
-    diffs: Vec<Diff>,
+    /// Results that probably indicate a real change in performance and should be highlighted
+    noteworthy: Vec<Diff>,
+    /// Results within the noise threshold
+    negligible: Vec<Diff>,
     /// Benchmark scenarios present in the candidate but missing in the baseline
     missing_in_baseline: Vec<String>,
 }
 
 /// Contains information about instruction counts and their difference for a specific scenario
+#[derive(Clone)]
 struct Diff {
     scenario: String,
     baseline: u64,
@@ -534,21 +545,23 @@ fn compare_results(
         });
     }
 
-    CompareResult {
-        diffs,
-        missing_in_baseline: missing,
-    }
-}
-
-/// Prints a report of the comparison to stdout, using GitHub-flavored markdown
-fn print_report(mut result: CompareResult) {
-    result.diffs.sort_by(|diff1, diff2| {
+    diffs.sort_by(|diff1, diff2| {
         diff2
             .diff_ratio
             .abs()
             .total_cmp(&diff1.diff_ratio.abs())
     });
 
+    let (noteworthy, negligible) = split_on_threshold(&diffs);
+    CompareResult {
+        noteworthy,
+        negligible,
+        missing_in_baseline: missing,
+    }
+}
+
+/// Prints a report of the comparison to stdout, using GitHub-flavored markdown
+fn print_report(result: &CompareResult) {
     println!("# Benchmark results");
 
     if !result.missing_in_baseline.is_empty() {
@@ -561,49 +574,40 @@ fn print_report(mut result: CompareResult) {
         }
     }
 
-    if result.diffs.is_empty() {
-        println!("### ⚠️ Warning: missing benchmarks");
-        println!();
-        println!("There are no benchmarks to report");
-        return;
-    }
-
-    let (noteworthy, negligible) = split_on_threshold(&result.diffs);
-
     println!("### Noteworthy instruction count differences");
-    if noteworthy.is_empty() {
+    if result.noteworthy.is_empty() {
         println!(
             "_There are no noteworthy instruction count differences (i.e. above {}%)_",
             CHANGE_THRESHOLD * 100.0
         );
     } else {
-        table(noteworthy, true);
+        table(&result.noteworthy, true);
     }
 
     println!("### Other instruction count differences");
-    if negligible.is_empty() {
+    if result.negligible.is_empty() {
         println!("_There are no other instruction count differences_");
     } else {
         println!("<details>");
         println!("<summary>Click to expand</summary>\n");
-        table(negligible, false);
+        table(&result.negligible, false);
         println!("</details>\n")
     }
 }
 
-/// Splits the diffs into two slices, the first one containing the diffs that exceed the threshold,
+/// Splits the diffs into two `Vec`s, the first one containing the diffs that exceed the threshold,
 /// the second one containing the rest.
 ///
 /// Assumes that the diff slice is sorted by `diff_ratio` in descending order.
-fn split_on_threshold(diffs: &[Diff]) -> (&[Diff], &[Diff]) {
+fn split_on_threshold(diffs: &[Diff]) -> (Vec<Diff>, Vec<Diff>) {
     match diffs
         .iter()
         .position(|diff| diff.diff_ratio.abs() < CHANGE_THRESHOLD)
     {
-        None => (diffs, &[]),
+        None => (diffs.to_vec(), Vec::new()),
         Some(first_below_threshold) => (
-            &diffs[..first_below_threshold],
-            &diffs[first_below_threshold..],
+            diffs[..first_below_threshold].to_vec(),
+            diffs[first_below_threshold..].to_vec(),
         ),
     }
 }
