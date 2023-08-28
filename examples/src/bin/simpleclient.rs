@@ -28,10 +28,13 @@ fn main() {
                 )
             }),
     );
-    let config = rustls::ClientConfig::<Ring>::builder()
+    let mut config = rustls::ClientConfig::<Ring>::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();
+
+    // Allow using SSLKEYLOGFILE.
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();

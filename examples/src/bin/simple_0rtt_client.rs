@@ -77,6 +77,9 @@ fn main() {
         .with_root_certificates(root_store)
         .with_no_client_auth();
 
+    // Allow using SSLKEYLOGFILE.
+    config.key_log = Arc::new(rustls::KeyLogFile::new());
+
     // Enable early data.
     config.enable_early_data = true;
     let config = Arc::new(config);
