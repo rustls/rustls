@@ -49,3 +49,7 @@ jobs:
       - run: cargo run --bin limitedclient
 
       - run: cargo run --bin simple_0rtt_client
+
+      # Test the server_acceptor binary builds - we invoke with --help since it
+      # will run a server process that doesn't exit when invoked with no args
+      - run: cargo run --bin server_acceptor -- --help
