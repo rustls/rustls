@@ -4776,7 +4776,7 @@ fn test_no_warning_logging_during_successful_sessions() {
 }
 
 /// Test that secrets can be extracted and used for encryption/decryption.
-#[cfg(feature = "secret_extraction")]
+#[cfg(all(feature = "secret_extraction", feature = "tls12"))]
 #[test]
 fn test_secret_extraction_enabled() {
     // Normally, secret extraction would be used to configure kTLS (TLS offload
@@ -4851,7 +4851,7 @@ fn test_secret_extraction_enabled() {
 
 /// Test that secrets cannot be extracted unless explicitly enabled, and until
 /// the handshake is done.
-#[cfg(feature = "secret_extraction")]
+#[cfg(all(feature = "secret_extraction", feature = "tls12"))]
 #[test]
 fn test_secret_extraction_disabled_or_too_early() {
     let suite = rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
