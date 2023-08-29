@@ -67,6 +67,21 @@ where
 
     // same as MessageDeframer.discard
     pub(super) fn discard_handshake_data(&mut self, new_end: usize) {
+        if new_end == 0 {
+            return;
+        }
+
+        self.discard(new_end);
+
+        #[cfg(test)]
+        eprintln!(
+            "discarded {new_end}B of handshake records; new IncomingTls buffer size: {}B",
+            self.filled
+        );
+    }
+
+    // shared routine
+    fn discard(&mut self, new_end: usize) {
         let taken = new_end;
         assert!(self.filled >= taken, "BUG");
 
@@ -76,12 +91,6 @@ where
 
         self.buf.as_mut().copy_within(taken..self.filled, 0);
         self.filled -= taken;
-
-        #[cfg(test)]
-        eprintln!(
-            "discarded {taken}B of handshake records; new IncomingTls buffer size: {}B",
-            self.filled
-        );
     }
 
     /// `num_bytes` refers to number of bytes of decrypted payload.
@@ -100,7 +109,26 @@ where
         // discarded. if any of those Alert records is fatal, that should have already been raised
         // by the `IncomingAppData` iterator
         #[cfg(test)]
-        eprintln!("\ndiscarded {_num_bytes}B of app-data");
+        match (ClientState.current(), ServerState.current()) {
+            (0, 6) => {
+                self.discard(103);
+            }
+
+            (11, 0) => {
+                // alert record that follows the app-data record is not discarded in this call
+                self.discard(95);
+            }
+
+            (i, j) => {
+                panic!("unknown ClientState / ServerState: {i} / {j}")
+            }
+        }
+
+        #[cfg(test)]
+        eprintln!(
+            "\ndiscarded {_num_bytes}B of app-data. new IncomingTls buffer size: {}B",
+            self.filled
+        );
     }
 
     // NOTE instead of this `wrap` + `into_inner` approach, the `buf` field could be made public but
@@ -131,7 +159,7 @@ where
         #[cfg(test)]
         if self.is_client {
             match ClientState.advance() {
-                3 => {
+                9 => {
                     // TODO return a slice of `self._incoming_tls.buf`
                     const SIZE: usize = 73;
                     eprintln!(
@@ -141,20 +169,20 @@ where
                     return Some(Ok(&[0; SIZE]));
                 }
 
-                4 => {
-                    eprintln!("\nfound an alert message (24B)");
+                10 => {
+                    eprintln!("\nfound a non-fatal alert message (24B)");
                     // not critical; do not raise an error
                     // this is the end of the incoming TLS data
                     return None;
                 }
 
                 i => {
-                    unreachable!("unexpected MOCK_CLIENT state: {i}")
+                    unreachable!("unexpected ClientState: {i}")
                 }
             }
         } else {
             match ServerState.advance() {
-                3 => {
+                4 => {
                     // TODO return a slice of `self._incoming_tls.buf`
                     const SIZE: usize = 81;
                     eprintln!(
@@ -164,10 +192,10 @@ where
                     return Some(Ok(&[0; SIZE]));
                 }
 
-                4 => return None,
+                5 => return None,
 
                 i => {
-                    unreachable!("unexpected MOCK_SERVER state: {i}")
+                    unreachable!("unexpected ServerState: {i}")
                 }
             }
         }

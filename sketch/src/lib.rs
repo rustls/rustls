@@ -5,8 +5,8 @@ extern crate alloc;
 
 use core::{fmt, ops};
 
-use alloc::vec::Vec;
-use status::Status;
+use alloc::{string::String, vec, vec::Vec};
+use status::{Capabilities, State, Status};
 
 pub use crate::incoming::{IncomingAppData, IncomingTls};
 #[cfg(test)]
@@ -24,6 +24,33 @@ const MAX_HANDSHAKE_SIZE: usize = 0xffff;
 
 type Result<T> = core::result::Result<T, Error>;
 
+pub trait ServerCertVerifier: Send + Sync {
+    fn verify_server_cert(
+        &self,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        server_name: &ServerName,
+        ocsp_response: &[u8],
+        // now: SystemTime,
+    ) -> Result<ServerCertVerified>;
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid>;
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid>;
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+}
+
 #[derive(Debug)]
 pub enum Error {
     Fatal,
@@ -40,6 +67,32 @@ pub struct LlConnectionCommon {
     is_client: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SignatureScheme;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Certificate;
+
+#[derive(Clone, Debug)]
+pub struct CertificateEntry {
+    pub cert: Certificate,
+    pub exts: Vec<CertificateExtension>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct CertificateExtension;
+
+#[derive(Clone, Copy, Debug)]
+pub struct DigitallySignedStruct;
+
+pub struct ServerCertVerified;
+
+#[derive(Clone, Copy, Debug)]
+pub enum ProtocolVersion {
+    TLSv1_2,
+    TLSv1_3,
+}
+
 impl LlConnectionCommon {
     /// Handles TLS-level records
     ///
@@ -53,7 +106,8 @@ impl LlConnectionCommon {
     where
         B: AsRef<[u8]> + AsMut<[u8]>,
     {
-        let mut status = Status::default();
+        let mut caps = Capabilities::default();
+        let mut state = State::TrafficTransit;
 
         let mut incoming_tls_new_end = 0;
 
@@ -67,13 +121,20 @@ found {}B of data in incoming_tls",
 
             match ClientState.advance() {
                 0 => {
-                    mock::append(236, "HS::ClientHello", _outgoing_tls);
-
-                    status.wants_write = true;
-                    status.wants_read = true;
+                    state = State::NeedsSupportedVerifySchemes;
                 }
 
                 1 => {
+                    mock::append(236, "HS::ClientHello", _outgoing_tls);
+
+                    state = State::MustTransmitTlsData;
+                }
+
+                2 => {
+                    state = State::NeedsMoreTlsData;
+                }
+
+                3 => {
                     mock::process(127, "HS::ServerHello", &mut incoming_tls_new_end);
 
                     mock::append(6, "ChangeCipherSpec", _outgoing_tls);
@@ -85,25 +146,44 @@ found {}B of data in incoming_tls",
                         &mut incoming_tls_new_end,
                     );
                     mock::process(1055, "encrypted HS::Certificate", &mut incoming_tls_new_end);
+
+                    state = State::ReceivedCertificate(vec![CertificateEntry {
+                        cert: Certificate,
+                        exts: vec![],
+                    }]);
+                }
+
+                4 => {
                     mock::process(
                         286,
                         "encrypted HS::CertificateVerify",
                         &mut incoming_tls_new_end,
                     );
 
-                    // FIXME this should not happen inside `handshake` because it may perform IO
-                    eprintln!("verified server certificate");
-
-                    mock::process(74, "encrypted HS::Finished", &mut incoming_tls_new_end);
-
-                    mock::append(79, "encrypted HS::Finished", _outgoing_tls);
-
-                    status.may_send_app_data = true;
-                    status.wants_write = true;
-                    status.wants_read = true;
+                    state = State::ReceivedSignature(DigitallySignedStruct);
                 }
 
-                2 => {
+                5 => {
+                    state = State::NeedsSignature {
+                        message: vec![],
+                        version: ProtocolVersion::TLSv1_3,
+                    };
+                }
+
+                6 => {
+                    mock::process(74, "encrypted HS::Finished", &mut incoming_tls_new_end);
+                    mock::append(79, "encrypted HS::Finished", _outgoing_tls);
+
+                    caps.may_encrypt_app_data = true;
+
+                    state = State::MustTransmitTlsData;
+                }
+
+                7 => {
+                    state = State::NeedsMoreTlsData;
+                }
+
+                8 => {
                     for _ in 0..4 {
                         mock::process(
                             103,
@@ -112,7 +192,7 @@ found {}B of data in incoming_tls",
                         );
                     }
 
-                    // next record is an application-data one; it won't be processed here
+                    state = State::ReceivedAppData;
                 }
 
                 i => {
@@ -128,7 +208,8 @@ found {}B of data in incoming_tls",
 
             match ServerState.advance() {
                 0 => {
-                    status.wants_read = true;
+                    // need a ClientHello to start the handshake
+                    state = State::NeedsMoreTlsData;
                 }
 
                 1 => {
@@ -145,11 +226,14 @@ found {}B of data in incoming_tls",
                         mock::append(size, packet_type, _outgoing_tls);
                     }
 
-                    status.wants_write = true;
-                    status.wants_read = true;
+                    state = State::MustTransmitTlsData;
                 }
 
                 2 => {
+                    state = State::NeedsMoreTlsData;
+                }
+
+                3 => {
                     mock::process(6, "ChangeCipherSpec", &mut incoming_tls_new_end);
 
                     mock::process(74, "encrypted HS::Finished", &mut incoming_tls_new_end);
@@ -158,11 +242,19 @@ found {}B of data in incoming_tls",
                         mock::append(103, "encrypted HS::NewSessionTicket", _outgoing_tls)
                     }
 
-                    status.wants_write = true;
+                    caps.may_encrypt_app_data = true;
 
-                    status.may_send_app_data = true;
                     // peeking into `incoming_tls` shows that there's an app-data record
-                    status.received_app_data = true;
+                    // favor that over flushing the current `outgoing_tls`
+                    state = State::ReceivedAppData;
+                }
+
+                6 => {
+                    state = State::MustTransmitTlsData;
+                }
+
+                7 => {
+                    state = State::TrafficTransit;
                 }
 
                 i => unreachable!("unexpected ServerState: {i}"),
@@ -171,7 +263,10 @@ found {}B of data in incoming_tls",
 
         _incoming_tls.discard_handshake_data(incoming_tls_new_end);
 
-        Ok(status)
+        #[cfg(test)]
+        eprintln!("state: {state:?}");
+
+        Ok(Status { caps, state })
     }
 
     /// Encrypts `app_data` into the `outgoing_tls` buffer
@@ -196,7 +291,25 @@ found {}B of data in incoming_tls",
             is_client: self.is_client,
         }
     }
+
+    pub fn add_supported_verify_schemes(&mut self, _schemes: Vec<SignatureScheme>) {
+        #[cfg(test)]
+        eprintln!("added {} verify schemes", _schemes.len());
+    }
+
+    pub fn verification_outcome(&mut self, outcome: VerificationOutcome) {}
 }
+
+pub enum VerificationOutcome {
+    Valid {
+        cert_verified: ServerCertVerified,
+        sig_verified: HandshakeSignatureValid,
+    },
+
+    Failed,
+}
+
+pub struct HandshakeSignatureValid;
 
 pub struct LlClientConnection {
     conn: LlConnectionCommon,
@@ -216,8 +329,10 @@ impl ops::DerefMut for LlClientConnection {
     }
 }
 
+pub type ServerName = str;
+
 impl LlClientConnection {
-    pub fn new(_server_name: &str) -> Self {
+    pub fn new(_server_name: &ServerName) -> Self {
         Self {
             conn: LlConnectionCommon {
                 #[cfg(test)]
@@ -275,6 +390,52 @@ impl LlServerConnection {
     pub fn discard_early_data(&mut self) {}
 }
 
+pub struct WebPkiServerCertVerifier;
+
+impl ServerCertVerifier for WebPkiServerCertVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        server_name: &ServerName,
+        ocsp_response: &[u8],
+        // now: SystemTime,
+    ) -> Result<ServerCertVerified> {
+        #[cfg(test)]
+        eprintln!("verified the server certificate of {server_name}");
+
+        Ok(ServerCertVerified)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid> {
+        #[cfg(test)]
+        eprintln!("signed TLS 1.2 message");
+
+        Ok(HandshakeSignatureValid)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid> {
+        #[cfg(test)]
+        eprintln!("signed TLS 1.3 message");
+
+        Ok(HandshakeSignatureValid)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme; 9]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io;
@@ -298,15 +459,15 @@ mod tests {
         fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
             let num_bytes = if self.is_client {
                 match ClientState.current() {
-                    1 => 1580,
-                    2 => 531,
+                    3 => 1580,
+                    8 => 531,
 
                     i => unreachable!("unexpected ClientState: {i}"),
                 }
             } else {
                 match ServerState.current() {
                     1 => 236,
-                    2 => 183,
+                    3 => 183,
 
                     i => unreachable!("unexpected ServerState: {i}"),
                 }
@@ -324,9 +485,9 @@ mod tests {
     // this is a replay of tlsclient-mio interacting with tlsserver-mio
     #[test]
     fn simple_client() -> io::Result<()> {
-        let domain_name = "localhost";
-        let sock = MockTcpStream::connect(&format!("{domain_name}:443"))?;
-        let mut conn = LlClientConnection::new(domain_name);
+        let server_name = "localhost";
+        let sock = MockTcpStream::connect(&format!("{server_name}:443"))?;
+        let mut conn = LlClientConnection::new(server_name);
 
         let mut incoming_tls = IncomingTls::new(vec![0; MAX_HANDSHAKE_SIZE]);
         let mut outgoing_tls = Vec::new();
@@ -337,41 +498,88 @@ mod tests {
              Connection: close\r\n\
              Accept-Encoding: identity\r\n\
              \r\n",
-            domain_name
+            server_name
         )
         .into_bytes();
 
+        let cert_verifier = WebPkiServerCertVerifier;
+        let mut certificates = vec![];
+        let mut dss = None;
+
         let mut wants_read = false;
         let mut did_send_app_data = false;
-        while !did_send_app_data || wants_read {
+        loop {
             let status = conn.handle_tls_records(&mut incoming_tls, &mut outgoing_tls)?;
 
-            if status.may_send_early_data() {
-                let some_early_data = b"0-RTT packet";
-                conn.encrypt_early_data(some_early_data, &mut outgoing_tls);
-            }
-
-            let mut wants_to_send_app_data = false;
-            if status.may_send_app_data() && !some_request.is_empty() {
-                conn.encrypt_outgoing(&some_request, &mut outgoing_tls);
-                wants_to_send_app_data = true;
-                // ensure we don't send this more than once
-                some_request.clear();
-            }
-
-            if status.wants_write() || wants_to_send_app_data {
-                sock.write_all(&outgoing_tls)?;
-                outgoing_tls.clear();
-
-                if wants_to_send_app_data {
-                    did_send_app_data = true;
+            match status.state {
+                State::NeedsSupportedVerifySchemes => {
+                    let schemes = cert_verifier.supported_verify_schemes();
+                    conn.add_supported_verify_schemes(schemes);
                 }
-            }
 
-            wants_read = status.wants_read();
-            if wants_read {
-                let read = sock.read(incoming_tls.unfilled())?;
-                incoming_tls.advance(read);
+                State::MustTransmitTlsData => {
+                    if status.caps.may_encrypt_app_data {
+                        if !some_request.is_empty() {
+                            conn.encrypt_outgoing(&some_request, &mut outgoing_tls);
+                            did_send_app_data = true;
+
+                            some_request.clear();
+                        }
+                    }
+
+                    sock.write_all(&outgoing_tls)?;
+                    outgoing_tls.clear();
+                }
+
+                State::NeedsMoreTlsData => {
+                    let read = sock.read(incoming_tls.unfilled())?;
+                    incoming_tls.advance(read);
+                }
+
+                State::ReceivedCertificate(new_certificates) => {
+                    // NOTE here, an async CertVerifier could have started cert verification in a separate async task
+                    certificates.extend(new_certificates);
+                }
+
+                State::ReceivedSignature(new_dsd) => dss = Some(new_dsd),
+
+                State::NeedsSignature { message, version } => {
+                    let (end_entity, intermediates) =
+                        certificates.split_first().ok_or(Error::Fatal)?;
+
+                    // normally, this would come from the `ext` field of `end_entity` but it was not mocked
+                    let ocsp_response = &[];
+
+                    let intermediates = intermediates
+                        .iter()
+                        .map(|entry| entry.cert)
+                        .collect::<Vec<_>>();
+
+                    let cert_verified = cert_verifier.verify_server_cert(
+                        &end_entity.cert,
+                        &intermediates,
+                        server_name,
+                        ocsp_response,
+                    )?;
+
+                    let dss = dss.as_ref().ok_or(Error::Fatal)?;
+                    let sig_verified =
+                        cert_verifier.verify_tls13_signature(&message, &end_entity.cert, dss)?;
+
+                    let verification_outcome = VerificationOutcome::Valid {
+                        cert_verified,
+                        sig_verified,
+                    };
+                    conn.verification_outcome(verification_outcome);
+                }
+
+                // both indicate a complete handshake
+                State::ReceivedAppData | State::TrafficTransit => break,
+
+                State::ReceivedEarlyData => {
+                    // server-only state
+                    unreachable!()
+                }
             }
         }
 
@@ -379,12 +587,14 @@ mod tests {
         assert!(outgoing_tls.is_empty());
 
         if !did_send_app_data {
+            // not reachable in this TLS 1.3 example
             conn.encrypt_outgoing(&some_request, &mut outgoing_tls);
 
             sock.write_all(&outgoing_tls)?;
         }
 
         if incoming_tls.buf.is_empty() {
+            // not reachable in this TLS 1.3 example
             sock.read_to_end(&mut incoming_tls.buf)?;
         } else {
             // server responded to the request during the previous loop and the response is
@@ -453,37 +663,56 @@ mod tests {
         let mut outgoing_tls = Vec::new();
 
         let mut did_respond = false;
-        while !did_respond {
+        let mut must_transmit_app_data = false;
+        loop {
             let status = conn.handle_tls_records(&mut incoming_tls, &mut outgoing_tls)?;
 
-            if status.received_app_data() {
-                let incoming_app_data = conn.decrypt_incoming(&mut incoming_tls);
-                let mut num_bytes_read = 0;
-                for res in incoming_app_data {
-                    let request = res?;
+            match status.state {
+                State::NeedsMoreTlsData => {
+                    let read = sock.read(incoming_tls.unfilled())?;
+                    incoming_tls.advance(read);
+                }
 
-                    num_bytes_read += request.len();
-                    if status.may_send_app_data() {
-                        let response = handle(request);
-                        conn.encrypt_outgoing(&response, &mut outgoing_tls);
+                State::MustTransmitTlsData => {
+                    sock.write_all(&outgoing_tls)?;
+                    outgoing_tls.clear();
+
+                    if must_transmit_app_data {
                         did_respond = true;
-                    } else {
-                        // not reachable in this example but in this branch the data should likely
-                        // be buffered for later processing
+                        must_transmit_app_data = false;
                     }
                 }
 
-                incoming_tls.discard_app_data(num_bytes_read);
-            }
+                State::ReceivedAppData => {
+                    let incoming_app_data = conn.decrypt_incoming(&mut incoming_tls);
+                    let mut num_bytes_read = 0;
+                    for res in incoming_app_data {
+                        let request = res?;
 
-            if status.wants_write() {
-                sock.write_all(&outgoing_tls)?;
-                outgoing_tls.clear();
-            }
+                        num_bytes_read += request.len();
+                        if status.caps.may_encrypt_app_data {
+                            let response = handle(request);
+                            conn.encrypt_outgoing(&response, &mut outgoing_tls);
+                            must_transmit_app_data = true;
+                        } else {
+                            // not reachable in this example but in this branch the data should likely
+                            // be buffered for later processing
+                        }
+                    }
 
-            if status.wants_read() {
-                let read = sock.read(incoming_tls.unfilled())?;
-                incoming_tls.advance(read);
+                    incoming_tls.discard_app_data(num_bytes_read);
+                }
+
+                State::TrafficTransit => break,
+
+                // client-only state
+                State::NeedsSupportedVerifySchemes => todo!(),
+
+                // not exercised in this example
+                State::ReceivedEarlyData
+                | State::ReceivedCertificate(_)
+                | State::ReceivedSignature(_)
+                | State::NeedsSignature { .. } => unreachable!(),
             }
         }
 

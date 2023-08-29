@@ -2,29 +2,30 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct ClientState;
 
-static CLIENT_STATE: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    static CLIENT_STATE: AtomicUsize = AtomicUsize::new(0);
+    static SERVER_STATE: AtomicUsize = AtomicUsize::new(0);
+}
 
 impl ClientState {
     pub fn advance(&self) -> usize {
-        CLIENT_STATE.fetch_add(1, Ordering::Relaxed)
+        CLIENT_STATE.with(|state| state.fetch_add(1, Ordering::Relaxed))
     }
 
     pub fn current(&self) -> usize {
-        CLIENT_STATE.load(Ordering::Relaxed)
+        CLIENT_STATE.with(|state| state.load(Ordering::Relaxed))
     }
 }
 
 pub struct ServerState;
 
-static SERVER_STATE: AtomicUsize = AtomicUsize::new(0);
-
 impl ServerState {
     pub fn advance(&self) -> usize {
-        SERVER_STATE.fetch_add(1, Ordering::Relaxed)
+        SERVER_STATE.with(|state| state.fetch_add(1, Ordering::Relaxed))
     }
 
     pub fn current(&self) -> usize {
-        SERVER_STATE.load(Ordering::Relaxed)
+        SERVER_STATE.with(|state| state.load(Ordering::Relaxed))
     }
 }
 
