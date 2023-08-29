@@ -41,7 +41,7 @@ base64 = "0.21"
 [[example]]
 name = "bogo_shim"
 path = "examples/internal/bogo_shim.rs"
-required-features = ["dangerous_configuration", "quic"]
+required-features = ["dangerous_configuration", "quic", "tls12"]
 
 [[example]]
 name = "bench"
