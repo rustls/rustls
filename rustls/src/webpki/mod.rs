@@ -11,6 +11,6 @@ pub use verify::{UnparsedCertRevocationList, WebPkiClientVerifier};
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]
 pub use verify::{
-    verify_server_cert_signed_by_trust_anchor, verify_server_name, ParsedCertificate,
-    WebPkiServerVerifier,
+    verify_client_cert_signed_by_trust_anchor, verify_server_cert_signed_by_trust_anchor,
+    verify_server_name, ParsedCertificate, RustlsRevocationOptions, WebPkiServerVerifier,
 };

@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use std::time::SystemTime;
+use webpki::RevocationOptions;
 
 use super::anchors::{OwnedTrustAnchor, RootCertStore};
 use super::client_verifier_builder::ClientCertVerifierBuilder;
@@ -60,6 +61,49 @@ pub fn verify_server_cert_signed_by_trust_anchor(
             webpki_now,
             webpki::KeyUsage::server_auth(),
             None, // no CRLs
+        )
+        .map_err(pki_error)
+        .map(|_| ())
+}
+
+/// The wrapper of `webpki::RevocationOptions`.
+/// Call `Into::into` on `RevocationOptions` to get `RustlsRevocationOptions`
+pub struct RustlsRevocationOptions<'a>(RevocationOptions<'a>);
+
+impl<'a> From<RevocationOptions<'a>> for RustlsRevocationOptions<'a> {
+    fn from(value: RevocationOptions<'a>) -> Self {
+        Self(value)
+    }
+}
+
+/// Verify that the end-entity certificate `end_entity` is a valid client cert
+/// and chains to at least one of the [OwnedTrustAnchor] in the `roots` [RootCertStore].
+///
+/// `intermediates` contains all certificates other than `end_entity` that
+/// were sent as part of the client's [Certificate] message. It is in the
+/// same order that the client sent them and may be empty.
+/// `revocation` is how to perform revocation checking
+#[allow(dead_code)]
+#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
+pub fn verify_client_cert_signed_by_trust_anchor(
+    cert: &ParsedCertificate,
+    roots: &RootCertStore,
+    intermediates: &[Certificate],
+    now: SystemTime,
+    revocation: Option<RustlsRevocationOptions<'_>>,
+) -> Result<(), Error> {
+    let chain = intermediate_chain(intermediates);
+    let trust_roots = trust_roots(roots);
+    let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
+
+    cert.0
+        .verify_for_usage(
+            SUPPORTED_SIG_ALGS,
+            &trust_roots,
+            &chain,
+            webpki_now,
+            webpki::KeyUsage::client_auth(),
+            revocation.map(|r| r.0),
         )
         .map_err(pki_error)
         .map(|_| ())
@@ -350,10 +394,6 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
-        let chain = intermediate_chain(intermediates);
-        let trust_roots = trust_roots(&self.roots);
-        let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
-
         #[allow(trivial_casts)] // Cast to &dyn trait is required.
         let crls = self
             .crls
@@ -371,18 +411,15 @@ impl ClientCertVerifier for WebPkiClientVerifier {
                     .build(),
             )
         };
+        verify_client_cert_signed_by_trust_anchor(
+            &cert,
+            &self.roots,
+            intermediates,
+            now,
+            revocation.map(Into::into),
+        )?;
 
-        cert.0
-            .verify_for_usage(
-                SUPPORTED_SIG_ALGS,
-                &trust_roots,
-                &chain,
-                now,
-                webpki::KeyUsage::client_auth(),
-                revocation,
-            )
-            .map_err(pki_error)
-            .map(|_| ClientCertVerified::assertion())
+        Ok(ClientCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
