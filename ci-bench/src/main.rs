@@ -48,7 +48,7 @@ const TRANSFER_PLAINTEXT_SIZE: usize = 1024 * 1024;
 /// [`rustls::client::ClientSessionMemoryCache`] and [`rustls::server::ServerSessionMemoryCache`],
 /// which rely on a randomized `HashMap` under the hood (you can check for yourself by that
 /// `HashMap` by a `FxHashMap`, which brings the noise down to acceptable levels in a single run).
-const RESUMED_HANDSHAKE_RUNS: usize = 3;
+const RESUMED_HANDSHAKE_RUNS: usize = 30;
 
 /// The threshold at which instruction count changes are considered relevant
 const CHANGE_THRESHOLD: f64 = 0.002; // 0.2%
