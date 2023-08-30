@@ -39,18 +39,24 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
-      - run: cargo build
+      - name: Build main crate
+        run: cargo build
 
-      - run: cargo test --manifest-path=connect-tests/Cargo.toml
+      - name: Run connect tests
+        run: cargo test --manifest-path=connect-tests/Cargo.toml
         env:
           RUST_BACKTRACE: 1
 
-      - run: cargo run --bin simpleclient
+      - name: Check simple client
+        run: cargo run --bin simpleclient
 
-      - run: cargo run --bin limitedclient
+      - name: Check limited client
+        run: cargo run --bin limitedclient
 
-      - run: cargo run --bin simple_0rtt_client
+      - name: Check simple 0rtt client
+        run: cargo run --bin simple_0rtt_client
 
       # Test the server_acceptor binary builds - we invoke with --help since it
       # will run a server process that doesn't exit when invoked with no args
-      - run: cargo run --bin server_acceptor -- --help
+      - name: Check server acceptor
+        run: cargo run --bin server_acceptor -- --help
