@@ -3,6 +3,7 @@ use std::time::SystemTime;
 
 use super::anchors::{OwnedTrustAnchor, RootCertStore};
 use super::client_verifier_builder::ClientCertVerifierBuilder;
+use super::pki_error;
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
 use crate::error::{CertRevocationListError, CertificateError, Error, PeerMisbehaved};
@@ -415,31 +416,6 @@ pub(crate) enum AnonymousClientPolicy {
     Allow,
     /// Clients that do not present a client certificate are denied.
     Deny,
-}
-
-fn pki_error(error: webpki::Error) -> Error {
-    use webpki::Error::*;
-    match error {
-        BadDer | BadDerTime | TrailingData(_) => CertificateError::BadEncoding.into(),
-        CertNotValidYet => CertificateError::NotValidYet.into(),
-        CertExpired | InvalidCertValidity => CertificateError::Expired.into(),
-        UnknownIssuer => CertificateError::UnknownIssuer.into(),
-        CertNotValidForName => CertificateError::NotValidForName.into(),
-        CertRevoked => CertificateError::Revoked.into(),
-        IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
-
-        InvalidSignatureForPublicKey
-        | UnsupportedSignatureAlgorithm
-        | UnsupportedSignatureAlgorithmForPublicKey => CertificateError::BadSignature.into(),
-
-        InvalidCrlSignatureForPublicKey
-        | UnsupportedCrlSignatureAlgorithm
-        | UnsupportedCrlSignatureAlgorithmForPublicKey => {
-            CertRevocationListError::BadSignature.into()
-        }
-
-        _ => CertificateError::Other(Arc::new(error)).into(),
-    }
 }
 
 impl From<webpki::Error> for CertRevocationListError {
