@@ -15,6 +15,9 @@ pub mod hash;
 /// HMAC interfaces.
 pub mod hmac;
 
+/// Message signing interfaces.
+pub mod signer;
+
 pub use crate::rand::GetRandomFailed;
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
