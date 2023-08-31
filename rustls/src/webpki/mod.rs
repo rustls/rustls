@@ -10,7 +10,7 @@ pub use anchors::{RootCertStore, TrustAnchorWithDn};
 
 pub use client_verifier_builder::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
 
-pub use verify::WebPkiClientVerifier;
+pub use verify::{WebPkiClientVerifier, WebPkiSupportedAlgorithms};
 
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]

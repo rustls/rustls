@@ -3,7 +3,7 @@ use std::sync::Arc;
 use pki_types::CertificateRevocationListDer;
 use webpki::BorrowedCertRevocationList;
 
-use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier};
+use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier, WebPkiSupportedAlgorithms};
 use crate::verify::ClientCertVerifier;
 use crate::{CertRevocationListError, RootCertStore};
 
@@ -15,6 +15,7 @@ pub struct ClientCertVerifierBuilder {
     roots: Arc<RootCertStore>,
     crls: Vec<CertificateRevocationListDer<'static>>,
     anon_policy: AnonymousClientPolicy,
+    supported_algs: Option<WebPkiSupportedAlgorithms>,
 }
 
 impl ClientCertVerifierBuilder {
@@ -23,6 +24,7 @@ impl ClientCertVerifierBuilder {
             roots,
             crls: Vec::new(),
             anon_policy: AnonymousClientPolicy::Deny,
+            supported_algs: None,
         }
     }
 
@@ -46,10 +48,24 @@ impl ClientCertVerifierBuilder {
         self
     }
 
+    /// Sets which signature verification algorithms are enabled.
+    ///
+    /// If this is called multiple times, the last call wins.
+    pub fn with_signature_verification_algorithms(
+        mut self,
+        supported_algs: WebPkiSupportedAlgorithms,
+    ) -> Self {
+        self.supported_algs = Some(supported_algs);
+        self
+    }
+
     /// Build a client certificate verifier. The built verifier will be used for the server to offer
     /// client certificate authentication, to control how offered client certificates are validated,
     /// and to determine what to do with anonymous clients that do not respond to the client
     /// certificate authentication offer with a client certificate.
+    ///
+    /// If the `ring` crate feature is supplied, and `with_signature_verification_algorithms` was not
+    /// called on the builder, a default set of signature verification algorithms is used.
     ///
     /// Once built, the provided `Arc<dyn ClientCertVerifier>` can be used with a Rustls
     /// [crate::server::ServerConfig] to configure client certificate validation using
@@ -59,10 +75,20 @@ impl ClientCertVerifierBuilder {
     /// This function will return a `ClientCertVerifierBuilderError` if:
     /// 1. No trust anchors have been provided.
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
-    pub fn build(self) -> Result<Arc<dyn ClientCertVerifier>, ClientCertVerifierBuilderError> {
+    /// 3. No signature verification algorithms were set and the `ring` feature is not enabled.
+    pub fn build(mut self) -> Result<Arc<dyn ClientCertVerifier>, ClientCertVerifierBuilderError> {
         if self.roots.is_empty() {
             return Err(ClientCertVerifierBuilderError::NoRootAnchors);
         }
+
+        #[cfg(feature = "ring")]
+        if self.supported_algs.is_none() {
+            self.supported_algs = Some(super::verify::SUPPORTED_SIG_ALGS);
+        }
+
+        let supported_algs = self
+            .supported_algs
+            .ok_or(ClientCertVerifierBuilderError::NoSupportedAlgorithms)?;
 
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
@@ -75,6 +101,7 @@ impl ClientCertVerifierBuilder {
                 })
                 .collect::<Result<Vec<_>, CertRevocationListError>>()?,
             self.anon_policy,
+            supported_algs,
         )))
     }
 }
@@ -89,6 +116,11 @@ pub enum ClientCertVerifierBuilderError {
     NoRootAnchors,
     /// A provided CRL could not be parsed.
     InvalidCrl(CertRevocationListError),
+    /// No supported signature verification algorithms were provided.
+    ///
+    /// Call `with_signature_verification_algorithms` on the builder, or compile
+    /// with the `ring` feature.
+    NoSupportedAlgorithms,
 }
 
 impl From<CertRevocationListError> for ClientCertVerifierBuilderError {
@@ -97,7 +129,7 @@ impl From<CertRevocationListError> for ClientCertVerifierBuilderError {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ring"))]
 mod tests {
     use crate::server::ClientCertVerifierBuilderError;
     use crate::webpki::verify::WebPkiClientVerifier;

@@ -409,7 +409,7 @@ pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::DigitallySignedStruct;
 pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
-pub use crate::webpki::{RootCertStore, TrustAnchorWithDn};
+pub use crate::webpki::{RootCertStore, TrustAnchorWithDn, WebPkiSupportedAlgorithms};
 
 /// Items for use in a client.
 pub mod client {
