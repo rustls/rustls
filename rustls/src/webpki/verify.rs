@@ -166,6 +166,7 @@ impl WebPkiServerVerifier {
     /// A full implementation of `ServerCertVerifier::verify_tls12_signature` or
     /// `ClientCertVerifier::verify_tls12_signature`.
     #[cfg(feature = "ring")]
+    #[allow(dead_code)]
     pub fn default_verify_tls12_signature(
         message: &[u8],
         cert: &CertificateDer<'_>,
@@ -177,6 +178,7 @@ impl WebPkiServerVerifier {
     /// A full implementation of `ServerCertVerifier::verify_tls13_signature` or
     /// `ClientCertVerifier::verify_tls13_signature`.
     #[cfg(feature = "ring")]
+    #[allow(dead_code)]
     pub fn default_verify_tls13_signature(
         message: &[u8],
         cert: &CertificateDer<'_>,
@@ -188,6 +190,7 @@ impl WebPkiServerVerifier {
     /// A full implementation of `ServerCertVerifier::supported_verify_schemes()` or
     /// `ClientCertVerifier::supported_verify_schemes()`.
     #[cfg(feature = "ring")]
+    #[allow(dead_code)]
     pub fn default_supported_verify_schemes() -> Vec<SignatureScheme> {
         SUPPORTED_SIG_ALGS.supported_schemes()
     }

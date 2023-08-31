@@ -3,9 +3,11 @@ use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::crypto::{CryptoProvider, KeyExchange};
 #[cfg(feature = "ring")]
-use crate::{error::Error, webpki};
+use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
+#[cfg(feature = "webpki")]
+use crate::webpki;
 use crate::{verify, versions};
 
 use super::client_conn::Resumption;
@@ -17,7 +19,7 @@ use alloc::sync::Arc;
 use core::marker::PhantomData;
 
 impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
-    #[cfg(feature = "ring")]
+    #[cfg(all(feature = "webpki", feature = "ring"))]
     /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,

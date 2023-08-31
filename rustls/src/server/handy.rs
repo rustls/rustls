@@ -6,6 +6,7 @@ use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
+#[cfg(feature = "webpki")]
 use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
 
@@ -157,8 +158,10 @@ impl ResolvesServerCertUsingSni {
 
     /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
     ///
-    /// This function fails if `name` is not a valid DNS name, or if
-    /// it's not valid for the supplied certificate, or if the certificate
+    /// This function fails if `name` is not a valid DNS name.
+    ///
+    /// If compiled with the `webpki` feature, the function also fails if the
+    /// name is not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
     pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
         let server_name = {
@@ -177,6 +180,7 @@ impl ResolvesServerCertUsingSni {
         // These checks are not security-sensitive.  They are the
         // *server* attempting to detect accidental misconfiguration.
 
+        #[cfg(feature = "webpki")]
         ck.end_entity_cert()
             .and_then(ParsedCertificate::try_from)
             .and_then(|cert| verify_server_name(&cert, &server_name))?;

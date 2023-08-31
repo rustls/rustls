@@ -4,6 +4,8 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
+#![cfg(all(feature = "webpki", feature = "ring"))]
+
 use core::time::Duration;
 use std::time::{Instant, SystemTime};
 
