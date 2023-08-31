@@ -413,7 +413,8 @@ mod tests {
 
     #[test]
     fn can_load_ecdsa_nistp256_pkcs8() {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/nistp256key.pkcs8.der")[..]);
+        let key =
+            PrivatePkcs8KeyDer::from(&include_bytes!("../testdata/nistp256key.pkcs8.der")[..]);
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(any_supported_type(&key).is_ok());
@@ -423,7 +424,7 @@ mod tests {
     #[test]
     fn can_load_ecdsa_nistp256_sec1() {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
-            &include_bytes!("testdata/nistp256key.der")[..],
+            &include_bytes!("../testdata/nistp256key.der")[..],
         ));
         assert!(any_supported_type(&key).is_ok());
         assert!(any_ecdsa_type(&key).is_ok());
@@ -431,7 +432,8 @@ mod tests {
 
     #[test]
     fn can_load_ecdsa_nistp384_pkcs8() {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/nistp384key.pkcs8.der")[..]);
+        let key =
+            PrivatePkcs8KeyDer::from(&include_bytes!("../testdata/nistp384key.pkcs8.der")[..]);
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(any_supported_type(&key).is_ok());
@@ -441,7 +443,7 @@ mod tests {
     #[test]
     fn can_load_ecdsa_nistp384_sec1() {
         let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
-            &include_bytes!("testdata/nistp384key.der")[..],
+            &include_bytes!("../testdata/nistp384key.der")[..],
         ));
         assert!(any_supported_type(&key).is_ok());
         assert!(any_ecdsa_type(&key).is_ok());
@@ -449,7 +451,7 @@ mod tests {
 
     #[test]
     fn can_load_eddsa_pkcs8() {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/eddsakey.der")[..]);
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../testdata/eddsakey.der")[..]);
         assert!(any_eddsa_type(&key).is_ok());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(any_supported_type(&key).is_ok());
@@ -458,7 +460,7 @@ mod tests {
 
     #[test]
     fn can_load_rsa2048_pkcs8() {
-        let key = PrivatePkcs8KeyDer::from(&include_bytes!("testdata/rsa2048key.pkcs8.der")[..]);
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../testdata/rsa2048key.pkcs8.der")[..]);
         assert!(any_eddsa_type(&key).is_err());
         let key = PrivateKeyDer::Pkcs8(key);
         assert!(any_supported_type(&key).is_ok());
@@ -468,7 +470,7 @@ mod tests {
     #[test]
     fn can_load_rsa2048_pkcs1() {
         let key = PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(
-            &include_bytes!("testdata/rsa2048key.pkcs1.der")[..],
+            &include_bytes!("../testdata/rsa2048key.pkcs1.der")[..],
         ));
         assert!(any_supported_type(&key).is_ok());
         assert!(any_ecdsa_type(&key).is_err());
