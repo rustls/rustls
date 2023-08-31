@@ -1,5 +1,6 @@
 // Additional x509/asn1 functions to those provided in webpki/ring.
 
+#[allow(dead_code)] // if webpki is compiled out
 pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
     let len = bytes.len();
 
@@ -18,6 +19,7 @@ pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
 }
 
 /// Prepend stuff to `bytes` to put it in a DER SEQUENCE.
+#[allow(dead_code)]
 pub(crate) fn wrap_in_sequence(bytes: &mut Vec<u8>) {
     wrap_in_asn1_len(bytes);
     bytes.insert(0, DER_SEQUENCE_TAG);

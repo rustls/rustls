@@ -19,7 +19,7 @@ rustversion = { version = "1.0.6", optional = true }
 log = { version = "0.4.4", optional = true }
 ring = { version = "0.16.20", optional = true }
 subtle = "2.5.0"
-webpki = { package = "rustls-webpki", version = "=0.102.0-alpha.1", features = ["alloc", "std"] }
+webpki = { package = "rustls-webpki", version = "=0.102.0-alpha.1", features = ["alloc", "std"], default-features = false, optional = true }
 pki-types = { package = "rustls-pki-types", version = "0.1.1" }
 
 [features]
@@ -27,6 +27,7 @@ default = ["logging", "tls12", "ring"]
 logging = ["log"]
 dangerous_configuration = []
 ring = ["dep:ring", "webpki/ring"]
+webpki = ["dep:webpki"]
 secret_extraction = []
 quic = []
 tls12 = []
