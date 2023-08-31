@@ -490,7 +490,12 @@ pub mod version {
 pub use crypto::ring::kx_group;
 
 /// Message signing interfaces and implementations.
-pub mod sign;
+pub mod sign {
+    pub use super::crypto::signer::{
+        any_ecdsa_type, any_eddsa_type, any_supported_type, CertifiedKey, RsaSigningKey, Signer,
+        SigningKey,
+    };
+}
 
 #[cfg(feature = "quic")]
 /// APIs for implementing QUIC TLS
