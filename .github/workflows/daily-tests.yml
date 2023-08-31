@@ -88,3 +88,21 @@ jobs:
       # will run a server process that doesn't exit when invoked with no args
       - name: Check server acceptor
         run: cargo run --bin server_acceptor -- --help
+
+  feature-powerset:
+    name: Feature Powerset
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo hack
+        uses: taiki-e/install-action@cargo-hack
+
+      - name: Check feature powerset
+        run: cargo hack check --feature-powerset --no-dev-deps
