@@ -421,3 +421,116 @@ mod tests {
         assert!(any_ecdsa_type(&key).is_err());
     }
 }
+
+#[cfg(bench)]
+mod benchmarks {
+    use super::{PrivateKeyDer, PrivatePkcs8KeyDer, SignatureScheme};
+
+    #[bench]
+    fn bench_rsa2048_pkcs1_sha256(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
+        ));
+        let sk = super::any_supported_type(&key).unwrap();
+        let signer = sk
+            .choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
+            .unwrap();
+
+        b.iter(|| {
+            test::black_box(
+                signer
+                    .sign(SAMPLE_TLS13_MESSAGE)
+                    .unwrap(),
+            );
+        });
+    }
+
+    #[bench]
+    fn bench_rsa2048_pss_sha256(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
+        ));
+        let sk = super::any_supported_type(&key).unwrap();
+        let signer = sk
+            .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
+            .unwrap();
+
+        b.iter(|| {
+            test::black_box(
+                signer
+                    .sign(SAMPLE_TLS13_MESSAGE)
+                    .unwrap(),
+            );
+        });
+    }
+
+    #[bench]
+    fn bench_eddsa(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/eddsakey.der")[..],
+        ));
+        let sk = super::any_supported_type(&key).unwrap();
+        let signer = sk
+            .choose_scheme(&[SignatureScheme::ED25519])
+            .unwrap();
+
+        b.iter(|| {
+            test::black_box(
+                signer
+                    .sign(SAMPLE_TLS13_MESSAGE)
+                    .unwrap(),
+            );
+        });
+    }
+
+    #[bench]
+    fn bench_ecdsa_p256_sha256(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/nistp256key.pkcs8.der")[..],
+        ));
+        let sk = super::any_supported_type(&key).unwrap();
+        let signer = sk
+            .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
+            .unwrap();
+
+        b.iter(|| {
+            test::black_box(
+                signer
+                    .sign(SAMPLE_TLS13_MESSAGE)
+                    .unwrap(),
+            );
+        });
+    }
+
+    #[bench]
+    fn bench_ecdsa_p384_sha384(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/nistp384key.pkcs8.der")[..],
+        ));
+        let sk = super::any_supported_type(&key).unwrap();
+        let signer = sk
+            .choose_scheme(&[SignatureScheme::ECDSA_NISTP384_SHA384])
+            .unwrap();
+
+        b.iter(|| {
+            test::black_box(
+                signer
+                    .sign(SAMPLE_TLS13_MESSAGE)
+                    .unwrap(),
+            );
+        });
+    }
+
+    const SAMPLE_TLS13_MESSAGE: &[u8] = &[
+        0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+        0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+        0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+        0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+        0x20, 0x20, 0x20, 0x20, 0x54, 0x4c, 0x53, 0x20, 0x31, 0x2e, 0x33, 0x2c, 0x20, 0x73, 0x65,
+        0x72, 0x76, 0x65, 0x72, 0x20, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74,
+        0x65, 0x56, 0x65, 0x72, 0x69, 0x66, 0x79, 0x00, 0x04, 0xca, 0xc4, 0x48, 0x0e, 0x70, 0xf2,
+        0x1b, 0xa9, 0x1c, 0x16, 0xca, 0x90, 0x48, 0xbe, 0x28, 0x2f, 0xc7, 0xf8, 0x9b, 0x87, 0x72,
+        0x93, 0xda, 0x4d, 0x2f, 0x80, 0x80, 0x60, 0x1a, 0xd3, 0x08, 0xe2, 0xb7, 0x86, 0x14, 0x1b,
+        0x54, 0xda, 0x9a, 0xc9, 0x6d, 0xe9, 0x66, 0xb4, 0x9f, 0xe2, 0x2c,
+    ];
+}
