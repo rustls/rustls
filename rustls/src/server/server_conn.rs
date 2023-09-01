@@ -99,6 +99,13 @@ pub trait ProducesTickets: Send + Sync {
 
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
+///
+/// This is suitable when selecting a certificate does not require
+/// I/O or when the application is using blocking I/O anyhow.
+///
+/// For applications that use async I/O and need to do I/O to choose
+/// a certificate (for instance, fetching a certificate from a data store),
+/// the [`Acceptor`] interface is more suitable.
 pub trait ResolvesServerCert: Send + Sync {
     /// Choose a certificate chain and matching key given simplified
     /// ClientHello information.
@@ -234,7 +241,9 @@ pub struct ServerConfig<C: CryptoProvider> {
     /// How to produce tickets.
     pub ticketer: Arc<dyn ProducesTickets>,
 
-    /// How to choose a server cert and key.
+    /// How to choose a server cert and key. This is usually set by
+    /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].
+    /// For async applications, see also [Acceptor].
     pub cert_resolver: Arc<dyn ResolvesServerCert>,
 
     /// Protocol names we support, most preferred first.
