@@ -226,7 +226,7 @@ impl TrustAnchor<'_> {
 ///
 /// Certificate revocation lists are identified in PEM context as `X509 CRL` and when stored in a
 /// file usually use a `.crl` extension. For more on PEM files, refer to the crate documentation.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CertificateRevocationListDer<'a>(Der<'a>);
 
 impl AsRef<[u8]> for CertificateRevocationListDer<'_> {
