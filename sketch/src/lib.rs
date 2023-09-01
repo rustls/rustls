@@ -292,27 +292,31 @@ found {}B of data in incoming_tls",
         }
     }
 
+    /// Provide the verify schemes supported by the certificate verifier
     pub fn add_supported_verify_schemes(&mut self, _schemes: Vec<SignatureScheme>) {
         #[cfg(test)]
         eprintln!("added {} verify schemes", _schemes.len());
     }
 
-    pub fn verification_outcome(&mut self, outcome: VerificationOutcome) {}
+    /// Provide the result of the certificate verification process
+    pub fn certificate_verification_outcome(&mut self, outcome: CertificateVerificationOutcome) {}
 }
 
-pub enum VerificationOutcome {
-    Valid {
+/// The outcome of the certificate verification process
+pub enum CertificateVerificationOutcome {
+    Success {
         cert_verified: ServerCertVerified,
         sig_verified: HandshakeSignatureValid,
     },
 
-    Failed,
+    Failure,
 }
 
 pub struct HandshakeSignatureValid;
 
 pub struct LlClientConnection {
     conn: LlConnectionCommon,
+    server_name: String,
 }
 
 impl ops::Deref for LlClientConnection {
@@ -332,12 +336,13 @@ impl ops::DerefMut for LlClientConnection {
 pub type ServerName = str;
 
 impl LlClientConnection {
-    pub fn new(_server_name: &ServerName) -> Self {
+    pub fn new(server_name: &ServerName) -> Self {
         Self {
             conn: LlConnectionCommon {
                 #[cfg(test)]
                 is_client: true,
             },
+            server_name: String::from(server_name),
         }
     }
 
@@ -541,11 +546,12 @@ mod tests {
                     certificates.extend(new_certificates);
                 }
 
-                State::ReceivedSignature(new_dsd) => dss = Some(new_dsd),
+                State::ReceivedSignature(new_dss) => dss = Some(new_dss),
 
                 State::NeedsSignature { message, version } => {
-                    let (end_entity, intermediates) =
-                        certificates.split_first().ok_or(Error::Fatal)?;
+                    let (end_entity, intermediates) = certificates
+                        .split_first()
+                        .ok_or(Error::Fatal)?;
 
                     // normally, this would come from the `ext` field of `end_entity` but it was not mocked
                     let ocsp_response = &[];
@@ -566,11 +572,11 @@ mod tests {
                     let sig_verified =
                         cert_verifier.verify_tls13_signature(&message, &end_entity.cert, dss)?;
 
-                    let verification_outcome = VerificationOutcome::Valid {
+                    let outcome = CertificateVerificationOutcome::Success {
                         cert_verified,
                         sig_verified,
                     };
-                    conn.verification_outcome(verification_outcome);
+                    conn.certificate_verification_outcome(outcome);
                 }
 
                 // both indicate a complete handshake

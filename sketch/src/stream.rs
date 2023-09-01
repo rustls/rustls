@@ -4,7 +4,11 @@ use core::fmt;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 
-use crate::{IncomingTls, LlClientConnection, WebPkiServerCertVerifier, MAX_HANDSHAKE_SIZE};
+use crate::status::State;
+use crate::{
+    CertificateEntry, CertificateVerificationOutcome, DigitallySignedStruct, IncomingTls,
+    LlClientConnection, ServerCertVerifier, WebPkiServerCertVerifier, MAX_HANDSHAKE_SIZE,
+};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -49,7 +53,9 @@ impl From<Error> for io::Error {
 
 pub struct Stream {
     cert_verifier: WebPkiServerCertVerifier,
+    certificates: Vec<CertificateEntry>,
     conn: LlClientConnection,
+    dss: Option<DigitallySignedStruct>,
     early_data: Vec<u8>,
     incoming_tls: IncomingTls<Vec<u8>>,
     outgoing_tls: Vec<u8>,
@@ -66,11 +72,13 @@ impl Stream {
     pub fn new(sock: TcpStream, conn: LlClientConnection) -> Self {
         Self {
             cert_verifier: WebPkiServerCertVerifier,
-            early_data: Vec::new(),
-            sock,
+            certificates: Vec::new(),
             conn,
+            dss: None,
+            early_data: Vec::new(),
             incoming_tls: IncomingTls::new(vec![0; MAX_HANDSHAKE_SIZE]),
             outgoing_tls: Vec::new(),
+            sock,
         }
     }
 
@@ -78,137 +86,198 @@ impl Stream {
         self.early_data = early_data;
     }
 
-    // TODO update these methods
-    //     fn inner_read(&mut self, buf: &mut [u8], mut do_read_once: bool) -> io::Result<usize> {
-    //         let capacity = buf.len();
-    //         let mut cursor = 0;
+    fn inner_read(&mut self, buf: &mut [u8], mut do_read_once: bool) -> io::Result<usize> {
+        let capacity = buf.len();
+        let mut cursor = 0;
 
-    //         for _ in 0..2 {
-    //             // first read out buffered data first
-    //             let incoming_appdata = self.conn.decrypt_incoming(&mut self.incoming_tls);
-    //             for res in incoming_appdata {
-    //                 let new_data = res?;
+        for _ in 0..2 {
+            // first read out buffered data first
+            let incoming_appdata = self
+                .conn
+                .decrypt_incoming(&mut self.incoming_tls);
+            for res in incoming_appdata {
+                let new_data = res?;
 
-    //                 let available = capacity - cursor;
-    //                 let tocopy = new_data.len().min(available);
-    //                 buf[cursor..cursor + tocopy].copy_from_slice(&new_data[..tocopy]);
-    //                 cursor += tocopy;
+                let available = capacity - cursor;
+                let tocopy = new_data.len().min(available);
+                buf[cursor..cursor + tocopy].copy_from_slice(&new_data[..tocopy]);
+                cursor += tocopy;
 
-    //                 if cursor == capacity {
-    //                     // `buf` is full; do not decrypt in place any other record
-    //                     break;
-    //                 }
-    //             }
+                if cursor == capacity {
+                    // `buf` is full; do not decrypt in place any other record
+                    break;
+                }
+            }
 
-    //             // NOTE we don't want to call this inside the previous for loop to avoid
-    //             // excesive memcpy-ing
-    //             self.incoming_tls.discard_app_data(cursor);
+            // NOTE we don't want to call this inside the previous for loop to avoid
+            // excesive memcpy-ing
+            self.incoming_tls
+                .discard_app_data(cursor);
 
-    //             if cursor == capacity {
-    //                 break;
-    //             }
+            if cursor == capacity {
+                break;
+            }
 
-    //             if do_read_once {
-    //                 let read = self.sock.read(self.incoming_tls.unfilled())?;
-    //                 self.incoming_tls.advance(read);
-    //                 do_read_once = false;
-    //             } else {
-    //                 break;
-    //             }
-    //         }
+            if do_read_once {
+                let read = self
+                    .sock
+                    .read(self.incoming_tls.unfilled())?;
+                self.incoming_tls.advance(read);
+                do_read_once = false;
+            } else {
+                break;
+            }
+        }
 
-    //         Ok(cursor)
-    //     }
+        Ok(cursor)
+    }
 
-    //     fn event_loop(&mut self, mut write_buffer: Option<&[u8]>) -> Result<Status> {
-    //         let mut stream_status = Status::default();
+    fn event_loop(&mut self, mut write_buffer: Option<&[u8]>) -> Result<Status> {
+        let mut stream_status = Status::default();
 
-    //         let mut did_encrypt = false;
-    //         loop {
-    //             let tls_status = self
-    //                 .conn
-    //                 .handle_tls_records(&mut self.incoming_tls, &mut self.outgoing_tls)?;
+        let mut did_encrypt = false;
+        loop {
+            let status = self
+                .conn
+                .handle_tls_records(&mut self.incoming_tls, &mut self.outgoing_tls)?;
 
-    //             if tls_status.received_app_data() {
-    //                 stream_status.received_app_data = true;
-    //                 break;
-    //             }
+            match status.state {
+                State::NeedsSupportedVerifySchemes => {
+                    let schemes = self
+                        .cert_verifier
+                        .supported_verify_schemes();
+                    self.conn
+                        .add_supported_verify_schemes(schemes);
+                }
 
-    //             if tls_status.may_send_early_data() && !self.early_data.is_empty() {
-    //                 self.conn.encrypt_early_data(
-    //                     &std::mem::replace(&mut self.early_data, vec![]),
-    //                     &mut self.outgoing_tls,
-    //                 );
-    //             }
+                State::MustTransmitTlsData => {
+                    if status.caps.may_encrypt_app_data {
+                        if let Some(write_buffer) = write_buffer.take() {
+                            self.conn
+                                .encrypt_outgoing(write_buffer, &mut self.outgoing_tls);
+                            stream_status.did_send = true;
+                        }
+                    }
 
-    //             if tls_status.may_send_app_data() {
-    //                 // we use `Option::take` to avoid encryting this more than once
-    //                 if let Some(write_buffer) = write_buffer.take() {
-    //                     self.conn
-    //                         .encrypt_outgoing(write_buffer, &mut self.outgoing_tls);
+                    if status.caps.may_encrypt_early_data {
+                        if !self.early_data.is_empty() {
+                            self.conn
+                                .encrypt_early_data(&self.early_data, &mut self.outgoing_tls);
 
-    //                     did_encrypt = true;
-    //                 }
-    //             }
+                            self.early_data.clear();
+                        }
+                    }
 
-    //             if tls_status.wants_write() {
-    //                 self.sock.write_all(&self.outgoing_tls)?; // <<IO>>
-    //                 self.outgoing_tls.clear();
+                    self.sock
+                        .write_all(&self.outgoing_tls)?;
+                    self.outgoing_tls.clear();
 
-    //                 if did_encrypt {
-    //                     stream_status.did_send = true;
-    //                 }
-    //             }
+                    if stream_status.did_send {
+                        break;
+                    }
+                }
 
-    //             if tls_status.wants_read() {
-    //                 let read = self.sock.read(self.incoming_tls.unfilled())?; // <<IO>>
-    //                 self.incoming_tls.advance(read);
+                State::NeedsMoreTlsData => {
+                    let read = self
+                        .sock
+                        .read(self.incoming_tls.unfilled())?;
+                    self.incoming_tls.advance(read);
+                }
 
-    //                 // must call `handle_tls_records` again
-    //                 continue;
-    //             } else {
-    //                 if write_buffer.is_some() {
-    //                     // io::Write
-    //                     if did_encrypt {
-    //                         break;
-    //                     }
-    //                 } else {
-    //                     // io::Read
-    //                     if tls_status.may_receive_app_data() {
-    //                         break;
-    //                     }
-    //                 }
-    //             }
-    //         }
+                State::ReceivedAppData => {
+                    stream_status.received_app_data = true;
+                    break;
+                }
 
-    //         Ok(stream_status)
-    //     }
-    // }
+                State::ReceivedEarlyData => {
+                    // XXX should this be signaled as an error? e.g. `Stream::write` was used but
+                    // during handshake early data was received; the early data needs to be read or
+                    // discarded, since it can't be buffered by ServerConnection, to complete the
+                    // handshake
 
-    // impl io::Read for Stream {
-    //     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-    //         let status = self.event_loop(None)?;
+                    todo!()
+                }
 
-    //         self.inner_read(buf, !status.received_app_data)
-    //     }
-    // }
+                State::TrafficTransit => break,
 
-    // impl io::Write for Stream {
-    //     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-    //         let status = self.event_loop(Some(buf))?;
+                State::ReceivedCertificate(new_certificates) => self
+                    .certificates
+                    .extend(new_certificates),
 
-    //         if !status.did_send {
-    //             let written = self.sock.write(&self.outgoing_tls)?;
-    //             self.outgoing_tls.drain(0..written);
-    //         }
+                State::ReceivedSignature(dss) => {
+                    self.dss = Some(dss);
+                }
 
-    //         Ok(buf.len())
-    //     }
+                State::NeedsSignature { message, version } => {
+                    let (end_entity, intermediates) = self
+                        .certificates
+                        .split_first()
+                        .ok_or(crate::Error::Fatal)?;
 
-    //     fn flush(&mut self) -> io::Result<()> {
-    //         self.sock.write_all(&self.outgoing_tls)?;
-    //         self.outgoing_tls.clear();
+                    // normally, this would come from the `ext` field of `end_entity` but it was not mocked
+                    let ocsp_response = &[];
 
-    //         Ok(())
-    //     }
+                    let intermediates = intermediates
+                        .iter()
+                        .map(|entry| entry.cert)
+                        .collect::<Vec<_>>();
+
+                    let cert_verified = self.cert_verifier.verify_server_cert(
+                        &end_entity.cert,
+                        &intermediates,
+                        &self.conn.server_name,
+                        ocsp_response,
+                    )?;
+
+                    let dss = self
+                        .dss
+                        .as_ref()
+                        .ok_or(crate::Error::Fatal)?;
+                    let sig_verified = self
+                        .cert_verifier
+                        .verify_tls13_signature(&message, &end_entity.cert, dss)?;
+
+                    let verification_outcome = CertificateVerificationOutcome::Success {
+                        cert_verified,
+                        sig_verified,
+                    };
+                    self.conn
+                        .certificate_verification_outcome(verification_outcome);
+                }
+            }
+        }
+
+        Ok(stream_status)
+    }
+}
+
+impl io::Read for Stream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let status = self.event_loop(None)?;
+
+        self.inner_read(buf, !status.received_app_data)
+    }
+}
+
+impl io::Write for Stream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let status = self.event_loop(Some(buf))?;
+
+        if !status.did_send {
+            let written = self.sock.write(&self.outgoing_tls)?;
+            self.outgoing_tls.drain(0..written);
+        }
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.outgoing_tls.is_empty() {
+            self.sock
+                .write_all(&self.outgoing_tls)?;
+            self.outgoing_tls.clear();
+        }
+
+        Ok(())
+    }
 }

@@ -30,6 +30,7 @@ sequenceDiagram
   participant HTTPClient
 
   HTTPClient ->> ClientConnection: ApplicationData/Request (81B)
+  ClientConnection ->> ServerCertVerifier: supported_verify_schemes()
   ClientConnection ->> ServerBuffers: HS::ClientHello (236B)
   ServerBuffers ->> ClientBuffers: write_tls / read_tls (236B)
 
@@ -48,7 +49,8 @@ sequenceDiagram
   ServerBuffers ->> ClientConnection: [encr]HS::EncryptedExtensions (27B)
   ServerBuffers ->> ClientConnection: [encr]HS::Certificate (1,050B)
   ServerBuffers ->> ClientConnection: [encr]HS::CertificateVerify (281B)
-  ClientConnection ->> ServerCertVerifier: verify_server_cert
+  ClientConnection ->> ServerCertVerifier: verify_server_cert(..)
+  ClientConnection ->> ServerCertVerifier: verify_tls13_signature(..)
   ServerBuffers ->> ClientConnection: [encr]HS::Finished (69B)
   ClientConnection ->> ServerBuffers: [encr]HS::Finished (69B)
   ClientConnection ->> ServerBuffers: [encr]ApplicationData/Request (98B)
