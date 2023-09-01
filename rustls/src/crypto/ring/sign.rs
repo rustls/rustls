@@ -521,6 +521,59 @@ mod benchmarks {
         });
     }
 
+    #[bench]
+    fn bench_load_and_validate_rsa2048(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
+        ));
+
+        b.iter(|| {
+            test::black_box(super::any_supported_type(&key).unwrap());
+        });
+    }
+
+    #[bench]
+    fn bench_load_and_validate_rsa4096(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/rsa4096key.pkcs8.der")[..],
+        ));
+
+        b.iter(|| {
+            test::black_box(super::any_supported_type(&key).unwrap());
+        });
+    }
+
+    #[bench]
+    fn bench_load_and_validate_p256(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/nistp256key.pkcs8.der")[..],
+        ));
+
+        b.iter(|| {
+            test::black_box(super::any_ecdsa_type(&key).unwrap());
+        });
+    }
+
+    #[bench]
+    fn bench_load_and_validate_p384(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/nistp384key.pkcs8.der")[..],
+        ));
+
+        b.iter(|| {
+            test::black_box(super::any_ecdsa_type(&key).unwrap());
+        });
+    }
+
+    #[bench]
+    fn bench_load_and_validate_eddsa(b: &mut test::Bencher) {
+        let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
+
+        b.iter(|| {
+            test::black_box(super::any_eddsa_type(&key).unwrap());
+        });
+    }
+
     const SAMPLE_TLS13_MESSAGE: &[u8] = &[
         0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
         0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
