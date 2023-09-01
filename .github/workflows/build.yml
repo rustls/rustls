@@ -82,7 +82,7 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
-      - name: cargo build (debug; no default features)
+      - name: cargo test (debug; no default features)
         run: cargo test --no-default-features
 
       - name: cargo test (debug; no default features; tls12)
