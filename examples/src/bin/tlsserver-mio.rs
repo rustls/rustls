@@ -1,22 +1,14 @@
-use std::sync::Arc;
-
-use mio::net::{TcpListener, TcpStream};
-use rustls::crypto::ring::Ring;
-
-#[macro_use]
-extern crate log;
-
 use std::collections::HashMap;
-use std::fs;
-use std::io;
-use std::io::{BufReader, Read, Write};
-use std::net;
-
-#[macro_use]
-extern crate serde_derive;
+use std::io::{self, BufReader, Read, Write};
+use std::sync::Arc;
+use std::{fs, net};
 
 use docopt::Docopt;
+use log::{debug, error};
+use mio::net::{TcpListener, TcpStream};
+use serde::Deserialize;
 
+use rustls::crypto::ring::Ring;
 use rustls::server::{UnparsedCertRevocationList, WebPkiClientVerifier};
 use rustls::{self, RootCertStore};
 

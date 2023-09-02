@@ -3,6 +3,7 @@
 //! client certificates.
 //!
 //! For a more complete server demonstration, see `tlsserver-mio.rs`.
+
 use std::fs::File;
 use std::io::{Read, Write};
 use std::ops::Add;
@@ -12,7 +13,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use docopt::Docopt;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 use rustls::crypto::CryptoProvider;
 use rustls::server::{

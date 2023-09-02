@@ -1,7 +1,6 @@
-use std::sync::Arc;
-
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
+use std::sync::Arc;
 
 use rustls::crypto::ring::Ring;
 use rustls::crypto::CryptoProvider;
