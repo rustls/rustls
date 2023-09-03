@@ -68,6 +68,8 @@ pub fn verify_server_cert_signed_by_trust_anchor(
 
 /// The wrapper of `webpki::RevocationOptions`.
 /// Call `Into::into` on `RevocationOptions` to get `RustlsRevocationOptions`
+#[allow(dead_code)]
+#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 pub struct RustlsRevocationOptions<'a>(RevocationOptions<'a>);
 
 impl<'a> From<RevocationOptions<'a>> for RustlsRevocationOptions<'a> {
