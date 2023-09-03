@@ -16,6 +16,7 @@ build = "build.rs"
 rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
+caches = { version = "0.2.4", features = ["core"], default-features = false, git = "https://github.com/stevefan1999-personal/caches-rs" }
 log = { version = "0.4.4", optional = true }
 ring = "0.16.20"
 subtle = "2.5.0"

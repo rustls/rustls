@@ -1,138 +1,48 @@
-use alloc::collections::VecDeque;
-use core::borrow::Borrow;
+use caches::Cache;
 use core::hash::Hash;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 
-/// A HashMap-alike, which never gets larger than a specified
-/// capacity, and evicts the oldest insertion to maintain this.
-///
-/// The requested capacity may be rounded up by the underlying
-/// collections.  This implementation uses all the allocated
-/// storage.
-///
-/// This is inefficient: it stores keys twice.
-pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
-    map: HashMap<K, V>,
-
-    // first item is the oldest key
-    oldest: VecDeque<K>,
+pub(crate) trait CacheExt<K: Clone + Hash + Eq, V: Default> {
+    fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V));
 }
 
-impl<K, V> LimitedCache<K, V>
-where
-    K: Eq + Hash + Clone + core::fmt::Debug,
-    V: Default,
-{
-    /// Create a new LimitedCache with the given rough capacity.
-    pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
-        Self {
-            map: HashMap::with_capacity(capacity_order_of_magnitude),
-            oldest: VecDeque::with_capacity(capacity_order_of_magnitude),
-        }
-    }
-
-    pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
-        let inserted_new_item = match self.map.entry(k) {
-            Entry::Occupied(value) => {
-                edit(value.into_mut());
-                false
-            }
-            entry @ Entry::Vacant(_) => {
-                self.oldest
-                    .push_back(entry.key().clone());
-                edit(entry.or_insert_with(V::default));
-                true
-            }
-        };
-
-        // ensure next insertion does not require a realloc
-        if inserted_new_item && self.oldest.capacity() == self.oldest.len() {
-            if let Some(oldest_key) = self.oldest.pop_front() {
-                self.map.remove(&oldest_key);
-            }
-        }
-    }
-
-    pub(crate) fn insert(&mut self, k: K, v: V) {
-        let inserted_new_item = match self.map.entry(k) {
-            Entry::Occupied(mut old) => {
-                // nb. does not freshen entry in `oldest`
-                old.insert(v);
-                false
-            }
-
-            entry @ Entry::Vacant(_) => {
-                self.oldest
-                    .push_back(entry.key().clone());
-                entry.or_insert(v);
-                true
-            }
-        };
-
-        // ensure next insertion does not require a realloc
-        if inserted_new_item && self.oldest.capacity() == self.oldest.len() {
-            if let Some(oldest_key) = self.oldest.pop_front() {
-                self.map.remove(&oldest_key);
-            }
-        }
-    }
-
-    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.map.get(k)
-    }
-
-    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.map.get_mut(k)
-    }
-
-    pub(crate) fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        if let Some(value) = self.map.remove(k) {
-            // O(N) search, followed by O(N) removal
-            if let Some(index) = self
-                .oldest
-                .iter()
-                .position(|item| item.borrow() == k)
-            {
-                self.oldest.remove(index);
-            }
-            Some(value)
+impl<K: Clone + Hash + Eq, V: Default, C: Cache<K, V>> CacheExt<K, V> for C {
+    fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
+        if self.contains(&k) {
+            edit(self.get_mut(&k).unwrap());
         } else {
-            None
+            let mut val = V::default();
+            edit(&mut val);
+
+            // TODO: there seems to have a bug on caches-rs where if the key was both recently or frequently removed, but the entry only reside on one place, making an option unwrap failed,
+            // this is technically an optimization to take the evicted box out and try to put it back inline, but nonetheless failed to do so, we could workaround it
+            // by fully evicting the key (this should be a no-op anyway)
+            self.remove(&k);
+            self.put(k, val);
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    type Test = super::LimitedCache<String, usize>;
+    use super::CacheExt;
+    use caches::Cache;
+
+    type Test = caches::AdaptiveCache<String, usize>;
 
     #[test]
     fn test_updates_existing_item() {
-        let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("abc".into(), 2);
+        let mut t = Test::new(3 - 1).unwrap();
+        t.put("abc".into(), 1);
+        t.put("abc".into(), 2);
         assert_eq!(t.get("abc"), Some(&2));
     }
 
     #[test]
     fn test_evicts_oldest_item() {
-        let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
-        t.insert("ghi".into(), 3);
+        let mut t = Test::new(3 - 1).unwrap();
+        t.put("abc".into(), 1);
+        t.put("def".into(), 2);
+        t.put("ghi".into(), 3);
 
         assert_eq!(t.get("abc"), None);
         assert_eq!(t.get("def"), Some(&2));
@@ -141,14 +51,14 @@ mod test {
 
     #[test]
     fn test_evicts_second_oldest_item_if_first_removed() {
-        let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
+        let mut t = Test::new(3 - 1).unwrap();
+        t.put("abc".into(), 1);
+        t.put("def".into(), 2);
 
         assert_eq!(t.remove("abc"), Some(1));
 
-        t.insert("ghi".into(), 3);
-        t.insert("jkl".into(), 4);
+        t.put("ghi".into(), 3);
+        t.put("jkl".into(), 4);
 
         assert_eq!(t.get("abc"), None);
         assert_eq!(t.get("def"), None);
@@ -158,34 +68,34 @@ mod test {
 
     #[test]
     fn test_evicts_after_second_oldest_item_removed() {
-        let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
+        let mut t = Test::new(3 - 1).unwrap();
+        t.put("abc".into(), 1);
+        t.put("def".into(), 2);
 
         assert_eq!(t.remove("def"), Some(2));
         assert_eq!(t.get("abc"), Some(&1));
 
-        t.insert("ghi".into(), 3);
-        t.insert("jkl".into(), 4);
+        t.put("ghi".into(), 3);
+        t.put("jkl".into(), 4);
 
-        assert_eq!(t.get("abc"), None);
+        assert_eq!(t.get("abc"), Some(&1));
         assert_eq!(t.get("def"), None);
-        assert_eq!(t.get("ghi"), Some(&3));
+        assert_eq!(t.get("ghi"), None);
         assert_eq!(t.get("jkl"), Some(&4));
     }
 
     #[test]
     fn test_removes_all_items() {
-        let mut t = Test::new(3);
-        t.insert("abc".into(), 1);
-        t.insert("def".into(), 2);
+        let mut t = Test::new(3 - 1).unwrap();
+        t.put("abc".into(), 1);
+        t.put("def".into(), 2);
 
         assert_eq!(t.remove("def"), Some(2));
         assert_eq!(t.remove("abc"), Some(1));
 
-        t.insert("ghi".into(), 3);
-        t.insert("jkl".into(), 4);
-        t.insert("mno".into(), 5);
+        t.put("ghi".into(), 3);
+        t.put("jkl".into(), 4);
+        t.put("mno".into(), 5);
 
         assert_eq!(t.get("abc"), None);
         assert_eq!(t.get("def"), None);
@@ -196,18 +106,18 @@ mod test {
 
     #[test]
     fn test_inserts_many_items() {
-        let mut t = Test::new(3);
+        let mut t = Test::new(3 - 1).unwrap();
 
         for _ in 0..10000 {
-            t.insert("abc".into(), 1);
-            t.insert("def".into(), 2);
-            t.insert("ghi".into(), 3);
+            t.put("abc".into(), 1);
+            t.put("def".into(), 2);
+            t.put("ghi".into(), 3);
         }
     }
 
     #[test]
     fn test_get_or_insert_default_and_edit_evicts_old_items_to_meet_capacity() {
-        let mut t = Test::new(3);
+        let mut t = Test::new(3 - 1).unwrap();
 
         t.get_or_insert_default_and_edit("abc".into(), |v| *v += 1);
         t.get_or_insert_default_and_edit("def".into(), |v| *v += 2);
@@ -235,7 +145,7 @@ mod test {
 
     #[test]
     fn test_get_or_insert_default_and_edit_edits_existing_item() {
-        let mut t = Test::new(3);
+        let mut t = Test::new(3 - 1).unwrap();
 
         t.get_or_insert_default_and_edit("abc".into(), |v| *v += 1);
         t.get_or_insert_default_and_edit("abc".into(), |v| *v += 2);

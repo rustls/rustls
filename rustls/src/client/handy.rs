@@ -2,7 +2,7 @@ use crate::client;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::key;
-use crate::limited_cache;
+use crate::limited_cache::CacheExt;
 use crate::msgs::persist;
 use crate::sign;
 use crate::NamedGroup;
@@ -10,6 +10,7 @@ use crate::ServerName;
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use caches::Cache;
 use std::sync::Mutex;
 
 /// An implementer of `ClientSessionStore` which does nothing.
@@ -66,7 +67,7 @@ impl Default for ServerData {
 ///
 /// It enforces a limit on the number of entries to bound memory usage.
 pub struct ClientSessionMemoryCache {
-    servers: Mutex<limited_cache::LimitedCache<ServerName, ServerData>>,
+    servers: Mutex<caches::AdaptiveCache<ServerName, ServerData>>,
 }
 
 impl ClientSessionMemoryCache {
@@ -76,7 +77,7 @@ impl ClientSessionMemoryCache {
         let max_servers =
             size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1) / MAX_TLS13_TICKETS_PER_SERVER;
         Self {
-            servers: Mutex::new(limited_cache::LimitedCache::new(max_servers)),
+            servers: Mutex::new(caches::AdaptiveCache::new(max_servers).unwrap()),
         }
     }
 }

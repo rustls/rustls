@@ -1,7 +1,6 @@
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::key;
-use crate::limited_cache;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
@@ -9,6 +8,7 @@ use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
 
 use alloc::sync::Arc;
+use caches::Cache;
 use std::collections;
 use std::sync::Mutex;
 
@@ -34,7 +34,7 @@ impl server::StoresServerSessions for NoServerSessionStorage {
 /// in memory.  If enforces a limit on the number of stored sessions
 /// to bound memory usage.
 pub struct ServerSessionMemoryCache {
-    cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
+    cache: Mutex<caches::AdaptiveCache<Vec<u8>, Vec<u8>>>,
 }
 
 impl ServerSessionMemoryCache {
@@ -43,7 +43,7 @@ impl ServerSessionMemoryCache {
     /// efficiency.
     pub fn new(size: usize) -> Arc<Self> {
         Arc::new(Self {
-            cache: Mutex::new(limited_cache::LimitedCache::new(size)),
+            cache: Mutex::new(caches::AdaptiveCache::new(size).unwrap()),
         })
     }
 }
@@ -53,7 +53,7 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
         self.cache
             .lock()
             .unwrap()
-            .insert(key, value);
+            .put(key, value);
         true
     }
 
