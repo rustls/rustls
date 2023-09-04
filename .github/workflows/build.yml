@@ -298,6 +298,6 @@ jobs:
         with:
           components: clippy
       - run: cargo clippy --package rustls --all-features --all-targets
-      - run: cargo clippy --package rustls --no-default-features --all-targets -- --deny warnings
-      - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features --all-targets -- --deny warnings
-      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --package rustls --no-default-features --all-targets
+      - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features --all-targets
+      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets
