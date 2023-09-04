@@ -1,5 +1,4 @@
-use std::collections::{HashMap, HashSet};
-
+use fxhash::{FxHashMap, FxHashSet};
 use itertools::Itertools;
 
 use crate::cachegrind::InstructionCounts;
@@ -27,11 +26,11 @@ pub fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
     }
 
     // Detect dangling benchmark references
-    let all_names: HashSet<_> = benchmarks
+    let all_names: FxHashSet<_> = benchmarks
         .iter()
         .map(|b| b.name.as_str())
         .collect();
-    let referenced_names: HashSet<_> = benchmarks
+    let referenced_names: FxHashSet<_> = benchmarks
         .iter()
         .flat_map(|b| match &b.reporting_mode {
             ReportingMode::AllInstructions => None,
@@ -65,7 +64,7 @@ pub enum ReportingMode {
 /// Get the reported instruction counts for the provided benchmark
 pub fn get_reported_instr_count(
     bench: &Benchmark,
-    results: &HashMap<&str, InstructionCounts>,
+    results: &FxHashMap<&str, InstructionCounts>,
 ) -> InstructionCounts {
     match bench.reporting_mode() {
         ReportingMode::AllInstructions => results[&bench.name()],
