@@ -1,12 +1,15 @@
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
 use std::hint::black_box;
 use std::io::{self, BufRead, BufReader, Read, Write};
+use std::mem;
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand, ValueEnum};
+use fxhash::FxHashMap;
 use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
@@ -116,8 +119,19 @@ fn main() -> anyhow::Result<()> {
                 .get(index as usize)
                 .ok_or(anyhow::anyhow!("Benchmark not found: {index}"))?;
 
-            let mut stdin = io::stdin().lock();
-            let mut stdout = io::stdout().lock();
+            let stdin_lock = io::stdin().lock();
+            let stdout_lock = io::stdout().lock();
+
+            // `StdinLock` and `StdoutLock` are buffered, which makes the instruction counts less
+            // deterministic (the growth of the internal buffers varies across runs, causing
+            // differences of hundreds of instructions). To counter this, we do the actual io
+            // operations through `File`, which is unbuffered. The `stdin_lock` and `stdout_lock`
+            // variables are kept around to ensure exclusive access.
+
+            // safety: the file descriptor is valid and we have exclusive access to it for the
+            // duration of the lock
+            let mut stdin = unsafe { File::from_raw_fd(stdin_lock.as_raw_fd()) };
+            let mut stdout = unsafe { File::from_raw_fd(stdout_lock.as_raw_fd()) };
 
             let handshake_buf = &mut [0u8; 262144];
             let resumption_kind = black_box(bench.kind.resumption_kind());
@@ -147,6 +161,10 @@ fn main() -> anyhow::Result<()> {
 
             result
                 .with_context(|| format!("{} crashed for {} side", bench.name(), side.as_str()))?;
+
+            // Prevent stdin / stdout from being closed
+            mem::forget(stdin);
+            mem::forget(stdout);
         }
         Command::Compare {
             baseline_input,
@@ -267,7 +285,7 @@ pub fn run_all(executable: String, benches: &[Benchmark]) -> anyhow::Result<Vec<
         .collect();
 
     // Report possible errors
-    let (errors, results): (Vec<_>, HashMap<_, _>) =
+    let (errors, results): (Vec<_>, FxHashMap<_, _>) =
         results
             .into_iter()
             .partition_map(|(bench, result)| match result {
