@@ -326,8 +326,8 @@ impl<Data> ConnectionCommon<Data> {
         let common = &mut self.core.common_state;
         Reader {
             received_plaintext: &mut common.received_plaintext,
-            /// Are we done? i.e., have we processed all received messages, and received a
-            /// close_notify to indicate that no new messages will arrive?
+            // Are we done? i.e., have we processed all received messages, and received a
+            // close_notify to indicate that no new messages will arrive?
             peer_cleanly_closed: common.has_received_close_notify
                 && !self.core.message_deframer.has_pending(),
             has_seen_eof: common.has_seen_eof,
