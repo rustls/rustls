@@ -12,8 +12,9 @@ important bits.
 
 _Note: this step requires having `valgrind` in your path._
 
-Use `cargo run --release -- run-all > out.csv` to generate a CSV with the instruction counts for
-the different scenarios we support. The result should look like the following:
+Use `cargo run --release -- run-all --output-dir foo` to generate the results inside the `foo`
+directory. Within that directory, you will find an `icounts.csv` file with the instruction counts
+for the different scenarios we support. It should look like the following:
 
 ```csv
 handshake_no_resume_1.2_rsa_aes_server,11327015
@@ -31,12 +32,14 @@ handshake_no_resume_1.3_rsa_aes_client,4212770
 ...
 ```
 
+In the `cachegrind` subdirectory you will find output files emitted by the `cachegrind` tool, which
+are useful to report detailed instruction count differences when comparing two benchmark runs.
+
 ### Comparing results
 
-Use `cargo run --release -- compare out1.csv out2.csv`. It will output a report using
-GitHub-flavored markdown (used by the CI itself to give feedback about PRs). We currently
-consider differences of 0.2% to be significant, but might tweak it in the future after we gain
-experience with the benchmarking setup.
+Use `cargo run --release -- compare foo bar`. It will output a report using GitHub-flavored markdown
+(used by the CI itself to give feedback about PRs). We currently consider differences of 0.2% to be
+significant, but might tweak it in the future after we gain experience with the benchmarking setup.
 
 ### Supported scenarios
 

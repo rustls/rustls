@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
 
       - name: Run icount benchmarks for ${{ github.base_ref }}
-        run: cd ci-bench && cargo run --release -- run-all > ${{ runner.temp }}/base.csv
+        run: cd ci-bench && cargo run --release -- run-all --output-dir ${{ runner.temp }}/base
 
       - name: Checkout PR
         uses: actions/checkout@v3
@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
 
       - name: Run icount benchmarks for PR
-        run: cd ci-bench && cargo run --release -- run-all > ${{ runner.temp }}/pr.csv
+        run: cd ci-bench && cargo run --release -- run-all --output-dir ${{ runner.temp }}/pr
 
       - name: Compare results
-        run: cd ci-bench && cargo run --release -- compare ${{ runner.temp }}/base.csv ${{ runner.temp }}/pr.csv > $GITHUB_STEP_SUMMARY
+        run: cd ci-bench && cargo run --release -- compare ${{ runner.temp }}/base ${{ runner.temp }}/pr > $GITHUB_STEP_SUMMARY
