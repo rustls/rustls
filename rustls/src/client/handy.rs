@@ -8,6 +8,7 @@ use crate::ServerName;
 #[cfg(feature = "ring")]
 use crate::{crypto::ring, error::Error};
 
+#[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::collections::VecDeque;

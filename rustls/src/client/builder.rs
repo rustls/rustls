@@ -12,6 +12,7 @@ use crate::{verify, versions};
 
 use super::client_conn::Resumption;
 
+#[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;

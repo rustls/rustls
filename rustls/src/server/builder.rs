@@ -10,6 +10,7 @@ use crate::verify::ClientCertVerifier;
 use crate::versions;
 use crate::NoKeyLog;
 
+#[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
