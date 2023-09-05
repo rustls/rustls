@@ -3,13 +3,14 @@ use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::crypto::{CryptoProvider, KeyExchange};
 #[cfg(feature = "ring")]
-use crate::error::Error;
+use crate::{error::Error, webpki};
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
-use crate::{verify, versions, webpki};
+use crate::{verify, versions};
 
 use super::client_conn::Resumption;
 
+#[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
