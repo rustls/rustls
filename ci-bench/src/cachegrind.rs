@@ -9,12 +9,17 @@ use anyhow::Context;
 use crate::benchmark::Benchmark;
 use crate::Side;
 
+/// The subdirectory in which the cachegrind output should be stored
+const CACHEGRIND_OUTPUT_SUBDIR: &str = "cachegrind";
+
 /// A cachegrind-based benchmark runner
 pub struct CachegrindRunner {
     /// The path to the ci-bench executable
     ///
     /// This is necessary because the cachegrind runner works by spawning child processes
     executable: String,
+    /// The directory where the cachegrind output will be stored
+    output_dir: PathBuf,
     /// The amount of instructions that are executed upon startup of the child process, before
     /// actually running one of the benchmarks
     ///
@@ -24,8 +29,12 @@ pub struct CachegrindRunner {
 
 impl CachegrindRunner {
     /// Returns a new cachegrind-based benchmark runner
-    pub fn new(executable: String) -> anyhow::Result<Self> {
+    pub fn new(executable: String, output_dir: PathBuf) -> anyhow::Result<Self> {
         Self::ensure_cachegrind_available()?;
+
+        let cachegrind_output_dir = output_dir.join(CACHEGRIND_OUTPUT_SUBDIR);
+        std::fs::create_dir_all(&cachegrind_output_dir)
+            .context("Failed to create cachegrind output directory")?;
 
         // We don't care about the side here, so let's use `Server` just to choose something
         let overhead_instructions = Self::run_bench_side(
@@ -35,12 +44,14 @@ impl CachegrindRunner {
             "calibration",
             Stdio::piped(),
             Stdio::piped(),
+            &cachegrind_output_dir,
         )?
         .wait_and_get_instr_count()
         .context("Unable to count overhead instructions")?;
 
         Ok(CachegrindRunner {
             executable,
+            output_dir: cachegrind_output_dir,
             overhead_instructions,
         })
     }
@@ -61,6 +72,7 @@ impl CachegrindRunner {
             &bench.name_with_side(Side::Server),
             Stdio::piped(),
             Stdio::piped(),
+            &self.output_dir,
         )
         .context("server side bench crashed")?;
 
@@ -71,6 +83,7 @@ impl CachegrindRunner {
             &bench.name_with_side(Side::Client),
             Stdio::from(server.process.stdout.take().unwrap()),
             Stdio::from(server.process.stdin.take().unwrap()),
+            &self.output_dir,
         )
         .context("client side bench crashed")?;
 
@@ -116,10 +129,9 @@ impl CachegrindRunner {
         name: &str,
         stdin: Stdio,
         stdout: Stdio,
+        output_dir: &Path,
     ) -> anyhow::Result<BenchSubprocess> {
-        let output_file = PathBuf::from(format!("target/cachegrind/cachegrind.out.{}", name));
-        std::fs::create_dir_all(output_file.parent().unwrap())
-            .context("Failed to create cachegrind output directory")?;
+        let cachegrind_output_file = output_dir.join(name);
 
         // Run under setarch to disable ASLR, to reduce noise
         let mut cmd = Command::new("setarch");
@@ -133,7 +145,10 @@ impl CachegrindRunner {
             // keep stderr free of noise, to see any errors from the child process)
             .arg("--log-file=/dev/null")
             // The file where the instruction counts will be stored
-            .arg(format!("--cachegrind-out-file={}", output_file.display()))
+            .arg(format!(
+                "--cachegrind-out-file={}",
+                cachegrind_output_file.display()
+            ))
             .arg(executable)
             .arg("run-single")
             .arg(benchmark_index.to_string())
@@ -146,7 +161,7 @@ impl CachegrindRunner {
 
         Ok(BenchSubprocess {
             process: child,
-            output_file,
+            cachegrind_output_file,
         })
     }
 }
@@ -156,7 +171,7 @@ struct BenchSubprocess {
     /// The benchmark's child process, running under cachegrind
     process: Child,
     /// Cachegrind's output file for this benchmark
-    output_file: PathBuf,
+    cachegrind_output_file: PathBuf,
 }
 
 impl BenchSubprocess {
@@ -173,9 +188,7 @@ impl BenchSubprocess {
             );
         }
 
-        let instruction_count = parse_cachegrind_output(&self.output_file)?;
-        std::fs::remove_file(&self.output_file).ok();
-
+        let instruction_count = parse_cachegrind_output(&self.cachegrind_output_file)?;
         Ok(instruction_count)
     }
 }
@@ -215,4 +228,70 @@ impl Sub for InstructionCounts {
             server: self.server - rhs.server,
         }
     }
+}
+
+/// Returns the detailed instruction diff between the baseline and the candidate
+pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result<String> {
+    // The latest version of valgrind has deprecated cg_diff, which has been superseded by
+    // cg_annotate. Many systems are running older versions, though, so we are sticking with cg_diff
+    // for the time being.
+
+    let tmp_path = Path::new("target/ci-bench-tmp");
+    let tmp = File::create(tmp_path).context("cannot create temp file for cg_diff")?;
+
+    // cg_diff generates a diff between two cachegrind output files in a custom format that is not
+    // user-friendly
+    let cg_diff = Command::new("cg_diff")
+        .arg(
+            baseline
+                .join(CACHEGRIND_OUTPUT_SUBDIR)
+                .join(scenario),
+        )
+        .arg(
+            candidate
+                .join(CACHEGRIND_OUTPUT_SUBDIR)
+                .join(scenario),
+        )
+        .stdout(Stdio::from(tmp))
+        .spawn()
+        .context("cannot spawn cg_diff subprocess")?
+        .wait()
+        .context("error waiting for cg_diff to finish")?;
+
+    if !cg_diff.success() {
+        anyhow::bail!(
+            "cg_diff finished with an error (code = {:?})",
+            cg_diff.code()
+        )
+    }
+
+    // cg_annotate transforms the output of cg_diff into something a user can understand
+    let cg_annotate = Command::new("cg_annotate")
+        .arg(tmp_path)
+        .arg("--auto=no")
+        .output()
+        .context("error waiting for cg_annotate to finish")?;
+
+    if !cg_annotate.status.success() {
+        anyhow::bail!(
+            "cg_annotate finished with an error (code = {:?})",
+            cg_annotate.status.code()
+        )
+    }
+
+    let annotated =
+        String::from_utf8(cg_annotate.stdout).context("cg_annotate produced invalid UTF8")?;
+
+    // Discard lines before the first `Ir` header
+    let mut diff = String::new();
+    for line in annotated
+        .trim()
+        .lines()
+        .skip_while(|l| l.trim() != "Ir")
+    {
+        diff.push_str(line);
+        diff.push('\n');
+    }
+
+    Ok(diff)
 }

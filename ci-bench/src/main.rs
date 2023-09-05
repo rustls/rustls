@@ -56,6 +56,9 @@ const RESUMED_HANDSHAKE_RUNS: usize = 30;
 /// The threshold at which instruction count changes are considered relevant
 const CHANGE_THRESHOLD: f64 = 0.002; // 0.2%
 
+/// The name of the file where the instruction counts are stored after a `run-all` run
+const ICOUNTS_FILENAME: &str = "icounts.csv";
+
 #[derive(Parser)]
 #[command(about)]
 pub struct Cli {
@@ -66,15 +69,18 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Command {
     /// Run all benchmarks and prints the measured CPU instruction counts in CSV format
-    RunAll,
+    RunAll {
+        #[arg(short, long)]
+        output_dir: Option<PathBuf>,
+    },
     /// Run a single benchmark at the provided index (used by the bench runner to start each benchmark in its own process)
     RunSingle { index: u32, side: Side },
     /// Compare the results from two previous benchmark runs and print a user-friendly markdown overview
     Compare {
-        /// Path to a CSV file obtained from a previous `run-all` execution
-        baseline_input: PathBuf,
-        /// Path to a CSV file obtained from a previous `run-all` execution
-        candidate_input: PathBuf,
+        /// Path to the directory with the results of a previous `run-all` execution
+        baseline_dir: PathBuf,
+        /// Path to the directory with the results of a previous `run-all` execution
+        candidate_dir: PathBuf,
     },
 }
 
@@ -99,13 +105,16 @@ fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     match cli.command {
-        Command::RunAll => {
+        Command::RunAll { output_dir } => {
             let executable = std::env::args().next().unwrap();
-            let results = run_all(executable, &benchmarks)?;
+            let output_dir = output_dir.unwrap_or("target/ci-bench".into());
+            let results = run_all(executable, output_dir.clone(), &benchmarks)?;
 
             // Output results in CSV (note: not using a library here to avoid extra dependencies)
+            let mut csv_file = File::create(output_dir.join(ICOUNTS_FILENAME))
+                .context("cannot create output csv file")?;
             for (name, instr_count) in results {
-                println!("{name},{instr_count}");
+                writeln!(csv_file, "{name},{instr_count}")?;
             }
         }
         Command::RunSingle { index, side } => {
@@ -167,12 +176,12 @@ fn main() -> anyhow::Result<()> {
             mem::forget(stdout);
         }
         Command::Compare {
-            baseline_input,
-            candidate_input,
+            baseline_dir,
+            candidate_dir,
         } => {
-            let baseline = read_results(baseline_input.as_ref())?;
-            let candidate = read_results(candidate_input.as_ref())?;
-            let result = compare_results(&baseline, &candidate);
+            let baseline = read_results(&baseline_dir.join(ICOUNTS_FILENAME))?;
+            let candidate = read_results(&candidate_dir.join(ICOUNTS_FILENAME))?;
+            let result = compare_results(&baseline_dir, &candidate_dir, &baseline, &candidate)?;
             print_report(&result);
 
             if !result.noteworthy.is_empty() {
@@ -275,9 +284,13 @@ fn add_benchmark_group(benchmarks: &mut Vec<Benchmark>, params: BenchmarkParams)
 }
 
 /// Run all the provided benches under cachegrind to retrieve their instruction count
-pub fn run_all(executable: String, benches: &[Benchmark]) -> anyhow::Result<Vec<(String, u64)>> {
+pub fn run_all(
+    executable: String,
+    output_dir: PathBuf,
+    benches: &[Benchmark],
+) -> anyhow::Result<Vec<(String, u64)>> {
     // Run the benchmarks in parallel
-    let cachegrind = CachegrindRunner::new(executable)?;
+    let cachegrind = CachegrindRunner::new(executable, output_dir)?;
     let results: Vec<_> = benches
         .par_iter()
         .enumerate()
@@ -497,8 +510,10 @@ fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyhow::Re
 
 /// The results of a comparison between two `run-all` executions
 struct CompareResult {
-    /// Results that probably indicate a real change in performance and should be highlighted
-    noteworthy: Vec<Diff>,
+    /// Results that probably indicate a real change in performance and should be highlighted.
+    ///
+    /// The string is a detailed diff between the instruction counts obtained from cachegrind.
+    noteworthy: Vec<(Diff, String)>,
     /// Results within the noise threshold
     negligible: Vec<Diff>,
     /// Benchmark scenarios present in the candidate but missing in the baseline
@@ -517,7 +532,10 @@ struct Diff {
 
 /// Reads the (benchmark, instruction count) pairs from previous CSV output
 fn read_results(path: &Path) -> anyhow::Result<HashMap<String, u64>> {
-    let file = fs::File::open(path).context("CSV file for comparison not found")?;
+    let file = File::open(path).context(format!(
+        "CSV file for comparison not found: {}",
+        path.display()
+    ))?;
 
     let mut measurements = HashMap::new();
     for line in BufReader::new(file).lines() {
@@ -543,9 +561,11 @@ fn read_results(path: &Path) -> anyhow::Result<HashMap<String, u64>> {
 /// Returns an internal representation of the comparison between the baseline and the candidate
 /// measurements
 fn compare_results(
+    baseline_dir: &Path,
+    candidate_dir: &Path,
     baseline: &HashMap<String, u64>,
     candidate: &HashMap<String, u64>,
-) -> CompareResult {
+) -> anyhow::Result<CompareResult> {
     let mut diffs = Vec::new();
     let mut missing = Vec::new();
     for (scenario, &instr_count) in candidate {
@@ -573,11 +593,18 @@ fn compare_results(
     });
 
     let (noteworthy, negligible) = split_on_threshold(&diffs);
-    CompareResult {
-        noteworthy,
+
+    let mut noteworthy_with_details = Vec::new();
+    for diff in noteworthy {
+        let detailed_diff = cachegrind::diff(baseline_dir, candidate_dir, &diff.scenario)?;
+        noteworthy_with_details.push((diff, detailed_diff));
+    }
+
+    Ok(CompareResult {
+        noteworthy: noteworthy_with_details,
         negligible,
         missing_in_baseline: missing,
-    }
+    })
 }
 
 /// Prints a report of the comparison to stdout, using GitHub-flavored markdown
@@ -594,23 +621,38 @@ fn print_report(result: &CompareResult) {
         }
     }
 
-    println!("### Noteworthy instruction count differences");
+    println!("## Noteworthy instruction count differences");
     if result.noteworthy.is_empty() {
         println!(
             "_There are no noteworthy instruction count differences (i.e. above {}%)_",
             CHANGE_THRESHOLD * 100.0
         );
     } else {
-        table(&result.noteworthy, true);
+        table(
+            result
+                .noteworthy
+                .iter()
+                .map(|(diff, _)| diff),
+            true,
+        );
+        println!("<details>");
+        println!("<summary>Details per scenario</summary>\n");
+        for (diff, detailed_diff) in &result.noteworthy {
+            println!("#### {}", diff.scenario);
+            println!("```");
+            println!("{detailed_diff}");
+            println!("```");
+        }
+        println!("</details>\n")
     }
 
-    println!("### Other instruction count differences");
+    println!("## Other instruction count differences");
     if result.negligible.is_empty() {
         println!("_There are no other instruction count differences_");
     } else {
         println!("<details>");
         println!("<summary>Click to expand</summary>\n");
-        table(&result.negligible, false);
+        table(result.negligible.iter(), false);
         println!("</details>\n")
     }
 }
@@ -633,7 +675,7 @@ fn split_on_threshold(diffs: &[Diff]) -> (Vec<Diff>, Vec<Diff>) {
 }
 
 /// Renders the diffs as a markdown table
-fn table(diffs: &[Diff], emoji_feedback: bool) {
+fn table<'a>(diffs: impl Iterator<Item = &'a Diff>, emoji_feedback: bool) {
     println!("| Scenario | Baseline | Candidate | Diff |");
     println!("| --- | ---: | ---: | ---: |");
     for diff in diffs {
