@@ -19,5 +19,9 @@ sha2 = "0.10.0"
 webpki = { package = "rustls-webpki", version = "0.102.0-alpha.0", default-features = false, features = ["alloc", "std"] }
 webpki-roots = "0.25.0"
 x25519-dalek = "2"
+p256 = "0.13.2"
+ecdsa = { version = "0.16.8", features = ["signing", "pem", "pkcs8"] }
+signature = "2.1.0"
+rcgen = "0.11.1"
 
 [dev-dependencies]
