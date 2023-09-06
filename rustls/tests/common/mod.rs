@@ -245,7 +245,7 @@ impl KeyType {
 
 pub fn finish_server_config<C: CryptoProvider>(
     kt: KeyType,
-    conf: rustls::ConfigBuilder<ServerConfig<C>, rustls::WantsVerifier<C>>,
+    conf: rustls::ConfigBuilder<ServerConfig<C>, rustls::WantsVerifier>,
 ) -> ServerConfig<C> {
     conf.with_no_client_auth()
         .with_single_cert(kt.get_chain(), kt.get_key())
@@ -272,7 +272,7 @@ pub fn make_server_config_with_versions(
 
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: &[&'static rustls::SupportedKxGroup],
+    kx_groups: &[&'static dyn rustls::SupportedKxGroup],
 ) -> ServerConfig<Ring> {
     finish_server_config(
         kt,
@@ -338,7 +338,7 @@ pub fn make_server_config_with_optional_client_auth(
 
 pub fn finish_client_config<C: CryptoProvider>(
     kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier<C>>,
+    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier>,
 ) -> ClientConfig<C> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
@@ -353,7 +353,7 @@ pub fn finish_client_config<C: CryptoProvider>(
 
 pub fn finish_client_config_with_creds<C: CryptoProvider>(
     kt: KeyType,
-    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier<C>>,
+    config: rustls::ConfigBuilder<ClientConfig<C>, rustls::WantsVerifier>,
 ) -> ClientConfig<C> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
@@ -374,7 +374,7 @@ pub fn make_client_config(kt: KeyType) -> ClientConfig<Ring> {
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: &[&'static rustls::SupportedKxGroup],
+    kx_groups: &[&'static dyn rustls::SupportedKxGroup],
 ) -> ClientConfig<Ring> {
     let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()

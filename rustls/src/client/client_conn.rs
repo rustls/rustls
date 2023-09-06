@@ -1,7 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
-use crate::crypto::{CryptoProvider, KeyExchange};
+use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::{DnsName, DnsNameRef, InvalidDnsNameError};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -134,7 +134,7 @@ pub struct ClientConfig<C: CryptoProvider> {
     ///
     /// The first element in this list is the _default key share algorithm_,
     /// and in TLS1.3 a key share for it is sent in the client hello.
-    pub(super) kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
+    pub(super) kx_groups: Vec<&'static dyn SupportedKxGroup>,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.

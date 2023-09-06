@@ -1,7 +1,7 @@
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{ActiveKeyExchange, CryptoProvider};
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -15,7 +15,6 @@ use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, Handshak
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::rand::GetRandomFailed;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
@@ -33,10 +32,9 @@ use alloc::sync::Arc;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
-    use crate::crypto::{KeyExchange, SupportedGroup};
+    use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
-    use crate::msgs::enums::NamedGroup;
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::ServerECDHParams;
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
@@ -182,8 +180,7 @@ mod client_hello {
                         AlertDescription::HandshakeFailure,
                         PeerIncompatible::NoKxGroupsInCommon,
                     )
-                })?
-                .name();
+                })?;
 
             let ecpoint = ECPointFormat::SUPPORTED
                 .iter()
@@ -224,10 +221,9 @@ mod client_hello {
             if let Some(ocsp_response) = ocsp_response {
                 emit_cert_status(&mut self.transcript, cx.common, ocsp_response);
             }
-            let server_kx = emit_server_kx::<C>(
+            let server_kx = emit_server_kx(
                 &mut self.transcript,
                 cx.common,
-                &self.config,
                 sigschemes,
                 group,
                 server_key.get_key(),
@@ -404,25 +400,18 @@ mod client_hello {
         common.send_msg(c, false);
     }
 
-    fn emit_server_kx<C: CryptoProvider>(
+    fn emit_server_kx(
         transcript: &mut HandshakeHash,
         common: &mut CommonState,
-        config: &ServerConfig<C>,
         sigschemes: Vec<SignatureScheme>,
-        selected_group: NamedGroup,
+        selected_group: &'static dyn SupportedKxGroup,
         signing_key: &dyn sign::SigningKey,
         randoms: &ConnectionRandoms,
-    ) -> Result<C::KeyExchange, Error> {
-        let kx = match <<C as CryptoProvider>::KeyExchange as KeyExchange>::start(
-            selected_group,
-            &config.kx_groups,
-        ) {
-            Ok(kx) => kx,
-            Err(_) => {
-                return Err(GetRandomFailed.into());
-            }
-        };
-        let secdh = ServerECDHParams::new(selected_group, kx.pub_key());
+    ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
+        let kx = selected_group
+            .start()
+            .map_err(|_| Error::FailedToGetRandomBytes)?;
+        let secdh = ServerECDHParams::new(&*kx);
 
         let mut msg = Vec::new();
         msg.extend(randoms.client);
@@ -516,7 +505,7 @@ struct ExpectCertificate<C: CryptoProvider> {
     session_id: SessionId,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
-    server_kx: C::KeyExchange,
+    server_kx: Box<dyn ActiveKeyExchange>,
     send_ticket: bool,
 }
 
@@ -584,7 +573,7 @@ struct ExpectClientKx<C: CryptoProvider> {
     session_id: SessionId,
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
-    server_kx: C::KeyExchange,
+    server_kx: Box<dyn ActiveKeyExchange>,
     client_cert: Option<Vec<CertificateDer<'static>>>,
     send_ticket: bool,
 }

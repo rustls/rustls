@@ -76,7 +76,7 @@ pub(crate) struct ConnectionSecrets {
 
 impl ConnectionSecrets {
     pub(crate) fn from_key_exchange(
-        kx: impl crypto::KeyExchange,
+        kx: Box<dyn crypto::ActiveKeyExchange>,
         peer_pub_key: &[u8],
         ems_seed: Option<hash::Output>,
         randoms: ConnectionRandoms,
@@ -96,15 +96,16 @@ impl ConnectionSecrets {
             ),
         };
 
-        kx.complete(peer_pub_key, |secret| {
-            prf::prf(
-                &mut ret.master_secret,
-                &*suite.hmac_provider.with_key(secret),
-                label.as_bytes(),
-                seed.as_ref(),
-            );
-            Ok(())
-        })?;
+        let shared_secret = kx.complete(peer_pub_key)?;
+        prf::prf(
+            &mut ret.master_secret,
+            &*ret
+                .suite
+                .hmac_provider
+                .with_key(shared_secret.secret_bytes()),
+            label.as_bytes(),
+            seed.as_ref(),
+        );
 
         Ok(ret)
     }
@@ -316,14 +317,13 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 mod tests {
     use super::*;
     use crate::common_state::{CommonState, Side};
-    use crate::crypto::ring::{self, X25519};
-    use crate::crypto::KeyExchange;
+    use crate::crypto::ring::X25519;
     use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
-        let key = ring::KeyExchange::start(crate::NamedGroup::X25519, &[&X25519]).unwrap();
-        let server_params = ServerECDHParams::new(key.group(), key.pub_key());
+        let key = X25519.start().unwrap();
+        let server_params = ServerECDHParams::new(&*key);
         let mut server_buf = Vec::new();
         server_params.encode(&mut server_buf);
         server_buf.push(34);

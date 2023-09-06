@@ -1,7 +1,7 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::{CryptoProvider, KeyExchange, KeyExchangeError};
+use crate::crypto::CryptoProvider;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
@@ -29,7 +29,6 @@ use super::hs::ClientContext;
 use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
-use crate::rand::GetRandomFailed;
 
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
@@ -766,14 +765,20 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
         let ecdh_params =
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
-        let kx =
-            match <<C as CryptoProvider>::KeyExchange>::start(named_group, &st.config.kx_groups) {
-                Ok(kx) => kx,
-                Err(KeyExchangeError::UnsupportedGroup) => {
-                    return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into())
-                }
-                Err(KeyExchangeError::GetRandomFailed) => return Err(GetRandomFailed.into()),
-            };
+        let skxg = match st
+            .config
+            .kx_groups
+            .iter()
+            .find(|skxg| skxg.name() == named_group)
+        {
+            Some(skxg) => skxg,
+            None => {
+                return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());
+            }
+        };
+        let kx = skxg
+            .start()
+            .map_err(|_| Error::FailedToGetRandomBytes)?;
 
         // 5b.
         let mut transcript = st.transcript;

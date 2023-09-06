@@ -3,7 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::{CryptoProvider, KeyExchange, KeyExchangeError, SupportedGroup};
+use crate::crypto::{ActiveKeyExchange, CryptoProvider};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -20,7 +20,6 @@ use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
 use crate::msgs::handshake::{Random, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::rand::GetRandomFailed;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::SupportedCipherSuite;
 
@@ -170,7 +169,7 @@ struct ExpectServerHello<C: CryptoProvider> {
     input: ClientHelloInput<C>,
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
-    offered_key_share: Option<C::KeyExchange>,
+    offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
     suite: Option<SupportedCipherSuite>,
 }
 
@@ -194,7 +193,7 @@ struct ClientHelloInput<C: CryptoProvider> {
 fn emit_client_hello_for_retry<C: CryptoProvider>(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
-    key_share: Option<C::KeyExchange>,
+    key_share: Option<Box<dyn ActiveKeyExchange>>,
     extra_exts: Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput<C>,
@@ -814,16 +813,22 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                match KeyExchange::start(group, &config.kx_groups) {
-                    Ok(kx) => kx,
-                    Err(KeyExchangeError::UnsupportedGroup) => {
+                let skxg = match config
+                    .kx_groups
+                    .iter()
+                    .find(|skxg| skxg.name() == group)
+                {
+                    Some(skxg) => skxg,
+                    None => {
                         return Err(cx.common.send_fatal_alert(
                             AlertDescription::IllegalParameter,
                             PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
                         ));
                     }
-                    Err(KeyExchangeError::GetRandomFailed) => return Err(GetRandomFailed.into()),
-                }
+                };
+
+                skxg.start()
+                    .map_err(|_| Error::FailedToGetRandomBytes)?
             }
             _ => offered_key_share,
         };

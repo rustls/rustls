@@ -20,8 +20,6 @@ impl Provider {
 }
 
 impl rustls::crypto::CryptoProvider for Provider {
-    type KeyExchange = kx::KeyExchange;
-
     fn fill_random(bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
         use rand_core::RngCore;
         rand_core::OsRng
@@ -31,6 +29,10 @@ impl rustls::crypto::CryptoProvider for Provider {
 
     fn default_cipher_suites() -> &'static [rustls::SupportedCipherSuite] {
         ALL_CIPHER_SUITES
+    }
+
+    fn default_kx_groups() -> &'static [&'static dyn rustls::SupportedKxGroup] {
+        kx::ALL_KX_GROUPS
     }
 }
 

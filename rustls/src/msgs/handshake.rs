@@ -1,5 +1,5 @@
 #![allow(non_camel_case_types)]
-use crate::crypto::CryptoProvider;
+use crate::crypto::{ActiveKeyExchange, CryptoProvider};
 use crate::dns_name::{DnsName, DnsNameRef};
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::InvalidMessage;
@@ -1504,13 +1504,13 @@ pub struct ServerECDHParams {
 }
 
 impl ServerECDHParams {
-    pub fn new(named_group: NamedGroup, pubkey: &[u8]) -> Self {
+    pub fn new(kx: &dyn ActiveKeyExchange) -> Self {
         Self {
             curve_params: ECParameters {
                 curve_type: ECCurveType::NamedCurve,
-                named_group,
+                named_group: kx.group(),
             },
-            public: PayloadU8::new(pubkey.to_vec()),
+            public: PayloadU8::new(kx.pub_key().to_vec()),
         }
     }
 }

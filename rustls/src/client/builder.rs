@@ -1,7 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
-use crate::crypto::{CryptoProvider, KeyExchange};
+use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "ring")]
@@ -16,13 +16,13 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use alloc::sync::Arc;
 use core::marker::PhantomData;
 
-impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier> {
     #[cfg(feature = "ring")]
     /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
-    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -39,7 +39,7 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
     pub fn with_custom_certificate_verifier(
         self,
         verifier: Arc<dyn verify::ServerCertVerifier>,
-    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
+    ) -> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
@@ -56,15 +56,15 @@ impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsVerifier<C>> {
 /// certificate.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
-#[derive(Clone, Debug)]
-pub struct WantsClientCert<C: CryptoProvider> {
+#[derive(Clone)]
+pub struct WantsClientCert {
     cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static <<C as CryptoProvider>::KeyExchange as KeyExchange>::SupportedGroup>,
+    kx_groups: Vec<&'static dyn SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
 }
 
-impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert<C>> {
+impl<C: CryptoProvider> ConfigBuilder<ClientConfig<C>, WantsClientCert> {
     #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
