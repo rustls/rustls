@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::ops::Sub;
 use std::path::{Path, PathBuf};
@@ -236,7 +236,7 @@ pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result
     // cg_annotate. Many systems are running older versions, though, so we are sticking with cg_diff
     // for the time being.
 
-    let tmp_path = Path::new("target/ci-bench-tmp");
+    let tmp_path = Path::new("ci-bench-tmp");
     let tmp = File::create(tmp_path).context("cannot create temp file for cg_diff")?;
 
     // cg_diff generates a diff between two cachegrind output files in a custom format that is not
@@ -292,6 +292,8 @@ pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result
         diff.push_str(line);
         diff.push('\n');
     }
+
+    fs::remove_file(tmp_path).ok();
 
     Ok(diff)
 }
