@@ -25,69 +25,65 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 
 /// Pluggable crypto galore.
 pub trait CryptoProvider: Send + Sync + 'static {
-    /// KeyExchange operations that are supported by the provider.
-    type KeyExchange: KeyExchange;
-
     /// Fill the given buffer with random bytes.
     fn fill_random(buf: &mut [u8]) -> Result<(), GetRandomFailed>;
 
     /// Provide a safe set of cipher suites that can be used as the defaults.
     fn default_cipher_suites() -> &'static [suites::SupportedCipherSuite];
+
+    /// Return a safe set of supported key exchange groups to be used as the defaults.
+    fn default_kx_groups() -> &'static [&'static dyn SupportedKxGroup];
 }
 
-/// An in-progress key exchange over a [SupportedGroup].
-pub trait KeyExchange: Sized + Send + Sync + 'static {
-    /// The supported group the key exchange is operating over.
-    type SupportedGroup: SupportedGroup;
-
-    /// Start a key exchange using the [NamedGroup] if it is a suitable choice
-    /// based on the groups supported.
+/// A supported key exchange group.
+///
+/// This has a TLS-level name expressed using the [`NamedGroup`] enum, and
+/// a function which produces a [`ActiveKeyExchange`].
+pub trait SupportedKxGroup: Send + Sync + Debug {
+    /// Start a key exchange.
     ///
     /// This will prepare an ephemeral secret key in the supported group, and a corresponding
-    /// public key. The key exchange must be completed by calling [KeyExchange#complete].
-    ///
-    /// `name` gives the name of the chosen key exchange group that should be used.  `supported`
-    /// is the configured collection of supported key exchange groups. Implementation-specific
-    /// data can be looked up in this array (based on `name`) to allow unconfigured algorithms
-    /// to be discarded by the linker.
+    /// public key. The key exchange can be completed by calling [ActiveKeyExchange#complete]
+    /// or discarded.
     ///
     /// # Errors
     ///
-    /// Returns an error if the [NamedGroup] is not supported, or if a key exchange
-    /// can't be started.
-    fn start(
-        name: NamedGroup,
-        supported: &[&'static Self::SupportedGroup],
-    ) -> Result<Self, KeyExchangeError>;
+    /// This can fail if the random source fails during ephemeral key generation.
+    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, GetRandomFailed>;
 
+    /// Named group the SupportedKxGroup operates in.
+    fn name(&self) -> NamedGroup;
+}
+
+/// An in-progress key exchange originating from a `SupportedKxGroup`.
+pub trait ActiveKeyExchange: Send + Sync {
     /// Completes the key exchange, given the peer's public key.
     ///
-    /// The shared secret is passed into the closure passed down in `f`, and the result of calling
-    /// `f` is returned to the caller.
-    fn complete<T>(self, peer: &[u8], f: impl FnOnce(&[u8]) -> Result<T, ()>) -> Result<T, Error>;
-
-    /// Return the group being used.
-    fn group(&self) -> NamedGroup;
+    /// The shared secret is returned as a [`SharedSecret`] which can be constructed
+    /// from a `&[u8]`.
+    ///
+    /// This consumes and so terminates the [`ActiveKeyExchange`].
+    fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error>;
 
     /// Return the public key being used.
     fn pub_key(&self) -> &[u8];
 
-    /// Return all supported key exchange groups.
-    fn all_kx_groups() -> &'static [&'static Self::SupportedGroup];
+    /// Return the group being used.
+    fn group(&self) -> NamedGroup;
 }
 
-/// Enumerates possible key exchange errors.
-#[derive(Debug)]
-pub enum KeyExchangeError {
-    /// Returned when the specified group is unsupported.
-    UnsupportedGroup,
+/// The result from `ActiveKeyExchange::complete` as a value.
+pub struct SharedSecret(Vec<u8>);
 
-    /// Random material generation failure during key generation/exchange.
-    GetRandomFailed,
+impl SharedSecret {
+    /// Returns the shared secret as a slice of bytes.
+    pub(crate) fn secret_bytes(&self) -> &[u8] {
+        &self.0
+    }
 }
 
-/// A trait describing a supported key exchange group that can be identified by name.
-pub trait SupportedGroup: Debug + Send + Sync + 'static {
-    /// Named group the SupportedGroup operates in.
-    fn name(&self) -> NamedGroup;
+impl From<&[u8]> for SharedSecret {
+    fn from(source: &[u8]) -> Self {
+        Self(source.to_vec())
+    }
 }

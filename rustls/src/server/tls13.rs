@@ -42,7 +42,7 @@ use subtle::ConstantTimeEq;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
-    use crate::crypto::{KeyExchange, SupportedGroup};
+    use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -201,7 +201,7 @@ mod client_hello {
             }
 
             // choose a share that we support
-            let chosen_share = self
+            let chosen_share_and_kxg = self
                 .config
                 .kx_groups
                 .iter()
@@ -209,9 +209,10 @@ mod client_hello {
                     shares_ext
                         .iter()
                         .find(|share| share.group == group.name())
+                        .map(|share| (share, *group))
                 });
 
-            let chosen_share = match chosen_share {
+            let chosen_share_and_kxg = match chosen_share_and_kxg {
                 Some(s) => s,
                 None => {
                     // We don't have a suitable key share.  Choose a suitable group and
@@ -362,7 +363,7 @@ mod client_hello {
                 self.suite,
                 cx,
                 &client_hello.session_id,
-                chosen_share,
+                chosen_share_and_kxg,
                 chosen_psk_index,
                 resumedata
                     .as_ref()
@@ -480,19 +481,19 @@ mod client_hello {
         suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         session_id: &SessionId,
-        share: &KeyShareEntry,
+        share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
         config: &ServerConfig<C>,
     ) -> Result<KeyScheduleHandshake, Error> {
         let mut extensions = Vec::new();
 
-        // Prepare key exchange; the caller ascertained that the `share.group` is supported
-        let kx = <<C as CryptoProvider>::KeyExchange as KeyExchange>::start(
-            share.group,
-            &config.kx_groups,
-        )
-        .map_err(|_| Error::FailedToGetRandomBytes)?;
+        // Prepare key exchange; the caller already found the matching SupportedKxGroup
+        let (share, kxgroup) = share_and_kxgroup;
+        debug_assert_eq!(kxgroup.name(), share.group);
+        let kx = kxgroup
+            .start()
+            .map_err(|_| Error::FailedToGetRandomBytes)?;
 
         let kse = KeyShareEntry::new(share.group, kx.pub_key());
         extensions.push(ServerExtension::KeyShare(kse));
@@ -541,9 +542,8 @@ mod client_hello {
         };
 
         // Do key exchange
-        let key_schedule = kx.complete(&share.payload.0, |secret| {
-            Ok(key_schedule_pre_handshake.into_handshake(secret))
-        })?;
+        let shared_secret = kx.complete(&share.payload.0)?;
+        let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret.secret_bytes());
 
         let handshake_hash = transcript.get_current_hash();
         let key_schedule = key_schedule.derive_server_handshake_secrets(

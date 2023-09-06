@@ -1,4 +1,4 @@
-use crate::crypto::{CryptoProvider, KeyExchangeError, SupportedGroup};
+use crate::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
@@ -28,8 +28,6 @@ pub mod sign;
 pub struct Ring;
 
 impl CryptoProvider for Ring {
-    type KeyExchange = KeyExchange;
-
     fn fill_random(buf: &mut [u8]) -> Result<(), GetRandomFailed> {
         SystemRandom::new()
             .fill(buf)
@@ -38,6 +36,11 @@ impl CryptoProvider for Ring {
 
     fn default_cipher_suites() -> &'static [SupportedCipherSuite] {
         DEFAULT_CIPHER_SUITES
+    }
+
+    /// Return all supported key exchange groups.
+    fn default_kx_groups() -> &'static [&'static dyn SupportedKxGroup] {
+        ALL_KX_GROUPS
     }
 }
 
@@ -68,118 +71,98 @@ pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 ];
 
-/// An in-progress key exchange.  This has the algorithm,
-/// our private key, and our public key.
-#[derive(Debug)]
-pub struct KeyExchange {
-    group: &'static SupportedKxGroup,
-    priv_key: EphemeralPrivateKey,
-    pub_key: ring::agreement::PublicKey,
-}
-
-impl super::KeyExchange for KeyExchange {
-    type SupportedGroup = SupportedKxGroup;
-
-    fn start(
-        name: NamedGroup,
-        supported: &[&'static SupportedKxGroup],
-    ) -> Result<Self, KeyExchangeError> {
-        let group = match supported
-            .iter()
-            .find(|group| group.name == name)
-        {
-            Some(group) => group,
-            None => return Err(KeyExchangeError::UnsupportedGroup),
-        };
-
-        let rng = SystemRandom::new();
-        let priv_key = match EphemeralPrivateKey::generate(group.agreement_algorithm, &rng) {
-            Ok(priv_key) => priv_key,
-            Err(_) => return Err(KeyExchangeError::GetRandomFailed),
-        };
-
-        let pub_key = match priv_key.compute_public_key() {
-            Ok(pub_key) => pub_key,
-            Err(_) => return Err(KeyExchangeError::GetRandomFailed),
-        };
-
-        Ok(Self {
-            group,
-            priv_key,
-            pub_key,
-        })
-    }
-
-    /// Completes the key exchange, given the peer's public key.
-    ///
-    /// The shared secret is passed into the closure passed down in `f`, and the result of calling
-    /// `f` is returned to the caller.
-    fn complete<T>(self, peer: &[u8], f: impl FnOnce(&[u8]) -> Result<T, ()>) -> Result<T, Error> {
-        let peer_key = UnparsedPublicKey::new(self.group.agreement_algorithm, peer);
-        agree_ephemeral(self.priv_key, &peer_key, (), f)
-            .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
-    }
-
-    /// Return the group being used.
-    fn group(&self) -> NamedGroup {
-        self.group.name
-    }
-
-    /// Return the public key being used.
-    fn pub_key(&self) -> &[u8] {
-        self.pub_key.as_ref()
-    }
-
-    /// Return all supported key exchange groups.
-    fn all_kx_groups() -> &'static [&'static Self::SupportedGroup] {
-        &ALL_KX_GROUPS
-    }
-}
-
 /// A key-exchange group supported by *ring*.
 ///
 /// All possible instances of this class are provided by the library in
 /// the `ALL_KX_GROUPS` array.
-pub struct SupportedKxGroup {
+pub struct KxGroup {
     /// The IANA "TLS Supported Groups" name of the group
-    pub name: NamedGroup,
+    name: NamedGroup,
 
     /// The corresponding ring agreement::Algorithm
     agreement_algorithm: &'static ring::agreement::Algorithm,
 }
 
-impl SupportedGroup for SupportedKxGroup {
+impl SupportedKxGroup for KxGroup {
+    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, GetRandomFailed> {
+        let rng = SystemRandom::new();
+        let priv_key = EphemeralPrivateKey::generate(self.agreement_algorithm, &rng)
+            .map_err(|_| GetRandomFailed)?;
+
+        let pub_key = priv_key
+            .compute_public_key()
+            .map_err(|_| GetRandomFailed)?;
+
+        Ok(Box::new(KeyExchange {
+            name: self.name,
+            agreement_algorithm: self.agreement_algorithm,
+            priv_key,
+            pub_key,
+        }))
+    }
+
     fn name(&self) -> NamedGroup {
         self.name
     }
 }
 
-impl fmt::Debug for SupportedKxGroup {
+impl fmt::Debug for KxGroup {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.name.fmt(f)
     }
 }
 
 /// Ephemeral ECDH on curve25519 (see RFC7748)
-pub static X25519: SupportedKxGroup = SupportedKxGroup {
+pub static X25519: &dyn SupportedKxGroup = &KxGroup {
     name: NamedGroup::X25519,
     agreement_algorithm: &ring::agreement::X25519,
 };
 
 /// Ephemeral ECDH on secp256r1 (aka NIST-P256)
-pub static SECP256R1: SupportedKxGroup = SupportedKxGroup {
+pub static SECP256R1: &dyn SupportedKxGroup = &KxGroup {
     name: NamedGroup::secp256r1,
     agreement_algorithm: &ring::agreement::ECDH_P256,
 };
 
 /// Ephemeral ECDH on secp384r1 (aka NIST-P384)
-pub static SECP384R1: SupportedKxGroup = SupportedKxGroup {
+pub static SECP384R1: &dyn SupportedKxGroup = &KxGroup {
     name: NamedGroup::secp384r1,
     agreement_algorithm: &ring::agreement::ECDH_P384,
 };
 
 /// A list of all the key exchange groups supported by rustls.
-pub static ALL_KX_GROUPS: [&SupportedKxGroup; 3] = [&X25519, &SECP256R1, &SECP384R1];
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
+
+/// An in-progress key exchange.  This has the algorithm,
+/// our private key, and our public key.
+#[derive(Debug)]
+pub struct KeyExchange {
+    name: NamedGroup,
+    agreement_algorithm: &'static ring::agreement::Algorithm,
+    priv_key: EphemeralPrivateKey,
+    pub_key: ring::agreement::PublicKey,
+}
+
+impl ActiveKeyExchange for KeyExchange {
+    /// Completes the key exchange, given the peer's public key.
+    fn complete(self: Box<Self>, peer: &[u8]) -> Result<SharedSecret, Error> {
+        let peer_key = UnparsedPublicKey::new(self.agreement_algorithm, peer);
+        agree_ephemeral(self.priv_key, &peer_key, (), |secret| {
+            Ok(SharedSecret::from(secret))
+        })
+        .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
+    }
+
+    /// Return the group being used.
+    fn group(&self) -> NamedGroup {
+        self.name
+    }
+
+    /// Return the public key being used.
+    fn pub_key(&self) -> &[u8] {
+        self.pub_key.as_ref()
+    }
+}
 
 /// All defined key exchange groups supported by *ring* appear in this module.
 ///

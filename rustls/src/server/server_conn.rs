@@ -1,7 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Context, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
-use crate::crypto::{CryptoProvider, KeyExchange};
+use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -215,7 +215,7 @@ pub struct ServerConfig<C: CryptoProvider> {
     ///
     /// The first is the highest priority: they will be
     /// offered to the client in this order.
-    pub(super) kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
+    pub(super) kx_groups: Vec<&'static dyn SupportedKxGroup>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list

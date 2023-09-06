@@ -1,5 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::crypto::{CryptoProvider, KeyExchange};
+use crate::crypto::{CryptoProvider, SupportedKxGroup};
 #[cfg(feature = "ring")]
 use crate::error::Error;
 use crate::server::handy;
@@ -15,12 +15,12 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use alloc::sync::Arc;
 use core::marker::PhantomData;
 
-impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier<C>> {
+impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier> {
     /// Choose how to verify client certificates.
     pub fn with_client_cert_verifier(
         self,
         client_cert_verifier: Arc<dyn ClientCertVerifier>,
-    ) -> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
+    ) -> ConfigBuilder<ServerConfig<C>, WantsServerCert> {
         ConfigBuilder {
             state: WantsServerCert {
                 cipher_suites: self.state.cipher_suites,
@@ -33,7 +33,7 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier<C>> {
     }
 
     /// Disable client authentication.
-    pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
+    pub fn with_no_client_auth(self) -> ConfigBuilder<ServerConfig<C>, WantsServerCert> {
         self.with_client_cert_verifier(Arc::new(NoClientAuth))
     }
 }
@@ -43,14 +43,14 @@ impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsVerifier<C>> {
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsServerCert<C: CryptoProvider> {
+pub struct WantsServerCert {
     cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static <C::KeyExchange as KeyExchange>::SupportedGroup>,
+    kx_groups: Vec<&'static dyn SupportedKxGroup>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn ClientCertVerifier>,
 }
 
-impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert<C>> {
+impl<C: CryptoProvider> ConfigBuilder<ServerConfig<C>, WantsServerCert> {
     #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,

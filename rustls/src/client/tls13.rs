@@ -6,7 +6,7 @@ use crate::common_state::Side;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
-use crate::crypto::{CryptoProvider, KeyExchange, SupportedGroup};
+use crate::crypto::{ActiveKeyExchange, CryptoProvider};
 use crate::enums::{
     AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
@@ -76,7 +76,7 @@ pub(super) fn handle_server_hello<C: CryptoProvider>(
     transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
-    our_key_share: C::KeyExchange,
+    our_key_share: Box<dyn ActiveKeyExchange>,
     mut sent_tls13_fake_ccs: bool,
 ) -> hs::NextStateOrError {
     validate_server_hello(cx.common, server_hello)?;
@@ -150,9 +150,8 @@ pub(super) fn handle_server_hello<C: CryptoProvider>(
         KeySchedulePreHandshake::new(suite)
     };
 
-    let key_schedule = our_key_share.complete(&their_key_share.payload.0, |secret| {
-        Ok(key_schedule_pre_handshake.into_handshake(secret))
-    })?;
+    let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
+    let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret.secret_bytes());
 
     // Remember what KX group the server liked for next time.
     config
@@ -207,7 +206,7 @@ fn validate_server_hello(
 pub(super) fn initial_key_share<C: CryptoProvider>(
     config: &ClientConfig<C>,
     server_name: &ServerName,
-) -> Result<C::KeyExchange, Error> {
+) -> Result<Box<dyn ActiveKeyExchange>, Error> {
     let group = config
         .resumption
         .store
@@ -223,10 +222,11 @@ pub(super) fn initial_key_share<C: CryptoProvider>(
                 .kx_groups
                 .first()
                 .expect("No kx groups configured")
-        })
-        .name();
+        });
 
-    KeyExchange::start(group, &config.kx_groups).map_err(|_| Error::FailedToGetRandomBytes)
+    group
+        .start()
+        .map_err(|_| Error::FailedToGetRandomBytes)
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a

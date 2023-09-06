@@ -357,11 +357,11 @@ fn lookup_scheme(scheme: u16) -> SignatureScheme {
     }
 }
 
-fn lookup_kx_group(group: u16) -> &'static SupportedKxGroup {
+fn lookup_kx_group(group: u16) -> &'static dyn SupportedKxGroup {
     match group {
-        0x001d => &kx_group::X25519,
-        0x0017 => &kx_group::SECP256R1,
-        0x0018 => &kx_group::SECP384R1,
+        0x001d => kx_group::X25519,
+        0x0017 => kx_group::SECP256R1,
+        0x0018 => kx_group::SECP384R1,
         _ => {
             println_err!("Unsupported kx group {:04x}", group);
             process::exit(BOGO_NACK);
