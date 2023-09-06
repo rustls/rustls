@@ -291,6 +291,72 @@ impl<'a> From<Vec<u8>> for CertificateDer<'a> {
     }
 }
 
+/// A DER encoding of the PKIX AlgorithmIdentifier type:
+///
+/// ```ASN.1
+/// AlgorithmIdentifier  ::=  SEQUENCE  {
+///     algorithm               OBJECT IDENTIFIER,
+///     parameters              ANY DEFINED BY algorithm OPTIONAL  }
+///                                -- contains a value of the type
+///                                -- registered for use with the
+///                                -- algorithm object identifier value
+/// ```
+/// (from <https://www.rfc-editor.org/rfc/rfc5280#section-4.1.1.2>)
+///
+/// The outer sequence encoding is *not included*, so this is the DER encoding
+/// of an OID for `algorithm` plus the `parameters` value.
+///
+/// For example, this is the `rsaEncryption` algorithm:
+///
+/// ```
+/// let rsa_encryption = rustls_pki_types::AlgorithmIdentifier::from_slice(
+///     &[
+///         // algorithm: 1.2.840.113549.1.1.1
+///         0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,
+///         // parameters: NULL
+///         0x05, 0x00
+///     ]
+/// );
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct AlgorithmIdentifier<'a>(Der<'a>);
+
+impl<'a> AlgorithmIdentifier<'a> {
+    /// Makes a new `AlgorithmIdentifier` from a static octet slice.
+    ///
+    /// This does not validate the contents of the slice.
+    pub const fn from_slice(bytes: &'a [u8]) -> Self {
+        Self(Der::from_slice(bytes))
+    }
+}
+
+impl AsRef<[u8]> for AlgorithmIdentifier<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl Deref for AlgorithmIdentifier<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+impl<'a> From<&'a [u8]> for AlgorithmIdentifier<'a> {
+    fn from(slice: &'a [u8]) -> Self {
+        Self(Der::from(slice))
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> From<Vec<u8>> for AlgorithmIdentifier<'a> {
+    fn from(vec: Vec<u8>) -> Self {
+        Self(Der::from(vec))
+    }
+}
+
 /// DER-encoded data, either owned or borrowed
 ///
 /// This wrapper type is used to represent DER-encoded data in a way that is agnostic to whether
