@@ -7,7 +7,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Install valgrind
-        run: sudo apt install -y valgrind
+        run: |
+          sudo apt install -y valgrind
+          valgrind --version
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
