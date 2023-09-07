@@ -51,6 +51,9 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
     #[cfg(feature = "secret_extraction")]
     pub(crate) enable_secret_extraction: bool,
+
+    pub(crate) verify_data: Option<Vec<u8>>,
+    pub(crate) is_renego: bool,
 }
 
 impl CommonState {
@@ -81,6 +84,9 @@ impl CommonState {
             quic: quic::Quic::default(),
             #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
+
+            verify_data: None,
+            is_renego: false,
         }
     }
 
@@ -156,16 +162,17 @@ impl CommonState {
     ) -> Result<Box<dyn State<Data>>, Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
-        if self.may_receive_application_data && !self.is_tls13() {
-            let reject_ty = match self.side {
-                Side::Client => HandshakeType::HelloRequest,
-                Side::Server => HandshakeType::ClientHello,
-            };
-            if msg.is_handshake_type(reject_ty) {
-                self.send_warning_alert(AlertDescription::NoRenegotiation);
-                return Ok(state);
-            }
-        }
+        // TODO: Why?
+        // if self.may_receive_application_data && !self.is_tls13() {
+        //     let reject_ty = match self.side {
+        //         Side::Client => HandshakeType::HelloRequest,
+        //         Side::Server => HandshakeType::ClientHello,
+        //     };
+        //     if msg.is_handshake_type(reject_ty) {
+        //         self.send_warning_alert(AlertDescription::NoRenegotiation);
+        //         return Ok(state);
+        //     }
+        // }
 
         let mut cx = Context { common: self, data };
         match state.handle(&mut cx, msg) {
@@ -415,6 +422,25 @@ impl CommonState {
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext.append(bytes.0);
+    }
+
+    #[cfg(feature = "tls12")]
+    pub(crate) fn stop_traffic(&mut self) {
+        self.may_send_application_data = false;
+    }
+
+    #[cfg(feature = "tls12")]
+    pub(crate) fn start_encryption_only_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
+        let (_, enc) = secrets.make_cipher_pair(side);
+        self.record_layer
+            .prepare_message_encrypter(enc);
+    }
+
+    #[cfg(feature = "tls12")]
+    pub(crate) fn start_decryption_only_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
+        let (dec, _) = secrets.make_cipher_pair(side);
+        self.record_layer
+            .prepare_message_decrypter(dec);
     }
 
     #[cfg(feature = "tls12")]

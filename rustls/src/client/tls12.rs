@@ -2,6 +2,7 @@ use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{CryptoProvider, KeyExchange, KeyExchangeError};
+use crate::dns_name::DnsName;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
@@ -26,7 +27,8 @@ use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify::{self, DigitallySignedStruct};
 
 use super::client_conn::ClientConnectionData;
-use super::hs::ClientContext;
+use super::common::ClientHelloDetails;
+use super::hs::{emit_client_hello_for_retry, ClientContext, ClientHelloInput};
 use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
@@ -427,7 +429,7 @@ fn emit_certificate(
     };
 
     transcript.add_message(&cert);
-    common.send_msg(cert, false);
+    common.send_msg(cert, common.is_renego);
 }
 
 fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
@@ -445,7 +447,7 @@ fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_k
     };
 
     transcript.add_message(&ckx);
-    common.send_msg(ckx, false);
+    common.send_msg(ckx, common.is_renego);
 }
 
 fn emit_certverify(
@@ -470,7 +472,7 @@ fn emit_certverify(
     };
 
     transcript.add_message(&m);
-    common.send_msg(m, false);
+    common.send_msg(m, common.is_renego);
     Ok(())
 }
 
@@ -480,7 +482,7 @@ fn emit_ccs(common: &mut CommonState) {
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
 
-    common.send_msg(ccs, false);
+    common.send_msg(ccs, common.is_renego);
 }
 
 fn emit_finished(
@@ -490,6 +492,8 @@ fn emit_finished(
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
+    // Store verify_data for case of renego to put it in the RenegotiationInfo extension
+    common.verify_data = Some(verify_data.clone());
     let verify_data_payload = Payload::new(verify_data);
 
     let f = Message {
@@ -806,8 +810,15 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
             &secrets.randoms.client,
             &secrets.master_secret,
         );
-        cx.common
-            .start_encryption_tls12(&secrets, Side::Client);
+
+        if cx.common.is_renego {
+            cx.common
+                .start_encryption_only_tls12(&secrets, Side::Client);
+        } else {
+            cx.common
+                .start_encryption_tls12(&secrets, Side::Client);
+        }
+
         cx.common
             .record_layer
             .start_encrypting();
@@ -918,6 +929,11 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCcs<C> {
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
         cx.common.check_aligned_handshake()?;
+
+        if cx.common.is_renego {
+            cx.common
+                .start_decryption_only_tls12(&self.secrets, Side::Client);
+        }
 
         // nb. msgs layer validates trivial contents of CCS
         cx.common
@@ -1044,7 +1060,9 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectFinished<C> {
 
         cx.common.start_traffic();
         Ok(Box::new(ExpectTraffic {
+            config: st.config,
             secrets: st.secrets,
+            transcript: st.transcript,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
             _fin_verified,
@@ -1053,19 +1071,32 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectFinished<C> {
 }
 
 // -- Traffic transit state --
-struct ExpectTraffic {
+struct ExpectTraffic<C: CryptoProvider> {
+    config: Arc<ClientConfig<C>>,
     secrets: ConnectionSecrets,
+    transcript: HandshakeHash,
     _cert_verified: verify::ServerCertVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
-impl State<ClientConnectionData> for ExpectTraffic {
+impl<C: CryptoProvider> State<ClientConnectionData> for ExpectTraffic<C> {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common
                 .take_received_plaintext(payload),
+            MessagePayload::Handshake {
+                parsed:
+                    HandshakeMessagePayload {
+                        typ: HandshakeType::HelloRequest,
+                        payload: HandshakePayload::ClientHello(_),
+                        ..
+                    },
+                ..
+            } => {
+                cx.common.stop_traffic();
+            }
             payload => {
                 return Err(inappropriate_message(
                     &payload,
