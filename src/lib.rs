@@ -365,42 +365,29 @@ pub struct InvalidSignature;
 ///     ]
 /// );
 /// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct AlgorithmIdentifier<'a>(Der<'a>);
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AlgorithmIdentifier(&'static [u8]);
 
-impl<'a> AlgorithmIdentifier<'a> {
+impl AlgorithmIdentifier {
     /// Makes a new `AlgorithmIdentifier` from a static octet slice.
     ///
     /// This does not validate the contents of the slice.
-    pub const fn from_slice(bytes: &'a [u8]) -> Self {
-        Self(Der::from_slice(bytes))
+    pub const fn from_slice(bytes: &'static [u8]) -> Self {
+        Self(bytes)
     }
 }
 
-impl AsRef<[u8]> for AlgorithmIdentifier<'_> {
+impl AsRef<[u8]> for AlgorithmIdentifier {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+        self.0
     }
 }
 
-impl Deref for AlgorithmIdentifier<'_> {
+impl Deref for AlgorithmIdentifier {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
         self.as_ref()
-    }
-}
-
-impl<'a> From<&'a [u8]> for AlgorithmIdentifier<'a> {
-    fn from(slice: &'a [u8]) -> Self {
-        Self(Der::from(slice))
-    }
-}
-
-#[cfg(feature = "alloc")]
-impl<'a> From<Vec<u8>> for AlgorithmIdentifier<'a> {
-    fn from(vec: Vec<u8>) -> Self {
-        Self(Der::from(vec))
     }
 }
 
