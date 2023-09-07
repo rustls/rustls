@@ -93,10 +93,10 @@ The effects of no-std mode on the API are described in the following sections.
 
 ### `LlClientConnection`
 
-The lower-level `ClientConnection` API (to be) proposed as a solution to [issue #1362][gh1362] does not rely on the `io::{Read, Write}` traits.
+The lower-level `ClientConnection` API proposed in [RFC1420] does not rely on the `io::{Read, Write}` traits.
 This new API -- from now on, referred to as `LlClientConnection` -- instead of the existing one (as of v0.21.6), will be exposed in no-std mode.
 
-[gh1362]: https://github.com/rustls/rustls/issues/1362
+[RFC1420]: https://github.com/rustls/rustls/pull/1420
 
 ### `SystemTime`
 
@@ -456,6 +456,7 @@ The non-breaking changes required in this stage are described in the following s
 ### `LlServerConnection`
 
 The server side version of `LlClientConnection`, the `LlServerConnection` API, will be exposed in no-std mode.
+See [RFC1420] for details about this API.
 
 ### Mutex provider
 
