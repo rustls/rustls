@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use std::time::SystemTime;
 
-use pki_types::{CertificateDer, TrustAnchor};
+use pki_types::{CertificateDer, SignatureVerificationAlgorithm, TrustAnchor};
 
 use super::anchors::RootCertStore;
 use super::client_verifier_builder::ClientCertVerifierBuilder;
@@ -17,7 +17,7 @@ use crate::verify::{
     NoClientAuth, ServerCertVerified, ServerCertVerifier,
 };
 
-type SignatureAlgorithms = &'static [&'static dyn webpki::SignatureVerificationAlgorithm];
+type SignatureAlgorithms = &'static [&'static dyn SignatureVerificationAlgorithm];
 
 /// Which signature verification mechanisms we support.  No particular
 /// order.
@@ -470,7 +470,7 @@ fn verify_sig_using_any_alg(
     message: &[u8],
     sig: &[u8],
 ) -> Result<(), webpki::Error> {
-    // TLS doesn't itself give us enough info to map to a single webpki::SignatureVerificationAlgorithm.
+    // TLS doesn't itself give us enough info to map to a single pki_types::SignatureVerificationAlgorithm.
     // Therefore, convert_algs maps to several and we try them all.
     for alg in algs {
         match cert.verify_signature(*alg, message, sig) {
@@ -497,7 +497,7 @@ fn verify_signed_struct(
 
 fn convert_alg_tls13(
     scheme: SignatureScheme,
-) -> Result<&'static dyn webpki::SignatureVerificationAlgorithm, Error> {
+) -> Result<&'static dyn SignatureVerificationAlgorithm, Error> {
     use crate::enums::SignatureScheme::*;
 
     match scheme {
