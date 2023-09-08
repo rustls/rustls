@@ -67,6 +67,9 @@ impl<'c, 'i> EarlyDataAvailable<'c, 'i> {
     pub fn decrypt(self) -> TlsResult<&'i [u8]> {
         todo!()
     }
+
+    // XXX consider adding a `discard` method to drop the entire early-data record (and advance
+    // incoming_tls's cursor) without decrypting the record
 }
 
 /// provided `outgoing_tls` buffer is too small
