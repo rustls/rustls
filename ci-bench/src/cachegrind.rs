@@ -242,6 +242,10 @@ pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result
     // cg_diff generates a diff between two cachegrind output files in a custom format that is not
     // user-friendly
     let cg_diff = Command::new("cg_diff")
+        // remove per-compilation uniqueness in symbols, eg
+        // _ZN9hashbrown3raw21RawTable$LT$T$C$A$GT$14reserve_rehash17hc60392f3f3eac4b2E.llvm.9716880419886440089 ->
+        // _ZN9hashbrown3raw21RawTable$LT$T$C$A$GT$14reserve_rehashE
+        .arg("--mod-funcname=s/17h[0-9a-f]+E\\.llvm\\.\\d+/E/")
         .arg(
             baseline
                 .join(CACHEGRIND_OUTPUT_SUBDIR)
