@@ -24,15 +24,15 @@ pub use crate::rand::GetRandomFailed;
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 
 /// Pluggable crypto galore.
-pub trait CryptoProvider: Send + Sync + 'static {
+pub trait CryptoProvider: Send + Sync + Debug + 'static {
     /// Fill the given buffer with random bytes.
-    fn fill_random(buf: &mut [u8]) -> Result<(), GetRandomFailed>;
+    fn fill_random(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed>;
 
     /// Provide a safe set of cipher suites that can be used as the defaults.
-    fn default_cipher_suites() -> &'static [suites::SupportedCipherSuite];
+    fn default_cipher_suites(&self) -> &'static [suites::SupportedCipherSuite];
 
     /// Return a safe set of supported key exchange groups to be used as the defaults.
-    fn default_kx_groups() -> &'static [&'static dyn SupportedKxGroup];
+    fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup];
 }
 
 /// A supported key exchange group.

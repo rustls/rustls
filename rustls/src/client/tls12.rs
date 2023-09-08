@@ -1,7 +1,6 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::CryptoProvider;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
@@ -38,15 +37,14 @@ use alloc::sync::Arc;
 pub(super) use server_hello::CompleteServerHelloHandling;
 
 mod server_hello {
-    use crate::crypto::CryptoProvider;
     use crate::msgs::enums::ExtensionType;
     use crate::msgs::handshake::HasServerExtensions;
     use crate::msgs::handshake::ServerHelloPayload;
 
     use super::*;
 
-    pub(in crate::client) struct CompleteServerHelloHandling<C: CryptoProvider> {
-        pub(in crate::client) config: Arc<ClientConfig<C>>,
+    pub(in crate::client) struct CompleteServerHelloHandling {
+        pub(in crate::client) config: Arc<ClientConfig>,
         pub(in crate::client) resuming_session: Option<persist::Tls12ClientSessionValue>,
         pub(in crate::client) server_name: ServerName,
         pub(in crate::client) randoms: ConnectionRandoms,
@@ -54,7 +52,7 @@ mod server_hello {
         pub(in crate::client) transcript: HandshakeHash,
     }
 
-    impl<C: CryptoProvider> CompleteServerHelloHandling<C> {
+    impl CompleteServerHelloHandling {
         pub(in crate::client) fn handle_server_hello(
             mut self,
             cx: &mut ClientContext,
@@ -180,8 +178,8 @@ mod server_hello {
     }
 }
 
-struct ExpectCertificate<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectCertificate {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -193,7 +191,7 @@ struct ExpectCertificate<C: CryptoProvider> {
     must_issue_new_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificate<C> {
+impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -238,8 +236,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificate<C> {
     }
 }
 
-struct ExpectCertificateStatusOrServerKx<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectCertificateStatusOrServerKx {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -251,7 +249,7 @@ struct ExpectCertificateStatusOrServerKx<C: CryptoProvider> {
     must_issue_new_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<C> {
+impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {
@@ -306,8 +304,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateStatusO
     }
 }
 
-struct ExpectCertificateStatus<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectCertificateStatus {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -319,7 +317,7 @@ struct ExpectCertificateStatus<C: CryptoProvider> {
     must_issue_new_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateStatus<C> {
+impl State<ClientConnectionData> for ExpectCertificateStatus {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -355,8 +353,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateStatus<
     }
 }
 
-struct ExpectServerKx<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectServerKx {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -368,7 +366,7 @@ struct ExpectServerKx<C: CryptoProvider> {
     must_issue_new_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerKx<C> {
+impl State<ClientConnectionData> for ExpectServerKx {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let opaque_kx = require_handshake_msg!(
             m,
@@ -520,8 +518,8 @@ impl ServerKxDetails {
 // --- Either a CertificateRequest, or a ServerHelloDone. ---
 // Existence of the CertificateRequest tells us the server is asking for
 // client auth.  Otherwise we go straight to ServerHelloDone.
-struct ExpectServerDoneOrCertReq<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectServerDoneOrCertReq {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -534,7 +532,7 @@ struct ExpectServerDoneOrCertReq<C: CryptoProvider> {
     must_issue_new_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDoneOrCertReq<C> {
+impl State<ClientConnectionData> for ExpectServerDoneOrCertReq {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         if matches!(
             m.payload,
@@ -582,8 +580,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDoneOrCertRe
     }
 }
 
-struct ExpectCertificateRequest<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectCertificateRequest {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -596,7 +594,7 @@ struct ExpectCertificateRequest<C: CryptoProvider> {
     must_issue_new_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateRequest<C> {
+impl State<ClientConnectionData> for ExpectCertificateRequest {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -643,8 +641,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateRequest
     }
 }
 
-struct ExpectServerDone<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectServerDone {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -658,7 +656,7 @@ struct ExpectServerDone<C: CryptoProvider> {
     must_issue_new_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
+impl State<ClientConnectionData> for ExpectServerDone {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {
@@ -845,8 +843,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
     }
 }
 
-struct ExpectNewTicket<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectNewTicket {
+    config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -858,7 +856,7 @@ struct ExpectNewTicket<C: CryptoProvider> {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectNewTicket<C> {
+impl State<ClientConnectionData> for ExpectNewTicket {
     fn handle(
         mut self: Box<Self>,
         _cx: &mut ClientContext<'_>,
@@ -889,8 +887,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectNewTicket<C> {
 }
 
 // -- Waiting for their CCS --
-struct ExpectCcs<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectCcs {
+    config: Arc<ClientConfig>,
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -903,7 +901,7 @@ struct ExpectCcs<C: CryptoProvider> {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCcs<C> {
+impl State<ClientConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
@@ -939,8 +937,8 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCcs<C> {
     }
 }
 
-struct ExpectFinished<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ExpectFinished {
+    config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
     server_name: ServerName,
@@ -953,7 +951,7 @@ struct ExpectFinished<C: CryptoProvider> {
     sig_verified: verify::HandshakeSignatureValid,
 }
 
-impl<C: CryptoProvider> ExpectFinished<C> {
+impl ExpectFinished {
     // -- Waiting for their finished --
     fn save_session(&mut self, cx: &ClientContext<'_>) {
         // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
@@ -995,7 +993,7 @@ impl<C: CryptoProvider> ExpectFinished<C> {
     }
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectFinished<C> {
+impl State<ClientConnectionData> for ExpectFinished {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let mut st = *self;
         let finished =

@@ -125,7 +125,7 @@ pub trait ResolvesClientCert: Send + Sync {
 /// * [`ClientConfig::key_log`]: key material is not logged.
 ///
 /// [`RootCertStore`]: crate::RootCertStore
-pub struct ClientConfig<C: CryptoProvider> {
+pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
@@ -135,6 +135,9 @@ pub struct ClientConfig<C: CryptoProvider> {
     /// The first element in this list is the _default key share algorithm_,
     /// and in TLS1.3 a key share for it is sent in the client hello.
     pub(super) kx_groups: Vec<&'static dyn SupportedKxGroup>,
+
+    /// Source of randomness and other crypto.
+    pub(super) provider: &'static dyn CryptoProvider,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
@@ -186,8 +189,6 @@ pub struct ClientConfig<C: CryptoProvider> {
     ///
     /// The default is false.
     pub enable_early_data: bool,
-
-    pub(crate) provider: PhantomData<C>,
 }
 
 /// What mechanisms to support for resuming a TLS 1.2 session.
@@ -206,11 +207,12 @@ pub enum Tls12Resumption {
     SessionIdOrTickets,
 }
 
-impl<C: CryptoProvider> Clone for ClientConfig<C> {
+impl Clone for ClientConfig {
     fn clone(&self) -> Self {
         Self {
             cipher_suites: self.cipher_suites.clone(),
             kx_groups: self.kx_groups.clone(),
+            provider: self.provider,
             resumption: self.resumption.clone(),
             alpn_protocols: self.alpn_protocols.clone(),
             max_fragment_size: self.max_fragment_size,
@@ -222,12 +224,11 @@ impl<C: CryptoProvider> Clone for ClientConfig<C> {
             #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: self.enable_secret_extraction,
             enable_early_data: self.enable_early_data,
-            provider: PhantomData,
         }
     }
 }
 
-impl<C: CryptoProvider> fmt::Debug for ClientConfig<C> {
+impl fmt::Debug for ClientConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientConfig")
             .field("alpn_protocols", &self.alpn_protocols)
@@ -239,13 +240,25 @@ impl<C: CryptoProvider> fmt::Debug for ClientConfig<C> {
     }
 }
 
-impl<C: CryptoProvider> ClientConfig<C> {
-    /// Create a builder to build up the client configuration.
+impl ClientConfig {
+    #[cfg(feature = "ring")]
+    /// Create a builder to build up the client configuration with the default
+    /// [`CryptoProvider`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
+        Self::builder_with_provider(crate::crypto::ring::RING)
+    }
+
+    /// Create builder to build up the client configuration with a specific
+    /// `CryptoProvider`.
+    ///
+    /// For more information, see the [`ConfigBuilder`] documentation.
+    pub fn builder_with_provider(
+        provider: &'static dyn CryptoProvider,
+    ) -> ConfigBuilder<Self, WantsCipherSuites> {
         ConfigBuilder {
-            state: WantsCipherSuites(()),
+            state: WantsCipherSuites(provider),
             side: PhantomData,
         }
     }
@@ -264,7 +277,7 @@ impl<C: CryptoProvider> ClientConfig<C> {
     /// Access configuration options whose use is dangerous and requires
     /// extra care.
     #[cfg(feature = "dangerous_configuration")]
-    pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_, C> {
+    pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
         danger::DangerousClientConfig { cfg: self }
     }
 
@@ -427,7 +440,6 @@ impl TryFrom<&str> for ServerName {
 /// Container for unsafe APIs
 #[cfg(feature = "dangerous_configuration")]
 pub(super) mod danger {
-    use crate::crypto::CryptoProvider;
     use alloc::sync::Arc;
 
     use super::verify::ServerCertVerifier;
@@ -435,12 +447,12 @@ pub(super) mod danger {
 
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
-    pub struct DangerousClientConfig<'a, C: CryptoProvider> {
+    pub struct DangerousClientConfig<'a> {
         /// The underlying ClientConfig
-        pub cfg: &'a mut ClientConfig<C>,
+        pub cfg: &'a mut ClientConfig,
     }
 
-    impl<'a, C: CryptoProvider> DangerousClientConfig<'a, C> {
+    impl<'a> DangerousClientConfig<'a> {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
@@ -578,10 +590,7 @@ impl ClientConnection {
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `name` is the
     /// name of the server we want to talk to.
-    pub fn new<C: CryptoProvider>(
-        config: Arc<ClientConfig<C>>,
-        name: ServerName,
-    ) -> Result<Self, Error> {
+    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
         Ok(Self {
             inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
         })
@@ -681,8 +690,8 @@ impl From<ClientConnection> for crate::Connection {
 }
 
 impl ConnectionCore<ClientConnectionData> {
-    pub(crate) fn for_client<C: CryptoProvider>(
-        config: Arc<ClientConfig<C>>,
+    pub(crate) fn for_client(
+        config: Arc<ClientConfig>,
         name: ServerName,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,

@@ -8,8 +8,6 @@ use mio::net::TcpStream;
 use pki_types::{CertificateDer, PrivateKeyDer};
 use serde::Deserialize;
 
-use rustls::crypto::ring::Ring;
-use rustls::crypto::CryptoProvider;
 use rustls::RootCertStore;
 
 const CLIENT: mio::Token = mio::Token(0);
@@ -27,7 +25,7 @@ impl TlsClient {
     fn new(
         sock: TcpStream,
         server_name: rustls::ServerName,
-        cfg: Arc<rustls::ClientConfig<impl CryptoProvider>>,
+        cfg: Arc<rustls::ClientConfig>,
     ) -> Self {
         Self {
             socket: sock,
@@ -356,7 +354,7 @@ mod danger {
 }
 
 #[cfg(feature = "dangerous_configuration")]
-fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig<impl CryptoProvider>) {
+fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig) {
     if args.flag_insecure {
         cfg.dangerous()
             .set_certificate_verifier(Arc::new(danger::NoCertificateVerification {}));
@@ -364,14 +362,14 @@ fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig<impl Cryp
 }
 
 #[cfg(not(feature = "dangerous_configuration"))]
-fn apply_dangerous_options(args: &Args, _: &mut rustls::ClientConfig<impl CryptoProvider>) {
+fn apply_dangerous_options(args: &Args, _: &mut rustls::ClientConfig) {
     if args.flag_insecure {
         panic!("This build does not support --insecure.");
     }
 }
 
 /// Build a `ClientConfig` from our arguments
-fn make_config(args: &Args) -> Arc<rustls::ClientConfig<Ring>> {
+fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let mut root_store = RootCertStore::empty();
 
     if args.flag_cafile.is_some() {

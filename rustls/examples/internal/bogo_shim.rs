@@ -7,8 +7,6 @@
 use rustls::client::{
     ClientConfig, ClientConnection, HandshakeSignatureValid, Resumption, WebPkiServerVerifier,
 };
-use rustls::crypto::ring::Ring;
-use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
@@ -427,7 +425,7 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
     }
 }
 
-fn make_server_cfg(opts: &Options) -> Arc<ServerConfig<Ring>> {
+fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
             Arc::new(DummyClientAuth {
@@ -555,7 +553,7 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
     }
 }
 
-fn make_client_cfg(opts: &Options) -> Arc<ClientConfig<Ring>> {
+fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     let kx_groups = if let Some(curves) = &opts.curves {
         curves
             .iter()
@@ -1237,8 +1235,8 @@ fn main() {
 
     fn make_session(
         opts: &Options,
-        scfg: &Option<Arc<ServerConfig<impl CryptoProvider>>>,
-        ccfg: &Option<Arc<ClientConfig<impl CryptoProvider>>>,
+        scfg: &Option<Arc<ServerConfig>>,
+        ccfg: &Option<Arc<ClientConfig>>,
     ) -> Connection {
         assert!(opts.quic_transport_params.is_empty());
         assert!(opts

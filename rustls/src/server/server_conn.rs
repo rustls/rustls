@@ -207,7 +207,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
 ///
 /// [`RootCertStore`]: crate::RootCertStore
-pub struct ServerConfig<C: CryptoProvider> {
+pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
 
@@ -216,6 +216,9 @@ pub struct ServerConfig<C: CryptoProvider> {
     /// The first is the highest priority: they will be
     /// offered to the client in this order.
     pub(super) kx_groups: Vec<&'static dyn SupportedKxGroup>,
+
+    /// Source of randomness and other crypto.
+    pub(super) provider: &'static dyn CryptoProvider,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -311,16 +314,15 @@ pub struct ServerConfig<C: CryptoProvider> {
     /// If this is 0, no tickets are sent and clients will not be able to
     /// do any resumption.
     pub send_tls13_tickets: usize,
-
-    pub(crate) provider: PhantomData<C>,
 }
 
 // Avoid a `Clone` bound on `C`.
-impl<C: CryptoProvider> Clone for ServerConfig<C> {
+impl Clone for ServerConfig {
     fn clone(&self) -> Self {
         Self {
             cipher_suites: self.cipher_suites.clone(),
             kx_groups: self.kx_groups.clone(),
+            provider: self.provider,
             ignore_client_order: self.ignore_client_order,
             max_fragment_size: self.max_fragment_size,
             session_storage: Arc::clone(&self.session_storage),
@@ -335,12 +337,11 @@ impl<C: CryptoProvider> Clone for ServerConfig<C> {
             max_early_data_size: self.max_early_data_size,
             send_half_rtt_data: self.send_half_rtt_data,
             send_tls13_tickets: self.send_tls13_tickets,
-            provider: PhantomData,
         }
     }
 }
 
-impl<C: CryptoProvider> fmt::Debug for ServerConfig<C> {
+impl fmt::Debug for ServerConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerConfig")
             .field("ignore_client_order", &self.ignore_client_order)
@@ -353,13 +354,25 @@ impl<C: CryptoProvider> fmt::Debug for ServerConfig<C> {
     }
 }
 
-impl<C: CryptoProvider> ServerConfig<C> {
-    /// Create builder to build up the server configuration.
+impl ServerConfig {
+    #[cfg(feature = "ring")]
+    /// Create builder to build up the server configuration with the default
+    /// `CryptoProvider`.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
+        Self::builder_with_provider(crate::crypto::ring::RING)
+    }
+
+    /// Create builder to build up the server configuration with a specific
+    /// `CryptoProvider`.
+    ///
+    /// For more information, see the [`ConfigBuilder`] documentation.
+    pub fn builder_with_provider(
+        provider: &'static dyn CryptoProvider,
+    ) -> ConfigBuilder<Self, WantsCipherSuites> {
         ConfigBuilder {
-            state: WantsCipherSuites(()),
+            state: WantsCipherSuites(provider),
             side: PhantomData,
         }
     }
@@ -413,7 +426,7 @@ pub struct ServerConnection {
 impl ServerConnection {
     /// Make a new ServerConnection.  `config` controls how
     /// we behave in the TLS protocol.
-    pub fn new<C: CryptoProvider>(config: Arc<ServerConfig<C>>) -> Result<Self, Error> {
+    pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
         #[cfg(feature = "secret_extraction")]
@@ -549,9 +562,9 @@ impl From<ServerConnection> for crate::Connection {
 ///
 /// ```no_run
 /// # #[cfg(feature = "ring")] {
-/// # fn choose_server_config<C: rustls::crypto::CryptoProvider>(
+/// # fn choose_server_config(
 /// #     _: rustls::server::ClientHello,
-/// # ) -> std::sync::Arc<rustls::ServerConfig<C>> {
+/// # ) -> std::sync::Arc<rustls::ServerConfig> {
 /// #     unimplemented!();
 /// # }
 /// # #[allow(unused_variables)]
@@ -569,7 +582,7 @@ impl From<ServerConnection> for crate::Connection {
 ///     };
 ///
 ///     // For some user-defined choose_server_config:
-///     let config = choose_server_config::<rustls::crypto::ring::Ring>(accepted.client_hello());
+///     let config = choose_server_config(accepted.client_hello());
 ///     let conn = accepted
 ///         .into_connection(config)
 ///         .unwrap();
@@ -678,10 +691,7 @@ impl Accepted {
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
-    pub fn into_connection<C: CryptoProvider>(
-        mut self,
-        config: Arc<ServerConfig<C>>,
-    ) -> Result<ServerConnection, Error> {
+    pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
         self.connection
             .set_max_fragment_size(config.max_fragment_size)?;
 
@@ -787,8 +797,8 @@ impl EarlyDataState {
 }
 
 impl ConnectionCore<ServerConnectionData> {
-    pub(crate) fn for_server<C: CryptoProvider>(
-        config: Arc<ServerConfig<C>>,
+    pub(crate) fn for_server(
+        config: Arc<ServerConfig>,
         extra_exts: Vec<ServerExtension>,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);

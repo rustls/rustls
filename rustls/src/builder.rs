@@ -24,14 +24,13 @@ use core::marker::PhantomData;
 ///
 /// ```
 /// # #[cfg(feature = "ring")] {
-/// use rustls::{ClientConfig, ServerConfig, crypto::ring::Ring};
-/// // <Ring> specifies the cryptographic provider to use.
-/// ClientConfig::<Ring>::builder()
+/// use rustls::{ClientConfig, ServerConfig};
+/// ClientConfig::builder()
 ///     .with_safe_defaults()
 /// //  ...
 /// # ;
 ///
-/// ServerConfig::<Ring>::builder()
+/// ServerConfig::builder()
 ///     .with_safe_defaults()
 /// //  ...
 /// # ;
@@ -45,8 +44,7 @@ use core::marker::PhantomData;
 /// ```no_run
 /// # #[cfg(feature = "ring")] {
 /// # use rustls::ServerConfig;
-/// # use rustls::crypto::ring::Ring;
-/// ServerConfig::<Ring>::builder()
+/// ServerConfig::builder()
 ///     .with_safe_default_cipher_suites()
 ///     .with_safe_default_kx_groups()
 ///     .with_protocol_versions(&[&rustls::version::TLS13])
@@ -85,9 +83,8 @@ use core::marker::PhantomData;
 /// ```
 /// # #[cfg(feature = "ring")] {
 /// # use rustls::ClientConfig;
-/// # use rustls::crypto::ring::Ring;
 /// # let root_certs = rustls::RootCertStore::empty();
-/// ClientConfig::<Ring>::builder()
+/// ClientConfig::builder()
 ///     .with_safe_defaults()
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth();
@@ -110,12 +107,11 @@ use core::marker::PhantomData;
 /// ```no_run
 /// # #[cfg(feature = "ring")] {
 /// # use rustls::ServerConfig;
-/// # use rustls::crypto::ring::Ring;
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(
 /// #    pki_types::PrivatePkcs8KeyDer::from(vec![])
 /// # );
-/// ServerConfig::<Ring>::builder()
+/// ServerConfig::builder()
 ///     .with_safe_defaults()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
@@ -136,7 +132,7 @@ use core::marker::PhantomData;
 /// - [`WantsClientCert`]
 /// - [`WantsServerCert`]
 ///
-/// The other type parameter is `Side`, which is either `ServerConfig<C>` or `ClientConfig<C>`
+/// The other type parameter is `Side`, which is either `ServerConfig` or `ClientConfig`
 /// depending on whether the ConfigBuilder was built with [`ServerConfig::builder()`] or
 /// [`ClientConfig::builder()`].
 ///
@@ -169,21 +165,14 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
 impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let side_name = core::any::type_name::<Side>();
-        let (ty, param) = side_name
+        let (ty, _) = side_name
             .split_once('<')
             .unwrap_or((side_name, ""));
         let (_, name) = ty.rsplit_once("::").unwrap_or(("", ty));
-        let (_, param) = param
-            .rsplit_once("::")
-            .unwrap_or(("", param));
 
-        f.debug_struct(&format!(
-            "ConfigBuilder<{}<{}>, _>",
-            name,
-            param.trim_end_matches('>')
-        ))
-        .field("state", &self.state)
-        .finish()
+        f.debug_struct(&format!("ConfigBuilder<{}, _>", name,))
+            .field("state", &self.state)
+            .finish()
     }
 }
 
@@ -191,7 +180,7 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsCipherSuites(pub(crate) ());
+pub struct WantsCipherSuites(pub(crate) &'static dyn CryptoProvider);
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// Start side-specific config with defaults for underlying cryptography.
@@ -206,9 +195,17 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier> {
         ConfigBuilder {
             state: WantsVerifier {
-                cipher_suites: <S::CryptoProvider as CryptoProvider>::default_cipher_suites()
+                cipher_suites: self
+                    .state
+                    .0
+                    .default_cipher_suites()
                     .to_vec(),
-                kx_groups: <S::CryptoProvider as CryptoProvider>::default_kx_groups().to_vec(),
+                kx_groups: self
+                    .state
+                    .0
+                    .default_kx_groups()
+                    .to_vec(),
+                provider: self.state.0,
                 versions: versions::EnabledVersions::new(versions::DEFAULT_VERSIONS),
             },
             side: self.side,
@@ -223,6 +220,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
         ConfigBuilder {
             state: WantsKxGroups {
                 cipher_suites: cipher_suites.to_vec(),
+                provider: self.state.0,
             },
             side: self.side,
         }
@@ -235,7 +233,8 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     /// implement these.  But the precise details are controlled by what is implemented by the
     /// `CryptoProvider`.
     pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups> {
-        self.with_cipher_suites(<S::CryptoProvider as CryptoProvider>::default_cipher_suites())
+        let default = self.state.0.default_cipher_suites();
+        self.with_cipher_suites(default)
     }
 }
 
@@ -245,6 +244,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
 #[derive(Clone, Debug)]
 pub struct WantsKxGroups {
     cipher_suites: Vec<SupportedCipherSuite>,
+    provider: &'static dyn CryptoProvider,
 }
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
@@ -257,6 +257,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
             state: WantsVersions {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: kx_groups.to_vec(),
+                provider: self.state.provider,
             },
             side: self.side,
         }
@@ -266,7 +267,8 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
     ///
     /// This is a safe default: rustls doesn't implement any poor-quality groups.
     pub fn with_safe_default_kx_groups(self) -> ConfigBuilder<S, WantsVersions> {
-        self.with_kx_groups(<S::CryptoProvider as CryptoProvider>::default_kx_groups())
+        let default = self.state.provider.default_kx_groups();
+        self.with_kx_groups(default)
     }
 }
 
@@ -277,6 +279,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
 pub struct WantsVersions {
     cipher_suites: Vec<SupportedCipherSuite>,
     kx_groups: Vec<&'static dyn SupportedKxGroup>,
+    provider: &'static dyn CryptoProvider,
 }
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
@@ -312,6 +315,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             state: WantsVerifier {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
+                provider: self.state.provider,
                 versions: versions::EnabledVersions::new(versions),
             },
             side: self.side,
@@ -326,6 +330,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 pub struct WantsVerifier {
     pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
     pub(crate) kx_groups: Vec<&'static dyn SupportedKxGroup>,
+    pub(crate) provider: &'static dyn CryptoProvider,
     pub(crate) versions: versions::EnabledVersions,
 }
 
@@ -333,22 +338,13 @@ pub struct WantsVerifier {
 ///
 /// [`ClientConfig`]: crate::ClientConfig
 /// [`ServerConfig`]: crate::ServerConfig
-pub trait ConfigSide: sealed::Sealed {
-    /// Cryptographic provider.
-    type CryptoProvider: CryptoProvider;
-}
+pub trait ConfigSide: sealed::Sealed {}
 
-impl<C: CryptoProvider> ConfigSide for crate::ClientConfig<C> {
-    type CryptoProvider = C;
-}
-impl<C: CryptoProvider> ConfigSide for crate::ServerConfig<C> {
-    type CryptoProvider = C;
-}
+impl ConfigSide for crate::ClientConfig {}
+impl ConfigSide for crate::ServerConfig {}
 
 mod sealed {
-    use crate::crypto::CryptoProvider;
-
     pub trait Sealed {}
-    impl<C: CryptoProvider> Sealed for crate::ClientConfig<C> {}
-    impl<C: CryptoProvider> Sealed for crate::ServerConfig<C> {}
+    impl Sealed for crate::ClientConfig {}
+    impl Sealed for crate::ServerConfig {}
 }

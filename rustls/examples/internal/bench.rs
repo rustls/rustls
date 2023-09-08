@@ -14,7 +14,6 @@ use std::time::{Duration, Instant};
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use rustls::client::Resumption;
-use rustls::crypto::ring::Ring;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
 use rustls::Ticketer;
@@ -293,7 +292,7 @@ fn make_server_config(
     client_auth: ClientAuth,
     resume: ResumptionParam,
     max_fragment_size: Option<usize>,
-) -> ServerConfig<Ring> {
+) -> ServerConfig {
     let client_auth = match client_auth {
         ClientAuth::Yes => {
             let roots = params.key_type.get_chain();
@@ -333,7 +332,7 @@ fn make_client_config(
     params: &BenchmarkParam,
     clientauth: ClientAuth,
     resume: ResumptionParam,
-) -> ClientConfig<Ring> {
+) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());

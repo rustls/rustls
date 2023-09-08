@@ -12,7 +12,6 @@ use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::crypto::ring::Ring;
 use rustls::RootCertStore;
 
 fn main() {
@@ -22,7 +21,7 @@ fn main() {
             .iter()
             .cloned(),
     );
-    let mut config = rustls::ClientConfig::<Ring>::builder()
+    let mut config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();
