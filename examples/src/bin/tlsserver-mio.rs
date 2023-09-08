@@ -9,7 +9,6 @@ use mio::net::{TcpListener, TcpStream};
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use serde::Deserialize;
 
-use rustls::crypto::ring::Ring;
 use rustls::server::WebPkiClientVerifier;
 use rustls::{self, RootCertStore};
 
@@ -36,12 +35,12 @@ struct TlsServer {
     server: TcpListener,
     connections: HashMap<mio::Token, OpenConnection>,
     next_id: usize,
-    tls_config: Arc<rustls::ServerConfig<Ring>>,
+    tls_config: Arc<rustls::ServerConfig>,
     mode: ServerMode,
 }
 
 impl TlsServer {
-    fn new(server: TcpListener, mode: ServerMode, cfg: Arc<rustls::ServerConfig<Ring>>) -> Self {
+    fn new(server: TcpListener, mode: ServerMode, cfg: Arc<rustls::ServerConfig>) -> Self {
         Self {
             server,
             connections: HashMap::new(),
@@ -557,7 +556,7 @@ fn load_crls(filenames: &[String]) -> Vec<CertificateRevocationListDer<'static>>
         .collect()
 }
 
-fn make_config(args: &Args) -> Arc<rustls::ServerConfig<Ring>> {
+fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     let client_auth = if args.flag_auth.is_some() {
         let roots = load_certs(args.flag_auth.as_ref().unwrap());
         let mut client_auth_roots = RootCertStore::empty();

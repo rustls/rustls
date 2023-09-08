@@ -3,7 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::{ActiveKeyExchange, CryptoProvider};
+use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -41,7 +41,7 @@ pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConne
 
 fn find_session(
     server_name: &ServerName,
-    config: &ClientConfig<impl CryptoProvider>,
+    config: &ClientConfig,
     #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
     #[allow(clippy::let_and_return, clippy::unnecessary_lazy_evaluations)]
@@ -87,10 +87,10 @@ fn find_session(
     found
 }
 
-pub(super) fn start_handshake<C: CryptoProvider>(
+pub(super) fn start_handshake(
     server_name: ServerName,
     extra_exts: Vec<ClientExtension>,
-    config: Arc<ClientConfig<C>>,
+    config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError {
     let mut transcript_buffer = HandshakeHashBuffer::new();
@@ -123,7 +123,7 @@ pub(super) fn start_handshake<C: CryptoProvider>(
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
             if !inner.ticket().is_empty() {
-                inner.session_id = SessionId::random::<C>()?;
+                inner.session_id = SessionId::random(config.provider)?;
             }
             session_id = Some(inner.session_id);
         }
@@ -139,12 +139,12 @@ pub(super) fn start_handshake<C: CryptoProvider>(
         Some(session_id) => session_id,
         None if cx.common.is_quic() => SessionId::empty(),
         None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-        None => SessionId::random::<C>()?,
+        None => SessionId::random(config.provider)?,
     };
 
-    let random = Random::new::<C>()?;
+    let random = Random::new(config.provider)?;
 
-    Ok(emit_client_hello_for_retry::<C>(
+    Ok(emit_client_hello_for_retry(
         transcript_buffer,
         None,
         key_share,
@@ -165,21 +165,21 @@ pub(super) fn start_handshake<C: CryptoProvider>(
     ))
 }
 
-struct ExpectServerHello<C: CryptoProvider> {
-    input: ClientHelloInput<C>,
+struct ExpectServerHello {
+    input: ClientHelloInput,
     transcript_buffer: HandshakeHashBuffer,
     early_key_schedule: Option<KeyScheduleEarly>,
     offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
     suite: Option<SupportedCipherSuite>,
 }
 
-struct ExpectServerHelloOrHelloRetryRequest<C: CryptoProvider> {
-    next: ExpectServerHello<C>,
+struct ExpectServerHelloOrHelloRetryRequest {
+    next: ExpectServerHello,
     extra_exts: Vec<ClientExtension>,
 }
 
-struct ClientHelloInput<C: CryptoProvider> {
-    config: Arc<ClientConfig<C>>,
+struct ClientHelloInput {
+    config: Arc<ClientConfig>,
     resuming: Option<persist::Retrieved<ClientSessionValue>>,
     random: Random,
     #[cfg(feature = "tls12")]
@@ -190,13 +190,13 @@ struct ClientHelloInput<C: CryptoProvider> {
     server_name: ServerName,
 }
 
-fn emit_client_hello_for_retry<C: CryptoProvider>(
+fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
     key_share: Option<Box<dyn ActiveKeyExchange>>,
     extra_exts: Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
-    mut input: ClientHelloInput<C>,
+    mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
 ) -> NextState {
     let config = &input.config;
@@ -378,7 +378,7 @@ fn prepare_resumption<'a>(
     exts: &mut Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
-    config: &ClientConfig<impl CryptoProvider>,
+    config: &ClientConfig,
 ) -> Option<persist::Retrieved<&'a persist::Tls13ClientSessionValue>> {
     // Check whether we're resuming with a non-empty ticket.
     let resuming = match resuming {
@@ -432,7 +432,7 @@ fn prepare_resumption<'a>(
 
 pub(super) fn process_alpn_protocol(
     common: &mut CommonState,
-    config: &ClientConfig<impl CryptoProvider>,
+    config: &ClientConfig,
     proto: Option<&[u8]>,
 ) -> Result<(), Error> {
     common.alpn_protocol = proto.map(ToOwned::to_owned);
@@ -475,7 +475,7 @@ pub(super) fn process_alpn_protocol(
     Ok(())
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerHello<C> {
+impl State<ClientConnectionData> for ExpectServerHello {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
@@ -668,7 +668,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerHello<C> {
     }
 }
 
-impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
+impl ExpectServerHelloOrHelloRetryRequest {
     fn into_expect_server_hello(self) -> NextState {
         Box::new(self.next)
     }
@@ -829,7 +829,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
             _ => offered_key_share,
         };
 
-        Ok(emit_client_hello_for_retry::<C>(
+        Ok(emit_client_hello_for_retry(
             transcript_buffer,
             Some(hrr),
             Some(key_share),
@@ -841,7 +841,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
     }
 }
 
-impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest<C> {
+impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
     fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
         match m.payload {
             MessagePayload::Handshake {

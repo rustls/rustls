@@ -6,8 +6,6 @@ use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::crypto::ring::Ring;
-
 fn main() {
     let mut root_store = rustls::RootCertStore::empty();
     root_store.extend(
@@ -16,7 +14,7 @@ fn main() {
             .cloned(),
     );
 
-    let config = rustls::ClientConfig::<Ring>::builder()
+    let config = rustls::ClientConfig::builder()
         .with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
         .with_kx_groups(&[rustls::kx_group::X25519])
         .with_protocol_versions(&[&rustls::version::TLS13])

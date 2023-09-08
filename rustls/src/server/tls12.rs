@@ -1,7 +1,7 @@
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::{ActiveKeyExchange, CryptoProvider};
+use crate::crypto::ActiveKeyExchange;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -47,8 +47,8 @@ mod client_hello {
 
     use super::*;
 
-    pub(in crate::server) struct CompleteClientHelloHandling<C: CryptoProvider> {
-        pub(in crate::server) config: Arc<ServerConfig<C>>,
+    pub(in crate::server) struct CompleteClientHelloHandling {
+        pub(in crate::server) config: Arc<ServerConfig>,
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) session_id: SessionId,
         pub(in crate::server) suite: &'static Tls12CipherSuite,
@@ -58,7 +58,7 @@ mod client_hello {
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
     }
 
-    impl<C: CryptoProvider> CompleteClientHelloHandling<C> {
+    impl CompleteClientHelloHandling {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             cx: &mut ServerContext<'_>,
@@ -201,7 +201,7 @@ mod client_hello {
             if !self.config.session_storage.can_cache() {
                 self.session_id = SessionId::empty();
             } else if self.session_id.is_empty() && !ticket_received {
-                self.session_id = SessionId::random::<C>()?;
+                self.session_id = SessionId::random(self.config.provider)?;
             }
 
             self.send_ticket = emit_server_hello(
@@ -330,8 +330,8 @@ mod client_hello {
         }
     }
 
-    fn emit_server_hello<C: CryptoProvider>(
-        config: &ServerConfig<C>,
+    fn emit_server_hello(
+        config: &ServerConfig,
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
         session_id: SessionId,
@@ -442,8 +442,8 @@ mod client_hello {
         Ok(kx)
     }
 
-    fn emit_certificate_req<C: CryptoProvider>(
-        config: &ServerConfig<C>,
+    fn emit_certificate_req(
+        config: &ServerConfig,
         transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
@@ -498,8 +498,8 @@ mod client_hello {
 }
 
 // --- Process client's Certificate for client auth ---
-struct ExpectCertificate<C: CryptoProvider> {
-    config: Arc<ServerConfig<C>>,
+struct ExpectCertificate {
+    config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionId,
@@ -509,7 +509,7 @@ struct ExpectCertificate<C: CryptoProvider> {
     send_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificate<C> {
+impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
         let cert_chain = require_handshake_msg_move!(
@@ -566,8 +566,8 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificate<C> {
 }
 
 // --- Process client's KeyExchange ---
-struct ExpectClientKx<C: CryptoProvider> {
-    config: Arc<ServerConfig<C>>,
+struct ExpectClientKx {
+    config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
     session_id: SessionId,
@@ -578,7 +578,7 @@ struct ExpectClientKx<C: CryptoProvider> {
     send_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ServerConnectionData> for ExpectClientKx<C> {
+impl State<ServerConnectionData> for ExpectClientKx {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let client_kx = require_handshake_msg!(
             m,
@@ -635,8 +635,8 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectClientKx<C> {
 }
 
 // --- Process client's certificate proof ---
-struct ExpectCertificateVerify<C: CryptoProvider> {
-    config: Arc<ServerConfig<C>>,
+struct ExpectCertificateVerify {
+    config: Arc<ServerConfig>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
@@ -645,7 +645,7 @@ struct ExpectCertificateVerify<C: CryptoProvider> {
     send_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificateVerify<C> {
+impl State<ServerConnectionData> for ExpectCertificateVerify {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let rc = {
             let sig = require_handshake_msg!(
@@ -698,8 +698,8 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificateVerify<
 }
 
 // --- Process client's ChangeCipherSpec ---
-struct ExpectCcs<C: CryptoProvider> {
-    config: Arc<ServerConfig<C>>,
+struct ExpectCcs {
+    config: Arc<ServerConfig>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
@@ -708,7 +708,7 @@ struct ExpectCcs<C: CryptoProvider> {
     send_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCcs<C> {
+impl State<ServerConnectionData> for ExpectCcs {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ChangeCipherSpec(..) => {}
@@ -831,8 +831,8 @@ fn emit_finished(
     common.send_msg(f, true);
 }
 
-struct ExpectFinished<C: CryptoProvider> {
-    config: Arc<ServerConfig<C>>,
+struct ExpectFinished {
+    config: Arc<ServerConfig>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
@@ -841,7 +841,7 @@ struct ExpectFinished<C: CryptoProvider> {
     send_ticket: bool,
 }
 
-impl<C: CryptoProvider> State<ServerConnectionData> for ExpectFinished<C> {
+impl State<ServerConnectionData> for ExpectFinished {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;

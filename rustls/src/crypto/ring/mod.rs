@@ -23,23 +23,28 @@ pub(crate) mod tls13;
 /// Using software keys for authentication.
 pub mod sign;
 
+/// A `CryptoProvider` backed by the [*ring*] crate.
+///
+/// [*ring*]: https://github.com/briansmith/ring
+pub static RING: &dyn CryptoProvider = &Ring;
+
 /// Default crypto provider.
 #[derive(Debug)]
-pub struct Ring;
+struct Ring;
 
 impl CryptoProvider for Ring {
-    fn fill_random(buf: &mut [u8]) -> Result<(), GetRandomFailed> {
+    fn fill_random(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {
         SystemRandom::new()
             .fill(buf)
             .map_err(|_| GetRandomFailed)
     }
 
-    fn default_cipher_suites() -> &'static [SupportedCipherSuite] {
+    fn default_cipher_suites(&self) -> &'static [SupportedCipherSuite] {
         DEFAULT_CIPHER_SUITES
     }
 
     /// Return all supported key exchange groups.
-    fn default_kx_groups() -> &'static [&'static dyn SupportedKxGroup] {
+    fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup] {
         ALL_KX_GROUPS
     }
 }
@@ -191,7 +196,7 @@ impl Ticketer {
 
 fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
     let mut key = [0u8; 32];
-    Ring::fill_random(&mut key)?;
+    RING.fill_random(&mut key)?;
 
     let alg = &aead::CHACHA20_POLY1305;
     let key = aead::UnboundKey::new(alg, &key).unwrap();
@@ -225,7 +230,7 @@ impl ProducesTickets for AeadTicketer {
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
         // Random nonce, because a counter is a privacy leak.
         let mut nonce_buf = [0u8; 12];
-        Ring::fill_random(&mut nonce_buf).ok()?;
+        RING.fill_random(&mut nonce_buf).ok()?;
         let nonce = aead::Nonce::assume_unique_for_key(nonce_buf);
         let aad = ring::aead::Aad::empty();
 

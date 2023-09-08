@@ -16,7 +16,6 @@ use docopt::Docopt;
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde_derive::Deserialize;
 
-use rustls::crypto::CryptoProvider;
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
 use rustls::RootCertStore;
 
@@ -123,8 +122,7 @@ fn main() {
 
         // Generate a server config for the accepted connection, optionally customizing the
         // configuration based on the client hello.
-        let config = test_pki
-            .server_config::<rustls::crypto::ring::Ring>(&crl_path, accepted.client_hello());
+        let config = test_pki.server_config(&crl_path, accepted.client_hello());
         let mut conn = accepted
             .into_connection(config)
             .unwrap();
@@ -210,11 +208,7 @@ impl TestPki {
     ///
     /// Since the presented client certificate is not available in the `ClientHello` the server
     /// must know ahead of time which CRLs it cares about.
-    fn server_config<C: CryptoProvider>(
-        &self,
-        crl_path: &str,
-        _hello: ClientHello,
-    ) -> Arc<ServerConfig<C>> {
+    fn server_config(&self, crl_path: &str, _hello: ClientHello) -> Arc<ServerConfig> {
         // Read the latest CRL from disk. The CRL is being periodically updated by the crl_updater
         // thread.
         let mut crl_file = File::open(crl_path).unwrap();

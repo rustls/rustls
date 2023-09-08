@@ -14,7 +14,6 @@ use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use rustls::client::Resumption;
-use rustls::crypto::ring::Ring;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, ProtocolVersion, RootCertStore, ServerConfig, ServerConnection,
@@ -345,11 +344,11 @@ struct StepperIO<'a> {
 struct ClientSideStepper<'a> {
     io: StepperIO<'a>,
     resumption_kind: ResumptionKind,
-    config: Arc<ClientConfig<Ring>>,
+    config: Arc<ClientConfig>,
 }
 
 impl ClientSideStepper<'_> {
-    fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig<Ring>> {
+    fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
         let mut root_store = RootCertStore::empty();
         let mut rootbuf =
@@ -422,11 +421,11 @@ impl BenchStepper for ClientSideStepper<'_> {
 /// A benchmark stepper for the server-side of the connection
 struct ServerSideStepper<'a> {
     io: StepperIO<'a>,
-    config: Arc<ServerConfig<Ring>>,
+    config: Arc<ServerConfig>,
 }
 
 impl ServerSideStepper<'_> {
-    fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig<Ring>> {
+    fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
 
         let mut cfg = ServerConfig::builder()

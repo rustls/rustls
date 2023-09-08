@@ -1,6 +1,5 @@
 use crate::common_state::State;
 use crate::conn::ConnectionRandoms;
-use crate::crypto::CryptoProvider;
 use crate::dns_name::DnsName;
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
@@ -63,9 +62,9 @@ impl ExtensionProcessing {
         Default::default()
     }
 
-    pub(super) fn process_common<C: CryptoProvider>(
+    pub(super) fn process_common(
         &mut self,
-        config: &ServerConfig<C>,
+        config: &ServerConfig,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
@@ -162,9 +161,9 @@ impl ExtensionProcessing {
     }
 
     #[cfg(feature = "tls12")]
-    pub(super) fn process_tls12<C: CryptoProvider>(
+    pub(super) fn process_tls12(
         &mut self,
-        config: &ServerConfig<C>,
+        config: &ServerConfig,
         hello: &ClientHelloPayload,
         using_ems: bool,
     ) {
@@ -203,8 +202,8 @@ impl ExtensionProcessing {
     }
 }
 
-pub(super) struct ExpectClientHello<C: CryptoProvider> {
-    pub(super) config: Arc<ServerConfig<C>>,
+pub(super) struct ExpectClientHello {
+    pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: Vec<ServerExtension>,
     pub(super) transcript: HandshakeHashOrBuffer,
     #[cfg(feature = "tls12")]
@@ -215,8 +214,8 @@ pub(super) struct ExpectClientHello<C: CryptoProvider> {
     pub(super) send_tickets: usize,
 }
 
-impl<C: CryptoProvider> ExpectClientHello<C> {
-    pub(super) fn new(config: Arc<ServerConfig<C>>, extra_exts: Vec<ServerExtension>) -> Self {
+impl ExpectClientHello {
+    pub(super) fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {
@@ -380,7 +379,8 @@ impl<C: CryptoProvider> ExpectClientHello<C> {
         };
 
         // Save their Random.
-        let randoms = ConnectionRandoms::new(client_hello.random, Random::new::<C>()?);
+        let randoms =
+            ConnectionRandoms::new(client_hello.random, Random::new(self.config.provider)?);
         match suite {
             SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
                 config: self.config,
@@ -415,7 +415,7 @@ impl<C: CryptoProvider> ExpectClientHello<C> {
     }
 }
 
-impl<C: CryptoProvider> State<ServerConnectionData> for ExpectClientHello<C> {
+impl State<ServerConnectionData> for ExpectClientHello {
     fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
         let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
