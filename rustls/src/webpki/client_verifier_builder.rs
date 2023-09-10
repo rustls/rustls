@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use core::fmt;
+use std::{error::Error as StdError, sync::Arc};
 
 use pki_types::CertificateRevocationListDer;
 use webpki::BorrowedCertRevocationList;
@@ -96,6 +97,17 @@ impl From<CertRevocationListError> for ClientCertVerifierBuilderError {
         Self::InvalidCrl(value)
     }
 }
+
+impl fmt::Display for ClientCertVerifierBuilderError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoRootAnchors => write!(f, "no root trust anchors were provided"),
+            Self::InvalidCrl(e) => write!(f, "provided CRL could not be parsed: {:?}", e),
+        }
+    }
+}
+
+impl StdError for ClientCertVerifierBuilderError {}
 
 #[cfg(test)]
 mod tests {
@@ -251,5 +263,18 @@ mod tests {
             result,
             Err(ClientCertVerifierBuilderError::NoRootAnchors)
         ));
+    }
+
+    #[test]
+    fn smoke() {
+        let all = vec![
+            ClientCertVerifierBuilderError::NoRootAnchors,
+            ClientCertVerifierBuilderError::InvalidCrl(crate::CertRevocationListError::ParseError),
+        ];
+
+        for err in all {
+            let _ = format!("{:?}", err);
+            let _ = format!("{}", err);
+        }
     }
 }
