@@ -15,7 +15,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Checkout ${{ github.base_ref }}
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.base_ref }}
           persist-credentials: false
@@ -24,7 +24,7 @@ jobs:
         run: cd ci-bench && cargo run --release -- run-all --output-dir ${{ runner.temp }}/base
 
       - name: Checkout PR
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           clean: false
           persist-credentials: false
