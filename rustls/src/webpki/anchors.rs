@@ -6,31 +6,12 @@ use super::pki_error;
 use crate::log::{debug, trace};
 use crate::Error;
 
-/// A trust anchor, commonly known as a "Root Certificate."
-#[derive(Debug, Clone)]
-pub struct TrustAnchorWithDn {
-    inner: TrustAnchor<'static>,
-}
-
-impl TrustAnchorWithDn {
-    /// Get a `TrustAnchor` by borrowing the owned elements.
-    pub fn inner(&self) -> &TrustAnchor<'static> {
-        &self.inner
-    }
-}
-
-impl From<TrustAnchor<'static>> for TrustAnchorWithDn {
-    fn from(inner: TrustAnchor<'static>) -> Self {
-        Self { inner }
-    }
-}
-
 /// A container for root certificates able to provide a root-of-trust
 /// for connection authentication.
 #[derive(Debug, Clone)]
 pub struct RootCertStore {
     /// The list of roots.
-    pub roots: Vec<TrustAnchorWithDn>,
+    pub roots: Vec<TrustAnchor<'static>>,
 }
 
 impl RootCertStore {
@@ -59,18 +40,17 @@ impl RootCertStore {
     /// in order to add as many valid roots as possible and to understand how many certificates
     /// have been diagnosed as malformed.
     pub fn add(&mut self, der: CertificateDer<'_>) -> Result<(), Error> {
-        self.roots.push(TrustAnchorWithDn::from(
+        self.roots.push(
             extract_trust_anchor(&der)
                 .map_err(pki_error)?
                 .to_owned(),
-        ));
+        );
         Ok(())
     }
 
     /// Adds all the given TrustAnchors `anchors`.  This does not fail.
     pub fn add_trust_anchors(&mut self, trust_anchors: impl Iterator<Item = TrustAnchor<'static>>) {
-        self.roots
-            .extend(trust_anchors.map(|ta| ta.into()));
+        self.roots.extend(trust_anchors);
     }
 
     /// Parse the given DER-encoded certificates and add all that can be parsed
@@ -91,8 +71,7 @@ impl RootCertStore {
             #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
             match extract_trust_anchor(&der_cert) {
                 Ok(anchor) => {
-                    self.roots
-                        .push(TrustAnchorWithDn::from(anchor.to_owned()));
+                    self.roots.push(anchor.to_owned());
                     valid_count += 1;
                 }
                 Err(err) => {
