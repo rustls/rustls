@@ -1196,3 +1196,11 @@ fn can_decode_server_hello_from_api_devicecheck_apple_com() {
     let hm = HandshakeMessagePayload::read(&mut r).unwrap();
     println!("msg: {:?}", hm);
 }
+
+#[test]
+fn wrapped_dn_encoding() {
+    let subject = b"subject";
+    let dn = DistinguishedName::in_sequence(&subject[..]);
+    let expected_prefix = vec![ring::io::der::Tag::Sequence as u8, subject.len() as u8];
+    assert_eq!(dn.as_ref(), [expected_prefix, subject.to_vec()].concat());
+}
