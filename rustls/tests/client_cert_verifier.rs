@@ -52,17 +52,7 @@ fn server_config_with_verifier(
 // Happy path, we resolve to a root, it is verified OK, should be able to connect
 fn client_verifier_works() {
     for kt in ALL_KEY_TYPES.iter() {
-        let client_verifier = MockClientVerifier {
-            verified: ver_ok,
-            subjects: get_client_root_store(*kt)
-                .roots
-                .iter()
-                .map(|r| r.subject().clone())
-                .collect(),
-            mandatory: true,
-            offered_schemes: None,
-        };
-
+        let client_verifier = MockClientVerifier::new(ver_ok, *kt);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
@@ -80,17 +70,8 @@ fn client_verifier_works() {
 #[test]
 fn client_verifier_no_schemes() {
     for kt in ALL_KEY_TYPES.iter() {
-        let client_verifier = MockClientVerifier {
-            verified: ver_ok,
-            subjects: get_client_root_store(*kt)
-                .roots
-                .iter()
-                .map(|r| r.subject().clone())
-                .collect(),
-            mandatory: true,
-            offered_schemes: Some(vec![]),
-        };
-
+        let mut client_verifier = MockClientVerifier::new(ver_ok, *kt);
+        client_verifier.offered_schemes = Some(vec![]);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
@@ -113,17 +94,7 @@ fn client_verifier_no_schemes() {
 #[test]
 fn client_verifier_no_auth_yes_root() {
     for kt in ALL_KEY_TYPES.iter() {
-        let client_verifier = MockClientVerifier {
-            verified: ver_unreachable,
-            subjects: get_client_root_store(*kt)
-                .roots
-                .iter()
-                .map(|r| r.subject().clone())
-                .collect(),
-            mandatory: true,
-            offered_schemes: None,
-        };
-
+        let client_verifier = MockClientVerifier::new(ver_unreachable, *kt);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
@@ -150,17 +121,7 @@ fn client_verifier_no_auth_yes_root() {
 // Triple checks we propagate the rustls::Error through
 fn client_verifier_fails_properly() {
     for kt in ALL_KEY_TYPES.iter() {
-        let client_verifier = MockClientVerifier {
-            verified: ver_err,
-            subjects: get_client_root_store(*kt)
-                .roots
-                .iter()
-                .map(|r| r.subject().clone())
-                .collect(),
-            mandatory: true,
-            offered_schemes: None,
-        };
-
+        let client_verifier = MockClientVerifier::new(ver_err, *kt);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
@@ -183,6 +144,21 @@ pub struct MockClientVerifier {
     pub subjects: Vec<DistinguishedName>,
     pub mandatory: bool,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
+}
+
+impl MockClientVerifier {
+    pub fn new(verified: fn() -> Result<ClientCertVerified, Error>, kt: KeyType) -> Self {
+        Self {
+            verified,
+            subjects: get_client_root_store(kt)
+                .roots
+                .iter()
+                .map(|ta| ta.subject().clone())
+                .collect(),
+            mandatory: true,
+            offered_schemes: None,
+        }
+    }
 }
 
 impl ClientCertVerifier for MockClientVerifier {
