@@ -17,7 +17,7 @@ use rustls::RootCertStore;
 
 fn main() {
     let mut root_store = RootCertStore::empty();
-    root_store.add_trust_anchors(
+    root_store.extend(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
             .cloned(),

@@ -383,7 +383,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig<Ring>> {
             rustls_pemfile::certs(&mut reader).map(|result| result.unwrap()),
         );
     } else {
-        root_store.add_trust_anchors(
+        root_store.extend(
             webpki_roots::TLS_SERVER_ROOTS
                 .iter()
                 .cloned(),

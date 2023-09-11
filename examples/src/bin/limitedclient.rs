@@ -10,7 +10,7 @@ use rustls::crypto::ring::Ring;
 
 fn main() {
     let mut root_store = rustls::RootCertStore::empty();
-    root_store.add_trust_anchors(
+    root_store.extend(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
             .cloned(),
