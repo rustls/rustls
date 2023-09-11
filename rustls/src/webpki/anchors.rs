@@ -4,41 +4,24 @@ use webpki::extract_trust_anchor;
 use super::pki_error;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::DistinguishedName;
 use crate::Error;
 
 /// A trust anchor, commonly known as a "Root Certificate."
 #[derive(Debug, Clone)]
 pub struct TrustAnchorWithDn {
-    subject_dn: DistinguishedName,
     inner: TrustAnchor<'static>,
 }
 
 impl TrustAnchorWithDn {
-    /// Return the subject field including its outer SEQUENCE encoding.
-    ///
-    /// This can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
-    ///
-    /// ```ignore
-    /// use x509_parser::prelude::FromDer;
-    /// println!("{}", x509_parser::x509::X509Name::from_der(anchor.subject())?.1);
-    /// ```
-    pub fn subject(&self) -> &DistinguishedName {
-        &self.subject_dn
-    }
-
     /// Get a `TrustAnchor` by borrowing the owned elements.
-    pub(crate) fn inner(&self) -> &TrustAnchor<'static> {
+    pub fn inner(&self) -> &TrustAnchor<'static> {
         &self.inner
     }
 }
 
 impl From<TrustAnchor<'static>> for TrustAnchorWithDn {
     fn from(inner: TrustAnchor<'static>) -> Self {
-        Self {
-            subject_dn: DistinguishedName::in_sequence(inner.subject.as_ref()),
-            inner,
-        }
+        Self { inner }
     }
 }
 
@@ -126,27 +109,5 @@ impl RootCertStore {
         );
 
         (valid_count, invalid_count)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TrustAnchorWithDn;
-    use pki_types::TrustAnchor;
-
-    #[test]
-    fn ownedtrustanchor_subject_is_correctly_encoding_dn() {
-        let ta = TrustAnchor {
-            subject: b"subject"[..].into(),
-            subject_public_key_info: [][..].into(),
-            name_constraints: None,
-        };
-
-        let with_dn = TrustAnchorWithDn::from(ta.clone());
-        let expected_prefix = vec![ring::io::der::Tag::Sequence as u8, ta.subject.len() as u8];
-        assert_eq!(
-            with_dn.subject().as_ref(),
-            [expected_prefix, ta.subject.to_vec()].concat()
-        );
     }
 }

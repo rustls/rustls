@@ -311,7 +311,7 @@ impl WebPkiClientVerifier {
             subjects: roots
                 .roots
                 .iter()
-                .map(|r| r.subject().clone())
+                .map(|r| DistinguishedName::in_sequence(r.inner().subject.as_ref()))
                 .collect(),
             crls,
             roots,
