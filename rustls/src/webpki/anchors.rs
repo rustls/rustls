@@ -48,11 +48,6 @@ impl RootCertStore {
         Ok(())
     }
 
-    /// Adds all the given TrustAnchors `anchors`.  This does not fail.
-    pub fn add_trust_anchors(&mut self, trust_anchors: impl Iterator<Item = TrustAnchor<'static>>) {
-        self.roots.extend(trust_anchors);
-    }
-
     /// Parse the given DER-encoded certificates and add all that can be parsed
     /// in a best-effort fashion.
     ///
@@ -88,5 +83,11 @@ impl RootCertStore {
         );
 
         (valid_count, invalid_count)
+    }
+}
+
+impl Extend<TrustAnchor<'static>> for RootCertStore {
+    fn extend<T: IntoIterator<Item = TrustAnchor<'static>>>(&mut self, iter: T) {
+        self.roots.extend(iter);
     }
 }
