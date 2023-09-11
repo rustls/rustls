@@ -153,7 +153,7 @@ impl MockClientVerifier {
             subjects: get_client_root_store(kt)
                 .roots
                 .iter()
-                .map(|ta| ta.subject().clone())
+                .map(|ta| DistinguishedName::in_sequence(ta.inner().subject.as_ref()))
                 .collect(),
             mandatory: true,
             offered_schemes: None,
