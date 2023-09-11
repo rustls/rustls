@@ -167,6 +167,11 @@ where
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.sock
     }
+
+    /// Extract the `conn` and `sock` parts from the `StreamOwned`
+    pub fn into_parts(self) -> (C, T) {
+        (self.conn, self.sock)
+    }
 }
 
 impl<'a, C, T, S> StreamOwned<C, T>

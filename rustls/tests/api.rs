@@ -1999,6 +1999,8 @@ fn client_streamowned_handshake_error() {
         format!("{:?}", rc),
         "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })"
     );
+
+    let (_, _) = client_stream.into_parts();
 }
 
 #[test]
