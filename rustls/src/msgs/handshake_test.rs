@@ -1201,6 +1201,7 @@ fn can_decode_server_hello_from_api_devicecheck_apple_com() {
 fn wrapped_dn_encoding() {
     let subject = b"subject";
     let dn = DistinguishedName::in_sequence(&subject[..]);
-    let expected_prefix = vec![ring::io::der::Tag::Sequence as u8, subject.len() as u8];
+    const DER_SEQUENCE_TAG: u8 = 0x30;
+    let expected_prefix = vec![DER_SEQUENCE_TAG, subject.len() as u8];
     assert_eq!(dn.as_ref(), [expected_prefix, subject.to_vec()].concat());
 }
