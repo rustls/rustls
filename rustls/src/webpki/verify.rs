@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use std::time::SystemTime;
 
-use pki_types::{CertificateDer, SignatureVerificationAlgorithm, TrustAnchor};
+use pki_types::{CertificateDer, SignatureVerificationAlgorithm};
 
 use super::anchors::RootCertStore;
 use super::client_verifier_builder::ClientCertVerifierBuilder;
@@ -37,7 +37,7 @@ static SUPPORTED_SIG_ALGS: SignatureAlgorithms = &[
 ];
 
 /// Verify that the end-entity certificate `end_entity` is a valid server cert
-/// and chains to at least one of the [TrustAnchor]s in the `roots` [RootCertStore].
+/// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
 ///
 /// `intermediates` contains all certificates other than `end_entity` that
 /// were sent as part of the server's `Certificate` message. It is in the
@@ -50,13 +50,12 @@ pub fn verify_server_cert_signed_by_trust_anchor(
     intermediates: &[CertificateDer<'_>],
     now: SystemTime,
 ) -> Result<(), Error> {
-    let trust_roots = trust_roots(roots);
     let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
     cert.0
         .verify_for_usage(
             SUPPORTED_SIG_ALGS,
-            &trust_roots,
+            &roots.roots,
             intermediates,
             webpki_now,
             webpki::KeyUsage::server_auth(),
@@ -195,27 +194,6 @@ impl WebPkiServerVerifier {
     }
 }
 
-fn trust_roots(roots: &RootCertStore) -> Vec<TrustAnchor<'_>> {
-    roots
-        .roots
-        .iter()
-        .map(|with_dn| {
-            let inner = with_dn.inner();
-            TrustAnchor {
-                subject: inner.subject.as_ref().into(),
-                subject_public_key_info: inner
-                    .subject_public_key_info
-                    .as_ref()
-                    .into(),
-                name_constraints: inner
-                    .name_constraints
-                    .as_ref()
-                    .map(|nc| nc.as_ref().into()),
-            }
-        })
-        .collect()
-}
-
 /// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
 /// validation. It must be created via the [WebPkiClientVerifier::builder()] function.
 ///
@@ -311,7 +289,7 @@ impl WebPkiClientVerifier {
             subjects: roots
                 .roots
                 .iter()
-                .map(|r| DistinguishedName::in_sequence(r.inner().subject.as_ref()))
+                .map(|ta| DistinguishedName::in_sequence(ta.subject.as_ref()))
                 .collect(),
             crls,
             roots,
@@ -343,7 +321,6 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         now: SystemTime,
     ) -> Result<ClientCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
-        let trust_roots = trust_roots(&self.roots);
         let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
         #[allow(trivial_casts)] // Cast to &dyn trait is required.
@@ -367,7 +344,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         cert.0
             .verify_for_usage(
                 SUPPORTED_SIG_ALGS,
-                &trust_roots,
+                &self.roots.roots,
                 intermediates,
                 now,
                 webpki::KeyUsage::client_auth(),

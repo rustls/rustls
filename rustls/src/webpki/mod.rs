@@ -6,7 +6,7 @@ mod anchors;
 mod client_verifier_builder;
 mod verify;
 
-pub use anchors::{RootCertStore, TrustAnchorWithDn};
+pub use anchors::RootCertStore;
 
 pub use client_verifier_builder::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
 
