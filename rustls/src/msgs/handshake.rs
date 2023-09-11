@@ -11,8 +11,8 @@ use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
     ExtensionType, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
-use crate::rand;
 use crate::verify::DigitallySignedStruct;
+use crate::{rand, x509};
 
 use pki_types::CertificateDer;
 
@@ -1686,6 +1686,22 @@ wrapped_payload!(
     DistinguishedName,
     PayloadU16,
 );
+
+impl DistinguishedName {
+    /// Create a [`DistinguishedName`] after prepending its outer SEQUENCE encoding.
+    ///
+    /// This can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
+    ///
+    /// ```ignore
+    /// use x509_parser::prelude::FromDer;
+    /// println!("{}", x509_parser::x509::X509Name::from_der(dn.as_ref())?.1);
+    /// ```
+    pub fn in_sequence(bytes: &[u8]) -> Self {
+        let mut wrapped = bytes.to_owned();
+        x509::wrap_in_sequence(&mut wrapped);
+        Self(PayloadU16::new(wrapped))
+    }
+}
 
 impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;

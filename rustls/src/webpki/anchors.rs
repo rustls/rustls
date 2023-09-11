@@ -4,7 +4,6 @@ use webpki::extract_trust_anchor;
 use super::pki_error;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::x509;
 use crate::DistinguishedName;
 use crate::Error;
 
@@ -36,11 +35,8 @@ impl TrustAnchorWithDn {
 
 impl From<TrustAnchor<'static>> for TrustAnchorWithDn {
     fn from(inner: TrustAnchor<'static>) -> Self {
-        let mut subject = inner.subject.as_ref().to_owned();
-        x509::wrap_in_sequence(&mut subject);
-
         Self {
-            subject_dn: DistinguishedName::from(subject),
+            subject_dn: DistinguishedName::in_sequence(inner.subject.as_ref()),
             inner,
         }
     }
