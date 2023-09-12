@@ -13,6 +13,11 @@ a pcap or reproduction steps.
 
 Feel free to file github issues to get help, or ask a question.
 
+If you believe you've found a security bug please 
+[open a draft security advisory](https://github.com/rustls/rustls/security/advisories/new) 
+in GitHub, and not as a regular repository issue. See [SECURITY.md] for more
+information.
+
 ## Code changes
 
 Some ideas and guidelines for contributions:
@@ -30,13 +35,10 @@ Some ideas and guidelines for contributions:
 
 ## Security bugs
 
-Please report security bugs by filing a github issue, or by
-email to jbp@jbp.io if you want to disclose privately.  I'll then:
+Please report security bugs by [opening a draft security advisory](https://github.com/rustls/rustls/security/advisories/new)
+in GitHub, and not as a regular repository issue. 
 
-- Prepare a fix and regression tests.
-- Backport the fix and make a patch release for most recent release.
-- Submit an advisory to [rustsec/advisory-db](https://github.com/RustSec/advisory-db).
-- Refer to the advisory on the main README.md and release notes.
+See [SECURITY.md] for more information.
 
 If you're *looking* for security bugs, this crate is set up for
 `cargo fuzz` but would benefit from more runtime, targets and corpora.
