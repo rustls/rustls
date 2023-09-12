@@ -127,6 +127,12 @@ differentiating between a given function and other functions, so putting them
 first makes it easier to infer the context/meaning of the function (compared to
 starting with a number of generic context-like types).
 
+#### Use `impl` where possible
+
+We prefer to use `impl ...` for arguments and return types when there's a single
+use of the type. Generic type argument bounds add a level of indirection that's
+harder to read in one pass.
+
 #### Validation
 
 Where possible, avoid writing `validate` or `check` type functions that try to
