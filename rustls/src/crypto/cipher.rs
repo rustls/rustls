@@ -119,8 +119,9 @@ impl Iv {
         Self(value)
     }
 
+    /// Create a new `Iv` from a byte slice, of precisely `NONCE_LEN` bytes.
     #[cfg(feature = "tls12")]
-    pub(crate) fn copy(value: &[u8]) -> Self {
+    pub fn copy(value: &[u8]) -> Self {
         debug_assert_eq!(value.len(), NONCE_LEN);
         let mut iv = Self::new(Default::default());
         iv.0.copy_from_slice(value);
