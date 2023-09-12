@@ -183,6 +183,18 @@ Ok(match foo {
 })
 ```
 
+#### Avoid `ref` in match patterns
+
+When writing match expressions, try to avoid using `ref` in patterns. Prefer
+taking a reference on the
+[scrutinee](https://doc.rust-lang.org/reference/expressions/match-expr.html) 
+of the `match`.
+
+Since the addition of [binding
+modes](https://rust-lang.github.io/rfcs/2005-match-ergonomics.html) for improved
+match ergonomics the `ref` keyword is unidiomatic and can be unfamiliar to
+readers.
+
 ### Naming
 
 #### Use concise names
