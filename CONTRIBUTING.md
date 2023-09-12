@@ -232,6 +232,12 @@ Per the
 [API guidelines](https://rust-lang.github.io/api-guidelines/naming.html#getter-names-follow-rust-convention-c-getter),
 `get_()` prefixes are discouraged.
 
+#### Alphabetize enum variants
+
+When implementing or modifying an `enum` type, list its variants in alphabetical
+order. It's acceptable to ignore this advice when matching the order imposed by
+an external source, e.g. a standards document.
+
 #### Don't elide generic lifetimes
 
 We prefer not to elide lifetimes when naming types that are generic over
