@@ -169,11 +169,16 @@ code harder to read. To avoid this, try to `return` early for error cases, or
 
 #### Use concise names
 
-We prefer concise names, especially for local variables. Avoid adding a suffix
-for a variable that describes its type (provided that its type is hard to
-confuse with other types -- for example, we do still use `_id` suffixes because
-we usually use numeric IDs for database entities). The precision/conciseness
-trade-off for variable names also depends on the scope of the binding.
+We prefer concise names, especially for local variables, but prefer to
+expand acronyms/abbreviations that are not very well known (e.g. prefer
+`key_usage` instead of `ku`, `anonymous` instead of `anon`). Extremely common
+short-forms like `url` are acceptable.
+
+Avoid adding a suffix for a variable that describes its type (provided that its
+type is hard to confuse with other types -- for example, we do still use `_id`
+suffixes because we usually use numeric IDs for database entities). The
+precision/conciseness trade-off for variable names also depends on the scope of
+the binding. 
 
 #### Avoid `get_` prefixes
 
