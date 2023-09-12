@@ -232,11 +232,15 @@ Per the
 [API guidelines](https://rust-lang.github.io/api-guidelines/naming.html#getter-names-follow-rust-convention-c-getter),
 `get_()` prefixes are discouraged.
 
-#### Alphabetize enum variants
+#### Enum variants
 
 When implementing or modifying an `enum` type, list its variants in alphabetical
 order. It's acceptable to ignore this advice when matching the order imposed by
 an external source, e.g. a standards document.
+
+Prefer active verbs for variant names. E.g. `Allow` instead of `Allowed`,
+`Forbid` instead of `Forbidden`. Avoid faux-bools like `Yes` and `No`, instead
+preferring variant names that are descriptive of the different states.
 
 #### Don't elide generic lifetimes
 
