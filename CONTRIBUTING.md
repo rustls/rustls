@@ -194,6 +194,14 @@ We use 3 blocks of imports in our Rust files:
 
 We believe that this makes it easier to see where a particular import comes from.
 
+We prefer to reference types and traits by an imported symbol name instead of
+using qualified references. Qualification paths generally add noise and are
+unnecessary. The one exception to this is when the symbol name is overly
+generic, or easily confused between different crates. In this case we prefer to
+import the symbol name under an alias, or if the parent module name is short,
+using a one-level qualified path. E.g. for a crate with a local `Error` type,
+prefer to `import std::error::Error as StdError`.
+
 ## Licensing
 
 Contributions are made under [rustls's licenses](LICENSE).
