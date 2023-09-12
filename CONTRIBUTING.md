@@ -112,6 +112,14 @@ to gain an understanding of what's going on. When writing a single-use function,
 consider whether it needs the dedicated interface, or if it could be inlined into
 its caller instead.
 
+#### Consider avoiding free-standing functions
+
+If a function's semantics or implementation are strongly dependent on one of its
+arguments, and the argument is defined in a type within the current crate,
+prefer using a method on the type. Similarly, if a function is taking multiple
+arguments that originate from the same common type in all call-sites it is
+a strong candidate for becoming a method on the type.
+
 #### Order arguments from most specific to least specific
 
 When writing a function, we prefer to order arguments from most specific to
