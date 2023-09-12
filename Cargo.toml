@@ -13,6 +13,7 @@ categories = ["network-programming", "data-structures", "cryptography"]
 [features]
 default = ["alloc"]
 alloc = []
+std = ["alloc"]
 
 [package.metadata.docs.rs]
 all-features = true

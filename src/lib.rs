@@ -26,7 +26,7 @@
 //! This crate does not provide any functionality for creating new certificates or keys. However,
 //! the [rcgen](https://docs.rs/rcgen) crate can be used to create new certificates and keys.
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![warn(unreachable_pub, clippy::use_self)]
 #![deny(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
@@ -38,6 +38,9 @@ extern crate alloc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::ops::Deref;
+use core::time::Duration;
+#[cfg(feature = "std")]
+use std::time::SystemTime;
 
 /// A DER-encoded X.509 private key, in one of several formats
 ///
@@ -210,6 +213,7 @@ impl TrustAnchor<'_> {
     /// Yield a `'static` lifetime of the `TrustAnchor` by allocating owned `Der` variants
     #[cfg(feature = "alloc")]
     pub fn to_owned(&self) -> TrustAnchor<'static> {
+        #[cfg(not(feature = "std"))]
         use alloc::borrow::ToOwned;
         TrustAnchor {
             subject: self.subject.as_ref().to_owned().into(),
@@ -388,6 +392,36 @@ impl Deref for AlgorithmIdentifier {
 
     fn deref(&self) -> &Self::Target {
         self.as_ref()
+    }
+}
+
+/// A timestamp, tracking the number of non-leap seconds since the Unix epoch.
+///
+/// The Unix epoch is defined January 1, 1970 00:00:00 UTC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
+pub struct UnixTime(u64);
+
+impl UnixTime {
+    /// The current time, as a `UnixTime`
+    #[cfg(feature = "std")]
+    pub fn now() -> Self {
+        Self::since_unix_epoch(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap(), // Safe: this code did not exist before 1970.
+        )
+    }
+
+    /// Convert a `Duration` since the start of 1970 to a `UnixTime`
+    ///
+    /// The `duration` must be relative to the Unix epoch.
+    pub fn since_unix_epoch(duration: Duration) -> Self {
+        Self(duration.as_secs())
+    }
+
+    /// Number of seconds since the Unix epoch
+    pub fn as_secs(&self) -> u64 {
+        self.0
     }
 }
 
