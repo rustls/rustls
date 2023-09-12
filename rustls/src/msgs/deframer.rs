@@ -106,7 +106,7 @@ impl MessageDeframer {
                 ContentType::Alert
                     if version_is_tls13
                         && !record_layer.has_decrypted()
-                        && m.payload.0.len() <= 2 =>
+                        && m.payload().len() <= 2 =>
                 {
                     true
                 }

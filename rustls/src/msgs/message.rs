@@ -74,11 +74,18 @@ impl MessagePayload {
 /// This type owns all memory for its interior parts. It is used to read/write from/to I/O
 /// buffers as well as for fragmenting, joining and encryption/decryption. It can be converted
 /// into a `Message` by decoding the payload.
+///
+/// # Decryption
+/// Internally the message payload is stored as a `Vec<u8>`; this can by mutably borrowed with
+/// [`OpaqueMessage::payload_mut()`].  This is useful for decrypting a message in-place.
+/// After the message is decrypted, call [`OpaqueMessage::into_plain_message()`] or
+/// [`OpaqueMessage::into_tls13_unpadded_message()`] (depending on the
+/// protocol version).
 #[derive(Clone, Debug)]
 pub struct OpaqueMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    pub payload: Payload,
+    payload: Payload,
 }
 
 impl OpaqueMessage {
@@ -91,6 +98,16 @@ impl OpaqueMessage {
             version,
             payload: Payload::new(body),
         }
+    }
+
+    /// Access the message payload as a slice.
+    pub fn payload(&self) -> &[u8] {
+        &self.payload.0
+    }
+
+    /// Access the message payload as a mutable `Vec<u8>`.
+    pub fn payload_mut(&mut self) -> &mut Vec<u8> {
+        &mut self.payload.0
     }
 
     /// `MessageError` allows callers to distinguish between valid prefixes (might
