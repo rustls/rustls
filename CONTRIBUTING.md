@@ -165,6 +165,26 @@ levels, which we call "rightward drift". This makes lines shorter, making the
 code harder to read. To avoid this, try to `return` early for error cases, or
 `continue` early in a loop to skip an iteration.
 
+#### Hoist common expression returns
+
+When writing a `match` or `if` expression that has arms that each share a return
+type (e.g. `Ok(...)`), hoist the commonality outside the `match`. This helps
+separate out the important differences and reduces code duplication.
+
+```rust
+// Incorrect:
+match foo {
+    1..10 => Ok(do_one_thing()),
+    _ => Ok(do_another()),
+}
+
+// Correct:
+Ok(match foo {
+    1..10 => do_one_thing(),
+    _ => do_another(),
+})
+```
+
 ### Naming
 
 #### Use concise names
