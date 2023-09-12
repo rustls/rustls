@@ -235,7 +235,7 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let payload = &mut msg.payload.0;
+        let payload = msg.payload();
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
         }
@@ -254,6 +254,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
             payload.len() - GCM_OVERHEAD,
         ));
 
+        let payload = msg.payload_mut();
         let plain_len = self
             .dec_key
             .open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..)
@@ -308,7 +309,7 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let payload = &mut msg.payload.0;
+        let payload = msg.payload();
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
             return Err(Error::DecryptError);
@@ -322,6 +323,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             payload.len() - CHACHAPOLY1305_OVERHEAD,
         ));
 
+        let payload = msg.payload_mut();
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)

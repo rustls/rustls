@@ -191,7 +191,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 
 impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let payload = &mut msg.payload.0;
+        let payload = msg.payload_mut();
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
