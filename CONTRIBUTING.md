@@ -143,14 +143,14 @@ be represented.
 
 #### Error handling
 
-We use `Result` types pervasively throughout the code to signal error cases. We
-prefer to avoid `unwrap()` and `expect()` calls unless there is a clear
-invariant which can be locally validated by the structure of the code. If
-there is such an invariant, we usually add a comment explaining how the
-invariant is upheld. In other cases (especially for error cases which can arise
-from network traffic, which could represent an attacker), we always prefer to
-handle errors and ultimately return an error to the network peer or close the
-connection.
+We use `Result` types pervasively throughout the code to signal error cases. 
+Outside of unit/integration tests we prefer to avoid `unwrap()` and `expect()`
+calls unless there is a clear invariant which can be locally validated by the
+structure of the code. If there is such an invariant, we usually add a comment
+explaining how the invariant is upheld. In other cases (especially for error
+cases which can arise from network traffic, which could represent an attacker),
+we always prefer to handle errors and ultimately return an error to the network
+peer or close the connection.
 
 ### Expressions
 
