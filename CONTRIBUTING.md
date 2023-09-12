@@ -129,6 +129,14 @@ differentiating between a given function and other functions, so putting them
 first makes it easier to infer the context/meaning of the function (compared to
 starting with a number of generic context-like types).
 
+#### Validation
+
+Where possible, avoid writing `validate` or `check` type functions that try to
+check for error conditions based on the state of a populated object. Prefer
+["parse, don't validate"](https://lexi-lambda.github.io/blog/2019/11/05/parse-don-t-validate/)
+style and try to use the type system to make it impossible for invalid states to
+be represented.
+
 #### Error handling
 
 We use `Result` types pervasively throughout the code to signal error cases. We
