@@ -5,7 +5,6 @@ use crate::crypto::cipher::{
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
-use crate::msgs::base::Payload;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 #[cfg(feature = "secret_extraction")]
@@ -285,11 +284,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
             .map(|tag| payload.extend(tag.as_ref()))
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OpaqueMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload: Payload::new(payload),
-        })
+        Ok(OpaqueMessage::new(msg.typ, msg.version, payload))
     }
 }
 
@@ -355,11 +350,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut buf)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OpaqueMessage {
-            typ: msg.typ,
-            version: msg.version,
-            payload: Payload::new(buf),
-        })
+        Ok(OpaqueMessage::new(msg.typ, msg.version, buf))
     }
 }
 

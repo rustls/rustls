@@ -233,7 +233,6 @@ pub struct Decrypted {
 
 #[test]
 fn test_has_decrypted() {
-    use crate::msgs::base::Payload;
     use crate::{ContentType, ProtocolVersion};
 
     struct PassThroughDecrypter;
@@ -270,11 +269,11 @@ fn test_has_decrypted() {
 
     // Decrypting a message should update the read_seq and track that we have now performed
     // a decryption.
-    let msg = OpaqueMessage {
-        typ: ContentType::Handshake,
-        version: ProtocolVersion::TLSv1_2,
-        payload: Payload(vec![0xC0, 0xFF, 0xEE]),
-    };
+    let msg = OpaqueMessage::new(
+        ContentType::Handshake,
+        ProtocolVersion::TLSv1_2,
+        vec![0xC0, 0xFF, 0xEE],
+    );
     record_layer
         .decrypt_incoming(msg)
         .unwrap();

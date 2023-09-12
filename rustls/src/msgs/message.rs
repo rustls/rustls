@@ -82,6 +82,17 @@ pub struct OpaqueMessage {
 }
 
 impl OpaqueMessage {
+    /// Construct a new `OpaqueMessage` from constituent fields.
+    ///
+    /// `body` is moved into the `payload` field.
+    pub fn new(typ: ContentType, version: ProtocolVersion, body: Vec<u8>) -> Self {
+        Self {
+            typ,
+            version,
+            payload: Payload::new(body),
+        }
+    }
+
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
     pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
