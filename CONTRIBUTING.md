@@ -254,6 +254,15 @@ import the symbol name under an alias, or if the parent module name is short,
 using a one-level qualified path. E.g. for a crate with a local `Error` type,
 prefer to `import std::error::Error as StdError`.
 
+### Misc
+
+#### Avoid type aliases
+
+We prefer to avoid type aliases as they obfuscate the underlying type and
+don't provide additional type safety. Using the 
+[newtype idiom](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) 
+is one alternative when an abstraction boundary is worth the added complexity.
+
 ## Licensing
 
 Contributions are made under [rustls's licenses](LICENSE).
