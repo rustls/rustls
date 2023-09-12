@@ -224,6 +224,12 @@ Per the
 [API guidelines](https://rust-lang.github.io/api-guidelines/naming.html#getter-names-follow-rust-convention-c-getter),
 `get_()` prefixes are discouraged.
 
+#### Don't elide generic lifetimes
+
+We prefer not to elide lifetimes when naming types that are generic over
+lifetimes. Always include a lifetime placeholder (e.g. `<'_>`) to avoid
+confusion.
+
 ### Imports
 
 We use 3 blocks of imports in our Rust files:
