@@ -4,13 +4,16 @@
 
 extern crate alloc;
 
-use alloc::{borrow::Cow, vec, vec::Vec};
+use alloc::{borrow::Cow, sync::Arc, vec, vec::Vec};
 use core::{fmt, iter, num::NonZeroUsize, ops};
 
 #[cfg(test)]
 mod mock;
+#[cfg(test)]
+mod stream;
 
-const ENCRYPTED_TLS_SIZE_OVERHEAD: usize = 22;
+const TLS_HEADER_SIZE: usize = 5;
+const ENCRYPTED_TLS_SIZE_OVERHEAD: usize = TLS_HEADER_SIZE + 17;
 
 #[derive(Debug)]
 pub enum TlsError {
@@ -31,6 +34,7 @@ pub type TlsResult<T> = Result<T, TlsError>;
 
 pub struct LlClientConnection {
     inner: LlConnectionCommon,
+    server_name: Arc<str>,
 }
 
 impl ops::Deref for LlClientConnection {
@@ -54,6 +58,7 @@ impl LlClientConnection {
                 #[cfg(test)]
                 is_client: true,
             },
+            server_name: Arc::from(_server_name),
         })
     }
 }
@@ -137,17 +142,48 @@ impl State<'_, '_> {
 /// A single TLS record containing application data
 pub struct AppDataAvailable<'c, 'i> {
     _conn: &'c mut LlConnectionCommon,
-    _incoming_tls: &'i mut [u8],
+    _incoming_tls: Option<&'i mut [u8]>,
+}
+
+pub struct AppDataRecord<'i> {
+    pub discard: usize,
+    pub payload: &'i [u8],
+}
+
+impl<'c, 'i> Iterator for AppDataAvailable<'c, 'i> {
+    type Item = TlsResult<AppDataRecord<'i>>;
+
+    // decrypts the first *app-data* record in `_incoming_tls` in-place and yields it
+    // any record preceding the app-data record will be decrypted and processed by `LlConnectionCommon`
+    fn next(&mut self) -> Option<Self::Item> {
+        let len = self.peek_len()?;
+        let discard = len + ENCRYPTED_TLS_SIZE_OVERHEAD;
+        let (head, tail) = self._incoming_tls.take().unwrap().split_at_mut(discard);
+        self._incoming_tls = Some(tail);
+
+        Some(Ok(AppDataRecord {
+            discard,
+            payload: &mut head[TLS_HEADER_SIZE..discard],
+        }))
+    }
 }
 
 impl<'c, 'i> AppDataAvailable<'c, 'i> {
-    // decrypts the first record in `_incoming_tls` in-place and returns a slice into its payload
-    // this advances `incoming_tls`'s cursor *fully* discarding the TLS record
-    pub fn decrypt(self) -> TlsResult<&'i [u8]> {
+    /// returns the payload size of the next app-data record *without* decrypting it
+    ///
+    /// returns `None` if there are no more app-data records
+    pub fn peek_len(&self) -> Option<usize> {
         #[cfg(test)]
-        mock::ClientState.advance();
+        match mock::ClientState.advance() {
+            12 => Some(95 - ENCRYPTED_TLS_SIZE_OVERHEAD),
 
-        Ok(&[])
+            13 => None,
+
+            state => unimplemented!("client state: {state}"),
+        }
+
+        #[cfg(not(test))]
+        None
     }
 }
 
@@ -375,11 +411,11 @@ impl<'c> TrafficTransit<'c> {
     ///
     /// returns the number of bytes that were written into `outgoing_tls`, or an error if
     /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
-    pub fn encrypt<'o>(
+    pub fn encrypt(
         &mut self,
         _outgoing_plaintext: &[u8],
-        _outgoing_tls: &'o mut [u8],
-    ) -> Result<&'o mut [u8], EncryptError> {
+        _outgoing_tls: &mut [u8],
+    ) -> Result<usize, EncryptError> {
         todo!()
     }
 }
@@ -460,15 +496,13 @@ found {}B of data in incoming_tls",
                         discard += mock::process(103, "encrypted HS::NewSessionTicket");
                     }
 
-                    discard += 95;
-
                     State::AppDataAvailable(AppDataAvailable {
                         _conn: self,
-                        _incoming_tls,
+                        _incoming_tls: Some(_incoming_tls),
                     })
                 }
 
-                13 => {
+                14 => {
                     discard += mock::process(24, "encrypted Alert");
 
                     State::TrafficTransit(TrafficTransit { _conn: self })
@@ -668,7 +702,7 @@ mod tests {
 
         let max_iters = 32;
         for _ in 0..max_iters {
-            let Status { discard, state } =
+            let Status { mut discard, state } =
                 conn.process_tls_records(&mut incoming_tls[..incoming_used])?;
 
             eprintln!("state: {}", state.variant_name());
@@ -694,9 +728,11 @@ mod tests {
                             eprintln!("resized `outgoing_tls` buffer to {}B", new_len);
 
                             // don't forget to encrypt the handshake record after resizing!
-                            encrypter
+                            let written = encrypter
                                 .encrypt(&mut outgoing_tls[outgoing_used..])
                                 .expect("should not fail this time");
+
+                            outgoing_used += written;
                         }
                     }
                 }
@@ -760,9 +796,17 @@ mod tests {
                     state.done(verification_outcome);
                 }
 
-                State::AppDataAvailable(record) => {
-                    let _data = record.decrypt()?;
-                    // do stuff with `data`
+                State::AppDataAvailable(records) => {
+                    for res in records {
+                        let AppDataRecord {
+                            discard: new_discard,
+                            payload,
+                        } = res?;
+
+                        discard += new_discard;
+
+                        // do stuff with `data`
+                    }
                 }
 
                 State::EarlyDataAvailable(record) => {
@@ -785,9 +829,11 @@ mod tests {
                             eprintln!("resized `outgoing_tls` buffer to {}B", new_len);
 
                             // don't forget to encrypt `app_data` after resizing!
-                            encrypter
+                            let written = encrypter
                                 .encrypt(app_data, &mut outgoing_tls[outgoing_used..])
                                 .expect("should not fail this time");
+
+                            outgoing_used += written;
                         }
                     }
 
@@ -880,7 +926,8 @@ mod tests {
 
         let max_iters = 32;
         for _ in 0..max_iters {
-            let Status { discard, state } = conn.process_tls_records(incoming_tls.filled_mut())?;
+            let Status { mut discard, state } =
+                conn.process_tls_records(incoming_tls.filled_mut())?;
 
             eprintln!("state: {}", state.variant_name());
 
@@ -905,9 +952,11 @@ mod tests {
                             eprintln!("resized `outgoing_tls` buffer to {}B", new_len);
 
                             // don't forget to encrypt the handshake record after resizing!
-                            encrypter
+                            let written = encrypter
                                 .encrypt(&mut outgoing_tls[outgoing_used..])
                                 .expect("should not fail this time");
+
+                            outgoing_used += written;
                         }
                     }
                 }
@@ -971,9 +1020,16 @@ mod tests {
                     state.done(verification_outcome);
                 }
 
-                State::AppDataAvailable(record) => {
-                    let _data = record.decrypt()?;
-                    // do stuff with `data`
+                State::AppDataAvailable(records) => {
+                    for res in records {
+                        let AppDataRecord {
+                            discard: new_discard,
+                            payload,
+                        } = res?;
+                        discard += new_discard;
+
+                        // do stuff with `data`
+                    }
                 }
 
                 State::EarlyDataAvailable(record) => {
@@ -996,9 +1052,11 @@ mod tests {
                             eprintln!("resized `outgoing_tls` buffer to {}B", new_len);
 
                             // don't forget to encrypt `app_data` after resizing!
-                            encrypter
+                            let written = encrypter
                                 .encrypt(app_data, &mut outgoing_tls[outgoing_used..])
                                 .expect("should not fail this time");
+
+                            outgoing_used += written;
                         }
                     }
 
