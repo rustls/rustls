@@ -268,6 +268,13 @@ prefer to `import std::error::Error as StdError`.
 
 ### Misc
 
+#### Numeric literals
+
+Prefer a numeric base that fits with the domain of the value being used. E.g.
+use hexadecimal for protocol message literals, and octal for UNIX privileges.
+Use digit grouping to make larger numeric constants easy to read, e.g. use
+`100_000_000` instead of `100000000`.
+
 #### Avoid type aliases
 
 We prefer to avoid type aliases as they obfuscate the underlying type and
