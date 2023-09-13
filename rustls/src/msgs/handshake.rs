@@ -6,7 +6,7 @@ use crate::error::InvalidMessage;
 #[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
-use crate::msgs::codec::{self, Codec, ListLength, Reader, TlsListElement};
+use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
     ExtensionType, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
@@ -581,31 +581,28 @@ impl Codec for ClientExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
-        let mut sub: Vec<u8> = Vec::new();
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::ECPointFormats(ref r) => r.encode(&mut sub),
-            Self::NamedGroups(ref r) => r.encode(&mut sub),
-            Self::SignatureAlgorithms(ref r) => r.encode(&mut sub),
-            Self::ServerName(ref r) => r.encode(&mut sub),
+            Self::ECPointFormats(ref r) => r.encode(nested.buf),
+            Self::NamedGroups(ref r) => r.encode(nested.buf),
+            Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
+            Self::ServerName(ref r) => r.encode(nested.buf),
             Self::SessionTicket(ClientSessionTicket::Request)
             | Self::ExtendedMasterSecretRequest
             | Self::EarlyData => {}
-            Self::SessionTicket(ClientSessionTicket::Offer(ref r)) => r.encode(&mut sub),
-            Self::Protocols(ref r) => r.encode(&mut sub),
-            Self::SupportedVersions(ref r) => r.encode(&mut sub),
-            Self::KeyShare(ref r) => r.encode(&mut sub),
-            Self::PresharedKeyModes(ref r) => r.encode(&mut sub),
-            Self::PresharedKey(ref r) => r.encode(&mut sub),
-            Self::Cookie(ref r) => r.encode(&mut sub),
-            Self::CertificateStatusRequest(ref r) => r.encode(&mut sub),
+            Self::SessionTicket(ClientSessionTicket::Offer(ref r)) => r.encode(nested.buf),
+            Self::Protocols(ref r) => r.encode(nested.buf),
+            Self::SupportedVersions(ref r) => r.encode(nested.buf),
+            Self::KeyShare(ref r) => r.encode(nested.buf),
+            Self::PresharedKeyModes(ref r) => r.encode(nested.buf),
+            Self::PresharedKey(ref r) => r.encode(nested.buf),
+            Self::Cookie(ref r) => r.encode(nested.buf),
+            Self::CertificateStatusRequest(ref r) => r.encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                sub.extend_from_slice(r);
+                nested.buf.extend_from_slice(r);
             }
-            Self::Unknown(ref r) => r.encode(&mut sub),
+            Self::Unknown(ref r) => r.encode(nested.buf),
         }
-
-        (sub.len() as u16).encode(bytes);
-        bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -728,27 +725,24 @@ impl Codec for ServerExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
-        let mut sub: Vec<u8> = Vec::new();
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::ECPointFormats(ref r) => r.encode(&mut sub),
+            Self::ECPointFormats(ref r) => r.encode(nested.buf),
             Self::ServerNameAck
             | Self::SessionTicketAck
             | Self::ExtendedMasterSecretAck
             | Self::CertificateStatusAck
             | Self::EarlyData => {}
-            Self::RenegotiationInfo(ref r) => r.encode(&mut sub),
-            Self::Protocols(ref r) => r.encode(&mut sub),
-            Self::KeyShare(ref r) => r.encode(&mut sub),
-            Self::PresharedKey(r) => r.encode(&mut sub),
-            Self::SupportedVersions(ref r) => r.encode(&mut sub),
+            Self::RenegotiationInfo(ref r) => r.encode(nested.buf),
+            Self::Protocols(ref r) => r.encode(nested.buf),
+            Self::KeyShare(ref r) => r.encode(nested.buf),
+            Self::PresharedKey(r) => r.encode(nested.buf),
+            Self::SupportedVersions(ref r) => r.encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                sub.extend_from_slice(r);
+                nested.buf.extend_from_slice(r);
             }
-            Self::Unknown(ref r) => r.encode(&mut sub),
+            Self::Unknown(ref r) => r.encode(nested.buf),
         }
-
-        (sub.len() as u16).encode(bytes);
-        bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1030,16 +1024,13 @@ impl Codec for HelloRetryExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
-        let mut sub: Vec<u8> = Vec::new();
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::KeyShare(ref r) => r.encode(&mut sub),
-            Self::Cookie(ref r) => r.encode(&mut sub),
-            Self::SupportedVersions(ref r) => r.encode(&mut sub),
-            Self::Unknown(ref r) => r.encode(&mut sub),
+            Self::KeyShare(ref r) => r.encode(nested.buf),
+            Self::Cookie(ref r) => r.encode(nested.buf),
+            Self::SupportedVersions(ref r) => r.encode(nested.buf),
+            Self::Unknown(ref r) => r.encode(nested.buf),
         }
-
-        (sub.len() as u16).encode(bytes);
-        bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1289,14 +1280,11 @@ impl Codec for CertificateExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
-        let mut sub: Vec<u8> = Vec::new();
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::CertificateStatus(ref r) => r.encode(&mut sub),
-            Self::Unknown(ref r) => r.encode(&mut sub),
+            Self::CertificateStatus(ref r) => r.encode(nested.buf),
+            Self::Unknown(ref r) => r.encode(nested.buf),
         }
-
-        (sub.len() as u16).encode(bytes);
-        bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1760,15 +1748,12 @@ impl Codec for CertReqExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
-        let mut sub: Vec<u8> = Vec::new();
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::SignatureAlgorithms(ref r) => r.encode(&mut sub),
-            Self::AuthorityNames(ref r) => r.encode(&mut sub),
-            Self::Unknown(ref r) => r.encode(&mut sub),
+            Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
+            Self::AuthorityNames(ref r) => r.encode(nested.buf),
+            Self::Unknown(ref r) => r.encode(nested.buf),
         }
-
-        (sub.len() as u16).encode(bytes);
-        bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1900,14 +1885,11 @@ impl Codec for NewSessionTicketExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.get_type().encode(bytes);
 
-        let mut sub: Vec<u8> = Vec::new();
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::EarlyData(r) => r.encode(&mut sub),
-            Self::Unknown(ref r) => r.encode(&mut sub),
+            Self::EarlyData(r) => r.encode(nested.buf),
+            Self::Unknown(ref r) => r.encode(nested.buf),
         }
-
-        (sub.len() as u16).encode(bytes);
-        bytes.append(&mut sub);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -2103,18 +2085,15 @@ pub struct HandshakeMessagePayload {
 
 impl Codec for HandshakeMessagePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        // encode payload to learn length
-        let mut sub: Vec<u8> = Vec::new();
-        self.payload.encode(&mut sub);
-
         // output type, length, and encoded payload
         match self.typ {
             HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
             _ => self.typ,
         }
         .encode(bytes);
-        codec::u24(sub.len() as u32).encode(bytes);
-        bytes.append(&mut sub);
+
+        let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes);
+        self.payload.encode(nested.buf);
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
