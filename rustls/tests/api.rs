@@ -4984,3 +4984,21 @@ fn test_debug_server_name_from_string() {
         "DnsName(\"a.com\")"
     )
 }
+
+#[cfg(feature = "ring")]
+#[test]
+fn test_explicit_provider_selection() {
+    let client_config = finish_client_config(
+        KeyType::Rsa,
+        rustls::ClientConfig::builder_with_provider(rustls::crypto::ring::RING)
+            .with_safe_defaults(),
+    );
+    let server_config = finish_server_config(
+        KeyType::Rsa,
+        rustls::ServerConfig::builder_with_provider(rustls::crypto::ring::RING)
+            .with_safe_defaults(),
+    );
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+}
