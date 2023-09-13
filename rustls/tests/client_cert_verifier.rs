@@ -18,7 +18,7 @@ use rustls::{
     ServerConnection, SignatureScheme,
 };
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, UnixTime};
 
 use std::sync::Arc;
 
@@ -174,7 +174,7 @@ impl ClientCertVerifier for MockClientVerifier {
         &self,
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
-        _now: std::time::SystemTime,
+        _now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
         (self.verified)()
     }

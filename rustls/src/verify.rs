@@ -1,7 +1,6 @@
 use core::fmt;
-use std::time::SystemTime;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, UnixTime};
 
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
@@ -86,7 +85,7 @@ pub trait ServerCertVerifier: Send + Sync {
         intermediates: &[CertificateDer<'_>],
         server_name: &ServerName,
         ocsp_response: &[u8],
-        now: SystemTime,
+        now: UnixTime,
     ) -> Result<ServerCertVerified, Error>;
 
     /// Verify a signature allegedly by the given server certificate.
@@ -193,7 +192,7 @@ pub trait ClientCertVerifier: Send + Sync {
         &self,
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
-        now: SystemTime,
+        now: UnixTime,
     ) -> Result<ClientCertVerified, Error>;
 
     /// Verify a signature allegedly by the given client certificate.
@@ -266,7 +265,7 @@ impl ClientCertVerifier for NoClientAuth {
         &self,
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
-        _now: SystemTime,
+        _now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
         unimplemented!();
     }

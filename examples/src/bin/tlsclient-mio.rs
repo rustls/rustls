@@ -313,7 +313,7 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 
 #[cfg(feature = "dangerous_configuration")]
 mod danger {
-    use pki_types::CertificateDer;
+    use pki_types::{CertificateDer, UnixTime};
     use rustls::client::{HandshakeSignatureValid, WebPkiServerVerifier};
     use rustls::DigitallySignedStruct;
 
@@ -326,7 +326,7 @@ mod danger {
             _intermediates: &[CertificateDer<'_>],
             _server_name: &rustls::ServerName,
             _ocsp: &[u8],
-            _now: std::time::SystemTime,
+            _now: UnixTime,
         ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
             Ok(rustls::client::ServerCertVerified::assertion())
         }

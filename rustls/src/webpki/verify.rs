@@ -1,7 +1,6 @@
 use alloc::sync::Arc;
-use std::time::SystemTime;
 
-use pki_types::{CertificateDer, SignatureVerificationAlgorithm};
+use pki_types::{CertificateDer, SignatureVerificationAlgorithm, UnixTime};
 
 use super::anchors::RootCertStore;
 use super::client_verifier_builder::ClientCertVerifierBuilder;
@@ -48,16 +47,14 @@ pub fn verify_server_cert_signed_by_trust_anchor(
     cert: &ParsedCertificate,
     roots: &RootCertStore,
     intermediates: &[CertificateDer<'_>],
-    now: SystemTime,
+    now: UnixTime,
 ) -> Result<(), Error> {
-    let webpki_now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
-
     cert.0
         .verify_for_usage(
             SUPPORTED_SIG_ALGS,
             &roots.roots,
             intermediates,
-            webpki_now,
+            now,
             webpki::KeyUsage::server_auth(),
             None, // no CRLs
         )
@@ -104,7 +101,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         intermediates: &[CertificateDer<'_>],
         server_name: &ServerName,
         ocsp_response: &[u8],
-        now: SystemTime,
+        now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
 
@@ -318,10 +315,9 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         &self,
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
-        now: SystemTime,
+        now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
-        let now = webpki::Time::try_from(now).map_err(|_| Error::FailedToGetCurrentTime)?;
 
         #[allow(trivial_casts)] // Cast to &dyn trait is required.
         let crls = self

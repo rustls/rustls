@@ -26,6 +26,7 @@ use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
+use crate::sign::{CertifiedKey, Signer};
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls13::construct_client_verify_message;
@@ -43,10 +44,9 @@ use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
 use crate::client::{hs, ClientConfig, ClientSessionStore, ServerName};
 
-use crate::ticketer::TimeBase;
+use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
-use crate::sign::{CertifiedKey, Signer};
 use alloc::sync::Arc;
 
 // Extensions we expect in plaintext in the ServerHello.
@@ -672,7 +672,6 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateVerify<
             .cert_chain
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
-        let now = std::time::SystemTime::now();
         let cert_verified = self
             .config
             .verifier
@@ -681,7 +680,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectCertificateVerify<
                 intermediates,
                 &self.server_name,
                 &self.server_cert.ocsp_response,
-                now,
+                UnixTime::now(),
             )
             .map_err(|err| {
                 cx.common
@@ -958,15 +957,6 @@ impl ExpectTraffic {
             .key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
 
-        let time_now = match TimeBase::now() {
-            Ok(t) => t,
-            #[allow(unused_variables)]
-            Err(e) => {
-                debug!("Session not saved: {}", e);
-                return Ok(());
-            }
-        };
-
         #[allow(unused_mut)]
         let mut value = persist::Tls13ClientSessionValue::new(
             self.suite,
@@ -976,7 +966,7 @@ impl ExpectTraffic {
                 .peer_certificates
                 .clone()
                 .unwrap_or_default(),
-            time_now,
+            UnixTime::now(),
             nst.lifetime,
             nst.age_add,
             nst.get_max_early_data_size()

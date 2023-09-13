@@ -211,13 +211,16 @@ mod test {
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
+
+    use pki_types::UnixTime;
+
     use core::convert::TryInto;
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
         let c = NoClientSessionStorage {};
         let name = "example.com".try_into().unwrap();
-        let now = crate::ticketer::TimeBase::now().unwrap();
+        let now = UnixTime::now();
 
         c.set_kx_hint(&name, NamedGroup::X25519);
         assert_eq!(None, c.kx_hint(&name));

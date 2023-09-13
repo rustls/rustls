@@ -25,7 +25,6 @@ use crate::rand;
 use crate::server::ServerConfig;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
-use crate::ticketer;
 use crate::tls13::construct_client_verify_message;
 use crate::tls13::construct_server_verify_message;
 use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
@@ -37,7 +36,7 @@ use super::server_conn::ServerConnectionData;
 
 use alloc::sync::Arc;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
@@ -276,7 +275,6 @@ mod client_hello {
 
             let mut chosen_psk_index = None;
             let mut resumedata = None;
-            let time_now = ticketer::TimeBase::now()?;
 
             if let Some(psk_offer) = client_hello.get_psk() {
                 if !client_hello.check_psk_ext_is_last() {
@@ -315,7 +313,7 @@ mod client_hello {
                     let resume = match self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .map(|resumedata| {
-                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, time_now)
+                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, UnixTime::now())
                         })
                         .filter(|resumedata| {
                             hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
@@ -928,10 +926,9 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificate<C> {
             Some(chain) => chain,
         };
 
-        let now = std::time::SystemTime::now();
         self.config
             .verifier
-            .verify_client_cert(end_entity, intermediates, now)
+            .verify_client_cert(end_entity, intermediates, UnixTime::now())
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
@@ -1057,7 +1054,7 @@ fn get_server_session_value(
     key_schedule: &KeyScheduleTraffic,
     cx: &ServerContext<'_>,
     nonce: &[u8],
-    time_now: ticketer::TimeBase,
+    time_now: UnixTime,
     age_obfuscation_offset: u32,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
@@ -1096,11 +1093,17 @@ impl<C: CryptoProvider> ExpectFinished<C> {
         config: &ServerConfig<C>,
     ) -> Result<(), Error> {
         let nonce = rand::random_vec::<C>(32)?;
-        let now = ticketer::TimeBase::now()?;
         let age_add = rand::random_u32::<C>()?;
-        let plain =
-            get_server_session_value(transcript, suite, key_schedule, cx, &nonce, now, age_add)
-                .get_encoding();
+        let plain = get_server_session_value(
+            transcript,
+            suite,
+            key_schedule,
+            cx,
+            &nonce,
+            UnixTime::now(),
+            age_add,
+        )
+        .get_encoding();
 
         let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {

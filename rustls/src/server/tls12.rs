@@ -19,13 +19,13 @@ use crate::rand::GetRandomFailed;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::{ticketer, verify};
+use crate::verify;
 
 use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;
 
 use alloc::sync::Arc;
@@ -550,10 +550,9 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectCertificate<C> {
                 None
             }
             Some((end_entity, intermediates)) => {
-                let now = std::time::SystemTime::now();
                 self.config
                     .verifier
-                    .verify_client_cert(end_entity, intermediates, now)
+                    .verify_client_cert(end_entity, intermediates, UnixTime::now())
                     .map_err(|err| {
                         cx.common
                             .send_cert_verify_error_alert(err)
@@ -756,7 +755,7 @@ fn get_server_connection_value_tls12(
     secrets: &ConnectionSecrets,
     using_ems: bool,
     cx: &ServerContext<'_>,
-    time_now: ticketer::TimeBase,
+    time_now: UnixTime,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
     let secret = secrets.get_master_secret();
@@ -787,8 +786,8 @@ fn emit_ticket(
     cx: &mut ServerContext<'_>,
     ticketer: &dyn ProducesTickets,
 ) -> Result<(), Error> {
-    let time_now = ticketer::TimeBase::now()?;
-    let plain = get_server_connection_value_tls12(secrets, using_ems, cx, time_now).get_encoding();
+    let plain =
+        get_server_connection_value_tls12(secrets, using_ems, cx, UnixTime::now()).get_encoding();
 
     // If we can't produce a ticket for some reason, we can't
     // report an error. Send an empty one.
@@ -875,9 +874,12 @@ impl<C: CryptoProvider> State<ServerConnectionData> for ExpectFinished<C> {
 
         // Save connection, perhaps
         if !self.resuming && !self.session_id.is_empty() {
-            let time_now = ticketer::TimeBase::now()?;
-            let value =
-                get_server_connection_value_tls12(&self.secrets, self.using_ems, cx, time_now);
+            let value = get_server_connection_value_tls12(
+                &self.secrets,
+                self.using_ems,
+                cx,
+                UnixTime::now(),
+            );
 
             let worked = self
                 .config
