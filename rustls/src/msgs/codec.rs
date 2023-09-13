@@ -270,9 +270,9 @@ impl<'a> LengthPrefixedBuffer<'a> {
     pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> LengthPrefixedBuffer<'a> {
         let len_offset = buf.len();
         buf.extend(match size_len {
-            ListLength::U8 => &[0][..],
-            ListLength::U16 => &[0, 0],
-            ListLength::U24 { .. } => &[0, 0, 0],
+            ListLength::U8 => &[0xff][..],
+            ListLength::U16 => &[0xff, 0xff],
+            ListLength::U24 { .. } => &[0xff, 0xff, 0xff],
         });
 
         Self {
@@ -311,4 +311,18 @@ impl<'a> Drop for LengthPrefixedBuffer<'a> {
             }
         }
     }
+}
+
+#[test]
+fn interrupted_length_prefixed_buffer_leaves_maximum_length() {
+    let mut buf = Vec::new();
+    let nested = LengthPrefixedBuffer::new(ListLength::U16, &mut buf);
+    nested.buf.push(0xaa);
+    assert_eq!(nested.buf, &vec![0xff, 0xff, 0xaa]);
+    // <- if the buffer is accidentally read here, there is no possiblity
+    //    that the contents of the length-prefixed buffer are interpretted
+    //    as a subsequent encoding (perhaps allowing injection of a different
+    //    extension)
+    drop(nested);
+    assert_eq!(buf, vec![0x00, 0x01, 0xaa]);
 }
