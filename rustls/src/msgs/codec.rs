@@ -210,40 +210,10 @@ impl Codec for u64 {
 /// `TlsListElement` provides the size of the length prefix for the list.
 impl<T: Codec + TlsListElement + Debug> Codec for Vec<T> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        let len_offset = bytes.len();
-        bytes.extend(match T::SIZE_LEN {
-            ListLength::U8 => &[0][..],
-            ListLength::U16 => &[0, 0],
-            ListLength::U24 { .. } => &[0, 0, 0],
-        });
+        let nest = LengthPrefixedBuffer::new(T::SIZE_LEN, bytes);
 
         for i in self {
-            i.encode(bytes);
-        }
-
-        match T::SIZE_LEN {
-            ListLength::U8 => {
-                let len = bytes.len() - len_offset - 1;
-                debug_assert!(len <= 0xff);
-                bytes[len_offset] = len as u8;
-            }
-            ListLength::U16 => {
-                let len = bytes.len() - len_offset - 2;
-                debug_assert!(len <= 0xffff);
-                let out: &mut [u8; 2] = (&mut bytes[len_offset..len_offset + 2])
-                    .try_into()
-                    .unwrap();
-                *out = u16::to_be_bytes(len as u16);
-            }
-            ListLength::U24 { .. } => {
-                let len = bytes.len() - len_offset - 3;
-                debug_assert!(len <= 0xff_ffff);
-                let len_bytes = u32::to_be_bytes(len as u32);
-                let out: &mut [u8; 3] = (&mut bytes[len_offset..len_offset + 3])
-                    .try_into()
-                    .unwrap();
-                out.copy_from_slice(&len_bytes[1..]);
-            }
+            i.encode(nest.buf);
         }
     }
 
@@ -283,4 +253,62 @@ pub(crate) enum ListLength {
     U8,
     U16,
     U24 { max: usize },
+}
+
+/// Tracks encoding a length-delimited structure in a single pass.
+pub(crate) struct LengthPrefixedBuffer<'a> {
+    pub(crate) buf: &'a mut Vec<u8>,
+    len_offset: usize,
+    size_len: ListLength,
+}
+
+impl<'a> LengthPrefixedBuffer<'a> {
+    /// Inserts a dummy length into `buf`, and remembers where it went.
+    ///
+    /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
+    /// The length header is corrected in `LengthPrefixedBuffer::drop`.
+    pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> LengthPrefixedBuffer<'a> {
+        let len_offset = buf.len();
+        buf.extend(match size_len {
+            ListLength::U8 => &[0][..],
+            ListLength::U16 => &[0, 0],
+            ListLength::U24 { .. } => &[0, 0, 0],
+        });
+
+        Self {
+            buf,
+            len_offset,
+            size_len,
+        }
+    }
+}
+
+impl<'a> Drop for LengthPrefixedBuffer<'a> {
+    /// Goes back and corrects the length previously inserted at the start of the structure.
+    fn drop(&mut self) {
+        match self.size_len {
+            ListLength::U8 => {
+                let len = self.buf.len() - self.len_offset - 1;
+                debug_assert!(len <= 0xff);
+                self.buf[self.len_offset] = len as u8;
+            }
+            ListLength::U16 => {
+                let len = self.buf.len() - self.len_offset - 2;
+                debug_assert!(len <= 0xffff);
+                let out: &mut [u8; 2] = (&mut self.buf[self.len_offset..self.len_offset + 2])
+                    .try_into()
+                    .unwrap();
+                *out = u16::to_be_bytes(len as u16);
+            }
+            ListLength::U24 { .. } => {
+                let len = self.buf.len() - self.len_offset - 3;
+                debug_assert!(len <= 0xff_ffff);
+                let len_bytes = u32::to_be_bytes(len as u32);
+                let out: &mut [u8; 3] = (&mut self.buf[self.len_offset..self.len_offset + 3])
+                    .try_into()
+                    .unwrap();
+                out.copy_from_slice(&len_bytes[1..]);
+            }
+        }
+    }
 }
