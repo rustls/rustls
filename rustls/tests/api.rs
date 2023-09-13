@@ -5002,3 +5002,95 @@ fn test_explicit_provider_selection() {
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
 }
+
+#[derive(Debug)]
+struct FaultyRandomProvider {
+    parent: &'static dyn rustls::crypto::CryptoProvider,
+
+    // when empty, `fill_random` requests return `GetRandomFailed`
+    rand_queue: Mutex<&'static [u8]>,
+}
+
+impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
+    fn fill_random(&self, output: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
+        let mut queue = self.rand_queue.lock().unwrap();
+
+        println!(
+            "fill_random request for {} bytes (got {})",
+            output.len(),
+            queue.len()
+        );
+
+        if queue.len() < output.len() {
+            return Err(rustls::crypto::GetRandomFailed);
+        }
+
+        let fixed_output = &queue[..output.len()];
+        output.copy_from_slice(fixed_output);
+        *queue = &queue[output.len()..];
+        Ok(())
+    }
+
+    fn default_cipher_suites(&self) -> &'static [SupportedCipherSuite] {
+        self.parent.default_cipher_suites()
+    }
+
+    fn default_kx_groups(&self) -> &'static [&'static (dyn rustls::crypto::SupportedKxGroup)] {
+        self.parent.default_kx_groups()
+    }
+}
+
+#[test]
+fn test_client_construction_fails_if_random_source_fails_in_first_request() {
+    static PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
+        parent: rustls::crypto::ring::RING,
+        rand_queue: Mutex::new(b""),
+    };
+
+    let client_config = finish_client_config(
+        KeyType::Rsa,
+        rustls::ClientConfig::builder_with_provider(&PROVIDER).with_safe_defaults(),
+    );
+
+    assert_eq!(
+        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
+        Error::FailedToGetRandomBytes
+    );
+}
+
+#[test]
+fn test_client_construction_fails_if_random_source_fails_in_second_request() {
+    static PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
+        parent: rustls::crypto::ring::RING,
+        rand_queue: Mutex::new(b"nice random number generator huh"),
+    };
+
+    let client_config = finish_client_config(
+        KeyType::Rsa,
+        rustls::ClientConfig::builder_with_provider(&PROVIDER).with_safe_defaults(),
+    );
+
+    assert_eq!(
+        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap_err(),
+        Error::FailedToGetRandomBytes
+    );
+}
+
+#[test]
+fn test_client_construction_requires_64_bytes_of_random_material() {
+    static PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
+        parent: rustls::crypto::ring::RING,
+        rand_queue: Mutex::new(
+            b"nice random number generator !!!\
+              it's really not very good is it?",
+        ),
+    };
+
+    let client_config = finish_client_config(
+        KeyType::Rsa,
+        rustls::ClientConfig::builder_with_provider(&PROVIDER).with_safe_defaults(),
+    );
+
+    ClientConnection::new(Arc::new(client_config), server_name("localhost"))
+        .expect("check how much random material ClientConnection::new consumes");
+}
