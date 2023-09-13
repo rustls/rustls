@@ -13,7 +13,7 @@ use rustls::client::{
 use rustls::DigitallySignedStruct;
 use rustls::{AlertDescription, Error, InvalidMessage, SignatureScheme};
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, UnixTime};
 
 use std::sync::Arc;
 
@@ -170,7 +170,7 @@ impl ServerCertVerifier for MockServerVerifier {
         intermediates: &[CertificateDer<'_>],
         server_name: &rustls::ServerName,
         oscp_response: &[u8],
-        now: std::time::SystemTime,
+        now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
         println!(
             "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?})",

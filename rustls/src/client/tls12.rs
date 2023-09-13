@@ -21,7 +21,6 @@ use crate::sign::Signer;
 #[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::SupportedCipherSuite;
-use crate::ticketer::TimeBase;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify::{self, DigitallySignedStruct};
 
@@ -32,6 +31,7 @@ use crate::client::common::ServerCertDetails;
 use crate::client::{hs, ClientConfig, ServerName};
 use crate::rand::GetRandomFailed;
 
+use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
 use alloc::sync::Arc;
@@ -707,7 +707,6 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
             .cert_chain
             .split_first()
             .ok_or(Error::NoCertificatesPresented)?;
-        let now = std::time::SystemTime::now();
         let cert_verified = st
             .config
             .verifier
@@ -716,7 +715,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
                 intermediates,
                 &st.server_name,
                 &st.server_cert.ocsp_response,
-                now,
+                UnixTime::now(),
             )
             .map_err(|err| {
                 cx.common
@@ -975,15 +974,6 @@ impl<C: CryptoProvider> ExpectFinished<C> {
             return;
         }
 
-        let time_now = match TimeBase::now() {
-            Ok(time_now) => time_now,
-            #[allow(unused_variables)]
-            Err(e) => {
-                debug!("Session not saved: {}", e);
-                return;
-            }
-        };
-
         let session_value = persist::Tls12ClientSessionValue::new(
             self.secrets.suite(),
             self.session_id,
@@ -993,7 +983,7 @@ impl<C: CryptoProvider> ExpectFinished<C> {
                 .peer_certificates
                 .clone()
                 .unwrap_or_default(),
-            time_now,
+            UnixTime::now(),
             lifetime,
             self.using_ems,
         );

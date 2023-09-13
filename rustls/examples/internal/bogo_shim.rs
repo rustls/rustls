@@ -20,11 +20,11 @@ use rustls::{
 };
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
 
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
-use std::time::{self, SystemTime};
+use std::time;
 use std::{env, fs, net, process, thread};
 
 static BOGO_NACK: i32 = 89;
@@ -209,7 +209,7 @@ impl server::ClientCertVerifier for DummyClientAuth {
         &self,
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
-        _now: SystemTime,
+        _now: UnixTime,
     ) -> Result<server::ClientCertVerified, Error> {
         Ok(server::ClientCertVerified::assertion())
     }
@@ -246,7 +246,7 @@ impl client::ServerCertVerifier for DummyServerAuth {
         _certs: &[CertificateDer<'_>],
         _hostname: &ServerName,
         _ocsp: &[u8],
-        _now: SystemTime,
+        _now: UnixTime,
     ) -> Result<client::ServerCertVerified, Error> {
         Ok(client::ServerCertVerified::assertion())
     }

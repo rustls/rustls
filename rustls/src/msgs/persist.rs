@@ -5,12 +5,11 @@ use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::CertificatePayload;
 use crate::msgs::handshake::SessionId;
-use crate::ticketer::TimeBase;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, UnixTime};
 
 use core::cmp;
 #[cfg(feature = "tls12")]
@@ -18,11 +17,11 @@ use core::mem;
 
 pub struct Retrieved<T> {
     pub value: T,
-    retrieved_at: TimeBase,
+    retrieved_at: UnixTime,
 }
 
 impl<T> Retrieved<T> {
-    pub fn new(value: T, retrieved_at: TimeBase) -> Self {
+    pub fn new(value: T, retrieved_at: UnixTime) -> Self {
         Self {
             value,
             retrieved_at,
@@ -83,7 +82,7 @@ impl Tls13ClientSessionValue {
         ticket: Vec<u8>,
         secret: Vec<u8>,
         server_cert_chain: Vec<CertificateDer<'static>>,
-        time_now: TimeBase,
+        time_now: UnixTime,
         lifetime_secs: u32,
         age_add: u32,
         max_early_data_size: u32,
@@ -158,7 +157,7 @@ impl Tls12ClientSessionValue {
         ticket: Vec<u8>,
         master_secret: Vec<u8>,
         server_cert_chain: Vec<CertificateDer<'static>>,
-        time_now: TimeBase,
+        time_now: UnixTime,
         lifetime_secs: u32,
         extended_ms: bool,
     ) -> Self {
@@ -217,7 +216,7 @@ impl ClientSessionCommon {
     fn new(
         ticket: Vec<u8>,
         secret: Vec<u8>,
-        time_now: TimeBase,
+        time_now: UnixTime,
         lifetime_secs: u32,
         server_cert_chain: Vec<CertificateDer<'static>>,
     ) -> Self {
@@ -359,7 +358,7 @@ impl ServerSessionValue {
         client_cert_chain: Option<CertificatePayload>,
         alpn: Option<Vec<u8>>,
         application_data: Vec<u8>,
-        creation_time: TimeBase,
+        creation_time: UnixTime,
         age_obfuscation_offset: u32,
     ) -> Self {
         Self {
@@ -381,7 +380,7 @@ impl ServerSessionValue {
         self.extended_ms = true;
     }
 
-    pub fn set_freshness(mut self, obfuscated_client_age_ms: u32, time_now: TimeBase) -> Self {
+    pub fn set_freshness(mut self, obfuscated_client_age_ms: u32, time_now: UnixTime) -> Self {
         let client_age_ms = obfuscated_client_age_ms.wrapping_sub(self.age_obfuscation_offset);
         let server_age_ms = (time_now
             .as_secs()
@@ -408,7 +407,6 @@ mod tests {
     use super::*;
     use crate::enums::*;
     use crate::msgs::codec::{Codec, Reader};
-    use crate::ticketer::TimeBase;
 
     #[test]
     fn serversessionvalue_is_debug() {
@@ -420,7 +418,7 @@ mod tests {
             None,
             None,
             vec![4, 5, 6],
-            TimeBase::now().unwrap(),
+            UnixTime::now(),
             0x12345678,
         );
         println!("{:?}", ssv);

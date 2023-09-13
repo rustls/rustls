@@ -5,12 +5,12 @@
 // etc. because it's unstable at the time of writing.
 
 use core::time::Duration;
-use std::time::{Instant, SystemTime};
+use std::time::Instant;
 
 use crate::verify::ServerCertVerifier;
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, UnixTime};
 use webpki_roots;
 
 fn duration_nanos(d: Duration) -> u64 {
@@ -181,7 +181,7 @@ struct Context {
     domain: &'static str,
     roots: RootCertStore,
     chain: Vec<CertificateDer<'static>>,
-    now: SystemTime,
+    now: UnixTime,
 }
 
 impl Context {
@@ -201,7 +201,7 @@ impl Context {
                 .copied()
                 .map(|bytes| CertificateDer::from(bytes.to_vec()))
                 .collect(),
-            now: SystemTime::UNIX_EPOCH + Duration::from_secs(1640870720),
+            now: UnixTime::since_unix_epoch(Duration::from_secs(1_640_870_720)),
         }
     }
 

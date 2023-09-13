@@ -21,7 +21,6 @@ use crate::msgs::handshake::{Random, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand::GetRandomFailed;
-use crate::ticketer::TimeBase;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::SupportedCipherSuite;
 
@@ -31,6 +30,8 @@ use super::Tls12Resumption;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::{tls13, ClientConfig, ServerName};
+
+use pki_types::UnixTime;
 
 use alloc::sync::Arc;
 use core::ops::Deref;
@@ -64,7 +65,7 @@ fn find_session(
             None
         })
         .and_then(|resuming| {
-            let retrieved = persist::Retrieved::new(resuming, TimeBase::now().ok()?);
+            let retrieved = persist::Retrieved::new(resuming, UnixTime::now());
             match retrieved.has_expired() {
                 false => Some(retrieved),
                 true => None,

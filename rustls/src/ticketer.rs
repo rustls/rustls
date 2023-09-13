@@ -2,31 +2,10 @@ use crate::rand;
 use crate::server::ProducesTickets;
 use crate::Error;
 
+use pki_types::UnixTime;
+
 use core::mem;
-use core::time::Duration;
 use std::sync::{Mutex, MutexGuard};
-use std::time;
-
-/// The timebase for expiring and rolling tickets and ticketing
-/// keys.  This is UNIX wall time in seconds.
-///
-/// This is guaranteed to be on or after the UNIX epoch.
-#[derive(Clone, Copy, Debug)]
-pub struct TimeBase(pub(crate) Duration);
-
-impl TimeBase {
-    #[inline]
-    pub fn now() -> Result<Self, time::SystemTimeError> {
-        Ok(Self(
-            time::SystemTime::now().duration_since(time::UNIX_EPOCH)?,
-        ))
-    }
-
-    #[inline]
-    pub fn as_secs(&self) -> u64 {
-        self.0.as_secs()
-    }
-}
 
 pub(crate) struct TicketSwitcherState {
     next: Option<Box<dyn ProducesTickets>>,
@@ -56,7 +35,6 @@ impl TicketSwitcher {
         lifetime: u32,
         generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
     ) -> Result<Self, Error> {
-        let now = TimeBase::now()?;
         Ok(Self {
             generator,
             lifetime,
@@ -64,7 +42,7 @@ impl TicketSwitcher {
                 next: Some(generator()?),
                 current: generator()?,
                 previous: None,
-                next_switch_time: now
+                next_switch_time: UnixTime::now()
                     .as_secs()
                     .saturating_add(u64::from(lifetime)),
             }),
@@ -80,7 +58,7 @@ impl TicketSwitcher {
     ///
     /// For efficiency, this is also responsible for locking the state mutex
     /// and returning the mutexguard.
-    pub(crate) fn maybe_roll(&self, now: TimeBase) -> Option<MutexGuard<TicketSwitcherState>> {
+    pub(crate) fn maybe_roll(&self, now: UnixTime) -> Option<MutexGuard<TicketSwitcherState>> {
         // The code below aims to make switching as efficient as possible
         // in the common case that the generator never fails. To achieve this
         // we run the following steps:
@@ -162,13 +140,13 @@ impl ProducesTickets for TicketSwitcher {
     }
 
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        let state = self.maybe_roll(TimeBase::now().ok()?)?;
+        let state = self.maybe_roll(UnixTime::now())?;
 
         state.current.encrypt(message)
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        let state = self.maybe_roll(TimeBase::now().ok()?)?;
+        let state = self.maybe_roll(UnixTime::now())?;
 
         // Decrypt with the current key; if that fails, try with the previous.
         state
