@@ -184,6 +184,8 @@ pub enum InvalidMessage {
     UnsupportedCurveType,
     /// A peer sent an unsupported key exchange algorithm.
     UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
+    /// A peer sent a message where a given extension type was repeated
+    DuplicateExtension,
 }
 
 impl From<InvalidMessage> for Error {
