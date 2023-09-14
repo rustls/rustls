@@ -151,7 +151,8 @@ mod client_hello {
             sigschemes_ext.retain(SignatureScheme::supported_in_tls13);
 
             let shares_ext = client_hello
-                .keyshare_extension()
+                .key_shares
+                .as_ref()
                 .ok_or_else(|| {
                     cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
@@ -174,7 +175,8 @@ mod client_hello {
             }
 
             let cert_compressor = client_hello
-                .certificate_compression_extension()
+                .certificate_compression_algorithms
+                .as_ref()
                 .and_then(|offered|
                     // prefer server order when choosing a compression: the client's
                     // extension here does not denote any preference.
@@ -184,7 +186,9 @@ mod client_hello {
                         .find(|compressor| offered.contains(&compressor.algorithm()))
                         .cloned());
 
-            let early_data_requested = client_hello.early_data_extension_offered();
+            let early_data_requested = client_hello
+                .early_data_request
+                .is_some();
 
             // EarlyData extension is illegal in second ClientHello
             if self.done_retry && early_data_requested {
@@ -249,19 +253,15 @@ mod client_hello {
             let mut chosen_psk_index = None;
             let mut resumedata = None;
 
-            if let Some(psk_offer) = client_hello.psk() {
-                if !client_hello.check_psk_ext_is_last() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::PskExtensionMustBeLast,
-                    ));
-                }
-
+            if let Some(psk_offer) = &client_hello.preshared_key_offer {
                 // "A client MUST provide a "psk_key_exchange_modes" extension if it
                 //  offers a "pre_shared_key" extension. If clients offer
                 //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
                 //  servers MUST abort the handshake." - RFC8446 4.2.9
-                if client_hello.psk_modes().is_none() {
+                if client_hello
+                    .preshared_key_modes
+                    .is_none()
+                {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::MissingExtension,
                         PeerMisbehaved::MissingPskModesExtension,
@@ -316,7 +316,12 @@ mod client_hello {
                 }
             }
 
-            if !client_hello.psk_mode_offered(PskKeyExchangeMode::PSK_DHE_KE) {
+            if !client_hello
+                .preshared_key_modes
+                .as_ref()
+                .map(|offer| offer.contains(&PskKeyExchangeMode::PSK_DHE_KE))
+                .unwrap_or_default()
+            {
                 debug!("Client unwilling to resume, DHE_KE not offered");
                 self.send_tickets = 0;
                 chosen_psk_index = None;
@@ -617,7 +622,9 @@ mod client_hello {
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
-        let early_data_requested = client_hello.early_data_extension_offered();
+        let early_data_requested = client_hello
+            .early_data_request
+            .is_some();
         let rejected_or_disabled = match early_data_requested {
             true => EarlyDataDecision::RequestedButRejected,
             false => EarlyDataDecision::Disabled,

@@ -42,9 +42,9 @@ mod client_hello {
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::{ClientCertificateType, Compression, ECPointFormat};
     use crate::msgs::handshake::{
-        CertificateRequestPayload, CertificateStatus, ClientExtension, ClientHelloPayload,
-        ClientSessionTicket, Random, ServerExtension, ServerHelloPayload, ServerKeyExchange,
-        ServerKeyExchangeParams, ServerKeyExchangePayload,
+        CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
+        Random, ServerExtension, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
+        ServerKeyExchangePayload,
     };
     use crate::sign;
     use crate::verify::DigitallySignedStruct;
@@ -74,7 +74,10 @@ mod client_hello {
             // -- TLS1.2 only from hereon in --
             self.transcript.add_message(chm);
 
-            if client_hello.ems_support_offered() {
+            if client_hello
+                .extended_master_secret_request
+                .is_some()
+            {
                 self.using_ems = true;
             } else if self.config.require_ems {
                 return Err(cx.common.send_fatal_alert(
@@ -88,7 +91,8 @@ mod client_hello {
             // supported"
             // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
             let ecpoints_ext = client_hello
-                .ecpoints_extension()
+                .ec_point_formats
+                .as_deref()
                 .unwrap_or(&[ECPointFormat::Uncompressed]);
 
             trace!("ecpoints {ecpoints_ext:?}");
@@ -119,11 +123,10 @@ mod client_hello {
             //
             let mut ticket_received = false;
             let resume_data = client_hello
-                .ticket_extension()
+                .session_ticket
+                .as_ref()
                 .and_then(|ticket_ext| match ticket_ext {
-                    ClientExtension::SessionTicket(ClientSessionTicket::Offer(ticket)) => {
-                        Some(ticket)
-                    }
+                    ClientSessionTicket::Offer(ticket) => Some(ticket),
                     _ => None,
                 })
                 .and_then(|ticket| {

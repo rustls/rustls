@@ -28,10 +28,10 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtension, EchConfigPayload,
+    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtensions, EchConfigPayload,
     HandshakeMessagePayload, HandshakePayload, HasServerExtensions, KeyShareEntry,
-    NewSessionTicketPayloadTls13, PresharedKeyIdentity, PresharedKeyOffer, ServerExtension,
-    ServerHelloPayload,
+    NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
+    ServerExtension, ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -332,7 +332,19 @@ pub(super) fn fill_in_psk_binder(
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
     if let HandshakePayload::ClientHello(ch) = &mut hmp.0 {
-        ch.set_psk_binder(real_binder.as_ref());
+        if let Some(PresharedKeyOffer {
+            binders,
+            identities,
+        }) = &mut ch.preshared_key_offer
+        {
+            // the caller of this function must have set up the desired identity, and a
+            // matching (dummy) binder; or else the binder we compute here will be incorrect.
+            // See `prepare_resumption()`.
+            debug_assert_eq!(identities.len(), 1);
+            debug_assert_eq!(binders.len(), 1);
+            debug_assert_eq!(binders[0].as_ref().len(), real_binder.as_ref().len());
+            binders[0] = PresharedKeyBinder::from(real_binder.as_ref().to_vec());
+        }
     };
 
     key_schedule
@@ -342,7 +354,7 @@ pub(super) fn prepare_resumption(
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
     resuming_session: &persist::Retrieved<&persist::Tls13ClientSessionValue>,
-    exts: &mut Vec<ClientExtension>,
+    exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
 ) {
     let resuming_suite = resuming_session.suite();
@@ -354,7 +366,7 @@ pub(super) fn prepare_resumption(
         cx.data
             .early_data
             .enable(max_early_data_size as usize);
-        exts.push(ClientExtension::EarlyData);
+        exts.early_data_request = Some(());
     }
 
     // Finally, and only for TLS1.3 with a ticket resumption, include a binder
@@ -372,8 +384,8 @@ pub(super) fn prepare_resumption(
 
     let psk_identity =
         PresharedKeyIdentity::new(resuming_session.ticket().to_vec(), obfuscated_ticket_age);
-    let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
-    exts.push(ClientExtension::PresharedKey(psk_ext));
+    let psk_offer = PresharedKeyOffer::new(psk_identity, binder);
+    exts.preshared_key_offer = Some(psk_offer);
 }
 
 pub(super) fn derive_early_traffic_secret(
