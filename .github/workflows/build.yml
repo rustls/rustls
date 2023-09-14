@@ -222,9 +222,6 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Create a lockfile
-        run: cargo check
-
       - name: Update to minimal-versions
         # This has no effect if no `Cargo.lock` exists yet.
         run: cargo update -Z minimal-versions

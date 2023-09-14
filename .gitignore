@@ -1,4 +1,3 @@
-Cargo.lock
 target/
 *.gcda
 *.gcno
