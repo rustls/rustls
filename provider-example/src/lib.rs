@@ -7,6 +7,7 @@ mod hash;
 mod hmac;
 mod hpke;
 mod kx;
+mod sign;
 mod verify;
 
 pub use hpke::HPKE_PROVIDER;
@@ -32,13 +33,13 @@ impl rustls::crypto::CryptoProvider for Provider {
         kx::ALL_KX_GROUPS
     }
 
-    /// XXX: currently this example is client-only, which avoids the need for it to support
-    /// authentication key handling.
     fn load_private_key(
         &self,
-        _key_der: PrivateKeyDer<'static>,
+        key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
-        unimplemented!()
+        let key = sign::EcdsaSigningKeyP256::try_from(key_der)
+            .map_err(|err| rustls::OtherError(Arc::new(err)))?;
+        Ok(Arc::new(key))
     }
 
     fn signature_verification_algorithms(&self) -> rustls::WebPkiSupportedAlgorithms {
