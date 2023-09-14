@@ -116,7 +116,7 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     type Test = super::LimitedCache<String, usize>;
 
     #[test]

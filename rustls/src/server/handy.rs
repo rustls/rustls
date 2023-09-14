@@ -201,7 +201,7 @@ impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use crate::server::ProducesTickets;
     use crate::server::ResolvesServerCert;

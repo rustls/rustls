@@ -22,11 +22,12 @@ mod handshake_test;
 mod message_test;
 
 #[cfg(test)]
-mod test {
+mod tests {
+    use super::codec::Reader;
+    use super::message::{Message, OpaqueMessage};
+
     #[test]
     fn smoketest() {
-        use super::codec::Reader;
-        use super::message::{Message, OpaqueMessage};
         let bytes = include_bytes!("handshake-test.1.bin");
         let mut r = Reader::init(bytes);
 

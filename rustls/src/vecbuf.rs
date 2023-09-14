@@ -148,7 +148,7 @@ impl ChunkVecBuffer {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::ChunkVecBuffer;
 
     #[test]
