@@ -686,6 +686,272 @@ impl TlsListElement for CertificateCompressionAlgorithm {
     };
 }
 
+extension_struct! {
+    /// A representation of extensions present in a `ClientHello` message
+    ///
+    /// All extensions are optional (by definition) so are represented with `Option<T>`.
+    ///
+    /// Some extensions have an empty value and are represented with Option<()>.
+    ///
+    /// Unknown extensions are dropped during parsing.
+    pub(crate) struct ClientExtensions<'a> {
+        /// Requested server name indication (RFC6066)
+        ExtensionType::ServerName =>
+            pub(crate) server_name: Option<ServerNamePayload<'a>>,
+
+        /// Certificate status is requested (RFC6066)
+        ExtensionType::StatusRequest =>
+            pub(crate) certificate_status_request: Option<CertificateStatusRequest>,
+
+        /// Supported groups (RFC4492/RFC8446)
+        ExtensionType::EllipticCurves =>
+            pub(crate) named_groups: Option<Vec<NamedGroup>>,
+
+        /// Supported EC point formats (RFC4492)
+        ExtensionType::ECPointFormats =>
+            pub(crate) ec_point_formats: Option<Vec<ECPointFormat>>,
+
+        /// Supported signature schemes (RFC5246/RFC8446)
+        ExtensionType::SignatureAlgorithms =>
+            pub(crate) signature_schemes: Option<Vec<SignatureScheme>>,
+
+        /// Offered ALPN protocols (RFC6066)
+        ExtensionType::ALProtocolNegotiation =>
+            pub(crate) protocols: Option<Vec<ProtocolName>>,
+
+        /// Available client certificate types (RFC7250)
+        ExtensionType::ClientCertificateType =>
+            pub(crate) client_certificate_types: Option<Vec<CertificateType>>,
+
+        /// Acceptable server certificate types (RFC7250)
+        ExtensionType::ServerCertificateType =>
+            pub(crate) server_certificate_types: Option<Vec<CertificateType>>,
+
+        /// Extended master secret is requested (RFC7627)
+        ExtensionType::ExtendedMasterSecret =>
+            pub(crate) extended_master_secret_request: Option<()>,
+
+        /// Offered certificate compression methods (RFC8879)
+        ExtensionType::CompressCertificate =>
+            pub(crate) certificate_compression_algorithms: Option<Vec<CertificateCompressionAlgorithm>>,
+
+        /// Session ticket offer or request (RFC5077/RFC8446)
+        ExtensionType::SessionTicket =>
+            pub(crate) session_ticket: Option<ClientSessionTicket>,
+
+        /// Offered preshared keys (RFC8446)
+        ExtensionType::PreSharedKey =>
+            pub(crate) preshared_key_offer: Option<PresharedKeyOffer>,
+
+        /// Early data is requested (RFC8446)
+        ExtensionType::EarlyData =>
+            pub(crate) early_data_request: Option<()>,
+
+        /// Supported TLS versions (RFC8446)
+        ExtensionType::SupportedVersions =>
+            pub(crate) supported_versions: Option<SupportedProtocolVersions>,
+
+        /// Stateless HelloRetryRequest cookie (RFC8446)
+        ExtensionType::Cookie =>
+            pub(crate) cookie: Option<PayloadU16<NonEmpty>>,
+
+        /// Offered preshared key modes (RFC8446)
+        ExtensionType::PSKKeyExchangeModes =>
+            pub(crate) preshared_key_modes: Option<Vec<PskKeyExchangeMode>>,
+
+        /// Certificate authority names (RFC8446)
+        ExtensionType::CertificateAuthorities =>
+            pub(crate) certificate_authority_names: Option<Vec<DistinguishedName>>,
+
+        /// Offered key exchange shares (RFC8446)
+        ExtensionType::KeyShare =>
+            pub(crate) key_shares: Option<Vec<KeyShareEntry>>,
+
+        /// QUIC transport parameters (RFC9001)
+        ExtensionType::TransportParameters =>
+            pub(crate) transport_parameters: Option<Payload<'a>>,
+
+        /// Secure renegotiation (RFC5746)
+        ExtensionType::RenegotiationInfo =>
+            pub(crate) renegotiation_info: Option<PayloadU8>,
+
+        /// QUIC transport parameters (RFC9001 prior to draft 33)
+        ExtensionType::TransportParametersDraft =>
+            pub(crate) transport_parameters_draft: Option<Payload<'a>>,
+
+        /// Encrypted inner client hello (draft-ietf-tls-esni)
+        ExtensionType::EncryptedClientHello =>
+            pub(crate) encrypted_client_hello: Option<EncryptedClientHello>,
+
+        /// Encrypted client hello outer extensions (draft-ietf-tls-esni)
+        ExtensionType::EncryptedClientHelloOuterExtensions =>
+            pub(crate) encrypted_client_hello_outer: Option<Vec<ExtensionType>>,
+    } + {
+        /// Order randomization seed.
+        pub(crate) order_seed: u16,
+
+        /// Extensions that must appear contiguously.
+        pub(crate) contiguous_extensions: Vec<ExtensionType>,
+    }
+}
+
+impl ClientExtensions<'_> {
+    pub(crate) fn into_owned(self) -> ClientExtensions<'static> {
+        let Self {
+            server_name,
+            certificate_status_request,
+            named_groups,
+            ec_point_formats,
+            signature_schemes,
+            protocols,
+            client_certificate_types,
+            server_certificate_types,
+            extended_master_secret_request,
+            certificate_compression_algorithms,
+            session_ticket,
+            preshared_key_offer,
+            early_data_request,
+            supported_versions,
+            cookie,
+            preshared_key_modes,
+            certificate_authority_names,
+            key_shares,
+            transport_parameters,
+            renegotiation_info,
+            transport_parameters_draft,
+            encrypted_client_hello,
+            encrypted_client_hello_outer,
+            order_seed,
+            contiguous_extensions,
+        } = self;
+        ClientExtensions {
+            server_name: server_name.map(|x| x.into_owned()),
+            certificate_status_request,
+            named_groups,
+            ec_point_formats,
+            signature_schemes,
+            protocols,
+            client_certificate_types,
+            server_certificate_types,
+            extended_master_secret_request,
+            certificate_compression_algorithms,
+            session_ticket,
+            preshared_key_offer,
+            early_data_request,
+            supported_versions,
+            cookie,
+            preshared_key_modes,
+            certificate_authority_names,
+            key_shares,
+            transport_parameters: transport_parameters.map(|x| x.into_owned()),
+            renegotiation_info,
+            transport_parameters_draft: transport_parameters_draft.map(|x| x.into_owned()),
+            encrypted_client_hello,
+            encrypted_client_hello_outer,
+            order_seed,
+            contiguous_extensions,
+        }
+    }
+
+    /// Returns extensions which don't need a specific order, in randomized order.
+    ///
+    /// Extensions are encoded in three portions:
+    ///
+    /// - First, extensions not otherwise dealt with by other cases.
+    ///   These are encoded in random order, controlled by `self.order_seed`,
+    ///   and this is the set of extensions returned by this function.
+    ///
+    /// - Second, extensions named in `self.contiguous_extensions`, in the order
+    ///   given by that field.
+    ///
+    /// - Lastly, any ECH and PSK extensions (in that order).  These
+    ///   are required to be last by the standard.
+    fn order_insensitive_extensions_in_random_order(&self) -> Vec<ExtensionType> {
+        let mut order = self.collect_used_extensions();
+
+        // Remove extensions which have specific order requirements.
+        order.retain(|ext| {
+            !(matches!(
+                ext,
+                ExtensionType::PreSharedKey
+                    | ExtensionType::EncryptedClientHello
+                    | ExtensionType::EncryptedClientHelloOuterExtensions
+            ) || self.contiguous_extensions.contains(ext))
+        });
+
+        order.sort_by_cached_key(|new_ext| {
+            let seed = ((self.order_seed as u32) << 16) | (u16::from(*new_ext) as u32);
+            low_quality_integer_hash(seed)
+        });
+
+        order
+    }
+
+    pub(crate) fn used_extensions_in_encoding_order(&self) -> Vec<ExtensionType> {
+        let mut exts = self.order_insensitive_extensions_in_random_order();
+        exts.extend(&self.contiguous_extensions);
+
+        if self
+            .encrypted_client_hello_outer
+            .is_some()
+        {
+            exts.push(ExtensionType::EncryptedClientHelloOuterExtensions);
+        }
+        if self.encrypted_client_hello.is_some() {
+            exts.push(ExtensionType::EncryptedClientHello);
+        }
+        if self.preshared_key_offer.is_some() {
+            exts.push(ExtensionType::PreSharedKey);
+        }
+        exts
+    }
+}
+
+impl<'a> Codec<'a> for ClientExtensions<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let order = self.used_extensions_in_encoding_order();
+
+        if order.is_empty() {
+            return;
+        }
+
+        let body = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        for item in order {
+            self.encode_one_extension(item, body.buf);
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let mut out = Self::default();
+
+        // extensions length can be absent if no extensions
+        if !r.any_left() {
+            return Ok(out);
+        }
+
+        let mut unknown_extensions = BTreeSet::new();
+
+        let len = usize::from(u16::read(r)?);
+        let mut sub = r.sub(len)?;
+
+        while sub.any_left() {
+            let typ = ExtensionType::read(&mut sub)?;
+            let len = usize::from(u16::read(&mut sub)?);
+            let mut ext_body = sub.sub(len)?;
+            match out.read_extension_body(typ, &mut ext_body)? {
+                true => ext_body.expect_empty("ClientExtension")?,
+                false => {
+                    if !unknown_extensions.insert(u16::from(typ)) {
+                        return Err(InvalidMessage::DuplicateExtension);
+                    }
+                }
+            };
+        }
+
+        Ok(out)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum ClientExtension {
     EcPointFormats(Vec<ECPointFormat>),
@@ -861,6 +1127,22 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
 pub(crate) enum ClientSessionTicket {
     Request,
     Offer(Payload<'static>),
+}
+
+impl<'a> Codec<'a> for ClientSessionTicket {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::Request => (),
+            Self::Offer(p) => p.encode(bytes),
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(match r.left() {
+            0 => Self::Request,
+            _ => Self::Offer(Payload::read(r).into_owned()),
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -3329,6 +3611,22 @@ fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>(iter: I) -
     }
 
     false
+}
+
+fn low_quality_integer_hash(mut x: u32) -> u32 {
+    x = x
+        .wrapping_add(0x7ed55d16)
+        .wrapping_add(x << 12);
+    x = (x ^ 0xc761c23c) ^ (x >> 19);
+    x = x
+        .wrapping_add(0x165667b1)
+        .wrapping_add(x << 5);
+    x = x.wrapping_add(0xd3a2646c) ^ (x << 9);
+    x = x
+        .wrapping_add(0xfd7046c5)
+        .wrapping_add(x << 3);
+    x = (x ^ 0xb55a4f09) ^ (x >> 16);
+    x
 }
 
 #[cfg(test)]
