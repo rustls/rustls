@@ -578,87 +578,6 @@ fn verify_tls13(
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
-#[test]
-fn pki_crl_errors() {
-    // CRL signature errors should be turned into BadSignature.
-    assert_eq!(
-        pki_error(webpki::Error::InvalidCrlSignatureForPublicKey),
-        Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
-    );
-    assert_eq!(
-        pki_error(webpki::Error::UnsupportedCrlSignatureAlgorithm),
-        Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
-    );
-    assert_eq!(
-        pki_error(webpki::Error::UnsupportedCrlSignatureAlgorithmForPublicKey),
-        Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
-    );
-
-    // Revoked cert errors should be turned into Revoked.
-    assert_eq!(
-        pki_error(webpki::Error::CertRevoked),
-        Error::InvalidCertificate(CertificateError::Revoked),
-    );
-
-    // Issuer not CRL signer errors should be turned into IssuerInvalidForCrl
-    assert_eq!(
-        pki_error(webpki::Error::IssuerNotCrlSigner),
-        Error::InvalidCertRevocationList(CertRevocationListError::IssuerInvalidForCrl)
-    );
-}
-
-#[test]
-fn crl_error_from_webpki() {
-    use crate::CertRevocationListError::*;
-    let testcases = &[
-        (webpki::Error::InvalidCrlSignatureForPublicKey, BadSignature),
-        (
-            webpki::Error::UnsupportedCrlSignatureAlgorithm,
-            BadSignature,
-        ),
-        (
-            webpki::Error::UnsupportedCrlSignatureAlgorithmForPublicKey,
-            BadSignature,
-        ),
-        (webpki::Error::InvalidCrlNumber, InvalidCrlNumber),
-        (
-            webpki::Error::InvalidSerialNumber,
-            InvalidRevokedCertSerialNumber,
-        ),
-        (webpki::Error::IssuerNotCrlSigner, IssuerInvalidForCrl),
-        (webpki::Error::MalformedExtensions, ParseError),
-        (webpki::Error::BadDer, ParseError),
-        (webpki::Error::BadDerTime, ParseError),
-        (
-            webpki::Error::UnsupportedCriticalExtension,
-            UnsupportedCriticalExtension,
-        ),
-        (webpki::Error::UnsupportedCrlVersion, UnsupportedCrlVersion),
-        (webpki::Error::UnsupportedDeltaCrl, UnsupportedDeltaCrl),
-        (
-            webpki::Error::UnsupportedIndirectCrl,
-            UnsupportedIndirectCrl,
-        ),
-        (
-            webpki::Error::UnsupportedRevocationReason,
-            UnsupportedRevocationReason,
-        ),
-    ];
-    for t in testcases {
-        assert_eq!(
-            <webpki::Error as Into<CertRevocationListError>>::into(t.0),
-            t.1
-        );
-    }
-
-    assert!(matches!(
-        <webpki::Error as Into<CertRevocationListError>>::into(
-            webpki::Error::NameConstraintViolation
-        ),
-        Other(_)
-    ));
-}
-
 /// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
 #[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
@@ -673,8 +592,89 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
 }
 
 #[cfg(test)]
-mod test {
-    use super::CertificateDer;
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pki_crl_errors() {
+        // CRL signature errors should be turned into BadSignature.
+        assert_eq!(
+            pki_error(webpki::Error::InvalidCrlSignatureForPublicKey),
+            Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::UnsupportedCrlSignatureAlgorithm),
+            Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+        );
+        assert_eq!(
+            pki_error(webpki::Error::UnsupportedCrlSignatureAlgorithmForPublicKey),
+            Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+        );
+
+        // Revoked cert errors should be turned into Revoked.
+        assert_eq!(
+            pki_error(webpki::Error::CertRevoked),
+            Error::InvalidCertificate(CertificateError::Revoked),
+        );
+
+        // Issuer not CRL signer errors should be turned into IssuerInvalidForCrl
+        assert_eq!(
+            pki_error(webpki::Error::IssuerNotCrlSigner),
+            Error::InvalidCertRevocationList(CertRevocationListError::IssuerInvalidForCrl)
+        );
+    }
+
+    #[test]
+    fn crl_error_from_webpki() {
+        use crate::CertRevocationListError::*;
+        let testcases = &[
+            (webpki::Error::InvalidCrlSignatureForPublicKey, BadSignature),
+            (
+                webpki::Error::UnsupportedCrlSignatureAlgorithm,
+                BadSignature,
+            ),
+            (
+                webpki::Error::UnsupportedCrlSignatureAlgorithmForPublicKey,
+                BadSignature,
+            ),
+            (webpki::Error::InvalidCrlNumber, InvalidCrlNumber),
+            (
+                webpki::Error::InvalidSerialNumber,
+                InvalidRevokedCertSerialNumber,
+            ),
+            (webpki::Error::IssuerNotCrlSigner, IssuerInvalidForCrl),
+            (webpki::Error::MalformedExtensions, ParseError),
+            (webpki::Error::BadDer, ParseError),
+            (webpki::Error::BadDerTime, ParseError),
+            (
+                webpki::Error::UnsupportedCriticalExtension,
+                UnsupportedCriticalExtension,
+            ),
+            (webpki::Error::UnsupportedCrlVersion, UnsupportedCrlVersion),
+            (webpki::Error::UnsupportedDeltaCrl, UnsupportedDeltaCrl),
+            (
+                webpki::Error::UnsupportedIndirectCrl,
+                UnsupportedIndirectCrl,
+            ),
+            (
+                webpki::Error::UnsupportedRevocationReason,
+                UnsupportedRevocationReason,
+            ),
+        ];
+        for t in testcases {
+            assert_eq!(
+                <webpki::Error as Into<CertRevocationListError>>::into(t.0),
+                t.1
+            );
+        }
+
+        assert!(matches!(
+            <webpki::Error as Into<CertRevocationListError>>::into(
+                webpki::Error::NameConstraintViolation
+            ),
+            Other(_)
+        ));
+    }
 
     #[test]
     fn certificate_debug() {
@@ -689,7 +689,7 @@ mod test {
     fn webpki_supported_algorithms_is_debug() {
         assert_eq!(
             "WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }",
-            format!("{:?}", super::SUPPORTED_SIG_ALGS)
+            format!("{:?}", SUPPORTED_SIG_ALGS)
         );
     }
 }

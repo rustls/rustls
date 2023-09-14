@@ -226,7 +226,7 @@ impl crate::quic::Algorithm for KeyBuilder {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use crate::common_state::Side;
     use crate::crypto::ring;

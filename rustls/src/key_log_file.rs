@@ -105,7 +105,7 @@ impl KeyLog for KeyLogFile {
 }
 
 #[cfg(all(test, target_os = "linux"))]
-mod test {
+mod tests {
     use super::*;
 
     fn init() {

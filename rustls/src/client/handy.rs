@@ -206,7 +206,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 }
 
 #[cfg(all(test, feature = "ring"))]
-mod test {
+mod tests {
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
     use crate::msgs::enums::NamedGroup;

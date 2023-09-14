@@ -217,7 +217,7 @@ pub enum ConnectionTrafficSecrets {
 }
 
 #[cfg(all(test, feature = "ring"))]
-mod test {
+mod tests {
     use super::crypto::ring::tls13::*;
     use super::*;
     use crate::enums::CipherSuite;

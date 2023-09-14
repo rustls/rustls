@@ -145,7 +145,7 @@ enum State {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     static TESTS: &[(&str, bool)] = &[
         ("", false),
         ("localhost", true),

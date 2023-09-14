@@ -164,7 +164,7 @@ impl HandshakeHash {
 }
 
 #[cfg(all(test, feature = "ring"))]
-mod test {
+mod tests {
     use super::HandshakeHashBuffer;
     use crate::crypto::ring;
 
