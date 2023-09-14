@@ -19,11 +19,11 @@ rustversion = { version = "1.0.6", optional = true }
 log = { version = "0.4.4", optional = true }
 ring = { version = "0.16.20", optional = true }
 subtle = "2.5.0"
-webpki = { package = "rustls-webpki", version = "=0.102.0-alpha.3", features = ["alloc", "std"], default-features = false }
-pki-types = { package = "rustls-pki-types", version = "0.2.0", features = ["std"] }
+webpki = { package = "rustls-webpki", version = "=0.102.0-alpha.3", default-features = false }
+pki-types = { package = "rustls-pki-types", version = "0.2.1", default-features = false }
 
 [features]
-default = ["logging", "ring", "tls12"]
+default = ["logging", "ring", "tls12", "std"]
 logging = ["log"]
 dangerous_configuration = []
 ring = ["dep:ring", "webpki/ring"]
@@ -31,6 +31,8 @@ secret_extraction = []
 quic = []
 tls12 = []
 read_buf = ["rustversion"]
+std = ["webpki/std", "pki-types/std"]
+alloc = ["webpki/alloc", "pki-types/alloc"]
 
 [dev-dependencies]
 bencher = "0.1.5"
