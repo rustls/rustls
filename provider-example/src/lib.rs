@@ -4,6 +4,7 @@ mod aead;
 mod hash;
 mod hmac;
 mod kx;
+pub mod sign;
 mod verify;
 
 pub struct Provider;
