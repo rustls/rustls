@@ -12,14 +12,15 @@ use super::enums::{
 use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
-    CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
-    ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
-    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryExtension,
-    HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension, NewSessionTicketPayload,
-    NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    ProtocolName, Random, ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload,
-    ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId,
-    SingleProtocolName, SupportedProtocolVersions, UnknownExtension,
+    CertificateStatus, CertificateStatusRequest, ClientExtension, ClientExtensions,
+    ClientHelloPayload, ClientSessionTicket, CompressedCertificatePayload, DistinguishedName,
+    EcParameters, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
+    HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
+    NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
+    ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
+    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SingleProtocolName,
+    SupportedProtocolVersions, UnknownExtension,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
@@ -128,10 +129,12 @@ fn can_round_trip_unknown_client_ext() {
 }
 
 #[test]
-fn refuses_client_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
-    let mut rd = Reader::init(&bytes);
-    assert!(ClientExtension::read(&mut rd).is_err());
+fn refuses_client_exts_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x08, 0x00, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    assert_eq!(
+        ClientExtensions::read_bytes(&bytes).unwrap_err(),
+        InvalidMessage::TrailingData("ClientExtensions")
+    );
 }
 
 #[test]
@@ -366,15 +369,154 @@ fn can_clone_all_client_extensions() {
 }
 
 #[test]
-fn client_has_duplicate_extensions_works() {
-    let mut chp = sample_client_hello_payload();
-    assert!(chp.has_duplicate_extension()); // due to SessionTicketRequest/SessionTicketOffer
+fn client_extensions_basics() {
+    let src = ClientExtensions {
+        early_data_request: Some(()),
+        ..Default::default()
+    };
+    let mut target = ClientExtensions::default();
 
-    chp.extensions.drain(1..);
-    assert!(!chp.has_duplicate_extension());
+    assert_eq!(src.collect_used(), vec![ExtensionType::EarlyData]);
+    assert_eq!(target.collect_used(), vec![]);
 
-    chp.extensions = vec![];
-    assert!(!chp.has_duplicate_extension());
+    target.clone_one(&src, ExtensionType::EarlyData);
+    assert_eq!(target.collect_used(), vec![ExtensionType::EarlyData]);
+}
+
+#[test]
+fn client_extensions_empty() {
+    // both sides of empty-encoding branch
+    assert_eq!(ClientExtensions::default().get_encoding(), Vec::<u8>::new());
+    assert_eq!(
+        ClientExtensions::read_bytes(&[])
+            .unwrap()
+            .collect_used(),
+        vec![]
+    );
+
+    let early_data = b"\x00\x04\x00\x2a\x00\x00";
+    assert_eq!(
+        ClientExtensions {
+            early_data_request: Some(()),
+            ..Default::default()
+        }
+        .get_encoding(),
+        early_data
+    );
+    assert_eq!(
+        ClientExtensions::read_bytes(early_data)
+            .unwrap()
+            .collect_used(),
+        vec![ExtensionType::EarlyData]
+    );
+}
+
+#[test]
+fn client_extensions_decode_checks_duplicates() {
+    // base
+    ClientExtensions::read_bytes(b"\x00\x04\x00\x2a\x00\x00").unwrap();
+
+    // duplicate known
+    assert_eq!(
+        ClientExtensions::read_bytes(b"\x00\x08\x00\x2a\x00\x00\x00\x2a\x00\x00").unwrap_err(),
+        InvalidMessage::DuplicateExtension(0x002a)
+    );
+
+    // duplicate unknown
+    assert_eq!(
+        ClientExtensions::read_bytes(b"\x00\x08\xff\xff\x00\x00\xff\xff\x00\x00").unwrap_err(),
+        InvalidMessage::DuplicateExtension(0xffff)
+    );
+}
+
+#[test]
+fn client_extensions_ordering() {
+    // the important thing here is that PSK requests come last,
+    // ECH requests come second to last, and order of other extensions
+    // do vary.
+
+    let psk_offer = PresharedKeyOffer {
+        identities: vec![],
+        binders: vec![],
+    };
+
+    let psk_and_ech = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        preshared_key_offer: Some(psk_offer.clone()),
+        encrypted_client_hello: Some(EncryptedClientHello::Inner),
+        ..Default::default()
+    };
+
+    let psk_and_ech_with_contiguous = ClientExtensions {
+        contiguous_extensions: vec![ExtensionType::ExtendedMasterSecret],
+        ..psk_and_ech.clone()
+    };
+
+    let ech = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        encrypted_client_hello: Some(EncryptedClientHello::Inner),
+        ..Default::default()
+    };
+
+    let psk = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        preshared_key_offer: Some(psk_offer),
+        ..Default::default()
+    };
+
+    let neither = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        ..Default::default()
+    };
+
+    fn encoding_with_order(order_seed: u16, exts: &ClientExtensions<'_>) -> Vec<u8> {
+        let mut e = exts.clone();
+        e.order_seed = order_seed;
+        e.get_encoding()
+    }
+
+    assert_ne!(
+        encoding_with_order(0, &psk_and_ech),
+        encoding_with_order(1, &psk_and_ech)
+    );
+    assert_eq!(
+        encoding_with_order(0, &psk_and_ech_with_contiguous),
+        encoding_with_order(1, &psk_and_ech_with_contiguous)
+    );
+    assert_ne!(encoding_with_order(0, &ech), encoding_with_order(1, &ech));
+    assert_ne!(encoding_with_order(0, &psk), encoding_with_order(1, &psk));
+    assert_ne!(
+        encoding_with_order(0, &neither),
+        encoding_with_order(1, &neither)
+    );
+
+    // check order invariants hold for all seeds
+    for seed in 0..=0xffff {
+        // must end with ECH and then PSK
+        assert!(encoding_with_order(seed, &psk_and_ech).ends_with(
+            b"\xfe\x0d\x00\x01\x01\
+              \x00\x29\x00\x04\x00\x00\x00\x00"
+        ));
+
+        // must end with EMS, then ECH and then PSK
+        assert!(
+            encoding_with_order(seed, &psk_and_ech_with_contiguous).ends_with(
+                b"\x00\x17\x00\x00\
+                  \xfe\x0d\x00\x01\x01\
+                  \x00\x29\x00\x04\x00\x00\x00\x00"
+            )
+        );
+
+        // just PSK
+        assert!(encoding_with_order(seed, &psk).ends_with(b"\x00\x29\x00\x04\x00\x00\x00\x00"));
+
+        // just ECH
+        assert!(encoding_with_order(seed, &ech).ends_with(b"\xfe\x0d\x00\x01\x01"));
+    }
 }
 
 #[test]

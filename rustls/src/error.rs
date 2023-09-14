@@ -194,6 +194,8 @@ pub enum InvalidMessage {
     IllegalEmptyList(&'static str),
     /// A peer sent an empty value, but a non-empty value is required.
     IllegalEmptyValue,
+    /// A peer sent a message where a given extension type was repeated
+    DuplicateExtension(u16),
 }
 
 impl From<InvalidMessage> for Error {
