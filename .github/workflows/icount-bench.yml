@@ -8,6 +8,7 @@ jobs:
     steps:
       - name: Install valgrind
         run: |
+          sudo apt update
           sudo apt install -y valgrind
           valgrind --version
 
