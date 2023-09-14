@@ -30,8 +30,9 @@ mod connection {
     use crate::conn::{ConnectionCore, SideData};
     use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
     use crate::error::Error;
+    use crate::msgs::base::Payload;
     use crate::msgs::deframer::buffers::{DeframerVecBuffer, Locator};
-    use crate::msgs::handshake::{ClientExtension, ServerExtension};
+    use crate::msgs::handshake::{ClientExtensionsInput, ServerExtension, TransportParameters};
     use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::sync::Arc;
@@ -193,18 +194,15 @@ mod connection {
                 ));
             }
 
-            let ext = match quic_version {
-                Version::V1Draft => ClientExtension::TransportParametersDraft(params),
-                Version::V1 | Version::V2 => ClientExtension::TransportParameters(params),
+            let exts = ClientExtensionsInput {
+                transport_parameters: Some(match quic_version {
+                    Version::V1Draft => TransportParameters::QuicDraft(Payload::new(params)),
+                    Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
+                }),
             };
 
-            let mut inner = ConnectionCore::for_client(
-                config,
-                name,
-                alpn_protocols,
-                vec![ext],
-                Protocol::Quic,
-            )?;
+            let mut inner =
+                ConnectionCore::for_client(config, name, alpn_protocols, exts, Protocol::Quic)?;
             inner.common_state.quic.version = quic_version;
             Ok(Self {
                 inner: inner.into(),
