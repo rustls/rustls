@@ -203,6 +203,12 @@ impl From<InvalidMessage> for Error {
     }
 }
 
+impl From<InvalidMessage> for AlertDescription {
+    fn from(_: InvalidMessage) -> Self {
+        Self::DecodeError
+    }
+}
+
 #[non_exhaustive]
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq, Clone)]
