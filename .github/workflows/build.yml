@@ -222,8 +222,17 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: cargo test (debug; all features; -Z minimal-versions)
-        run: cargo -Z minimal-versions test --all-features
+      - name: Create a lockfile
+        run: cargo check
+
+      - name: Update to minimal-versions
+        # This has no effect if no `Cargo.lock` exists yet.
+        run: cargo update -Z minimal-versions
+
+      - name: cargo test (debug; all features)
+        run: cargo test --locked --all-features
+        env:
+          RUST_BACKTRACE: 1
 
   cross:
     name: Check cross compilation targets
