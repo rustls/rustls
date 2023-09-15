@@ -1,40 +1,39 @@
-use core::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{self, AtomicUsize};
+
+use crate::EncryptError;
 
 pub struct ClientState;
 
 thread_local! {
     static CLIENT_STATE: AtomicUsize = AtomicUsize::new(0);
-    static SERVER_STATE: AtomicUsize = AtomicUsize::new(0);
 }
 
 impl ClientState {
-    pub fn advance(&self) -> usize {
-        CLIENT_STATE.with(|state| state.fetch_add(1, Ordering::Relaxed))
-    }
-
     pub fn current(&self) -> usize {
-        CLIENT_STATE.with(|state| state.load(Ordering::Relaxed))
+        CLIENT_STATE.with(|client_state| client_state.load(atomic::Ordering::Relaxed))
     }
-}
 
-pub struct ServerState;
-
-impl ServerState {
     pub fn advance(&self) -> usize {
-        SERVER_STATE.with(|state| state.fetch_add(1, Ordering::Relaxed))
-    }
-
-    pub fn current(&self) -> usize {
-        SERVER_STATE.with(|state| state.load(Ordering::Relaxed))
+        CLIENT_STATE.with(|client_state| client_state.fetch_add(1, atomic::Ordering::Relaxed))
     }
 }
 
-pub fn append(num_bytes: usize, packet_type: &str, outgoing_tls: &mut Vec<u8>) {
-    outgoing_tls.extend(core::iter::repeat(0).take(num_bytes));
-    eprintln!("<- wrote {packet_type} packet ({num_bytes}B) to outgoing_tls");
+pub fn append(
+    num_bytes: usize,
+    packet_type: &str,
+    outgoing_tls: &mut [u8],
+) -> Result<usize, EncryptError> {
+    if outgoing_tls.len() < num_bytes {
+        Err(EncryptError {
+            required_size: num_bytes,
+        })
+    } else {
+        eprintln!("<- wrote {packet_type} packet ({num_bytes}B) to outgoing_tls");
+        Ok(num_bytes)
+    }
 }
 
-pub fn process(num_bytes: usize, packet_type: &str, incoming_tls_new_end: &mut usize) {
+pub fn process(num_bytes: usize, packet_type: &str) -> usize {
     eprintln!("-> processed {packet_type} packet ({}B)", num_bytes);
-    *incoming_tls_new_end += num_bytes;
+    num_bytes
 }
