@@ -52,416 +52,465 @@ impl LlServerConnection {
 
 The differences start in the way how IO is performed.
 The `LlConnection` types do not operate on IO objects; they operate on buffers.
-The main methods of the `LlConnection` types are shown below:
+The `LlConnection` types only have a single method:
 
 ```rust
-type Result<T> = core::result::Result<T, rustls::Error>;
+type Result<T> = core::result::Result<T, crate::Error>;
 
 // both `LlClientConnection` and `LlServerConnection` implement `DerefMut<Target = LlConnectionCommon>`
 pub struct LlConnectionCommon { /* .. */ }
 
 impl LlConnectionCommon {
-    /// Handles TLS records
-    ///
-    /// This method must always be called and its returned `Status` checked prior to
-    /// calling either `encrypt_outgoing` or `decrypt_incoming`
-    pub fn handle_tls_records<B>(
-        &mut self,
-        incoming_tls: &mut IncomingTls<B>,
-        outgoing_tls: &mut Vec<u8>,
-    ) -> Result<Status>
-    where
-        B: AsRef<[u8]> + AsMut<[u8]>,
-    {
+    /// Processes TLS records in the `incoming_tls` buffer
+    pub fn process_tls_records<'c, 'i>(
+        &'c mut self,
+        incoming_tls: &'i mut [u8],
+    ) -> Result<Status<'c, 'i>, crate::Error> {
        // ..
-    }
-
-    /// Encrypts `app_data` into the `outgoing_tls` buffer
-    pub fn encrypt_outgoing(&self, app_data: &[u8], outgoing_tls: &mut Vec<u8>) { /* .. */ }
-
-    /// Decrypts the application data in the `incoming_tls` buffer
-    ///
-    /// The returned iterator yields decrypted application data, one item per TLS record
-    ///
-    /// The iterator will return an `Err`or in these cases
-    /// - a record that's not application data was found, e.g. a handshake record
-    /// - a fatal Alert record was found
-    pub fn decrypt_incoming<'a, B>(
-        &self,
-        incoming_tls: &'a mut IncomingTls<B>,
-    ) -> impl Iterator<Item = Result<&'a [u8]>> {
-        // ..
     }
 }
 ```
 
-At a high level:
-
-`encrypt_outgoing` prepares outgoing application data.
-The plain-text data is encrypted, framed and placed in the outgoing TLS buffer.
-
-`decrypt_incoming` extracts application data from the incoming, AKA received, TLS data.
-
-`handle_tls_records` drives the handshake process to completion and handles TLS records that are not application data.
-TLS records that are not application data may need to be sent as part of the handshake process so this method needs write access to the `outgoing_tls` buffer.
-
-As the API documentation states the end-user must call `handle_tls_records` and check the returned `Status` prior to using the other two methods.
-The fields of the `Status` struct indicate when it's possible to use the other two methods as application data may only be exchanged after the handshake process is complete and, in same cases, at specific points of the handshake process.
+`process_tls_records` handles TLS records in the `incoming_tls` buffer and drives the handshake process to completion.
+The returned `Status` value contains a newtype over `LlConnection` that enables operations like decrypting received app-data records and encrypting application data depending on the current state of the TLS connection.
 
 ## `Status`
 
-`Status` is a struct with two public fields: `state` and `caps` (capabilities).
+`Status` is a struct with two public fields: `state` and `discard`.
 
 ```rust
 #[must_use]
-pub struct Status {
+pub struct Status<'c, 'i> {
+    /// number of bytes that must be discarded from the *front* of `incoming_tls` *after* handling
+    /// `state` and *before* the next `process_tls_records` call
+    pub discard: usize,
+
+    /// the current state of the handshake process
     pub state: State,
-    pub caps: Capabilities,
 }
 ```
+
+The `discard` field indicates how many bytes must be discarded from the front of the `incoming_tls` buffer _after_ handling `state` and _before_ the next `process_tls_records` call.
+Examples of how this can be achieved with different collections will be presented later.
 
 `State` is an enum that represent the current state of the handshake process.
-The different states and how they must be handled are described in the following snippet.
+The different states are described in the following snippet.
 
 ```rust
-pub enum State {
+pub enum State<'c, 'i> {
+    /// One, or more, application data record is available
+    AppDataAvailable(AppDataAvailable<'c, 'i>),
+
+    /// An early data record is available
+    EarlyDataAvailable(EarlyDataAvailable<'c, 'i>),
+
+    /// Application data may be encrypted at this stage of the handshake
+    MayEncryptAppData(MayEncryptAppData<'c>),
+
+    /// Early (0-RTT) data may be encrypted
+    MayEncryptEarlyData(MayEncryptEarlyData<'c>),
+
+    /// A Handshake record must be encrypted into the `outgoing_tls` buffer
+    MustEncryptTlsData(MustEncryptTlsData<'c>),
+
     /// TLS records related to the handshake have been placed in the `outgoing_tls` buffer and must
     /// be transmitted to continue with the handshake process
-    MustTransmitTlsData,
+    MustTransmitTlsData(MustTransmitTlsData<'c>),
 
     /// More TLS data needs to be added to the `incoming_tls` buffer to continue with the handshake
-    NeedsMoreTlsData,
+    NeedsMoreTlsData {
+        /// number of bytes required to complete a TLS record. `None` indicates that
+        /// no information is available
+        num_bytes: Option<NonZeroUsize>,
+    },
 
-    /// `incoming_tls` has application data that `decrypt_incoming` can decrypt
-    ReceivedAppData,
+    /// Handshake is complete.
+    TrafficTransit(TrafficTransit<'c>),
 
-    /// `incoming_tls` has early ("0-RTT") data that `decrypt_early_data` can decrypt
-    ReceivedEarlyData,
-
-    /// Handshake is complete. `decrypt_incoming` and `decrypt_outgoing` may now be freely used
-    TrafficTransit,
+    // .. other variants are omitted for now ..
 }
 ```
 
-`Capabilities` is a struct with public boolean flags that indicates which operations are possible during the handshake process.
+Most variants contain a single, unnamed field.
+These unnamed fields are new types over `LlConnectionCommon` and restrict the operations that are possible.
+The following subsections cover the API of these fields.
+
+### `AppDataAvailable`
+
+Application data records are available in the `incoming_tls` buffer and can be decrypted.
+This state generally occurs after the handshake is complete but may also happen during the handshake process.
 
 ```rust
-pub struct Capabilities {
-    pub may_encrypt_app_data: bool,
-    pub may_encrypt_early_data: bool,
-}
-```
+/// A decrypted application data record
+pub struct AppDataRecord<'i> {
+    /// number of the bytes associated to this record that must discarded from the front of
+    /// the `incoming_tls` buffer before the next `process_tls_record` call
+    pub discard: NonZeroUsize,
 
-## The `IncomingTls` buffer
-
-The `outgoing_tls` buffer is relatively simple:
-it's a `Vec` (vector) of bytes that must be transmitted in its entirety every now and then.
-
-The `incoming_tls` buffer needs to support in-place decryption, appending data as well as removing data from the front.
-To support these operations the `IncomingTls` type is provided.
-This type wraps a generic slice of bytes object that can provide both immutable and mutable views into its contents.
-Its main methods are shown below:
-
-```rust
-pub struct IncomingTls<B> { /* .. */ }
-
-impl<B> IncomingTls<B>
-where
-    B: AsRef<[u8]> + AsMut<[u8]>,
-{
-    /// Creates a new `IncomingTls` buffer
-    pub fn new(buffer: B) -> Self { /* .. */ }
-
-    /// Retrieves the underlying `buffer`
-    ///
-    /// To avoid discarding TLS data this should only be called when `filled().is_empty()` is `true`
-    pub fn into_inner(self) -> B { /* .. */ }
-
-    /// Returns a mutable view into the back of the buffer that has not yet been filled with
-    /// TLS data
-    pub fn unfilled(&mut self) -> &mut [u8] { /* .. */ }
-
-    /// Returns an immutable view into the front of the buffer that already been filled with
-    /// TLS data
-    pub fn filled(&self) -> &[u8] { /* .. */ }
-
-    /// Advances an internal cursor that tracks how full the buffer is
-    pub fn advance(&mut self, num_bytes: usize) { /* .. */  }
-
-    /// Discards `num_bytes` of application data from the front of the buffer
-    pub fn discard_app_data(&mut self, num_bytes: usize) { /* .. */ }
-}
-```
-
-To append data the `unfilled` and `advance` methods are used.
-`unfilled` returns a mutable view into the part of the buffer that has not yet been filled with TLS data.
-`advance` advances an internal cursor that tracks how full the buffer is.
-
-```rust
-// example: appending data to `IncomingTls`
-
-let mut socket: std::net::TcpStream;
-let mut incoming_tls: IncomingTls<_>;
-
-// ..
-
-let nbytes = socket.read(incoming_tls.unfilled())?;
-incoming_tls.advance(nbytes);
-```
-
-`process_tls_records` will automatically remove handshake records from the front of the `incoming_tls` buffer once it's done processing them.
-When the `decrypt_incoming` iterator is advanced, it becomes the end-user responsibility to discard application data records from the front of `incoming_tls` using the `discard_app_data` method.
-`discard_app_data` uses number of bytes, instead of number of records, so it's possible to partially discard a record.
-
-```rust
-// example: discarding entire app data records
-
-let mut conn: LlClientConnection;
-let mut incoming_tls: IncomingTls<_>;
-
-let mut num_bytes = 0;
-for res in conn.decrypt_incoming(&mut incoming_tls) {
-    let record = res?;
-    num_bytes += record.len();
-    handle(record);
+    pub payload: &'i [u8],
 }
 
-incoming_tls.discard_app_data(num_bytes);
-```
+impl<'c, 'i> Iterator for AppDataAvailable<'c, 'i> {
+    type Item = Result<AppDataRecord<'i>, crate::Error>;
 
-`discard_app_data` discards data from the front of the buffer;
-this operation involves memcpy-ing data around.
-For that reason, it's preferred to call `discard_app_data` _once_ after exhausting the iterator instead of on each iteration.
-
-## Early ("0-RTT") data
-
-To handle early data, `LlClientConnection` and `LlServerConnection` have the following methods:
-
-```rust
-impl LlClientConnection {
-    /// Encrypts `early_data` and appends it to the `outgoing_tls` buffer
-    pub fn encrypt_early_data(&mut self, _early_data: &[u8], _outgoing_tls: &mut Vec<u8>) { /* .. */ }
-}
-
-impl LlServerConnection {
-    /// Decrypts the early ("0-RTT") record that's in the front of the `incoming_tls` buffer
-    ///
-    /// Returns `None` if a record of said type is not available at the front of the `incoming_tls` buffer
-    pub fn decrypt_early_data<'a, B>(
-        &mut self,
-        incoming_tls: &'a mut IncomingTls<B>,
-    ) -> Option<Result<&'a [u8]>>
-    where
-        B: AsRef<[u8]> + AsMut<[u8]>,
-    {
-        // ..
-    }
-
-    /// Discards the early ("0-RTT") record that's in the front of the `incoming_tls` buffer
-    pub fn discard_early_data(&mut self) { /* .. */ }
-}
-```
-
-Before calling these, the `Status.state` must be `State::ReceivedEarlyData` in the case of the server;
-or, in the case of the client, `Status.may_encrypt_early_data` must be `true`.
-
-## Example event loop
-
-Here's a complete event loop that completes the handshake process and includes some inline examples of application logic.
-
-```rust
-let mut conn: LlClientConnection;
-let mut incoming_tls: IncomingTls<_>;
-let mut outgoing_tls: Vec<u8>;
-let mut socket: std::net::TcpStream;
-
-// ..
-
-loop {
-    let status = conn.handle_tls_records(&mut incoming_tls, &mut outgoing_tls)?;
-
-    match status.state {
-        State::MustTransmitTlsData => {
-            if status.caps.may_encrypt_early_data {
-                // application-specific logic goes here; contrived client-like example:
-
-                let request = prepare_request();
-                conn.encrypt_early_data(&request, &mut outgoing_tls);
-            }
-
-            if status.caps.may_encrypt_app_data {
-                // opportunistically send application data during the handshake
-                // application-specific logic goes here; contrived client-like example:
-
-                let request = prepare_request();
-                conn.encrypt_app_data(&request, &mut outgoing_tls);
-            }
-
-            socket.write_all(&outgoing_tls)?;
-            outgoing_tls.clear();
-        },
-
-        State::NeedsMoreTlsData => {
-            let read = socket.read(incoming_tls.unfilled())?;
-            incoming_tls.advance(read);
-        },
-
-        State::ReceivedAppData => {
-            // application-specific logic goes here; contrived server-like example:
-
-            let request = conn.decrypt_incoming(&mut incoming_tls).next().unwrap()?;
-            handle(request);
-        },
-
-        State::ReceivedEarlyData => {
-            // application-specific logic goes here; contrived server-like example:
-
-            let request = conn.decrypt_early_data(&mut incoming_tls).unwrap()?;
-            handle(request);
-        },
-
-        State::TrafficTransit => {
-            // handshake complete; break out of the handshake loop
-            break
-        },
-    }
-}
-
-// post-handshake application logic goes here
-```
-
-## Resizing buffers
-
-One of the goals of this new API is to support resizing of all the involved buffers.
-An example is provided below:
-
-```rust
-let handshake_size: usize = 64 * 1024;
-let mut outgoing_tls = Vec::with_capacity(handshake_size);
-let mut incoming_tls = IncomingTls::new(vec![0; handshake_size]);
-
-// complete the handshake process
-loop {
     // ..
 }
 
-let post_handshake_size: usize = 4096;
-if incoming_tls.filled().is_empty() {
-    let mut buf = incoming_tls.into_inner();
-    buf.truncate(post_handshake_size);
-    incoming_tls = IncomingTls::new(buf);
+impl<'c, 'i> AppDataAvailable<'c, 'i> {
+    /// returns the payload size of the next app-data record *without* decrypting it
+    ///
+    /// returns `None` if there are no more app-data records
+    pub fn peek_len(&self) -> Option<NonZeroUsize> { /* .. */ }
 }
-
-if outgoing_tls.len() <= post_handshake_size {
-    outgoing_tls.truncate(post_handshake_size);
-}
-
-// ..
 ```
 
-In the case of `IncomingTls`, care must be taken to check that the buffer is empty prior to resizing.
+The `AppDataAvailable` type implements the `Iterator` trait and yields decrypted application data records (`AppDataRecord`).
+The actual iterator `Item` type is a `Result`.
+The `Error` variant can be returned in these scenarios:
 
-In the case of `outgoing_tls`, the buffer can be resized while it contains data but
-care must be taken not to discard existing data if truncating it.
+- decryption failed
+- an Alert record of the fatal kind was found
 
-# Implementation details
+The `discard` field of `AppDataRecord` is similar to the `discard` field of `Status`:
+it's the number of bytes that must be removed from the front of the `incoming_tls` buffer before
+the next `process_tls_records` call.
 
-This section contains implementation details about the new API.
+The `AppDataAvailable` type also provide a `peek_len` method that returns the _payload_ size of the next app-data record.
 
-## Partially discarding app data records
+### `EarlyDataAvailable`
 
-To implement an equivalent of `rustls::Stream` API using the `LlConnection` types and, in particular, to implement the `io::Read` trait,
-it's necessary to support partially discarding app data records.
-
-Because `io::Read::read` works on mutable slices, the situation where it's not possible to copy an entire record into the provided buffer arises:
+This state only occurs on the server-side of a TLS connection.
+The only operation available in this state is decrypting the record.
 
 ```rust
-impl io::Read for Stream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let capacity = buf.len();
-        let mut cursor = 0;
+impl<'c, 'i> EarlyDataAvailable<'c, 'i> {
+    /// returns the decrypted payload of the early data record
+    pub fn decrypt(self) -> Result<AppDataRecord<'i>, crate::Error> { /* .. */ }
+}
+```
 
+An `Error` is returned when decryption fails.
+
+### `MayEncryptAppData`
+
+This state may occur during the handshake process and allows sending app-data records alongside handshake records in the same, e.g. TCP, packet.
+
+```rust
+/// Provided buffer was too small
+pub struct InsufficientSizeError {
+    /// buffer must be at least this size
+    pub required_size: usize,
+}
+
+impl<'c> MayEncryptAppData<'c> {
+    /// encrypts `application_data` into `outgoing_tls`
+    ///
+    /// returns the number of bytes that were written into `outgoing_tls`, or an error if
+    /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
+    pub fn encrypt(
+        &mut self,
+        application_data: &[u8],
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, InsufficientSize> { /* .. */ }
+
+    /// No more encryption will be performed; continue with the handshake process
+    pub fn done(self) { /* .. */ }
+}
+```
+
+The `encrypt` operation is fallible because the `outgoing_tls` buffer may not be large enough.
+The error type, `InsufficientSizeError`, includes a field that indicates how large `outgoing_tls` must be for the operation to succeed.
+The `encrypt` operation can be retried in the error case.
+An example of how to handle `InsufficientSizeError` will be provided in a later section.
+
+The `done` method must be called to continue with the `handshake` process.
+If one does not want to send application data during the handshake process,
+one can call `done` without calling `encrypt` first.
+
+### `MayEncryptEarlyData`
+
+This state only occurs on the client side of a TLS connection.
+The API of this state is the same as the API of the `MayEncryptAppData` state.
+
+```rust
+impl<'c> MayEncryptEarlyData<'c> {
+    /// Encrypts `early_data` into the `outgoing_tls` buffer
+    ///
+    /// returns the number of bytes that were written into `outgoing_tls`, or an error if
+    /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
+    pub fn encrypt(
+        &mut self,
+        early_data: &[u8],
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, InsufficientSize> { /* .. */ }
+
+    /// Continue with the handshake process
+    pub fn done(self) { /* .. */ }
+}
+```
+
+### `MustEncryptTlsData`
+
+This state provides a single method: `encrypt`.
+
+```rust
+/// An error occurred while encrypting a handshake record
+pub enum EncryptError {
+    /// Provided buffer was too small
+    InsufficientSize(InsufficientSizeError),
+
+    /// The handshake record has already been encrypted; do not call `encrypt` again
+    AlreadyEncrypted,
+}
+
+impl<'c> MustEncryptTlsData<'c> {
+    /// Encrypts a handshake record into the `outgoing_tls` buffer
+    ///
+    /// returns the number of bytes that were written into `outgoing_tls`, or an error if
+    /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
+    pub fn encrypt(&mut self, outgoing_tls: &mut [u8]) -> Result<usize, InsufficientSize> {
         // ..
+    }
+}
+```
 
-        let incoming_appdata = self.conn.decrypt_incoming(&mut self.incoming_tls);
-        for res in incoming_appdata {
-            let new_data = res?;
+The method will fail with the `InsufficientSizeError` variant if the provided buffer is too small, in which case the operation can be retried.
+If the method is called again after the last call succeed, it'll fail with the `AlreadyEncrypted` variant.
+To continue with the handshake process, the method call must succeed.
 
-            let available = capacity - cursor;
-            let tocopy = new_data.len().min(available);
-            buf[cursor..cursor + tocopy].copy_from_slice(&new_data[..tocopy]);
-            cursor += tocopy;
+### `MustTransmitTlsData`
 
-            if cursor == capacity {
-                // `buf` is full; do not decrypt in place any other record
-                break;
+This state indicates that all the data in the `outgoing_tls` buffer must be transmitted.
+How this is performed, e.g. in a blocking or asynchronous manner, is entirely up to the user.
+Once the data has been transmitted, the `done` must be called to continue with the handshake.
+
+```rust
+impl<'c> MustTransmitTlsData<'c> {
+    pub fn done(self) { /* .. */ }
+}
+```
+
+To prevent sending the same TLS data again, it's recommended that the `outgoing_tls` buffer is "cleared" or emptied after transmission.
+
+### `NeedsMoreTlsData`
+
+This state indicates that more TLS data needs to be added to the `incoming_tls` buffer to continue with the handshake process.
+This usually involves reading out new data from a network socket and placing it in the `incoming_tls` buffer.
+Again, how that IO operation is performed is entirely up to the user.
+
+In the case an incomplete TLS record in the `incoming_tls` buffer is observed, the state will report how many additional bytes are required to complete that record.
+Note that several TLS records are usually packed in a single network packet to speed up the handshake process so reading out one record at a time from the network socket may not be the most efficient way to complete the handshake phase.
+In other words, the `num_bytes` field should be treated as a _hint_ and not as the best route of action.
+
+### `TrafficTransit`
+
+This state indicates that the handshake phase is complete and the connection is secured;
+application may be exchanged bidirectionally at this stage.
+
+```rust
+impl<'c> TrafficTransit<'c> {
+    /// Encrypts `application_data` into the `outgoing_tls` buffer
+    ///
+    /// returns the number of bytes that were written into `outgoing_tls`, or an error if
+    /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
+    pub fn encrypt(
+        &mut self,
+        application_data: &[u8],
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, InsufficientSize> { /* .. */ }
+}
+```
+
+The state only provides an `encrypt` method which can be used to transmit TLS data.
+To receive TLS data one can add new data -- retrieved from a network socket -- to `incoming_tls` and call `process_tls_records`.
+If enough TLS data was provided, `process_tls_records` will return the `AppDataAvailable` state.
+
+## Handling `InsufficientSizeError`
+
+This section contains an example of handling the `InsufficientSizeError` when the `outgoing_tls` buffer is a `Vec`.
+
+```rust
+let mut outgoing_tls = Vec::new();
+let mut outgoing_used = 0;
+
+// some sort of event loop
+loop {
+    // ..
+    match state {
+        State::MayEncryptAppData(mut state) {
+            let some_app_data = /* .. */;
+
+            let res = state.encrypt(some_app_data, &mut outgoing_tls[outgoing_used..]);
+
+            match res {
+                Ok(written) => {
+                    outgoing_used += written;
+                }
+
+                Err(InsufficientSizeError { required_size }) => {
+                    let new_len = outgoing_used + required_size;
+                    outgoing_tls.resize(new_len, 0);
+
+                    // don't forget to encrypt `some_app_data` after resizing the buffer!
+                    let written = state
+                        .encrypt(some_app_data, &mut outgoing_tls[outgoing_used..])
+                        .expect("should not fail after resizing");
+
+                    outgoing_used += written;
+                }
             }
-        }
 
-        // when the `cursor == capacity` condition is hit above, this call needs to partially
-        // discard a record
-        self.incoming_tls.discard_app_data(cursor);
+            state.done();
+        }
 
         // ..
     }
 }
 ```
 
-This proposal suggests tracking partially discarded records in the `IncomingTls` data structure.
+## Example event loop with blocking IO
+
+This section contains an example of a complete event loop.
 
 ```rust
-pub struct IncomingTls<B> {
-    buf: B,
+let mut conn: LlClientConnection;
+let mut sock: std::net::TcpStream;
 
-    filled: usize,
+// .. configure / inititiaize `conn` and `sock`
 
-    // keeps track of how many bytes have already been discarded from the first app-data record
-    // - `None` indicates that the record in the front has not yet been decrypted in place
-    // - `Some` indicates that the record in the front has been decrypted in place; the inner
-    //   value indicates how many bytes have already been discarded
-    partially_discarded: Option<usize>,
+let mut incoming_tls = [0; 16 * 1024];
+let mut incoming_used = 0;
+
+let mut outgoing_tls = Vec::new();
+let mut outgoing_used = 0;
+
+loop {
+    let Status { discard, state } = conn.process_tls_records(&incoming_tls);
+    let mut discard = discard.get();
+
+    match state {
+        // logic similar to the one presented in the 'handling InsufficientSizeError' section is
+        // used in these states
+        State::MustEncryptTlsData(state) => { /* .. */ }
+        State::MayEncryptAppData(state) => { /* .. */ }
+
+        State::MustTransmitTlsData(state) => {
+            sock.write_all(&outgoing_tls[..outgoing_used])?;
+
+            outgoing_used = 0;
+
+            state.done();
+        }
+
+        State::NeedsMoreTlsData { .. } => {
+            // NOTE real code needs to handle the scenario where `incoming_tls` is not big enough
+            let read = sock.read(&mut incoming_tls[incoming_used..])?;
+            incoming_used += read;
+        }
+
+        State::MayEncryptEarlyData(state) => {
+            // this example does not send any early data
+            state.done();
+        }
+
+        State::AppDataAvailable(records) => {
+            for res in records {
+                let AppDataRecord {
+                    discard: new_discard,
+                    payload,
+                } = res?;
+
+                discard += new_discard.get();
+
+                // do app-specific stuff with `payload`
+            }
+        }
+
+        State::EarlyDataAvailable(_) => {
+            // unreachable since this is a client
+            #[cfg(debug_assertions)]
+            unreachable!();
+        }
+
+        State::TrafficTransit(_) => {
+            // post-handshake logic
+        }
+    }
+
+    // discard TLS records
+    if discard != 0 {
+        incoming_tls.copy_within(discard .. incoming_used, 0);
+        incoming_used -= discard;
+    }
 }
 ```
 
-As described in the code comment, when `discard_app_data` results in partially discarding a record,
-the `partially_discarded` field is set to the `Some` variant.
-The `decrypt_incoming` iterator will read the `partially_discarded` field and
-only yield the part of the record that has not been discard.
+The parts of this example that are worth highlighting are:
 
-The `decrypt_incoming` iterator also checks the variant of `partially_discarded` as an indicator of
-whether the first record in `incoming_tls` has already been decrypted in place or not.
-When `partially_discarded` is `None`, the first record is expected to be encrypted;
-when it's `Some`, the expectation is that the record has already been decrypted.
+Discarding TLS record has to happen after `state` has been consumed by the `match` statement.
+This is due to how the borrow checker works:
+`state` mutably borrows the `incoming_tls` buffer so the buffer cannot be modified while `state` is "alive".
 
-Because the `decrypt_incoming` iterator decrypts a record each time `next` is called,
-with the suggested approach, this can result in a runtime error in the following scenario:
+After decrypting records in the `AppDataAvailable` and `EarlyDataAvailable` states, the records need to be discarded.
+The "discard N bytes" information appears in the `discard` field of the `AppDataRecord` struct.
+All the `discard` information needs be "collected", that is summed up, and executed all at once after `state` has been consumed.
+It's less efficient (as in, it requires more CPU cycles) to discard one TLS record at a time while iterating `AppDataAvailable` but this is not possible because of borrow checking:
+`AppDataAvailable` mutably borrows the `incoming_tls` so `incoming_tls` can only be modified after `AppDataAvailable` goes out of scope.
+
+# `read_buf` API (`Borrowed{Buf,Cursor}`) support
+
+The proposed API is compatible with the `read_buf` API as is.
+The end-user-side changes required to use the `read_buf` API are shown below:
 
 ```rust
-let mut records = conn.decrypt_incoming(&mut incoming_tls);
-drop(records.next().unwrap()?);
+let mut conn: LlClientConnection;
+let mut sock: std::net::TcpStream;
 
-// forgot to call this!
-// incoming_tls.discard_app_data();
+// .. configure / inititiaize `conn` and `sock`
 
-let mut records = conn.decrypt_incoming(&mut incoming_tls);
-assert!(records.next().unwrap().is_err());
+let mut incoming_tls = [MaybeUninit::uninit(); 16 * 1024];
+let mut incoming_tls = BorrowedBuf::from(&mut incoming_tls[..]);
+let mut incoming_used = 0;
+
+let mut outgoing_tls = Vec::new();
+let mut outgoing_used = 0;
+
+loop {
+    let Status { mut discard, state } = conn.process_tls_records(&incoming_tls);
+
+    match state {
+        // no change in the handling of these states
+        State::AppDataAvailable(state) => { /* .. */ }
+        State::EarlyDataAvailable(state) => { /* .. */ }
+        State::MayEncryptAppData(state) => { /* .. */ }
+        State::MayEncryptEarlyData(state) => { /* .. */ }
+        State::MustEncryptTlsData(state) => { /* .. */ }
+        State::MustTransmitTlsData(state) => { /* .. */ }
+        State::TrafficTransit(state) => { /* .. */ }
+
+        State::NeedsMoreTlsData { .. } => {
+            let read = sock.read_buf(incoming_tls.unfilled())?;
+            //              ^^^^^^^^             ^^^^^^^^^^^
+            incoming_used += read;
+        }
+
+    }
+
+    // discard TLS records
+    if discard != 0 {
+        incoming_tls
+            .filled_mut() // <-
+            .copy_within(discard..incoming_used, 0);
+
+        incoming_tls.clear(); // <-
+        unsafe {
+            incoming_tls.unfilled().advance(incoming_used - discard); // <-
+        }
+
+        incoming_used -= discard;
+    }
+}
 ```
-
-Basically, every record decrypted using `next()` must be discarded, or partially discarded, prior to using a new instance of the `decrypt_incoming` iterator or that iterator will eventually error on a `next` call when it sees a decrypted record when a encrypted one was expected.
-
-There are ways to address this last issue: `IncomingTls` could also store the numbers of records that have already been decrypted in place.
-`partially_discarded` would still refer to the first record.
-It's unclear if decrypting records that won't be immediately used should be supported or encouraged.
-At first glance, it seems wasteful but "decrypting ahead of time" could have some use case.
-
-## Misusing the API
-
-This section describes some scenarios where the API is misused and what the outcomes are.
-
-- `Status.state` is `NeedsMoreTlsData`, no data or an incomplete TLS record is appended to `incoming_tls` and `process_tls_records` is called
-  - the newly returned `Status.state` will also be in the `NeedsMoreTlsData` state. the handshake won't make progress until sufficient data is appended to `incoming_tls`
-
-Also see the 'unresolved questions' section.
 
 # Supporting async certificate verification
 
@@ -473,7 +522,6 @@ To support both blocking and async certificate verification without "coloring" t
 - `LlClientConnection` and `LlServerConnection` will not contain a `ServerCertVerifier` / `ClientCertVerifier` trait object
 - `CertificateVerifier` will be a separate object that the user of the `LlConnection` API must manage
 - `State` will gain variants related to the certificate verification process
-- `LlConnectionCommon` will gain an API to incorporate the results of the certificate verification process into the handshake process
 
 Letting the end-user manage the certificate verification process means that they can decide whether to perform it in a blocking fashion, either serially, concurrently using `select` or in parallel using `thread::spawn`; or asynchronously, either concurrently using `join!` / `select!` / `FuturesUnordered` or in parallel using `task::spawn`.
 
@@ -491,228 +539,381 @@ The required changes to the `LlConnection` are described in the following sectio
 `State` gains the following variants:
 
 ```rust
-pub enum State {
+pub enum State<'c, 'i> {
     // ..
 
-    /// The supported verify schemes must be provided using `add_supported_verify_schemes` to continue with the handshake
-    NeedsSupportedVerifySchemes,
+    /// the supported verify schemes must be provided using to continue with the handshake
+    NeedsSupportedVerifySchemes(NeedsSupportedVerifySchemes<'c>),
 
     /// Received a `Certificate` message
-    ReceivedCertificate(Vec<CertificateEntry>),
+    ReceivedCertificate(ReceivedCertificate<'c, 'i>),
 
     /// Received a `ServerKeyExchange` (TLS 1.2) / `CertificateVerify` (TLS 1.3) message
-    ReceivedSignature(DigitallySignedStruct),
+    ReceivedSignature(ReceivedSignature<'c, 'i>),
 
     /// Needs to send back the `message` signed. provide it with the either `handshake_signature`
-    NeedsSignature {
-        message: Vec<u8>,
-        version: ProtocolVersion,
-    },
+    NeedsSignature(NeedsSignature<'c>),
 }
 ```
 
-## New `LlConnection` methods
+The API of these new states are covered in the following subsections
 
-`LlConnectionCommon` gains methods to receive data outputted by the certificate verifier object:
+### `NeedsSupportedVerifySchemes`
+
+This state provides a method to pass in the verify schemes supported by a certificate verifier.
 
 ```rust
-impl LlConnectionCommon {
+impl<'c> NeedsSupportedVerifySchemes<'c> {
     /// Provide the verify schemes supported by the certificate verifier
-    pub fn add_supported_verify_schemes(&mut self, _schemes: Vec<SignatureScheme>) { /* .. */ }
+    pub fn add_supported_verify_schemes(self, schemes: Vec<SignatureScheme>) { /* .. */ }
+}
+```
 
-    /// Provide the result of the certificate verification process
-    pub fn certificate_verification_outcome(&mut self, outcome: CertificateVerificationOutcome) { /* .. */ }
+### `ReceivedCertificate`
+
+This state provides a method to decrypt the contents of the received Certificate record.
+
+```rust
+impl<'c, 'i> ReceivedCertificate<'c, 'i> {
+    /// Decrypts the received Certificate record and returns an iterator over the
+    /// certificate entries contained in it
+    pub fn decrypt(self) -> impl Iterator<Item = Result<CertificateEntry<'i>>, crate::Error> { /* .. */ }
+}
+```
+
+To keep in line with non-allocating behavior of the rest of the API,
+this proposal _suggests_ tweaking the `CertificateEntry` type to support both the current allocating version and a new lazy / non-allocating version.
+Such change would likely be a **breaking change** as it requires adding a lifetime parameter to several types.
+
+Current allocating version:
+
+```rust
+pub struct CertificateEntry {
+    pub cert: Certificate,
+    pub exts: Vec<CertificateExtension>,
 }
 
-/// The outcome of the certificate verification process
-pub enum CertificateVerificationOutcome {
-    Success {
+pub struct Certificate(pub Vec<u8>);
+
+pub enum CertificateExtension {
+    CertificateStatus(CertificateStatus),
+    Unknown(UnknownExtension),
+}
+
+pub struct CertificateStatus {
+    pub ocsp_response: PayloadU24,
+}
+
+pub struct PayloadU24(pub Vec<u8>);
+
+pub struct UnknownExtension {
+    pub typ: ExtensionType,
+    pub payload: Payload,
+}
+
+#[derive(Clone, Copy)]
+pub enum ExtensionType { /* .. */  }
+
+pub struct Payload(pub Vec<u8>);
+```
+
+New non-allocating version:
+
+```rust
+pub struct CertificateEntry<'i> {
+    pub cert: Certificate<'i>,
+    pub exts: /* a concrete iterator? (not a boxed trait object) */ <CertificateExtension<'i>>,
+}
+
+pub struct Certificate<i>(pub Cow<'i, [u8]>);
+
+pub enum CertificateExtension<'i> {
+    CertificateStatus(CertificateStatus<'i>),
+    Unknown(UnknownExtension<'i>),
+}
+
+pub struct CertificateStatus<'i> {
+    pub ocsp_response: PayloadU24<'i>,
+}
+
+pub struct PayloadU24<'i>(pub Cow<'i, [u8]>);
+
+pub struct UnknownExtension<'i> {
+    pub typ: ExtensionType,
+    pub payload: Payload<'i>,
+}
+
+#[derive(Clone, Copy)]
+pub enum ExtensionType { /* .. */  }
+
+pub struct Payload<'i>(pub Cow<'i, [u8]>);
+```
+
+### `ReceivedSignature`
+
+This state provides a method to decrypt the contents of the received ServerKeyExchange / CertificateVerify record.
+
+```rust
+impl<'c, 'i> ReceivedSignature<'c, 'i> {
+    pub fn decrypt(self) -> Result<DigitallySignedStruct<'i>, crate::Error> { /* .. */ }
+}
+```
+
+Like in the previous section,
+this proposal suggests tweaking the `DigitallySignedStruct` type to support non-allocating decoding.
+This change will, likely, also be a **breaking change**.
+
+Current, allocating version:
+
+```rust
+pub struct DigitallySignedStruct {
+    pub scheme: SignatureScheme,
+    sig: PayloadU16,
+}
+
+#[derive(Clone, Copy)]
+pub enum SignatureScheme { /* .. */ }
+
+pub struct PayloadU16(pub Vec<u8>);
+```
+
+New, non-allocating version:
+
+```rust
+pub struct DigitallySignedStruct<'i> {
+    pub scheme: SignatureScheme,
+    sig: PayloadU16<'i>,
+}
+
+#[derive(Clone, Copy)]
+pub enum SignatureScheme { /* .. */ }
+
+pub struct PayloadU16<'i>(pub Cow<'i, [u8]>);
+```
+
+### `NeedsSignature`
+
+This state indicates that certificate verification process needs to be completed to continue with the handshake process.
+The type provides the following methods:
+
+```rust
+pub enum VerificationOutcome {
+    Valid {
         cert_verified: ServerCertVerified,
         sig_verified: HandshakeSignatureValid,
     },
 
-    Failure,
+    Failed,
+}
+
+impl<'c> NeedsSignature<'c> {
+    /// The message that needs to be signed
+    pub fn message(&self) -> &'c [u8] { /* .. */ }
+
+    /// The negotiated protocol version
+    pub fn protocol_version(&self) -> ProtocolVersion { /* .. */ }
+
+    /// Provide the outcome of the certificate verification process
+    pub fn done(self, _verification_outcome: VerificationOutcome) { /* .. */ }
 }
 ```
 
+`message` returns the message that needs to be signed as part of the certificate verification process.
+
+`protocol_version` returns the TLS version that has been negotiated.
+
+`done` accepts the outcome of the certificate verification process.
+
 ## Non-async event loop example
 
+This section presents an updated event loop that handles the new states.
 This example uses the `ServerCertVerifier` trait methods but that is not strictly required.
 
 ```rust
+let server_name: ServerName;
+let mut cert_verifier: WebPkiServerCertVerifier;
 let mut conn: LlClientConnection;
-let mut incoming_tls: IncomingTls<_>;
-let mut outgoing_tls: Vec<u8>;
 let mut socket: std::net::TcpStream;
 
-let mut cert_verifier: WebPkiServerCertVerifier;
-let mut certificate_entries: Vec<CertificateEntry>;
-let mut dss: Option<DigitallySignedStruct>;
+// .. configure / inititiaize the above variables
+
+let mut incoming_tls = [0; 16 * 1024];
+let mut incoming_used = 0;
+
+let mut outgoing_tls = Vec::new();
+let mut outgoing_used = 0;
+
+let mut certificate_entries: Vec<CertificateEntry> = vec![];
+let mut dss: Option<DigitallySignedStruct> = None;
 
 loop {
-    let status = conn.handle_tls_records(&mut incoming_tls, &mut outgoing_tls)?;
+    let Status { mut discard, state } = conn.process_tls_records(&incoming_tls);
 
-    match status.state {
-        // .. omitting states covered by a previous example ..
+    match state {
+        // omitting states unrelated to certificate verification, which have already been
+        // covered in a previous example
 
-        State::NeedsSupportedVerifySchemes => {
+        State::NeedsSupportedVerifySchemes(state) => {
             let schemes = cert_verifier.supported_verify_schemes();
-            conn.add_supported_verify_schemes(schemes);
+            state.add_supported_verify_schemes(schemes);
         }
 
-        State::ReceivedCertificate(new_certificate_entries) => {
-            certificate_entries.extend(new_certificate_entries);
+        State::ReceivedCertificate(state) => {
+            let new_entries: Vec<_> = state.decrypt().map(/* to_owned */).collect()?;
+            certificate_entries.extend(new_entries);
         }
 
-        State::ReceivedSignature(new_dss) => {
-            dss = Some(new_dss);
+        State::ReceivedSignature(state) => {
+            let new_dss = state.decrypt()?;
+            dss = Some(new_dss.to_owned());
         }
 
-        State::NeedsSignature { message, version } => {
-            let (end_entity, intermediates) = certificates
-                .split_first()
-                .ok_or(Error::RelevantErrorType)?;
-
-            let ocsp_response = extract_ocsp_response(&end_entity.ext);
-
-            let intermediates = intermediates
-                .iter()
-                .map(|entry| entry.cert)
-                .collect::<Vec<_>>();
-
+        State::NeedsSignature(state) => {
             let res = (|| {
+                let dss = dss.as_ref()?;
+                let (end_entity, intermediates) = split(&mut certificate_entries)?;
+                let oscp_response = extract_ocsp_response(&end_entity).unwrap_or(&[]);
+
                 let cert_verified = cert_verifier.verify_server_cert(
                     &end_entity.cert,
                     &intermediates,
                     server_name,
                     ocsp_response,
-                )?;
+                ).ok()?;
 
-                let dss = dss.as_ref().ok_or(Error::RelevantErrorType)?;
-                let sig_verified = match version {
+                let protocol_version = state.protocol_version();
+                let message = state.message();
+                let sig_verified = match protocol_version {
                     ProtocolVersion::TLSv1_2 => {
-                        cert_verifier.verify_tls12_signature(&message, &end_entity.cert, dss)?
+                        cert_verifier.verify_tls12_signature(message, &end_entity.cert, dss)
                     }
+
                     ProtocolVersion::TLSv1_3 => {
-                        cert_verifier.verify_tls13_signature(&message, &end_entity.cert, dss)?
+                        cert_verifier.verify_tls13_signature(message, &end_entity.cert, dss)
                     }
+
+                    _ => return None,
                 };
 
-                Ok((cert_verified, sig_verified))
+                Some((cert_verified, sig_verified.ok()?))
             })();
 
             let outcome = match res {
-                Ok((cert_verified, sig_verified)) => CertificateVerificationOutcome::Success {
+                Some((cert_verified, sig_verified)) => CertificateVerificationOutcome::Success {
                     cert_verified,
                     sig_verified,
                 }
 
-                Err(_) = CertificateVerificationOutcome::Failure,
+                None = CertificateVerificationOutcome::Failure,
             };
 
-            conn.certificate_verification_outcome(outcome);
+            state.done(outcome);
         }
     }
+
+    // omitting the discard operation which has been covered in a previous example
 }
 ```
 
-## Async event loop example
+## Multi-threaded async event loop example
 
 This example demonstrates how to perform the certificate verification in parallel using a multi-threaded async runtime.
+`AsyncPlatformVerifier` is a made-up certificate verifier.
 
 ```rust
+let server_name: ServerName;
 let mut conn: LlClientConnection;
-let mut incoming_tls: IncomingTls<_>;
-let mut outgoing_tls: Vec<u8>;
 let mut socket: std::net::TcpStream;
+let mut cert_verifier: AsyncPlatformVerifier; // <- DIFFERENT
 
-let cert_verifier: AsyncPlatformVerifier;
-let mut dss: Option<DigitallySignedStruct>;
-let mut handle: Option<JoinHandle<_>>;
+// .. configure / inititiaize the above variables
 
-let mut cert_verifier = Some(cert_verifier);
+let mut incoming_tls = [0; 16 * 1024];
+let mut incoming_used = 0;
+
+let mut outgoing_tls = Vec::new();
+let mut outgoing_used = 0;
+
+let mut dss: Option<DigitallySignedStruct> = None;
+
+let mut cert_verifier = Some(cert_verifier); // <- NEW
+let mut handle: Option<JoinHandle<_>> = None; // <- NEW
+
 loop {
-    let status = conn.handle_tls_records(&mut incoming_tls, &mut outgoing_tls)?;
+    let Status { mut discard, state } = conn.process_tls_records(&incoming_tls);
 
-    match status.state {
-        // .. omitting states covered by a previous example ..
+    match state {
+        // omitting states unrelated to certificate verification, which have already been
+        // covered in a previous example
 
-        // no change
-        State::NeedsSupportedVerifySchemes => {
-            let schemes = cert_verifier.supported_verify_schemes();
-            conn.add_supported_verify_schemes(schemes);
-        }
+        // no change in how these states are handled
+        State::NeedsSupportedVerifySchemes(state) => { /* .. */ }
+        State::ReceivedSignature(state) => { /* .. */ }
 
-        // no change
-        State::ReceivedSignature(new_dss) => {
-            dss = Some(new_dss);
-        }
-
-        State::ReceivedCertificate(certificate_entries) => {
-            // perform the certificate verification in parallel
-            let mut cert_verifier = cert_verifier.take().ok_or(Error::RelevantErrorType)?;
+        State::ReceivedCertificate(state) => {
+            let mut certificate_entries: Vec<_> = state.decrypt().map(/* to_owned */).collect()?;
+            let mut cert_verifier = cert_verifier.take().ok_or(/* relevant error type */)?;
 
             handle = Some(task::spawn(async move {
-                let (end_entity, intermediates) = certificates
-                    .split_first()
-                    .ok_or(Error::RelevantErrorType)?;
+                let (end_entity, intermediates) = split(&mut certificate_entries)?;
 
-                let ocsp_response = extract_ocsp_response(&end_entity.ext);
-
-                let intermediates = intermediates
-                    .iter()
-                    .map(|entry| entry.cert)
-                    .collect::<Vec<_>>();
+                let oscp_response = extract_ocsp_response(&end_entity).unwrap_or(&[]);
 
                 let cert_verified = cert_verifier.async_verify_server_cert(
                     &end_entity.cert,
                     &intermediates,
                     server_name,
                     ocsp_response,
-                ).await?;
+                ).await.ok()?;
 
-                Ok((cert_verifier, cert_verified, certificate_entries))
+                Some((cert_verifier, cert_verified, end_entity))
             }));
         }
 
-        State::NeedsSignature { message, version } => {
+        State::NeedsSignature(state) => {
             let mut opt = if let Some(handle) = handle.take() {
-                handle.await.ok()
+                handle.await
             } else {
                 None
             };
 
-            let dss = dss.as_ref().ok_or(Error::RelevantErrorType)?;
-
             let res = (|| {
-                let (cert_verifier, cert_verified, certificate_entries) =
-                    opt.take().ok_or(Error::RelevantErrorType)?;
+                let dss = dss.as_ref()?;
 
-                let sig_verified = match version {
+                let (cert_verifier, cert_verified, end_entity) = opt.take()?;
+
+                let protocol_version = state.protocol_version();
+                let message = state.message();
+
+                let sig_verified = match protocol_version {
                     ProtocolVersion::TLSv1_2 => {
-                        cert_verifier.verify_tls12_signature(&message, &end_entity.cert, dss)?
+                        cert_verifier.verify_tls12_signature(message, &end_entity.cert, dss)
                     }
 
                     ProtocolVersion::TLSv1_3 => {
-                        cert_verifier.verify_tls13_signature(&message, &end_entity.cert, dss)?
+                        cert_verifier.verify_tls13_signature(message, &end_entity.cert, dss)
                     }
+
+                    _ => return None,
                 };
 
-                (cert_verified, sig_verified)
+                Some((cert_verified, sig_verified.ok()?))
             })();
 
             let outcome = match res {
-                Ok((cert_verified, sig_verified)) => CertificateVerificationOutcome::Success {
+                Some((cert_verified, sig_verified)) => CertificateVerificationOutcome::Success {
                     cert_verified,
                     sig_verified,
                 }
 
-                Err(_) = CertificateVerificationOutcome::Failure,
+                None = CertificateVerificationOutcome::Failure,
             };
 
-            conn.certificate_verification_outcome(outcome);
+            state.done(outcome);
         }
     }
+
+    // omitting the discard operation which has been covered in a previous example
 }
 ```
 
@@ -729,101 +930,43 @@ their constructors, for example `ServerCertVerified::assertion`, will continue t
 
 # Alternatives
 
-## More eager `State`
+## `IncomingTls` newtype
 
-Some of the `State` variants are unit structs.
-When handling those variants, one must call API like `decrypt_early_data`.
-In some cases this can feel like one is performing redundant checks:
+In a previous iteration of this RFC,
+the `incoming_tls` parameter was not a plain slice but a newtype over a generic slice: `IncomingTls`.
 
-```rust
-if status.state == State::ReceivedEarlyData {
-    if let Some(early_data) = conn.decrypt_early_data(&mut incoming_tls) {
-        // ..
+The `IncomingTls` API was basically a public version of the `buf` and `used` fields of the private `MessageDeframer` type.
+It made the usage of the `LlConnection` a bit easier because it provided a method that handled discarding records from the front of the buffer (see the `MessageDeframer::discard` method).
 
-        conn.discard_early_data();
-    }
-}
-```
+Because `IncomingTls` was generic over the underlying buffer (`B: AsRef<[u8]> + AsMut<[u8]>`) it supported both `[u8]` and `Vec`;
+however it wasn't clear how to make it support the `read_buf` types: `Borrowed{Buf,Cursor}`.
+Chances are the `BorrowedBuf` type would need to be in the `IncomingTls` struct, perhaps using an `enum`;
+as the `Borrowed*` types are only available in libstd that would have lead to the use of conditional compilation (`cfg(feature = "std")`), which makes the implementation more complex.
 
-An alternative to this is to, for example, include the early data in the `State` variant itself.
+The current proposal uses `&mut [u8]` as the type of the `incoming_tls` parameter and it's compatible with the `read_buf` API without any conditional compilation.
+It does require however that the `MessageDeframer::discard` functionality is implemented by the end user so that's the trade-off.
 
-```rust
-enum State<'a> {
-    ReceivedEarlyData(&'a [u8]),
-}
-```
-
-But this alternative has two issues:
-`State`, and thus `Status` as well, would have to gain a lifetime that ties it to the `incoming_tls` buffer.
-Given how Rust works, even if `State` was not in the `ReceivedEarlyData` variant, the `status.state` field would still "freeze" `incoming_tls` meaning that it can't be mutated until `status.state` goes out of scope / is dropped.
-
-The other issues is that if `process_tls_records` automatically decrypts early data, the end-user no longer has the option to discard the early data without decrypting it first (see snippet below) to save some CPU work.
-
-```rust
-// this is possible with the API in the main proposal
-
-if status.received_early_data() {
-    conn.discard_early_data();
-    // without decrypting it first
-}
-```
-
-## "Less" allocations in `State`
-
-On the other hand, some of the `State` variants include owned data types like `Vec<u8>`.
-These are copies of, potentially encrypted, data that was stored in the `incoming_tls` buffer.
-
-It would be possible to avoid some allocations in `LlConnection` by turning the enum variants into unit structs and adding new methods to `LlConnection` to yield slices to the relevant part of `incoming_tls`. For example,
-
-```rust
-struct CertificateRef<'a>(pub &'a [u8]);
-
-struct CertificateEntryRef<'a> {
-    pub cert: CertificateRef<'a>,
-    pub exts: Vec<CertificateExtension>,
-}
-
-loop {
-    // ..
-
-    match status.state {
-        State::ReceivedCertificate => {
-            let certificates: Vec<CertificateEntryRef> = conn.decrypt_certificate(&mut incoming_tls);
-            // ..
-        }
-
-    }
-}
-```
-
-Given that `certificates` freezes `incoming_tls`, the end-user will likely have to copy the data into an owned version (`Certificate`) so
-they can stash the certificates for use in a later iteration of the event loop or to send them to a separate async task.
-In the end, the allocation is not eliminated but simply made more explicit, as the end user will have to perform it.
-
-This main proposal's criteria for whether to include owned data into one of `State` variants is to re-use existing owned types and avoid creating new "ref" versions of them.
-For instance, the internal `Codec` trait which creates instances the `Certificate` type from a `Reader` slice can only create owned types, not slices.
+For more details about the `IncomingTls` API, check the older revisions of this branch / PR.
 
 # Unresolved questions
-
-what should the behavior be in these scenarios
-
-- `Status.state` is `State::MustTransmitTlsData`, `outgoing_tls` is not fully transmitted and `process_tls_records` is called
-  - should `wants_write` "latch" to the `true` value until `outgoing_tls` is observed as being empty?
-- `Capabilities.may_send_app_data` returns `false` and `encrypt_outgoing` is called
-  - do nothing?
-  - consider this a programmer error, a "bug", and panic
-  - return a `Result::Err`
-  - panic when `debug_assertions` are enabled; do nothing when they are disabled
-- `Capabilities.:may_send_early_data` returns `false` and `encrypt_early_data` is called
-- `discard_app_data` is called during the handshake process when there are still no application data records in `incoming_tls`
-- `discard_app_data` is called with a wrong value: e.g. greater than `filled().len()`
-- etc.
-
-how to best fit the `std::io::Read::read_buf` API (`BorrowedCursor`, `BorrowedBuf`) into this design
 
 are more variants required in `State` to support server-side verification of client certificates?
 
 are more variants required in `State` to support the `EncryptedClientHello` (ECH) extension?
+
+should `EarlyDataAvailable` provide a `discard` method to discard the early data record _without_ decrypting it first?
+
+can several early-data records appear in a single, e.g. TCP, packet? if yes, should `EarlyDataAvailable` become an iterator like `AppDataAvailable`?
+
+should the 'close notify' alert record be reported as a new, separate `State` variant, say `State::ConnectionClosed`?
+
+during the handshake, is it _always_ possible to send encrypted application data back after encrypted application data has been received? if yes, then the `AppDataAvailable` type should provide an `encrypt(app_data, outgoing_tls)` method.
+
+is it possible to receive a _non-fatal_ Alert record after the handshake has been finished and "sandwich-ed" between app-data records? if yes, how should these be handled by the `AppDataAvailable` type? some options:
+
+- yield `None` when one of these Alert record is found and let `process_tls_record` handle it
+- yield `Some(AppDataRecord { discard: /* alert record size */, payload: &[] })`
+- don't yield an `AppDataRecord` for the Alert record but include its `discard` size into the `discard` field of the next `AppDataRecord`
 
 # References
 

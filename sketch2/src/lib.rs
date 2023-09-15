@@ -117,7 +117,6 @@ pub enum State<'c, 'i> {
 
     /// Handshake is complete.
     TrafficTransit(TrafficTransit<'c>),
-    // NOTE omitting certificate verification variants for now
 }
 
 impl State<'_, '_> {
@@ -146,7 +145,7 @@ pub struct AppDataAvailable<'c, 'i> {
 }
 
 pub struct AppDataRecord<'i> {
-    pub discard: usize,
+    pub discard: NonZeroUsize,
     pub payload: &'i [u8],
 }
 
@@ -157,12 +156,12 @@ impl<'c, 'i> Iterator for AppDataAvailable<'c, 'i> {
     // any record preceding the app-data record will be decrypted and processed by `LlConnectionCommon`
     fn next(&mut self) -> Option<Self::Item> {
         let len = self.peek_len()?;
-        let discard = len + ENCRYPTED_TLS_SIZE_OVERHEAD;
+        let discard = len.get() + ENCRYPTED_TLS_SIZE_OVERHEAD;
         let (head, tail) = self._incoming_tls.take().unwrap().split_at_mut(discard);
         self._incoming_tls = Some(tail);
 
         Some(Ok(AppDataRecord {
-            discard,
+            discard: NonZeroUsize::new(discard).unwrap(),
             payload: &mut head[TLS_HEADER_SIZE..discard],
         }))
     }
@@ -172,10 +171,10 @@ impl<'c, 'i> AppDataAvailable<'c, 'i> {
     /// returns the payload size of the next app-data record *without* decrypting it
     ///
     /// returns `None` if there are no more app-data records
-    pub fn peek_len(&self) -> Option<usize> {
+    pub fn peek_len(&self) -> Option<NonZeroUsize> {
         #[cfg(test)]
         match mock::ClientState.advance() {
-            12 => Some(95 - ENCRYPTED_TLS_SIZE_OVERHEAD),
+            12 => NonZeroUsize::new(95 - ENCRYPTED_TLS_SIZE_OVERHEAD),
 
             13 => None,
 
@@ -196,7 +195,7 @@ pub struct EarlyDataAvailable<'c, 'i> {
 impl<'c, 'i> EarlyDataAvailable<'c, 'i> {
     // decrypts the first record in `_incoming_tls` in-place and returns a slice into its payload
     // this advances `incoming_tls`'s cursor *fully* discarding the TLS record
-    pub fn decrypt(self) -> TlsResult<&'i [u8]> {
+    pub fn decrypt(self) -> TlsResult<AppDataRecord<'i>> {
         todo!()
     }
 
@@ -218,10 +217,8 @@ pub struct MayEncryptAppData<'c> {
 impl<'c> MayEncryptAppData<'c> {
     /// Encrypts `app_data` into the `outgoing_tls` buffer
     ///
-    /// returns the part of `outgoing_tls` that was not used, or an error if the provided buffer was
-    /// too small
-    // XXX can more than one application data record be sent during the same handshake round-trip?
-    // if not, then this can take `self` by value
+    /// returns the number of bytes that were written into `outgoing_tls`, or an error if
+    /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
     pub fn encrypt(
         &mut self,
         _app_data: &[u8],
@@ -339,10 +336,15 @@ pub struct NeedsSignature<'c> {
     _conn: &'c mut LlConnectionCommon,
 }
 
-impl NeedsSignature<'_> {
+impl<'c> NeedsSignature<'c> {
     /// Message that needs to be signed
-    pub fn message(&self) -> &[u8] {
+    pub fn message(&self) -> &'c [u8] {
         &[]
+    }
+
+    /// The negotiated protocol version
+    pub fn protocol_version(&self) -> ProtocolVersion {
+       ProtocolVersion::TLSv1_3
     }
 
     pub fn done(self, _verification_outcome: VerificationOutcome) {
@@ -374,6 +376,8 @@ pub struct ReceivedCertificate<'c, 'i> {
 }
 
 impl<'c, 'i> ReceivedCertificate<'c, 'i> {
+    /// Decrypts the received Certificate record and returns an iterator over the
+    /// certificate entries contained in it
     pub fn decrypt(self) -> impl Iterator<Item = TlsResult<CertificateEntry<'i>>> {
         #[cfg(test)]
         mock::ClientState.advance();
@@ -407,13 +411,13 @@ pub struct TrafficTransit<'c> {
 }
 
 impl<'c> TrafficTransit<'c> {
-    /// Encrypts `outgoing_plaintext` into the `outgoing_tls` buffer
+    /// Encrypts `application_data` into the `outgoing_tls` buffer
     ///
     /// returns the number of bytes that were written into `outgoing_tls`, or an error if
     /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
     pub fn encrypt(
         &mut self,
-        _outgoing_plaintext: &[u8],
+        _application_data: &[u8],
         _outgoing_tls: &mut [u8],
     ) -> Result<usize, EncryptError> {
         todo!()
@@ -566,6 +570,7 @@ pub struct HandshakeSignatureValid;
 pub enum ProtocolVersion {
     TLSv1_2,
     TLSv1_3,
+    SomethingElse,
 }
 
 pub trait ServerCertVerifier: Send + Sync {
@@ -764,8 +769,6 @@ mod tests {
                 }
 
                 State::NeedsSignature(state) => {
-                    let message = state.message();
-
                     let (end_entity, intermediates) =
                         certificates.split_first().ok_or(TlsError::Fatal)?;
 
@@ -785,8 +788,19 @@ mod tests {
                     )?;
 
                     let dss = dss.as_ref().ok_or(TlsError::Fatal)?;
-                    let sig_verified =
-                        cert_verifier.verify_tls13_signature(message, &end_entity.cert, dss)?;
+                    let protocol_version = state.protocol_version();
+                    let message = state.message();
+                    let sig_verified = match protocol_version {
+                        ProtocolVersion::TLSv1_2 => {
+                            cert_verifier.verify_tls12_signature(message, &end_entity.cert, dss)?
+                        }
+
+                        ProtocolVersion::TLSv1_3 => {
+                            cert_verifier.verify_tls13_signature(message, &end_entity.cert, dss)?
+                        }
+
+                        _ => return Err(TlsError::Fatal.into()),
+                    };
 
                     let verification_outcome = VerificationOutcome::Valid {
                         cert_verified,
@@ -803,7 +817,7 @@ mod tests {
                             payload,
                         } = res?;
 
-                        discard += new_discard;
+                        discard += new_discard.get();
 
                         // do stuff with `data`
                     }
@@ -988,8 +1002,6 @@ mod tests {
                 }
 
                 State::NeedsSignature(state) => {
-                    let message = state.message();
-
                     let (end_entity, intermediates) =
                         certificates.split_first().ok_or(TlsError::Fatal)?;
 
@@ -1009,8 +1021,19 @@ mod tests {
                     )?;
 
                     let dss = dss.as_ref().ok_or(TlsError::Fatal)?;
-                    let sig_verified =
-                        cert_verifier.verify_tls13_signature(message, &end_entity.cert, dss)?;
+                    let protocol_version = state.protocol_version();
+                    let message = state.message();
+                    let sig_verified = match protocol_version {
+                        ProtocolVersion::TLSv1_2 => {
+                            cert_verifier.verify_tls12_signature(message, &end_entity.cert, dss)?
+                        }
+
+                        ProtocolVersion::TLSv1_3 => {
+                            cert_verifier.verify_tls13_signature(message, &end_entity.cert, dss)?
+                        }
+
+                        _ => return Err(TlsError::Fatal.into()),
+                    };
 
                     let verification_outcome = VerificationOutcome::Valid {
                         cert_verified,
@@ -1026,7 +1049,7 @@ mod tests {
                             discard: new_discard,
                             payload,
                         } = res?;
-                        discard += new_discard;
+                        discard += new_discard.get();
 
                         // do stuff with `data`
                     }

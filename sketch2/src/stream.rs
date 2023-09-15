@@ -62,12 +62,15 @@ impl Stream {
         let mut num_bytes = 0;
 
         while rd_buf.is_some() || wr_buf.is_some() {
-            let Status { mut discard, state } =
-                self.conn.process_tls_records(&mut self.incoming_tls)?;
+            let Status { mut discard, state } = self
+                .conn
+                .process_tls_records(&mut self.incoming_tls)?;
 
             match state {
                 State::NeedsSupportedVerifySchemes(mut conn) => {
-                    let schemes = self.cert_verifier.supported_verify_schemes();
+                    let schemes = self
+                        .cert_verifier
+                        .supported_verify_schemes();
                     conn.add_supported_verify_schemes(schemes);
                 }
 
@@ -113,13 +116,15 @@ impl Stream {
                                 buf.copy_from_slice(head);
                                 num_bytes += buf.len();
 
-                                self.received_plaintext.extend_from_slice(tail);
+                                self.received_plaintext
+                                    .extend_from_slice(tail);
                             }
                         } else {
-                            self.received_plaintext.extend_from_slice(payload);
+                            self.received_plaintext
+                                .extend_from_slice(payload);
                         }
 
-                        discard += new_discard;
+                        discard += new_discard.get();
                     }
 
                     // break the event loop to prevent doing more than one `self.sock.read` per
@@ -206,11 +211,9 @@ impl Stream {
                     )?;
 
                     let dss = self.dss.take().ok_or(TlsError::Fatal)?;
-                    let sig_verified = self.cert_verifier.verify_tls13_signature(
-                        message,
-                        &end_entity.cert,
-                        &dss,
-                    )?;
+                    let sig_verified = self
+                        .cert_verifier
+                        .verify_tls13_signature(message, &end_entity.cert, &dss)?;
 
                     let verification_outcome = VerificationOutcome::Valid {
                         cert_verified,
@@ -224,7 +227,8 @@ impl Stream {
                     let new_certificates = record.decrypt();
 
                     for certificate in new_certificates {
-                        self.certificates.push(certificate?.into_owned())
+                        self.certificates
+                            .push(certificate?.into_owned())
                     }
                 }
 
