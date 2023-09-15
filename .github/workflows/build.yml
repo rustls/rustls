@@ -40,15 +40,15 @@ jobs:
           toolchain: ${{ matrix.rust }}
 
       - name: cargo build (debug; default features)
-        run: cargo build
+        run: cargo build --locked
 
       - name: cargo test (debug; all features)
-        run: cargo test --all-features
+        run: cargo test --locked --all-features
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo build (debug; rustls-provider-example)
-        run: cargo build -p rustls-provider-example
+        run: cargo build --locked -p rustls-provider-example
 
   msrv:
     name: MSRV
@@ -63,7 +63,7 @@ jobs:
         with:
           toolchain: "1.60"
 
-      - run: cargo check --lib --all-features -p rustls
+      - run: cargo check --locked --lib --all-features -p rustls
 
   features:
     name: Features
@@ -78,21 +78,21 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: cargo build (debug; default features)
-        run: cargo build
+        run: cargo build --locked
 
       - name: cargo test (debug; default features)
-        run: cargo test
+        run: cargo test --locked
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; no default features)
-        run: cargo test --no-default-features
+        run: cargo test --locked --no-default-features
 
       - name: cargo test (debug; no default features; tls12)
-        run: cargo test --no-default-features --features tls12
+        run: cargo test --locked --no-default-features --features tls12
 
       - name: cargo test (release; no run)
-        run: cargo test --release --no-run
+        run: cargo test --locked --release --no-run
 
   bogo:
     name: BoGo test suite
@@ -152,10 +152,10 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Smoke-test benchmark program
-        run: cargo run --release --example bench
+        run: cargo run --release --locked --example bench
 
       - name: Run micro-benchmarks
-        run: cargo bench
+        run: cargo bench --locked
         env:
           RUSTFLAGS: --cfg=bench
 
@@ -172,13 +172,13 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: cargo doc (rustls; all features)
-        run: cargo doc --all-features --no-deps --document-private-items --package rustls
+        run: cargo doc --locked --all-features --no-deps --document-private-items --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings
 
       - name: Check README.md
         run: |
-          cargo build --all-features
+          cargo build --locked --all-features
           ./admin/pull-readme
           ./admin/pull-usage
           git diff --exit-code
@@ -244,7 +244,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Install cross
         uses: taiki-e/install-action@cross
-      - run: cross build --target i686-unknown-linux-gnu
+      - run: cross build --locked --target i686-unknown-linux-gnu
 
   semver:
     name: Check semver compatibility
@@ -289,11 +289,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --package rustls --all-features --all-targets -- --deny warnings
-      - run: cargo clippy --package rustls --no-default-features --all-targets -- --deny warnings
-      - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features --all-targets -- --deny warnings
-      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- --deny warnings
-      - run: cargo clippy --manifest-path=provider-example/Cargo.toml --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --package rustls --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --package rustls --no-default-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --manifest-path=connect-tests/Cargo.toml --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --manifest-path=provider-example/Cargo.toml --all-features --all-targets -- --deny warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
@@ -307,8 +307,8 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
-      - run: cargo clippy --package rustls --all-features --all-targets
-      - run: cargo clippy --package rustls --no-default-features --all-targets
-      - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features --all-targets
-      - run: cargo clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets
-      - run: cargo clippy --manifest-path=provider-example/Cargo.toml --all-features --all-targets
+      - run: cargo clippy --locked --package rustls --all-features --all-targets
+      - run: cargo clippy --locked --package rustls --no-default-features --all-targets
+      - run: cargo clippy --locked --manifest-path=connect-tests/Cargo.toml --all-features --all-targets
+      - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets
+      - run: cargo clippy --locked --manifest-path=provider-example/Cargo.toml --all-features --all-targets
