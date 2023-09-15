@@ -3,13 +3,11 @@
 </p>
 
 <p align="center">
-Rustls is a modern TLS library written in Rust.  It uses <a href = "https://github.com/briansmith/ring"><em>ring</em></a> for cryptography and <a href = "https://github.com/rustls/webpki">webpki</a> for certificate
-verification.
+Rustls is a modern TLS library written in Rust.
 </p>
 
 # Status
-Rustls is mature and widely used. While most of the API surface is stable, we expect the next
-few releases will make further changes as needed to accomodate new features or performance improvements.
+Rustls is ready for production use. We aim to maintain reasonable API surface stability but the API may evolve as we make changes to accomodate new features or performance improvements.
 
 If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -23,12 +21,13 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 Release history can be found [on GitHub](https://github.com/rustls/rustls/releases).
 
 # Documentation
-Lives here: https://docs.rs/rustls/
+
+https://docs.rs/rustls/
 
 # Approach
 Rustls is a TLS library that aims to provide a good level of cryptographic security,
 requires no configuration to achieve that security, and provides no unsafe features or
-obsolete cryptography.
+obsolete cryptography by default.
 
 ## Current features
 
@@ -53,12 +52,6 @@ obsolete cryptography.
 * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 * OCSP stapling by servers.
 
-## Possible future features
-
-* PSK support.
-* OCSP verification by clients.
-* Certificate pinning.
-
 ## Non-features
 
 For reasons [explained in the manual](https://docs.rs/rustls/latest/rustls/manual/_02_tls_vulnerabilities/index.html),
@@ -72,10 +65,8 @@ rustls does not and will not support:
 * Ciphersuites without forward secrecy.
 * Renegotiation.
 * Kerberos.
-* Compression.
 * Discrete-log Diffie-Hellman.
 * Automatic protocol version downgrade.
-* Self-signed certificates.
 
 There are plenty of other libraries that provide these features should you
 need them.
@@ -221,6 +212,12 @@ $ echo hello world | cargo run --bin tlsclient-mio -- --cafile test-ca/rsa/ca.ce
 hello world
 ^C
 ```
+
+# Project Leadership
+
+- Joe Birr-Pixton (GitHub: @ctz)
+- Dirkjan Ochtman (GitHub: @djc)
+- Daniel McCarney (GitHub: @cpu)
 
 # License
 
