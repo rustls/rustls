@@ -13,8 +13,8 @@ a pcap or reproduction steps.
 
 Feel free to file github issues to get help, or ask a question.
 
-If you believe you've found a security bug please 
-[open a draft security advisory](https://github.com/rustls/rustls/security/advisories/new) 
+If you believe you've found a security bug please
+[open a draft security advisory](https://github.com/rustls/rustls/security/advisories/new)
 in GitHub, and not as a regular repository issue. See [SECURITY.md] for more
 information.
 
@@ -47,7 +47,7 @@ Our default workflow is to rebase clean commit history from a PR to `main`.
 ## Security bugs
 
 Please report security bugs by [opening a draft security advisory](https://github.com/rustls/rustls/security/advisories/new)
-in GitHub, and not as a regular repository issue. 
+in GitHub, and not as a regular repository issue.
 
 See [SECURITY.md] for more information.
 
@@ -156,7 +156,7 @@ be represented.
 
 #### Error handling
 
-We use `Result` types pervasively throughout the code to signal error cases. 
+We use `Result` types pervasively throughout the code to signal error cases.
 Outside of unit/integration tests we prefer to avoid `unwrap()` and `expect()`
 calls unless there is a clear invariant which can be locally validated by the
 structure of the code. If there is such an invariant, we usually add a comment
@@ -214,7 +214,7 @@ Ok(match foo {
 
 When writing match expressions, try to avoid using `ref` in patterns. Prefer
 taking a reference on the
-[scrutinee](https://doc.rust-lang.org/reference/expressions/match-expr.html) 
+[scrutinee](https://doc.rust-lang.org/reference/expressions/match-expr.html)
 of the `match`.
 
 Since the addition of [binding
@@ -235,7 +235,7 @@ Avoid adding a suffix for a variable that describes its type (provided that its
 type is hard to confuse with other types -- for example, we do still use `_id`
 suffixes because we usually use numeric IDs for database entities). The
 precision/conciseness trade-off for variable names also depends on the scope of
-the binding. 
+the binding.
 
 #### Avoid `get_` prefixes
 
@@ -298,8 +298,8 @@ Use digit grouping to make larger numeric constants easy to read, e.g. use
 #### Avoid type aliases
 
 We prefer to avoid type aliases as they obfuscate the underlying type and
-don't provide additional type safety. Using the 
-[newtype idiom](https://doc.rust-lang.org/rust-by-example/generics/new_types.html) 
+don't provide additional type safety. Using the
+[newtype idiom](https://doc.rust-lang.org/rust-by-example/generics/new_types.html)
 is one alternative when an abstraction boundary is worth the added complexity.
 
 ## Licensing
