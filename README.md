@@ -7,6 +7,7 @@ Rustls is a modern TLS library written in Rust.
 </p>
 
 # Status
+
 Rustls is used in production at many organizations and projects. We aim to maintain
 reasonable API surface stability but the API may evolve as we make changes to accomodate
 new features or performance improvements.
@@ -27,6 +28,7 @@ Release history can be found [on GitHub](https://github.com/rustls/rustls/releas
 https://docs.rs/rustls/
 
 # Approach
+
 Rustls is a TLS library that aims to provide a good level of cryptographic security,
 requires no configuration to achieve that security, and provides no unsafe features or
 obsolete cryptography by default.
@@ -67,8 +69,10 @@ rustls does not and will not support:
 * Ciphersuites without forward secrecy.
 * Renegotiation.
 * Kerberos.
+* TLS 1.2 protocol compression.
 * Discrete-log Diffie-Hellman.
 * Automatic protocol version downgrade.
+* Self-signed certificates.
 
 There are plenty of other libraries that provide these features should you
 need them.
@@ -215,12 +219,6 @@ hello world
 ^C
 ```
 
-# Project Leadership
-
-- Joe Birr-Pixton (GitHub: @ctz)
-- Dirkjan Ochtman (GitHub: @djc)
-- Daniel McCarney (GitHub: @cpu)
-
 # License
 
 Rustls is distributed under the following three licenses:
@@ -232,6 +230,12 @@ Rustls is distributed under the following three licenses:
 These are included as LICENSE-APACHE, LICENSE-MIT and LICENSE-ISC
 respectively.  You may use this software under the terms of any
 of these licenses, at your option.
+
+# Project Leadership
+
+- Joe Birr-Pixton (GitHub: @ctz)
+- Dirkjan Ochtman (GitHub: @djc)
+- Daniel McCarney (GitHub: @cpu)
 
 # Code of conduct
 

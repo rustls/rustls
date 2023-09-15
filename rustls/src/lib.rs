@@ -1,7 +1,8 @@
 //! # Rustls - a modern TLS library
+//!
 //! Rustls is a TLS library that aims to provide a good level of cryptographic security,
 //! requires no configuration to achieve that security, and provides no unsafe features or
-//! obsolete cryptography.
+//! obsolete cryptography by default.
 //!
 //! ## Current features
 //!
@@ -26,12 +27,6 @@
 //! * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 //! * OCSP stapling by servers.
 //!
-//! ## Possible future features
-//!
-//! * PSK support.
-//! * OCSP verification by clients.
-//! * Certificate pinning.
-//!
 //! ## Non-features
 //!
 //! For reasons [explained in the manual](manual),
@@ -45,7 +40,7 @@
 //! * Ciphersuites without forward secrecy.
 //! * Renegotiation.
 //! * Kerberos.
-//! * Compression.
+//! * TLS 1.2 protocol compression.
 //! * Discrete-log Diffie-Hellman.
 //! * Automatic protocol version downgrade.
 //! * Self-signed certificates.
