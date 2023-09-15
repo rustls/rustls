@@ -33,6 +33,17 @@ Some ideas and guidelines for contributions:
 - I run `cargo outdated` prior to major releases; but PRs to update specific
   dependencies are welcome.
 
+## Commit history
+
+We prefer to keep the commit history clean and easy to follow. As such, we prefer small commits
+that do one thing. In particular:
+
+* Avoid mixing refactoring and functional changes in the same commit if possible
+* Make mechanical changes (like renaming or moving code around) in a separate commit
+* Isolate updates to `Cargo.lock` in their own commits
+
+Our default workflow is to rebase clean commit history from a PR to `main`.
+
 ## Security bugs
 
 Please report security bugs by [opening a draft security advisory](https://github.com/rustls/rustls/security/advisories/new)
