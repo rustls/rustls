@@ -813,11 +813,7 @@ impl<C: CryptoProvider> ExpectServerHelloOrHelloRetryRequest<C> {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                let skxg = match config
-                    .kx_groups
-                    .iter()
-                    .find(|skxg| skxg.name() == group)
-                {
+                let skxg = match config.find_kx_group(group) {
                     Some(skxg) => skxg,
                     None => {
                         return Err(cx.common.send_fatal_alert(

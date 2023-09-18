@@ -211,16 +211,13 @@ pub(super) fn initial_key_share<C: CryptoProvider>(
         .resumption
         .store
         .kx_hint(server_name)
-        .and_then(|hint_group| {
-            config
-                .kx_groups
-                .iter()
-                .find(|kx_group| kx_group.name() == hint_group)
-        })
+        .and_then(|group_name| config.find_kx_group(group_name))
         .unwrap_or_else(|| {
             config
                 .kx_groups
-                .first()
+                .iter()
+                .copied()
+                .next()
                 .expect("No kx groups configured")
         });
 

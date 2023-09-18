@@ -765,12 +765,7 @@ impl<C: CryptoProvider> State<ClientConnectionData> for ExpectServerDone<C> {
         let ecdh_params =
             tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
-        let skxg = match st
-            .config
-            .kx_groups
-            .iter()
-            .find(|skxg| skxg.name() == named_group)
-        {
+        let skxg = match st.config.find_kx_group(named_group) {
             Some(skxg) => skxg,
             None => {
                 return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());
