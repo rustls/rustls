@@ -274,6 +274,13 @@ impl<C: CryptoProvider> ClientConfig<C> {
             .copied()
             .find(|&scs| scs.suite() == suite)
     }
+
+    pub(super) fn find_kx_group(&self, group: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {
+        self.kx_groups
+            .iter()
+            .copied()
+            .find(|skxg| skxg.name() == group)
+    }
 }
 
 /// Configuration for how/when a client is allowed to resume a previous session.
