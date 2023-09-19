@@ -70,7 +70,7 @@ use core::marker::PhantomData;
 ///
 /// For a client, _certificate verification_ must be configured either by calling one of:
 ///  - [`ConfigBuilder::with_root_certificates`] or
-///  - [`ConfigBuilder::dangerous.with_custom_certificate_verifier`]
+///  - [`ConfigBuilder::dangerous()`]`.with_custom_certificate_verifier`
 ///
 /// Next, _certificate sending_ (also known as "client authentication", "mutual TLS", or "mTLS") must be configured
 /// or disabled using one of:
@@ -141,9 +141,10 @@ use core::marker::PhantomData;
 /// incorrect chain of configuration calls you will get an error message from the compiler
 /// mentioning some of these types.
 ///
-/// Additionally, ServerConfig and ClientConfig are parameterized by `C`, a [`CryptoProvider`],
-/// which determines a cryptographic backend to use (for instance, `ring`). That type parameter
-/// is used in several of the `State` types as well.
+/// Additionally, ServerConfig and ClientConfig carry a private field containing a
+/// `&'static dyn `[`CryptoProvider`], from [`ClientConfig::builder_with_provider()`] or
+/// [`ServerConfig::builder_with_provider()`]. This determines which cryptographic backend
+/// is used. The default is [*ring*].
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [typestate]: http://cliffle.com/blog/rust-typestate/
@@ -152,10 +153,13 @@ use core::marker::PhantomData;
 /// [`ClientConfig`]: crate::ClientConfig
 /// [`ClientConfig::builder()`]: crate::ClientConfig::builder()
 /// [`ServerConfig::builder()`]: crate::ServerConfig::builder()
+/// [`ClientConfig::builder_with_provider()`]: crate::ClientConfig::builder_with_provider()
+/// [`ServerConfig::builder_with_provider()`]: crate::ServerConfig::builder_with_provider()
 /// [`ConfigBuilder<ClientConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-3
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
 /// [`WantsClientCert`]: crate::client::WantsClientCert
 /// [`WantsServerCert`]: crate::server::WantsServerCert
+/// [*ring*]: crate::crypto::ring::RING
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
