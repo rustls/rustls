@@ -142,7 +142,7 @@ enum_builder! {
     ///
     /// This enum is used for recognizing elliptic curve parameters advertised
     /// by a peer during a TLS handshake. It is **not** a list of curves that
-    /// Rustls supports. See [`crate::kx_group`] for the list of supported
+    /// Rustls supports. See [`crate::crypto::ring::kx_group`] for the list of supported
     /// elliptic curve groups.
     @U16
     EnumName: NamedCurve;

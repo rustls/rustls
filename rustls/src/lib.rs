@@ -493,10 +493,6 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
-#[cfg(feature = "ring")]
-/// All defined key exchange groups supported by *ring* appear in this module.
-pub use crypto::ring::kx_group;
-
 /// Message signing interfaces and implementations.
 pub mod sign {
     #[cfg(feature = "ring")]
