@@ -20,7 +20,7 @@ jobs:
         rust:
           - stable
           - beta
-          - nightly
+          - ${{ vars.NIGHTLY_VERSION }}
         os: [ubuntu-20.04]
         # but only stable on macos/windows (slower platforms)
         include:
@@ -56,7 +56,7 @@ jobs:
         rust:
           - stable
           - beta
-          - nightly
+          - ${{ vars.NIGHTLY_VERSION }}
         os: [ubuntu-20.04]
         # but only stable on macos/windows (slower platforms)
         include:

@@ -20,7 +20,7 @@ jobs:
         rust:
           - stable
           - beta
-          - nightly
+          - ${{ vars.NIGHTLY_VERSION }}
         os: [ubuntu-20.04]
         # but only stable on macos/windows (slower platforms)
         include:
@@ -127,7 +127,9 @@ jobs:
           persist-credentials: false
 
       - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ vars.NIGHTLY_VERSION }}
 
       - name: Install cargo fuzz
         run: cargo install cargo-fuzz
@@ -149,7 +151,9 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ vars.NIGHTLY_VERSION }}
 
       - name: Smoke-test benchmark program
         run: cargo run --release --example bench
@@ -169,7 +173,9 @@ jobs:
           persist-credentials: false
 
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ vars.NIGHTLY_VERSION }}
 
       - name: cargo doc (rustls; all features)
         run: cargo doc --all-features --no-deps --document-private-items --package rustls
@@ -193,9 +199,10 @@ jobs:
           persist-credentials: false
 
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
         with:
           components: llvm-tools
+          toolchain: ${{ vars.NIGHTLY_VERSION }}
 
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
@@ -220,7 +227,9 @@ jobs:
           persist-credentials: false
 
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ vars.NIGHTLY_VERSION }}
 
       - name: cargo test (debug; all features; -Z minimal-versions)
         run: cargo -Z minimal-versions test --all-features
@@ -298,9 +307,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@master
         with:
           components: clippy
+          toolchain: ${{ vars.NIGHTLY_VERSION }}
+
       - run: cargo clippy --package rustls --all-features --all-targets
       - run: cargo clippy --package rustls --no-default-features --all-targets
       - run: cargo clippy --manifest-path=connect-tests/Cargo.toml --all-features --all-targets
