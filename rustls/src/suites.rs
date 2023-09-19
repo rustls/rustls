@@ -21,7 +21,7 @@ pub struct CipherSuiteCommon {
 /// A cipher suite supported by rustls.
 ///
 /// All possible instances of this type are provided by the library in
-/// the [`crate::ALL_CIPHER_SUITES`] array.
+/// the [`crypto::ring::ALL_CIPHER_SUITES`] array.
 #[derive(Clone, Copy, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite
@@ -250,19 +250,19 @@ mod tests {
     fn test_pref_fails() {
         assert!(choose_ciphersuite_preferring_client(
             &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-            crate::ALL_CIPHER_SUITES
+            crypto::ring::ALL_CIPHER_SUITES
         )
         .is_none());
         assert!(choose_ciphersuite_preferring_server(
             &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-            crate::ALL_CIPHER_SUITES
+            crypto::ring::ALL_CIPHER_SUITES
         )
         .is_none());
     }
 
     #[test]
     fn test_scs_is_debug() {
-        println!("{:?}", crate::ALL_CIPHER_SUITES);
+        println!("{:?}", crypto::ring::ALL_CIPHER_SUITES);
     }
 
     #[test]

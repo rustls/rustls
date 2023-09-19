@@ -377,7 +377,7 @@ pub use crate::builder::{
 pub use crate::common_state::{CommonState, IoState, Side};
 pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
 #[cfg(feature = "ring")]
-pub use crate::crypto::ring::{ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES};
+pub use crate::crypto::ring::DEFAULT_CIPHER_SUITES;
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
     SignatureScheme,
@@ -471,7 +471,7 @@ pub use server::{ServerConfig, ServerConnection};
 
 /// All defined ciphersuites appear in this module.
 ///
-/// [`ALL_CIPHER_SUITES`] is provided as an array of all of these values.
+/// [`crypto::ring::ALL_CIPHER_SUITES`] is provided as an array of all of these values.
 pub mod cipher_suite {
     #[cfg(all(feature = "tls12", feature = "ring"))]
     pub use crate::crypto::ring::tls12::{
