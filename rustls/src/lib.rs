@@ -380,7 +380,6 @@ pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
 pub use crate::crypto::ring::ALL_KX_GROUPS;
 #[cfg(feature = "ring")]
 pub use crate::crypto::ring::{ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES};
-pub use crate::crypto::SupportedKxGroup;
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
     SignatureScheme,

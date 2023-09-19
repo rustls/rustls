@@ -23,7 +23,7 @@ impl rustls::crypto::CryptoProvider for Provider {
         ALL_CIPHER_SUITES
     }
 
-    fn default_kx_groups(&self) -> &'static [&'static dyn rustls::SupportedKxGroup] {
+    fn default_kx_groups(&self) -> &'static [&'static dyn rustls::crypto::SupportedKxGroup] {
         kx::ALL_KX_GROUPS
     }
 }

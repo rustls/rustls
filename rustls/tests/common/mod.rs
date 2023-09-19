@@ -270,7 +270,7 @@ pub fn make_server_config_with_versions(
 
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: &[&'static dyn rustls::SupportedKxGroup],
+    kx_groups: &[&'static dyn rustls::crypto::SupportedKxGroup],
 ) -> ServerConfig {
     finish_server_config(
         kt,
@@ -372,7 +372,7 @@ pub fn make_client_config(kt: KeyType) -> ClientConfig {
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: &[&'static dyn rustls::SupportedKxGroup],
+    kx_groups: &[&'static dyn rustls::crypto::SupportedKxGroup],
 ) -> ClientConfig {
     let builder = ClientConfig::builder()
         .with_safe_default_cipher_suites()
