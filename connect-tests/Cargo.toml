@@ -12,7 +12,6 @@ publish = false
 members = ["."]
 
 [features]
-dangerous_configuration = ["rustls/dangerous_configuration"]
 quic = ["rustls/quic"]
 
 [dependencies]

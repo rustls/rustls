@@ -70,7 +70,7 @@ use core::marker::PhantomData;
 ///
 /// For a client, _certificate verification_ must be configured either by calling one of:
 ///  - [`ConfigBuilder::with_root_certificates`] or
-///  - [`ConfigBuilder::with_custom_certificate_verifier`] - requires dangerous_configuration feature flag
+///  - [`ConfigBuilder::dangerous.with_custom_certificate_verifier`]
 ///
 /// Next, _certificate sending_ (also known as "client authentication", "mutual TLS", or "mTLS") must be configured
 /// or disabled using one of:
@@ -95,7 +95,7 @@ use core::marker::PhantomData;
 ///
 /// For a server, _certificate verification_ must be configured by calling one of:
 /// - [`ConfigBuilder::with_no_client_auth`] - to not require client authentication (most common)
-/// - [`ConfigBuilder::with_client_cert_verifier`] - to use a custom verifier
+/// - [`ConfigBuilder::dangerous.with_client_cert_verifier`] - to use a custom verifier
 ///
 /// Next, _certificate sending_ must be configured by calling one of:
 /// - [`ConfigBuilder::with_single_cert`] - to send a specific certificate

@@ -276,7 +276,6 @@ impl ClientConfig {
 
     /// Access configuration options whose use is dangerous and requires
     /// extra care.
-    #[cfg(feature = "dangerous_configuration")]
     pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
         danger::DangerousClientConfig { cfg: self }
     }
@@ -438,7 +437,6 @@ impl TryFrom<&str> for ServerName {
 }
 
 /// Container for unsafe APIs
-#[cfg(feature = "dangerous_configuration")]
 pub(super) mod danger {
     use alloc::sync::Arc;
 

@@ -1,10 +1,6 @@
 //! Tests for configuring and using a [`ClientCertVerifier`] for a server.
 
-#![cfg(all(
-    feature = "dangerous_configuration",
-    feature = "webpki",
-    feature = "ring"
-))]
+#![cfg(all(feature = "webpki", feature = "ring"))]
 
 mod common;
 
@@ -13,9 +9,10 @@ use crate::common::{
     make_client_config_with_versions, make_client_config_with_versions_with_auth,
     make_pair_for_arc_configs, server_name, ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
-use rustls::client::{HandshakeSignatureValid, WebPkiServerVerifier};
+use rustls::client::danger::HandshakeSignatureValid;
+use rustls::client::WebPkiServerVerifier;
 use rustls::internal::msgs::handshake::DistinguishedName;
-use rustls::server::{ClientCertVerified, ClientCertVerifier};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
     AlertDescription, ClientConnection, DigitallySignedStruct, Error, InvalidMessage, ServerConfig,
     ServerConnection, SignatureScheme,
@@ -27,7 +24,7 @@ use std::sync::Arc;
 
 // Client is authorized!
 fn ver_ok() -> Result<ClientCertVerified, Error> {
-    Ok(rustls::server::ClientCertVerified::assertion())
+    Ok(ClientCertVerified::assertion())
 }
 
 // Use when we shouldn't even attempt verification

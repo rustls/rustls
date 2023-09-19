@@ -123,7 +123,6 @@ mod online {
             .unwrap();
     }
 
-    #[cfg(feature = "dangerous_configuration")]
     mod danger {
         #[test]
         fn self_signed() {

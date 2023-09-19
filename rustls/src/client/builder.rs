@@ -36,21 +36,44 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         }
     }
 
-    #[cfg(feature = "dangerous_configuration")]
-    /// Set a custom certificate verifier.
-    pub fn with_custom_certificate_verifier(
-        self,
-        verifier: Arc<dyn verify::ServerCertVerifier>,
-    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        ConfigBuilder {
-            state: WantsClientCert {
-                cipher_suites: self.state.cipher_suites,
-                kx_groups: self.state.kx_groups,
-                provider: self.state.provider,
-                versions: self.state.versions,
-                verifier,
-            },
-            side: PhantomData,
+    /// Access configuration options whose use is dangerous and requires
+    /// extra care.
+    pub fn dangerous(self) -> danger::DangerousClientConfigBuilder {
+        danger::DangerousClientConfigBuilder { cfg: self }
+    }
+}
+
+/// Container for unsafe APIs
+pub(super) mod danger {
+    use core::marker::PhantomData;
+    use std::sync::Arc;
+
+    use crate::client::WantsClientCert;
+    use crate::{verify, ClientConfig, ConfigBuilder, WantsVerifier};
+
+    /// Accessor for dangerous configuration options.
+    #[derive(Debug)]
+    pub struct DangerousClientConfigBuilder {
+        /// The underlying ClientConfigBuilder
+        pub cfg: ConfigBuilder<ClientConfig, WantsVerifier>,
+    }
+
+    impl DangerousClientConfigBuilder {
+        /// Set a custom certificate verifier.
+        pub fn with_custom_certificate_verifier(
+            self,
+            verifier: Arc<dyn verify::ServerCertVerifier>,
+        ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+            ConfigBuilder {
+                state: WantsClientCert {
+                    cipher_suites: self.cfg.state.cipher_suites,
+                    kx_groups: self.cfg.state.kx_groups,
+                    provider: self.cfg.state.provider,
+                    versions: self.cfg.state.versions,
+                    verifier,
+                },
+                side: PhantomData,
+            }
         }
     }
 }

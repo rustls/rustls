@@ -309,15 +309,15 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
     );
 }
 
-#[cfg(feature = "dangerous_configuration")]
 mod danger {
     use pki_types::{CertificateDer, UnixTime};
-    use rustls::client::{HandshakeSignatureValid, WebPkiServerVerifier};
+    use rustls::client::danger::HandshakeSignatureValid;
+    use rustls::client::WebPkiServerVerifier;
     use rustls::DigitallySignedStruct;
 
     pub struct NoCertificateVerification {}
 
-    impl rustls::client::ServerCertVerifier for NoCertificateVerification {
+    impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
         fn verify_server_cert(
             &self,
             _end_entity: &CertificateDer<'_>,
@@ -325,8 +325,8 @@ mod danger {
             _server_name: &rustls::ServerName,
             _ocsp: &[u8],
             _now: UnixTime,
-        ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-            Ok(rustls::client::ServerCertVerified::assertion())
+        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+            Ok(rustls::client::danger::ServerCertVerified::assertion())
         }
 
         fn verify_tls12_signature(
@@ -350,21 +350,6 @@ mod danger {
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
             WebPkiServerVerifier::default_supported_verify_schemes()
         }
-    }
-}
-
-#[cfg(feature = "dangerous_configuration")]
-fn apply_dangerous_options(args: &Args, cfg: &mut rustls::ClientConfig) {
-    if args.flag_insecure {
-        cfg.dangerous()
-            .set_certificate_verifier(Arc::new(danger::NoCertificateVerification {}));
-    }
-}
-
-#[cfg(not(feature = "dangerous_configuration"))]
-fn apply_dangerous_options(args: &Args, _: &mut rustls::ClientConfig) {
-    if args.flag_insecure {
-        panic!("This build does not support --insecure.");
     }
 }
 
@@ -440,7 +425,11 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         .collect();
     config.max_fragment_size = args.flag_max_frag_size;
 
-    apply_dangerous_options(args, &mut config);
+    if args.flag_insecure {
+        config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(danger::NoCertificateVerification {}));
+    }
 
     Arc::new(config)
 }

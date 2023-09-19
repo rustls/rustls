@@ -16,6 +16,7 @@ fn main() {
 
     let config = rustls::ClientConfig::builder_with_provider(PROVIDER)
         .with_safe_defaults()
+        .dangerous()
         .with_custom_certificate_verifier(certificate_verifier(root_store))
         .with_no_client_auth();
 

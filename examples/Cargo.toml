@@ -8,7 +8,6 @@ description = "Rustls example code and tests."
 publish = false
 
 [features]
-dangerous_configuration = ["rustls/dangerous_configuration"]
 quic = ["rustls/quic"]
 
 [dependencies]

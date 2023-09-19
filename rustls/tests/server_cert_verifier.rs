@@ -1,19 +1,14 @@
 //! Tests for configuring and using a [`ServerCertVerifier`] for a client.
 
-#![cfg(all(
-    feature = "dangerous_configuration",
-    feature = "webpki",
-    feature = "ring"
-))]
+#![cfg(all(feature = "webpki", feature = "ring"))]
 
 mod common;
 use crate::common::{
     do_handshake, do_handshake_until_both_error, make_client_config_with_versions,
     make_pair_for_arc_configs, make_server_config, ErrorFromPeer, ALL_KEY_TYPES,
 };
-use rustls::client::{
-    HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, WebPkiServerVerifier,
-};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::WebPkiServerVerifier;
 use rustls::DigitallySignedStruct;
 use rustls::{AlertDescription, Error, InvalidMessage, SignatureScheme};
 

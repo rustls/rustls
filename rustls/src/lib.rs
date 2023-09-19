@@ -229,11 +229,6 @@
 //!   messages do not contain secret key data, and so are safe to archive without
 //!   affecting session security.  This feature is in the default set.
 //!
-//! - `dangerous_configuration`: this feature enables a `dangerous()` method on
-//!   `ClientConfig` and `ServerConfig` that allows setting inadvisable options,
-//!   such as replacing the certificate verification process.  Applications
-//!   requesting this feature should be reviewed carefully.
-//!
 //! - `quic`: this feature exposes additional constructors and functions
 //!   for using rustls as a TLS library for QUIC.  See the `quic` module for
 //!   details of these.  You will only need this if you're writing a QUIC
@@ -419,14 +414,15 @@ pub mod client {
     };
     pub use handy::ClientSessionMemoryCache;
 
-    #[cfg(feature = "dangerous_configuration")]
-    pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-    #[cfg(feature = "dangerous_configuration")]
+    /// Dangerous configuration that should be audited and used with extreme care.
+    pub mod danger {
+        pub use super::client_conn::danger::DangerousClientConfig;
+        pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    }
+
     pub use crate::webpki::{
         verify_server_cert_signed_by_trust_anchor, verify_server_name, WebPkiServerVerifier,
     };
-    #[cfg(feature = "dangerous_configuration")]
-    pub use client_conn::danger::DangerousClientConfig;
 
     pub use crate::msgs::persist::Tls12ClientSessionValue;
     pub use crate::msgs::persist::Tls13ClientSessionValue;
@@ -457,11 +453,12 @@ pub mod server {
     };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
 
-    #[cfg(feature = "dangerous_configuration")]
-    pub use crate::dns_name::DnsName;
-    #[cfg(feature = "dangerous_configuration")]
-    pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
-    #[cfg(feature = "dangerous_configuration")]
+    /// Dangerous configuration that should be audited and used with extreme care.
+    pub mod danger {
+        pub use crate::dns_name::DnsName;
+        pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
+    }
+
     pub use crate::webpki::ParsedCertificate;
 }
 
