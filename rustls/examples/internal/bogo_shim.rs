@@ -7,6 +7,7 @@
 use rustls::client::{
     ClientConfig, ClientConnection, HandshakeSignatureValid, Resumption, WebPkiServerVerifier,
 };
+use rustls::crypto::ring::Ticketer;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
@@ -14,7 +15,7 @@ use rustls::{
     self, client, kx_group, server, sign, version, AlertDescription, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
     PeerMisbehaved, ProtocolVersion, ServerName, Side, SignatureAlgorithm, SignatureScheme,
-    SupportedKxGroup, SupportedProtocolVersion, Ticketer, ALL_KX_GROUPS,
+    SupportedKxGroup, SupportedProtocolVersion, ALL_KX_GROUPS,
 };
 
 use base64::prelude::{Engine, BASE64_STANDARD};

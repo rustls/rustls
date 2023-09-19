@@ -14,9 +14,9 @@ use std::time::{Duration, Instant};
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use rustls::client::Resumption;
+use rustls::crypto::ring::Ticketer;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
-use rustls::Ticketer;
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ConnectionCommon, SideData};
 use rustls::{ServerConfig, ServerConnection};
