@@ -60,7 +60,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherS
 
 pub fn certificate_verifier(
     roots: rustls::RootCertStore,
-) -> Arc<dyn rustls::client::ServerCertVerifier> {
+) -> Arc<dyn rustls::client::danger::ServerCertVerifier> {
     Arc::new(rustls::client::WebPkiServerVerifier::new_with_algorithms(
         roots,
         verify::ALGORITHMS,

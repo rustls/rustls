@@ -6,7 +6,7 @@
 set -xe
 
 if [ "x$USE_EXISTING_BOGO_SHIM" = "x" ] ; then
-  cargo build --example bogo_shim --features dangerous_configuration,quic
+  cargo build --example bogo_shim --features quic
 fi
 
 if [ ! -e bogo/ssl/test/runner/runner.test ] ; then

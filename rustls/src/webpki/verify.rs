@@ -24,7 +24,6 @@ use crate::verify::{
 /// were sent as part of the server's `Certificate` message. It is in the
 /// same order that the server sent them and may be empty.
 #[allow(dead_code)]
-#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 pub fn verify_server_cert_signed_by_trust_anchor(
     cert: &ParsedCertificate,
     roots: &RootCertStore,
@@ -48,7 +47,6 @@ pub fn verify_server_cert_signed_by_trust_anchor(
 /// Verify that the `end_entity` has a name or alternative name matching the `server_name`
 /// note: this only verifies the name and should be used in conjuction with more verification
 /// like [verify_server_cert_signed_by_trust_anchor]
-#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 pub fn verify_server_name(cert: &ParsedCertificate, server_name: &ServerName) -> Result<(), Error> {
     match server_name {
         ServerName::DnsName(dns_name) => {
@@ -149,7 +147,6 @@ impl WebPkiServerVerifier {
     /// `roots` is the set of trust anchors to trust for issuing server certs.
     /// `supported` is the set of supported algorithms that will be used for
     /// certificate verification and TLS handshake signature verification.
-    #[cfg_attr(not(feature = "dangerous_configuration"), allow(dead_code))]
     pub fn new_with_algorithms(
         roots: impl Into<Arc<RootCertStore>>,
         supported: WebPkiSupportedAlgorithms,
@@ -163,7 +160,6 @@ impl WebPkiServerVerifier {
     /// A full implementation of `ServerCertVerifier::verify_tls12_signature` or
     /// `ClientCertVerifier::verify_tls12_signature`.
     #[cfg(feature = "ring")]
-    #[cfg_attr(not(feature = "dangerous_configuration"), allow(dead_code))]
     pub fn default_verify_tls12_signature(
         message: &[u8],
         cert: &CertificateDer<'_>,
@@ -175,7 +171,6 @@ impl WebPkiServerVerifier {
     /// A full implementation of `ServerCertVerifier::verify_tls13_signature` or
     /// `ClientCertVerifier::verify_tls13_signature`.
     #[cfg(feature = "ring")]
-    #[cfg_attr(not(feature = "dangerous_configuration"), allow(dead_code))]
     pub fn default_verify_tls13_signature(
         message: &[u8],
         cert: &CertificateDer<'_>,
@@ -187,7 +182,6 @@ impl WebPkiServerVerifier {
     /// A full implementation of `ServerCertVerifier::supported_verify_schemes()` or
     /// `ClientCertVerifier::supported_verify_schemes()`.
     #[cfg(feature = "ring")]
-    #[cfg_attr(not(feature = "dangerous_configuration"), allow(dead_code))]
     pub fn default_supported_verify_schemes() -> Vec<SignatureScheme> {
         SUPPORTED_SIG_ALGS.supported_schemes()
     }
@@ -579,7 +573,6 @@ fn verify_tls13(
 }
 
 /// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
-#[cfg_attr(not(feature = "dangerous_configuration"), allow(unreachable_pub))]
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
 
 impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {

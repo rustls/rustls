@@ -4,9 +4,8 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use rustls::client::{
-    ClientConfig, ClientConnection, HandshakeSignatureValid, Resumption, WebPkiServerVerifier,
-};
+use rustls::client::danger::HandshakeSignatureValid;
+use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
 use rustls::crypto::ring::{kx_group, Ticketer, ALL_KX_GROUPS};
 use rustls::crypto::SupportedKxGroup;
 use rustls::internal::msgs::codec::Codec;
@@ -192,7 +191,7 @@ struct DummyClientAuth {
     mandatory: bool,
 }
 
-impl server::ClientCertVerifier for DummyClientAuth {
+impl server::danger::ClientCertVerifier for DummyClientAuth {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -210,8 +209,8 @@ impl server::ClientCertVerifier for DummyClientAuth {
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
-    ) -> Result<server::ClientCertVerified, Error> {
-        Ok(server::ClientCertVerified::assertion())
+    ) -> Result<server::danger::ClientCertVerified, Error> {
+        Ok(server::danger::ClientCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -239,7 +238,7 @@ impl server::ClientCertVerifier for DummyClientAuth {
 
 struct DummyServerAuth {}
 
-impl client::ServerCertVerifier for DummyServerAuth {
+impl client::danger::ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
         _end_entity: &CertificateDer<'_>,
@@ -247,8 +246,8 @@ impl client::ServerCertVerifier for DummyServerAuth {
         _hostname: &ServerName,
         _ocsp: &[u8],
         _now: UnixTime,
-    ) -> Result<client::ServerCertVerified, Error> {
-        Ok(client::ServerCertVerified::assertion())
+    ) -> Result<client::danger::ServerCertVerified, Error> {
+        Ok(client::danger::ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -570,6 +569,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         .with_kx_groups(&kx_groups)
         .with_protocol_versions(&opts.supported_versions())
         .expect("inconsistent settings")
+        .dangerous()
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth {}));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
