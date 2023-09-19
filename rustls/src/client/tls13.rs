@@ -151,7 +151,7 @@ pub(super) fn handle_server_hello<C: CryptoProvider>(
     };
 
     let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
-    let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret.secret_bytes());
+    let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
     // Remember what KX group the server liked for next time.
     config
