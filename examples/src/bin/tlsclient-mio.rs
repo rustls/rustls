@@ -391,7 +391,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let suites = if !args.flag_suite.is_empty() {
         lookup_suites(&args.flag_suite)
     } else {
-        rustls::DEFAULT_CIPHER_SUITES.to_vec()
+        rustls::crypto::ring::DEFAULT_CIPHER_SUITES.to_vec()
     };
 
     let versions = if !args.flag_protover.is_empty() {
