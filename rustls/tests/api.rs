@@ -12,6 +12,7 @@ use std::sync::Mutex;
 
 use pki_types::CertificateDer;
 use rustls::client::{ResolvesClientCert, Resumption};
+use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
@@ -19,6 +20,7 @@ use rustls::internal::msgs::message::PlainMessage;
 use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
+use rustls::SupportedCipherSuite;
 use rustls::{
     sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, KeyLog,
     PeerIncompatible, PeerMisbehaved, SideData,
@@ -27,7 +29,6 @@ use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ServerConfig, ServerConnection};
 use rustls::{Stream, StreamOwned};
-use rustls::{SupportedCipherSuite, ALL_CIPHER_SUITES};
 
 mod common;
 use crate::common::*;
