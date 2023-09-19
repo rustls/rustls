@@ -1,6 +1,6 @@
 use crate::common_state::{CommonState, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
-use crate::crypto::{hash, hmac};
+use crate::crypto::{hash, hmac, SharedSecret};
 use crate::error::Error;
 use crate::hkdf;
 #[cfg(feature = "quic")]
@@ -141,8 +141,9 @@ impl KeySchedulePreHandshake {
         }
     }
 
-    pub(crate) fn into_handshake(mut self, secret: &[u8]) -> KeyScheduleHandshakeStart {
-        self.ks.input_secret(secret);
+    pub(crate) fn into_handshake(mut self, secret: SharedSecret) -> KeyScheduleHandshakeStart {
+        self.ks
+            .input_secret(secret.secret_bytes());
         KeyScheduleHandshakeStart { ks: self.ks }
     }
 }
