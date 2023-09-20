@@ -256,14 +256,16 @@ impl ConnectionSecrets {
         let (client_iv, key_block) = key_block.split_at(shape.fixed_iv_len);
         let (server_iv, explicit_nonce) = key_block.split_at(shape.fixed_iv_len);
 
-        let client_secrets =
-            self.suite
-                .aead_alg
-                .extract_keys(AeadKey::new(client_key), client_iv, explicit_nonce);
-        let server_secrets =
-            self.suite
-                .aead_alg
-                .extract_keys(AeadKey::new(server_key), server_iv, explicit_nonce);
+        let client_secrets = self.suite.aead_alg.extract_keys(
+            AeadKey::new(client_key),
+            client_iv,
+            explicit_nonce,
+        )?;
+        let server_secrets = self.suite.aead_alg.extract_keys(
+            AeadKey::new(server_key),
+            server_iv,
+            explicit_nonce,
+        )?;
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),

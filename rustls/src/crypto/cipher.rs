@@ -1,3 +1,6 @@
+use core::fmt;
+use std::error::Error as StdError;
+
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;
@@ -18,7 +21,14 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
 
     #[cfg(feature = "secret_extraction")]
     /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
-    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets;
+    ///
+    /// May return [`UnsupportedOperationError`] if the AEAD algorithm is not a supported
+    /// variant of `ConnectionTrafficSecrets`.
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: Iv,
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError>;
 }
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.2 cipher suite.
@@ -52,8 +62,34 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     /// The length of `iv` is set by [`KeyBlockShape::fixed_iv_len`].
     ///
     /// The length of `extra` is set by [`KeyBlockShape::explicit_nonce_len`].
-    fn extract_keys(&self, key: AeadKey, iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets;
+    ///
+    /// May return [`UnsupportedOperationError`] if the AEAD algorithm is not a supported
+    /// variant of `ConnectionTrafficSecrets`.
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: &[u8],
+        explicit: &[u8],
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError>;
 }
+
+/// An error indicating that the AEAD algorithm does not support the requested operation.
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub struct UnsupportedOperationError;
+
+impl From<UnsupportedOperationError> for Error {
+    fn from(value: UnsupportedOperationError) -> Self {
+        Self::General(value.to_string())
+    }
+}
+
+impl fmt::Display for UnsupportedOperationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "operation not supported")
+    }
+}
+
+impl StdError for UnsupportedOperationError {}
 
 /// How a TLS1.2 `key_block` is partitioned.
 ///

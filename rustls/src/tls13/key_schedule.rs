@@ -531,12 +531,12 @@ impl KeyScheduleTraffic {
             .ks
             .suite
             .aead_alg
-            .extract_keys(client_key, client_iv);
+            .extract_keys(client_key, client_iv)?;
         let server_secrets = self
             .ks
             .suite
             .aead_alg
-            .extract_keys(server_key, server_iv);
+            .extract_keys(server_key, server_iv)?;
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),

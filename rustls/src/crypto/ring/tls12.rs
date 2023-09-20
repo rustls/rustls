@@ -1,3 +1,5 @@
+#[cfg(feature = "secret_extraction")]
+use crate::crypto::cipher::UnsupportedOperationError;
 use crate::crypto::cipher::{
     make_tls12_aad, AeadKey, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
     Tls12AeadAlgorithm,
@@ -163,8 +165,13 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: AeadKey, iv: &[u8], explicit: &[u8]) -> ConnectionTrafficSecrets {
-        match key.as_ref().len() {
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: &[u8],
+        explicit: &[u8],
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
+        Ok(match key.as_ref().len() {
             16 => {
                 // nb. "fixed IV" becomes the GCM nonce "salt"
                 let (key, salt, iv) = slices_to_arrays(key.as_ref(), iv, explicit);
@@ -176,7 +183,7 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
                 ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
             }
             _ => unreachable!(),
-        }
+        })
     }
 }
 
@@ -212,9 +219,14 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: AeadKey, iv: &[u8], _explicit: &[u8]) -> ConnectionTrafficSecrets {
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: &[u8],
+        _explicit: &[u8],
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         let (key, iv) = (slice_to_array(key.as_ref()), slice_to_array(iv));
-        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
+        Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 }
 
