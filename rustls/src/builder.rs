@@ -144,7 +144,7 @@ use core::marker::PhantomData;
 /// Additionally, ServerConfig and ClientConfig carry a private field containing a
 /// `&'static dyn `[`CryptoProvider`], from [`ClientConfig::builder_with_provider()`] or
 /// [`ServerConfig::builder_with_provider()`]. This determines which cryptographic backend
-/// is used. The default is [*ring*].
+/// is used. The default is [`RING`].
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [typestate]: http://cliffle.com/blog/rust-typestate/
@@ -159,7 +159,7 @@ use core::marker::PhantomData;
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
 /// [`WantsClientCert`]: crate::client::WantsClientCert
 /// [`WantsServerCert`]: crate::server::WantsServerCert
-/// [*ring*]: crate::crypto::ring::RING
+/// [`RING`]: crate::crypto::ring::RING
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
