@@ -147,11 +147,12 @@ impl dyn MessageDecrypter {
 
 /// A write or read IV.
 #[derive(Default)]
-pub struct Iv(pub(crate) [u8; NONCE_LEN]);
+pub struct Iv([u8; NONCE_LEN]);
 
 impl Iv {
+    /// Create a new `Iv` from a byte array, of precisely `NONCE_LEN` bytes.
     #[cfg(feature = "tls12")]
-    fn new(value: [u8; NONCE_LEN]) -> Self {
+    pub fn new(value: [u8; NONCE_LEN]) -> Self {
         Self(value)
     }
 
@@ -168,6 +169,12 @@ impl Iv {
 impl From<[u8; NONCE_LEN]> for Iv {
     fn from(bytes: [u8; NONCE_LEN]) -> Self {
         Self(bytes)
+    }
+}
+
+impl AsRef<[u8]> for Iv {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
     }
 }
 
@@ -197,7 +204,7 @@ impl Nonce {
 
 /// Size of TLS nonces (incorrectly termed "IV" in standard) for all supported ciphersuites
 /// (AES-GCM, Chacha20Poly1305)
-const NONCE_LEN: usize = 12;
+pub const NONCE_LEN: usize = 12;
 
 /// Returns a TLS1.3 `additional_data` encoding.
 ///
