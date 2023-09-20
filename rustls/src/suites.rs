@@ -216,6 +216,32 @@ pub enum ConnectionTrafficSecrets {
     },
 }
 
+#[cfg(feature = "secret_extraction")]
+impl ConnectionTrafficSecrets {
+    /// Convert three slices to three fixed sized arrays, panicking if any slice is not the correct
+    /// constant size length.
+    pub fn slices_to_arrays<const NK: usize, const NS: usize, const NI: usize>(
+        k: &[u8],
+        s: &[u8],
+        i: &[u8],
+    ) -> ([u8; NK], [u8; NS], [u8; NI]) {
+        (
+            Self::slice_to_array(k),
+            Self::slice_to_array(s),
+            Self::slice_to_array(i),
+        )
+    }
+
+    /// Convert a slice to a fixed sized array, panicking if the slice is not the correct
+    /// constant size length.
+    pub fn slice_to_array<const N: usize>(slice: &[u8]) -> [u8; N] {
+        // this is guaranteed true because `ConnectionTrafficSecrets` items and
+        // call-site `TlsXXAeadAlgorithm` impl `key_len()`s are in agreement.
+        debug_assert_eq!(N, slice.len());
+        slice.try_into().unwrap()
+    }
+}
+
 #[cfg(all(test, feature = "ring"))]
 mod tests {
     use super::crypto::ring::tls13::*;

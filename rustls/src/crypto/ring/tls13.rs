@@ -90,7 +90,10 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         key: AeadKey,
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        let (key, iv) = (slice_to_array(key.as_ref()), slice_to_array(iv.as_ref()));
+        let (key, iv) = (
+            ConnectionTrafficSecrets::slice_to_array(key.as_ref()),
+            ConnectionTrafficSecrets::slice_to_array(iv.as_ref()),
+        );
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 }
@@ -117,7 +120,8 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         let iv = iv.as_ref();
-        let (key, salt, iv) = slices_to_arrays(key.as_ref(), &iv[..4], &iv[4..]);
+        let (key, salt, iv) =
+            ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), &iv[..4], &iv[4..]);
         Ok(ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv })
     }
 }
@@ -144,7 +148,8 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         let iv = iv.as_ref();
-        let (key, salt, iv) = slices_to_arrays(key.as_ref(), &iv[..4], &iv[4..]);
+        let (key, salt, iv) =
+            ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), &iv[..4], &iv[4..]);
         Ok(ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv })
     }
 }
@@ -223,21 +228,4 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         payload.truncate(plain_len);
         msg.into_tls13_unpadded_message()
     }
-}
-
-#[cfg(feature = "secret_extraction")]
-fn slices_to_arrays<const NK: usize, const NS: usize, const NI: usize>(
-    k: &[u8],
-    s: &[u8],
-    i: &[u8],
-) -> ([u8; NK], [u8; NS], [u8; NI]) {
-    (slice_to_array(k), slice_to_array(s), slice_to_array(i))
-}
-
-#[cfg(feature = "secret_extraction")]
-fn slice_to_array<const N: usize>(slice: &[u8]) -> [u8; N] {
-    // this is guaranteed true because `ConnectionTrafficSecrets` items and
-    // `key_len()` are in agreement.
-    debug_assert_eq!(N, slice.len());
-    slice.try_into().unwrap()
 }
