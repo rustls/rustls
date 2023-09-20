@@ -7,9 +7,7 @@ use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
-#[cfg(feature = "secret_extraction")]
-use crate::suites::PartiallyExtractedSecrets;
-use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
+use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
 
 use core::fmt;
 
@@ -245,7 +243,6 @@ impl ConnectionSecrets {
         );
     }
 
-    #[cfg(feature = "secret_extraction")]
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         // Make a key block, and chop it up
         let key_block = self.make_key_block();

@@ -198,12 +198,10 @@ impl RecordLayer {
         self.has_decrypted
     }
 
-    #[cfg(feature = "secret_extraction")]
     pub(crate) fn write_seq(&self) -> u64 {
         self.write_seq
     }
 
-    #[cfg(feature = "secret_extraction")]
     pub(crate) fn read_seq(&self) -> u64 {
         self.read_seq
     }

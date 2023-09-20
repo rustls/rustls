@@ -5,7 +5,6 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;
 pub use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
-#[cfg(feature = "secret_extraction")]
 use crate::suites::ConnectionTrafficSecrets;
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
@@ -19,7 +18,6 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
     /// The length of key in bytes required by `encrypter()` and `decrypter()`.
     fn key_len(&self) -> usize;
 
-    #[cfg(feature = "secret_extraction")]
     /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
     ///
     /// May return [`UnsupportedOperationError`] if the AEAD algorithm is not a supported
@@ -54,7 +52,6 @@ pub trait Tls12AeadAlgorithm: Send + Sync + 'static {
     /// is split up prior to calling `encrypter()`, `decrypter()` and/or `extract_keys()`.
     fn key_block_shape(&self) -> KeyBlockShape;
 
-    #[cfg(feature = "secret_extraction")]
     /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
     ///
     /// The length of `key` is set by [`KeyBlockShape::enc_key_len`].

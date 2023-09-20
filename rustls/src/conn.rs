@@ -6,7 +6,6 @@ use crate::log::trace;
 use crate::msgs::deframer::{Deframed, MessageDeframer};
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{Message, MessagePayload, PlainMessage};
-#[cfg(feature = "secret_extraction")]
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -83,15 +82,6 @@ impl Connection {
         }
     }
 
-    /// Extract secrets, to set up kTLS for example
-    #[cfg(feature = "secret_extraction")]
-    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        match self {
-            Self::Client(conn) => conn.extract_secrets(),
-            Self::Server(conn) => conn.extract_secrets(),
-        }
-    }
-
     /// This function uses `io` to complete any outstanding IO for this connection.
     ///
     /// See [`ConnectionCommon::complete_io()`] for more information.
@@ -103,6 +93,15 @@ impl Connection {
         match self {
             Self::Client(conn) => conn.complete_io(io),
             Self::Server(conn) => conn.complete_io(io),
+        }
+    }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        match self {
+            Self::Client(client) => client.dangerous_extract_secrets(),
+            Self::Server(server) => server.dangerous_extract_secrets(),
         }
     }
 }
@@ -549,8 +548,8 @@ impl<Data> ConnectionCommon<Data> {
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
-    #[cfg(feature = "secret_extraction")]
-    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         if !self.enable_secret_extraction {
             return Err(Error::General("Secret extraction is disabled".into()));
         }

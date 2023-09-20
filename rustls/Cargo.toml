@@ -26,7 +26,6 @@ pki-types = { package = "rustls-pki-types", version = "0.2.1", features = ["std"
 default = ["logging", "ring", "tls12"]
 logging = ["log"]
 ring = ["dep:ring", "webpki/ring"]
-secret_extraction = []
 quic = []
 tls12 = []
 read_buf = ["rustversion"]

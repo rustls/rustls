@@ -17,9 +17,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign::Signer;
-#[cfg(feature = "secret_extraction")]
-use crate::suites::PartiallyExtractedSecrets;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify::{self, DigitallySignedStruct};
 
@@ -1075,7 +1073,6 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Ok(())
     }
 
-    #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         self.secrets
             .extract_secrets(Side::Client)

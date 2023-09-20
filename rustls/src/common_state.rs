@@ -12,7 +12,6 @@ use crate::msgs::message::{BorrowedPlainMessage, Message, OpaqueMessage, PlainMe
 #[cfg(feature = "quic")]
 use crate::quic;
 use crate::record_layer;
-#[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "tls12")]
@@ -49,7 +48,6 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     #[cfg(feature = "quic")]
     pub(crate) quic: quic::Quic,
-    #[cfg(feature = "secret_extraction")]
     pub(crate) enable_secret_extraction: bool,
 }
 
@@ -79,7 +77,6 @@ impl CommonState {
             protocol: Protocol::Tcp,
             #[cfg(feature = "quic")]
             quic: quic::Quic::default(),
-            #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
         }
     }
@@ -639,7 +636,6 @@ pub(crate) trait State<Data>: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
-    #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         Err(Error::HandshakeNotComplete)
     }
