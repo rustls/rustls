@@ -11,11 +11,9 @@ use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
 use crate::sign;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::verify;
 use crate::versions;
-#[cfg(feature = "secret_extraction")]
-use crate::ExtractedSecrets;
 use crate::KeyLog;
 
 use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
@@ -181,7 +179,6 @@ pub struct ClientConfig {
 
     /// Allows traffic secrets to be extracted after the handshake,
     /// e.g. for kTLS setup.
-    #[cfg(feature = "secret_extraction")]
     pub enable_secret_extraction: bool,
 
     /// Whether to send data on the first flight ("early data") in
@@ -221,7 +218,6 @@ impl Clone for ClientConfig {
             enable_sni: self.enable_sni,
             verifier: Arc::clone(&self.verifier),
             key_log: Arc::clone(&self.key_log),
-            #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: self.enable_secret_extraction,
             enable_early_data: self.enable_early_data,
         }
@@ -635,6 +631,12 @@ impl ClientConnection {
         self.inner.core.is_early_data_accepted()
     }
 
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.dangerous_extract_secrets()
+    }
+
     fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
         self.inner
             .core
@@ -645,12 +647,6 @@ impl ClientConnection {
                 self.inner
                     .send_early_plaintext(&data[..sz])
             })
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    #[cfg(feature = "secret_extraction")]
-    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.extract_secrets()
     }
 }
 
@@ -697,10 +693,7 @@ impl ConnectionCore<ClientConnectionData> {
         let mut common_state = CommonState::new(Side::Client);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
-        #[cfg(feature = "secret_extraction")]
-        {
-            common_state.enable_secret_extraction = config.enable_secret_extraction;
-        }
+        common_state.enable_secret_extraction = config.enable_secret_extraction;
         let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {

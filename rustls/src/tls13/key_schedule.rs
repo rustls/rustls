@@ -5,7 +5,6 @@ use crate::error::Error;
 use crate::hkdf;
 #[cfg(feature = "quic")]
 use crate::quic;
-#[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{KeyLog, Tls13CipherSuite};
 
@@ -502,7 +501,6 @@ impl KeyScheduleTraffic {
             .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
 
-    #[cfg(feature = "secret_extraction")]
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         fn expand(
             secret: &hkdf::OkmBlock,

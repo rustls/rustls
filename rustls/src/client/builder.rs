@@ -148,7 +148,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             enable_sni: true,
             verifier: self.state.verifier,
             key_log: Arc::new(NoKeyLog {}),
-            #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: false,
             enable_early_data: false,
         }

@@ -1,15 +1,12 @@
-#[cfg(feature = "secret_extraction")]
-use crate::crypto::cipher::UnsupportedOperationError;
 use crate::crypto::cipher::{
     make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm,
+    UnsupportedOperationError,
 };
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec::Codec;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
-#[cfg(feature = "secret_extraction")]
-use crate::suites::ConnectionTrafficSecrets;
-use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
+use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls13::Tls13CipherSuite;
 
 use ring::aead;
@@ -84,7 +81,6 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         self.0.key_len()
     }
 
-    #[cfg(feature = "secret_extraction")]
     fn extract_keys(
         &self,
         key: AeadKey,
@@ -113,7 +109,6 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
         self.0.key_len()
     }
 
-    #[cfg(feature = "secret_extraction")]
     fn extract_keys(
         &self,
         key: AeadKey,
@@ -141,7 +136,6 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
         self.0.key_len()
     }
 
-    #[cfg(feature = "secret_extraction")]
     fn extract_keys(
         &self,
         key: AeadKey,

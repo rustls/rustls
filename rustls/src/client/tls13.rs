@@ -1,9 +1,7 @@
 use crate::check::inappropriate_handshake_message;
 #[cfg(feature = "quic")]
 use crate::common_state::Protocol;
-#[cfg(feature = "secret_extraction")]
-use crate::common_state::Side;
-use crate::common_state::{CommonState, State};
+use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::ActiveKeyExchange;
@@ -27,7 +25,6 @@ use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign::{CertifiedKey, Signer};
-#[cfg(feature = "secret_extraction")]
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls13::construct_client_verify_message;
 use crate::tls13::construct_server_verify_message;
@@ -1062,7 +1059,6 @@ impl State<ClientConnectionData> for ExpectTraffic {
             .export_keying_material(output, label, context)
     }
 
-    #[cfg(feature = "secret_extraction")]
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         self.key_schedule
             .extract_secrets(Side::Client)

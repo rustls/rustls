@@ -1,6 +1,6 @@
 use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
-use rustls::crypto::cipher;
-use rustls::{ContentType, ProtocolVersion};
+use rustls::crypto::cipher::{self, AeadKey, Iv, UnsupportedOperationError};
+use rustls::{ConnectionTrafficSecrets, ContentType, ProtocolVersion};
 
 pub struct Chacha20Poly1305;
 
@@ -21,6 +21,18 @@ impl cipher::Tls13AeadAlgorithm for Chacha20Poly1305 {
 
     fn key_len(&self) -> usize {
         chacha20poly1305::ChaCha20Poly1305::key_size()
+    }
+
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: Iv,
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
+        let (key, iv) = (
+            ConnectionTrafficSecrets::slice_to_array(key.as_ref()),
+            ConnectionTrafficSecrets::slice_to_array(iv.as_ref()),
+        );
+        Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 }
 
@@ -50,6 +62,19 @@ impl cipher::Tls12AeadAlgorithm for Chacha20Poly1305 {
             fixed_iv_len: 12,
             explicit_nonce_len: 0,
         }
+    }
+
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: &[u8],
+        _explicit: &[u8],
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
+        let (key, iv) = (
+            ConnectionTrafficSecrets::slice_to_array(key.as_ref()),
+            ConnectionTrafficSecrets::slice_to_array(iv),
+        );
+        Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 }
 

@@ -18,7 +18,6 @@ use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
 use rustls::internal::msgs::message::PlainMessage;
 use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
-#[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
 use rustls::SupportedCipherSuite;
 use rustls::{
@@ -4791,7 +4790,7 @@ fn test_no_warning_logging_during_successful_sessions() {
 }
 
 /// Test that secrets can be extracted and used for encryption/decryption.
-#[cfg(all(feature = "secret_extraction", feature = "tls12"))]
+#[cfg(feature = "tls12")]
 #[test]
 fn test_secret_extraction_enabled() {
     // Normally, secret extraction would be used to configure kTLS (TLS offload
@@ -4836,8 +4835,12 @@ fn test_secret_extraction_enabled() {
         do_handshake(&mut client, &mut server);
 
         // The handshake is finished, we're now able to extract traffic secrets
-        let client_secrets = client.extract_secrets().unwrap();
-        let server_secrets = server.extract_secrets().unwrap();
+        let client_secrets = client
+            .dangerous_extract_secrets()
+            .unwrap();
+        let server_secrets = server
+            .dangerous_extract_secrets()
+            .unwrap();
 
         // Comparing secrets for equality is something you should never have to
         // do in production code, so ConnectionTrafficSecrets doesn't implement
@@ -4866,7 +4869,7 @@ fn test_secret_extraction_enabled() {
 
 /// Test that secrets cannot be extracted unless explicitly enabled, and until
 /// the handshake is done.
-#[cfg(all(feature = "secret_extraction", feature = "tls12"))]
+#[cfg(feature = "tls12")]
 #[test]
 fn test_secret_extraction_disabled_or_too_early() {
     let suite = rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
@@ -4892,11 +4895,15 @@ fn test_secret_extraction_disabled_or_too_early() {
         let (client, server) = make_pair_for_arc_configs(&client_config, &server_config);
 
         assert!(
-            client.extract_secrets().is_err(),
+            client
+                .dangerous_extract_secrets()
+                .is_err(),
             "extraction should fail until handshake completes"
         );
         assert!(
-            server.extract_secrets().is_err(),
+            server
+                .dangerous_extract_secrets()
+                .is_err(),
             "extraction should fail until handshake completes"
         );
 
@@ -4904,8 +4911,18 @@ fn test_secret_extraction_disabled_or_too_early() {
 
         do_handshake(&mut client, &mut server);
 
-        assert_eq!(server_enable, server.extract_secrets().is_ok());
-        assert_eq!(client_enable, client.extract_secrets().is_ok());
+        assert_eq!(
+            server_enable,
+            server
+                .dangerous_extract_secrets()
+                .is_ok()
+        );
+        assert_eq!(
+            client_enable,
+            client
+                .dangerous_extract_secrets()
+                .is_ok()
+        );
     }
 }
 

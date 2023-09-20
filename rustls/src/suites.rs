@@ -160,7 +160,6 @@ pub(crate) fn compatible_sigscheme_for_suites(
 /// After performing a handshake with rustls, these secrets can be extracted
 /// to configure kTLS for a socket, and have the kernel take over encryption
 /// and/or decryption.
-#[cfg(feature = "secret_extraction")]
 pub struct ExtractedSecrets {
     /// sequence number and secrets for the "tx" (transmit) direction
     pub tx: (u64, ConnectionTrafficSecrets),
@@ -170,7 +169,6 @@ pub struct ExtractedSecrets {
 }
 
 /// [ExtractedSecrets] minus the sequence numbers
-#[cfg(feature = "secret_extraction")]
 pub(crate) struct PartiallyExtractedSecrets {
     /// secrets for the "tx" (transmit) direction
     pub(crate) tx: ConnectionTrafficSecrets,
@@ -184,7 +182,6 @@ pub(crate) struct PartiallyExtractedSecrets {
 /// These can be used to configure kTLS for a socket in one direction.
 /// The only other piece of information needed is the sequence number,
 /// which is in [ExtractedSecrets].
-#[cfg(feature = "secret_extraction")]
 #[non_exhaustive]
 pub enum ConnectionTrafficSecrets {
     /// Secrets for the AES_128_GCM AEAD algorithm
@@ -216,7 +213,6 @@ pub enum ConnectionTrafficSecrets {
     },
 }
 
-#[cfg(feature = "secret_extraction")]
 impl ConnectionTrafficSecrets {
     /// Convert three slices to three fixed sized arrays, panicking if any slice is not the correct
     /// constant size length.

@@ -11,11 +11,9 @@ use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
 use crate::sign;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
-#[cfg(feature = "secret_extraction")]
-use crate::ExtractedSecrets;
 use crate::KeyLog;
 
 use super::hs;
@@ -266,7 +264,6 @@ pub struct ServerConfig {
 
     /// Allows traffic secrets to be extracted after the handshake,
     /// e.g. for kTLS setup.
-    #[cfg(feature = "secret_extraction")]
     pub enable_secret_extraction: bool,
 
     /// Amount of early data to accept for sessions created by
@@ -332,7 +329,6 @@ impl Clone for ServerConfig {
             versions: self.versions,
             verifier: Arc::clone(&self.verifier),
             key_log: Arc::clone(&self.key_log),
-            #[cfg(feature = "secret_extraction")]
             enable_secret_extraction: self.enable_secret_extraction,
             max_early_data_size: self.max_early_data_size,
             send_half_rtt_data: self.send_half_rtt_data,
@@ -429,10 +425,7 @@ impl ServerConnection {
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
-        #[cfg(feature = "secret_extraction")]
-        {
-            common.enable_secret_extraction = config.enable_secret_extraction;
-        }
+        common.enable_secret_extraction = config.enable_secret_extraction;
         Ok(Self {
             inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
         })
@@ -513,9 +506,9 @@ impl ServerConnection {
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
-    #[cfg(feature = "secret_extraction")]
-    pub fn extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.extract_secrets()
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.dangerous_extract_secrets()
     }
 }
 
@@ -695,10 +688,7 @@ impl Accepted {
         self.connection
             .set_max_fragment_size(config.max_fragment_size)?;
 
-        #[cfg(feature = "secret_extraction")]
-        {
-            self.connection.enable_secret_extraction = config.enable_secret_extraction;
-        }
+        self.connection.enable_secret_extraction = config.enable_secret_extraction;
 
         let state = hs::ExpectClientHello::new(config, Vec::new());
         let mut cx = hs::ServerContext::from(&mut self.connection);
@@ -803,10 +793,7 @@ impl ConnectionCore<ServerConnectionData> {
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
-        #[cfg(feature = "secret_extraction")]
-        {
-            common.enable_secret_extraction = config.enable_secret_extraction;
-        }
+        common.enable_secret_extraction = config.enable_secret_extraction;
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts)),
             ServerConnectionData::default(),
