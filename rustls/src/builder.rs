@@ -95,7 +95,7 @@ use core::marker::PhantomData;
 ///
 /// For a server, _certificate verification_ must be configured by calling one of:
 /// - [`ConfigBuilder::with_no_client_auth`] - to not require client authentication (most common)
-/// - [`ConfigBuilder::dangerous.with_client_cert_verifier`] - to use a custom verifier
+/// - [`ConfigBuilder::with_client_cert_verifier`] - to use a custom verifier
 ///
 /// Next, _certificate sending_ must be configured by calling one of:
 /// - [`ConfigBuilder::with_single_cert`] - to send a specific certificate
