@@ -86,10 +86,6 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
         key: AeadKey,
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        let (key, iv) = (
-            ConnectionTrafficSecrets::slice_to_array(key.as_ref()),
-            ConnectionTrafficSecrets::slice_to_array(iv.as_ref()),
-        );
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 }
@@ -114,10 +110,7 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
         key: AeadKey,
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        let iv = iv.as_ref();
-        let (key, salt, iv) =
-            ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), &iv[..4], &iv[4..]);
-        Ok(ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv })
+        Ok(ConnectionTrafficSecrets::Aes256Gcm { key, iv })
     }
 }
 
@@ -141,10 +134,7 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
         key: AeadKey,
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        let iv = iv.as_ref();
-        let (key, salt, iv) =
-            ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), &iv[..4], &iv[4..]);
-        Ok(ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv })
+        Ok(ConnectionTrafficSecrets::Aes128Gcm { key, iv })
     }
 }
 
