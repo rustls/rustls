@@ -1,6 +1,7 @@
 use core::fmt;
 
 use crate::crypto;
+use crate::crypto::cipher::{AeadKey, Iv};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
@@ -186,56 +187,27 @@ pub(crate) struct PartiallyExtractedSecrets {
 pub enum ConnectionTrafficSecrets {
     /// Secrets for the AES_128_GCM AEAD algorithm
     Aes128Gcm {
-        /// key (16 bytes)
-        key: [u8; 16],
-        /// salt (4 bytes)
-        salt: [u8; 4],
-        /// initialization vector (8 bytes, chopped from key block)
-        iv: [u8; 8],
+        /// AEAD Key
+        key: AeadKey,
+        /// Initialization vector
+        iv: Iv,
     },
 
     /// Secrets for the AES_256_GCM AEAD algorithm
     Aes256Gcm {
-        /// key (32 bytes)
-        key: [u8; 32],
-        /// salt (4 bytes)
-        salt: [u8; 4],
-        /// initialization vector (8 bytes, chopped from key block)
-        iv: [u8; 8],
+        /// AEAD Key
+        key: AeadKey,
+        /// Initialization vector
+        iv: Iv,
     },
 
     /// Secrets for the CHACHA20_POLY1305 AEAD algorithm
     Chacha20Poly1305 {
-        /// key (32 bytes)
-        key: [u8; 32],
-        /// initialization vector (12 bytes)
-        iv: [u8; 12],
+        /// AEAD Key
+        key: AeadKey,
+        /// Initialization vector
+        iv: Iv,
     },
-}
-
-impl ConnectionTrafficSecrets {
-    /// Convert three slices to three fixed sized arrays, panicking if any slice is not the correct
-    /// constant size length.
-    pub fn slices_to_arrays<const NK: usize, const NS: usize, const NI: usize>(
-        k: &[u8],
-        s: &[u8],
-        i: &[u8],
-    ) -> ([u8; NK], [u8; NS], [u8; NI]) {
-        (
-            Self::slice_to_array(k),
-            Self::slice_to_array(s),
-            Self::slice_to_array(i),
-        )
-    }
-
-    /// Convert a slice to a fixed sized array, panicking if the slice is not the correct
-    /// constant size length.
-    pub fn slice_to_array<const N: usize>(slice: &[u8]) -> [u8; N] {
-        // this is guaranteed true because `ConnectionTrafficSecrets` items and
-        // call-site `TlsXXAeadAlgorithm` impl `key_len()`s are in agreement.
-        debug_assert_eq!(N, slice.len());
-        slice.try_into().unwrap()
-    }
 }
 
 #[cfg(all(test, feature = "ring"))]

@@ -4845,11 +4845,13 @@ fn test_secret_extraction_enabled() {
         // Comparing secrets for equality is something you should never have to
         // do in production code, so ConnectionTrafficSecrets doesn't implement
         // PartialEq/Eq on purpose. Instead, we have to get creative.
-        fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8], &[u8]) {
+        fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8]) {
             match s {
-                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv } => (key, salt, iv),
-                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv } => (key, salt, iv),
-                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => (key, &[], iv),
+                ConnectionTrafficSecrets::Aes128Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
+                ConnectionTrafficSecrets::Aes256Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
+                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
+                    (key.as_ref(), iv.as_ref())
+                }
                 _ => panic!("unexpected secret type"),
             }
         }

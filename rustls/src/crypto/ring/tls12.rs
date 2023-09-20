@@ -132,24 +132,9 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
-        debug_assert_eq!(write_iv.len(), 4);
-        debug_assert_eq!(explicit.len(), 8);
-
         let enc_key =
             aead::LessSafeKey::new(aead::UnboundKey::new(self.0, enc_key.as_ref()).unwrap());
-
-        // The GCM nonce is constructed from a 32-bit 'salt' derived
-        // from the master-secret, and a 64-bit explicit part,
-        // with no specified construction.  Thanks for that.
-        //
-        // We use the same construction as TLS1.3/ChaCha20Poly1305:
-        // a starting point extracted from the key block, xored with
-        // the sequence number.
-        let mut iv = [0; NONCE_LEN];
-        iv[..4].copy_from_slice(write_iv);
-        iv[4..].copy_from_slice(explicit);
-        let iv = Iv::new(iv);
-
+        let iv = gcm_iv(write_iv, explicit);
         Box::new(GcmMessageEncrypter { enc_key, iv })
     }
 
@@ -164,23 +149,12 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
     fn extract_keys(
         &self,
         key: AeadKey,
-        iv: &[u8],
+        write_iv: &[u8],
         explicit: &[u8],
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        Ok(match key.as_ref().len() {
-            16 => {
-                // nb. "fixed IV" becomes the GCM nonce "salt"
-                let (key, salt, iv) =
-                    ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), iv, explicit);
-                ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
-            }
-            32 => {
-                // nb. "fixed IV" becomes the GCM nonce "salt"
-                let (key, salt, iv) =
-                    ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), iv, explicit);
-                ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
-            }
-            _ => unreachable!(),
+        Ok(ConnectionTrafficSecrets::Aes128Gcm {
+            key,
+            iv: gcm_iv(write_iv, explicit),
         })
     }
 }
@@ -222,11 +196,12 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         iv: &[u8],
         _explicit: &[u8],
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        let (key, iv) = (
-            ConnectionTrafficSecrets::slice_to_array(key.as_ref()),
-            ConnectionTrafficSecrets::slice_to_array(iv),
-        );
-        Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
+        // This should always be true because KeyBlockShape and the Iv nonce len are in agreement.
+        debug_assert_eq!(aead::NONCE_LEN, iv.len());
+        Ok(ConnectionTrafficSecrets::Chacha20Poly1305 {
+            key,
+            iv: Iv::new(iv[..].try_into().unwrap()),
+        })
     }
 }
 
@@ -366,4 +341,22 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         Ok(OpaqueMessage::new(msg.typ, msg.version, buf))
     }
+}
+
+fn gcm_iv(write_iv: &[u8], explicit: &[u8]) -> Iv {
+    debug_assert_eq!(write_iv.len(), 4);
+    debug_assert_eq!(explicit.len(), 8);
+
+    // The GCM nonce is constructed from a 32-bit 'salt' derived
+    // from the master-secret, and a 64-bit explicit part,
+    // with no specified construction.  Thanks for that.
+    //
+    // We use the same construction as TLS1.3/ChaCha20Poly1305:
+    // a starting point extracted from the key block, xored with
+    // the sequence number.
+    let mut iv = [0; NONCE_LEN];
+    iv[..4].copy_from_slice(write_iv);
+    iv[4..].copy_from_slice(explicit);
+
+    Iv::new(iv)
 }
