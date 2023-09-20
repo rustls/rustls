@@ -416,6 +416,7 @@ pub mod client {
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
+        pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
         pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     }
