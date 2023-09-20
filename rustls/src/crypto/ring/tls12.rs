@@ -175,12 +175,14 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         Ok(match key.as_ref().len() {
             16 => {
                 // nb. "fixed IV" becomes the GCM nonce "salt"
-                let (key, salt, iv) = slices_to_arrays(key.as_ref(), iv, explicit);
+                let (key, salt, iv) =
+                    ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), iv, explicit);
                 ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
             }
             32 => {
                 // nb. "fixed IV" becomes the GCM nonce "salt"
-                let (key, salt, iv) = slices_to_arrays(key.as_ref(), iv, explicit);
+                let (key, salt, iv) =
+                    ConnectionTrafficSecrets::slices_to_arrays(key.as_ref(), iv, explicit);
                 ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
             }
             _ => unreachable!(),
@@ -226,7 +228,10 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         iv: &[u8],
         _explicit: &[u8],
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        let (key, iv) = (slice_to_array(key.as_ref()), slice_to_array(iv));
+        let (key, iv) = (
+            ConnectionTrafficSecrets::slice_to_array(key.as_ref()),
+            ConnectionTrafficSecrets::slice_to_array(iv),
+        );
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 }
@@ -367,21 +372,4 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         Ok(OpaqueMessage::new(msg.typ, msg.version, buf))
     }
-}
-
-#[cfg(feature = "secret_extraction")]
-fn slices_to_arrays<const NK: usize, const NS: usize, const NI: usize>(
-    k: &[u8],
-    s: &[u8],
-    i: &[u8],
-) -> ([u8; NK], [u8; NS], [u8; NI]) {
-    (slice_to_array(k), slice_to_array(s), slice_to_array(i))
-}
-
-#[cfg(feature = "secret_extraction")]
-fn slice_to_array<const N: usize>(slice: &[u8]) -> [u8; N] {
-    // this is guaranteed true because `ConnectionTrafficSecrets` items and
-    // `key_block_shape()` are in agreement.
-    debug_assert_eq!(N, slice.len());
-    slice.try_into().unwrap()
 }
