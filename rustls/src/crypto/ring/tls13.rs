@@ -1,3 +1,5 @@
+#[cfg(feature = "secret_extraction")]
+use crate::crypto::cipher::UnsupportedOperationError;
 use crate::crypto::cipher::{
     make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm,
 };
@@ -83,9 +85,13 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets {
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: Iv,
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         let (key, iv) = (slice_to_array(key.as_ref()), slice_to_array(&iv.0));
-        ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv }
+        Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
 }
 
@@ -105,9 +111,13 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets {
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: Iv,
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         let (key, salt, iv) = slices_to_arrays(key.as_ref(), &iv.0[..4], &iv.0[4..]);
-        ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv }
+        Ok(ConnectionTrafficSecrets::Aes256Gcm { key, salt, iv })
     }
 }
 
@@ -127,9 +137,13 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
     }
 
     #[cfg(feature = "secret_extraction")]
-    fn extract_keys(&self, key: AeadKey, iv: Iv) -> ConnectionTrafficSecrets {
+    fn extract_keys(
+        &self,
+        key: AeadKey,
+        iv: Iv,
+    ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         let (key, salt, iv) = slices_to_arrays(key.as_ref(), &iv.0[..4], &iv.0[4..]);
-        ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv }
+        Ok(ConnectionTrafficSecrets::Aes128Gcm { key, salt, iv })
     }
 }
 
