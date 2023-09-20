@@ -948,7 +948,7 @@ mod tests {
         assert!(seal_output.len() >= 48); // Sanity check.
 
         let iv = derive_traffic_iv(&expander);
-        assert_eq!(&iv.0, expected_iv);
+        assert_eq!(iv.as_ref(), expected_iv);
     }
 
     fn seal_zeroes(key: aead::UnboundKey) -> Vec<u8> {

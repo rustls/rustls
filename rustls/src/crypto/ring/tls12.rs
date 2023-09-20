@@ -2,7 +2,7 @@
 use crate::crypto::cipher::UnsupportedOperationError;
 use crate::crypto::cipher::{
     make_tls12_aad, AeadKey, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
-    Tls12AeadAlgorithm,
+    Tls12AeadAlgorithm, NONCE_LEN,
 };
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{CipherSuite, SignatureScheme};
@@ -149,9 +149,10 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         // We use the same construction as TLS1.3/ChaCha20Poly1305:
         // a starting point extracted from the key block, xored with
         // the sequence number.
-        let mut iv = Iv(Default::default());
-        iv.0[..4].copy_from_slice(write_iv);
-        iv.0[4..].copy_from_slice(explicit);
+        let mut iv = [0; NONCE_LEN];
+        iv[..4].copy_from_slice(write_iv);
+        iv[4..].copy_from_slice(explicit);
+        let iv = Iv::new(iv);
 
         Box::new(GcmMessageEncrypter { enc_key, iv })
     }
