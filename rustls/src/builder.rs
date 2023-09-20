@@ -70,7 +70,7 @@ use core::marker::PhantomData;
 ///
 /// For a client, _certificate verification_ must be configured either by calling one of:
 ///  - [`ConfigBuilder::with_root_certificates`] or
-///  - [`ConfigBuilder::dangerous()`]`.with_custom_certificate_verifier`
+///  - [`ConfigBuilder::dangerous()`] and [`DangerousClientConfigBuilder::with_custom_certificate_verifier`]
 ///
 /// Next, _certificate sending_ (also known as "client authentication", "mutual TLS", or "mTLS") must be configured
 /// or disabled using one of:
@@ -160,6 +160,7 @@ use core::marker::PhantomData;
 /// [`WantsClientCert`]: crate::client::WantsClientCert
 /// [`WantsServerCert`]: crate::server::WantsServerCert
 /// [`RING`]: crate::crypto::ring::RING
+/// [`DangerousClientConfigBuilder::with_custom_certificate_verifier`]: crate::client::danger::DangerousClientConfigBuilder::with_custom_certificate_verifier
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
