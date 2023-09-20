@@ -193,7 +193,7 @@ jobs:
           persist-credentials: false
 
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
 
