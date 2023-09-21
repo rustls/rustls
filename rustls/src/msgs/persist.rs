@@ -259,7 +259,7 @@ pub struct ServerSessionValue {
     pub(crate) sni: Option<DnsName>,
     pub(crate) version: ProtocolVersion,
     pub(crate) cipher_suite: CipherSuite,
-    pub(crate) master_secret: PayloadU8,
+    pub(crate) master_secret: Zeroizing<PayloadU8>,
     pub(crate) extended_ms: bool,
     pub(crate) client_cert_chain: Option<CertificatePayload>,
     pub(crate) alpn: Option<PayloadU8>,
@@ -316,7 +316,7 @@ impl Codec for ServerSessionValue {
 
         let v = ProtocolVersion::read(r)?;
         let cs = CipherSuite::read(r)?;
-        let ms = PayloadU8::read(r)?;
+        let ms = Zeroizing::new(PayloadU8::read(r)?);
         let ems = u8::read(r)?;
         let has_ccert = u8::read(r)? == 1;
         let ccert = if has_ccert {
@@ -366,7 +366,7 @@ impl ServerSessionValue {
             sni: sni.cloned(),
             version: v,
             cipher_suite: cs,
-            master_secret: PayloadU8::new(ms),
+            master_secret: Zeroizing::new(PayloadU8::new(ms)),
             extended_ms: false,
             client_cert_chain,
             alpn: alpn.map(PayloadU8::new),
