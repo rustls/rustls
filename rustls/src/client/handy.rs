@@ -245,7 +245,7 @@ mod tests {
                     tls12_suite,
                     SessionId::empty(),
                     Vec::new(),
-                    Vec::new(),
+                    &[],
                     Vec::new(),
                     now,
                     0,
@@ -264,16 +264,7 @@ mod tests {
         };
         c.insert_tls13_ticket(
             &name,
-            Tls13ClientSessionValue::new(
-                tls13_suite,
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                now,
-                0,
-                0,
-                0,
-            ),
+            Tls13ClientSessionValue::new(tls13_suite, Vec::new(), &[], Vec::new(), now, 0, 0, 0),
         );
         assert!(c.take_tls13_ticket(&name).is_none());
     }

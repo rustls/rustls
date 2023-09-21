@@ -751,13 +751,12 @@ fn get_server_connection_value_tls12(
     time_now: UnixTime,
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_2;
-    let secret = secrets.get_master_secret();
 
     let mut v = persist::ServerSessionValue::new(
         cx.data.sni.as_ref(),
         version,
         secrets.suite().common.suite,
-        secret,
+        secrets.master_secret(),
         cx.common.peer_certificates.clone(),
         cx.common.alpn_protocol.clone(),
         cx.data.resumption_data.clone(),

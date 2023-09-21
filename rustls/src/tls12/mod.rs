@@ -193,10 +193,8 @@ impl ConnectionSecrets {
         self.suite
     }
 
-    pub(crate) fn get_master_secret(&self) -> Vec<u8> {
-        let mut ret = Vec::new();
-        ret.extend_from_slice(&self.master_secret);
-        ret
+    pub(crate) fn master_secret(&self) -> &[u8] {
+        &self.master_secret[..]
     }
 
     fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {

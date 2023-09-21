@@ -978,7 +978,7 @@ impl ExpectFinished {
             self.secrets.suite(),
             self.session_id,
             ticket,
-            self.secrets.get_master_secret(),
+            self.secrets.master_secret(),
             cx.common
                 .peer_certificates
                 .clone()
