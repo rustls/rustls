@@ -1,5 +1,7 @@
 use alloc::boxed::Box;
 
+use zeroize::Zeroize;
+
 /// A concrete HMAC implementation, for a single cryptographic hash function.
 ///
 /// You should have one object that implements this trait for HMAC-SHA256, another
@@ -34,6 +36,12 @@ impl Tag {
 
     /// Maximum supported HMAC tag size: supports up to SHA512.
     pub const MAX_LEN: usize = 64;
+}
+
+impl Drop for Tag {
+    fn drop(&mut self) {
+        self.buf.zeroize();
+    }
 }
 
 impl AsRef<[u8]> for Tag {
