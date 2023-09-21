@@ -14,6 +14,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 
+use zeroize::Zeroize;
+
 mod prf;
 
 /// A TLS 1.2 cipher suite supported by rustls.
@@ -272,6 +274,12 @@ impl ConnectionSecrets {
             Side::Server => (server_secrets, client_secrets),
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
+    }
+}
+
+impl Drop for ConnectionSecrets {
+    fn drop(&mut self) {
+        self.master_secret.zeroize();
     }
 }
 
