@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::CertificateDer;
+use zeroize::Zeroize;
 
 /// An externally length'd payload
 #[derive(Clone, Eq, PartialEq)]
@@ -148,6 +149,12 @@ impl Codec for PayloadU8 {
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
         Ok(Self(body))
+    }
+}
+
+impl Zeroize for PayloadU8 {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
     }
 }
 
