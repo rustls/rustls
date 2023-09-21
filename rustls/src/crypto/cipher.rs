@@ -9,6 +9,8 @@ use crate::msgs::codec;
 pub use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::ConnectionTrafficSecrets;
 
+use zeroize::Zeroize;
+
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
     /// Build a `MessageEncrypter` for the given key/iv.
@@ -268,6 +270,12 @@ impl AeadKey {
 
     /// Largest possible AEAD key in the ciphersuites we support.
     pub(crate) const MAX_LEN: usize = 32;
+}
+
+impl Drop for AeadKey {
+    fn drop(&mut self) {
+        self.buf.zeroize();
+    }
 }
 
 impl AsRef<[u8]> for AeadKey {

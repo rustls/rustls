@@ -859,6 +859,7 @@ dependencies = [
  "rustversion",
  "subtle",
  "webpki-roots",
+ "zeroize",
 ]
 
 [[package]]
