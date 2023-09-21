@@ -11,6 +11,7 @@ use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
 use pki_types::{CertificateDer, UnixTime};
+use zeroize::Zeroizing;
 
 use alloc::vec::Vec;
 use core::cmp;
@@ -208,7 +209,7 @@ impl core::ops::Deref for Tls12ClientSessionValue {
 #[derive(Debug, Clone)]
 pub struct ClientSessionCommon {
     ticket: PayloadU16,
-    secret: PayloadU8,
+    secret: Zeroizing<PayloadU8>,
     epoch: u64,
     lifetime_secs: u32,
     server_cert_chain: CertificatePayload,
@@ -224,7 +225,7 @@ impl ClientSessionCommon {
     ) -> Self {
         Self {
             ticket: PayloadU16(ticket),
-            secret: PayloadU8(secret),
+            secret: Zeroizing::new(PayloadU8(secret)),
             epoch: time_now.as_secs(),
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
             server_cert_chain,
