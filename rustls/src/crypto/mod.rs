@@ -5,6 +5,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use zeroize::Zeroize;
+
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]
 pub mod ring;
@@ -81,6 +83,12 @@ impl SharedSecret {
     /// Returns the shared secret as a slice of bytes.
     pub(crate) fn secret_bytes(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl Drop for SharedSecret {
+    fn drop(&mut self) {
+        self.0.zeroize();
     }
 }
 
