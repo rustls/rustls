@@ -266,6 +266,7 @@ impl TestPki {
             this_update: now,
             next_update: now.add(Duration::from_secs(next_update_seconds)),
             crl_number: rcgen::SerialNumber::from(1234),
+            issuing_distribution_point: None,
             revoked_certs,
             key_identifier_method: rcgen::KeyIdMethod::Sha256,
             alg: &rcgen::PKCS_ECDSA_P256_SHA256,
