@@ -109,4 +109,4 @@ jobs:
         uses: taiki-e/install-action@cargo-hack
 
       - name: Check feature powerset
-        run: cargo hack check --locked --feature-powerset --no-dev-deps
+        run: cargo hack check --feature-powerset --no-dev-deps
