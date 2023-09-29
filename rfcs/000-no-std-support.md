@@ -31,7 +31,7 @@ this document lays out a plan for adding no-std support to rustls.
 
 # Uses of libstd API in rustls
 
-rustls (v0.21.6) uses the following libstd API:
+rustls (v0.22.0-alpha.3) uses the following libstd API:
 
 - `io::Read` and `io::Write`
 - `std::time::SystemTime`
@@ -39,15 +39,14 @@ rustls (v0.21.6) uses the following libstd API:
 - `std::net::IpAddr`
 - `std::error::Error`
 - `std::collections::HashMap`
+- `std::collections::HashSet`
 - `std::{env, fs, path}`
 
 `io::Read` and `io::Write` appear as trait bounds in the `ConnectionCommon` API.
 
-`std::time::SystemTime` appears in the signature of the `ServerCertVerifier::verify_server_cert` and `ClientCertVerifier::verify_client_cert` methods and the `verify_server_cert_signed_by_trust_anchor` function.
-`ClientConnection` and `ServerConnection` both internally call `SystemTime::now()` prior to verifying the client / server certificate.
+`ClientConnection` and `ServerConnection` both internally call `UnixTime::now()`, which internally calls `SystemTime::now`, prior to verifying the client / server certificate.
 
-The internal `TimeBase::now` constructor calls `SystemTime::now`.
-This constructor is used in the following places:
+`UnixTime::now` is also used in the following places:
 
 - on the client-side by `ServerConnection` to handle session tickets.
 - on the server-side by `ClientConnection` to emit session tickets.
@@ -62,6 +61,9 @@ The `std::error::Error` trait appears as a trait object (`Arc<dyn Error + Send +
 
 `std::collections::HashMap` is used to implement `LimitedCache` which is used on the client-side in `ClientSessionMemoryCache` and on the server-side in `ServerSessionMemoryCache`.
 It's also used in `ResolvesServerCertUsingSni` which is one of the available `ResolvesServerCert` implementations that a server can use.
+
+`std::collections::HashSet` is internally used to create TLS records like `ClientHello`.
+See the `rustls/src/msgs/handshake.rs` file.
 
 The modules `std::{env, fs, path}` are used to implement the `KeyLogFile` feature.
 
@@ -98,84 +100,9 @@ This new API -- from now on, referred to as `LlClientConnection` -- instead of t
 
 [RFC1420]: https://github.com/rustls/rustls/pull/1420
 
-### `SystemTime`
-
-`std::time::SystemTime` has an OS specific representation (e.g. UNIX-like systems use `timespec`, Windows uses `FILETIME`).
-An alternative system time representation that is OS-agnostic is a UNIX timestamp: e.g. seconds since `UNIX_EPOCH`.
-`SystemTime` can already be easily converted into a UNIX timestamp.
-
-A simple `UnixTimestamp` data type with no methods will be added to rustls.
-
-```rust
-/// `duration` since UNIX_EPOCH
-pub struct UnixTimestamp(pub core::time::Duration);
-```
-
-When the "std" feature is enabled, `TryFrom` implementations will be provided.
-
-```rust
-#[cfg(feature = "std")]
-mod std_impls {
-    use crate::UnixTimestamp;
-
-    use std::time::{SystemTime, SystemTimeError, UNIX_EPOCH};
-
-    impl TryFrom<SystemTime> for UnixTimestamp {
-        type Error = SystemTimeError;
-
-        fn try_from(st: SystemTime) -> Result<Self, Self::Error> {
-            Ok(Self(st.duration_since(UNIX_EPOCH)?))
-        }
-    }
-
-    impl TryFrom<UnixTimestamp> for SystemTime {
-        type Error = ();
-
-        fn try_from(ts: UnixTimestamp) -> Result<Self, Self::Error> {
-            UNIX_EPOCH.checked_add(ts.0).ok_or(())
-        }
-    }
-}
-```
-
-All public API will change to use `rustls::UnixTimestamp` instead of `std::time::SystemTime`.
-This is a **breaking change**.
-
-```rust
-pub trait ServerCertVerifier: Send + Sync {
-    fn verify_server_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        server_name: &ServerName,
-        ocsp_response: &[u8],
-        now: UnixTimestamp, // <-
-    ) -> Result<ServerCertVerified, Error>;
-}
-
-pub trait ClientCertVerifier: Send + Sync {
-    fn verify_client_cert(
-        &self,
-        end_entity: &Certificate,
-        intermediates: &[Certificate],
-        now: UnixTimestamp, // <-
-    ) -> Result<ClientCertVerified, Error>;
-}
-
-pub fn verify_server_cert_signed_by_trust_anchor(
-    cert: &ParsedCertificate,
-    roots: &RootCertStore,
-    intermediates: &[Certificate],
-    now: UnixTimestamp, // <-
-) -> Result<(), Error> { /* .. */ }
-```
-
-Note that this also includes `ClientCertVerifier` even though it won't be exposed in no-std mode during the first stage.
-This is so a similar breaking change does not have to happen in the second stage where server functionality is made no-std compatible.
-
 ### `SystemTime::now`
 
-Additionally, the client internally calls `SystemTime::now` prior to invoking `verify_server_cert`.
+The client internally calls `SystemTime::now` prior to invoking `verify_server_cert`.
 In no-std mode, `ClientConfig` will gain a public `TimeProvider` setting.
 
 ```rust
@@ -187,7 +114,7 @@ pub struct TimeProvider {
 
 #[cfg(not(feature = "std"))]
 pub trait GetCurrentTime {
-    fn get_current_time(&self) -> Result<UnixTimestamp, ()>;
+    fn get_current_time(&self) -> Result<pki_types::UnixTime, ()>;
 }
 
 #[derive(Clone)]
@@ -223,7 +150,7 @@ mod no_std {
     struct NoTimeProvider;
 
     impl GetCurrentTime for NoTimeProvider {
-        fn get_current_time(&self) -> Result<UnixTimestamp, ()> {
+        fn get_current_time(&self) -> Result<UnixTime, ()> {
             Err(())
         }
     }
@@ -253,11 +180,9 @@ let cert_verified = self
 
 Other places that need to be changed are:
 
-- [`SystemTime::now()` in `client/tls12.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/client/tls12.rs#L736)
-- [`SystemTime::now()` in `client/tls13.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/client/tls13.rs#L687)
-- [`TimeBase::now()` in `client/tls12.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/client/tls12.rs#L1002)
-- [`TimeBase::now()` in `client/tls13.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/client/tls13.rs#L972)
-- [`TimeBase::now()` in `client/hs.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/client/hs.rs#L66)
+- [`client/tls12.rs`](https://github.com/rustls/rustls/blob/1a939124e8b8a72f21bdb557b8d80dc6eef72522/rustls/src/client/tls12.rs#L713) (2 instances)
+- [`client/tls13.rs`](https://github.com/rustls/rustls/blob/1a939124e8b8a72f21bdb557b8d80dc6eef72522/rustls/src/client/tls13.rs#L677) (2 instances)
+- [`client/hs.rs`](https://github.com/rustls/rustls/blob/1a939124e8b8a72f21bdb557b8d80dc6eef72522/rustls/src/client/hs.rs#L67)
 
 ### `std::sync::Mutex`
 
@@ -293,36 +218,10 @@ pub struct ClientSessionMemoryCache {
 
 ### `std::net::IpAddr`
 
-The `IpAddr` API is also available in `core` but it's unstable API.
-As that can't be used, a simple `IpAddress` data type with no methods will be added to rustls:
+This `IpAddr` API is also available in `core` but it's unstable API.
+The `rustls-webpki` crate includes a no-std compatible `IpAddr` API that can be used in `ServerName`.
 
-```rust
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub enum IpAddress {
-    Ipv4(Ipv4Address),
-    Ipv6(Ipv6Address),
-}
-
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub struct Ipv4Address(pub [u8; 4]);
-
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub struct Ipv6Address(pub [u16; 8]);
-```
-
-When the "std" feature is enabled, `From` implementations will be provided:
-
-```rust
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
-impl From<IpAddress> for IpAddr { /* .. */ }
-
-impl From<Ipv4Address> for Ipv4Addr { /* .. */ }
-
-impl From<Ipv6Address> for Ipv6Addr { /* .. */ }
-```
-
-The `ServerName` enum will gain a variant that wraps a `rustls::IpAddress`.
+The `ServerName` enum will gain a variant that wraps a `wekpki::IpAddress`.
 The existing `IpAddress` variant will not be available in no-std mode.
 Because `ServerName` is a `#[non_exhaustive]` enum, this is _not_ a breaking change.
 
@@ -334,7 +233,8 @@ pub enum ServerName {
     #[cfg(feature = "std")]
     IpAddress(std::net::IpAddr),
 
-    PlainIpAddress(crate::IpAddress), // <-
+    /// Like the `IpAddress` variant but no-std compatible
+    NoStdIpAddress(webpki::IpAddress), // <-
 }
 ```
 
@@ -345,7 +245,7 @@ And its `TryFrom<&str>` implementation will be put behind the "std" feature.
 impl TryFrom<&str> for ServerName { /* .. */ }
 ```
 
-When `core::net::IpAddr` gets stabilized, `rustls::IpAddress` and `ServerName::PlainIpAddress` can be deprecated and
+When `core::net::IpAddr` gets stabilized, `ServerName::NoStdIpAddress` can be deprecated and
 `ServerName::IpAddress` can be switched to use `core::net::IpAddr` and be made available in no-std mode.
 
 ```rust
@@ -356,11 +256,11 @@ pub enum ServerName {
     IpAddress(core::net::IpAddr), // <-
 
     #[deprecated = "use ServerName::IpAddress"]
-    PlainIpAddress(crate::IpAddress),
+    NoStdIpAddress(webpki::IpAddress),
 }
 ```
 
-Eventually, the `PlainIpAddress` variant can be removed and
+Eventually, the `NoStdIpAddress` variant can be removed and
 the `TryFrom` implementation can also be made available in no-std mode.
 This change would be a **breaking change** but it's more of a cleanup and not required to complete stage 1.
 
@@ -579,10 +479,8 @@ The server configuration will gain a `TimeProvider` setting just like the client
 
 This `TimeProvider` setting will be used to get the current time in the following places:
 
-- [`TimeBase::now()` in `server/tls12.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/server/tls12.rs#L787)
-- [`TimeBase::now()` in `server/tls13.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/server/tls13.rs#L276)
-- [`SystemTime::now()` in `server/tls12.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/server/tls12.rs#L550)
-- [`SystemTime::now()` in `server/tls13.rs`](https://github.com/rustls/rustls/blob/v/0.21.6/rustls/src/server/tls13.rs#L944)
+- [`server/tls12.rs`](https://github.com/rustls/rustls/blob/1a939124e8b8a72f21bdb557b8d80dc6eef72522/rustls/src/server/tls12.rs#L543) (3 instances)
+- [`server/tls13.rs`](https://github.com/rustls/rustls/blob/1a939124e8b8a72f21bdb557b8d80dc6eef72522/rustls/src/server/tls13.rs#L313) (3 instances)
 
 ### `TicketSwitcher`
 
@@ -625,7 +523,7 @@ impl Ticketer {
 }
 ```
 
-### Alternatives to `HashMap`
+### Alternatives to `HashMap` / `HashSet`
 
 There are two no-std alternatives to `std::collections::HashMap`:
 
