@@ -44,6 +44,7 @@ In a similar pattern to the MAC-then-encrypt problem discussed above, TLSv1.0 (1
 continued to specify use of PKCS#1 encryption, again with incrementally more complex and incorrect advice on countermeasures.
 
 [ROBOT](https://robotattack.org/) (2018) showed that implementations were still vulnerable to these attacks twenty years later.
+[The Marvin Attack](https://people.redhat.com/~hkario/marvin/) (2023) demonstrated the same a further five years later.
 
 rustls does not support RSA key exchange.  TLSv1.3 also removed support.
 
