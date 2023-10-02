@@ -84,10 +84,10 @@ impl ActiveKeyExchange for KeyExchange {
     /// Completes the key exchange, given the peer's public key.
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<SharedSecret, Error> {
         let peer_key = UnparsedPublicKey::new(self.agreement_algorithm, peer);
-        agree_ephemeral(self.priv_key, &peer_key, (), |secret| {
-            Ok(SharedSecret::from(secret))
+        agree_ephemeral(self.priv_key, &peer_key, |secret| {
+            SharedSecret::from(secret)
         })
-        .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
+        .map_err(|_| PeerMisbehaved::InvalidKeyShare.into())
     }
 
     /// Return the group being used.

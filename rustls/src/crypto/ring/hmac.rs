@@ -14,7 +14,7 @@ impl crypto::hmac::Hmac for Hmac {
     }
 
     fn hash_output_len(&self) -> usize {
-        self.0.digest_algorithm().output_len
+        self.0.digest_algorithm().output_len()
     }
 }
 
@@ -35,7 +35,7 @@ impl crypto::hmac::Key for Key {
         self.0
             .algorithm()
             .digest_algorithm()
-            .output_len
+            .output_len()
     }
 }
 

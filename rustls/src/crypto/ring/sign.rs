@@ -5,6 +5,7 @@ use crate::x509::{wrap_in_asn1_len, wrap_in_sequence};
 
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 use ring::io::der;
+use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
 use alloc::sync::Arc;
@@ -136,7 +137,7 @@ impl RsaSigner {
 
 impl Signer for RsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        let mut sig = vec![0; self.key.public_modulus_len()];
+        let mut sig = vec![0; self.key.public().modulus_len()];
 
         let rng = ring::rand::SystemRandom::new();
         self.key
@@ -175,12 +176,13 @@ impl EcdsaSigningKey {
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
     ) -> Result<Self, ()> {
+        let rng = SystemRandom::new();
         let key_pair = match der {
             PrivateKeyDer::Sec1(sec1) => {
-                Self::convert_sec1_to_pkcs8(scheme, sigalg, sec1.secret_sec1_der())?
+                Self::convert_sec1_to_pkcs8(scheme, sigalg, sec1.secret_sec1_der(), &rng)?
             }
             PrivateKeyDer::Pkcs8(pkcs8) => {
-                EcdsaKeyPair::from_pkcs8(sigalg, pkcs8.secret_pkcs8_der()).map_err(|_| ())?
+                EcdsaKeyPair::from_pkcs8(sigalg, pkcs8.secret_pkcs8_der(), &rng).map_err(|_| ())?
             }
             _ => return Err(()),
         };
@@ -198,6 +200,7 @@ impl EcdsaSigningKey {
         scheme: SignatureScheme,
         sigalg: &'static signature::EcdsaSigningAlgorithm,
         maybe_sec1_der: &[u8],
+        rng: &dyn SecureRandom,
     ) -> Result<EcdsaKeyPair, ()> {
         let pkcs8_prefix = match scheme {
             SignatureScheme::ECDSA_NISTP256_SHA256 => &PKCS8_PREFIX_ECDSA_NISTP256,
@@ -216,7 +219,7 @@ impl EcdsaSigningKey {
         pkcs8.extend_from_slice(&sec1_wrap);
         wrap_in_sequence(&mut pkcs8);
 
-        EcdsaKeyPair::from_pkcs8(sigalg, &pkcs8).map_err(|_| ())
+        EcdsaKeyPair::from_pkcs8(sigalg, &pkcs8, rng).map_err(|_| ())
     }
 }
 
