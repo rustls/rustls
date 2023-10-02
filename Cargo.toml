@@ -2,6 +2,8 @@
 members = [
   # CI benchmarks
   "ci-bench",
+  # Network-based tests
+  "connect-tests",
   # tests and example code
   "examples",
   # the main library and tests
