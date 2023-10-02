@@ -19,7 +19,7 @@ impl crypto::hash::Hash for Hash {
     }
 
     fn output_len(&self) -> usize {
-        self.0.output_len
+        self.0.output_len()
     }
 
     fn algorithm(&self) -> HashAlgorithm {
