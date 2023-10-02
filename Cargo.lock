@@ -874,6 +874,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-connect-tests"
+version = "0.0.1"
+dependencies = [
+ "regex",
+ "ring",
+ "rustls",
+]
+
+[[package]]
 name = "rustls-examples"
 version = "0.0.1"
 dependencies = [
