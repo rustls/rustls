@@ -61,7 +61,7 @@
 //! aarch64. For more information, see [the supported `ring` CI
 //! targets](https://github.com/briansmith/ring/blob/9cc0d45f4d8521f467bb3a621e74b1535e118188/.github/workflows/ci.yml#L151-L167).
 //!
-//! Rustls requires Rust 1.60 or later.
+//! Rustls requires Rust 1.61 or later.
 //!
 //! ## Design Overview
 //! ### Rustls does not take care of network IO
