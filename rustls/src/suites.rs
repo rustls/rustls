@@ -18,6 +18,23 @@ pub struct CipherSuiteCommon {
 
     /// Which hash function the suite uses.
     pub hash_provider: &'static dyn crypto::hash::Hash,
+
+    /// The number of messages that can be encrypted by a single
+    /// instance of `MessageEncrypter` produced for this suite before
+    /// an attacker gains an advantage in distinguishing it from an ideal
+    /// pseudorandom permutation (PRP).
+    ///
+    /// This is to be set on the assumption that messages are maximally sized --
+    /// at least 2 ** 14 bytes for TCP-TLS and 2 ** 16 for QUIC.
+    pub confidentiality_limit: u64,
+
+    /// The number of messages an attacker can be allowed to unsuccessfully
+    /// decrypt before the attacker gains an advantage in forging messages.
+    ///
+    /// This is not relevant for TLS over TCP (which is implemented in this crate)
+    /// because a single failed decryption is fatal to the connection.  However,
+    /// this quantity is used by QUIC.
+    pub integrity_limit: u64,
 }
 
 /// A cipher suite supported by rustls.
