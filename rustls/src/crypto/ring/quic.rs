@@ -167,7 +167,7 @@ impl quic::PacketKey for PacketKey {
     /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-confidentiality-limit>.
     #[inline]
     fn confidentiality_limit(&self) -> u64 {
-        self.suite.confidentiality_limit
+        self.suite.common.confidentiality_limit
     }
 
     /// Number of times the packet key can be used without sacrificing integrity
@@ -175,7 +175,7 @@ impl quic::PacketKey for PacketKey {
     /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-integrity-limit>.
     #[inline]
     fn integrity_limit(&self) -> u64 {
-        self.suite.integrity_limit
+        self.suite.common.integrity_limit
     }
 
     /// Tag length for the underlying AEAD algorithm

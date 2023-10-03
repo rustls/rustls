@@ -22,9 +22,6 @@ pub struct Tls13CipherSuite {
     /// [MessageEncrypter]: crate::crypto::cipher::MessageEncrypter
     pub aead_alg: &'static dyn crypto::cipher::Tls13AeadAlgorithm,
 
-    pub(crate) confidentiality_limit: u64,
-    pub(crate) integrity_limit: u64,
-
     /// How to create QUIC header and record protection algorithms
     /// for this suite.
     ///
