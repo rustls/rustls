@@ -7,7 +7,8 @@ use alloc::boxed::Box;
 
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring_like::hmac::HMAC_SHA256);
 pub(crate) static HMAC_SHA384: Hmac = Hmac(&ring_like::hmac::HMAC_SHA384);
-#[cfg(all(test, feature = "tls12"))]
+#[cfg(test)]
+#[allow(dead_code)] // only for TLS1.2 prf test
 pub(crate) static HMAC_SHA512: Hmac = Hmac(&ring_like::hmac::HMAC_SHA512);
 
 pub(crate) struct Hmac(&'static ring_like::hmac::Algorithm);
