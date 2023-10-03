@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 use super::ring_like::digest;
 use crate::crypto;
 use crate::msgs::enums::HashAlgorithm;
@@ -21,7 +23,7 @@ impl crypto::hash::Hash for Hash {
     }
 
     fn output_len(&self) -> usize {
-        self.0.output_len()
+        super::ring_shim::digest_output_len(self.0)
     }
 
     fn algorithm(&self) -> HashAlgorithm {

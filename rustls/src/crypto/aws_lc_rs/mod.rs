@@ -7,36 +7,45 @@ use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::Error;
 
 use pki_types::PrivateKeyDer;
-use webpki::ring as webpki_algs;
+use webpki::aws_lc_rs as webpki_algs;
 
-use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::sync::Arc;
 
-pub(crate) use ring as ring_like;
+// aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
+// glue here.  The shared files should always use `super::ring_like` to access a
+// ring-compatible crate, and `super::ring_shim` to bridge the gaps where they are
+// small.
+pub(crate) use aws_lc_rs as ring_like;
 
 /// Using software keys for authentication.
+#[path = "../ring/sign.rs"]
 pub mod sign;
 
+#[path = "../ring/hash.rs"]
 pub(crate) mod hash;
+#[path = "../ring/hmac.rs"]
 pub(crate) mod hmac;
+#[path = "../ring/kx.rs"]
 pub(crate) mod kx;
 #[cfg(feature = "quic")]
+#[path = "../ring/quic.rs"]
 pub(crate) mod quic;
+#[path = "../ring/ticketer.rs"]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
+#[path = "../ring/tls12.rs"]
 pub(crate) mod tls12;
+#[path = "../ring/tls13.rs"]
 pub(crate) mod tls13;
 
-/// A `CryptoProvider` backed by the [*ring*] crate.
-///
-/// [*ring*]: https://github.com/briansmith/ring
-pub static RING: &dyn CryptoProvider = &Ring;
+/// A `CryptoProvider` backed by aws-lc-rs.
+pub static AWS_LC_RS: &dyn CryptoProvider = &AwsLcRs;
 
-/// Default crypto provider.
 #[derive(Debug)]
-struct Ring;
+struct AwsLcRs;
 
-impl CryptoProvider for Ring {
+impl CryptoProvider for AwsLcRs {
     fn fill_random(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {
         use ring_like::rand::SecureRandom;
 
@@ -58,7 +67,7 @@ impl CryptoProvider for Ring {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn SigningKey>, Error> {
         sign::any_supported_type(&key_der)
-            .map_err(|_| Error::General("invalid private key".to_owned()))
+            .map_err(|_| Error::General(String::from("invalid private key")))
     }
 
     fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
@@ -93,7 +102,7 @@ pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 ];
 
-/// All defined cipher suites supported by *ring* appear in this module.
+/// All defined cipher suites supported by aws-lc-rs appear in this module.
 pub mod cipher_suite {
     #[cfg(feature = "tls12")]
     pub use super::tls12::{
@@ -167,7 +176,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
     ],
 };
 
-/// All defined key exchange groups supported by *ring* appear in this module.
+/// All defined key exchange groups supported by aws-lc-rs appear in this module.
 ///
 /// [`ALL_KX_GROUPS`] is provided as an array of all of these values.
 pub mod kx_group {
@@ -185,28 +194,27 @@ mod ring_shim {
     use crate::crypto::SharedSecret;
 
     pub(super) fn digest_output_len(alg: &ring_like::digest::Algorithm) -> usize {
-        alg.output_len()
+        alg.output_len
     }
 
     pub(super) fn agree_ephemeral(
         priv_key: ring_like::agreement::EphemeralPrivateKey,
         peer_key: &ring_like::agreement::UnparsedPublicKey<&[u8]>,
     ) -> Result<SharedSecret, ()> {
-        ring_like::agreement::agree_ephemeral(priv_key, peer_key, |secret| {
-            SharedSecret::from(secret)
+        ring_like::agreement::agree_ephemeral(priv_key, peer_key, (), |secret| {
+            Ok(SharedSecret::from(secret))
         })
-        .map_err(|_| ())
     }
 
     pub(super) fn rsa_key_pair_public_modulus_len(kp: &ring_like::signature::RsaKeyPair) -> usize {
-        kp.public().modulus_len()
+        kp.public_modulus_len()
     }
 
     pub(super) fn ecdsa_key_pair_from_pkcs8(
         alg: &'static ring_like::signature::EcdsaSigningAlgorithm,
         data: &[u8],
-        rng: &dyn ring_like::rand::SecureRandom,
+        _rng: &dyn ring_like::rand::SecureRandom,
     ) -> Result<ring_like::signature::EcdsaKeyPair, ()> {
-        ring_like::signature::EcdsaKeyPair::from_pkcs8(alg, data, rng).map_err(|_| ())
+        ring_like::signature::EcdsaKeyPair::from_pkcs8(alg, data).map_err(|_| ())
     }
 }

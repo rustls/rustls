@@ -15,6 +15,10 @@ use zeroize::Zeroize;
 #[cfg(feature = "ring")]
 pub mod ring;
 
+/// aws-lc-rs-based CryptoProvider.
+#[cfg(feature = "aws_lc_rs")]
+pub mod aws_lc_rs;
+
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
 

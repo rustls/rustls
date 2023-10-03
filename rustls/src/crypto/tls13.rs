@@ -239,10 +239,10 @@ impl AsRef<[u8]> for OkmBlock {
 #[derive(Debug)]
 pub struct OutputLengthError;
 
-#[cfg(all(test, feature = "ring"))]
+#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use super::{expand, Hkdf, HkdfUsingHmac};
-    use crate::crypto::ring;
+    use crate::test_provider::hmac;
 
     struct ByteArray<const N: usize>([u8; N]);
 
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn test_case_1() {
-        let hkdf = HkdfUsingHmac(&ring::hmac::HMAC_SHA256);
+        let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA256);
         let ikm = &[0x0b; 22];
         let salt = &[
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_case_2() {
-        let hkdf = HkdfUsingHmac(&ring::hmac::HMAC_SHA256);
+        let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA256);
         let ikm: Vec<u8> = (0x00u8..=0x4f).collect();
         let salt: Vec<u8> = (0x60u8..=0xaf).collect();
         let info: Vec<u8> = (0xb0u8..=0xff).collect();
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_case_3() {
-        let hkdf = HkdfUsingHmac(&ring::hmac::HMAC_SHA256);
+        let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA256);
         let ikm = &[0x0b; 22];
         let salt = &[];
         let info = &[];
@@ -339,7 +339,7 @@ mod tests {
         //
         // >>> hkdf.HKDF(algorithm=hashes.SHA384(), length=96, salt=None, info=b"hello").derive(b"\x0b" * 40)
 
-        let hkdf = HkdfUsingHmac(&ring::hmac::HMAC_SHA384);
+        let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA384);
         let ikm = &[0x0b; 40];
         let info = &[&b"hel"[..], &b"lo"[..]];
 
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_output_length_bounds() {
-        let hkdf = HkdfUsingHmac(&ring::hmac::HMAC_SHA256);
+        let hkdf = HkdfUsingHmac(&hmac::HMAC_SHA256);
         let ikm = &[];
         let info = &[];
 

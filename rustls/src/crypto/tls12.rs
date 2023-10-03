@@ -76,10 +76,10 @@ pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: 
     }
 }
 
-#[cfg(all(test, feature = "ring"))]
+#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use crate::crypto::hmac::Hmac;
-    use crate::crypto::ring;
+    use crate::test_provider::hmac;
 
     // Below known answer tests come from https://mailarchive.ietf.org/arch/msg/tls/fzVCzk-z3FShgGJ6DOXqM1ydxms/
 
@@ -93,7 +93,7 @@ mod tests {
 
         super::prf(
             &mut output,
-            &*ring::hmac::HMAC_SHA256.with_key(secret),
+            &*hmac::HMAC_SHA256.with_key(secret),
             label,
             seed,
         );
@@ -111,7 +111,7 @@ mod tests {
 
         super::prf(
             &mut output,
-            &*ring::hmac::HMAC_SHA512.with_key(secret),
+            &*hmac::HMAC_SHA512.with_key(secret),
             label,
             seed,
         );
@@ -129,7 +129,7 @@ mod tests {
 
         super::prf(
             &mut output,
-            &*ring::hmac::HMAC_SHA384.with_key(secret),
+            &*hmac::HMAC_SHA384.with_key(secret),
             label,
             seed,
         );
@@ -138,12 +138,12 @@ mod tests {
     }
 }
 
-#[cfg(bench)]
+#[cfg(all(bench, any(feature = "ring", feature = "aws_lc_rs")))]
 mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use crate::crypto::hmac::Hmac;
-        use crate::crypto::ring;
+        use crate::test_provider::hmac;
 
         let label = &b"extended master secret"[..];
         let seed = [0u8; 32];
@@ -151,12 +151,7 @@ mod benchmarks {
 
         b.iter(|| {
             let mut out = [0u8; 48];
-            super::prf(
-                &mut out,
-                &*ring::hmac::HMAC_SHA256.with_key(key),
-                &label,
-                &seed,
-            );
+            super::prf(&mut out, &*hmac::HMAC_SHA256.with_key(key), &label, &seed);
             test::black_box(out);
         });
     }

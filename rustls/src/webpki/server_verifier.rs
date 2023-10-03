@@ -327,14 +327,14 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     }
 }
 
-#[cfg(all(test, feature = "ring"))]
+#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use std::sync::Arc;
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
     use super::{VerifierBuilderError, WebPkiServerVerifier};
-    use crate::RootCertStore;
+    use crate::{RootCertStore, TEST_PROVIDER};
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der
@@ -375,7 +375,7 @@ mod tests {
     #[test]
     fn test_with_invalid_crls() {
         // Trying to build a server verifier with invalid CRLs should error at build time.
-        let result = WebPkiServerVerifier::builder(test_roots())
+        let result = WebPkiServerVerifier::builder_with_provider(test_roots(), TEST_PROVIDER)
             .with_crls(vec![CertificateRevocationListDer::from(vec![0xFF])])
             .build();
         assert!(matches!(result, Err(VerifierBuilderError::InvalidCrl(_))));
@@ -390,7 +390,7 @@ mod tests {
                 include_bytes!("../../../test-ca/eddsa/client.revoked.crl.pem").as_slice(),
             ]);
 
-        let builder = WebPkiServerVerifier::builder(test_roots())
+        let builder = WebPkiServerVerifier::builder_with_provider(test_roots(), TEST_PROVIDER)
             .with_crls(initial_crls.clone())
             .with_crls(extra_crls.clone());
 
@@ -404,15 +404,19 @@ mod tests {
     #[test]
     fn test_builder_no_roots() {
         // Trying to create a server verifier builder with no trust anchors should fail at build time
-        let result = WebPkiServerVerifier::builder(RootCertStore::empty().into()).build();
+        let result = WebPkiServerVerifier::builder_with_provider(
+            RootCertStore::empty().into(),
+            TEST_PROVIDER,
+        )
+        .build();
         assert!(matches!(result, Err(VerifierBuilderError::NoRootAnchors)));
     }
 
     #[test]
     fn test_server_verifier_ee_only() {
         // We should be able to build a server cert. verifier that only checks the EE cert.
-        let builder =
-            WebPkiServerVerifier::builder(test_roots()).only_check_end_entity_revocation();
+        let builder = WebPkiServerVerifier::builder_with_provider(test_roots(), TEST_PROVIDER)
+            .only_check_end_entity_revocation();
         // The builder should be Debug.
         println!("{:?}", builder);
         builder.build().unwrap();
@@ -422,7 +426,8 @@ mod tests {
     fn test_server_verifier_allow_unknown() {
         // We should be able to build a server cert. verifier that allows unknown revocation
         // status.
-        let builder = WebPkiServerVerifier::builder(test_roots()).allow_unknown_revocation_status();
+        let builder = WebPkiServerVerifier::builder_with_provider(test_roots(), TEST_PROVIDER)
+            .allow_unknown_revocation_status();
         // The builder should be Debug.
         println!("{:?}", builder);
         builder.build().unwrap();
@@ -432,7 +437,7 @@ mod tests {
     fn test_server_verifier_allow_unknown_ee_only() {
         // We should be able to build a server cert. verifier that allows unknown revocation
         // status and only checks the EE cert.
-        let builder = WebPkiServerVerifier::builder(test_roots())
+        let builder = WebPkiServerVerifier::builder_with_provider(test_roots(), TEST_PROVIDER)
             .allow_unknown_revocation_status()
             .only_check_end_entity_revocation();
         // The builder should be Debug.

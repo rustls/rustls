@@ -609,7 +609,7 @@ impl KeySchedule {
     }
 
     /// Input the given secret.
-    #[cfg(all(test, feature = "ring"))]
+    #[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
     fn input_secret(&mut self, secret: &[u8]) {
         let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
         self.current = self
@@ -830,11 +830,11 @@ where
     f(expander, info)
 }
 
-#[cfg(all(test, feature = "ring"))]
+#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-    use crate::crypto::ring::ring_like::aead;
-    use crate::crypto::ring::tls13::{
+    use crate::test_provider::ring_like::aead;
+    use crate::test_provider::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
     use crate::KeyLog;
@@ -1011,13 +1011,12 @@ mod tests {
 
 #[cfg(bench)]
 mod benchmarks {
-    #[cfg(feature = "ring")]
+    #[cfg(any(feature = "ring", feature = "aws_lc_rs"))]
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-        use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
+        use crate::test_provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::KeyLog;
-        use ring::aead;
 
         fn extract_traffic_secret(ks: &KeySchedule, kind: SecretKind) {
             struct Log;
@@ -1026,7 +1025,6 @@ mod benchmarks {
                 fn log(&self, _label: &str, _client_random: &[u8], _secret: &[u8]) {}
             }
 
-            let aead_alg = &aead::CHACHA20_POLY1305;
             let hash = [0u8; 32];
             let traffic_secret = ks.derive_logged_secret(kind, &hash, &Log, &[0u8; 32]);
             let traffic_secret_expander = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
@@ -1034,7 +1032,9 @@ mod benchmarks {
                 .expander_for_okm(&traffic_secret);
             test::black_box(derive_traffic_key(
                 traffic_secret_expander.as_ref(),
-                aead_alg.key_len(),
+                TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
+                    .aead_alg
+                    .key_len(),
             ));
             test::black_box(derive_traffic_iv(traffic_secret_expander.as_ref()));
         }

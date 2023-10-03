@@ -212,10 +212,11 @@ pub enum ConnectionTrafficSecrets {
 }
 
 #[cfg(all(test, feature = "ring"))]
+#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
-    use super::crypto::ring::tls13::*;
     use super::*;
     use crate::enums::CipherSuite;
+    use crate::test_provider::tls13::*;
 
     #[test]
     fn test_client_pref() {
