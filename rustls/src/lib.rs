@@ -256,6 +256,20 @@
 //!   which is used for cryptography.
 //!   Without this feature, these items must be provided externally to the core
 //!   rustls crate.
+//!
+//! - `aws_lc_rs`: this makes the rustls crate depend on the aws-lc-rs crate,
+//!   which can be used for cryptography as an alternative to *ring*.
+//!   Use `rustls::crypto::aws_lc_rs::AWS_LC_RS` as a `CryptoProvider` when making a
+//!   `ClientConfig` or `ServerConfig` to use aws-lc-rs -- eg:
+//!
+//!   ```
+//!   # #[cfg(feature = "aws_lc_rs")] {
+//!   rustls::ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::AWS_LC_RS);
+//!   # }
+//!   ```
+//!
+//!   Note that aws-lc-rs has additional build-time dependencies like cmake.
+//!   See [the documentation](https://aws.github.io/aws-lc-rs/requirements/index.html) for details.
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
@@ -406,6 +420,13 @@ pub mod internal {
         pub use crate::record_layer::RecordLayer;
     }
 }
+
+// Have a (non-public) "test provider" mod which supplies
+// tests that need part of a *ring*-compatible provider module.
+#[cfg(all(any(test, bench), not(feature = "ring"), feature = "aws_lc_rs"))]
+use crate::crypto::{aws_lc_rs as test_provider, aws_lc_rs::AWS_LC_RS as TEST_PROVIDER};
+#[cfg(all(any(test, bench), feature = "ring"))]
+use crate::crypto::{ring as test_provider, ring::RING as TEST_PROVIDER};
 
 // The public interface is:
 pub use crate::builder::{

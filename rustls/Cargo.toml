@@ -16,6 +16,7 @@ build = "build.rs"
 rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
+aws-lc-rs = { version = "1", optional = true }
 log = { version = "0.4.4", optional = true }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
@@ -26,6 +27,7 @@ zeroize = "1.6.0"
 [features]
 default = ["logging", "ring", "tls12"]
 logging = ["log"]
+aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 ring = ["dep:ring", "webpki/ring"]
 quic = []
 tls12 = []

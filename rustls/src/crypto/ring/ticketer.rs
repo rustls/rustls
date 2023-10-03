@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 use crate::error::Error;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;

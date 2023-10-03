@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 use crate::crypto::cipher::{Iv, Nonce};
 use crate::crypto::tls13;
 use crate::error::Error;

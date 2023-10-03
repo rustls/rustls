@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 use crate::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
@@ -85,10 +87,8 @@ impl ActiveKeyExchange for KeyExchange {
     /// Completes the key exchange, given the peer's public key.
     fn complete(self: Box<Self>, peer: &[u8]) -> Result<SharedSecret, Error> {
         let peer_key = agreement::UnparsedPublicKey::new(self.agreement_algorithm, peer);
-        agreement::agree_ephemeral(self.priv_key, &peer_key, |secret| {
-            SharedSecret::from(secret)
-        })
-        .map_err(|_| PeerMisbehaved::InvalidKeyShare.into())
+        super::ring_shim::agree_ephemeral(self.priv_key, &peer_key)
+            .map_err(|_| PeerMisbehaved::InvalidKeyShare.into())
     }
 
     /// Return the group being used.

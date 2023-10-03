@@ -186,17 +186,20 @@ impl ClientCertVerifierBuilder {
 ///
 /// To require all clients present a client certificate issued by a trusted CA:
 /// ```no_run
+/// # #[cfg(feature = "ring")] {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
 /// # let roots = RootCertStore::empty();
 /// let client_verifier = WebPkiClientVerifier::builder(roots.into())
 ///   .build()
 ///   .unwrap();
+/// # }
 /// ```
 ///
 /// Or, to allow clients presenting a client certificate authenticated by a trusted CA, or
 /// anonymous clients that present no client certificate:
 /// ```no_run
+/// # #[cfg(feature = "ring")] {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::WebPkiClientVerifier;
 /// # let roots = RootCertStore::empty();
@@ -204,6 +207,7 @@ impl ClientCertVerifierBuilder {
 ///   .allow_unauthenticated()
 ///   .build()
 ///   .unwrap();
+/// # }
 /// ```
 ///
 /// If you wish to disable advertising client authentication:
@@ -217,6 +221,7 @@ impl ClientCertVerifierBuilder {
 /// You can also configure the client verifier to check for certificate revocation with
 /// client certificate revocation lists (CRLs):
 /// ```no_run
+/// # #[cfg(feature = "ring")] {
 /// # use rustls::RootCertStore;
 /// # use rustls::server::{WebPkiClientVerifier};
 /// # let roots = RootCertStore::empty();
@@ -225,6 +230,7 @@ impl ClientCertVerifierBuilder {
 ///   .with_crls(crls)
 ///   .build()
 ///   .unwrap();
+/// # }
 /// ```
 ///
 /// [^1]: <https://github.com/rustls/webpki>

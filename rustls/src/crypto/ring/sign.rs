@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
 use crate::sign::{Signer, SigningKey};
@@ -141,7 +143,7 @@ impl RsaSigner {
 
 impl Signer for RsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        let mut sig = vec![0; self.key.public().modulus_len()];
+        let mut sig = vec![0; super::ring_shim::rsa_key_pair_public_modulus_len(&self.key)];
 
         let rng = SystemRandom::new();
         self.key
@@ -186,7 +188,7 @@ impl EcdsaSigningKey {
                 Self::convert_sec1_to_pkcs8(scheme, sigalg, sec1.secret_sec1_der(), &rng)?
             }
             PrivateKeyDer::Pkcs8(pkcs8) => {
-                EcdsaKeyPair::from_pkcs8(sigalg, pkcs8.secret_pkcs8_der(), &rng).map_err(|_| ())?
+                super::ring_shim::ecdsa_key_pair_from_pkcs8(sigalg, pkcs8.secret_pkcs8_der(), &rng)?
             }
             _ => return Err(()),
         };
@@ -218,7 +220,7 @@ impl EcdsaSigningKey {
         pkcs8_inner.extend_from_slice(pkcs8_prefix);
         pkcs8_inner.extend_from_slice(&sec1_wrap);
 
-        EcdsaKeyPair::from_pkcs8(sigalg, &wrap_in_sequence(&pkcs8_inner), rng).map_err(|_| ())
+        super::ring_shim::ecdsa_key_pair_from_pkcs8(sigalg, &wrap_in_sequence(&pkcs8_inner), rng)
     }
 }
 
