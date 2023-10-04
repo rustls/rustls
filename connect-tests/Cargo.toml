@@ -14,4 +14,4 @@ rustls = { path = "../rustls", features = [ "logging" ]}
 
 [dev-dependencies]
 regex = "1.0"
-ring = "0.16.20"
+ring = "0.17.0"
