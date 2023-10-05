@@ -495,8 +495,8 @@ pub mod unbuffered {
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier, WantsVersions};
 pub use crate::common_state::{CommonState, IoState, Side};
 #[cfg(feature = "std")]
-pub use crate::conn::{Connection, Reader};
-pub use crate::conn::{ConnectionCommon, SideData, Writer};
+pub use crate::conn::{Connection, Reader, Writer};
+pub use crate::conn::{ConnectionCommon, SideData};
 pub use crate::enums::{
     AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
     SignatureScheme,
