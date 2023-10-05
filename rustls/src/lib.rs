@@ -386,6 +386,7 @@ mod conn;
 pub mod crypto;
 mod error;
 mod hash_hs;
+#[cfg(feature = "std")]
 mod limited_cache;
 mod rand;
 mod record_layer;
@@ -582,9 +583,11 @@ pub mod server {
         ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
     };
     pub use builder::WantsServerCert;
+    pub use handy::NoServerSessionStorage;
     #[cfg(feature = "std")]
     pub use handy::ResolvesServerCertUsingSni;
-    pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
+    #[cfg(feature = "std")]
+    pub use handy::ServerSessionMemoryCache;
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{
         Accepted, ServerConfig, ServerConnectionData, UnbufferedServerConnection,

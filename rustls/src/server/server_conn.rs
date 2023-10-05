@@ -213,7 +213,9 @@ impl<'a> ClientHello<'a> {
 /// # Defaults
 ///
 /// * [`ServerConfig::max_fragment_size`]: the default is `None` (meaning 16kB).
-/// * [`ServerConfig::session_storage`]: the default stores 256 sessions in memory.
+/// * [`ServerConfig::session_storage`]: if the `std` feature is enabled, the default stores 256
+///   sessions in memory. If the `std` feature is not enabled, the default is to not store any
+///   sessions.
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
