@@ -19,19 +19,12 @@ pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
     oldest: VecDeque<K>,
 }
 
+#[cfg(feature = "std")]
 impl<K, V> LimitedCache<K, V>
 where
     K: Eq + Hash + Clone + core::fmt::Debug,
     V: Default,
 {
-    /// Create a new LimitedCache with the given rough capacity.
-    pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
-        Self {
-            map: HashMap::with_capacity(capacity_order_of_magnitude),
-            oldest: VecDeque::with_capacity(capacity_order_of_magnitude),
-        }
-    }
-
     pub(crate) fn get_or_insert_default_and_edit(&mut self, k: K, edit: impl FnOnce(&mut V)) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(value) => {
@@ -51,6 +44,28 @@ where
             if let Some(oldest_key) = self.oldest.pop_front() {
                 self.map.remove(&oldest_key);
             }
+        }
+    }
+
+    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        self.map.get_mut(k)
+    }
+}
+
+impl<K, V> LimitedCache<K, V>
+where
+    K: Eq + Hash + Clone + core::fmt::Debug,
+    V: Default,
+{
+    /// Create a new LimitedCache with the given rough capacity.
+    pub(crate) fn new(capacity_order_of_magnitude: usize) -> Self {
+        Self {
+            map: HashMap::with_capacity(capacity_order_of_magnitude),
+            oldest: VecDeque::with_capacity(capacity_order_of_magnitude),
         }
     }
 
@@ -84,14 +99,6 @@ where
         Q: Hash + Eq,
     {
         self.map.get(k)
-    }
-
-    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq,
-    {
-        self.map.get_mut(k)
     }
 
     pub(crate) fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
@@ -205,6 +212,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_get_or_insert_default_and_edit_evicts_old_items_to_meet_capacity() {
         let mut t = Test::new(3);
@@ -233,6 +241,7 @@ mod tests {
         assert_eq!(t.get("jkl"), None);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_get_or_insert_default_and_edit_edits_existing_item() {
         let mut t = Test::new(3);

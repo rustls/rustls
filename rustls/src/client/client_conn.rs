@@ -21,7 +21,7 @@ use crate::KeyLog;
 use crate::WantsVerifier;
 use crate::{verify, WantsVersions};
 
-use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
+use super::handy::NoClientSessionStorage;
 use super::hs;
 
 use pki_types::{ServerName, UnixTime};
@@ -400,7 +400,7 @@ impl Clone for ClientConfig {
 #[derive(Clone, Debug)]
 pub struct Resumption {
     /// How we store session data or tickets. The default is to use an in-memory
-    /// [ClientSessionMemoryCache].
+    /// [super::handy::ClientSessionMemoryCache].
     pub(super) store: Arc<dyn ClientSessionStore>,
 
     /// What mechanism is used for resuming a TLS 1.2 session.
@@ -412,9 +412,10 @@ impl Resumption {
     ///
     /// This is the default `Resumption` choice, and enables resuming a TLS 1.2 session with
     /// a session id or RFC 5077 ticket.
+    #[cfg(feature = "std")]
     pub fn in_memory_sessions(num: usize) -> Self {
         Self {
-            store: Arc::new(ClientSessionMemoryCache::new(num)),
+            store: Arc::new(super::handy::ClientSessionMemoryCache::new(num)),
             tls12_resumption: Tls12Resumption::SessionIdOrTickets,
         }
     }
@@ -439,7 +440,8 @@ impl Resumption {
 
     /// Configure whether TLS 1.2 sessions may be resumed, and by what mechanism.
     ///
-    /// This is meaningless if you've disabled resumption entirely.
+    /// This is meaningless if you've disabled resumption entirely, which is the case in `no-std`
+    /// contexts.
     pub fn tls12_resumption(mut self, tls12: Tls12Resumption) -> Self {
         self.tls12_resumption = tls12;
         self
@@ -450,7 +452,13 @@ impl Default for Resumption {
     /// Create an in-memory session store resumption with up to 256 server names, allowing
     /// a TLS 1.2 session to resume with a session id or RFC 5077 ticket.
     fn default() -> Self {
-        Self::in_memory_sessions(256)
+        #[cfg(feature = "std")]
+        let ret = Self::in_memory_sessions(256);
+
+        #[cfg(not(feature = "std"))]
+        let ret = Self::disabled();
+
+        ret
     }
 }
 
