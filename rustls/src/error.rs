@@ -4,7 +4,6 @@ use crate::rand;
 
 use alloc::format;
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use std::error::Error as StdError;
@@ -387,7 +386,7 @@ impl From<CertificateError> for AlertDescription {
             // certificate_unknown
             //  Some other (unspecified) issue arose in processing the
             //  certificate, rendering it unacceptable.
-            Other(_) => Self::CertificateUnknown,
+            Other(..) => Self::CertificateUnknown,
         }
     }
 }
@@ -544,43 +543,64 @@ impl From<rand::GetRandomFailed> for Error {
     }
 }
 
-/// Any other error that cannot be expressed by a more specific [`Error`] variant.
-///
-/// For example, an `OtherError` could be produced by a custom crypto provider
-/// exposing a provider specific error.
-///
-/// Enums holding this type will never compare equal to each other.
-#[derive(Debug, Clone)]
-pub struct OtherError(pub Arc<dyn StdError + Send + Sync>);
+mod other_error {
+    #[cfg(feature = "std")]
+    use alloc::sync::Arc;
+    use core::fmt;
+    #[cfg(feature = "std")]
+    use std::error::Error as StdError;
 
-impl PartialEq<Self> for OtherError {
-    fn eq(&self, _other: &Self) -> bool {
-        false
+    use super::Error;
+
+    /// Any other error that cannot be expressed by a more specific [`Error`] variant.
+    ///
+    /// For example, an `OtherError` could be produced by a custom crypto provider
+    /// exposing a provider specific error.
+    ///
+    /// Enums holding this type will never compare equal to each other.
+    #[derive(Debug, Clone)]
+    pub struct OtherError(#[cfg(feature = "std")] pub Arc<dyn StdError + Send + Sync>);
+
+    impl PartialEq<Self> for OtherError {
+        fn eq(&self, _other: &Self) -> bool {
+            false
+        }
+    }
+
+    impl From<OtherError> for Error {
+        fn from(value: OtherError) -> Self {
+            Self::Other(value)
+        }
+    }
+
+    impl fmt::Display for OtherError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            #[cfg(feature = "std")]
+            {
+                write!(f, "{}", self.0)
+            }
+            #[cfg(not(feature = "std"))]
+            {
+                f.write_str("no further information available")
+            }
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl StdError for OtherError {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            Some(self.0.as_ref())
+        }
     }
 }
 
-impl From<OtherError> for Error {
-    fn from(value: OtherError) -> Self {
-        Self::Other(value)
-    }
-}
-
-impl fmt::Display for OtherError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl StdError for OtherError {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        Some(self.0.as_ref())
-    }
-}
+pub use other_error::OtherError;
 
 #[cfg(test)]
 mod tests {
     use super::{Error, InvalidMessage};
-    use crate::error::{CertRevocationListError, OtherError};
+    use crate::error::CertRevocationListError;
+    use crate::error::OtherError;
 
     #[test]
     fn certificate_error_equality() {
@@ -598,7 +618,10 @@ mod tests {
             ApplicationVerificationFailure,
             ApplicationVerificationFailure
         );
-        let other = Other(OtherError(alloc::sync::Arc::from(Box::from(""))));
+        let other = Other(OtherError(
+            #[cfg(feature = "std")]
+            alloc::sync::Arc::from(Box::from("")),
+        ));
         assert_ne!(other, other);
         assert_ne!(BadEncoding, Expired);
     }
@@ -619,12 +642,16 @@ mod tests {
         assert_eq!(UnsupportedDeltaCrl, UnsupportedDeltaCrl);
         assert_eq!(UnsupportedIndirectCrl, UnsupportedIndirectCrl);
         assert_eq!(UnsupportedRevocationReason, UnsupportedRevocationReason);
-        let other = Other(OtherError(alloc::sync::Arc::from(Box::from(""))));
+        let other = Other(OtherError(
+            #[cfg(feature = "std")]
+            alloc::sync::Arc::from(Box::from("")),
+        ));
         assert_ne!(other, other);
         assert_ne!(BadSignature, InvalidCrlNumber);
     }
 
     #[test]
+    #[cfg(feature = "std")]
     fn other_error_equality() {
         let other_error = OtherError(alloc::sync::Arc::from(Box::from("")));
         assert_ne!(other_error, other_error);
@@ -660,7 +687,10 @@ mod tests {
             Error::NoApplicationProtocol,
             Error::BadMaxFragmentSize,
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
-            Error::Other(OtherError(alloc::sync::Arc::from(Box::from("")))),
+            Error::Other(OtherError(
+                #[cfg(feature = "std")]
+                alloc::sync::Arc::from(Box::from("")),
+            )),
         ];
 
         for err in all {
