@@ -586,11 +586,11 @@ pub mod server {
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{
-        Accepted, Acceptor, ServerConfig, ServerConnectionData, UnbufferedServerConnection,
+        Accepted, ServerConfig, ServerConnectionData, UnbufferedServerConnection,
     };
-    pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
     #[cfg(feature = "std")]
-    pub use server_conn::{ReadEarlyData, ServerConnection};
+    pub use server_conn::{Acceptor, ReadEarlyData, ServerConnection};
+    pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
