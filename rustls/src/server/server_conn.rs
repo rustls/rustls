@@ -10,16 +10,20 @@ use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
-use crate::time_provider::{DefaultTimeProvider, TimeProvider};
+#[cfg(feature = "std")]
+use crate::time_provider::DefaultTimeProvider;
+use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
 use crate::versions;
 use crate::KeyLog;
-use crate::{sign, WantsVerifier, WantsVersions};
+#[cfg(feature = "std")]
+use crate::WantsVerifier;
+use crate::{sign, WantsVersions};
 
 use super::hs;
 
-use pki_types::DnsName;
+use pki_types::{DnsName, UnixTime};
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -255,7 +259,7 @@ pub struct ServerConfig {
 
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
-    pub(super) versions: crate::versions::EnabledVersions,
+    pub(super) versions: versions::EnabledVersions,
 
     /// How to verify client certificates.
     pub(super) verifier: Arc<dyn verify::ClientCertVerifier>,
@@ -328,6 +332,9 @@ pub struct ServerConfig {
     /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
     #[cfg(feature = "tls12")]
     pub require_ems: bool,
+
+    /// Provides the current system time
+    pub time_provider: Arc<dyn TimeProvider>,
 }
 
 // Avoid a `Clone` bound on `C`.
@@ -350,6 +357,7 @@ impl Clone for ServerConfig {
             send_tls13_tickets: self.send_tls13_tickets,
             #[cfg(feature = "tls12")]
             require_ems: self.require_ems,
+            time_provider: Arc::clone(&self.time_provider),
         }
     }
 }
@@ -360,6 +368,7 @@ impl ServerConfig {
     /// and safe protocol version defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_protocol_versions(versions::DEFAULT_VERSIONS)
     }
@@ -376,6 +385,7 @@ impl ServerConfig {
     ///   the crate features and process default.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder_with_protocol_versions(
         versions: &[&'static versions::SupportedProtocolVersion],
     ) -> ConfigBuilder<Self, WantsVerifier> {
@@ -397,6 +407,7 @@ impl ServerConfig {
     /// version is not supported by the provider's ciphersuites.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder_with_provider(
         provider: Arc<CryptoProvider>,
     ) -> ConfigBuilder<Self, WantsVersions> {
@@ -404,6 +415,33 @@ impl ServerConfig {
             state: WantsVersions {
                 provider,
                 time_provider: Arc::new(DefaultTimeProvider),
+            },
+            side: PhantomData,
+        }
+    }
+
+    /// Create a builder for a server configuration with no default implementation details.
+    ///
+    /// This API must be used by `no_std` users.
+    ///
+    /// You must provide a specific [`TimeProvider`].
+    ///
+    /// You must provide a specific [`CryptoProvider`].
+    ///
+    /// This will use the provider's configured ciphersuites. You must additionally choose
+    /// which protocol versions to enable, using `with_protocol_versions` or
+    /// `with_safe_default_protocol_versions` and handling the `Result` in case a protocol
+    /// version is not supported by the provider's ciphersuites.
+    ///
+    /// For more information, see the [`ConfigBuilder`] documentation.
+    pub fn builder_with_details(
+        provider: Arc<CryptoProvider>,
+        time_provider: Arc<dyn TimeProvider>,
+    ) -> ConfigBuilder<Self, WantsVersions> {
+        ConfigBuilder {
+            state: WantsVersions {
+                provider,
+                time_provider,
             },
             side: PhantomData,
         }
@@ -444,6 +482,12 @@ impl ServerConfig {
             .cipher_suites
             .iter()
             .any(|cs| cs.usable_for_protocol(proto))
+    }
+
+    pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
+        self.time_provider
+            .current_time()
+            .ok_or(Error::FailedToGetCurrentTime)
     }
 }
 

@@ -406,9 +406,9 @@ impl ServerSessionValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enums::*;
     use crate::msgs::codec::{Codec, Reader};
 
+    #[cfg(feature = "std")]
     #[test]
     fn serversessionvalue_is_debug() {
         let ssv = ServerSessionValue::new(

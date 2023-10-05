@@ -4,6 +4,7 @@ use crate::error::Error;
 use crate::msgs::handshake::CertificateChain;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
+use crate::time_provider::TimeProvider;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
 use crate::versions;
 use crate::NoKeyLog;
@@ -25,6 +26,7 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
                 provider: self.state.provider,
                 versions: self.state.versions,
                 verifier: client_cert_verifier,
+                time_provider: self.state.time_provider,
             },
             side: PhantomData,
         }
@@ -45,6 +47,7 @@ pub struct WantsServerCert {
     provider: Arc<CryptoProvider>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn ClientCertVerifier>,
+    time_provider: Arc<dyn TimeProvider>,
 }
 
 impl ConfigBuilder<ServerConfig, WantsServerCert> {
@@ -126,6 +129,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             send_tls13_tickets: 4,
             #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
+            time_provider: self.state.time_provider,
         }
     }
 }
