@@ -507,7 +507,11 @@ pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::ffdhe_groups;
 pub use crate::msgs::handshake::DistinguishedName;
 pub use crate::stream::{Stream, StreamOwned};
-pub use crate::suites::{ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite};
+pub use crate::suites::{
+    CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
+};
+#[cfg(feature = "std")]
+pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
@@ -607,6 +611,7 @@ pub mod sign {
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
+#[cfg(feature = "std")]
 /// APIs for implementing TLS tickets
 pub mod ticketer;
 
