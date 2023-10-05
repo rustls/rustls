@@ -4,7 +4,6 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::CertificateRevocationListDer;
-use std::error::Error as StdError;
 use webpki::{CertRevocationList, OwnedCertRevocationList};
 
 use crate::error::{CertRevocationListError, CertificateError, Error, OtherError};
@@ -52,7 +51,8 @@ impl fmt::Display for VerifierBuilderError {
     }
 }
 
-impl StdError for VerifierBuilderError {}
+#[cfg(feature = "std")]
+impl std::error::Error for VerifierBuilderError {}
 
 fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;

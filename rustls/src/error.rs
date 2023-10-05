@@ -6,7 +6,6 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-use std::error::Error as StdError;
 use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
@@ -535,7 +534,8 @@ impl From<SystemTimeError> for Error {
     }
 }
 
-impl StdError for Error {}
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
 
 impl From<rand::GetRandomFailed> for Error {
     fn from(_: rand::GetRandomFailed) -> Self {

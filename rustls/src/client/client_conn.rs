@@ -32,7 +32,6 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
-use std::error::Error as StdError;
 
 #[cfg(doc)]
 use crate::{crypto, DistinguishedName};
@@ -894,7 +893,8 @@ impl fmt::Display for EarlyDataError {
     }
 }
 
-impl StdError for EarlyDataError {}
+#[cfg(feature = "std")]
+impl std::error::Error for EarlyDataError {}
 
 /// State associated with a client connection.
 #[derive(Debug)]
