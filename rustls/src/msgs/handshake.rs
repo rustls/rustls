@@ -21,12 +21,12 @@ use crate::x509::wrap_in_sequence;
 
 use pki_types::CertificateDer;
 
+use alloc::collections::BTreeSet;
 #[cfg(feature = "logging")]
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
-use std::collections;
 
 /// Create a newtype wrapper around a given type.
 ///
@@ -286,7 +286,7 @@ pub(crate) trait ConvertServerNameList {
 impl ConvertServerNameList for [ServerName] {
     /// RFC6066: "The ServerNameList MUST NOT contain more than one name of the same name_type."
     fn has_duplicate_names_for_type(&self) -> bool {
-        let mut seen = collections::HashSet::new();
+        let mut seen = BTreeSet::new();
 
         for name in self {
             if !seen.insert(name.typ.get_u8()) {
@@ -856,7 +856,7 @@ impl ClientHelloPayload {
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = collections::HashSet::new();
+        let mut seen = BTreeSet::new();
 
         for ext in &self.extensions {
             let typ = ext.get_type().get_u16();
@@ -952,7 +952,7 @@ impl ClientHelloPayload {
 
     pub(crate) fn has_keyshare_extension_with_duplicates(&self) -> bool {
         if let Some(entries) = self.get_keyshare_extension() {
-            let mut seen = collections::HashSet::new();
+            let mut seen = BTreeSet::new();
 
             for kse in entries {
                 let grp = kse.group.get_u16();
@@ -1108,7 +1108,7 @@ impl HelloRetryRequest {
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = collections::HashSet::new();
+        let mut seen = BTreeSet::new();
 
         for ext in &self.extensions {
             let typ = ext.get_type().get_u16();
@@ -1351,7 +1351,7 @@ impl CertificateEntry {
     }
 
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = collections::HashSet::new();
+        let mut seen = BTreeSet::new();
 
         for ext in &self.exts {
             let typ = ext.get_type().get_u16();
@@ -1620,7 +1620,7 @@ pub(crate) trait HasServerExtensions {
     /// Returns true if there is more than one extension of a given
     /// type.
     fn has_duplicate_extension(&self) -> bool {
-        let mut seen = collections::HashSet::new();
+        let mut seen = BTreeSet::new();
 
         for ext in self.get_extensions() {
             let typ = ext.get_type().get_u16();
@@ -1948,7 +1948,7 @@ impl NewSessionTicketPayloadTls13 {
     }
 
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = collections::HashSet::new();
+        let mut seen = BTreeSet::new();
 
         for ext in &self.exts {
             let typ = ext.get_type().get_u16();
