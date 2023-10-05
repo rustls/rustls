@@ -31,7 +31,7 @@ mod connection {
 
     #[cfg(doc)]
     use super::ConnectionCommon;
-    use super::Writer;
+    use super::PlaintextSink;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -260,10 +260,48 @@ mod connection {
     const UNEXPECTED_EOF_MESSAGE: &str =
         "peer closed connection without sending TLS close_notify: \
 https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";
+
+    /// A structure that implements [`std::io::Write`] for writing plaintext.
+    pub struct Writer<'a> {
+        sink: &'a mut dyn PlaintextSink,
+    }
+
+    impl<'a> Writer<'a> {
+        /// Create a new Writer.
+        ///
+        /// This is not an external interface.  Get one of these objects
+        /// from [`Connection::writer`].
+        pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
+            Writer { sink }
+        }
+    }
+
+    impl<'a> io::Write for Writer<'a> {
+        /// Send the plaintext `buf` to the peer, encrypting
+        /// and authenticating it.  Once this function succeeds
+        /// you should call [`Connection::write_tls`] which will output the
+        /// corresponding TLS records.
+        ///
+        /// This function buffers plaintext sent before the
+        /// TLS handshake completes, and sends it as soon
+        /// as it can.  See [`ConnectionCommon::set_buffer_limit`] to control
+        /// the size of this buffer.
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.sink.write(buf)
+        }
+
+        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+            self.sink.write_vectored(bufs)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.sink.flush()
+        }
+    }
 }
 
 #[cfg(feature = "std")]
-pub use connection::{Connection, Reader};
+pub use connection::{Connection, Reader, Writer};
 
 /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
 /// allowing them to be the subject of a [`Writer`].
@@ -306,44 +344,6 @@ impl<T> PlaintextSink for ConnectionCommon<T> {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
-    }
-}
-
-/// A structure that implements [`std::io::Write`] for writing plaintext.
-pub struct Writer<'a> {
-    sink: &'a mut dyn PlaintextSink,
-}
-
-impl<'a> Writer<'a> {
-    /// Create a new Writer.
-    ///
-    /// This is not an external interface.  Get one of these objects
-    /// from [`Connection::writer`].
-    pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
-        Writer { sink }
-    }
-}
-
-impl<'a> io::Write for Writer<'a> {
-    /// Send the plaintext `buf` to the peer, encrypting
-    /// and authenticating it.  Once this function succeeds
-    /// you should call [`Connection::write_tls`] which will output the
-    /// corresponding TLS records.
-    ///
-    /// This function buffers plaintext sent before the
-    /// TLS handshake completes, and sends it as soon
-    /// as it can.  See [`ConnectionCommon::set_buffer_limit`] to control
-    /// the size of this buffer.
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sink.write(buf)
-    }
-
-    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-        self.sink.write_vectored(bufs)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.sink.flush()
     }
 }
 
@@ -390,6 +390,7 @@ impl<Data> ConnectionCommon<Data> {
     }
 
     /// Returns an object that allows writing plaintext.
+    #[cfg(feature = "std")]
     pub fn writer(&mut self) -> Writer {
         Writer::new(self)
     }
