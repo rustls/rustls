@@ -612,3 +612,5 @@ pub mod ticketer;
 
 /// This is the rustls manual.
 pub mod manual;
+
+pub mod time_provider;

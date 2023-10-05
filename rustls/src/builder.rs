@@ -1,4 +1,5 @@
 use crate::error::Error;
+use crate::time_provider::TimeProvider;
 use crate::versions;
 use crate::{crypto::CryptoProvider, msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS};
 
@@ -184,6 +185,7 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
 #[derive(Clone, Debug)]
 pub struct WantsVersions {
     pub(crate) provider: Arc<CryptoProvider>,
+    pub(crate) time_provider: Arc<dyn TimeProvider>,
 }
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
@@ -248,6 +250,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             state: WantsVerifier {
                 provider: self.state.provider,
                 versions: versions::EnabledVersions::new(versions),
+                time_provider: self.state.time_provider,
             },
             side: self.side,
         })
@@ -261,6 +264,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 pub struct WantsVerifier {
     pub(crate) provider: Arc<CryptoProvider>,
     pub(crate) versions: versions::EnabledVersions,
+    pub(crate) time_provider: Arc<dyn TimeProvider>,
 }
 
 /// Helper trait to abstract [`ConfigBuilder`] over building a [`ClientConfig`] or [`ServerConfig`].
