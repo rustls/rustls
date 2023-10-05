@@ -6,6 +6,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+#[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
 /// rustls reports protocol errors using this type.
@@ -527,6 +528,7 @@ impl fmt::Display for Error {
     }
 }
 
+#[cfg(feature = "std")]
 impl From<SystemTimeError> for Error {
     #[inline]
     fn from(_: SystemTimeError) -> Self {
@@ -706,6 +708,7 @@ mod tests {
         assert_eq!(err, Error::FailedToGetRandomBytes);
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn time_error_mapping() {
         use std::time::SystemTime;
