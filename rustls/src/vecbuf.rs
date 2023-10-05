@@ -70,6 +70,7 @@ impl ChunkVecBuffer {
 
     /// Append a copy of `bytes`, perhaps a prefix if
     /// we're near the limit.
+    #[cfg(feature = "std")]
     pub(crate) fn append_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
         let take = self.apply_limit(payload.len());
         self.append(payload.split_at(take).0.to_vec());
