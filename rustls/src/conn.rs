@@ -5,12 +5,11 @@ use crate::error::{Error, PeerMisbehaved};
 use crate::log::trace;
 use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer};
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload, OutboundChunks};
+use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut};
@@ -22,16 +21,15 @@ pub(crate) mod unbuffered;
 mod connection {
     use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
+    use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
+    use crate::ConnectionCommon;
 
+    use alloc::vec::Vec;
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
     use std::io;
-
-    #[cfg(doc)]
-    use super::ConnectionCommon;
-    use super::PlaintextSink;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -298,54 +296,54 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             self.sink.flush()
         }
     }
+
+    /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
+    /// allowing them to be the subject of a [`Writer`].
+    ///
+    /// [`ServerConnection`]: crate::ServerConnection
+    /// [`ClientConnection`]: crate::ClientConnection
+    pub(crate) trait PlaintextSink {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
+        fn flush(&mut self) -> io::Result<()>;
+    }
+
+    impl<T> PlaintextSink for ConnectionCommon<T> {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            Ok(self
+                .core
+                .common_state
+                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext))
+        }
+
+        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+            let payload_owner: Vec<&[u8]>;
+            let payload = match bufs.len() {
+                0 => return Ok(0),
+                1 => OutboundChunks::Single(bufs[0].deref()),
+                _ => {
+                    payload_owner = bufs
+                        .iter()
+                        .map(|io_slice| io_slice.deref())
+                        .collect();
+
+                    OutboundChunks::new(&payload_owner)
+                }
+            };
+            Ok(self
+                .core
+                .common_state
+                .buffer_plaintext(payload, &mut self.sendable_plaintext))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
-
-/// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
-/// allowing them to be the subject of a [`Writer`].
-///
-/// [`ServerConnection`]: crate::ServerConnection
-/// [`ClientConnection`]: crate::ClientConnection
-pub(crate) trait PlaintextSink {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
-    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
-    fn flush(&mut self) -> io::Result<()>;
-}
-
-impl<T> PlaintextSink for ConnectionCommon<T> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self
-            .core
-            .common_state
-            .buffer_plaintext(buf.into(), &mut self.sendable_plaintext))
-    }
-
-    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-        let payload_owner: Vec<&[u8]>;
-        let payload = match bufs.len() {
-            0 => return Ok(0),
-            1 => OutboundChunks::Single(bufs[0].deref()),
-            _ => {
-                payload_owner = bufs
-                    .iter()
-                    .map(|io_slice| io_slice.deref())
-                    .collect();
-
-                OutboundChunks::new(&payload_owner)
-            }
-        };
-        Ok(self
-            .core
-            .common_state
-            .buffer_plaintext(payload, &mut self.sendable_plaintext))
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
 
 #[derive(Debug)]
 pub(crate) struct ConnectionRandoms {
