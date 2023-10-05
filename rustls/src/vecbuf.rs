@@ -1,6 +1,7 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::cmp;
+#[cfg(feature = "std")]
 use std::io;
 #[cfg(feature = "std")]
 use std::io::Read;
@@ -41,12 +42,6 @@ impl ChunkVecBuffer {
         self.chunks.is_empty()
     }
 
-    pub(crate) fn is_full(&self) -> bool {
-        self.limit
-            .map(|limit| self.len() > limit)
-            .unwrap_or_default()
-    }
-
     /// How many bytes we're storing
     pub(crate) fn len(&self) -> usize {
         let mut len = 0;
@@ -68,15 +63,6 @@ impl ChunkVecBuffer {
         }
     }
 
-    /// Append a copy of `bytes`, perhaps a prefix if
-    /// we're near the limit.
-    #[cfg(feature = "std")]
-    pub(crate) fn append_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
-        let take = self.apply_limit(payload.len());
-        self.append(payload.split_at(take).0.to_vec());
-        take
-    }
-
     /// Take and append the given `bytes`.
     pub(crate) fn append(&mut self, bytes: Vec<u8>) -> usize {
         let len = bytes.len();
@@ -94,9 +80,38 @@ impl ChunkVecBuffer {
         self.chunks.pop_front()
     }
 
+    #[cfg(read_buf)]
+    /// Read data out of this object, writing it into `cursor`.
+    pub(crate) fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
+        while !self.is_empty() && cursor.capacity() > 0 {
+            let chunk = self.chunks[0].as_slice();
+            let used = core::cmp::min(chunk.len(), cursor.capacity());
+            cursor.append(&chunk[..used]);
+            self.consume(used);
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl ChunkVecBuffer {
+    pub(crate) fn is_full(&self) -> bool {
+        self.limit
+            .map(|limit| self.len() > limit)
+            .unwrap_or_default()
+    }
+
+    /// Append a copy of `bytes`, perhaps a prefix if
+    /// we're near the limit.
+    pub(crate) fn append_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
+        let take = self.apply_limit(payload.len());
+        self.append(payload.split_at(take).0.to_vec());
+        take
+    }
+
     /// Read data out of this object, writing it into `buf`
     /// and returning how many bytes were written there.
-    #[cfg(feature = "std")]
     pub(crate) fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut offs = 0;
 
@@ -110,19 +125,6 @@ impl ChunkVecBuffer {
         }
 
         Ok(offs)
-    }
-
-    #[cfg(read_buf)]
-    /// Read data out of this object, writing it into `cursor`.
-    pub(crate) fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
-        while !self.is_empty() && cursor.capacity() > 0 {
-            let chunk = self.chunks[0].as_slice();
-            let used = core::cmp::min(chunk.len(), cursor.capacity());
-            cursor.append(&chunk[..used]);
-            self.consume(used);
-        }
-
-        Ok(())
     }
 
     fn consume(&mut self, mut used: usize) {
@@ -154,8 +156,7 @@ impl ChunkVecBuffer {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use super::ChunkVecBuffer;
 

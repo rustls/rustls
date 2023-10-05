@@ -23,7 +23,7 @@ impl InboundPlainMessage<'_> {
         self.typ == ContentType::ChangeCipherSpec && self.payload == [0x01]
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "std"))]
     pub(crate) fn into_owned(self) -> super::PlainMessage {
         super::PlainMessage {
             version: self.version,
