@@ -1,15 +1,16 @@
 use alloc::vec::Vec;
 use core::ops::Range;
 use core::slice::SliceIndex;
+#[cfg(feature = "std")]
 use std::io;
 
 use super::codec::Codec;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
-use crate::msgs::message::{
-    InboundOpaqueMessage, InboundPlainMessage, MessageError, OutboundOpaqueMessage,
-};
+#[cfg(feature = "std")]
+use crate::msgs::message::OutboundOpaqueMessage;
+use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError};
 use crate::record_layer::{Decrypted, RecordLayer};
 
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
@@ -241,27 +242,6 @@ impl MessageDeframer {
         err
     }
 
-    /// Allow pushing handshake messages directly into the buffer.
-    #[cfg(feature = "std")]
-    pub(crate) fn push(
-        &mut self,
-        version: ProtocolVersion,
-        payload: &[u8],
-        buffer: &mut DeframerVecBuffer,
-    ) -> Result<(), Error> {
-        if !buffer.is_empty() && self.joining_hs.is_none() {
-            return Err(Error::General(
-                "cannot push QUIC messages into unrelated connection".into(),
-            ));
-        } else if let Err(err) = buffer.prepare_read(self.joining_hs.is_some()) {
-            return Err(Error::General(err.into()));
-        }
-
-        let end = buffer.len() + payload.len();
-        self.append_hs(version, ExternalPayload(payload), end, buffer)?;
-        Ok(())
-    }
-
     /// Write the handshake message contents into the buffer and update the metadata.
     ///
     /// Returns true if a complete message is found.
@@ -318,6 +298,29 @@ impl MessageDeframer {
                 false => HandshakePayloadState::Blocked,
             },
         })
+    }
+}
+
+#[cfg(feature = "std")]
+impl MessageDeframer {
+    /// Allow pushing handshake messages directly into the buffer.
+    pub(crate) fn push(
+        &mut self,
+        version: ProtocolVersion,
+        payload: &[u8],
+        buffer: &mut DeframerVecBuffer,
+    ) -> Result<(), Error> {
+        if !buffer.is_empty() && self.joining_hs.is_none() {
+            return Err(Error::General(
+                "cannot push QUIC messages into unrelated connection".into(),
+            ));
+        } else if let Err(err) = buffer.prepare_read(self.joining_hs.is_some()) {
+            return Err(Error::General(err.into()));
+        }
+
+        let end = buffer.len() + payload.len();
+        self.append_hs(version, ExternalPayload(payload), end, buffer)?;
+        Ok(())
     }
 
     /// Read some bytes from `rd`, and add them to our internal buffer.
@@ -401,6 +404,34 @@ impl DeframerVecBuffer {
         DeframerSliceBuffer::new(&mut self.buf[..self.used])
     }
 
+    /// Discard `taken` bytes from the start of our buffer.
+    pub fn discard(&mut self, taken: usize) {
+        #[allow(clippy::comparison_chain)]
+        if taken < self.used {
+            /* Before:
+             * +----------+----------+----------+
+             * | taken    | pending  |xxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ taken    ^ self.used
+             *
+             * After:
+             * +----------+----------+----------+
+             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
+             * +----------+----------+----------+
+             * 0          ^ self.used
+             */
+
+            self.buf
+                .copy_within(taken..self.used, 0);
+            self.used -= taken;
+        } else if taken == self.used {
+            self.used = 0;
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl DeframerVecBuffer {
     /// Returns true if there are messages for the caller to process
     pub fn has_pending(&self) -> bool {
         !self.is_empty()
@@ -440,31 +471,6 @@ impl DeframerVecBuffer {
         Ok(())
     }
 
-    /// Discard `taken` bytes from the start of our buffer.
-    pub fn discard(&mut self, taken: usize) {
-        #[allow(clippy::comparison_chain)]
-        if taken < self.used {
-            /* Before:
-             * +----------+----------+----------+
-             * | taken    | pending  |xxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ taken    ^ self.used
-             *
-             * After:
-             * +----------+----------+----------+
-             * | pending  |xxxxxxxxxxxxxxxxxxxxx|
-             * +----------+----------+----------+
-             * 0          ^ self.used
-             */
-
-            self.buf
-                .copy_within(taken..self.used, 0);
-            self.used -= taken;
-        } else if taken == self.used {
-            self.used = 0;
-        }
-    }
-
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -478,6 +484,7 @@ impl DeframerVecBuffer {
     }
 }
 
+#[cfg(feature = "std")]
 impl FilledDeframerBuffer for DeframerVecBuffer {
     fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[..self.used]
@@ -488,12 +495,14 @@ impl FilledDeframerBuffer for DeframerVecBuffer {
     }
 }
 
+#[cfg(feature = "std")]
 impl DeframerBuffer<'_, InternalPayload> for DeframerVecBuffer {
     fn copy(&mut self, payload: &InternalPayload, at: usize) {
         self.borrow().copy(payload, at)
     }
 }
 
+#[cfg(feature = "std")]
 impl<'a> DeframerBuffer<'a, ExternalPayload<'a>> for DeframerVecBuffer {
     fn copy(&mut self, payload: &ExternalPayload<'a>, at: usize) {
         let len = payload.len();
@@ -694,8 +703,10 @@ const HEADER_SIZE: usize = 1 + 3;
 /// service.
 const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
 
+#[cfg(feature = "std")]
 const READ_SIZE: usize = 4096;
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use std::io;
