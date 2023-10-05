@@ -183,6 +183,7 @@ impl Message<'_> {
         }
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn into_owned(self) -> Message<'static> {
         let Self { version, payload } = self;
         Message {

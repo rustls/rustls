@@ -39,6 +39,7 @@ pub struct CommonState {
     sent_fatal_alert: bool,
     /// If the peer has signaled end of stream.
     pub(crate) has_received_close_notify: bool,
+    #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
     pub(crate) received_middlebox_ccs: u8,
     pub(crate) peer_certificates: Option<CertificateChain<'static>>,
@@ -67,6 +68,7 @@ impl CommonState {
             early_traffic: false,
             sent_fatal_alert: false,
             has_received_close_notify: false,
+            #[cfg(feature = "std")]
             has_seen_eof: false,
             received_middlebox_ccs: 0,
             peer_certificates: None,

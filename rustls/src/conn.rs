@@ -13,6 +13,7 @@ use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut};
+#[cfg(feature = "std")]
 use std::io;
 
 pub(crate) mod unbuffered;
@@ -373,8 +374,127 @@ pub struct ConnectionCommon<Data> {
 }
 
 impl<Data> ConnectionCommon<Data> {
+    /// Processes any new packets read by a previous call to
+    /// [`Connection::read_tls`].
+    ///
+    /// Errors from this function relate to TLS protocol errors, and
+    /// are fatal to the connection.  Future calls after an error will do
+    /// no new work and will return the same error. After an error is
+    /// received from [`process_new_packets`], you should not call [`read_tls`]
+    /// any more (it will fill up buffers to no purpose). However, you
+    /// may call the other methods on the connection, including `write`,
+    /// `send_close_notify`, and `write_tls`. Most likely you will want to
+    /// call `write_tls` to send any alerts queued by the error and then
+    /// close the underlying connection.
+    ///
+    /// Success from this function comes with some sundry state data
+    /// about the connection.
+    ///
+    /// [`read_tls`]: Connection::read_tls
+    /// [`process_new_packets`]: Connection::process_new_packets
+    #[inline]
+    pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
+        self.core
+            .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)
+    }
+
+    /// Derives key material from the agreed connection secrets.
+    ///
+    /// This function fills in `output` with `output.len()` bytes of key
+    /// material derived from the master session secret using `label`
+    /// and `context` for diversification. Ownership of the buffer is taken
+    /// by the function and returned via the Ok result to ensure no key
+    /// material leaks if the function fails.
+    ///
+    /// See RFC5705 for more details on what this does and is for.
+    ///
+    /// For TLS1.3 connections, this function does not use the
+    /// "early" exporter at any point.
+    ///
+    /// This function fails if called prior to the handshake completing;
+    /// check with [`CommonState::is_handshaking`] first.
+    ///
+    /// This function fails if `output.len()` is zero.
+    #[inline]
+    pub fn export_keying_material<T: AsMut<[u8]>>(
+        &self,
+        output: T,
+        label: &[u8],
+        context: Option<&[u8]>,
+    ) -> Result<T, Error> {
+        self.core
+            .export_keying_material(output, label, context)
+    }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        if !self.enable_secret_extraction {
+            return Err(Error::General("Secret extraction is disabled".into()));
+        }
+
+        let st = self.core.state?;
+
+        let record_layer = self.core.common_state.record_layer;
+        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
+        Ok(ExtractedSecrets {
+            tx: (record_layer.write_seq(), tx),
+            rx: (record_layer.read_seq(), rx),
+        })
+    }
+
+    /// Sets a limit on the internal buffers used to buffer
+    /// unsent plaintext (prior to completing the TLS handshake)
+    /// and unsent TLS records.  This limit acts only on application
+    /// data written through [`Connection::writer`].
+    ///
+    /// By default the limit is 64KB.  The limit can be set
+    /// at any time, even if the current buffer use is higher.
+    ///
+    /// [`None`] means no limit applies, and will mean that written
+    /// data is buffered without bound -- it is up to the application
+    /// to appropriately schedule its plaintext and TLS writes to bound
+    /// memory usage.
+    ///
+    /// For illustration: `Some(1)` means a limit of one byte applies:
+    /// [`Connection::writer`] will accept only one byte, encrypt it and
+    /// add a TLS header.  Once this is sent via [`Connection::write_tls`],
+    /// another byte may be sent.
+    ///
+    /// # Internal write-direction buffering
+    /// rustls has two buffers whose size are bounded by this setting:
+    ///
+    /// ## Buffering of unsent plaintext data prior to handshake completion
+    ///
+    /// Calls to [`Connection::writer`] before or during the handshake
+    /// are buffered (up to the limit specified here).  Once the
+    /// handshake completes this data is encrypted and the resulting
+    /// TLS records are added to the outgoing buffer.
+    ///
+    /// ## Buffering of outgoing TLS records
+    ///
+    /// This buffer is used to store TLS records that rustls needs to
+    /// send to the peer.  It is used in these two circumstances:
+    ///
+    /// - by [`Connection::process_new_packets`] when a handshake or alert
+    ///   TLS record needs to be sent.
+    /// - by [`Connection::writer`] post-handshake: the plaintext is
+    ///   encrypted and the resulting TLS record is buffered.
+    ///
+    /// This buffer is emptied by [`Connection::write_tls`].
+    ///
+    /// [`Connection::writer`]: crate::Connection::writer
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
+    pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
+        self.sendable_plaintext.set_limit(limit);
+        self.sendable_tls.set_limit(limit);
+    }
+}
+
+#[cfg(feature = "std")]
+impl<Data> ConnectionCommon<Data> {
     /// Returns an object that allows reading plaintext.
-    #[cfg(feature = "std")]
     pub fn reader(&mut self) -> Reader {
         let common = &mut self.core.common_state;
         Reader {
@@ -388,7 +508,6 @@ impl<Data> ConnectionCommon<Data> {
     }
 
     /// Returns an object that allows writing plaintext.
-    #[cfg(feature = "std")]
     pub fn writer(&mut self) -> Writer {
         Writer::new(self)
     }
@@ -494,7 +613,6 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
-    #[cfg(feature = "std")]
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message<'static>>, Error> {
         let mut deframer_buffer = self.deframer_buffer.borrow();
         let res = self
@@ -511,33 +629,8 @@ impl<Data> ConnectionCommon<Data> {
         }
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
         self.core.state = Ok(new);
-    }
-
-    /// Processes any new packets read by a previous call to
-    /// [`Connection::read_tls`].
-    ///
-    /// Errors from this function relate to TLS protocol errors, and
-    /// are fatal to the connection.  Future calls after an error will do
-    /// no new work and will return the same error. After an error is
-    /// received from [`process_new_packets`], you should not call [`read_tls`]
-    /// any more (it will fill up buffers to no purpose). However, you
-    /// may call the other methods on the connection, including `write`,
-    /// `send_close_notify`, and `write_tls`. Most likely you will want to
-    /// call `write_tls` to send any alerts queued by the error and then
-    /// close the underlying connection.
-    ///
-    /// Success from this function comes with some sundry state data
-    /// about the connection.
-    ///
-    /// [`read_tls`]: Connection::read_tls
-    /// [`process_new_packets`]: Connection::process_new_packets
-    #[inline]
-    pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        self.core
-            .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)
     }
 
     /// Read TLS content from `rd` into the internal buffer.
@@ -586,99 +679,6 @@ impl<Data> ConnectionCommon<Data> {
     /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
     pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
         self.sendable_tls.write_to(wr)
-    }
-
-    /// Derives key material from the agreed connection secrets.
-    ///
-    /// This function fills in `output` with `output.len()` bytes of key
-    /// material derived from the master session secret using `label`
-    /// and `context` for diversification. Ownership of the buffer is taken
-    /// by the function and returned via the Ok result to ensure no key
-    /// material leaks if the function fails.
-    ///
-    /// See RFC5705 for more details on what this does and is for.
-    ///
-    /// For TLS1.3 connections, this function does not use the
-    /// "early" exporter at any point.
-    ///
-    /// This function fails if called prior to the handshake completing;
-    /// check with [`CommonState::is_handshaking`] first.
-    ///
-    /// This function fails if `output.len()` is zero.
-    #[inline]
-    pub fn export_keying_material<T: AsMut<[u8]>>(
-        &self,
-        output: T,
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<T, Error> {
-        self.core
-            .export_keying_material(output, label, context)
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        if !self.enable_secret_extraction {
-            return Err(Error::General("Secret extraction is disabled".into()));
-        }
-
-        let st = self.core.state?;
-
-        let record_layer = self.core.common_state.record_layer;
-        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
-        Ok(ExtractedSecrets {
-            tx: (record_layer.write_seq(), tx),
-            rx: (record_layer.read_seq(), rx),
-        })
-    }
-
-    /// Sets a limit on the internal buffers used to buffer
-    /// unsent plaintext (prior to completing the TLS handshake)
-    /// and unsent TLS records.  This limit acts only on application
-    /// data written through [`Connection::writer`].
-    ///
-    /// By default the limit is 64KB.  The limit can be set
-    /// at any time, even if the current buffer use is higher.
-    ///
-    /// [`None`] means no limit applies, and will mean that written
-    /// data is buffered without bound -- it is up to the application
-    /// to appropriately schedule its plaintext and TLS writes to bound
-    /// memory usage.
-    ///
-    /// For illustration: `Some(1)` means a limit of one byte applies:
-    /// [`Connection::writer`] will accept only one byte, encrypt it and
-    /// add a TLS header.  Once this is sent via [`Connection::write_tls`],
-    /// another byte may be sent.
-    ///
-    /// # Internal write-direction buffering
-    /// rustls has two buffers whose size are bounded by this setting:
-    ///
-    /// ## Buffering of unsent plaintext data prior to handshake completion
-    ///
-    /// Calls to [`Connection::writer`] before or during the handshake
-    /// are buffered (up to the limit specified here).  Once the
-    /// handshake completes this data is encrypted and the resulting
-    /// TLS records are added to the outgoing buffer.
-    ///
-    /// ## Buffering of outgoing TLS records
-    ///
-    /// This buffer is used to store TLS records that rustls needs to
-    /// send to the peer.  It is used in these two circumstances:
-    ///
-    /// - by [`Connection::process_new_packets`] when a handshake or alert
-    ///   TLS record needs to be sent.
-    /// - by [`Connection::writer`] post-handshake: the plaintext is
-    ///   encrypted and the resulting TLS record is buffered.
-    ///
-    /// This buffer is emptied by [`Connection::write_tls`].
-    ///
-    /// [`Connection::writer`]: crate::Connection::writer
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
-    /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
-    pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.sendable_plaintext.set_limit(limit);
-        self.sendable_tls.set_limit(limit);
     }
 }
 
