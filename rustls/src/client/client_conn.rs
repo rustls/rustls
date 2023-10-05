@@ -1,6 +1,6 @@
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
-use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
+use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -10,7 +10,7 @@ use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
 use crate::sign;
-use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
+use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
@@ -33,7 +33,6 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 use std::error::Error as StdError;
-use std::io;
 
 #[cfg(doc)]
 use crate::{crypto, DistinguishedName};
@@ -559,11 +558,6 @@ impl EarlyData {
         }
     }
 
-    fn check_write(&mut self, sz: usize) -> io::Result<usize> {
-        self.check_write_opt(sz)
-            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
-    }
-
     fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
         match self.state {
             EarlyDataState::Disabled => unreachable!(),
@@ -580,160 +574,187 @@ impl EarlyData {
             EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => None,
         }
     }
-
-    fn bytes_left(&self) -> usize {
-        self.left
-    }
 }
 
-/// Stub that implements io::Write and dispatches to `write_early_data`.
-pub struct WriteEarlyData<'a> {
-    sess: &'a mut ClientConnection,
-}
+#[cfg(feature = "std")]
+mod connection {
+    use crate::common_state::Protocol;
+    use crate::conn::ConnectionCommon;
+    use crate::conn::ConnectionCore;
+    use crate::error::Error;
+    use crate::suites::ExtractedSecrets;
+    use crate::ClientConfig;
 
-impl<'a> WriteEarlyData<'a> {
-    fn new(sess: &'a mut ClientConnection) -> WriteEarlyData<'a> {
-        WriteEarlyData { sess }
+    use pki_types::ServerName;
+
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
+    use core::fmt;
+    use core::ops::{Deref, DerefMut};
+    use std::io;
+
+    use super::ClientConnectionData;
+
+    /// Stub that implements io::Write and dispatches to `write_early_data`.
+    pub struct WriteEarlyData<'a> {
+        sess: &'a mut ClientConnection,
     }
 
-    /// How many bytes you may send.  Writes will become short
-    /// once this reaches zero.
-    pub fn bytes_left(&self) -> usize {
-        self.sess
-            .inner
-            .core
-            .data
-            .early_data
-            .bytes_left()
-    }
-}
+    impl<'a> WriteEarlyData<'a> {
+        fn new(sess: &'a mut ClientConnection) -> WriteEarlyData<'a> {
+            WriteEarlyData { sess }
+        }
 
-impl<'a> io::Write for WriteEarlyData<'a> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sess.write_early_data(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-/// This represents a single TLS client connection.
-pub struct ClientConnection {
-    inner: ConnectionCommon<ClientConnectionData>,
-}
-
-impl fmt::Debug for ClientConnection {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("ClientConnection")
-            .finish()
-    }
-}
-
-impl ClientConnection {
-    /// Make a new ClientConnection.  `config` controls how
-    /// we behave in the TLS protocol, `name` is the
-    /// name of the server we want to talk to.
-    pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-        Ok(Self {
-            inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
-        })
-    }
-
-    /// Returns an `io::Write` implementer you can write bytes to
-    /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
-    ///
-    /// This returns None in many circumstances when the capability to
-    /// send early data is not available, including but not limited to:
-    ///
-    /// - The server hasn't been talked to previously.
-    /// - The server does not support resumption.
-    /// - The server does not support early data.
-    /// - The resumption data for the server has expired.
-    ///
-    /// The server specifies a maximum amount of early data.  You can
-    /// learn this limit through the returned object, and writes through
-    /// it will process only this many bytes.
-    ///
-    /// The server can choose not to accept any sent early data --
-    /// in this case the data is lost but the connection continues.  You
-    /// can tell this happened using `is_early_data_accepted`.
-    pub fn early_data(&mut self) -> Option<WriteEarlyData> {
-        if self
-            .inner
-            .core
-            .data
-            .early_data
-            .is_enabled()
-        {
-            Some(WriteEarlyData::new(self))
-        } else {
-            None
+        /// How many bytes you may send.  Writes will become short
+        /// once this reaches zero.
+        pub fn bytes_left(&self) -> usize {
+            self.sess
+                .inner
+                .core
+                .data
+                .early_data
+                .bytes_left()
         }
     }
 
-    /// Returns True if the server signalled it will process early data.
-    ///
-    /// If you sent early data and this returns false at the end of the
-    /// handshake then the server will not process the data.  This
-    /// is not an error, but you may wish to resend the data.
-    pub fn is_early_data_accepted(&self) -> bool {
-        self.inner.core.is_early_data_accepted()
+    impl<'a> io::Write for WriteEarlyData<'a> {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.sess.write_early_data(buf)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
     }
 
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
+    impl super::EarlyData {
+        fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+            self.check_write_opt(sz)
+                .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
+        }
+
+        fn bytes_left(&self) -> usize {
+            self.left
+        }
     }
 
-    fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.inner
-            .core
-            .data
-            .early_data
-            .check_write(data.len())
-            .map(|sz| {
-                self.inner
-                    .send_early_plaintext(&data[..sz])
+    /// This represents a single TLS client connection.
+    pub struct ClientConnection {
+        inner: ConnectionCommon<ClientConnectionData>,
+    }
+
+    impl fmt::Debug for ClientConnection {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.debug_struct("ClientConnection")
+                .finish()
+        }
+    }
+
+    impl ClientConnection {
+        /// Make a new ClientConnection.  `config` controls how
+        /// we behave in the TLS protocol, `name` is the
+        /// name of the server we want to talk to.
+        pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
+            Ok(Self {
+                inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
             })
+        }
+
+        /// Returns an `io::Write` implementer you can write bytes to
+        /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
+        ///
+        /// This returns None in many circumstances when the capability to
+        /// send early data is not available, including but not limited to:
+        ///
+        /// - The server hasn't been talked to previously.
+        /// - The server does not support resumption.
+        /// - The server does not support early data.
+        /// - The resumption data for the server has expired.
+        ///
+        /// The server specifies a maximum amount of early data.  You can
+        /// learn this limit through the returned object, and writes through
+        /// it will process only this many bytes.
+        ///
+        /// The server can choose not to accept any sent early data --
+        /// in this case the data is lost but the connection continues.  You
+        /// can tell this happened using `is_early_data_accepted`.
+        pub fn early_data(&mut self) -> Option<WriteEarlyData> {
+            if self
+                .inner
+                .core
+                .data
+                .early_data
+                .is_enabled()
+            {
+                Some(WriteEarlyData::new(self))
+            } else {
+                None
+            }
+        }
+
+        /// Returns True if the server signalled it will process early data.
+        ///
+        /// If you sent early data and this returns false at the end of the
+        /// handshake then the server will not process the data.  This
+        /// is not an error, but you may wish to resend the data.
+        pub fn is_early_data_accepted(&self) -> bool {
+            self.inner.core.is_early_data_accepted()
+        }
+
+        /// Extract secrets, so they can be used when configuring kTLS, for example.
+        /// Should be used with care as it exposes secret key material.
+        pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+            self.inner.dangerous_extract_secrets()
+        }
+
+        fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
+            self.inner
+                .core
+                .data
+                .early_data
+                .check_write(data.len())
+                .map(|sz| {
+                    self.inner
+                        .send_early_plaintext(&data[..sz])
+                })
+        }
     }
-}
 
-impl Deref for ClientConnection {
-    type Target = ConnectionCommon<ClientConnectionData>;
+    impl Deref for ClientConnection {
+        type Target = ConnectionCommon<ClientConnectionData>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
     }
-}
 
-impl DerefMut for ClientConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+    impl DerefMut for ClientConnection {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.inner
+        }
     }
-}
 
-#[cfg(feature = "std")]
-#[doc(hidden)]
-impl<'a> TryFrom<&'a mut crate::Connection> for &'a mut ClientConnection {
-    type Error = ();
+    #[doc(hidden)]
+    impl<'a> TryFrom<&'a mut crate::Connection> for &'a mut ClientConnection {
+        type Error = ();
 
-    fn try_from(value: &'a mut crate::Connection) -> Result<Self, Self::Error> {
-        use crate::Connection::*;
-        match value {
-            Client(conn) => Ok(conn),
-            Server(_) => Err(()),
+        fn try_from(value: &'a mut crate::Connection) -> Result<Self, Self::Error> {
+            use crate::Connection::*;
+            match value {
+                Client(conn) => Ok(conn),
+                Server(_) => Err(()),
+            }
+        }
+    }
+
+    impl From<ClientConnection> for crate::Connection {
+        fn from(conn: ClientConnection) -> Self {
+            Self::Client(conn)
         }
     }
 }
-
 #[cfg(feature = "std")]
-impl From<ClientConnection> for crate::Connection {
-    fn from(conn: ClientConnection) -> Self {
-        Self::Client(conn)
-    }
-}
+pub use connection::{ClientConnection, WriteEarlyData};
 
 impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(
