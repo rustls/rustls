@@ -426,7 +426,9 @@ pub use crate::key_log_file::KeyLogFile;
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::handshake::DistinguishedName;
 pub use crate::stream::{Stream, StreamOwned};
-pub use crate::suites::{ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite};
+pub use crate::suites::{
+    CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
+};
 pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
@@ -505,23 +507,6 @@ pub mod server {
 }
 
 pub use server::{ServerConfig, ServerConnection};
-
-/// All defined ciphersuites appear in this module.
-///
-/// [`crypto::ring::ALL_CIPHER_SUITES`] is provided as an array of all of these values.
-pub mod cipher_suite {
-    #[cfg(all(feature = "tls12", feature = "ring"))]
-    pub use crate::crypto::ring::tls12::{
-        TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-    };
-    #[cfg(feature = "ring")]
-    pub use crate::crypto::ring::tls13::{
-        TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
-    };
-    pub use crate::suites::CipherSuiteCommon;
-}
 
 /// All defined protocol versions appear in this module.
 ///
