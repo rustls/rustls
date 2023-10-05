@@ -536,6 +536,7 @@ pub mod client {
         ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
         WriteEarlyData,
     };
+    #[cfg(feature = "std")]
     pub use handy::ClientSessionMemoryCache;
 
     /// Dangerous configuration that should be audited and used with extreme care.
