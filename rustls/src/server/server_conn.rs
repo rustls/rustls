@@ -1,5 +1,5 @@
 use crate::builder::ConfigBuilder;
-use crate::common_state::{CommonState, Context, Protocol, Side, State};
+use crate::common_state::{CommonState, Protocol, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -31,6 +31,7 @@ use core::fmt;
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
+#[cfg(feature = "std")]
 use std::io;
 
 #[cfg(doc)]
@@ -492,11 +493,13 @@ impl ServerConfig {
 
 #[cfg(feature = "std")]
 mod connection {
-    use crate::common_state::{CommonState, Side};
+    use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
+    use crate::server::hs;
     use crate::suites::ExtractedSecrets;
 
+    use alloc::boxed::Box;
     use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt;
@@ -504,7 +507,7 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use super::{EarlyDataState, ServerConfig, ServerConnectionData};
+    use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
 
     /// Allows reading of early data in resumed TLS1.3 connections.
     ///
@@ -659,9 +662,128 @@ mod connection {
             Self::Server(conn)
         }
     }
+
+    /// Handle a server-side connection before configuration is available.
+    ///
+    /// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
+    /// the [`super::ClientHello`] of an incoming connection. This is useful for servers
+    /// that choose different certificates or cipher suites based on the
+    /// characteristics of the `ClientHello`. In particular it is useful for
+    /// servers that need to do some I/O to load a certificate and its private key
+    /// and don't want to use the blocking interface provided by
+    /// [`super::ResolvesServerCert`].
+    ///
+    /// Create an Acceptor with [`Acceptor::default()`].
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "aws_lc_rs")] {
+    /// # fn choose_server_config(
+    /// #     _: rustls::server::ClientHello,
+    /// # ) -> std::sync::Arc<rustls::ServerConfig> {
+    /// #     unimplemented!();
+    /// # }
+    /// # #[allow(unused_variables)]
+    /// # fn main() {
+    /// use rustls::server::{Acceptor, ServerConfig};
+    /// let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    /// for stream in listener.incoming() {
+    ///     let mut stream = stream.unwrap();
+    ///     let mut acceptor = Acceptor::default();
+    ///     let accepted = loop {
+    ///         acceptor.read_tls(&mut stream).unwrap();
+    ///         if let Some(accepted) = acceptor.accept().unwrap() {
+    ///             break accepted;
+    ///         }
+    ///     };
+    ///
+    ///     // For some user-defined choose_server_config:
+    ///     let config = choose_server_config(accepted.client_hello());
+    ///     let conn = accepted
+    ///         .into_connection(config)
+    ///         .unwrap();
+
+    ///     // Proceed with handling the ServerConnection.
+    /// }
+    /// # }
+    /// # }
+    /// ```
+    pub struct Acceptor {
+        inner: Option<ConnectionCommon<ServerConnectionData>>,
+    }
+
+    impl Default for Acceptor {
+        /// Return an empty Acceptor, ready to receive bytes from a new client connection.
+        fn default() -> Self {
+            Self {
+                inner: Some(
+                    ConnectionCore::new(
+                        Box::new(Accepting),
+                        ServerConnectionData::default(),
+                        CommonState::new(Side::Server),
+                    )
+                    .into(),
+                ),
+            }
+        }
+    }
+
+    impl Acceptor {
+        /// Read TLS content from `rd`.
+        ///
+        /// Returns an error if this `Acceptor` has already yielded an [`Accepted`]. For more details,
+        /// refer to [`Connection::read_tls()`].
+        ///
+        /// [`Connection::read_tls()`]: crate::Connection::read_tls
+        pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+            match &mut self.inner {
+                Some(conn) => conn.read_tls(rd),
+                None => Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "acceptor cannot read after successful acceptance",
+                )),
+            }
+        }
+
+        /// Check if a `ClientHello` message has been received.
+        ///
+        /// Returns `Ok(None)` if the complete `ClientHello` has not yet been received.
+        /// Do more I/O and then call this function again.
+        ///
+        /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
+        /// `accepted.into_connection()` to continue. Do not call this function again.
+        ///
+        /// Returns `Err(err)` if an error occurred. Do not call this function again.
+        pub fn accept(&mut self) -> Result<Option<Accepted>, Error> {
+            let mut connection = match self.inner.take() {
+                Some(conn) => conn,
+                None => {
+                    return Err(Error::General("Acceptor polled after completion".into()));
+                }
+            };
+
+            let message = match connection.first_handshake_message()? {
+                Some(msg) => msg,
+                None => {
+                    self.inner = Some(connection);
+                    return Ok(None);
+                }
+            };
+
+            let (_, sig_schemes) =
+                hs::process_client_hello(&message, false, &mut Context::from(&mut connection))?;
+
+            Ok(Some(Accepted {
+                connection,
+                message,
+                sig_schemes,
+            }))
+        }
+    }
 }
 #[cfg(feature = "std")]
-pub use connection::{ReadEarlyData, ServerConnection};
+pub use connection::{Acceptor, ReadEarlyData, ServerConnection};
 
 /// Unbuffered version of `ServerConnection`
 ///
@@ -702,125 +824,6 @@ impl DerefMut for UnbufferedServerConnection {
 impl UnbufferedConnectionCommon<ServerConnectionData> {
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
         self.core.data.early_data.pop()
-    }
-}
-
-/// Handle a server-side connection before configuration is available.
-///
-/// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
-/// the [`ClientHello`] of an incoming connection. This is useful for servers
-/// that choose different certificates or cipher suites based on the
-/// characteristics of the `ClientHello`. In particular it is useful for
-/// servers that need to do some I/O to load a certificate and its private key
-/// and don't want to use the blocking interface provided by
-/// [`ResolvesServerCert`].
-///
-/// Create an Acceptor with [`Acceptor::default()`].
-///
-/// # Example
-///
-/// ```no_run
-/// # #[cfg(feature = "aws_lc_rs")] {
-/// # fn choose_server_config(
-/// #     _: rustls::server::ClientHello,
-/// # ) -> std::sync::Arc<rustls::ServerConfig> {
-/// #     unimplemented!();
-/// # }
-/// # #[allow(unused_variables)]
-/// # fn main() {
-/// use rustls::server::{Acceptor, ServerConfig};
-/// let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-/// for stream in listener.incoming() {
-///     let mut stream = stream.unwrap();
-///     let mut acceptor = Acceptor::default();
-///     let accepted = loop {
-///         acceptor.read_tls(&mut stream).unwrap();
-///         if let Some(accepted) = acceptor.accept().unwrap() {
-///             break accepted;
-///         }
-///     };
-///
-///     // For some user-defined choose_server_config:
-///     let config = choose_server_config(accepted.client_hello());
-///     let conn = accepted
-///         .into_connection(config)
-///         .unwrap();
-
-///     // Proceed with handling the ServerConnection.
-/// }
-/// # }
-/// # }
-/// ```
-pub struct Acceptor {
-    inner: Option<ConnectionCommon<ServerConnectionData>>,
-}
-
-impl Default for Acceptor {
-    /// Return an empty Acceptor, ready to receive bytes from a new client connection.
-    fn default() -> Self {
-        Self {
-            inner: Some(
-                ConnectionCore::new(
-                    Box::new(Accepting),
-                    ServerConnectionData::default(),
-                    CommonState::new(Side::Server),
-                )
-                .into(),
-            ),
-        }
-    }
-}
-
-impl Acceptor {
-    /// Read TLS content from `rd`.
-    ///
-    /// Returns an error if this `Acceptor` has already yielded an [`Accepted`]. For more details,
-    /// refer to [`Connection::read_tls()`].
-    ///
-    /// [`Connection::read_tls()`]: crate::Connection::read_tls
-    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        match &mut self.inner {
-            Some(conn) => conn.read_tls(rd),
-            None => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "acceptor cannot read after successful acceptance",
-            )),
-        }
-    }
-
-    /// Check if a `ClientHello` message has been received.
-    ///
-    /// Returns `Ok(None)` if the complete `ClientHello` has not yet been received.
-    /// Do more I/O and then call this function again.
-    ///
-    /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
-    /// `accepted.into_connection()` to continue. Do not call this function again.
-    ///
-    /// Returns `Err(err)` if an error occurred. Do not call this function again.
-    pub fn accept(&mut self) -> Result<Option<Accepted>, Error> {
-        let mut connection = match self.inner.take() {
-            Some(conn) => conn,
-            None => {
-                return Err(Error::General("Acceptor polled after completion".into()));
-            }
-        };
-
-        let message = match connection.first_handshake_message()? {
-            Some(msg) => msg,
-            None => {
-                self.inner = Some(connection);
-                return Ok(None);
-            }
-        };
-
-        let (_, sig_schemes) =
-            hs::process_client_hello(&message, false, &mut Context::from(&mut connection))?;
-
-        Ok(Some(Accepted {
-            connection,
-            message,
-            sig_schemes,
-        }))
     }
 }
 
