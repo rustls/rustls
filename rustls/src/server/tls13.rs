@@ -279,10 +279,12 @@ mod client_hello {
                 }
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
+                    let now = self.config.current_time()?;
+
                     let resume = match self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .map(|resumedata| {
-                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, UnixTime::now())
+                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
                         })
                         .filter(|resumedata| {
                             hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
@@ -903,9 +905,11 @@ impl State<ServerConnectionData> for ExpectCertificate {
             Some(chain) => chain,
         };
 
+        let now = self.config.current_time()?;
+
         self.config
             .verifier
-            .verify_client_cert(end_entity, intermediates, UnixTime::now())
+            .verify_client_cert(end_entity, intermediates, now)
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
@@ -1098,16 +1102,12 @@ impl ExpectFinished {
         let secure_random = config.provider.secure_random;
         let nonce = rand::random_vec(secure_random, 32)?;
         let age_add = rand::random_u32(secure_random)?;
-        let plain = get_server_session_value(
-            transcript,
-            suite,
-            key_schedule,
-            cx,
-            &nonce,
-            UnixTime::now(),
-            age_add,
-        )
-        .get_encoding();
+
+        let now = config.current_time()?;
+
+        let plain =
+            get_server_session_value(transcript, suite, key_schedule, cx, &nonce, now, age_add)
+                .get_encoding();
 
         let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {

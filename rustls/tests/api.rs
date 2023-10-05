@@ -343,6 +343,16 @@ fn config_builder_for_client_with_time() {
 }
 
 #[test]
+fn config_builder_for_server_with_time() {
+    ServerConfig::builder_with_details(
+        provider::default_provider().into(),
+        Arc::new(rustls::time_provider::DefaultTimeProvider),
+    )
+    .with_safe_default_protocol_versions()
+    .unwrap();
+}
+
+#[test]
 fn buffered_client_data_sent() {
     let server_config = Arc::new(make_server_config(KeyType::Rsa));
 
@@ -514,7 +524,7 @@ fn test_config_builders_debug() {
         format!("{:?}", b)
     );
     let b = b.with_no_client_auth();
-    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsServerCert { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring }, versions: [TLSv1_3], verifier: NoClientAuth } }", format!("{:?}", b));
+    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsServerCert { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring }, versions: [TLSv1_3], verifier: NoClientAuth, time_provider: DefaultTimeProvider } }", format!("{:?}", b));
 
     let b = ClientConfig::builder_with_provider(
         CryptoProvider {
