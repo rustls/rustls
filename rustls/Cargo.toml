@@ -19,20 +19,21 @@ rustversion = { version = "1.0.6", optional = true }
 aws-lc-rs = { version = "1.6", optional = true, default-features = false, features = ["aws-lc-sys"] }
 log = { version = "0.4.4", optional = true }
 # remove once our MSRV is >= 1.70
-once_cell = "1"
+once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
-webpki = { package = "rustls-webpki", version = "0.102.2", features = ["std"], default-features = false }
-pki-types = { package = "rustls-pki-types", version = "1.2", features = ["std"] }
+webpki = { package = "rustls-webpki", version = "0.102.2", features = ["alloc"], default-features = false }
+pki-types = { package = "rustls-pki-types", version = "1.2", features = ["alloc"] }
 zeroize = "1.7"
 
 [features]
-default = ["aws_lc_rs", "logging", "tls12"]
+default = ["logging", "std", "tls12"]
+std = ["aws_lc_rs", "webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
-aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
+aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs", "std"]
 ring = ["dep:ring", "webpki/ring"]
 tls12 = []
-read_buf = ["rustversion"]
+read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 
 [dev-dependencies]
