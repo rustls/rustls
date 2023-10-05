@@ -9,7 +9,6 @@ use crate::log::trace;
 use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
-use crate::suites::ExtractedSecrets;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
@@ -491,160 +490,178 @@ impl ServerConfig {
     }
 }
 
-/// Allows reading of early data in resumed TLS1.3 connections.
-///
-/// "Early data" is also known as "0-RTT data".
-///
-/// This structure implements [`std::io::Read`].
-pub struct ReadEarlyData<'a> {
-    early_data: &'a mut EarlyDataState,
-}
+#[cfg(feature = "std")]
+mod connection {
+    use crate::common_state::{CommonState, Side};
+    use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::error::Error;
+    use crate::suites::ExtractedSecrets;
 
-impl<'a> ReadEarlyData<'a> {
-    fn new(early_data: &'a mut EarlyDataState) -> Self {
-        ReadEarlyData { early_data }
-    }
-}
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
+    use core::fmt;
+    use core::fmt::{Debug, Formatter};
+    use core::ops::{Deref, DerefMut};
+    use std::io;
 
-impl<'a> std::io::Read for ReadEarlyData<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.early_data.read(buf)
-    }
+    use super::{EarlyDataState, ServerConfig, ServerConnectionData};
 
-    #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
-        self.early_data.read_buf(cursor)
-    }
-}
-
-/// This represents a single TLS server connection.
-///
-/// Send TLS-protected data to the peer using the `io::Write` trait implementation.
-/// Read data from the peer using the `io::Read` trait implementation.
-pub struct ServerConnection {
-    inner: ConnectionCommon<ServerConnectionData>,
-}
-
-impl ServerConnection {
-    /// Make a new ServerConnection.  `config` controls how
-    /// we behave in the TLS protocol.
-    pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server);
-        common.set_max_fragment_size(config.max_fragment_size)?;
-        common.enable_secret_extraction = config.enable_secret_extraction;
-        Ok(Self {
-            inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
-        })
+    /// Allows reading of early data in resumed TLS1.3 connections.
+    ///
+    /// "Early data" is also known as "0-RTT data".
+    ///
+    /// This structure implements [`std::io::Read`].
+    pub struct ReadEarlyData<'a> {
+        early_data: &'a mut EarlyDataState,
     }
 
-    /// Retrieves the server name, if any, used to select the certificate and
-    /// private key.
-    ///
-    /// This returns `None` until some time after the client's server name indication
-    /// (SNI) extension value is processed during the handshake. It will never be
-    /// `None` when the connection is ready to send or process application data,
-    /// unless the client does not support SNI.
-    ///
-    /// This is useful for application protocols that need to enforce that the
-    /// server name matches an application layer protocol hostname. For
-    /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
-    /// every request on a connection to match the hostname in the SNI extension
-    /// when the client provides the SNI extension.
-    ///
-    /// The server name is also used to match sessions during session resumption.
-    pub fn server_name(&self) -> Option<&str> {
-        self.inner.core.get_sni_str()
-    }
-
-    /// Application-controlled portion of the resumption ticket supplied by the client, if any.
-    ///
-    /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
-    ///
-    /// Returns `Some` iff a valid resumption ticket has been received from the client.
-    pub fn received_resumption_data(&self) -> Option<&[u8]> {
-        self.inner
-            .core
-            .data
-            .received_resumption_data
-            .as_ref()
-            .map(|x| &x[..])
-    }
-
-    /// Set the resumption data to embed in future resumption tickets supplied to the client.
-    ///
-    /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
-    /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
-    /// resumption tickets are affected.
-    ///
-    /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
-    /// from the client is desired, encrypt the data separately.
-    pub fn set_resumption_data(&mut self, data: &[u8]) {
-        assert!(data.len() < 2usize.pow(15));
-        self.inner.core.data.resumption_data = data.into();
-    }
-
-    /// Explicitly discard early data, notifying the client
-    ///
-    /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
-    ///
-    /// Must be called while `is_handshaking` is true.
-    pub fn reject_early_data(&mut self) {
-        self.inner.core.reject_early_data()
-    }
-
-    /// Returns an `io::Read` implementer you can read bytes from that are
-    /// received from a client as TLS1.3 0RTT/"early" data, during the handshake.
-    ///
-    /// This returns `None` in many circumstances, such as :
-    ///
-    /// - Early data is disabled if [`ServerConfig::max_early_data_size`] is zero (the default).
-    /// - The session negotiated with the client is not TLS1.3.
-    /// - The client just doesn't support early data.
-    /// - The connection doesn't resume an existing session.
-    /// - The client hasn't sent a full ClientHello yet.
-    pub fn early_data(&mut self) -> Option<ReadEarlyData> {
-        let data = &mut self.inner.core.data;
-        if data.early_data.was_accepted() {
-            Some(ReadEarlyData::new(&mut data.early_data))
-        } else {
-            None
+    impl<'a> ReadEarlyData<'a> {
+        fn new(early_data: &'a mut EarlyDataState) -> Self {
+            ReadEarlyData { early_data }
         }
     }
 
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        self.inner.dangerous_extract_secrets()
+    impl<'a> std::io::Read for ReadEarlyData<'a> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.early_data.read(buf)
+        }
+
+        #[cfg(read_buf)]
+        fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
+            self.early_data.read_buf(cursor)
+        }
+    }
+
+    /// This represents a single TLS server connection.
+    ///
+    /// Send TLS-protected data to the peer using the `io::Write` trait implementation.
+    /// Read data from the peer using the `io::Read` trait implementation.
+    pub struct ServerConnection {
+        pub(super) inner: ConnectionCommon<ServerConnectionData>,
+    }
+
+    impl ServerConnection {
+        /// Make a new ServerConnection.  `config` controls how
+        /// we behave in the TLS protocol.
+        pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
+            let mut common = CommonState::new(Side::Server);
+            common.set_max_fragment_size(config.max_fragment_size)?;
+            common.enable_secret_extraction = config.enable_secret_extraction;
+            Ok(Self {
+                inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
+            })
+        }
+
+        /// Retrieves the server name, if any, used to select the certificate and
+        /// private key.
+        ///
+        /// This returns `None` until some time after the client's server name indication
+        /// (SNI) extension value is processed during the handshake. It will never be
+        /// `None` when the connection is ready to send or process application data,
+        /// unless the client does not support SNI.
+        ///
+        /// This is useful for application protocols that need to enforce that the
+        /// server name matches an application layer protocol hostname. For
+        /// example, HTTP/1.1 servers commonly expect the `Host:` header field of
+        /// every request on a connection to match the hostname in the SNI extension
+        /// when the client provides the SNI extension.
+        ///
+        /// The server name is also used to match sessions during session resumption.
+        pub fn server_name(&self) -> Option<&str> {
+            self.inner.core.get_sni_str()
+        }
+
+        /// Application-controlled portion of the resumption ticket supplied by the client, if any.
+        ///
+        /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
+        ///
+        /// Returns `Some` iff a valid resumption ticket has been received from the client.
+        pub fn received_resumption_data(&self) -> Option<&[u8]> {
+            self.inner
+                .core
+                .data
+                .received_resumption_data
+                .as_ref()
+                .map(|x| &x[..])
+        }
+
+        /// Set the resumption data to embed in future resumption tickets supplied to the client.
+        ///
+        /// Defaults to the empty byte string. Must be less than 2^15 bytes to allow room for other
+        /// data. Should be called while `is_handshaking` returns true to ensure all transmitted
+        /// resumption tickets are affected.
+        ///
+        /// Integrity will be assured by rustls, but the data will be visible to the client. If secrecy
+        /// from the client is desired, encrypt the data separately.
+        pub fn set_resumption_data(&mut self, data: &[u8]) {
+            assert!(data.len() < 2usize.pow(15));
+            self.inner.core.data.resumption_data = data.into();
+        }
+
+        /// Explicitly discard early data, notifying the client
+        ///
+        /// Useful if invariants encoded in `received_resumption_data()` cannot be respected.
+        ///
+        /// Must be called while `is_handshaking` is true.
+        pub fn reject_early_data(&mut self) {
+            self.inner.core.reject_early_data()
+        }
+
+        /// Returns an `io::Read` implementer you can read bytes from that are
+        /// received from a client as TLS1.3 0RTT/"early" data, during the handshake.
+        ///
+        /// This returns `None` in many circumstances, such as :
+        ///
+        /// - Early data is disabled if [`ServerConfig::max_early_data_size`] is zero (the default).
+        /// - The session negotiated with the client is not TLS1.3.
+        /// - The client just doesn't support early data.
+        /// - The connection doesn't resume an existing session.
+        /// - The client hasn't sent a full ClientHello yet.
+        pub fn early_data(&mut self) -> Option<ReadEarlyData> {
+            let data = &mut self.inner.core.data;
+            if data.early_data.was_accepted() {
+                Some(ReadEarlyData::new(&mut data.early_data))
+            } else {
+                None
+            }
+        }
+
+        /// Extract secrets, so they can be used when configuring kTLS, for example.
+        /// Should be used with care as it exposes secret key material.
+        pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+            self.inner.dangerous_extract_secrets()
+        }
+    }
+
+    impl Debug for ServerConnection {
+        fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+            f.debug_struct("ServerConnection")
+                .finish()
+        }
+    }
+
+    impl Deref for ServerConnection {
+        type Target = ConnectionCommon<ServerConnectionData>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+
+    impl DerefMut for ServerConnection {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.inner
+        }
+    }
+
+    impl From<ServerConnection> for crate::Connection {
+        fn from(conn: ServerConnection) -> Self {
+            Self::Server(conn)
+        }
     }
 }
-
-impl Debug for ServerConnection {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.debug_struct("ServerConnection")
-            .finish()
-    }
-}
-
-impl Deref for ServerConnection {
-    type Target = ConnectionCommon<ServerConnectionData>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for ServerConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
 #[cfg(feature = "std")]
-impl From<ServerConnection> for crate::Connection {
-    fn from(conn: ServerConnection) -> Self {
-        Self::Server(conn)
-    }
-}
+pub use connection::{ReadEarlyData, ServerConnection};
 
 /// Unbuffered version of `ServerConnection`
 ///
@@ -833,6 +850,7 @@ impl Accepted {
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
+    #[cfg(feature = "std")]
     pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
         self.connection
             .set_max_fragment_size(config.max_fragment_size)?;
@@ -907,6 +925,7 @@ impl EarlyDataState {
         *self = Self::Accepted(ChunkVecBuffer::new(Some(max_size)));
     }
 
+    #[cfg(feature = "std")]
     fn was_accepted(&self) -> bool {
         matches!(self, Self::Accepted(_))
     }
@@ -922,6 +941,7 @@ impl EarlyDataState {
         }
     }
 
+    #[cfg(feature = "std")]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Accepted(ref mut received) => received.read(buf),
@@ -1004,6 +1024,7 @@ impl ServerConnectionData {
 
 impl crate::conn::SideData for ServerConnectionData {}
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use super::*;
