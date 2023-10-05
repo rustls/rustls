@@ -10,6 +10,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
+use crate::time_provider::{DefaultTimeProvider, TimeProvider};
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
 use crate::versions;
@@ -400,7 +401,10 @@ impl ServerConfig {
         provider: Arc<CryptoProvider>,
     ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsVersions { provider },
+            state: WantsVersions {
+                provider,
+                time_provider: Arc::new(DefaultTimeProvider),
+            },
             side: PhantomData,
         }
     }

@@ -5,6 +5,7 @@ use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
+use crate::time_provider::TimeProvider;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{verify, versions};
 
@@ -56,6 +57,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 provider: self.state.provider,
                 versions: self.state.versions,
                 verifier,
+                time_provider: self.state.time_provider,
             },
             side: PhantomData,
         }
@@ -94,6 +96,7 @@ pub(super) mod danger {
                     provider: self.cfg.state.provider,
                     versions: self.cfg.state.versions,
                     verifier,
+                    time_provider: self.cfg.state.time_provider,
                 },
                 side: PhantomData,
             }
@@ -110,6 +113,7 @@ pub struct WantsClientCert {
     provider: Arc<CryptoProvider>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
+    time_provider: Arc<dyn TimeProvider>,
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
@@ -161,6 +165,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             enable_early_data: false,
             #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
+            time_provider: self.state.time_provider,
         }
     }
 }

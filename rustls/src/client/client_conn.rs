@@ -11,15 +11,20 @@ use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
 use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
+#[cfg(feature = "std")]
+use crate::time_provider::DefaultTimeProvider;
+use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 use crate::versions;
 use crate::KeyLog;
-use crate::{verify, WantsVerifier, WantsVersions};
+#[cfg(feature = "std")]
+use crate::WantsVerifier;
+use crate::{verify, WantsVersions};
 
 use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 use super::hs;
 
-use pki_types::ServerName;
+use pki_types::{ServerName, UnixTime};
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -206,6 +211,9 @@ pub struct ClientConfig {
     #[cfg(feature = "tls12")]
     pub require_ems: bool,
 
+    /// Provides the current system time
+    pub time_provider: Arc<dyn TimeProvider>,
+
     /// Source of randomness and other crypto.
     pub(super) provider: Arc<CryptoProvider>,
 
@@ -223,6 +231,7 @@ impl ClientConfig {
     /// and safe protocol version defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_protocol_versions(versions::DEFAULT_VERSIONS)
     }
@@ -239,6 +248,7 @@ impl ClientConfig {
     ///   the crate features and process default.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder_with_protocol_versions(
         versions: &[&'static versions::SupportedProtocolVersion],
     ) -> ConfigBuilder<Self, WantsVerifier> {
@@ -260,11 +270,41 @@ impl ClientConfig {
     /// version is not supported by the provider's ciphersuites.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "std")]
     pub fn builder_with_provider(
         provider: Arc<CryptoProvider>,
     ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsVersions { provider },
+            state: WantsVersions {
+                provider,
+                time_provider: Arc::new(DefaultTimeProvider),
+            },
+            side: PhantomData,
+        }
+    }
+    /// Create a builder for a client configuration with no default implementation details.
+    ///
+    /// This API must be used by `no_std` users.
+    ///
+    /// You must provide a specific [`TimeProvider`].
+    ///
+    /// You must provide a specific [`CryptoProvider`].
+    ///
+    /// This will use the provider's configured ciphersuites. You must additionally choose
+    /// which protocol versions to enable, using `with_protocol_versions` or
+    /// `with_safe_default_protocol_versions` and handling the `Result` in case a protocol
+    /// version is not supported by the provider's ciphersuites.
+    ///
+    /// For more information, see the [`ConfigBuilder`] documentation.
+    pub fn builder_with_details(
+        provider: Arc<CryptoProvider>,
+        time_provider: Arc<dyn TimeProvider>,
+    ) -> ConfigBuilder<Self, WantsVersions> {
+        ConfigBuilder {
+            state: WantsVersions {
+                provider,
+                time_provider,
+            },
             side: PhantomData,
         }
     }
@@ -327,6 +367,12 @@ impl ClientConfig {
             .copied()
             .find(|skxg| skxg.name() == group)
     }
+
+    pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
+        self.time_provider
+            .current_time()
+            .ok_or(Error::FailedToGetCurrentTime)
+    }
 }
 
 impl Clone for ClientConfig {
@@ -345,6 +391,7 @@ impl Clone for ClientConfig {
             enable_early_data: self.enable_early_data,
             #[cfg(feature = "tls12")]
             require_ems: self.require_ems,
+            time_provider: Arc::clone(&self.time_provider),
         }
     }
 }
