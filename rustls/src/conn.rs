@@ -23,6 +23,7 @@ mod connection {
     use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
+    use crate::vecbuf::ChunkVecBuffer;
 
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
@@ -30,7 +31,7 @@ mod connection {
 
     #[cfg(doc)]
     use super::ConnectionCommon;
-    use super::{Reader, Writer};
+    use super::Writer;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -153,112 +154,116 @@ mod connection {
             }
         }
     }
+
+    /// A structure that implements [`std::io::Read`] for reading plaintext.
+    pub struct Reader<'a> {
+        pub(super) received_plaintext: &'a mut ChunkVecBuffer,
+        pub(super) peer_cleanly_closed: bool,
+        pub(super) has_seen_eof: bool,
+    }
+
+    impl<'a> io::Read for Reader<'a> {
+        /// Obtain plaintext data received from the peer over this TLS connection.
+        ///
+        /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
+        /// the pending data has been read. No further data can be received on that
+        /// connection, so the underlying TCP connection should be half-closed too.
+        ///
+        /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
+        /// `close_notify` alert) this function returns a `std::io::Error` of type
+        /// `ErrorKind::UnexpectedEof` once any pending data has been read.
+        ///
+        /// Note that support for `close_notify` varies in peer TLS libraries: many do not
+        /// support it and uncleanly close the TCP connection (this might be
+        /// vulnerable to truncation attacks depending on the application protocol).
+        /// This means applications using rustls must both handle EOF
+        /// from this function, *and* unexpected EOF of the underlying TCP connection.
+        ///
+        /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
+        ///
+        /// You may learn the number of bytes available at any time by inspecting
+        /// the return of [`Connection::process_new_packets`].
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            let len = self.received_plaintext.read(buf)?;
+
+            if len == 0 && !buf.is_empty() {
+                // No bytes available:
+                match (self.peer_cleanly_closed, self.has_seen_eof) {
+                    // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+                    (true, _) => {}
+                    // unclean closure
+                    (false, true) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            UNEXPECTED_EOF_MESSAGE,
+                        ))
+                    }
+                    // connection still going, but needs more data: signal `WouldBlock` so that
+                    // the caller knows this
+                    (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
+                }
+            }
+
+            Ok(len)
+        }
+
+        /// Obtain plaintext data received from the peer over this TLS connection.
+        ///
+        /// If the peer closes the TLS session, this returns `Ok(())` without filling
+        /// any more of the buffer once all the pending data has been read. No further
+        /// data can be received on that connection, so the underlying TCP connection
+        /// should be half-closed too.
+        ///
+        /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
+        /// `close_notify` alert) this function returns a `std::io::Error` of type
+        /// `ErrorKind::UnexpectedEof` once any pending data has been read.
+        ///
+        /// Note that support for `close_notify` varies in peer TLS libraries: many do not
+        /// support it and uncleanly close the TCP connection (this might be
+        /// vulnerable to truncation attacks depending on the application protocol).
+        /// This means applications using rustls must both handle EOF
+        /// from this function, *and* unexpected EOF of the underlying TCP connection.
+        ///
+        /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
+        ///
+        /// You may learn the number of bytes available at any time by inspecting
+        /// the return of [`Connection::process_new_packets`].
+        #[cfg(read_buf)]
+        fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
+            let before = cursor.written();
+            self.received_plaintext
+                .read_buf(cursor.reborrow())?;
+            let len = cursor.written() - before;
+
+            if len == 0 && cursor.capacity() > 0 {
+                // No bytes available:
+                match (self.peer_cleanly_closed, self.has_seen_eof) {
+                    // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+                    (true, _) => {}
+                    // unclean closure
+                    (false, true) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            UNEXPECTED_EOF_MESSAGE,
+                        ));
+                    }
+                    // connection still going, but need more data: signal `WouldBlock` so that
+                    // the caller knows this
+                    (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
+                }
+            }
+
+            Ok(())
+        }
+    }
+
+    const UNEXPECTED_EOF_MESSAGE: &str =
+        "peer closed connection without sending TLS close_notify: \
+https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";
 }
 
 #[cfg(feature = "std")]
-pub use connection::Connection;
-
-/// A structure that implements [`std::io::Read`] for reading plaintext.
-pub struct Reader<'a> {
-    received_plaintext: &'a mut ChunkVecBuffer,
-    peer_cleanly_closed: bool,
-    has_seen_eof: bool,
-}
-
-impl<'a> io::Read for Reader<'a> {
-    /// Obtain plaintext data received from the peer over this TLS connection.
-    ///
-    /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
-    /// the pending data has been read. No further data can be received on that
-    /// connection, so the underlying TCP connection should be half-closed too.
-    ///
-    /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
-    /// `close_notify` alert) this function returns a `std::io::Error` of type
-    /// `ErrorKind::UnexpectedEof` once any pending data has been read.
-    ///
-    /// Note that support for `close_notify` varies in peer TLS libraries: many do not
-    /// support it and uncleanly close the TCP connection (this might be
-    /// vulnerable to truncation attacks depending on the application protocol).
-    /// This means applications using rustls must both handle EOF
-    /// from this function, *and* unexpected EOF of the underlying TCP connection.
-    ///
-    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
-    ///
-    /// You may learn the number of bytes available at any time by inspecting
-    /// the return of [`Connection::process_new_packets`].
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let len = self.received_plaintext.read(buf)?;
-
-        if len == 0 && !buf.is_empty() {
-            // No bytes available:
-            match (self.peer_cleanly_closed, self.has_seen_eof) {
-                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                (true, _) => {}
-                // unclean closure
-                (false, true) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        UNEXPECTED_EOF_MESSAGE,
-                    ))
-                }
-                // connection still going, but needs more data: signal `WouldBlock` so that
-                // the caller knows this
-                (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
-            }
-        }
-
-        Ok(len)
-    }
-
-    /// Obtain plaintext data received from the peer over this TLS connection.
-    ///
-    /// If the peer closes the TLS session, this returns `Ok(())` without filling
-    /// any more of the buffer once all the pending data has been read. No further
-    /// data can be received on that connection, so the underlying TCP connection
-    /// should be half-closed too.
-    ///
-    /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
-    /// `close_notify` alert) this function returns a `std::io::Error` of type
-    /// `ErrorKind::UnexpectedEof` once any pending data has been read.
-    ///
-    /// Note that support for `close_notify` varies in peer TLS libraries: many do not
-    /// support it and uncleanly close the TCP connection (this might be
-    /// vulnerable to truncation attacks depending on the application protocol).
-    /// This means applications using rustls must both handle EOF
-    /// from this function, *and* unexpected EOF of the underlying TCP connection.
-    ///
-    /// If there are no bytes to read, this returns `Err(ErrorKind::WouldBlock.into())`.
-    ///
-    /// You may learn the number of bytes available at any time by inspecting
-    /// the return of [`Connection::process_new_packets`].
-    #[cfg(read_buf)]
-    fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
-        let before = cursor.written();
-        self.received_plaintext
-            .read_buf(cursor.reborrow())?;
-        let len = cursor.written() - before;
-
-        if len == 0 && cursor.capacity() > 0 {
-            // No bytes available:
-            match (self.peer_cleanly_closed, self.has_seen_eof) {
-                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                (true, _) => {}
-                // unclean closure
-                (false, true) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        UNEXPECTED_EOF_MESSAGE,
-                    ));
-                }
-                // connection still going, but need more data: signal `WouldBlock` so that
-                // the caller knows this
-                (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
-            }
-        }
-
-        Ok(())
-    }
-}
+pub use connection::{Connection, Reader};
 
 /// Internal trait implemented by the [`ServerConnection`]/[`ClientConnection`]
 /// allowing them to be the subject of a [`Writer`].
@@ -371,6 +376,7 @@ pub struct ConnectionCommon<Data> {
 
 impl<Data> ConnectionCommon<Data> {
     /// Returns an object that allows reading plaintext.
+    #[cfg(feature = "std")]
     pub fn reader(&mut self) -> Reader {
         let common = &mut self.core.common_state;
         Reader {
@@ -924,6 +930,3 @@ impl<Data> ConnectionCore<Data> {
 
 /// Data specific to the peer's side (client or server).
 pub trait SideData: Debug {}
-
-const UNEXPECTED_EOF_MESSAGE: &str = "peer closed connection without sending TLS close_notify: \
-https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";
