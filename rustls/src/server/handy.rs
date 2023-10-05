@@ -12,7 +12,9 @@ use crate::ServerName;
 #[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use std::collections;
 use std::sync::Mutex;
 

@@ -8,7 +8,11 @@ use ring::io::der;
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 
+use alloc::boxed::Box;
+use alloc::string::ToString;
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::fmt;
 use std::error::Error as StdError;
 

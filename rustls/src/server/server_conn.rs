@@ -18,7 +18,9 @@ use crate::KeyLog;
 
 use super::hs;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};

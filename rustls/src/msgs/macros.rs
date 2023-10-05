@@ -23,7 +23,9 @@ macro_rules! enum_builder {
             }
         }
         impl Codec for $enum_name {
-            fn encode(&self, bytes: &mut Vec<u8>) {
+            // NOTE(allow) fully qualified Vec is only needed in no-std mode
+            #[allow(unused_qualifications)]
+            fn encode(&self, bytes: &mut alloc::vec::Vec<u8>) {
                 self.get_u8().encode(bytes);
             }
 
@@ -73,7 +75,9 @@ macro_rules! enum_builder {
             }
         }
         impl Codec for $enum_name {
-            fn encode(&self, bytes: &mut Vec<u8>) {
+            // NOTE(allow) fully qualified Vec is only needed in no-std mode
+            #[allow(unused_qualifications)]
+            fn encode(&self, bytes: &mut alloc::vec::Vec<u8>) {
                 self.get_u16().encode(bytes);
             }
 

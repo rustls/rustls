@@ -1,8 +1,9 @@
-use core::fmt;
-
 use crate::error::InvalidMessage;
 use crate::msgs::codec;
 use crate::msgs::codec::{Codec, Reader};
+
+use alloc::vec::Vec;
+use core::fmt;
 
 use pki_types::CertificateDer;
 

@@ -14,6 +14,7 @@ use super::client_conn::Resumption;
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 #[cfg(any(feature = "dangerous_configuration", feature = "ring"))]
 use core::marker::PhantomData;
 
@@ -45,8 +46,8 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
+    use alloc::sync::Arc;
     use core::marker::PhantomData;
-    use std::sync::Arc;
 
     use crate::client::WantsClientCert;
     use crate::{verify, ClientConfig, ConfigBuilder, WantsVerifier};

@@ -1,5 +1,7 @@
 pub use crate::msgs::enums::HashAlgorithm;
 
+use alloc::boxed::Box;
+
 /// Describes a single cryptographic hash function.
 ///
 /// This interface can do both one-shot and incremental hashing, using

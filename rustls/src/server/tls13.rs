@@ -30,7 +30,11 @@ use crate::verify;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;

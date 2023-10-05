@@ -3,7 +3,9 @@ use crate::error::Error;
 
 use pki_types::CertificateDer;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 /// An abstract signing key.
 pub trait SigningKey: Send + Sync {

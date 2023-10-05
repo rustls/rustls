@@ -3,6 +3,9 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::HashAlgorithm;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::message::{Message, MessagePayload};
+
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::mem;
 
 /// Early stage buffering of handshake payloads.

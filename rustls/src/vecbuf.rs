@@ -1,4 +1,5 @@
 use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 use core::cmp;
 use std::io;
 use std::io::Read;

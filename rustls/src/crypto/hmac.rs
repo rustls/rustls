@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 /// A concrete HMAC implementation, for a single cryptographic hash function.
 ///
 /// You should have one object that implements this trait for HMAC-SHA256, another

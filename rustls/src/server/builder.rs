@@ -13,6 +13,7 @@ use crate::NoKeyLog;
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {

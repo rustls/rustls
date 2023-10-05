@@ -3,6 +3,8 @@ use crate::error::Error;
 use crate::suites::SupportedCipherSuite;
 use crate::versions;
 
+use alloc::format;
+use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 

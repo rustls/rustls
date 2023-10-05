@@ -9,6 +9,8 @@ use crate::msgs::enums::AlertLevel;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::handshake::HandshakeMessagePayload;
 
+use alloc::vec::Vec;
+
 #[derive(Debug)]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),

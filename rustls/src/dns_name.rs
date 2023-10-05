@@ -1,5 +1,6 @@
 //! DNS name validation according to RFC1035, but with underscores allowed.
 
+use alloc::string::{String, ToString};
 use core::fmt;
 use std::error::Error as StdError;
 

@@ -1,6 +1,9 @@
 #[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::KeyLog;
+
+use alloc::string::String;
+use alloc::vec::Vec;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io;

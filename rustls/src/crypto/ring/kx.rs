@@ -6,6 +6,7 @@ use crate::rand::GetRandomFailed;
 use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, UnparsedPublicKey};
 use ring::rand::SystemRandom;
 
+use alloc::boxed::Box;
 use core::fmt;
 
 /// A key-exchange group supported by *ring*.

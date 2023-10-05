@@ -4,7 +4,9 @@ use crate::server::ProducesTickets;
 
 use ring::aead;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 /// A concrete, safe ticket creation mechanism.
 pub struct Ticketer {}

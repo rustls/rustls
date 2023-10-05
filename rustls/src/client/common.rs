@@ -6,7 +6,9 @@ use crate::msgs::handshake::ServerExtension;
 use crate::msgs::handshake::{CertificatePayload, DistinguishedName};
 use crate::{sign, SignatureScheme};
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails {

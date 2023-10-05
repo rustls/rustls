@@ -2,6 +2,8 @@
 
 use crate::crypto::{hash, hmac};
 
+use alloc::boxed::Box;
+
 /// This is the inputs to HKDF-Extract, except for IKM
 /// ("input keying material") which is supplied in [`Extractor::extract()`].
 pub(crate) struct Extractor {

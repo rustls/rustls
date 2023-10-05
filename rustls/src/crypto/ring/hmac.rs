@@ -1,6 +1,8 @@
 use crate::crypto;
 use ring;
 
+use alloc::boxed::Box;
+
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring::hmac::HMAC_SHA256);
 pub(crate) static HMAC_SHA384: Hmac = Hmac(&ring::hmac::HMAC_SHA384);
 #[cfg(all(test, feature = "tls12"))]

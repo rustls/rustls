@@ -9,6 +9,9 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
 
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::fmt;
 
 mod prf;
