@@ -1,4 +1,3 @@
-use crate::limited_cache;
 use crate::msgs::handshake::CertificateChain;
 use crate::server;
 use crate::server::ClientHello;
@@ -6,8 +5,7 @@ use crate::sign;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::fmt::{Debug, Formatter};
-use std::sync::Mutex;
+use core::fmt::Debug;
 
 /// Something which never stores sessions.
 #[derive(Debug)]
@@ -28,56 +26,115 @@ impl server::StoresServerSessions for NoServerSessionStorage {
     }
 }
 
-/// An implementer of `StoresServerSessions` that stores everything
-/// in memory.  If enforces a limit on the number of stored sessions
-/// to bound memory usage.
-pub struct ServerSessionMemoryCache {
-    cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
-}
+#[cfg(feature = "std")]
+mod cache {
+    use crate::limited_cache;
+    use crate::server;
 
-impl ServerSessionMemoryCache {
-    /// Make a new ServerSessionMemoryCache.  `size` is the maximum
-    /// number of stored sessions, and may be rounded-up for
-    /// efficiency.
-    pub fn new(size: usize) -> Arc<Self> {
-        Arc::new(Self {
-            cache: Mutex::new(limited_cache::LimitedCache::new(size)),
-        })
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
+    use core::fmt::{Debug, Formatter};
+    use std::sync::Mutex;
+
+    /// An implementer of `StoresServerSessions` that stores everything
+    /// in memory.  If enforces a limit on the number of stored sessions
+    /// to bound memory usage.
+    pub struct ServerSessionMemoryCache {
+        cache: Mutex<limited_cache::LimitedCache<Vec<u8>, Vec<u8>>>,
+    }
+
+    impl ServerSessionMemoryCache {
+        /// Make a new ServerSessionMemoryCache.  `size` is the maximum
+        /// number of stored sessions, and may be rounded-up for
+        /// efficiency.
+        pub fn new(size: usize) -> Arc<Self> {
+            Arc::new(Self {
+                cache: Mutex::new(limited_cache::LimitedCache::new(size)),
+            })
+        }
+    }
+
+    impl server::StoresServerSessions for ServerSessionMemoryCache {
+        fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
+            self.cache
+                .lock()
+                .unwrap()
+                .insert(key, value);
+            true
+        }
+
+        fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+            self.cache
+                .lock()
+                .unwrap()
+                .get(key)
+                .cloned()
+        }
+
+        fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
+            self.cache.lock().unwrap().remove(key)
+        }
+
+        fn can_cache(&self) -> bool {
+            true
+        }
+    }
+
+    impl Debug for ServerSessionMemoryCache {
+        fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+            f.debug_struct("ServerSessionMemoryCache")
+                .finish()
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::server::StoresServerSessions;
+
+        #[test]
+        fn test_serversessionmemorycache_accepts_put() {
+            let c = ServerSessionMemoryCache::new(4);
+            assert!(c.put(vec![0x01], vec![0x02]));
+        }
+
+        #[test]
+        fn test_serversessionmemorycache_persists_put() {
+            let c = ServerSessionMemoryCache::new(4);
+            assert!(c.put(vec![0x01], vec![0x02]));
+            assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
+            assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
+        }
+
+        #[test]
+        fn test_serversessionmemorycache_overwrites_put() {
+            let c = ServerSessionMemoryCache::new(4);
+            assert!(c.put(vec![0x01], vec![0x02]));
+            assert!(c.put(vec![0x01], vec![0x04]));
+            assert_eq!(c.get(&[0x01]), Some(vec![0x04]));
+        }
+
+        #[test]
+        fn test_serversessionmemorycache_drops_to_maintain_size_invariant() {
+            let c = ServerSessionMemoryCache::new(2);
+            assert!(c.put(vec![0x01], vec![0x02]));
+            assert!(c.put(vec![0x03], vec![0x04]));
+            assert!(c.put(vec![0x05], vec![0x06]));
+            assert!(c.put(vec![0x07], vec![0x08]));
+            assert!(c.put(vec![0x09], vec![0x0a]));
+
+            let count = c.get(&[0x01]).iter().count()
+                + c.get(&[0x03]).iter().count()
+                + c.get(&[0x05]).iter().count()
+                + c.get(&[0x07]).iter().count()
+                + c.get(&[0x09]).iter().count();
+
+            assert!(count < 5);
+        }
     }
 }
-
-impl server::StoresServerSessions for ServerSessionMemoryCache {
-    fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        self.cache
-            .lock()
-            .unwrap()
-            .insert(key, value);
-        true
-    }
-
-    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache
-            .lock()
-            .unwrap()
-            .get(key)
-            .cloned()
-    }
-
-    fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.cache.lock().unwrap().remove(key)
-    }
-
-    fn can_cache(&self) -> bool {
-        true
-    }
-}
-
-impl Debug for ServerSessionMemoryCache {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ServerSessionMemoryCache")
-            .finish()
-    }
-}
+#[cfg(feature = "std")]
+pub use cache::ServerSessionMemoryCache;
 
 /// Something which never produces tickets.
 #[derive(Debug)]
@@ -269,46 +326,6 @@ mod tests {
         assert_eq!(c.take(&[]), None);
         assert_eq!(c.take(&[0x01]), None);
         assert_eq!(c.take(&[0x02]), None);
-    }
-
-    #[test]
-    fn test_serversessionmemorycache_accepts_put() {
-        let c = ServerSessionMemoryCache::new(4);
-        assert!(c.put(vec![0x01], vec![0x02]));
-    }
-
-    #[test]
-    fn test_serversessionmemorycache_persists_put() {
-        let c = ServerSessionMemoryCache::new(4);
-        assert!(c.put(vec![0x01], vec![0x02]));
-        assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
-        assert_eq!(c.get(&[0x01]), Some(vec![0x02]));
-    }
-
-    #[test]
-    fn test_serversessionmemorycache_overwrites_put() {
-        let c = ServerSessionMemoryCache::new(4);
-        assert!(c.put(vec![0x01], vec![0x02]));
-        assert!(c.put(vec![0x01], vec![0x04]));
-        assert_eq!(c.get(&[0x01]), Some(vec![0x04]));
-    }
-
-    #[test]
-    fn test_serversessionmemorycache_drops_to_maintain_size_invariant() {
-        let c = ServerSessionMemoryCache::new(2);
-        assert!(c.put(vec![0x01], vec![0x02]));
-        assert!(c.put(vec![0x03], vec![0x04]));
-        assert!(c.put(vec![0x05], vec![0x06]));
-        assert!(c.put(vec![0x07], vec![0x08]));
-        assert!(c.put(vec![0x09], vec![0x0a]));
-
-        let count = c.get(&[0x01]).iter().count()
-            + c.get(&[0x03]).iter().count()
-            + c.get(&[0x05]).iter().count()
-            + c.get(&[0x07]).iter().count()
-            + c.get(&[0x09]).iter().count();
-
-        assert!(count < 5);
     }
 
     #[test]
