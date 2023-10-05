@@ -243,6 +243,7 @@ impl CommonState {
         Ok(written)
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
         debug_assert!(self.early_traffic);
         debug_assert!(self.record_layer.is_encrypting());

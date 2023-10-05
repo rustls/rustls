@@ -538,10 +538,11 @@ pub mod client {
 
     pub use builder::WantsClientCert;
     pub use client_conn::{
-        ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore, EarlyDataError,
-        ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
-        WriteEarlyData,
+        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
+        Resumption, Tls12Resumption, UnbufferedClientConnection,
     };
+    #[cfg(feature = "std")]
+    pub use client_conn::{ClientConnection, WriteEarlyData};
     #[cfg(feature = "std")]
     pub use handy::ClientSessionMemoryCache;
 
@@ -561,7 +562,9 @@ pub mod client {
     pub use crate::msgs::persist::Tls13ClientSessionValue;
 }
 
-pub use client::{ClientConfig, ClientConnection};
+pub use client::ClientConfig;
+#[cfg(feature = "std")]
+pub use client::ClientConnection;
 
 /// Items for use in a server.
 pub mod server {
