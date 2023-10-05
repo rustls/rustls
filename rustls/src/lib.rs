@@ -583,10 +583,11 @@ pub mod server {
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{
-        Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData,
-        UnbufferedServerConnection,
+        Accepted, Acceptor, ServerConfig, ServerConnectionData, UnbufferedServerConnection,
     };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
+    #[cfg(feature = "std")]
+    pub use server_conn::{ReadEarlyData, ServerConnection};
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
@@ -594,7 +595,9 @@ pub mod server {
     }
 }
 
-pub use server::{ServerConfig, ServerConnection};
+pub use server::ServerConfig;
+#[cfg(feature = "std")]
+pub use server::ServerConnection;
 
 /// All defined protocol versions appear in this module.
 ///
