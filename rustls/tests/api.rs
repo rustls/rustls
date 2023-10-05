@@ -14,7 +14,7 @@ use pki_types::{CertificateDer, UnixTime};
 use rustls::client::{
     verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption, WebPkiServerVerifier,
 };
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
+use rustls::crypto::ring::{cipher_suite, ALL_CIPHER_SUITES};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
@@ -248,7 +248,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
 fn config_builder_for_client_rejects_incompatible_cipher_suites() {
     assert_eq!(
         ClientConfig::builder()
-            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
+            .with_cipher_suites(&[cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .err(),
@@ -285,7 +285,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
 fn config_builder_for_server_rejects_incompatible_cipher_suites() {
     assert_eq!(
         ServerConfig::builder()
-            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
+            .with_cipher_suites(&[cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_protocol_versions(&[&rustls::version::TLS12])
             .err(),
@@ -451,7 +451,7 @@ fn test_config_builders_debug() {
         "ConfigBuilder<ServerConfig, _> { state: WantsCipherSuites(Ring) }",
         format!("{:?}", b)
     );
-    let b = b.with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
+    let b = b.with_cipher_suites(&[cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
     assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsKxGroups { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], provider: Ring } }", format!("{:?}", b));
     let b = b.with_kx_groups(&[rustls::crypto::ring::kx_group::X25519]);
     assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsVersions { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], provider: Ring } }", format!("{:?}", b));
@@ -466,7 +466,7 @@ fn test_config_builders_debug() {
         "ConfigBuilder<ClientConfig, _> { state: WantsCipherSuites(Ring) }",
         format!("{:?}", b)
     );
-    let b = b.with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
+    let b = b.with_cipher_suites(&[cipher_suite::TLS13_CHACHA20_POLY1305_SHA256]);
     assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsKxGroups { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], provider: Ring } }", format!("{:?}", b));
     let b = b.with_kx_groups(&[rustls::crypto::ring::kx_group::X25519]);
     assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsVersions { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], provider: Ring } }", format!("{:?}", b));
@@ -2307,7 +2307,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let server_config = finish_server_config(
         kt,
         ServerConfig::builder()
-            .with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
+            .with_cipher_suites(&[cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .unwrap(),
@@ -2316,7 +2316,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
     let client_config = finish_client_config(
         kt,
         ClientConfig::builder()
-            .with_cipher_suites(&[rustls::cipher_suite::TLS13_AES_256_GCM_SHA384])
+            .with_cipher_suites(&[cipher_suite::TLS13_AES_256_GCM_SHA384])
             .with_safe_default_kx_groups()
             .with_safe_default_protocol_versions()
             .unwrap(),
@@ -4173,7 +4173,7 @@ mod test_quic {
 
     #[test]
     fn packet_key_api() {
-        use rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
+        use cipher_suite::TLS13_AES_128_GCM_SHA256;
         use rustls::quic::{Keys, Version};
         use rustls::Side;
 
@@ -5213,12 +5213,12 @@ fn test_secret_extraction_enabled() {
     // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
     let kt = KeyType::Rsa;
     for suite in [
-        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
-        rustls::cipher_suite::TLS13_AES_256_GCM_SHA384,
-        rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
+        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     ] {
         let version = suite.version();
         println!("Testing suite {:?}", suite.suite().as_str());
@@ -5284,7 +5284,7 @@ fn test_secret_extraction_enabled() {
 #[cfg(feature = "tls12")]
 #[test]
 fn test_secret_extraction_disabled_or_too_early() {
-    let suite = rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
+    let suite = cipher_suite::TLS13_AES_128_GCM_SHA256;
     let kt = KeyType::Rsa;
 
     for (server_enable, client_enable) in [(true, false), (false, true)] {
@@ -5340,7 +5340,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
 #[test]
 fn test_received_plaintext_backpressure() {
-    let suite = rustls::cipher_suite::TLS13_AES_128_GCM_SHA256;
+    let suite = cipher_suite::TLS13_AES_128_GCM_SHA256;
     let kt = KeyType::Rsa;
 
     let server_config = Arc::new(

@@ -14,7 +14,7 @@ use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use rustls::client::Resumption;
-use rustls::crypto::ring::Ticketer;
+use rustls::crypto::ring::{cipher_suite, Ticketer};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, ProtocolVersion, RootCertStore, ServerConfig, ServerConnection,
@@ -210,31 +210,31 @@ fn all_benchmarks() -> anyhow::Result<Vec<Benchmark>> {
 static ALL_BENCHMARK_PARAMS: &[BenchmarkParams] = &[
     BenchmarkParams::new(
         KeyType::Rsa,
-        rustls::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
         "1.2_rsa_aes",
     ),
     BenchmarkParams::new(
         KeyType::Rsa,
-        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
         "1.3_rsa_aes",
     ),
     BenchmarkParams::new(
         KeyType::Ecdsa,
-        rustls::cipher_suite::TLS13_AES_128_GCM_SHA256,
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
         "1.3_ecdsa_aes",
     ),
     BenchmarkParams::new(
         KeyType::Rsa,
-        rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS13,
         "1.3_rsa_chacha",
     ),
     BenchmarkParams::new(
         KeyType::Ecdsa,
-        rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS13,
         "1.3_ecdsa_chacha",
     ),

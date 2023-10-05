@@ -211,6 +211,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 mod tests {
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
+    use crate::crypto::ring::cipher_suite;
     use crate::msgs::enums::NamedGroup;
     #[cfg(feature = "tls12")]
     use crate::msgs::handshake::SessionId;
@@ -234,7 +235,7 @@ mod tests {
         {
             use crate::msgs::persist::Tls12ClientSessionValue;
             let SupportedCipherSuite::Tls12(tls12_suite) =
-                crate::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+                cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
             else {
                 unreachable!()
             };
@@ -257,7 +258,7 @@ mod tests {
         }
 
         #[cfg_attr(not(feature = "tls12"), allow(clippy::infallible_destructuring_match))]
-        let tls13_suite = match crate::cipher_suite::TLS13_AES_256_GCM_SHA384 {
+        let tls13_suite = match cipher_suite::TLS13_AES_256_GCM_SHA384 {
             SupportedCipherSuite::Tls13(inner) => inner,
             #[cfg(feature = "tls12")]
             _ => unreachable!(),
