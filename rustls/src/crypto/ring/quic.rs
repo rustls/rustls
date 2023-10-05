@@ -5,6 +5,8 @@ use crate::quic;
 use crate::tls13::key_schedule::{hkdf_expand_label, hkdf_expand_label_aead_key};
 use crate::tls13::Tls13CipherSuite;
 
+use alloc::boxed::Box;
+
 use ring::aead;
 
 pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);

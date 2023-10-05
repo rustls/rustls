@@ -13,6 +13,8 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+#[cfg(feature = "ring")]
+use alloc::vec::Vec;
 use std::sync::Mutex;
 
 /// An implementer of `ClientSessionStore` which does nothing.

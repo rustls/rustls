@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, Reader};
 

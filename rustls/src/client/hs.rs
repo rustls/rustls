@@ -32,7 +32,11 @@ use crate::client::{tls13, ClientConfig, ServerName};
 
 use pki_types::UnixTime;
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::ops::Deref;
 
 pub(super) type NextState = Box<dyn State<ClientConnectionData>>;

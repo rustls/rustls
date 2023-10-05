@@ -30,7 +30,11 @@ use crate::client::{hs, ClientConfig, ServerName};
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 pub(super) use server_hello::CompleteServerHelloHandling;
 

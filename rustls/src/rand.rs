@@ -2,6 +2,9 @@
 
 use crate::crypto::CryptoProvider;
 
+use alloc::vec;
+use alloc::vec::Vec;
+
 /// Make a [`Vec<u8>`] of the given size containing random material.
 pub(crate) fn random_vec(
     provider: &dyn CryptoProvider,

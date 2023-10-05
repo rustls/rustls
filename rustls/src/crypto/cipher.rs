@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+use alloc::string::ToString;
 use core::fmt;
 use std::error::Error as StdError;
 

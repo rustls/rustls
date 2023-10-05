@@ -1,5 +1,7 @@
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::fmt;
-use std::{error::Error as StdError, sync::Arc};
+use std::error::Error as StdError;
 
 use pki_types::CertificateRevocationListDer;
 use webpki::BorrowedCertRevocationList;

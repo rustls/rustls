@@ -1,4 +1,5 @@
 #![allow(non_camel_case_types)]
+
 use crate::crypto::{ActiveKeyExchange, CryptoProvider};
 use crate::dns_name::{DnsName, DnsNameRef};
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
@@ -16,6 +17,11 @@ use crate::{rand, x509};
 
 use pki_types::CertificateDer;
 
+use alloc::borrow::ToOwned;
+#[cfg(feature = "logging")]
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::fmt;
 use std::collections;
 

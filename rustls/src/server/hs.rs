@@ -25,7 +25,10 @@ use super::tls12;
 use crate::server::common::ActiveCertifiedKey;
 use crate::server::tls13;
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
 pub(super) type NextStateOrError = Result<NextState, Error>;

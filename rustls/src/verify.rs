@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::{CertificateDer, UnixTime};

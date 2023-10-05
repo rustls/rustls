@@ -2,6 +2,8 @@ use crate::crypto;
 use crate::msgs::enums::HashAlgorithm;
 use ring;
 
+use alloc::boxed::Box;
+
 pub(crate) static SHA256: Hash = Hash(&ring::digest::SHA256, HashAlgorithm::SHA256);
 pub(crate) static SHA384: Hash = Hash(&ring::digest::SHA384, HashAlgorithm::SHA384);
 

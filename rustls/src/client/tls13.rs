@@ -44,7 +44,10 @@ use crate::client::{hs, ClientConfig, ClientSessionStore, ServerName};
 use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[

@@ -26,7 +26,12 @@ use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;
 
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::string::ToString;
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
 

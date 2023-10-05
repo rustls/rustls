@@ -300,8 +300,16 @@
 // cross-compiling.
 #![cfg_attr(read_buf, feature(read_buf))]
 #![cfg_attr(bench, feature(test))]
+#![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
+// This `extern crate` plus the `#![no_std]` attribute changes the default prelude from
+// `std::prelude` to `core::prelude`. That forces one to _explicitly_ import (`use`) everything that
+// is in `std::prelude` but not in `core::prelude`. This helps maintain no-std support as even
+// developers that are not interested in, or aware of, no-std support and / or that never run
+// `cargo build --no-default-features` locally will get errors when they rely on `std::prelude` API.
+#[cfg(not(test))]
+extern crate std;
 
 // Import `test` sysroot crate for `Bencher` definitions.
 #[cfg(bench)]

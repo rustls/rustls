@@ -1,6 +1,8 @@
 use crate::suites;
 use crate::{Error, NamedGroup};
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt::Debug;
 
 /// *ring* based CryptoProvider.

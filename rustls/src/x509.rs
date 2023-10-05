@@ -1,5 +1,7 @@
 // Additional x509/asn1 functions to those provided in webpki/ring.
 
+use alloc::vec::Vec;
+
 pub(crate) fn wrap_in_asn1_len(bytes: &mut Vec<u8>) {
     let len = bytes.len();
 

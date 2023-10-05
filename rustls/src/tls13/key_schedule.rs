@@ -8,6 +8,9 @@ use crate::quic;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{KeyLog, Tls13CipherSuite};
 
+use alloc::boxed::Box;
+use alloc::string::ToString;
+
 /// Key schedule maintenance for TLS1.3
 
 /// The kinds of secret we can extract from `KeySchedule`.

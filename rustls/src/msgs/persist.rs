@@ -11,6 +11,7 @@ use crate::tls13::Tls13CipherSuite;
 
 use pki_types::{CertificateDer, UnixTime};
 
+use alloc::vec::Vec;
 use core::cmp;
 #[cfg(feature = "tls12")]
 use core::mem;

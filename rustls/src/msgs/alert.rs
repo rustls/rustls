@@ -3,6 +3,8 @@ use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::AlertLevel;
 
+use alloc::vec::Vec;
+
 #[derive(Debug)]
 pub struct AlertMessagePayload {
     pub level: AlertLevel,

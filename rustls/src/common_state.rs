@@ -18,6 +18,9 @@ use crate::suites::SupportedCipherSuite;
 use crate::tls12::ConnectionSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use pki_types::CertificateDer;
 
 /// Connection state common to both client and server connections.

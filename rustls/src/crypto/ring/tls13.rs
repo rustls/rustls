@@ -1,3 +1,6 @@
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use crate::crypto::cipher::{
     make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm,
     UnsupportedOperationError,

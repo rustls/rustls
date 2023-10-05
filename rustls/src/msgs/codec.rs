@@ -1,6 +1,7 @@
-use core::fmt::Debug;
-
 use crate::error::InvalidMessage;
+
+use alloc::vec::Vec;
+use core::fmt::Debug;
 
 /// Wrapper over a slice of bytes that allows reading chunks from
 /// with the current position state held using a cursor.
