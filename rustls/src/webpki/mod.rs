@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
@@ -75,7 +76,11 @@ fn pki_error(error: webpki::Error) -> Error {
             CertRevocationListError::BadSignature.into()
         }
 
-        _ => CertificateError::Other(OtherError(Arc::new(error))).into(),
+        _ => CertificateError::Other(OtherError(
+            #[cfg(feature = "std")]
+            Arc::new(error),
+        ))
+        .into(),
     }
 }
 
@@ -95,7 +100,10 @@ fn crl_error(e: webpki::Error) -> CertRevocationListError {
         UnsupportedIndirectCrl => CertRevocationListError::UnsupportedIndirectCrl,
         UnsupportedRevocationReason => CertRevocationListError::UnsupportedRevocationReason,
 
-        _ => CertRevocationListError::Other(OtherError(Arc::new(e))),
+        _ => CertRevocationListError::Other(OtherError(
+            #[cfg(feature = "std")]
+            Arc::new(e),
+        )),
     }
 }
 
@@ -184,7 +192,7 @@ mod tests {
 
         assert!(matches!(
             crl_error(webpki::Error::NameConstraintViolation),
-            Other(_)
+            Other(..)
         ));
     }
 }
