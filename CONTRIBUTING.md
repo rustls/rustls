@@ -269,6 +269,18 @@ We use 3 blocks of imports in our Rust files:
 
 We believe that this makes it easier to see where a particular import comes from.
 
+Within the import blocks we prefer to separate imports that don't share a parent 
+module. For example,
+
+```rust
+// Incorrect
+use alloc::{format, vec::Vec};
+
+// Correct
+use alloc::format;
+use alloc::vec::Vec;
+```
+
 We prefer to reference types and traits by an imported symbol name instead of
 using qualified references. Qualification paths generally add noise and are
 unnecessary. The one exception to this is when the symbol name is overly
