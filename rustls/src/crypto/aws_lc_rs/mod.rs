@@ -197,3 +197,6 @@ mod ring_shim {
         })
     }
 }
+
+/// AEAD algorithm that is used by `mod ticketer`.
+pub(super) static TICKETER_AEAD: &ring_like::aead::Algorithm = &ring_like::aead::AES_256_GCM;
