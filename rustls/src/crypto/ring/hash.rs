@@ -29,6 +29,10 @@ impl crypto::hash::Hash for Hash {
     fn algorithm(&self) -> HashAlgorithm {
         self.1
     }
+
+    fn fips(&self) -> bool {
+        super::fips()
+    }
 }
 
 struct Context(digest::Context);

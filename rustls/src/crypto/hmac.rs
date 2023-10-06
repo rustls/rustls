@@ -12,6 +12,11 @@ pub trait Hmac: Send + Sync {
 
     /// Give the length of the underlying hash function.  In RFC2104 terminology this is `L`.
     fn hash_output_len(&self) -> usize;
+
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    fn fips(&self) -> bool {
+        false
+    }
 }
 
 /// A HMAC tag, stored as a value.

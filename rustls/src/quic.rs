@@ -587,6 +587,11 @@ pub trait Algorithm: Send + Sync {
     ///
     /// This controls the size of `AeadKey`s presented to `packet_key()` and `header_protection_key()`.
     fn aead_key_len(&self) -> usize;
+
+    /// Whether this algorithm is FIPS-approved.
+    fn fips(&self) -> bool {
+        false
+    }
 }
 
 /// A QUIC header protection key

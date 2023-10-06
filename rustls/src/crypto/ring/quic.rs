@@ -177,6 +177,10 @@ impl crate::quic::Algorithm for KeyBuilder {
     fn aead_key_len(&self) -> usize {
         self.0.key_len()
     }
+
+    fn fips(&self) -> bool {
+        super::fips()
+    }
 }
 
 #[cfg(test)]

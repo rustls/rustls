@@ -100,6 +100,15 @@ impl WebPkiSupportedAlgorithms {
             .next()
             .ok_or_else(|| PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into())
     }
+
+    /// Return `true` if all cryptography is FIPS-approved.
+    pub fn fips(&self) -> bool {
+        self.all.iter().all(|alg| alg.fips())
+            && self
+                .mapping
+                .iter()
+                .all(|item| item.1.iter().all(|alg| alg.fips()))
+    }
 }
 
 impl fmt::Debug for WebPkiSupportedAlgorithms {

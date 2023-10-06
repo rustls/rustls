@@ -41,6 +41,15 @@ pub struct CipherSuiteCommon {
     pub integrity_limit: u64,
 }
 
+impl CipherSuiteCommon {
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    ///
+    /// This means all the constituent parts that do cryptography return `true` for `fips()`.
+    pub fn fips(&self) -> bool {
+        self.hash_provider.fips()
+    }
+}
+
 /// A cipher suite supported by rustls.
 ///
 /// This type carries both configuration and implementation. Compare with
@@ -115,6 +124,15 @@ impl SupportedCipherSuite {
                 .tls13()
                 .and_then(|cs| cs.quic)
                 .is_some(),
+        }
+    }
+
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    pub fn fips(&self) -> bool {
+        match self {
+            #[cfg(feature = "tls12")]
+            Self::Tls12(cs) => cs.fips(),
+            Self::Tls13(cs) => cs.fips(),
         }
     }
 }
