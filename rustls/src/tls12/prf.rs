@@ -12,7 +12,7 @@ fn p(out: &mut [u8], alg: hmac::Algorithm, secret: &[u8], seed: &[u8]) {
 
     // A(1)
     let mut current_a = hmac::sign(&hmac_key, seed);
-    let chunk_size = alg.digest_algorithm().output_len;
+    let chunk_size = alg.digest_algorithm().output_len();
     for chunk in out.chunks_mut(chunk_size) {
         // P_hash[i] = HMAC_hash(secret, A(i) + seed)
         let p_term = concat_sign(&hmac_key, current_a.as_ref(), seed);

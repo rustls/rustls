@@ -148,7 +148,7 @@ pub(super) fn handle_server_hello(
     };
 
     let key_schedule = our_key_share.complete(&their_key_share.payload.0, |secret| {
-        Ok(key_schedule_pre_handshake.into_handshake(secret))
+        key_schedule_pre_handshake.into_handshake(secret)
     })?;
 
     // Remember what KX group the server liked for next time.
@@ -277,7 +277,7 @@ pub(super) fn prepare_resumption(
 
     let binder_len = resuming_suite
         .hash_algorithm()
-        .output_len;
+        .output_len();
     let binder = vec![0u8; binder_len];
 
     let psk_identity =

@@ -49,14 +49,10 @@ impl KeyExchange {
     ///
     /// The shared secret is passed into the closure passed down in `f`, and the result of calling
     /// `f` is returned to the caller.
-    pub(crate) fn complete<T>(
-        self,
-        peer: &[u8],
-        f: impl FnOnce(&[u8]) -> Result<T, ()>,
-    ) -> Result<T, Error> {
+    pub(crate) fn complete<T>(self, peer: &[u8], f: impl FnOnce(&[u8]) -> T) -> Result<T, Error> {
         let peer_key = ring::agreement::UnparsedPublicKey::new(self.skxg.agreement_algorithm, peer);
-        ring::agreement::agree_ephemeral(self.privkey, &peer_key, (), f)
-            .map_err(|()| PeerMisbehaved::InvalidKeyShare.into())
+        ring::agreement::agree_ephemeral(self.privkey, &peer_key, f)
+            .map_err(|_| PeerMisbehaved::InvalidKeyShare.into())
     }
 }
 

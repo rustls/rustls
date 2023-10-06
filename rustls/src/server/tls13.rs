@@ -543,7 +543,7 @@ mod client_hello {
 
         // Do key exchange
         let key_schedule = kx.complete(&share.payload.0, |secret| {
-            Ok(key_schedule_pre_handshake.into_handshake(secret))
+            key_schedule_pre_handshake.into_handshake(secret)
         })?;
 
         let handshake_hash = transcript.get_current_hash();
