@@ -703,11 +703,26 @@ However, given that all internal uses of `std::sync::Mutex` immediately `unwrap`
 
 # Appendix
 
+## FAQ
+
+> why no-std support depends on the `alloc` crate?
+
+For a few reasons:
+
+rustls uses `Arc`-ed dynamic trait objects (e.g. [`Resumption`](https://github.com/rustls/rustls/blob/384dd1c3fa9b725fdfb55bd168951e31900f7144/rustls/src/client/client_conn.rs#L281-L284)) to avoid adding type parameters and trait bounds to its public API;
+Removing those allocations / trait objects would require semver-breaking changes in several parts of the public API and likely negatively impact the ease of use of the library.
+This proposal requires no semver breaking changes and does not affect the ergonomics of the library.
+
+rustls also allocates in other places in its implementation that might be possible to remove without affecting the public API but removing those allocations would still be a significant undertaking.
+This proposal takes the "least resistance" path towards no-std support.
+
+## Diagrams
+
 This section contains some `mermaid` diagrams that show the relationship between rustls components and libstd API today and how those change as different stages of this proposal are implemented.
 Note that libstd API dependencies that were deemed less relevant are not shown in these diagrams;
 for example, `std::error::Error` is not shown.
 
-## "Today" (v0.21.6)
+### "Today" (v0.21.6)
 
 ```mermaid
 flowchart LR
@@ -776,7 +791,7 @@ flowchart LR
   ticketer -.-> ticket_switcher
 ```
 
-## Stage 1
+### Stage 1
 
 ```mermaid
 flowchart LR
@@ -808,7 +823,7 @@ flowchart LR
   time_provider --> no_time_provider
 ```
 
-## Stage 2
+### Stage 2
 
 ```mermaid
 flowchart LR
