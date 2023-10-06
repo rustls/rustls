@@ -9,9 +9,6 @@ edition = "2021"
 [package.metadata]
 cargo-fuzz = true
 
-[dependencies]
-webpki = { package = "rustls-webpki", version = "0.101.0", features = ["alloc", "std"] }
-
 [dependencies.rustls]
 path = "../rustls"
 [dependencies.libfuzzer-sys]

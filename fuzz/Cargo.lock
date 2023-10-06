@@ -105,7 +105,7 @@ dependencies = [
  "log",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.102.0-alpha.3",
+ "rustls-webpki",
  "subtle",
 ]
 
@@ -115,7 +115,6 @@ version = "0.0.1"
 dependencies = [
  "libfuzzer-sys",
  "rustls",
- "rustls-webpki 0.101.6",
 ]
 
 [[package]]
@@ -123,16 +122,6 @@ name = "rustls-pki-types"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a47003264dea418db67060fa420ad16d0d2f8f0a0360d825c00e177ac52cb5d8"
-
-[[package]]
-name = "rustls-webpki"
-version = "0.101.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c7d5dece342910d9ba34d259310cae3e0154b873b35408b787b59bce53d34fe"
-dependencies = [
- "ring",
- "untrusted",
-]
 
 [[package]]
 name = "rustls-webpki"
