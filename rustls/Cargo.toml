@@ -20,8 +20,8 @@ aws-lc-rs = { version = "1.6", optional = true, default-features = false, featur
 log = { version = "0.4.4", optional = true }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
-webpki = { package = "rustls-webpki", version = "0.102.1", features = ["std"], default-features = false }
-pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
+webpki = { package = "rustls-webpki", version = "0.102.2", features = ["std"], default-features = false }
+pki-types = { package = "rustls-pki-types", version = "1.2", features = ["std"] }
 zeroize = "1.7"
 
 [features]

@@ -42,6 +42,22 @@ impl Tls13CipherSuite {
         (prev.common.hash_provider.algorithm() == self.common.hash_provider.algorithm())
             .then(|| prev)
     }
+
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    ///
+    /// This means all the constituent parts that do cryptography return `true` for `fips()`.
+    pub fn fips(&self) -> bool {
+        let Self {
+            common,
+            hkdf_provider,
+            aead_alg,
+            quic,
+        } = self;
+        common.fips()
+            && hkdf_provider.fips()
+            && aead_alg.fips()
+            && quic.map(|q| q.fips()).unwrap_or(true)
+    }
 }
 
 impl From<&'static Tls13CipherSuite> for SupportedCipherSuite {

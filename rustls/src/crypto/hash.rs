@@ -18,6 +18,11 @@ pub trait Hash: Send + Sync {
 
     /// Which hash function this is, eg, `HashAlgorithm::SHA256`.
     fn algorithm(&self) -> HashAlgorithm;
+
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    fn fips(&self) -> bool {
+        false
+    }
 }
 
 /// A hash output, stored as a value.

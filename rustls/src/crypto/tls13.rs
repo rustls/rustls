@@ -176,6 +176,11 @@ pub trait Hkdf: Send + Sync {
     /// See [RFC2104](https://datatracker.ietf.org/doc/html/rfc2104) for the
     /// definition of HMAC.
     fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> hmac::Tag;
+
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    fn fips(&self) -> bool {
+        false
+    }
 }
 
 /// `HKDF-Expand(PRK, info, L)` to construct any type from a byte array.

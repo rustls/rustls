@@ -106,6 +106,10 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv })
     }
+
+    fn fips(&self) -> bool {
+        false // not FIPS approved
+    }
 }
 
 struct Aes256GcmAead(AeadAlgorithm);
@@ -130,6 +134,10 @@ impl Tls13AeadAlgorithm for Aes256GcmAead {
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         Ok(ConnectionTrafficSecrets::Aes256Gcm { key, iv })
     }
+
+    fn fips(&self) -> bool {
+        super::fips()
+    }
 }
 
 struct Aes128GcmAead(AeadAlgorithm);
@@ -153,6 +161,10 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
         iv: Iv,
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
         Ok(ConnectionTrafficSecrets::Aes128Gcm { key, iv })
+    }
+
+    fn fips(&self) -> bool {
+        super::fips()
     }
 }
 
@@ -353,6 +365,10 @@ impl Hkdf for RingHkdf {
 
     fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> crypto::hmac::Tag {
         crypto::hmac::Tag::new(hmac::sign(&hmac::Key::new(self.1, key.as_ref()), message).as_ref())
+    }
+
+    fn fips(&self) -> bool {
+        super::fips()
     }
 }
 

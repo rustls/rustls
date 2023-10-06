@@ -62,6 +62,13 @@ impl Tls12CipherSuite {
             .cloned()
             .collect()
     }
+
+    /// Return `true` if this is backed by a FIPS-approved implementation.
+    ///
+    /// This means all the constituent parts that do cryptography return `true` for `fips()`.
+    pub fn fips(&self) -> bool {
+        self.common.fips() && self.prf_provider.fips() && self.aead_alg.fips()
+    }
 }
 
 impl From<&'static Tls12CipherSuite> for SupportedCipherSuite {
