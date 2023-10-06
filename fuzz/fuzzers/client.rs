@@ -2,7 +2,6 @@
 #[macro_use]
 extern crate libfuzzer_sys;
 extern crate rustls;
-extern crate webpki;
 
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use std::io;
