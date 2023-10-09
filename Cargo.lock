@@ -892,7 +892,7 @@ name = "rustls-connect-tests"
 version = "0.0.1"
 dependencies = [
  "regex",
- "ring 0.16.20",
+ "ring 0.17.0",
  "rustls",
 ]
 
