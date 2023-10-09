@@ -905,8 +905,6 @@ dependencies = [
  "log",
  "mio",
  "rcgen",
- "regex",
- "ring 0.16.20",
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
