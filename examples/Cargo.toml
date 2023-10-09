@@ -21,7 +21,3 @@ rustls-pemfile = "=2.0.0-alpha.1"
 serde = "1.0"
 serde_derive = "1.0"
 webpki-roots = "=0.26.0-alpha.1"
-
-[dev-dependencies]
-regex = "1.9"
-ring = "0.16.20"
