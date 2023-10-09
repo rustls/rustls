@@ -281,6 +281,16 @@ use alloc::format;
 use alloc::vec::Vec;
 ```
 
+By default, Rust-Analyzer's import assist groups `use` items per crate.
+To get the desired grouping set `rust-analyzer.imports.granularity.group` to `module`.
+
+Likewise, by default, `rustfmt` will not group `use` items as desired.
+Add this line to `rustfmt.toml` to get the desired behavior but note that this setting is unstable (as of Rust 1.72) and requires a nightly toolchain:
+
+``` toml
+imports_granularity = "Module"
+```
+
 We prefer to reference types and traits by an imported symbol name instead of
 using qualified references. Qualification paths generally add noise and are
 unnecessary. The one exception to this is when the symbol name is overly
