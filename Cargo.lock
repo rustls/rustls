@@ -798,9 +798,9 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.17.0"
+version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb9d44f9bf6b635117787f72416783eb7e4227aaf255e5ce739563d817176a7e"
+checksum = "911b295d2d302948838c8ac142da1ee09fa7863163b44e6715bc9357905878b8"
 dependencies = [
  "cc",
  "getrandom",
@@ -863,7 +863,7 @@ dependencies = [
  "bencher",
  "env_logger",
  "log",
- "ring 0.17.0",
+ "ring 0.17.2",
  "rustls-pemfile",
  "rustls-pki-types",
  "rustls-webpki",
@@ -892,7 +892,7 @@ name = "rustls-connect-tests"
 version = "0.0.1"
 dependencies = [
  "regex",
- "ring 0.17.0",
+ "ring 0.17.2",
  "rustls",
 ]
 
@@ -953,7 +953,7 @@ version = "0.102.0-alpha.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa3ae0c05ae540f6d9089b731c26e49863058f03082dcef070df987bcc8db7ba"
 dependencies = [
- "ring 0.17.0",
+ "ring 0.17.2",
  "rustls-pki-types",
  "untrusted 0.9.0",
 ]
