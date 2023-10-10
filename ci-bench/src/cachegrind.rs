@@ -132,6 +132,7 @@ impl CachegrindRunner {
         output_dir: &Path,
     ) -> anyhow::Result<BenchSubprocess> {
         let cachegrind_output_file = output_dir.join(name);
+        let cachegrind_log_file = output_dir.join(format!("{name}.log"));
 
         // Run under setarch to disable ASLR, to reduce noise
         let mut cmd = Command::new("setarch");
@@ -141,9 +142,9 @@ impl CachegrindRunner {
             .arg("--tool=cachegrind")
             // Disable the cache simulation, since we are only interested in instruction counts
             .arg("--cache-sim=no")
-            // Discard cachegrind's logs, which would otherwise be printed to stderr (we want to
+            // Save cachegrind's logs, which would otherwise be printed to stderr (we want to
             // keep stderr free of noise, to see any errors from the child process)
-            .arg("--log-file=/dev/null")
+            .arg(format!("--log-file={}", cachegrind_log_file.display()))
             // The file where the instruction counts will be stored
             .arg(format!(
                 "--cachegrind-out-file={}",

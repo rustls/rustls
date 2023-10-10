@@ -33,7 +33,9 @@ handshake_no_resume_1.3_rsa_aes_client,4212770
 ```
 
 In the `cachegrind` subdirectory you will find output files emitted by the `cachegrind` tool, which
-are useful to report detailed instruction count differences when comparing two benchmark runs.
+are useful to report detailed instruction count differences when comparing two benchmark runs. This
+subdirectory also contains log information from cachegrind itself (in `.log` files), which can be
+used to diagnose unexpected cachegrind crashes.
 
 ### Comparing results
 
