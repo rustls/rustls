@@ -76,7 +76,7 @@ pub struct Tls13CipherSuite {
 
 impl Tls13CipherSuite {
     /// Which hash function to use with this suite.
-    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
+    pub(crate) fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         self.hkdf_algorithm
             .hmac_algorithm()
             .digest_algorithm()

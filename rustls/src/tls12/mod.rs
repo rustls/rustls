@@ -171,7 +171,7 @@ impl Tls12CipherSuite {
     }
 
     /// Which hash function to use with this suite.
-    pub fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
+    pub(crate) fn hash_algorithm(&self) -> &'static ring::digest::Algorithm {
         self.hmac_algorithm.digest_algorithm()
     }
 }
