@@ -85,18 +85,48 @@ impl<'a> Reader<'a> {
     }
 }
 
-#[allow(clippy::len_without_is_empty)]
-pub trait ByteBuffer {
-    fn len(&self) -> usize;
+pub(crate) mod byte_buffer {
+    use super::SliceBuffer;
+    use alloc::vec::Vec;
 
-    fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N];
+    #[allow(clippy::len_without_is_empty)]
+    pub trait ByteBuffer {
+        fn len(&self) -> usize;
+
+        fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N];
+    }
+
+    impl ByteBuffer for Vec<u8> {
+        fn len(&self) -> usize {
+            Self::len(self)
+        }
+
+        fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N] {
+            (&mut self[offset..offset + N])
+                .try_into()
+                .unwrap()
+        }
+    }
+
+    impl<'b> ByteBuffer for SliceBuffer<'b> {
+        fn len(&self) -> usize {
+            self.discard
+        }
+
+        fn get_array_mut<const N: usize>(&mut self, mut offset: usize) -> &mut [u8; N] {
+            offset += self.discard;
+            (&mut self.slice[offset..offset + N])
+                .try_into()
+                .unwrap()
+        }
+    }
 }
 
-pub trait PushBytes: ByteBuffer {
+pub trait PushBytes: byte_buffer::ByteBuffer {
     fn push_bytes(&mut self, bytes: &[u8]);
 }
 
-pub trait TryPushBytes: ByteBuffer {
+pub trait TryPushBytes: byte_buffer::ByteBuffer {
     type Error;
 
     fn try_push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error>;
@@ -111,35 +141,17 @@ impl<B: PushBytes> TryPushBytes for B {
     }
 }
 
-impl ByteBuffer for Vec<u8> {
-    fn len(&self) -> usize {
-        Self::len(self)
-    }
-
-    fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N] {
-        (&mut self[offset..offset + N])
-            .try_into()
-            .unwrap()
-    }
-}
-
 impl PushBytes for Vec<u8> {
     fn push_bytes(&mut self, bytes: &[u8]) {
         self.extend_from_slice(bytes);
     }
 }
 
-pub struct NotEnoughBytes {}
+pub(crate) struct NotEnoughBytes {}
 
-pub struct SliceBuffer<'b> {
+pub(crate) struct SliceBuffer<'b> {
     discard: usize,
     slice: &'b mut [u8],
-}
-
-impl<'b> SliceBuffer<'b> {
-    pub fn new(slice: &'b mut [u8]) -> Self {
-        Self { discard: 0, slice }
-    }
 }
 
 impl<'b> TryPushBytes for SliceBuffer<'b> {
@@ -158,28 +170,15 @@ impl<'b> TryPushBytes for SliceBuffer<'b> {
     }
 }
 
-impl<'b> ByteBuffer for SliceBuffer<'b> {
-    fn len(&self) -> usize {
-        self.discard
-    }
-
-    fn get_array_mut<const N: usize>(&mut self, mut offset: usize) -> &mut [u8; N] {
-        offset += self.discard;
-        (&mut self.slice[offset..offset + N])
-            .try_into()
-            .unwrap()
-    }
-}
-
 /// Trait for implementing encoding and decoding functionality
 /// on something.
 pub trait Codec: Debug + Sized {
     /// Function for encoding itself by appending itself to
-    /// the provided vec of bytes.
+    /// the provided buffer of bytes.
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error>;
 
     /// Function for encoding itself by appending itself to
-    /// the provided vec of bytes.
+    /// the provided buffer of bytes.
     fn encode<B: PushBytes>(&self, bytes: &mut B) {
         if let Err(err) = self.try_encode(bytes) {
             match err {}
