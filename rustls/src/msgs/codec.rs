@@ -146,11 +146,19 @@ impl PushBytes for Vec<u8> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct NotEnoughBytes {}
 
 pub(crate) struct SliceBuffer<'b> {
     discard: usize,
     slice: &'b mut [u8],
+}
+
+#[cfg(test)]
+impl<'b> SliceBuffer<'b> {
+    pub(crate) fn new(slice: &'b mut [u8]) -> Self {
+        Self { discard: 0, slice }
+    }
 }
 
 impl<'b> TryPushBytes for SliceBuffer<'b> {
@@ -425,6 +433,7 @@ impl<'a, B: TryPushBytes> Drop for LengthPrefixedBuffer<'a, B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use byte_buffer::ByteBuffer;
 
     #[test]
     fn interrupted_length_prefixed_buffer_leaves_maximum_length() {
@@ -438,5 +447,22 @@ mod tests {
         //    extension)
         drop(nested);
         assert_eq!(buf, vec![0x00, 0x01, 0xaa]);
+    }
+
+    #[test]
+    fn slice_buffer_is_consistent() {
+        let mut bytes = [0u8; 64];
+        let mut buf = SliceBuffer::new(&mut bytes);
+        // The buffer should be empty at the beginning
+        assert_eq!(buf.len(), 0);
+
+        let expected_num = 0xdeadbeefu32;
+        buf.try_push_bytes(&expected_num.to_ne_bytes()).unwrap();
+        // The buffer should be holding all the bytes of `expected_num` 
+        assert_eq!(buf.len(), core::mem::size_of::<u32>());
+
+        let found_num = u32::from_ne_bytes(*buf.get_array_mut(0));
+        // The read bytes should be the same that were written 
+        assert_eq!(expected_num, found_num)
     }
 }
