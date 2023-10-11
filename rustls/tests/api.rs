@@ -728,7 +728,9 @@ fn test_tls13_too_short_early_plaintext_alert() {
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message
     // because the payload length is too large to be considered an early plaintext alert.
     let mut payload = vec![ContentType::Alert.get_u8()];
-    ProtocolVersion::TLSv1_2.encode(&mut payload);
+    ProtocolVersion::TLSv1_2
+        .encode(&mut payload)
+        .unwrap();
     payload.extend(&[0x00, 0x03]); // Length of 3.
     payload.extend(&[AlertLevel::Fatal.get_u8(), 0xDE, 0xAD]); // Three byte fatal alert.
 
@@ -3686,7 +3688,7 @@ mod test_quic {
         });
 
         let mut buf = Vec::with_capacity(512);
-        client_hello.encode(&mut buf);
+        client_hello.encode(&mut buf).unwrap();
         assert_eq!(
             server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerMisbehaved(
@@ -3747,7 +3749,7 @@ mod test_quic {
         });
 
         let mut buf = Vec::with_capacity(512);
-        client_hello.encode(&mut buf);
+        client_hello.encode(&mut buf).unwrap();
         assert_eq!(
             server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerIncompatible(
