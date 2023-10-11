@@ -86,23 +86,20 @@ impl<'a> Reader<'a> {
 }
 
 #[allow(clippy::len_without_is_empty)]
-pub trait PushBytes {
-    fn push_bytes(&mut self, bytes: &[u8]);
-
+pub trait ByteBuffer {
     fn len(&self) -> usize;
 
     fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N];
 }
 
-#[allow(clippy::len_without_is_empty)]
-pub trait TryPushBytes {
+pub trait PushBytes: ByteBuffer {
+    fn push_bytes(&mut self, bytes: &[u8]);
+}
+
+pub trait TryPushBytes: ByteBuffer {
     type Error;
 
     fn try_push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error>;
-
-    fn len(&self) -> usize;
-
-    fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N];
 }
 
 impl<B: PushBytes> TryPushBytes for B {
@@ -112,21 +109,9 @@ impl<B: PushBytes> TryPushBytes for B {
         self.push_bytes(bytes);
         Ok(())
     }
-
-    fn len(&self) -> usize {
-        self.len()
-    }
-
-    fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N] {
-        self.get_array_mut(offset)
-    }
 }
 
-impl PushBytes for Vec<u8> {
-    fn push_bytes(&mut self, bytes: &[u8]) {
-        self.extend_from_slice(bytes);
-    }
-
+impl ByteBuffer for Vec<u8> {
     fn len(&self) -> usize {
         Self::len(self)
     }
@@ -135,6 +120,12 @@ impl PushBytes for Vec<u8> {
         (&mut self[offset..offset + N])
             .try_into()
             .unwrap()
+    }
+}
+
+impl PushBytes for Vec<u8> {
+    fn push_bytes(&mut self, bytes: &[u8]) {
+        self.extend_from_slice(bytes);
     }
 }
 
@@ -159,7 +150,9 @@ impl TryPushBytes for NotSlice {
 
         Ok(())
     }
+}
 
+impl ByteBuffer for NotSlice {
     fn len(&self) -> usize {
         self.discard
     }
@@ -360,6 +353,7 @@ pub(crate) struct LengthPrefixedBuffer<'a, B: TryPushBytes> {
     size_len: ListLength,
 }
 
+#[cfg(test)]
 impl<'a, B: PushBytes> LengthPrefixedBuffer<'a, B> {
     /// Inserts a dummy length into `buf`, and remembers where it went.
     ///
