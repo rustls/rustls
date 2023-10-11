@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 use core::fmt;
 use std::collections;
 
-use super::codec::PushBytes;
+use super::codec::TryPushBytes;
 
 /// Create a newtype wrapper around a given type.
 ///
@@ -51,8 +51,8 @@ macro_rules! wrapped_payload(
     }
 
     impl Codec for $name {
-        fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-            self.0.encode(bytes)
+        fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+            self.0.try_encode(bytes)
         }
 
         fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -79,8 +79,8 @@ static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
 static ZERO_RANDOM: Random = Random([0u8; 32]);
 
 impl Codec for Random {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        bytes.push_bytes(&self.0)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        bytes.try_push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -143,10 +143,10 @@ impl PartialEq for SessionId {
 }
 
 impl Codec for SessionId {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         debug_assert!(self.len <= 32);
-        bytes.push_bytes(&[self.len as u8])?;
-        bytes.push_bytes(&self.data[..self.len])
+        bytes.try_push_bytes(&[self.len as u8])?;
+        bytes.try_push_bytes(&self.data[..self.len])
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -196,8 +196,8 @@ pub struct UnknownExtension {
 }
 
 impl UnknownExtension {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.payload.encode(bytes)
+    fn encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.payload.try_encode(bytes)
     }
 
     fn read(typ: ExtensionType, r: &mut Reader) -> Self {
@@ -244,13 +244,13 @@ impl ServerNamePayload {
         }
     }
 
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match *self {
             Self::HostName(ref name) => {
-                (name.as_ref().len() as u16).encode(bytes)?;
-                bytes.push_bytes(name.as_ref().as_bytes())
+                (name.as_ref().len() as u16).try_encode(bytes)?;
+                bytes.try_push_bytes(name.as_ref().as_bytes())
             }
-            Self::Unknown(ref r) => r.encode(bytes),
+            Self::Unknown(ref r) => r.try_encode(bytes),
         }
     }
 }
@@ -262,8 +262,8 @@ pub struct ServerName {
 }
 
 impl Codec for ServerName {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.typ.encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.typ.try_encode(bytes)?;
         self.payload.encode(bytes)
     }
 
@@ -372,9 +372,9 @@ impl KeyShareEntry {
 }
 
 impl Codec for KeyShareEntry {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.group.encode(bytes)?;
-        self.payload.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.group.try_encode(bytes)?;
+        self.payload.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -402,9 +402,10 @@ impl PresharedKeyIdentity {
 }
 
 impl Codec for PresharedKeyIdentity {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.identity.encode(bytes)?;
-        self.obfuscated_ticket_age.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.identity.try_encode(bytes)?;
+        self.obfuscated_ticket_age
+            .try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -442,9 +443,9 @@ impl PresharedKeyOffer {
 }
 
 impl Codec for PresharedKeyOffer {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.identities.encode(bytes)?;
-        self.binders.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.identities.try_encode(bytes)?;
+        self.binders.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -469,10 +470,10 @@ pub struct OCSPCertificateStatusRequest {
 }
 
 impl Codec for OCSPCertificateStatusRequest {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        CertificateStatusType::OCSP.encode(bytes)?;
-        self.responder_ids.encode(bytes)?;
-        self.extensions.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        CertificateStatusType::OCSP.try_encode(bytes)?;
+        self.responder_ids.try_encode(bytes)?;
+        self.extensions.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -490,12 +491,12 @@ pub enum CertificateStatusRequest {
 }
 
 impl Codec for CertificateStatusRequest {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match self {
-            Self::OCSP(ref r) => r.encode(bytes),
+            Self::OCSP(ref r) => r.try_encode(bytes),
             Self::Unknown((typ, payload)) => {
-                typ.encode(bytes)?;
-                payload.encode(bytes)
+                typ.try_encode(bytes)?;
+                payload.try_encode(bytes)
             }
         }
     }
@@ -586,28 +587,28 @@ impl ClientExtension {
 }
 
 impl Codec for ClientExtension {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.get_type().encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().try_encode(bytes)?;
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
-            Self::ECPointFormats(ref r) => r.encode(nested.buf),
-            Self::NamedGroups(ref r) => r.encode(nested.buf),
-            Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
-            Self::ServerName(ref r) => r.encode(nested.buf),
+            Self::ECPointFormats(ref r) => r.try_encode(nested.buf),
+            Self::NamedGroups(ref r) => r.try_encode(nested.buf),
+            Self::SignatureAlgorithms(ref r) => r.try_encode(nested.buf),
+            Self::ServerName(ref r) => r.try_encode(nested.buf),
             Self::SessionTicket(ClientSessionTicket::Request)
             | Self::ExtendedMasterSecretRequest
             | Self::EarlyData => Ok(()),
-            Self::SessionTicket(ClientSessionTicket::Offer(ref r)) => r.encode(nested.buf),
-            Self::Protocols(ref r) => r.encode(nested.buf),
-            Self::SupportedVersions(ref r) => r.encode(nested.buf),
-            Self::KeyShare(ref r) => r.encode(nested.buf),
-            Self::PresharedKeyModes(ref r) => r.encode(nested.buf),
-            Self::PresharedKey(ref r) => r.encode(nested.buf),
-            Self::Cookie(ref r) => r.encode(nested.buf),
-            Self::CertificateStatusRequest(ref r) => r.encode(nested.buf),
+            Self::SessionTicket(ClientSessionTicket::Offer(ref r)) => r.try_encode(nested.buf),
+            Self::Protocols(ref r) => r.try_encode(nested.buf),
+            Self::SupportedVersions(ref r) => r.try_encode(nested.buf),
+            Self::KeyShare(ref r) => r.try_encode(nested.buf),
+            Self::PresharedKeyModes(ref r) => r.try_encode(nested.buf),
+            Self::PresharedKey(ref r) => r.try_encode(nested.buf),
+            Self::Cookie(ref r) => r.try_encode(nested.buf),
+            Self::CertificateStatusRequest(ref r) => r.try_encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                nested.buf.push_bytes(r)
+                nested.buf.try_push_bytes(r)
             }
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
@@ -730,24 +731,24 @@ impl ServerExtension {
 }
 
 impl Codec for ServerExtension {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.get_type().encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().try_encode(bytes)?;
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
-            Self::ECPointFormats(ref r) => r.encode(nested.buf),
+            Self::ECPointFormats(ref r) => r.try_encode(nested.buf),
             Self::ServerNameAck
             | Self::SessionTicketAck
             | Self::ExtendedMasterSecretAck
             | Self::CertificateStatusAck
             | Self::EarlyData => Ok(()),
-            Self::RenegotiationInfo(ref r) => r.encode(nested.buf),
-            Self::Protocols(ref r) => r.encode(nested.buf),
-            Self::KeyShare(ref r) => r.encode(nested.buf),
-            Self::PresharedKey(r) => r.encode(nested.buf),
-            Self::SupportedVersions(ref r) => r.encode(nested.buf),
+            Self::RenegotiationInfo(ref r) => r.try_encode(nested.buf),
+            Self::Protocols(ref r) => r.try_encode(nested.buf),
+            Self::KeyShare(ref r) => r.try_encode(nested.buf),
+            Self::PresharedKey(r) => r.try_encode(nested.buf),
+            Self::SupportedVersions(ref r) => r.try_encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                nested.buf.push_bytes(r)
+                nested.buf.try_push_bytes(r)
             }
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
@@ -806,15 +807,16 @@ pub struct ClientHelloPayload {
 }
 
 impl Codec for ClientHelloPayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.client_version.encode(bytes)?;
-        self.random.encode(bytes)?;
-        self.session_id.encode(bytes)?;
-        self.cipher_suites.encode(bytes)?;
-        self.compression_methods.encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.client_version.try_encode(bytes)?;
+        self.random.try_encode(bytes)?;
+        self.session_id.try_encode(bytes)?;
+        self.cipher_suites.try_encode(bytes)?;
+        self.compression_methods
+            .try_encode(bytes)?;
 
         if !self.extensions.is_empty() {
-            self.extensions.encode(bytes)?;
+            self.extensions.try_encode(bytes)?;
         }
 
         Ok(())
@@ -1031,14 +1033,14 @@ impl HelloRetryExtension {
 }
 
 impl Codec for HelloRetryExtension {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.get_type().encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().try_encode(bytes)?;
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
-            Self::KeyShare(ref r) => r.encode(nested.buf),
-            Self::Cookie(ref r) => r.encode(nested.buf),
-            Self::SupportedVersions(ref r) => r.encode(nested.buf),
+            Self::KeyShare(ref r) => r.try_encode(nested.buf),
+            Self::Cookie(ref r) => r.try_encode(nested.buf),
+            Self::SupportedVersions(ref r) => r.try_encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -1075,13 +1077,13 @@ pub struct HelloRetryRequest {
 }
 
 impl Codec for HelloRetryRequest {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.legacy_version.encode(bytes)?;
-        HELLO_RETRY_REQUEST_RANDOM.encode(bytes)?;
-        self.session_id.encode(bytes)?;
-        self.cipher_suite.encode(bytes)?;
-        Compression::Null.encode(bytes)?;
-        self.extensions.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.legacy_version.try_encode(bytes)?;
+        HELLO_RETRY_REQUEST_RANDOM.try_encode(bytes)?;
+        self.session_id.try_encode(bytes)?;
+        self.cipher_suite.try_encode(bytes)?;
+        Compression::Null.try_encode(bytes)?;
+        self.extensions.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1170,16 +1172,17 @@ pub struct ServerHelloPayload {
 }
 
 impl Codec for ServerHelloPayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.legacy_version.encode(bytes)?;
-        self.random.encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.legacy_version.try_encode(bytes)?;
+        self.random.try_encode(bytes)?;
 
-        self.session_id.encode(bytes)?;
-        self.cipher_suite.encode(bytes)?;
-        self.compression_method.encode(bytes)?;
+        self.session_id.try_encode(bytes)?;
+        self.cipher_suite.try_encode(bytes)?;
+        self.compression_method
+            .try_encode(bytes)?;
 
         if !self.extensions.is_empty() {
-            self.extensions.encode(bytes)?;
+            self.extensions.try_encode(bytes)?;
         }
 
         Ok(())
@@ -1289,12 +1292,12 @@ impl CertificateExtension {
 }
 
 impl Codec for CertificateExtension {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.get_type().encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().try_encode(bytes)?;
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
-            Self::CertificateStatus(ref r) => r.encode(nested.buf),
+            Self::CertificateStatus(ref r) => r.try_encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -1328,9 +1331,9 @@ pub struct CertificateEntry {
 }
 
 impl Codec for CertificateEntry {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.cert.encode(bytes)?;
-        self.exts.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.cert.try_encode(bytes)?;
+        self.exts.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1389,9 +1392,9 @@ pub struct CertificatePayloadTLS13 {
 }
 
 impl Codec for CertificatePayloadTLS13 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.context.encode(bytes)?;
-        self.entries.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.context.try_encode(bytes)?;
+        self.entries.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1473,9 +1476,9 @@ pub struct ECParameters {
 }
 
 impl Codec for ECParameters {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.curve_type.encode(bytes)?;
-        self.named_group.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.curve_type.try_encode(bytes)?;
+        self.named_group.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1499,8 +1502,8 @@ pub struct ClientECDHParams {
 }
 
 impl Codec for ClientECDHParams {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.public.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.public.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1528,9 +1531,9 @@ impl ServerECDHParams {
 }
 
 impl Codec for ServerECDHParams {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.curve_params.encode(bytes)?;
-        self.public.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.curve_params.try_encode(bytes)?;
+        self.public.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1551,9 +1554,9 @@ pub struct ECDHEServerKeyExchange {
 }
 
 impl Codec for ECDHEServerKeyExchange {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.params.encode(bytes)?;
-        self.dss.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.params.try_encode(bytes)?;
+        self.dss.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1571,10 +1574,10 @@ pub enum ServerKeyExchangePayload {
 }
 
 impl Codec for ServerKeyExchangePayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match *self {
-            Self::ECDHE(ref x) => x.encode(bytes),
-            Self::Unknown(ref x) => x.encode(bytes),
+            Self::ECDHE(ref x) => x.try_encode(bytes),
+            Self::Unknown(ref x) => x.try_encode(bytes),
         }
     }
 
@@ -1715,10 +1718,10 @@ pub struct CertificateRequestPayload {
 }
 
 impl Codec for CertificateRequestPayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.certtypes.encode(bytes)?;
-        self.sigschemes.encode(bytes)?;
-        self.canames.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.certtypes.try_encode(bytes)?;
+        self.sigschemes.try_encode(bytes)?;
+        self.canames.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1757,13 +1760,13 @@ impl CertReqExtension {
 }
 
 impl Codec for CertReqExtension {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.get_type().encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().try_encode(bytes)?;
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
-            Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
-            Self::AuthorityNames(ref r) => r.encode(nested.buf),
+            Self::SignatureAlgorithms(ref r) => r.try_encode(nested.buf),
+            Self::AuthorityNames(ref r) => r.try_encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -1804,9 +1807,9 @@ pub struct CertificateRequestPayloadTLS13 {
 }
 
 impl Codec for CertificateRequestPayloadTLS13 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.context.encode(bytes)?;
-        self.extensions.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.context.try_encode(bytes)?;
+        self.extensions.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1861,9 +1864,9 @@ impl NewSessionTicketPayload {
 }
 
 impl Codec for NewSessionTicketPayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.lifetime_hint.encode(bytes)?;
-        self.ticket.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.lifetime_hint.try_encode(bytes)?;
+        self.ticket.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1894,12 +1897,12 @@ impl NewSessionTicketExtension {
 }
 
 impl Codec for NewSessionTicketExtension {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.get_type().encode(bytes)?;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().try_encode(bytes)?;
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
-            Self::EarlyData(r) => r.encode(nested.buf),
+            Self::EarlyData(r) => r.try_encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -1974,12 +1977,12 @@ impl NewSessionTicketPayloadTLS13 {
 }
 
 impl Codec for NewSessionTicketPayloadTLS13 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        self.lifetime.encode(bytes)?;
-        self.age_add.encode(bytes)?;
-        self.nonce.encode(bytes)?;
-        self.ticket.encode(bytes)?;
-        self.exts.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.lifetime.try_encode(bytes)?;
+        self.age_add.try_encode(bytes)?;
+        self.nonce.try_encode(bytes)?;
+        self.ticket.try_encode(bytes)?;
+        self.exts.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -2008,9 +2011,9 @@ pub struct CertificateStatus {
 }
 
 impl Codec for CertificateStatus {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        CertificateStatusType::OCSP.encode(bytes)?;
-        self.ocsp_response.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        CertificateStatusType::OCSP.try_encode(bytes)?;
+        self.ocsp_response.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -2063,28 +2066,28 @@ pub enum HandshakePayload {
 }
 
 impl HandshakePayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         use self::HandshakePayload::*;
         match *self {
             HelloRequest | ServerHelloDone | EndOfEarlyData => Ok(()),
-            ClientHello(ref x) => x.encode(bytes),
-            ServerHello(ref x) => x.encode(bytes),
-            HelloRetryRequest(ref x) => x.encode(bytes),
-            Certificate(ref x) => x.encode(bytes),
-            CertificateTLS13(ref x) => x.encode(bytes),
-            ServerKeyExchange(ref x) => x.encode(bytes),
-            ClientKeyExchange(ref x) => x.encode(bytes),
-            CertificateRequest(ref x) => x.encode(bytes),
-            CertificateRequestTLS13(ref x) => x.encode(bytes),
-            CertificateVerify(ref x) => x.encode(bytes),
-            NewSessionTicket(ref x) => x.encode(bytes),
-            NewSessionTicketTLS13(ref x) => x.encode(bytes),
-            EncryptedExtensions(ref x) => x.encode(bytes),
-            KeyUpdate(ref x) => x.encode(bytes),
-            Finished(ref x) => x.encode(bytes),
-            CertificateStatus(ref x) => x.encode(bytes),
-            MessageHash(ref x) => x.encode(bytes),
-            Unknown(ref x) => x.encode(bytes),
+            ClientHello(ref x) => x.try_encode(bytes),
+            ServerHello(ref x) => x.try_encode(bytes),
+            HelloRetryRequest(ref x) => x.try_encode(bytes),
+            Certificate(ref x) => x.try_encode(bytes),
+            CertificateTLS13(ref x) => x.try_encode(bytes),
+            ServerKeyExchange(ref x) => x.try_encode(bytes),
+            ClientKeyExchange(ref x) => x.try_encode(bytes),
+            CertificateRequest(ref x) => x.try_encode(bytes),
+            CertificateRequestTLS13(ref x) => x.try_encode(bytes),
+            CertificateVerify(ref x) => x.try_encode(bytes),
+            NewSessionTicket(ref x) => x.try_encode(bytes),
+            NewSessionTicketTLS13(ref x) => x.try_encode(bytes),
+            EncryptedExtensions(ref x) => x.try_encode(bytes),
+            KeyUpdate(ref x) => x.try_encode(bytes),
+            Finished(ref x) => x.try_encode(bytes),
+            CertificateStatus(ref x) => x.try_encode(bytes),
+            MessageHash(ref x) => x.try_encode(bytes),
+            Unknown(ref x) => x.try_encode(bytes),
         }
     }
 }
@@ -2096,13 +2099,13 @@ pub struct HandshakeMessagePayload {
 }
 
 impl Codec for HandshakeMessagePayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         // output type, length, and encoded payload
         match self.typ {
             HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
             _ => self.typ,
         }
-        .encode(bytes)?;
+        .try_encode(bytes)?;
 
         let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes)?;
         self.payload.encode(nested.buf)
@@ -2222,8 +2225,7 @@ impl HandshakeMessagePayload {
                     let mut binders_encoding = Vec::new();
                     offer
                         .binders
-                        .encode(&mut binders_encoding)
-                        .unwrap();
+                        .encode(&mut binders_encoding);
                     binders_encoding.len()
                 }
                 _ => 0,

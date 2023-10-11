@@ -1,14 +1,14 @@
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, Reader};
 
-use super::codec::PushBytes;
+use super::codec::TryPushBytes;
 
 #[derive(Debug)]
 pub struct ChangeCipherSpecPayload;
 
 impl Codec for ChangeCipherSpecPayload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        1u8.encode(bytes)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        1u8.try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {

@@ -16,7 +16,7 @@ use core::cmp;
 #[cfg(feature = "tls12")]
 use core::mem;
 
-use super::codec::PushBytes;
+use super::codec::TryPushBytes;
 
 pub struct Retrieved<T> {
     pub value: T,
@@ -272,34 +272,36 @@ pub struct ServerSessionValue {
 }
 
 impl Codec for ServerSessionValue {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         if let Some(ref sni) = self.sni {
-            1u8.encode(bytes)?;
+            1u8.try_encode(bytes)?;
             let sni_bytes: &str = sni.as_ref();
-            PayloadU8::new(Vec::from(sni_bytes)).encode(bytes)?;
+            PayloadU8::new(Vec::from(sni_bytes)).try_encode(bytes)?;
         } else {
-            0u8.encode(bytes)?;
+            0u8.try_encode(bytes)?;
         }
-        self.version.encode(bytes)?;
-        self.cipher_suite.encode(bytes)?;
-        self.master_secret.encode(bytes)?;
-        (u8::from(self.extended_ms)).encode(bytes)?;
+        self.version.try_encode(bytes)?;
+        self.cipher_suite.try_encode(bytes)?;
+        self.master_secret.try_encode(bytes)?;
+        (u8::from(self.extended_ms)).try_encode(bytes)?;
         if let Some(ref chain) = self.client_cert_chain {
-            1u8.encode(bytes)?;
-            chain.encode(bytes)?;
+            1u8.try_encode(bytes)?;
+            chain.try_encode(bytes)?;
         } else {
-            0u8.encode(bytes)?;
+            0u8.try_encode(bytes)?;
         }
         if let Some(ref alpn) = self.alpn {
-            1u8.encode(bytes)?;
-            alpn.encode(bytes)?;
+            1u8.try_encode(bytes)?;
+            alpn.try_encode(bytes)?;
         } else {
-            0u8.encode(bytes)?;
+            0u8.try_encode(bytes)?;
         }
-        self.application_data.encode(bytes)?;
-        self.creation_time_sec.encode(bytes)?;
+        self.application_data
+            .try_encode(bytes)?;
+        self.creation_time_sec
+            .try_encode(bytes)?;
         self.age_obfuscation_offset
-            .encode(bytes)
+            .try_encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {

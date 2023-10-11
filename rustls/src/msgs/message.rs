@@ -11,7 +11,7 @@ use crate::msgs::handshake::HandshakeMessagePayload;
 
 use alloc::vec::Vec;
 
-use super::codec::PushBytes;
+use super::codec::{PushBytes, TryPushBytes};
 
 #[derive(Debug)]
 pub enum MessagePayload {
@@ -25,12 +25,18 @@ pub enum MessagePayload {
 }
 
 impl MessagePayload {
-    pub fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    pub fn encode<B: PushBytes>(&self, bytes: &mut B) {
+        if let Err(err) = self.try_encode(bytes) {
+            match err {}
+        }
+    }
+
+    pub fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match self {
-            Self::Alert(x) => x.encode(bytes),
-            Self::Handshake { encoded, .. } => bytes.push_bytes(&encoded.0),
-            Self::ChangeCipherSpec(x) => x.encode(bytes),
-            Self::ApplicationData(x) => x.encode(bytes),
+            Self::Alert(x) => x.try_encode(bytes),
+            Self::Handshake { encoded, .. } => bytes.try_push_bytes(&encoded.0),
+            Self::ChangeCipherSpec(x) => x.try_encode(bytes),
+            Self::ApplicationData(x) => x.try_encode(bytes),
         }
     }
 
@@ -160,12 +166,16 @@ impl OpaqueMessage {
 
     pub fn encode(self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.typ.encode(&mut buf).unwrap();
-        self.version.encode(&mut buf).unwrap();
-        (self.payload.0.len() as u16)
-            .encode(&mut buf)
+        self.typ.try_encode(&mut buf).unwrap();
+        self.version
+            .try_encode(&mut buf)
             .unwrap();
-        self.payload.encode(&mut buf).unwrap();
+        (self.payload.0.len() as u16)
+            .try_encode(&mut buf)
+            .unwrap();
+        self.payload
+            .try_encode(&mut buf)
+            .unwrap();
         buf
     }
 
@@ -239,7 +249,7 @@ impl From<Message> for PlainMessage {
             MessagePayload::ApplicationData(payload) => payload,
             _ => {
                 let mut buf = Vec::new();
-                msg.payload.encode(&mut buf).unwrap();
+                msg.payload.encode(&mut buf);
                 Payload(buf)
             }
         };

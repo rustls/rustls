@@ -25,8 +25,8 @@ macro_rules! enum_builder {
         impl Codec for $enum_name {
             // NOTE(allow) fully qualified Vec is only needed in no-std mode
             #[allow(unused_qualifications)]
-            fn encode<B: crate::msgs::codec::PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-                self.get_u8().encode(bytes)
+            fn try_encode<B: crate::msgs::codec::TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+                self.get_u8().try_encode(bytes)
             }
 
             fn read(r: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
@@ -77,8 +77,8 @@ macro_rules! enum_builder {
         impl Codec for $enum_name {
             // NOTE(allow) fully qualified Vec is only needed in no-std mode
             #[allow(unused_qualifications)]
-            fn encode<B: crate::msgs::codec::PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-                self.get_u16().encode(bytes)
+            fn try_encode<B: crate::msgs::codec::TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+                self.get_u16().try_encode(bytes)
             }
 
             fn read(r: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {

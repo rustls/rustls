@@ -87,22 +87,44 @@ impl<'a> Reader<'a> {
 
 #[allow(clippy::len_without_is_empty)]
 pub trait PushBytes {
-    type Error;
-
-    fn push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error>;
+    fn push_bytes(&mut self, bytes: &[u8]);
 
     fn len(&self) -> usize;
 
     fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N];
 }
 
-impl PushBytes for Vec<u8> {
+#[allow(clippy::len_without_is_empty)]
+pub trait TryPushBytes {
+    type Error;
+
+    fn try_push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error>;
+
+    fn len(&self) -> usize;
+
+    fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N];
+}
+
+impl<B: PushBytes> TryPushBytes for B {
     type Error = core::convert::Infallible;
 
-    fn push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        self.extend_from_slice(bytes);
-
+    fn try_push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+        self.push_bytes(bytes);
         Ok(())
+    }
+
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N] {
+        self.get_array_mut(offset)
+    }
+}
+
+impl PushBytes for Vec<u8> {
+    fn push_bytes(&mut self, bytes: &[u8]) {
+        self.extend_from_slice(bytes);
     }
 
     fn len(&self) -> usize {
@@ -123,10 +145,10 @@ pub struct NotSlice {
     slice: [u8],
 }
 
-impl PushBytes for NotSlice {
+impl TryPushBytes for NotSlice {
     type Error = NotEnoughBytes;
 
-    fn push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
+    fn try_push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
         let slice = self
             .slice
             .get_mut(self.discard..self.discard + bytes.len())
@@ -155,7 +177,15 @@ impl PushBytes for NotSlice {
 pub trait Codec: Debug + Sized {
     /// Function for encoding itself by appending itself to
     /// the provided vec of bytes.
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error>;
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error>;
+
+    /// Function for encoding itself by appending itself to
+    /// the provided vec of bytes.
+    fn encode<B: PushBytes>(&self, bytes: &mut B) {
+        if let Err(err) = self.try_encode(bytes) {
+            match err {}
+        }
+    }
 
     /// Function for decoding itself from the provided reader
     /// will return Some if the decoding was successful or
@@ -166,7 +196,7 @@ pub trait Codec: Debug + Sized {
     /// into a vec and returning it
     fn get_encoding(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        self.encode(&mut bytes).unwrap();
+        self.encode(&mut bytes);
         bytes
     }
 
@@ -179,8 +209,8 @@ pub trait Codec: Debug + Sized {
 }
 
 impl Codec for u8 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        bytes.push_bytes(&[*self])
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        bytes.try_push_bytes(&[*self])
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -197,10 +227,10 @@ pub fn put_u16(v: u16, out: &mut [u8]) {
 }
 
 impl Codec for u16 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         let mut b16 = [0u8; 2];
         put_u16(*self, &mut b16);
-        bytes.push_bytes(&b16)
+        bytes.try_push_bytes(&b16)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -225,9 +255,9 @@ impl From<u24> for usize {
 }
 
 impl Codec for u24 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         let be_bytes = u32::to_be_bytes(self.0);
-        bytes.push_bytes(&be_bytes[1..])
+        bytes.try_push_bytes(&be_bytes[1..])
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -239,8 +269,8 @@ impl Codec for u24 {
 }
 
 impl Codec for u32 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        bytes.push_bytes(&Self::to_be_bytes(*self))
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        bytes.try_push_bytes(&Self::to_be_bytes(*self))
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -257,10 +287,10 @@ pub fn put_u64(v: u64, bytes: &mut [u8]) {
 }
 
 impl Codec for u64 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         let mut b64 = [0u8; 8];
         put_u64(*self, &mut b64);
-        bytes.push_bytes(&b64)
+        bytes.try_push_bytes(&b64)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -275,11 +305,11 @@ impl Codec for u64 {
 ///
 /// `TlsListElement` provides the size of the length prefix for the list.
 impl<T: Codec + TlsListElement + Debug> Codec for Vec<T> {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         let nest = LengthPrefixedBuffer::new(T::SIZE_LEN, bytes)?;
 
         for i in self {
-            i.encode(nest.buf)?;
+            i.try_encode(nest.buf)?;
         }
 
         Ok(())
@@ -324,13 +354,13 @@ pub(crate) enum ListLength {
 }
 
 /// Tracks encoding a length-delimited structure in a single pass.
-pub(crate) struct LengthPrefixedBuffer<'a, B: PushBytes> {
+pub(crate) struct LengthPrefixedBuffer<'a, B: TryPushBytes> {
     pub(crate) buf: &'a mut B,
     len_offset: usize,
     size_len: ListLength,
 }
 
-impl<'a, B: PushBytes> LengthPrefixedBuffer<'a, B> {
+impl<'a, B: TryPushBytes> LengthPrefixedBuffer<'a, B> {
     /// Inserts a dummy length into `buf`, and remembers where it went.
     ///
     /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
@@ -340,7 +370,7 @@ impl<'a, B: PushBytes> LengthPrefixedBuffer<'a, B> {
         buf: &'a mut B,
     ) -> Result<LengthPrefixedBuffer<'a, B>, B::Error> {
         let len_offset = buf.len();
-        buf.push_bytes(match size_len {
+        buf.try_push_bytes(match size_len {
             ListLength::U8 => &[0xff][..],
             ListLength::U16 => &[0xff, 0xff],
             ListLength::U24 { .. } => &[0xff, 0xff, 0xff],
@@ -354,7 +384,7 @@ impl<'a, B: PushBytes> LengthPrefixedBuffer<'a, B> {
     }
 }
 
-impl<'a, B: PushBytes> Drop for LengthPrefixedBuffer<'a, B> {
+impl<'a, B: TryPushBytes> Drop for LengthPrefixedBuffer<'a, B> {
     /// Goes back and corrects the length previously inserted at the start of the structure.
     fn drop(&mut self) {
         match self.size_len {

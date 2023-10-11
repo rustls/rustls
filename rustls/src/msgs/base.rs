@@ -7,15 +7,15 @@ use core::fmt;
 
 use pki_types::CertificateDer;
 
-use super::codec::PushBytes;
+use super::codec::TryPushBytes;
 
 /// An externally length'd payload
 #[derive(Clone, Eq, PartialEq)]
 pub struct Payload(pub Vec<u8>);
 
 impl Codec for Payload {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        bytes.push_bytes(&self.0)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        bytes.try_push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -38,9 +38,9 @@ impl Payload {
 }
 
 impl<'a> Codec for CertificateDer<'a> {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        codec::u24(self.as_ref().len() as u32).encode(bytes)?;
-        bytes.push_bytes(self.as_ref())
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        codec::u24(self.as_ref().len() as u32).try_encode(bytes)?;
+        bytes.try_push_bytes(self.as_ref())
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -68,9 +68,9 @@ impl PayloadU24 {
 }
 
 impl Codec for PayloadU24 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        codec::u24(self.0.len() as u32).encode(bytes)?;
-        bytes.push_bytes(&self.0)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        codec::u24(self.0.len() as u32).try_encode(bytes)?;
+        bytes.try_push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -100,14 +100,14 @@ impl PayloadU16 {
         Self::new(Vec::new())
     }
 
-    fn encode_slice<B: PushBytes>(slice: &[u8], bytes: &mut B) -> Result<(), B::Error> {
-        (slice.len() as u16).encode(bytes)?;
-        bytes.push_bytes(slice)
+    fn encode_slice<B: TryPushBytes>(slice: &[u8], bytes: &mut B) -> Result<(), B::Error> {
+        (slice.len() as u16).try_encode(bytes)?;
+        bytes.try_push_bytes(slice)
     }
 }
 
 impl Codec for PayloadU16 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         Self::encode_slice(&self.0, bytes)
     }
 
@@ -144,9 +144,9 @@ impl PayloadU8 {
 }
 
 impl Codec for PayloadU8 {
-    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        (self.0.len() as u8).encode(bytes)?;
-        bytes.push_bytes(&self.0)
+    fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        (self.0.len() as u8).try_encode(bytes)?;
+        bytes.try_push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {

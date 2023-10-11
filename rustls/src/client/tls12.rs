@@ -390,7 +390,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
         let mut kx_params = Vec::new();
         ecdhe
             .params
-            .encode(&mut kx_params)
+            .try_encode(&mut kx_params)
             .unwrap();
         let server_kx = ServerKxDetails::new(kx_params, ecdhe.dss);
 
@@ -435,7 +435,7 @@ fn emit_certificate(
 fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
     let mut buf = Vec::new();
     let ecpoint = PayloadU8::new(Vec::from(pub_key));
-    ecpoint.encode(&mut buf).unwrap();
+    ecpoint.try_encode(&mut buf).unwrap();
     let pubkey = Payload::new(buf);
 
     let ckx = Message {

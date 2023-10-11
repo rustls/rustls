@@ -392,7 +392,7 @@ impl CommonState {
                         "QUIC uses TLS for the cryptographic handshake only"
                     );
                     let mut bytes = Vec::new();
-                    m.payload.encode(&mut bytes).unwrap();
+                    m.payload.encode(&mut bytes);
                     self.quic
                         .hs_queue
                         .push_back((must_encrypt, bytes));

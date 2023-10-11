@@ -336,7 +336,7 @@ pub(crate) mod tests {
 
         for val in first_v..last_v + 1 {
             let mut buf = Vec::new();
-            val.encode(&mut buf).unwrap();
+            val.try_encode(&mut buf).unwrap();
             assert_eq!(buf.len(), 1);
 
             let t = T::read_bytes(&buf).unwrap();
@@ -350,7 +350,7 @@ pub(crate) mod tests {
 
         for val in first_v..last_v + 1 {
             let mut buf = Vec::new();
-            val.encode(&mut buf).unwrap();
+            val.try_encode(&mut buf).unwrap();
             assert_eq!(buf.len(), 2);
 
             let t = T::read_bytes(&buf).unwrap();

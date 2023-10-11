@@ -232,7 +232,7 @@ impl ConnectionSecrets {
         if let Some(context) = context {
             assert!(context.len() <= 0xffff);
             (context.len() as u16)
-                .encode(&mut randoms)
+                .try_encode(&mut randoms)
                 .unwrap();
             randoms.extend_from_slice(context);
         }
@@ -330,7 +330,7 @@ mod tests {
         let server_params = ServerECDHParams::new(&*key);
         let mut server_buf = Vec::new();
         server_params
-            .encode(&mut server_buf)
+            .try_encode(&mut server_buf)
             .unwrap();
         server_buf.push(34);
 
