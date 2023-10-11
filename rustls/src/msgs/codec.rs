@@ -113,8 +113,7 @@ pub(crate) mod byte_buffer {
             self.discard
         }
 
-        fn get_array_mut<const N: usize>(&mut self, mut offset: usize) -> &mut [u8; N] {
-            offset += self.discard;
+        fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N] {
             (&mut self.slice[offset..offset + N])
                 .try_into()
                 .unwrap()
