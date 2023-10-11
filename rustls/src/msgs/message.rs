@@ -166,16 +166,10 @@ impl OpaqueMessage {
 
     pub fn encode(self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.typ.try_encode(&mut buf).unwrap();
-        self.version
-            .try_encode(&mut buf)
-            .unwrap();
-        (self.payload.0.len() as u16)
-            .try_encode(&mut buf)
-            .unwrap();
-        self.payload
-            .try_encode(&mut buf)
-            .unwrap();
+        self.typ.encode(&mut buf);
+        self.version.encode(&mut buf);
+        (self.payload.0.len() as u16).encode(&mut buf);
+        self.payload.encode(&mut buf);
         buf
     }
 

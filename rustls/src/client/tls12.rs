@@ -387,12 +387,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
             })?;
 
         // Save the signature and signed parameters for later verification.
-        let mut kx_params = Vec::new();
-        ecdhe
-            .params
-            .try_encode(&mut kx_params)
-            .unwrap();
-        let server_kx = ServerKxDetails::new(kx_params, ecdhe.dss);
+        let server_kx = ServerKxDetails::new(ecdhe.params.get_encoding(), ecdhe.dss);
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {

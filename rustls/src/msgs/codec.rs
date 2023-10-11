@@ -306,7 +306,7 @@ impl Codec for u64 {
 /// `TlsListElement` provides the size of the length prefix for the list.
 impl<T: Codec + TlsListElement + Debug> Codec for Vec<T> {
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
-        let nest = LengthPrefixedBuffer::new(T::SIZE_LEN, bytes)?;
+        let nest = LengthPrefixedBuffer::try_new(T::SIZE_LEN, bytes)?;
 
         for i in self {
             i.try_encode(nest.buf)?;
@@ -360,12 +360,25 @@ pub(crate) struct LengthPrefixedBuffer<'a, B: TryPushBytes> {
     size_len: ListLength,
 }
 
+impl<'a, B: PushBytes> LengthPrefixedBuffer<'a, B> {
+    /// Inserts a dummy length into `buf`, and remembers where it went.
+    ///
+    /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
+    /// The length header is corrected in `LengthPrefixedBuffer::drop`.
+    pub(crate) fn new(size_len: ListLength, buf: &'a mut B) -> LengthPrefixedBuffer<'a, B> {
+        match Self::try_new(size_len, buf) {
+            Ok(buf) => buf,
+            Err(err) => match err {},
+        }
+    }
+}
+
 impl<'a, B: TryPushBytes> LengthPrefixedBuffer<'a, B> {
     /// Inserts a dummy length into `buf`, and remembers where it went.
     ///
     /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
     /// The length header is corrected in `LengthPrefixedBuffer::drop`.
-    pub(crate) fn new(
+    pub(crate) fn try_new(
         size_len: ListLength,
         buf: &'a mut B,
     ) -> Result<LengthPrefixedBuffer<'a, B>, B::Error> {
@@ -418,7 +431,7 @@ mod tests {
     #[test]
     fn interrupted_length_prefixed_buffer_leaves_maximum_length() {
         let mut buf = Vec::new();
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, &mut buf).unwrap();
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, &mut buf);
         nested.buf.push(0xaa);
         assert_eq!(nested.buf, &vec![0xff, 0xff, 0xaa]);
         // <- if the buffer is accidentally read here, there is no possiblity

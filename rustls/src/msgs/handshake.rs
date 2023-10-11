@@ -590,7 +590,7 @@ impl Codec for ClientExtension {
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         self.get_type().try_encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
+        let nested = LengthPrefixedBuffer::try_new(ListLength::U16, bytes)?;
         match *self {
             Self::ECPointFormats(ref r) => r.try_encode(nested.buf),
             Self::NamedGroups(ref r) => r.try_encode(nested.buf),
@@ -734,7 +734,7 @@ impl Codec for ServerExtension {
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         self.get_type().try_encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
+        let nested = LengthPrefixedBuffer::try_new(ListLength::U16, bytes)?;
         match *self {
             Self::ECPointFormats(ref r) => r.try_encode(nested.buf),
             Self::ServerNameAck
@@ -1036,7 +1036,7 @@ impl Codec for HelloRetryExtension {
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         self.get_type().try_encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
+        let nested = LengthPrefixedBuffer::try_new(ListLength::U16, bytes)?;
         match *self {
             Self::KeyShare(ref r) => r.try_encode(nested.buf),
             Self::Cookie(ref r) => r.try_encode(nested.buf),
@@ -1295,7 +1295,7 @@ impl Codec for CertificateExtension {
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         self.get_type().try_encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
+        let nested = LengthPrefixedBuffer::try_new(ListLength::U16, bytes)?;
         match *self {
             Self::CertificateStatus(ref r) => r.try_encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
@@ -1763,7 +1763,7 @@ impl Codec for CertReqExtension {
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         self.get_type().try_encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
+        let nested = LengthPrefixedBuffer::try_new(ListLength::U16, bytes)?;
         match *self {
             Self::SignatureAlgorithms(ref r) => r.try_encode(nested.buf),
             Self::AuthorityNames(ref r) => r.try_encode(nested.buf),
@@ -1900,7 +1900,7 @@ impl Codec for NewSessionTicketExtension {
     fn try_encode<B: TryPushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         self.get_type().try_encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
+        let nested = LengthPrefixedBuffer::try_new(ListLength::U16, bytes)?;
         match *self {
             Self::EarlyData(r) => r.try_encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
@@ -2107,7 +2107,7 @@ impl Codec for HandshakeMessagePayload {
         }
         .try_encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes)?;
+        let nested = LengthPrefixedBuffer::try_new(ListLength::U24 { max: usize::MAX }, bytes)?;
         self.payload.encode(nested.buf)
     }
 

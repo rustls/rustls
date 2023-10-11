@@ -231,9 +231,7 @@ impl ConnectionSecrets {
         randoms.extend_from_slice(&self.randoms.server);
         if let Some(context) = context {
             assert!(context.len() <= 0xffff);
-            (context.len() as u16)
-                .try_encode(&mut randoms)
-                .unwrap();
+            (context.len() as u16).encode(&mut randoms);
             randoms.extend_from_slice(context);
         }
 

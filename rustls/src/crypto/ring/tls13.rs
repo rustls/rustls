@@ -181,9 +181,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(msg.payload);
-        msg.typ
-            .try_encode(&mut payload)
-            .unwrap();
+        msg.typ.encode(&mut payload);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
         let aad = aead::Aad::from(make_tls13_aad(total_len));
