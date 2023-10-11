@@ -457,12 +457,13 @@ mod tests {
         assert_eq!(buf.len(), 0);
 
         let expected_num = 0xdeadbeefu32;
-        buf.try_push_bytes(&expected_num.to_ne_bytes()).unwrap();
-        // The buffer should be holding all the bytes of `expected_num` 
+        buf.try_push_bytes(&expected_num.to_ne_bytes())
+            .unwrap();
+        // The buffer should be holding all the bytes of `expected_num`
         assert_eq!(buf.len(), core::mem::size_of::<u32>());
 
         let found_num = u32::from_ne_bytes(*buf.get_array_mut(0));
-        // The read bytes should be the same that were written 
+        // The read bytes should be the same that were written
         assert_eq!(expected_num, found_num)
     }
 }
