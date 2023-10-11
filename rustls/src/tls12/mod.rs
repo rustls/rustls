@@ -328,10 +328,7 @@ mod tests {
     fn server_ecdhe_remaining_bytes() {
         let key = X25519.start().unwrap();
         let server_params = ServerECDHParams::new(&*key);
-        let mut server_buf = Vec::new();
-        server_params
-            .try_encode(&mut server_buf)
-            .unwrap();
+        let mut server_buf = server_params.get_encoding();
         server_buf.push(34);
 
         let mut common = CommonState::new(Side::Client);

@@ -433,10 +433,7 @@ fn emit_certificate(
 }
 
 fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
-    let mut buf = Vec::new();
-    let ecpoint = PayloadU8::new(Vec::from(pub_key));
-    ecpoint.try_encode(&mut buf).unwrap();
-    let pubkey = Payload::new(buf);
+    let pubkey = Payload::new(PayloadU8::new(Vec::from(pub_key)).get_encoding());
 
     let ckx = Message {
         version: ProtocolVersion::TLSv1_2,
