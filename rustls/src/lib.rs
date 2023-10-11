@@ -57,13 +57,15 @@
 //! While Rustls itself is platform independent, it uses
 //! [`ring`](https://crates.io/crates/ring) for implementing the cryptography in
 //! TLS. As a result, rustls only runs on platforms
-//! supported by `ring`. At the time of writing, this means x86, x86-64, aarch64,
-//! armv7, powerpc64le, riscv64gc and s390x. For more information, see [the
-//! supported `ring` CI targets][ring-ci-targets].
+//! supported by `ring`. At the time of writing, this means 32-bit ARM, Aarch64 (64-bit ARM),
+//! x86, x86-64, LoongArch64, 32-bit & 64-bit Little Endian MIPS, 32-bit PowerPC (Big Endian),
+//! 64-bit PowerPC (Big and Little Endian), 64-bit RISC-V, and s390x. We do not presently
+//! support WebAssembly.
+//! For more information, see [the supported `ring` target platforms][ring-target-platforms].
 //!
 //! Rustls requires Rust 1.61 or later.
 //!
-//! [ring-ci-targets]: https://github.com/briansmith/ring/blob/d34858a918b04127d085cdbc20325263bf8fdd36/.github/workflows/ci.yml#L171-L190
+//! [ring-target-platforms]: https://github.com/briansmith/ring/blob/2e8363b433fa3b3962c877d9ed2e9145612f3160/include/ring-core/target.h#L18-L64
 //!
 //! ## Design Overview
 //! ### Rustls does not take care of network IO
