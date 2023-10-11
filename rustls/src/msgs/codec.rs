@@ -131,12 +131,18 @@ impl PushBytes for Vec<u8> {
 
 pub struct NotEnoughBytes {}
 
-pub struct NotSlice {
+pub struct SliceBuffer<'b> {
     discard: usize,
-    slice: [u8],
+    slice: &'b mut [u8],
 }
 
-impl TryPushBytes for NotSlice {
+impl<'b> SliceBuffer<'b> {
+    pub fn new(slice: &'b mut [u8]) -> Self {
+        Self { discard: 0, slice }
+    }
+}
+
+impl<'b> TryPushBytes for SliceBuffer<'b> {
     type Error = NotEnoughBytes;
 
     fn try_push_bytes(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
@@ -152,7 +158,7 @@ impl TryPushBytes for NotSlice {
     }
 }
 
-impl ByteBuffer for NotSlice {
+impl<'b> ByteBuffer for SliceBuffer<'b> {
     fn len(&self) -> usize {
         self.discard
     }
