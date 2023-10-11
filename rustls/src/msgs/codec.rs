@@ -85,6 +85,7 @@ impl<'a> Reader<'a> {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait PushBytes {
     type Error;
 
@@ -105,7 +106,7 @@ impl PushBytes for Vec<u8> {
     }
 
     fn len(&self) -> usize {
-        Vec::len(self)
+        Self::len(self)
     }
 
     fn get_array_mut<const N: usize>(&mut self, offset: usize) -> &mut [u8; N] {
@@ -129,7 +130,7 @@ impl PushBytes for NotSlice {
         let slice = self
             .slice
             .get_mut(self.discard..self.discard + bytes.len())
-            .ok_or_else(|| NotEnoughBytes {})?;
+            .ok_or(NotEnoughBytes {})?;
 
         slice.copy_from_slice(bytes);
         self.discard += bytes.len();
