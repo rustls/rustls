@@ -388,7 +388,10 @@ impl State<ClientConnectionData> for ExpectServerKx {
 
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
-        ecdhe.params.encode(&mut kx_params);
+        ecdhe
+            .params
+            .encode(&mut kx_params)
+            .unwrap();
         let server_kx = ServerKxDetails::new(kx_params, ecdhe.dss);
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
@@ -432,7 +435,7 @@ fn emit_certificate(
 fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
     let mut buf = Vec::new();
     let ecpoint = PayloadU8::new(Vec::from(pub_key));
-    ecpoint.encode(&mut buf);
+    ecpoint.encode(&mut buf).unwrap();
     let pubkey = Payload::new(buf);
 
     let ckx = Message {

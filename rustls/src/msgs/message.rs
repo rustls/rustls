@@ -11,6 +11,8 @@ use crate::msgs::handshake::HandshakeMessagePayload;
 
 use alloc::vec::Vec;
 
+use super::codec::PushBytes;
+
 #[derive(Debug)]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),
@@ -23,10 +25,10 @@ pub enum MessagePayload {
 }
 
 impl MessagePayload {
-    pub fn encode(&self, bytes: &mut Vec<u8>) {
+    pub fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match self {
             Self::Alert(x) => x.encode(bytes),
-            Self::Handshake { encoded, .. } => bytes.extend(&encoded.0),
+            Self::Handshake { encoded, .. } => bytes.push_bytes(&encoded.0),
             Self::ChangeCipherSpec(x) => x.encode(bytes),
             Self::ApplicationData(x) => x.encode(bytes),
         }
@@ -158,10 +160,12 @@ impl OpaqueMessage {
 
     pub fn encode(self) -> Vec<u8> {
         let mut buf = Vec::new();
-        self.typ.encode(&mut buf);
-        self.version.encode(&mut buf);
-        (self.payload.0.len() as u16).encode(&mut buf);
-        self.payload.encode(&mut buf);
+        self.typ.encode(&mut buf).unwrap();
+        self.version.encode(&mut buf).unwrap();
+        (self.payload.0.len() as u16)
+            .encode(&mut buf)
+            .unwrap();
+        self.payload.encode(&mut buf).unwrap();
         buf
     }
 
@@ -235,7 +239,7 @@ impl From<Message> for PlainMessage {
             MessagePayload::ApplicationData(payload) => payload,
             _ => {
                 let mut buf = Vec::new();
-                msg.payload.encode(&mut buf);
+                msg.payload.encode(&mut buf).unwrap();
                 Payload(buf)
             }
         };

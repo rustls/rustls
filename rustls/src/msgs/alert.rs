@@ -3,7 +3,7 @@ use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::AlertLevel;
 
-use alloc::vec::Vec;
+use super::codec::PushBytes;
 
 #[derive(Debug)]
 pub struct AlertMessagePayload {
@@ -12,9 +12,9 @@ pub struct AlertMessagePayload {
 }
 
 impl Codec for AlertMessagePayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.level.encode(bytes);
-        self.description.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.level.encode(bytes)?;
+        self.description.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {

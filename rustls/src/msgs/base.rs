@@ -7,13 +7,15 @@ use core::fmt;
 
 use pki_types::CertificateDer;
 
+use super::codec::PushBytes;
+
 /// An externally length'd payload
 #[derive(Clone, Eq, PartialEq)]
 pub struct Payload(pub Vec<u8>);
 
 impl Codec for Payload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(&self.0);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        bytes.push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -36,9 +38,9 @@ impl Payload {
 }
 
 impl<'a> Codec for CertificateDer<'a> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.as_ref().len() as u32).encode(bytes);
-        bytes.extend(self.as_ref());
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        codec::u24(self.as_ref().len() as u32).encode(bytes)?;
+        bytes.push_bytes(self.as_ref())
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -66,9 +68,9 @@ impl PayloadU24 {
 }
 
 impl Codec for PayloadU24 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.0.len() as u32).encode(bytes);
-        bytes.extend_from_slice(&self.0);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        codec::u24(self.0.len() as u32).encode(bytes)?;
+        bytes.push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -98,15 +100,15 @@ impl PayloadU16 {
         Self::new(Vec::new())
     }
 
-    pub fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
-        (slice.len() as u16).encode(bytes);
-        bytes.extend_from_slice(slice);
+    fn encode_slice<B: PushBytes>(slice: &[u8], bytes: &mut B) -> Result<(), B::Error> {
+        (slice.len() as u16).encode(bytes)?;
+        bytes.push_bytes(slice)
     }
 }
 
 impl Codec for PayloadU16 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        Self::encode_slice(&self.0, bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        Self::encode_slice(&self.0, bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -142,9 +144,9 @@ impl PayloadU8 {
 }
 
 impl Codec for PayloadU8 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        (self.0.len() as u8).encode(bytes);
-        bytes.extend_from_slice(&self.0);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        (self.0.len() as u8).encode(bytes)?;
+        bytes.push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {

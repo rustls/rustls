@@ -420,7 +420,7 @@ mod client_hello {
         let mut msg = Vec::new();
         msg.extend(randoms.client);
         msg.extend(randoms.server);
-        secdh.encode(&mut msg);
+        secdh.encode(&mut msg).unwrap();
 
         let signer = signing_key
             .choose_scheme(&sigschemes)

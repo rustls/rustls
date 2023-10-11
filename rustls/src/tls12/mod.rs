@@ -231,7 +231,9 @@ impl ConnectionSecrets {
         randoms.extend_from_slice(&self.randoms.server);
         if let Some(context) = context {
             assert!(context.len() <= 0xffff);
-            (context.len() as u16).encode(&mut randoms);
+            (context.len() as u16)
+                .encode(&mut randoms)
+                .unwrap();
             randoms.extend_from_slice(context);
         }
 
@@ -327,7 +329,9 @@ mod tests {
         let key = X25519.start().unwrap();
         let server_params = ServerECDHParams::new(&*key);
         let mut server_buf = Vec::new();
-        server_params.encode(&mut server_buf);
+        server_params
+            .encode(&mut server_buf)
+            .unwrap();
         server_buf.push(34);
 
         let mut common = CommonState::new(Side::Client);

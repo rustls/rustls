@@ -25,6 +25,8 @@ use alloc::vec::Vec;
 use core::fmt;
 use std::collections;
 
+use super::codec::PushBytes;
+
 /// Create a newtype wrapper around a given type.
 ///
 /// This is used to create newtypes for the various TLS message types which is used to wrap
@@ -49,8 +51,8 @@ macro_rules! wrapped_payload(
     }
 
     impl Codec for $name {
-        fn encode(&self, bytes: &mut Vec<u8>) {
-            self.0.encode(bytes);
+        fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+            self.0.encode(bytes)
         }
 
         fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -77,8 +79,8 @@ static HELLO_RETRY_REQUEST_RANDOM: Random = Random([
 static ZERO_RANDOM: Random = Random([0u8; 32]);
 
 impl Codec for Random {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(&self.0);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        bytes.push_bytes(&self.0)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -141,10 +143,10 @@ impl PartialEq for SessionId {
 }
 
 impl Codec for SessionId {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         debug_assert!(self.len <= 32);
-        bytes.push(self.len as u8);
-        bytes.extend_from_slice(&self.data[..self.len]);
+        bytes.push_bytes(&[self.len as u8])?;
+        bytes.push_bytes(&self.data[..self.len])
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -194,8 +196,8 @@ pub struct UnknownExtension {
 }
 
 impl UnknownExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.payload.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.payload.encode(bytes)
     }
 
     fn read(typ: ExtensionType, r: &mut Reader) -> Self {
@@ -242,11 +244,11 @@ impl ServerNamePayload {
         }
     }
 
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match *self {
             Self::HostName(ref name) => {
-                (name.as_ref().len() as u16).encode(bytes);
-                bytes.extend_from_slice(name.as_ref().as_bytes());
+                (name.as_ref().len() as u16).encode(bytes)?;
+                bytes.push_bytes(name.as_ref().as_bytes())
             }
             Self::Unknown(ref r) => r.encode(bytes),
         }
@@ -260,9 +262,9 @@ pub struct ServerName {
 }
 
 impl Codec for ServerName {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        self.payload.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.typ.encode(bytes)?;
+        self.payload.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -370,9 +372,9 @@ impl KeyShareEntry {
 }
 
 impl Codec for KeyShareEntry {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.group.encode(bytes);
-        self.payload.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.group.encode(bytes)?;
+        self.payload.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -400,9 +402,9 @@ impl PresharedKeyIdentity {
 }
 
 impl Codec for PresharedKeyIdentity {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.identity.encode(bytes);
-        self.obfuscated_ticket_age.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.identity.encode(bytes)?;
+        self.obfuscated_ticket_age.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -440,9 +442,9 @@ impl PresharedKeyOffer {
 }
 
 impl Codec for PresharedKeyOffer {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.identities.encode(bytes);
-        self.binders.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.identities.encode(bytes)?;
+        self.binders.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -467,10 +469,10 @@ pub struct OCSPCertificateStatusRequest {
 }
 
 impl Codec for OCSPCertificateStatusRequest {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        CertificateStatusType::OCSP.encode(bytes);
-        self.responder_ids.encode(bytes);
-        self.extensions.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        CertificateStatusType::OCSP.encode(bytes)?;
+        self.responder_ids.encode(bytes)?;
+        self.extensions.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -488,12 +490,12 @@ pub enum CertificateStatusRequest {
 }
 
 impl Codec for CertificateStatusRequest {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match self {
             Self::OCSP(ref r) => r.encode(bytes),
             Self::Unknown((typ, payload)) => {
-                typ.encode(bytes);
-                payload.encode(bytes);
+                typ.encode(bytes)?;
+                payload.encode(bytes)
             }
         }
     }
@@ -584,10 +586,10 @@ impl ClientExtension {
 }
 
 impl Codec for ClientExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
             Self::ECPointFormats(ref r) => r.encode(nested.buf),
             Self::NamedGroups(ref r) => r.encode(nested.buf),
@@ -595,7 +597,7 @@ impl Codec for ClientExtension {
             Self::ServerName(ref r) => r.encode(nested.buf),
             Self::SessionTicket(ClientSessionTicket::Request)
             | Self::ExtendedMasterSecretRequest
-            | Self::EarlyData => {}
+            | Self::EarlyData => Ok(()),
             Self::SessionTicket(ClientSessionTicket::Offer(ref r)) => r.encode(nested.buf),
             Self::Protocols(ref r) => r.encode(nested.buf),
             Self::SupportedVersions(ref r) => r.encode(nested.buf),
@@ -605,7 +607,7 @@ impl Codec for ClientExtension {
             Self::Cookie(ref r) => r.encode(nested.buf),
             Self::CertificateStatusRequest(ref r) => r.encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                nested.buf.extend_from_slice(r);
+                nested.buf.push_bytes(r)
             }
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
@@ -728,24 +730,24 @@ impl ServerExtension {
 }
 
 impl Codec for ServerExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
             Self::ECPointFormats(ref r) => r.encode(nested.buf),
             Self::ServerNameAck
             | Self::SessionTicketAck
             | Self::ExtendedMasterSecretAck
             | Self::CertificateStatusAck
-            | Self::EarlyData => {}
+            | Self::EarlyData => Ok(()),
             Self::RenegotiationInfo(ref r) => r.encode(nested.buf),
             Self::Protocols(ref r) => r.encode(nested.buf),
             Self::KeyShare(ref r) => r.encode(nested.buf),
             Self::PresharedKey(r) => r.encode(nested.buf),
             Self::SupportedVersions(ref r) => r.encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
-                nested.buf.extend_from_slice(r);
+                nested.buf.push_bytes(r)
             }
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
@@ -804,16 +806,18 @@ pub struct ClientHelloPayload {
 }
 
 impl Codec for ClientHelloPayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.client_version.encode(bytes);
-        self.random.encode(bytes);
-        self.session_id.encode(bytes);
-        self.cipher_suites.encode(bytes);
-        self.compression_methods.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.client_version.encode(bytes)?;
+        self.random.encode(bytes)?;
+        self.session_id.encode(bytes)?;
+        self.cipher_suites.encode(bytes)?;
+        self.compression_methods.encode(bytes)?;
 
         if !self.extensions.is_empty() {
-            self.extensions.encode(bytes);
+            self.extensions.encode(bytes)?;
         }
+
+        Ok(())
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1027,10 +1031,10 @@ impl HelloRetryExtension {
 }
 
 impl Codec for HelloRetryExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
             Self::KeyShare(ref r) => r.encode(nested.buf),
             Self::Cookie(ref r) => r.encode(nested.buf),
@@ -1071,13 +1075,13 @@ pub struct HelloRetryRequest {
 }
 
 impl Codec for HelloRetryRequest {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.legacy_version.encode(bytes);
-        HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
-        self.session_id.encode(bytes);
-        self.cipher_suite.encode(bytes);
-        Compression::Null.encode(bytes);
-        self.extensions.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.legacy_version.encode(bytes)?;
+        HELLO_RETRY_REQUEST_RANDOM.encode(bytes)?;
+        self.session_id.encode(bytes)?;
+        self.cipher_suite.encode(bytes)?;
+        Compression::Null.encode(bytes)?;
+        self.extensions.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1166,17 +1170,19 @@ pub struct ServerHelloPayload {
 }
 
 impl Codec for ServerHelloPayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.legacy_version.encode(bytes);
-        self.random.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.legacy_version.encode(bytes)?;
+        self.random.encode(bytes)?;
 
-        self.session_id.encode(bytes);
-        self.cipher_suite.encode(bytes);
-        self.compression_method.encode(bytes);
+        self.session_id.encode(bytes)?;
+        self.cipher_suite.encode(bytes)?;
+        self.compression_method.encode(bytes)?;
 
         if !self.extensions.is_empty() {
-            self.extensions.encode(bytes);
+            self.extensions.encode(bytes)?;
         }
+
+        Ok(())
     }
 
     // minus version and random, which have already been read.
@@ -1283,10 +1289,10 @@ impl CertificateExtension {
 }
 
 impl Codec for CertificateExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
             Self::CertificateStatus(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
@@ -1322,9 +1328,9 @@ pub struct CertificateEntry {
 }
 
 impl Codec for CertificateEntry {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.cert.encode(bytes);
-        self.exts.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.cert.encode(bytes)?;
+        self.exts.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1383,9 +1389,9 @@ pub struct CertificatePayloadTLS13 {
 }
 
 impl Codec for CertificatePayloadTLS13 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.context.encode(bytes);
-        self.entries.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.context.encode(bytes)?;
+        self.entries.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1467,9 +1473,9 @@ pub struct ECParameters {
 }
 
 impl Codec for ECParameters {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.curve_type.encode(bytes);
-        self.named_group.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.curve_type.encode(bytes)?;
+        self.named_group.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1493,8 +1499,8 @@ pub struct ClientECDHParams {
 }
 
 impl Codec for ClientECDHParams {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.public.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.public.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1522,9 +1528,9 @@ impl ServerECDHParams {
 }
 
 impl Codec for ServerECDHParams {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.curve_params.encode(bytes);
-        self.public.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.curve_params.encode(bytes)?;
+        self.public.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1545,9 +1551,9 @@ pub struct ECDHEServerKeyExchange {
 }
 
 impl Codec for ECDHEServerKeyExchange {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.params.encode(bytes);
-        self.dss.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.params.encode(bytes)?;
+        self.dss.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1565,7 +1571,7 @@ pub enum ServerKeyExchangePayload {
 }
 
 impl Codec for ServerKeyExchangePayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         match *self {
             Self::ECDHE(ref x) => x.encode(bytes),
             Self::Unknown(ref x) => x.encode(bytes),
@@ -1709,10 +1715,10 @@ pub struct CertificateRequestPayload {
 }
 
 impl Codec for CertificateRequestPayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.certtypes.encode(bytes);
-        self.sigschemes.encode(bytes);
-        self.canames.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.certtypes.encode(bytes)?;
+        self.sigschemes.encode(bytes)?;
+        self.canames.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1751,10 +1757,10 @@ impl CertReqExtension {
 }
 
 impl Codec for CertReqExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
             Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
             Self::AuthorityNames(ref r) => r.encode(nested.buf),
@@ -1798,9 +1804,9 @@ pub struct CertificateRequestPayloadTLS13 {
 }
 
 impl Codec for CertificateRequestPayloadTLS13 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.context.encode(bytes);
-        self.extensions.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.context.encode(bytes)?;
+        self.extensions.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1855,9 +1861,9 @@ impl NewSessionTicketPayload {
 }
 
 impl Codec for NewSessionTicketPayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.lifetime_hint.encode(bytes);
-        self.ticket.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.lifetime_hint.encode(bytes)?;
+        self.ticket.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1888,10 +1894,10 @@ impl NewSessionTicketExtension {
 }
 
 impl Codec for NewSessionTicketExtension {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.get_type().encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes)?;
         match *self {
             Self::EarlyData(r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
@@ -1968,12 +1974,12 @@ impl NewSessionTicketPayloadTLS13 {
 }
 
 impl Codec for NewSessionTicketPayloadTLS13 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.lifetime.encode(bytes);
-        self.age_add.encode(bytes);
-        self.nonce.encode(bytes);
-        self.ticket.encode(bytes);
-        self.exts.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.lifetime.encode(bytes)?;
+        self.age_add.encode(bytes)?;
+        self.nonce.encode(bytes)?;
+        self.ticket.encode(bytes)?;
+        self.exts.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -2002,9 +2008,9 @@ pub struct CertificateStatus {
 }
 
 impl Codec for CertificateStatus {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        CertificateStatusType::OCSP.encode(bytes);
-        self.ocsp_response.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        CertificateStatusType::OCSP.encode(bytes)?;
+        self.ocsp_response.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -2057,10 +2063,10 @@ pub enum HandshakePayload {
 }
 
 impl HandshakePayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         use self::HandshakePayload::*;
         match *self {
-            HelloRequest | ServerHelloDone | EndOfEarlyData => {}
+            HelloRequest | ServerHelloDone | EndOfEarlyData => Ok(()),
             ClientHello(ref x) => x.encode(bytes),
             ServerHello(ref x) => x.encode(bytes),
             HelloRetryRequest(ref x) => x.encode(bytes),
@@ -2090,16 +2096,16 @@ pub struct HandshakeMessagePayload {
 }
 
 impl Codec for HandshakeMessagePayload {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         // output type, length, and encoded payload
         match self.typ {
             HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
             _ => self.typ,
         }
-        .encode(bytes);
+        .encode(bytes)?;
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes);
-        self.payload.encode(nested.buf);
+        let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes)?;
+        self.payload.encode(nested.buf)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -2216,7 +2222,8 @@ impl HandshakeMessagePayload {
                     let mut binders_encoding = Vec::new();
                     offer
                         .binders
-                        .encode(&mut binders_encoding);
+                        .encode(&mut binders_encoding)
+                        .unwrap();
                     binders_encoding.len()
                 }
                 _ => 0,

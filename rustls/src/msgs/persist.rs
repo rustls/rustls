@@ -16,6 +16,8 @@ use core::cmp;
 #[cfg(feature = "tls12")]
 use core::mem;
 
+use super::codec::PushBytes;
+
 pub struct Retrieved<T> {
     pub value: T,
     retrieved_at: UnixTime,
@@ -270,34 +272,34 @@ pub struct ServerSessionValue {
 }
 
 impl Codec for ServerSessionValue {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
         if let Some(ref sni) = self.sni {
-            1u8.encode(bytes);
+            1u8.encode(bytes)?;
             let sni_bytes: &str = sni.as_ref();
-            PayloadU8::new(Vec::from(sni_bytes)).encode(bytes);
+            PayloadU8::new(Vec::from(sni_bytes)).encode(bytes)?;
         } else {
-            0u8.encode(bytes);
+            0u8.encode(bytes)?;
         }
-        self.version.encode(bytes);
-        self.cipher_suite.encode(bytes);
-        self.master_secret.encode(bytes);
-        (u8::from(self.extended_ms)).encode(bytes);
+        self.version.encode(bytes)?;
+        self.cipher_suite.encode(bytes)?;
+        self.master_secret.encode(bytes)?;
+        (u8::from(self.extended_ms)).encode(bytes)?;
         if let Some(ref chain) = self.client_cert_chain {
-            1u8.encode(bytes);
-            chain.encode(bytes);
+            1u8.encode(bytes)?;
+            chain.encode(bytes)?;
         } else {
-            0u8.encode(bytes);
+            0u8.encode(bytes)?;
         }
         if let Some(ref alpn) = self.alpn {
-            1u8.encode(bytes);
-            alpn.encode(bytes);
+            1u8.encode(bytes)?;
+            alpn.encode(bytes)?;
         } else {
-            0u8.encode(bytes);
+            0u8.encode(bytes)?;
         }
-        self.application_data.encode(bytes);
-        self.creation_time_sec.encode(bytes);
+        self.application_data.encode(bytes)?;
+        self.creation_time_sec.encode(bytes)?;
         self.age_obfuscation_offset
-            .encode(bytes);
+            .encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {

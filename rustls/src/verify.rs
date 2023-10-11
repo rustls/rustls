@@ -7,7 +7,7 @@ use crate::client::ServerName;
 use crate::enums::SignatureScheme;
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::base::PayloadU16;
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{Codec, PushBytes, Reader};
 use crate::msgs::handshake::DistinguishedName;
 
 // Marker types.  These are used to bind the fact some verification
@@ -317,9 +317,9 @@ impl DigitallySignedStruct {
 }
 
 impl Codec for DigitallySignedStruct {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.scheme.encode(bytes);
-        self.sig.encode(bytes);
+    fn encode<B: PushBytes>(&self, bytes: &mut B) -> Result<(), B::Error> {
+        self.scheme.encode(bytes)?;
+        self.sig.encode(bytes)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
