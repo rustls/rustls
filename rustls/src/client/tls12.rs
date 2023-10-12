@@ -387,7 +387,9 @@ impl State<ClientConnectionData> for ExpectServerKx {
             })?;
 
         // Save the signature and signed parameters for later verification.
-        let server_kx = ServerKxDetails::new(ecdhe.params.get_encoding(), ecdhe.dss);
+        let mut kx_params = Vec::new();
+        ecdhe.params.encode(&mut kx_params);
+        let server_kx = ServerKxDetails::new(kx_params, ecdhe.dss);
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
@@ -428,7 +430,10 @@ fn emit_certificate(
 }
 
 fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
-    let pubkey = Payload::new(PayloadU8::new(Vec::from(pub_key)).get_encoding());
+    let mut buf = Vec::new();
+    let ecpoint = PayloadU8::new(Vec::from(pub_key));
+    ecpoint.encode(&mut buf);
+    let pubkey = Payload::new(buf);
 
     let ckx = Message {
         version: ProtocolVersion::TLSv1_2,
