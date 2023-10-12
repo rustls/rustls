@@ -1,0 +1,16 @@
+[package]
+edition = "2021"
+name = "ministd"
+publish = false
+version = "0.0.0"
+
+[lib]
+test = false
+bench = false
+
+[dependencies]
+getrandom = { version = "0.2.10", features = ["custom"] }
+
+[dev-dependencies]
+rand_core = { version =  "0.6.4", features = ["getrandom"] }
+

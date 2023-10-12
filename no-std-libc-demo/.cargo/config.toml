@@ -1,0 +1,5 @@
+[build]
+target = "x86_64-posix-elf.json"
+
+[unstable]
+build-std = ["core", "alloc"]
