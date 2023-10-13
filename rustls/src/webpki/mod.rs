@@ -44,24 +44,22 @@ fn pki_error(error: webpki::Error) -> Error {
     }
 }
 
-impl From<webpki::Error> for CertRevocationListError {
-    fn from(e: webpki::Error) -> Self {
-        use webpki::Error::*;
-        match e {
-            InvalidCrlSignatureForPublicKey
-            | UnsupportedCrlSignatureAlgorithm
-            | UnsupportedCrlSignatureAlgorithmForPublicKey => Self::BadSignature,
-            InvalidCrlNumber => Self::InvalidCrlNumber,
-            InvalidSerialNumber => Self::InvalidRevokedCertSerialNumber,
-            IssuerNotCrlSigner => Self::IssuerInvalidForCrl,
-            MalformedExtensions | BadDer | BadDerTime => Self::ParseError,
-            UnsupportedCriticalExtension => Self::UnsupportedCriticalExtension,
-            UnsupportedCrlVersion => Self::UnsupportedCrlVersion,
-            UnsupportedDeltaCrl => Self::UnsupportedDeltaCrl,
-            UnsupportedIndirectCrl => Self::UnsupportedIndirectCrl,
-            UnsupportedRevocationReason => Self::UnsupportedRevocationReason,
+fn crl_error(e: webpki::Error) -> CertRevocationListError {
+    use webpki::Error::*;
+    match e {
+        InvalidCrlSignatureForPublicKey
+        | UnsupportedCrlSignatureAlgorithm
+        | UnsupportedCrlSignatureAlgorithmForPublicKey => CertRevocationListError::BadSignature,
+        InvalidCrlNumber => CertRevocationListError::InvalidCrlNumber,
+        InvalidSerialNumber => CertRevocationListError::InvalidRevokedCertSerialNumber,
+        IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl,
+        MalformedExtensions | BadDer | BadDerTime => CertRevocationListError::ParseError,
+        UnsupportedCriticalExtension => CertRevocationListError::UnsupportedCriticalExtension,
+        UnsupportedCrlVersion => CertRevocationListError::UnsupportedCrlVersion,
+        UnsupportedDeltaCrl => CertRevocationListError::UnsupportedDeltaCrl,
+        UnsupportedIndirectCrl => CertRevocationListError::UnsupportedIndirectCrl,
+        UnsupportedRevocationReason => CertRevocationListError::UnsupportedRevocationReason,
 
-            _ => Self::Other(Arc::new(e)),
-        }
+        _ => CertRevocationListError::Other(Arc::new(e)),
     }
 }
