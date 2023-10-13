@@ -312,3 +312,21 @@ jobs:
       - run: cargo clippy --locked --manifest-path=connect-tests/Cargo.toml --all-features --all-targets
       - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets
       - run: cargo clippy --locked --manifest-path=provider-example/Cargo.toml --all-features --all-targets
+
+  check-external-types:
+    name: Validate external types appearing in public API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2023-10-10
+          # ^ sync with https://github.com/awslabs/cargo-check-external-types/blob/main/rust-toolchain.toml
+      - run: cargo install --locked cargo-check-external-types
+      - name: run cargo-check-external-types for rustls/
+        working-directory: rustls/
+        run: cargo check-external-types --config external-types.toml
