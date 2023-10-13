@@ -17,7 +17,7 @@ impl crypto::hash::Hash for Hash {
     fn hash(&self, bytes: &[u8]) -> crypto::hash::Output {
         let mut ctx = ring::digest::Context::new(self.0);
         ctx.update(bytes);
-        ctx.finish().into()
+        convert(ctx.finish())
     }
 
     fn output_len(&self) -> usize {
@@ -33,7 +33,7 @@ struct Context(ring::digest::Context);
 
 impl crypto::hash::Context for Context {
     fn fork_finish(&self) -> crypto::hash::Output {
-        self.0.clone().finish().into()
+        convert(self.0.clone().finish())
     }
 
     fn fork(&self) -> Box<dyn crypto::hash::Context> {
@@ -41,7 +41,7 @@ impl crypto::hash::Context for Context {
     }
 
     fn finish(self: Box<Self>) -> crypto::hash::Output {
-        self.0.finish().into()
+        convert(self.0.finish())
     }
 
     fn update(&mut self, data: &[u8]) {
@@ -49,8 +49,6 @@ impl crypto::hash::Context for Context {
     }
 }
 
-impl From<ring::digest::Digest> for crypto::hash::Output {
-    fn from(val: ring::digest::Digest) -> Self {
-        Self::new(val.as_ref())
-    }
+fn convert(val: ring::digest::Digest) -> crypto::hash::Output {
+    crypto::hash::Output::new(val.as_ref())
 }
