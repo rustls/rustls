@@ -11,7 +11,7 @@ use super::client_verifier_builder::ClientCertVerifierBuilder;
 use super::pki_error;
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
-use crate::error::{CertRevocationListError, CertificateError, Error, PeerMisbehaved};
+use crate::error::{CertificateError, Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::handshake::DistinguishedName;
@@ -385,28 +385,6 @@ pub(crate) enum AnonymousClientPolicy {
     Deny,
 }
 
-impl From<webpki::Error> for CertRevocationListError {
-    fn from(e: webpki::Error) -> Self {
-        use webpki::Error::*;
-        match e {
-            InvalidCrlSignatureForPublicKey
-            | UnsupportedCrlSignatureAlgorithm
-            | UnsupportedCrlSignatureAlgorithmForPublicKey => Self::BadSignature,
-            InvalidCrlNumber => Self::InvalidCrlNumber,
-            InvalidSerialNumber => Self::InvalidRevokedCertSerialNumber,
-            IssuerNotCrlSigner => Self::IssuerInvalidForCrl,
-            MalformedExtensions | BadDer | BadDerTime => Self::ParseError,
-            UnsupportedCriticalExtension => Self::UnsupportedCriticalExtension,
-            UnsupportedCrlVersion => Self::UnsupportedCrlVersion,
-            UnsupportedDeltaCrl => Self::UnsupportedDeltaCrl,
-            UnsupportedIndirectCrl => Self::UnsupportedIndirectCrl,
-            UnsupportedRevocationReason => Self::UnsupportedRevocationReason,
-
-            _ => Self::Other(Arc::new(e)),
-        }
-    }
-}
-
 /// Describes which `webpki` signature verification algorithms are supported and
 /// how they map to TLS `SignatureScheme`s.
 #[derive(Clone, Copy)]
@@ -596,6 +574,7 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::CertRevocationListError;
 
     #[test]
     fn pki_crl_errors() {

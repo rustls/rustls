@@ -43,3 +43,25 @@ fn pki_error(error: webpki::Error) -> Error {
         _ => CertificateError::Other(Arc::new(error)).into(),
     }
 }
+
+impl From<webpki::Error> for CertRevocationListError {
+    fn from(e: webpki::Error) -> Self {
+        use webpki::Error::*;
+        match e {
+            InvalidCrlSignatureForPublicKey
+            | UnsupportedCrlSignatureAlgorithm
+            | UnsupportedCrlSignatureAlgorithmForPublicKey => Self::BadSignature,
+            InvalidCrlNumber => Self::InvalidCrlNumber,
+            InvalidSerialNumber => Self::InvalidRevokedCertSerialNumber,
+            IssuerNotCrlSigner => Self::IssuerInvalidForCrl,
+            MalformedExtensions | BadDer | BadDerTime => Self::ParseError,
+            UnsupportedCriticalExtension => Self::UnsupportedCriticalExtension,
+            UnsupportedCrlVersion => Self::UnsupportedCrlVersion,
+            UnsupportedDeltaCrl => Self::UnsupportedDeltaCrl,
+            UnsupportedIndirectCrl => Self::UnsupportedIndirectCrl,
+            UnsupportedRevocationReason => Self::UnsupportedRevocationReason,
+
+            _ => Self::Other(Arc::new(e)),
+        }
+    }
+}
