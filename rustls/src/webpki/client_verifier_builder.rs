@@ -6,6 +6,7 @@ use std::error::Error as StdError;
 use pki_types::CertificateRevocationListDer;
 use webpki::BorrowedCertRevocationList;
 
+use super::crl_error;
 use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier, WebPkiSupportedAlgorithms};
 use crate::verify::ClientCertVerifier;
 use crate::{CertRevocationListError, RootCertStore};
@@ -101,7 +102,7 @@ impl ClientCertVerifierBuilder {
                 .map(|der_crl| {
                     BorrowedCertRevocationList::from_der(der_crl.as_ref())
                         .and_then(|crl| crl.to_owned())
-                        .map_err(CertRevocationListError::from)
+                        .map_err(crl_error)
                 })
                 .collect::<Result<Vec<_>, CertRevocationListError>>()?,
             self.anon_policy,

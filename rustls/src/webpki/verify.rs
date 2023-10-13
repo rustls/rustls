@@ -573,6 +573,7 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::crl_error;
     use super::*;
     use crate::error::CertRevocationListError;
 
@@ -643,16 +644,11 @@ mod tests {
             ),
         ];
         for t in testcases {
-            assert_eq!(
-                <webpki::Error as Into<CertRevocationListError>>::into(t.0),
-                t.1
-            );
+            assert_eq!(crl_error(t.0), t.1);
         }
 
         assert!(matches!(
-            <webpki::Error as Into<CertRevocationListError>>::into(
-                webpki::Error::NameConstraintViolation
-            ),
+            crl_error(webpki::Error::NameConstraintViolation),
             Other(_)
         ));
     }
