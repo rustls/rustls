@@ -30,7 +30,7 @@ impl crypto::hmac::Key for Key {
             ctx.update(d);
         }
         ctx.update(last);
-        ctx.sign().into()
+        crypto::hmac::Tag::new(ctx.sign().as_ref())
     }
 
     fn tag_len(&self) -> usize {
@@ -38,11 +38,5 @@ impl crypto::hmac::Key for Key {
             .algorithm()
             .digest_algorithm()
             .output_len()
-    }
-}
-
-impl From<ring::hmac::Tag> for crypto::hmac::Tag {
-    fn from(val: ring::hmac::Tag) -> Self {
-        Self::new(val.as_ref())
     }
 }
