@@ -1,6 +1,6 @@
 //! Tests for configuring and using a [`ClientCertVerifier`] for a server.
 
-#![cfg(all(feature = "webpki", feature = "ring"))]
+#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
 
 mod common;
 
