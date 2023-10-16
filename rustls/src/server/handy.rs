@@ -1,5 +1,3 @@
-#[cfg(feature = "ring")]
-use crate::crypto::ring;
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::limited_cache;
@@ -9,8 +7,7 @@ use crate::sign;
 use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
 
-#[cfg(feature = "ring")]
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::CertificateDer;
 
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -102,29 +99,23 @@ impl server::ProducesTickets for NeverProducesTickets {
 pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesChain {
-    /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
-    /// key type and encoding.
-    #[cfg(feature = "ring")]
+    /// Creates an `AlwaysResolvesChain`, using the supplied key and certificate chain.
     pub(super) fn new(
+        private_key: Arc<dyn sign::SigningKey>,
         chain: Vec<CertificateDer<'static>>,
-        priv_key: &PrivateKeyDer<'_>,
-    ) -> Result<Self, Error> {
-        let key = ring::sign::any_supported_type(priv_key)
-            .map_err(|_| Error::General("invalid private key".into()))?;
-        Ok(Self(Arc::new(sign::CertifiedKey::new(chain, key))))
+    ) -> Self {
+        Self(Arc::new(sign::CertifiedKey::new(chain, private_key)))
     }
 
-    /// Creates an `AlwaysResolvesChain`, auto-detecting the underlying private
-    /// key type and encoding.
+    /// Creates an `AlwaysResolvesChain`, using the supplied key, certificate chain and OCSP response.
     ///
-    /// If non-empty, the given OCSP response and SCTs are attached.
-    #[cfg(feature = "ring")]
+    /// If non-empty, the given OCSP response is attached.
     pub(super) fn new_with_extras(
+        private_key: Arc<dyn sign::SigningKey>,
         chain: Vec<CertificateDer<'static>>,
-        priv_key: &PrivateKeyDer<'_>,
         ocsp: Vec<u8>,
-    ) -> Result<Self, Error> {
-        let mut r = Self::new(chain, priv_key)?;
+    ) -> Self {
+        let mut r = Self::new(private_key, chain);
 
         {
             let cert = Arc::make_mut(&mut r.0);
@@ -133,7 +124,7 @@ impl AlwaysResolvesChain {
             }
         }
 
-        Ok(r)
+        r
     }
 }
 

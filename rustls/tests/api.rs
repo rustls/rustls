@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
 use rustls::client::{
     verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption, WebPkiServerVerifier,
 };
@@ -5481,6 +5481,13 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
 
     fn default_kx_groups(&self) -> &'static [&'static (dyn rustls::crypto::SupportedKxGroup)] {
         self.parent.default_kx_groups()
+    }
+
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn rustls::sign::SigningKey>, Error> {
+        self.parent.load_private_key(key_der)
     }
 }
 

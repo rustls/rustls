@@ -1,6 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
-#[cfg(feature = "ring")]
 use crate::error::Error;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
@@ -9,7 +8,6 @@ use crate::verify::{ClientCertVerifier, NoClientAuth};
 use crate::versions;
 use crate::NoKeyLog;
 
-#[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
@@ -54,7 +52,6 @@ pub struct WantsServerCert {
 }
 
 impl ConfigBuilder<ServerConfig, WantsServerCert> {
-    #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key.  This
     /// certificate and key is used for all subsequent connections,
     /// irrespective of things like SNI hostname.
@@ -65,7 +62,8 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// disregarded.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
+    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
     ///
     /// This function fails if `key_der` is invalid.
     pub fn with_single_cert(
@@ -73,17 +71,21 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         cert_chain: Vec<CertificateDer<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
-        let resolver = handy::AlwaysResolvesChain::new(cert_chain, &key_der)?;
+        let private_key = self
+            .state
+            .provider
+            .load_private_key(key_der)?;
+        let resolver = handy::AlwaysResolvesChain::new(private_key, cert_chain);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
-    #[cfg(feature = "ring")]
-    /// Sets a single certificate chain, matching private key, OCSP
-    /// response and SCTs.  This certificate and key is used for all
+    /// Sets a single certificate chain, matching private key and optional OCSP
+    /// response.  This certificate and key is used for all
     /// subsequent connections, irrespective of things like SNI hostname.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
+    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
     ///
     /// This function fails if `key_der` is invalid.
@@ -93,7 +95,11 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         key_der: PrivateKeyDer<'static>,
         ocsp: Vec<u8>,
     ) -> Result<ServerConfig, Error> {
-        let resolver = handy::AlwaysResolvesChain::new_with_extras(cert_chain, &key_der, ocsp)?;
+        let private_key = self
+            .state
+            .provider
+            .load_private_key(key_der)?;
+        let resolver = handy::AlwaysResolvesChain::new_with_extras(private_key, cert_chain, ocsp);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 

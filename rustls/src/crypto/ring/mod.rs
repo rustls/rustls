@@ -1,6 +1,13 @@
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::rand::GetRandomFailed;
+use crate::sign::SigningKey;
 use crate::suites::SupportedCipherSuite;
+use crate::Error;
+
+use pki_types::PrivateKeyDer;
+
+use alloc::borrow::ToOwned;
+use alloc::sync::Arc;
 
 pub(crate) use ring as ring_like;
 use ring_like::rand::{SecureRandom, SystemRandom};
@@ -38,9 +45,16 @@ impl CryptoProvider for Ring {
         DEFAULT_CIPHER_SUITES
     }
 
-    /// Return all supported key exchange groups.
     fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup] {
         ALL_KX_GROUPS
+    }
+
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn SigningKey>, Error> {
+        sign::any_supported_type(&key_der)
+            .map_err(|_| Error::General("invalid private key".to_owned()))
     }
 }
 

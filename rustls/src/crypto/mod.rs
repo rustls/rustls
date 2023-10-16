@@ -1,10 +1,13 @@
+use crate::sign::SigningKey;
 use crate::suites;
 use crate::{Error, NamedGroup};
 
 use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
 /// *ring* based CryptoProvider.
@@ -43,6 +46,14 @@ pub trait CryptoProvider: Send + Sync + Debug + 'static {
 
     /// Return a safe set of supported key exchange groups to be used as the defaults.
     fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup];
+
+    /// Decode and validate a private signing key from `key_der`.
+    ///
+    /// Return an error if the key type encoding is not supported, or if the key fails validation.
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn SigningKey>, Error>;
 }
 
 /// A supported key exchange group.
