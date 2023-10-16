@@ -1,19 +1,16 @@
 use crate::client;
 use crate::enums::SignatureScheme;
+use crate::error::Error;
 use crate::limited_cache;
 use crate::msgs::persist;
 use crate::sign;
 use crate::NamedGroup;
 use crate::ServerName;
-#[cfg(feature = "ring")]
-use crate::{crypto::ring, error::Error};
 
-#[cfg(feature = "ring")]
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::CertificateDer;
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-#[cfg(feature = "ring")]
 use alloc::vec::Vec;
 use std::sync::Mutex;
 
@@ -182,14 +179,11 @@ impl client::ResolvesClientCert for FailResolveClientCert {
 pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesClientCert {
-    #[cfg(feature = "ring")]
     pub(super) fn new(
+        private_key: Arc<dyn sign::SigningKey>,
         chain: Vec<CertificateDer<'static>>,
-        priv_key: &PrivateKeyDer<'_>,
     ) -> Result<Self, Error> {
-        let key = ring::sign::any_supported_type(priv_key)
-            .map_err(|_| Error::General("invalid private key".into()))?;
-        Ok(Self(Arc::new(sign::CertifiedKey::new(chain, key))))
+        Ok(Self(Arc::new(sign::CertifiedKey::new(chain, private_key))))
     }
 }
 

@@ -1,3 +1,4 @@
+use pki_types::PrivateKeyDer;
 use std::sync::Arc;
 
 mod aead;
@@ -25,6 +26,15 @@ impl rustls::crypto::CryptoProvider for Provider {
 
     fn default_kx_groups(&self) -> &'static [&'static dyn rustls::crypto::SupportedKxGroup] {
         kx::ALL_KX_GROUPS
+    }
+
+    /// XXX: currently this example is client-only, which avoids the need for it to support
+    /// authentication key handling.
+    fn load_private_key(
+        &self,
+        _key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
+        unimplemented!()
     }
 }
 

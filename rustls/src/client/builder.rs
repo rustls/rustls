@@ -2,15 +2,15 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "ring")]
-use crate::{error::Error, webpki};
+use crate::webpki;
 use crate::{verify, versions};
 
 use super::client_conn::Resumption;
 
-#[cfg(feature = "ring")]
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
@@ -95,12 +95,12 @@ pub struct WantsClientCert {
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
-    #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
+    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
     ///
     /// This function fails if `key_der` is invalid.
     pub fn with_client_auth_cert(
@@ -108,16 +108,20 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         cert_chain: Vec<CertificateDer<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
-        let resolver = handy::AlwaysResolvesClientCert::new(cert_chain, &key_der)?;
+        let private_key = self
+            .state
+            .provider
+            .load_private_key(key_der)?;
+        let resolver = handy::AlwaysResolvesClientCert::new(private_key, cert_chain)?;
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
     }
 
-    #[cfg(feature = "ring")]
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key.
+    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
+    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
     ///
     /// This function fails if `key_der` is invalid.
     #[deprecated(since = "0.21.4", note = "Use `with_client_auth_cert` instead")]
