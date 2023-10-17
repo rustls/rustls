@@ -1324,6 +1324,8 @@ where
     fail_ok: bool,
     pub short_writes: bool,
     pub last_error: Option<rustls::Error>,
+    pub buffered: bool,
+    buffer: Vec<Vec<u8>>,
 }
 
 impl<'a, C, S> OtherSession<'a, C, S>
@@ -1339,7 +1341,15 @@ where
             fail_ok: false,
             short_writes: false,
             last_error: None,
+            buffered: false,
+            buffer: vec![],
         }
+    }
+
+    fn new_buffered(sess: &'a mut C) -> OtherSession<'a, C, S> {
+        let mut os = OtherSession::new(sess);
+        os.buffered = true;
+        os
     }
 
     fn new_fails(sess: &'a mut C) -> OtherSession<'a, C, S> {
@@ -1347,33 +1357,8 @@ where
         os.fail_ok = true;
         os
     }
-}
 
-impl<'a, C, S> io::Read for OtherSession<'a, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
-    fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
-        self.reads += 1;
-        self.sess.write_tls(b.by_ref())
-    }
-}
-
-impl<'a, C, S> io::Write for OtherSession<'a, C, S>
-where
-    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
-    S: SideData,
-{
-    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
-        unreachable!()
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-
-    fn write_vectored<'b>(&mut self, b: &[io::IoSlice<'b>]) -> io::Result<usize> {
+    fn flush_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
         let mut total = 0;
         let mut lengths = vec![];
         for bytes in b {
@@ -1406,6 +1391,48 @@ where
 
         self.writevs.push(lengths);
         Ok(total)
+    }
+}
+
+impl<'a, C, S> io::Read for OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    fn read(&mut self, mut b: &mut [u8]) -> io::Result<usize> {
+        self.reads += 1;
+        self.sess.write_tls(b.by_ref())
+    }
+}
+
+impl<'a, C, S> io::Write for OtherSession<'a, C, S>
+where
+    C: DerefMut + Deref<Target = ConnectionCommon<S>>,
+    S: SideData,
+{
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        unreachable!()
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() {
+            let buffer = mem::take(&mut self.buffer);
+            let slices = buffer
+                .iter()
+                .map(|b| io::IoSlice::new(b))
+                .collect::<Vec<_>>();
+            self.flush_vectored(&slices)?;
+        }
+        Ok(())
+    }
+
+    fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        if self.buffered {
+            self.buffer
+                .extend(b.iter().map(|s| s.to_vec()));
+            return Ok(b.iter().map(|s| s.len()).sum());
+        }
+        self.flush_vectored(b)
     }
 }
 
@@ -1457,6 +1484,19 @@ fn client_complete_io_for_handshake() {
 }
 
 #[test]
+fn buffered_client_complete_io_for_handshake() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa);
+
+    assert!(client.is_handshaking());
+    let (rdlen, wrlen) = client
+        .complete_io(&mut OtherSession::new_buffered(&mut server))
+        .unwrap();
+    assert!(rdlen > 0 && wrlen > 0);
+    assert!(!client.is_handshaking());
+    assert!(!client.wants_write());
+}
+
+#[test]
 fn client_complete_io_for_handshake_eof() {
     let (mut client, _) = make_pair(KeyType::Rsa);
     let mut input = io::Cursor::new(Vec::new());
@@ -1485,6 +1525,35 @@ fn client_complete_io_for_write() {
             .unwrap();
         {
             let mut pipe = OtherSession::new(&mut server);
+            let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
+            assert!(rdlen == 0 && wrlen > 0);
+            println!("{:?}", pipe.writevs);
+            assert_eq!(pipe.writevs, vec![vec![42, 42]]);
+        }
+        check_read(
+            &mut server.reader(),
+            b"0123456789012345678901234567890123456789",
+        );
+    }
+}
+
+#[test]
+fn buffered_client_complete_io_for_write() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let (mut client, mut server) = make_pair(*kt);
+
+        do_handshake(&mut client, &mut server);
+
+        client
+            .writer()
+            .write_all(b"01234567890123456789")
+            .unwrap();
+        client
+            .writer()
+            .write_all(b"01234567890123456789")
+            .unwrap();
+        {
+            let mut pipe = OtherSession::new_buffered(&mut server);
             let (rdlen, wrlen) = client.complete_io(&mut pipe).unwrap();
             assert!(rdlen == 0 && wrlen > 0);
             println!("{:?}", pipe.writevs);
