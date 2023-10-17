@@ -1918,7 +1918,7 @@ impl TlsListElement for NewSessionTicketExtension {
 }
 
 #[derive(Debug)]
-pub struct NewSessionTicketPayloadTLS13 {
+pub struct NewSessionTicketPayloadTls13 {
     pub lifetime: u32,
     pub age_add: u32,
     pub nonce: PayloadU8,
@@ -1926,7 +1926,7 @@ pub struct NewSessionTicketPayloadTLS13 {
     pub exts: Vec<NewSessionTicketExtension>,
 }
 
-impl NewSessionTicketPayloadTLS13 {
+impl NewSessionTicketPayloadTls13 {
     pub fn new(lifetime: u32, age_add: u32, nonce: Vec<u8>, ticket: Vec<u8>) -> Self {
         Self {
             lifetime,
@@ -1967,7 +1967,7 @@ impl NewSessionTicketPayloadTLS13 {
     }
 }
 
-impl Codec for NewSessionTicketPayloadTLS13 {
+impl Codec for NewSessionTicketPayloadTls13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.lifetime.encode(bytes);
         self.age_add.encode(bytes);
@@ -2047,7 +2047,7 @@ pub enum HandshakePayload {
     EndOfEarlyData,
     ClientKeyExchange(Payload),
     NewSessionTicket(NewSessionTicketPayload),
-    NewSessionTicketTLS13(NewSessionTicketPayloadTLS13),
+    NewSessionTicketTLS13(NewSessionTicketPayloadTls13),
     EncryptedExtensions(Vec<ServerExtension>),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload),
@@ -2164,7 +2164,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::CertificateVerify(DigitallySignedStruct::read(&mut sub)?)
             }
             HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
-                let p = NewSessionTicketPayloadTLS13::read(&mut sub)?;
+                let p = NewSessionTicketPayloadTls13::read(&mut sub)?;
                 HandshakePayload::NewSessionTicketTLS13(p)
             }
             HandshakeType::NewSessionTicket => {

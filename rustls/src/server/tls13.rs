@@ -15,7 +15,7 @@ use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::handshake::HandshakePayload;
-use crate::msgs::handshake::{NewSessionTicketExtension, NewSessionTicketPayloadTLS13};
+use crate::msgs::handshake::{NewSessionTicketExtension, NewSessionTicketPayloadTls13};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::rand;
@@ -1125,7 +1125,7 @@ impl ExpectFinished {
             (id, stateful_lifetime)
         };
 
-        let mut payload = NewSessionTicketPayloadTLS13::new(lifetime, age_add, nonce, ticket);
+        let mut payload = NewSessionTicketPayloadTls13::new(lifetime, age_add, nonce, ticket);
 
         if config.max_early_data_size > 0 {
             if !stateless {
