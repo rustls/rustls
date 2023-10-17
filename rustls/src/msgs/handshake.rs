@@ -1792,12 +1792,12 @@ impl TlsListElement for CertReqExtension {
 }
 
 #[derive(Debug)]
-pub struct CertificateRequestPayloadTLS13 {
+pub struct CertificateRequestPayloadTls13 {
     pub context: PayloadU8,
     pub extensions: Vec<CertReqExtension>,
 }
 
-impl Codec for CertificateRequestPayloadTLS13 {
+impl Codec for CertificateRequestPayloadTls13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.extensions.encode(bytes);
@@ -1814,7 +1814,7 @@ impl Codec for CertificateRequestPayloadTLS13 {
     }
 }
 
-impl CertificateRequestPayloadTLS13 {
+impl CertificateRequestPayloadTls13 {
     pub fn find_extension(&self, ext: ExtensionType) -> Option<&CertReqExtension> {
         self.extensions
             .iter()
@@ -2041,7 +2041,7 @@ pub enum HandshakePayload {
     CertificateTLS13(CertificatePayloadTls13),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
-    CertificateRequestTLS13(CertificateRequestPayloadTLS13),
+    CertificateRequestTLS13(CertificateRequestPayloadTls13),
     CertificateVerify(DigitallySignedStruct),
     ServerHelloDone,
     EndOfEarlyData,
@@ -2153,7 +2153,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
             }
             HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificateRequestPayloadTLS13::read(&mut sub)?;
+                let p = CertificateRequestPayloadTls13::read(&mut sub)?;
                 HandshakePayload::CertificateRequestTLS13(p)
             }
             HandshakeType::CertificateRequest => {

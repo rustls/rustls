@@ -52,7 +52,7 @@ mod client_hello {
     use crate::msgs::handshake::CertificateEntry;
     use crate::msgs::handshake::CertificateExtension;
     use crate::msgs::handshake::CertificatePayloadTls13;
-    use crate::msgs::handshake::CertificateRequestPayloadTLS13;
+    use crate::msgs::handshake::CertificateRequestPayloadTls13;
     use crate::msgs::handshake::CertificateStatus;
     use crate::msgs::handshake::ClientHelloPayload;
     use crate::msgs::handshake::HelloRetryExtension;
@@ -705,7 +705,7 @@ mod client_hello {
             return Ok(false);
         }
 
-        let mut cr = CertificateRequestPayloadTLS13 {
+        let mut cr = CertificateRequestPayloadTls13 {
             context: PayloadU8::empty(),
             extensions: Vec::new(),
         };
