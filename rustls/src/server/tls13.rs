@@ -730,7 +730,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateRequest,
-                payload: HandshakePayload::CertificateRequestTLS13(cr),
+                payload: HandshakePayload::CertificateRequestTls13(cr),
             }),
         };
 
