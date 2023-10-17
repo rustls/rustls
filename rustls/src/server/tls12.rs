@@ -40,7 +40,7 @@ mod client_hello {
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression};
-    use crate::msgs::handshake::ServerECDHParams;
+    use crate::msgs::handshake::ServerEcdhParams;
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
     use crate::msgs::handshake::{CertificateStatus, ECDHEServerKeyExchange};
     use crate::msgs::handshake::{ClientExtension, SessionId};
@@ -415,7 +415,7 @@ mod client_hello {
         let kx = selected_group
             .start()
             .map_err(|_| Error::FailedToGetRandomBytes)?;
-        let secdh = ServerECDHParams::new(&*kx);
+        let secdh = ServerEcdhParams::new(&*kx);
 
         let mut msg = Vec::new();
         msg.extend(randoms.client);

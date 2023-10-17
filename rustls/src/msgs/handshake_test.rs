@@ -14,7 +14,7 @@ use crate::msgs::handshake::{
     EcParameters, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
     HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
     NewSessionTicketPayload, NewSessionTicketPayloadTLS13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerECDHParams,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerEcdhParams,
     ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
@@ -811,7 +811,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
 
 fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
-        params: ServerECDHParams {
+        params: ServerEcdhParams {
             curve_params: EcParameters {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: NamedGroup::X25519,
