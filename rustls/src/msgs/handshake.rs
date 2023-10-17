@@ -1539,12 +1539,12 @@ impl Codec for ServerEcdhParams {
 }
 
 #[derive(Debug)]
-pub struct ECDHEServerKeyExchange {
+pub struct EcdheServerKeyExchange {
     pub params: ServerEcdhParams,
     pub dss: DigitallySignedStruct,
 }
 
-impl Codec for ECDHEServerKeyExchange {
+impl Codec for EcdheServerKeyExchange {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.params.encode(bytes);
         self.dss.encode(bytes);
@@ -1560,7 +1560,7 @@ impl Codec for ECDHEServerKeyExchange {
 
 #[derive(Debug)]
 pub enum ServerKeyExchangePayload {
-    ECDHE(ECDHEServerKeyExchange),
+    ECDHE(EcdheServerKeyExchange),
     Unknown(Payload),
 }
 
@@ -1580,12 +1580,12 @@ impl Codec for ServerKeyExchangePayload {
 }
 
 impl ServerKeyExchangePayload {
-    pub fn unwrap_given_kxa(&self, kxa: KeyExchangeAlgorithm) -> Option<ECDHEServerKeyExchange> {
+    pub fn unwrap_given_kxa(&self, kxa: KeyExchangeAlgorithm) -> Option<EcdheServerKeyExchange> {
         if let Self::Unknown(ref unk) = *self {
             let mut rd = Reader::init(&unk.0);
 
             let result = match kxa {
-                KeyExchangeAlgorithm::ECDHE => ECDHEServerKeyExchange::read(&mut rd),
+                KeyExchangeAlgorithm::ECDHE => EcdheServerKeyExchange::read(&mut rd),
             };
 
             if !rd.any_left() {
