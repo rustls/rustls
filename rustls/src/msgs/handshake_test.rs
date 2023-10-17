@@ -8,7 +8,7 @@ use crate::msgs::enums::{
 };
 use crate::msgs::handshake::{
     CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTls13,
-    CertificateRequestPayload, CertificateRequestPayloadTLS13, CertificateStatus,
+    CertificateRequestPayload, CertificateRequestPayloadTls13, CertificateStatus,
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
     ConvertProtocolNameList, ConvertServerNameList, DistinguishedName, EcParameters,
     EcdheServerKeyExchange, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
@@ -834,8 +834,8 @@ fn get_sample_certificaterequestpayload() -> CertificateRequestPayload {
     }
 }
 
-fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTLS13 {
-    CertificateRequestPayloadTLS13 {
+fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTls13 {
+    CertificateRequestPayloadTls13 {
         context: PayloadU8(vec![1, 2, 3]),
         extensions: vec![
             CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
