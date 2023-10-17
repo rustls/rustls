@@ -101,19 +101,19 @@ pub enum ResumptionKind {
     /// No resumption
     No,
     /// Session ID
-    SessionID,
+    SessionId,
     /// Session tickets
     Tickets,
 }
 
 impl ResumptionKind {
-    pub const ALL: &'static [ResumptionKind] = &[Self::No, Self::SessionID, Self::Tickets];
+    pub const ALL: &'static [ResumptionKind] = &[Self::No, Self::SessionId, Self::Tickets];
 
     /// Returns a user-facing label that identifies the resumption kind
     pub fn label(&self) -> &'static str {
         match *self {
             Self::No => "no_resume",
-            Self::SessionID => "session_id",
+            Self::SessionId => "session_id",
             Self::Tickets => "tickets",
         }
     }
