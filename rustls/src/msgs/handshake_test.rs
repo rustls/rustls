@@ -745,7 +745,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: vec![
-            ServerExtension::ECPointFormats(ECPointFormat::SUPPORTED.to_vec()),
+            ServerExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
             ServerExtension::RenegotiationInfo(PayloadU8(vec![0])),
