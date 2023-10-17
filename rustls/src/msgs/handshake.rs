@@ -2047,7 +2047,7 @@ pub enum HandshakePayload {
     EndOfEarlyData,
     ClientKeyExchange(Payload),
     NewSessionTicket(NewSessionTicketPayload),
-    NewSessionTicketTLS13(NewSessionTicketPayloadTls13),
+    NewSessionTicketTls13(NewSessionTicketPayloadTls13),
     EncryptedExtensions(Vec<ServerExtension>),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload),
@@ -2072,7 +2072,7 @@ impl HandshakePayload {
             CertificateRequestTls13(ref x) => x.encode(bytes),
             CertificateVerify(ref x) => x.encode(bytes),
             NewSessionTicket(ref x) => x.encode(bytes),
-            NewSessionTicketTLS13(ref x) => x.encode(bytes),
+            NewSessionTicketTls13(ref x) => x.encode(bytes),
             EncryptedExtensions(ref x) => x.encode(bytes),
             KeyUpdate(ref x) => x.encode(bytes),
             Finished(ref x) => x.encode(bytes),
@@ -2165,7 +2165,7 @@ impl HandshakeMessagePayload {
             }
             HandshakeType::NewSessionTicket if vers == ProtocolVersion::TLSv1_3 => {
                 let p = NewSessionTicketPayloadTls13::read(&mut sub)?;
-                HandshakePayload::NewSessionTicketTLS13(p)
+                HandshakePayload::NewSessionTicketTls13(p)
             }
             HandshakeType::NewSessionTicket => {
                 let p = NewSessionTicketPayload::read(&mut sub)?;

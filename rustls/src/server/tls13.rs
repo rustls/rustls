@@ -1145,7 +1145,7 @@ impl ExpectFinished {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::NewSessionTicket,
-                payload: HandshakePayload::NewSessionTicketTLS13(payload),
+                payload: HandshakePayload::NewSessionTicketTls13(payload),
             }),
         };
 
