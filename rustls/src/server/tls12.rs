@@ -428,7 +428,7 @@ mod client_hello {
         let sigscheme = signer.scheme();
         let sig = signer.sign(&msg)?;
 
-        let skx = ServerKeyExchangePayload::ECDHE(EcdheServerKeyExchange {
+        let skx = ServerKeyExchangePayload::Ecdhe(EcdheServerKeyExchange {
             params: secdh,
             dss: DigitallySignedStruct::new(sigscheme, sig),
         });

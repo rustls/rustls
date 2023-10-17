@@ -810,7 +810,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
 }
 
 fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
-    ServerKeyExchangePayload::ECDHE(EcdheServerKeyExchange {
+    ServerKeyExchangePayload::Ecdhe(EcdheServerKeyExchange {
         params: ServerEcdhParams {
             curve_params: EcParameters {
                 curve_type: ECCurveType::NamedCurve,
