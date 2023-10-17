@@ -437,7 +437,7 @@ impl ServerSideStepper<'_> {
             .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
             .expect("bad certs/private key?");
 
-        if resume == ResumptionKind::SessionID {
+        if resume == ResumptionKind::SessionId {
             cfg.session_storage = ServerSessionMemoryCache::new(128);
         } else if resume == ResumptionKind::Tickets {
             cfg.ticketer = Ticketer::new().unwrap();
