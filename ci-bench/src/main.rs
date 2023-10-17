@@ -144,7 +144,7 @@ fn main() -> anyhow::Result<()> {
             let handshake_buf = &mut [0u8; 262144];
             let resumption_kind = black_box(bench.kind.resumption_kind());
             let params = black_box(bench.params);
-            let io = StepperIO {
+            let io = StepperIo {
                 reader: &mut stdin,
                 writer: &mut stdout,
                 handshake_buf,
@@ -334,7 +334,7 @@ trait BenchStepper {
 }
 
 /// Stepper fields necessary for IO
-struct StepperIO<'a> {
+struct StepperIo<'a> {
     reader: &'a mut dyn Read,
     writer: &'a mut dyn Write,
     handshake_buf: &'a mut [u8],
@@ -342,7 +342,7 @@ struct StepperIO<'a> {
 
 /// A benchmark stepper for the client-side of the connection
 struct ClientSideStepper<'a> {
-    io: StepperIO<'a>,
+    io: StepperIo<'a>,
     resumption_kind: ResumptionKind,
     config: Arc<ClientConfig>,
 }
@@ -420,7 +420,7 @@ impl BenchStepper for ClientSideStepper<'_> {
 
 /// A benchmark stepper for the server-side of the connection
 struct ServerSideStepper<'a> {
-    io: StepperIO<'a>,
+    io: StepperIo<'a>,
     config: Arc<ServerConfig>,
 }
 
