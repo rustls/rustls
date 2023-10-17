@@ -320,7 +320,7 @@ mod tests {
     use super::*;
     use crate::common_state::{CommonState, Side};
     use crate::crypto::ring::kx_group::X25519;
-    use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
+    use crate::msgs::handshake::{ClientEcdhParams, ServerECDHParams};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
@@ -337,6 +337,6 @@ mod tests {
     #[test]
     fn client_ecdhe_invalid() {
         let mut common = CommonState::new(Side::Server);
-        assert!(decode_ecdh_params::<ClientECDHParams>(&mut common, &[34]).is_err());
+        assert!(decode_ecdh_params::<ClientEcdhParams>(&mut common, &[34]).is_err());
     }
 }

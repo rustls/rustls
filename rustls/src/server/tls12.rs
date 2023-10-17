@@ -11,7 +11,7 @@ use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
-use crate::msgs::handshake::{ClientECDHParams, HandshakeMessagePayload, HandshakePayload};
+use crate::msgs::handshake::{ClientEcdhParams, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -597,7 +597,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let peer_kx_params =
-            tls12::decode_ecdh_params::<ClientECDHParams>(cx.common, &client_kx.0)?;
+            tls12::decode_ecdh_params::<ClientEcdhParams>(cx.common, &client_kx.0)?;
         let secrets = ConnectionSecrets::from_key_exchange(
             self.server_kx,
             &peer_kx_params.public.0,
