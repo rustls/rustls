@@ -461,12 +461,12 @@ impl TlsListElement for ResponderId {
 }
 
 #[derive(Clone, Debug)]
-pub struct OCSPCertificateStatusRequest {
+pub struct OcspCertificateStatusRequest {
     pub responder_ids: Vec<ResponderId>,
     pub extensions: PayloadU16,
 }
 
-impl Codec for OCSPCertificateStatusRequest {
+impl Codec for OcspCertificateStatusRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
         CertificateStatusType::OCSP.encode(bytes);
         self.responder_ids.encode(bytes);
@@ -483,7 +483,7 @@ impl Codec for OCSPCertificateStatusRequest {
 
 #[derive(Clone, Debug)]
 pub enum CertificateStatusRequest {
-    OCSP(OCSPCertificateStatusRequest),
+    OCSP(OcspCertificateStatusRequest),
     Unknown((CertificateStatusType, Payload)),
 }
 
@@ -503,7 +503,7 @@ impl Codec for CertificateStatusRequest {
 
         match typ {
             CertificateStatusType::OCSP => {
-                let ocsp_req = OCSPCertificateStatusRequest::read(r)?;
+                let ocsp_req = OcspCertificateStatusRequest::read(r)?;
                 Ok(Self::OCSP(ocsp_req))
             }
             _ => {
@@ -516,7 +516,7 @@ impl Codec for CertificateStatusRequest {
 
 impl CertificateStatusRequest {
     pub fn build_ocsp() -> Self {
-        let ocsp = OCSPCertificateStatusRequest {
+        let ocsp = OcspCertificateStatusRequest {
             responder_ids: Vec::new(),
             extensions: PayloadU16::empty(),
         };
