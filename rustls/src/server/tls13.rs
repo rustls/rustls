@@ -51,7 +51,7 @@ mod client_hello {
     use crate::msgs::handshake::CertReqExtension;
     use crate::msgs::handshake::CertificateEntry;
     use crate::msgs::handshake::CertificateExtension;
-    use crate::msgs::handshake::CertificatePayloadTLS13;
+    use crate::msgs::handshake::CertificatePayloadTls13;
     use crate::msgs::handshake::CertificateRequestPayloadTLS13;
     use crate::msgs::handshake::CertificateStatus;
     use crate::msgs::handshake::ClientHelloPayload;
@@ -767,7 +767,7 @@ mod client_hello {
             }
         }
 
-        let cert_body = CertificatePayloadTLS13::new(cert_entries);
+        let cert_body = CertificatePayloadTls13::new(cert_entries);
         let c = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload {

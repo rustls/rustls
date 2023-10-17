@@ -1377,12 +1377,12 @@ impl TlsListElement for CertificateEntry {
 }
 
 #[derive(Debug)]
-pub struct CertificatePayloadTLS13 {
+pub struct CertificatePayloadTls13 {
     pub context: PayloadU8,
     pub entries: Vec<CertificateEntry>,
 }
 
-impl Codec for CertificatePayloadTLS13 {
+impl Codec for CertificatePayloadTls13 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.entries.encode(bytes);
@@ -1396,7 +1396,7 @@ impl Codec for CertificatePayloadTLS13 {
     }
 }
 
-impl CertificatePayloadTLS13 {
+impl CertificatePayloadTls13 {
     pub fn new(entries: Vec<CertificateEntry>) -> Self {
         Self {
             context: PayloadU8::empty(),
@@ -2038,7 +2038,7 @@ pub enum HandshakePayload {
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificatePayload),
-    CertificateTLS13(CertificatePayloadTLS13),
+    CertificateTLS13(CertificatePayloadTls13),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
     CertificateRequestTLS13(CertificateRequestPayloadTLS13),
@@ -2135,7 +2135,7 @@ impl HandshakeMessagePayload {
                 }
             }
             HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
-                let p = CertificatePayloadTLS13::read(&mut sub)?;
+                let p = CertificatePayloadTls13::read(&mut sub)?;
                 HandshakePayload::CertificateTLS13(p)
             }
             HandshakeType::Certificate => {

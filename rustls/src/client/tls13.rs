@@ -17,7 +17,7 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
-use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTLS13};
+use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTls13};
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
@@ -724,7 +724,7 @@ fn emit_certificate_tls13(
 ) {
     let context = auth_context.unwrap_or_default();
 
-    let mut cert_payload = CertificatePayloadTLS13 {
+    let mut cert_payload = CertificatePayloadTls13 {
         context: PayloadU8::new(context),
         entries: Vec::new(),
     };
