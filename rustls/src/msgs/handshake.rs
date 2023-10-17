@@ -540,7 +540,7 @@ impl TlsListElement for ProtocolVersion {
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
-    ECPointFormats(Vec<ECPointFormat>),
+    EcPointFormats(Vec<ECPointFormat>),
     NamedGroups(Vec<NamedGroup>),
     SignatureAlgorithms(Vec<SignatureScheme>),
     ServerName(Vec<ServerName>),
@@ -562,7 +562,7 @@ pub enum ClientExtension {
 impl ClientExtension {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
-            Self::ECPointFormats(_) => ExtensionType::ECPointFormats,
+            Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             Self::ServerName(_) => ExtensionType::ServerName,
@@ -589,7 +589,7 @@ impl Codec for ClientExtension {
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::ECPointFormats(ref r) => r.encode(nested.buf),
+            Self::EcPointFormats(ref r) => r.encode(nested.buf),
             Self::NamedGroups(ref r) => r.encode(nested.buf),
             Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
             Self::ServerName(ref r) => r.encode(nested.buf),
@@ -617,7 +617,7 @@ impl Codec for ClientExtension {
         let mut sub = r.sub(len)?;
 
         let ext = match typ {
-            ExtensionType::ECPointFormats => Self::ECPointFormats(Vec::read(&mut sub)?),
+            ExtensionType::ECPointFormats => Self::EcPointFormats(Vec::read(&mut sub)?),
             ExtensionType::EllipticCurves => Self::NamedGroups(Vec::read(&mut sub)?),
             ExtensionType::SignatureAlgorithms => Self::SignatureAlgorithms(Vec::read(&mut sub)?),
             ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
@@ -901,7 +901,7 @@ impl ClientHelloPayload {
     pub fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
-            ClientExtension::ECPointFormats(ref req) => Some(req),
+            ClientExtension::EcPointFormats(ref req) => Some(req),
             _ => None,
         }
     }
