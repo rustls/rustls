@@ -13,7 +13,7 @@ use crate::msgs::handshake::{
     ConvertProtocolNameList, ConvertServerNameList, DistinguishedName, EcParameters,
     EcdheServerKeyExchange, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
     HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
-    NewSessionTicketPayload, NewSessionTicketPayloadTLS13, PresharedKeyBinder,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
     PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerEcdhParams,
     ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
@@ -855,8 +855,8 @@ fn get_sample_newsessionticketpayload() -> NewSessionTicketPayload {
     }
 }
 
-fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTLS13 {
-    NewSessionTicketPayloadTLS13 {
+fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTls13 {
+    NewSessionTicketPayloadTls13 {
         lifetime: 123,
         age_add: 1234,
         nonce: PayloadU8(vec![1, 2, 3]),

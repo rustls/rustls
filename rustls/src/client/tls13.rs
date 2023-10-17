@@ -16,7 +16,7 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::enums::KeyUpdateRequest;
-use crate::msgs::handshake::NewSessionTicketPayloadTLS13;
+use crate::msgs::handshake::NewSessionTicketPayloadTls13;
 use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTls13};
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
@@ -940,7 +940,7 @@ impl ExpectTraffic {
     fn handle_new_ticket_tls13(
         &mut self,
         cx: &mut ClientContext<'_>,
-        nst: &NewSessionTicketPayloadTLS13,
+        nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
         if nst.has_duplicate_extension() {
             return Err(cx.common.send_fatal_alert(
