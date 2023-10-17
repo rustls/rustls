@@ -265,6 +265,7 @@
     clippy::clone_on_ref_ptr,
     clippy::std_instead_of_core,
     clippy::use_self,
+    clippy::upper_case_acronyms,
     trivial_casts,
     trivial_numeric_casts,
     missing_docs,
