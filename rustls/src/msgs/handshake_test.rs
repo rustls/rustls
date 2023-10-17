@@ -1042,7 +1042,7 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload> {
         },
         HandshakeMessagePayload {
             typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequestTLS13(
+            payload: HandshakePayload::CertificateRequestTls13(
                 get_sample_certificaterequestpayloadtls13(),
             ),
         },

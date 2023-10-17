@@ -493,7 +493,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::CertificateRequestTLS13(..),
+                        payload: HandshakePayload::CertificateRequestTls13(..),
                         ..
                     },
                 ..
@@ -535,7 +535,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         let certreq = &require_handshake_msg!(
             m,
             HandshakeType::CertificateRequest,
-            HandshakePayload::CertificateRequestTLS13
+            HandshakePayload::CertificateRequestTls13
         )?;
         self.transcript.add_message(&m);
         debug!("Got CertificateRequest {:?}", certreq);
