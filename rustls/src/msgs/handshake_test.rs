@@ -1063,7 +1063,7 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload> {
         },
         HandshakeMessagePayload {
             typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicketTLS13(
+            payload: HandshakePayload::NewSessionTicketTls13(
                 get_sample_newsessionticketpayloadtls13(),
             ),
         },

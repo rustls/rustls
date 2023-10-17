@@ -1027,7 +1027,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::NewSessionTicketTLS13(ref new_ticket),
+                        payload: HandshakePayload::NewSessionTicketTls13(ref new_ticket),
                         ..
                     },
                 ..
@@ -1077,7 +1077,7 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
         let nst = require_handshake_msg!(
             m,
             HandshakeType::NewSessionTicket,
-            HandshakePayload::NewSessionTicketTLS13
+            HandshakePayload::NewSessionTicketTls13
         )?;
         self.0
             .handle_new_ticket_tls13(cx, nst)?;
