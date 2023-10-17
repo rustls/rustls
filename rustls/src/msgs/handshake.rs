@@ -690,7 +690,7 @@ pub enum ClientSessionTicket {
 
 #[derive(Clone, Debug)]
 pub enum ServerExtension {
-    ECPointFormats(Vec<ECPointFormat>),
+    EcPointFormats(Vec<ECPointFormat>),
     ServerNameAck,
     SessionTicketAck,
     RenegotiationInfo(PayloadU8),
@@ -709,7 +709,7 @@ pub enum ServerExtension {
 impl ServerExtension {
     pub fn get_type(&self) -> ExtensionType {
         match *self {
-            Self::ECPointFormats(_) => ExtensionType::ECPointFormats,
+            Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::ServerNameAck => ExtensionType::ServerName,
             Self::SessionTicketAck => ExtensionType::SessionTicket,
             Self::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
@@ -733,7 +733,7 @@ impl Codec for ServerExtension {
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::ECPointFormats(ref r) => r.encode(nested.buf),
+            Self::EcPointFormats(ref r) => r.encode(nested.buf),
             Self::ServerNameAck
             | Self::SessionTicketAck
             | Self::ExtendedMasterSecretAck
@@ -757,7 +757,7 @@ impl Codec for ServerExtension {
         let mut sub = r.sub(len)?;
 
         let ext = match typ {
-            ExtensionType::ECPointFormats => Self::ECPointFormats(Vec::read(&mut sub)?),
+            ExtensionType::ECPointFormats => Self::EcPointFormats(Vec::read(&mut sub)?),
             ExtensionType::ServerName => Self::ServerNameAck,
             ExtensionType::SessionTicket => Self::SessionTicketAck,
             ExtensionType::StatusRequest => Self::CertificateStatusAck,
@@ -1231,7 +1231,7 @@ impl ServerHelloPayload {
     pub fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
-            ServerExtension::ECPointFormats(ref fmts) => Some(fmts),
+            ServerExtension::EcPointFormats(ref fmts) => Some(fmts),
             _ => None,
         }
     }
