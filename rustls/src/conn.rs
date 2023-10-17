@@ -383,6 +383,7 @@ impl<Data> ConnectionCommon<Data> {
             while self.wants_write() {
                 wrlen += self.write_tls(io)?;
             }
+            io.flush()?;
 
             if !until_handshaked && wrlen > 0 {
                 return Ok((rdlen, wrlen));
@@ -413,6 +414,7 @@ impl<Data> ConnectionCommon<Data> {
                     // try a last-gasp write -- but don't predate the primary
                     // error.
                     let _ignored = self.write_tls(io);
+                    let _ignored = io.flush();
 
                     return Err(io::Error::new(io::ErrorKind::InvalidData, e));
                 }
