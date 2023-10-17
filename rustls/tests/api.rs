@@ -949,9 +949,9 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
     );
 }
 
-struct ServerCheckNoSNI {}
+struct ServerCheckNoSni {}
 
-impl ResolvesServerCert for ServerCheckNoSNI {
+impl ResolvesServerCert for ServerCheckNoSni {
     fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
         assert!(client_hello.server_name().is_none());
 
@@ -963,7 +963,7 @@ impl ResolvesServerCert for ServerCheckNoSNI {
 fn client_with_sni_disabled_does_not_send_sni() {
     for kt in ALL_KEY_TYPES.iter() {
         let mut server_config = make_server_config(*kt);
-        server_config.cert_resolver = Arc::new(ServerCheckNoSNI {});
+        server_config.cert_resolver = Arc::new(ServerCheckNoSni {});
         let server_config = Arc::new(server_config);
 
         for version in rustls::ALL_VERSIONS {
