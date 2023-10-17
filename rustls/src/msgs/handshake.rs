@@ -1461,12 +1461,12 @@ pub enum KeyExchangeAlgorithm {
 // idea and unnecessary attack surface.  Please,
 // get a grip.
 #[derive(Debug)]
-pub struct ECParameters {
+pub struct EcParameters {
     pub curve_type: ECCurveType,
     pub named_group: NamedGroup,
 }
 
-impl Codec for ECParameters {
+impl Codec for EcParameters {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.curve_type.encode(bytes);
         self.named_group.encode(bytes);
@@ -1505,14 +1505,14 @@ impl Codec for ClientECDHParams {
 
 #[derive(Debug)]
 pub struct ServerECDHParams {
-    pub curve_params: ECParameters,
+    pub curve_params: EcParameters,
     pub public: PayloadU8,
 }
 
 impl ServerECDHParams {
     pub fn new(kx: &dyn ActiveKeyExchange) -> Self {
         Self {
-            curve_params: ECParameters {
+            curve_params: EcParameters {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: kx.group(),
             },
@@ -1528,7 +1528,7 @@ impl Codec for ServerECDHParams {
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let cp = ECParameters::read(r)?;
+        let cp = EcParameters::read(r)?;
         let pb = PayloadU8::read(r)?;
 
         Ok(Self {
