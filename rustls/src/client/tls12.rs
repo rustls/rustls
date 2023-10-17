@@ -12,7 +12,7 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
     CertificatePayload, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
-    ServerECDHParams, SessionId,
+    ServerEcdhParams, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -763,7 +763,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 
         // 5a.
         let ecdh_params =
-            tls12::decode_ecdh_params::<ServerECDHParams>(cx.common, &st.server_kx.kx_params)?;
+            tls12::decode_ecdh_params::<ServerEcdhParams>(cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
         let skxg = match st.config.find_kx_group(named_group) {
             Some(skxg) => skxg,

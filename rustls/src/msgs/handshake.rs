@@ -1504,12 +1504,12 @@ impl Codec for ClientEcdhParams {
 }
 
 #[derive(Debug)]
-pub struct ServerECDHParams {
+pub struct ServerEcdhParams {
     pub curve_params: EcParameters,
     pub public: PayloadU8,
 }
 
-impl ServerECDHParams {
+impl ServerEcdhParams {
     pub fn new(kx: &dyn ActiveKeyExchange) -> Self {
         Self {
             curve_params: EcParameters {
@@ -1521,7 +1521,7 @@ impl ServerECDHParams {
     }
 }
 
-impl Codec for ServerECDHParams {
+impl Codec for ServerEcdhParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.curve_params.encode(bytes);
         self.public.encode(bytes);
@@ -1540,7 +1540,7 @@ impl Codec for ServerECDHParams {
 
 #[derive(Debug)]
 pub struct ECDHEServerKeyExchange {
-    pub params: ServerECDHParams,
+    pub params: ServerEcdhParams,
     pub dss: DigitallySignedStruct,
 }
 
@@ -1551,7 +1551,7 @@ impl Codec for ECDHEServerKeyExchange {
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let params = ServerECDHParams::read(r)?;
+        let params = ServerEcdhParams::read(r)?;
         let dss = DigitallySignedStruct::read(r)?;
 
         Ok(Self { params, dss })
