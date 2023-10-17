@@ -221,7 +221,7 @@ fn emit_client_hello_for_retry(
 
     let mut exts = vec![
         ClientExtension::SupportedVersions(supported_versions),
-        ClientExtension::ECPointFormats(ECPointFormat::SUPPORTED.to_vec()),
+        ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
         ClientExtension::NamedGroups(
             config
                 .kx_groups

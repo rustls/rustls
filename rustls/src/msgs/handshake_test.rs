@@ -363,7 +363,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
         extensions: vec![
-            ClientExtension::ECPointFormats(ECPointFormat::SUPPORTED.to_vec()),
+            ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             ClientExtension::make_sni(DnsNameRef::try_from("hello").unwrap()),
