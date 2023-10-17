@@ -97,7 +97,7 @@ fn main() {
     //
     // For this demo we spawn a thread that flips between writing a CRL that lists the client
     // certificate as revoked and a CRL that has no revoked certificates.
-    let crl_updater = CRLUpdater {
+    let crl_updater = CrlUpdater {
         sleep_duration: Duration::from_secs(update_seconds),
         crl_path: PathBuf::from(crl_path.clone()),
         pki: test_pki.clone(),
@@ -284,13 +284,13 @@ impl TestPki {
 ///
 /// In a real use case, the CRL would be updated by fetching fresh CRL data from an authoritative
 /// distribution point.
-struct CRLUpdater {
+struct CrlUpdater {
     sleep_duration: Duration,
     crl_path: PathBuf,
     pki: Arc<TestPki>,
 }
 
-impl CRLUpdater {
+impl CrlUpdater {
     fn run(self) {
         let mut revoked = true;
 
