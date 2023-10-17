@@ -2038,7 +2038,7 @@ pub enum HandshakePayload {
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificatePayload),
-    CertificateTLS13(CertificatePayloadTls13),
+    CertificateTls13(CertificatePayloadTls13),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
     CertificateRequestTLS13(CertificateRequestPayloadTls13),
@@ -2065,7 +2065,7 @@ impl HandshakePayload {
             ServerHello(ref x) => x.encode(bytes),
             HelloRetryRequest(ref x) => x.encode(bytes),
             Certificate(ref x) => x.encode(bytes),
-            CertificateTLS13(ref x) => x.encode(bytes),
+            CertificateTls13(ref x) => x.encode(bytes),
             ServerKeyExchange(ref x) => x.encode(bytes),
             ClientKeyExchange(ref x) => x.encode(bytes),
             CertificateRequest(ref x) => x.encode(bytes),
@@ -2136,7 +2136,7 @@ impl HandshakeMessagePayload {
             }
             HandshakeType::Certificate if vers == ProtocolVersion::TLSv1_3 => {
                 let p = CertificatePayloadTls13::read(&mut sub)?;
-                HandshakePayload::CertificateTLS13(p)
+                HandshakePayload::CertificateTls13(p)
             }
             HandshakeType::Certificate => {
                 HandshakePayload::Certificate(CertificatePayload::read(&mut sub)?)

@@ -476,7 +476,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::CertificateTLS13(..),
+                        payload: HandshakePayload::CertificateTls13(..),
                         ..
                     },
                 ..
@@ -604,7 +604,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
         let cert_chain = require_handshake_msg!(
             m,
             HandshakeType::Certificate,
-            HandshakePayload::CertificateTLS13
+            HandshakePayload::CertificateTls13
         )?;
         self.transcript.add_message(&m);
 
@@ -741,7 +741,7 @@ fn emit_certificate_tls13(
         version: ProtocolVersion::TLSv1_3,
         payload: MessagePayload::handshake(HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTLS13(cert_payload),
+            payload: HandshakePayload::CertificateTls13(cert_payload),
         }),
     };
     transcript.add_message(&m);

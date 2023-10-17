@@ -772,7 +772,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
-                payload: HandshakePayload::CertificateTLS13(cert_body),
+                payload: HandshakePayload::CertificateTls13(cert_body),
             }),
         };
 
@@ -887,7 +887,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
         let certp = require_handshake_msg!(
             m,
             HandshakeType::Certificate,
-            HandshakePayload::CertificateTLS13
+            HandshakePayload::CertificateTls13
         )?;
         self.transcript.add_message(&m);
 
