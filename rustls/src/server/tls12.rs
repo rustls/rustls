@@ -42,7 +42,7 @@ mod client_hello {
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::ServerEcdhParams;
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
-    use crate::msgs::handshake::{CertificateStatus, ECDHEServerKeyExchange};
+    use crate::msgs::handshake::{CertificateStatus, EcdheServerKeyExchange};
     use crate::msgs::handshake::{ClientExtension, SessionId};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
     use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
@@ -428,7 +428,7 @@ mod client_hello {
         let sigscheme = signer.scheme();
         let sig = signer.sign(&msg)?;
 
-        let skx = ServerKeyExchangePayload::ECDHE(ECDHEServerKeyExchange {
+        let skx = ServerKeyExchangePayload::ECDHE(EcdheServerKeyExchange {
             params: secdh,
             dss: DigitallySignedStruct::new(sigscheme, sig),
         });
