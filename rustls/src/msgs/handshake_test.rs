@@ -7,7 +7,7 @@ use crate::msgs::enums::{
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::msgs::handshake::{
-    CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTLS13,
+    CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTls13,
     CertificateRequestPayload, CertificateRequestPayloadTLS13, CertificateStatus,
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
     ConvertProtocolNameList, ConvertServerNameList, DistinguishedName, ECDHEServerKeyExchange,
@@ -791,8 +791,8 @@ fn get_sample_helloretryrequest() -> HelloRetryRequest {
     }
 }
 
-fn get_sample_certificatepayloadtls13() -> CertificatePayloadTLS13 {
-    CertificatePayloadTLS13 {
+fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
+    CertificatePayloadTls13 {
         context: PayloadU8(vec![1, 2, 3]),
         entries: vec![CertificateEntry {
             cert: CertificateDer::from(vec![3, 4, 5]),
