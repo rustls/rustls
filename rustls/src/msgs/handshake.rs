@@ -483,14 +483,14 @@ impl Codec for OcspCertificateStatusRequest {
 
 #[derive(Clone, Debug)]
 pub enum CertificateStatusRequest {
-    OCSP(OcspCertificateStatusRequest),
+    Ocsp(OcspCertificateStatusRequest),
     Unknown((CertificateStatusType, Payload)),
 }
 
 impl Codec for CertificateStatusRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
-            Self::OCSP(ref r) => r.encode(bytes),
+            Self::Ocsp(ref r) => r.encode(bytes),
             Self::Unknown((typ, payload)) => {
                 typ.encode(bytes);
                 payload.encode(bytes);
@@ -504,7 +504,7 @@ impl Codec for CertificateStatusRequest {
         match typ {
             CertificateStatusType::OCSP => {
                 let ocsp_req = OcspCertificateStatusRequest::read(r)?;
-                Ok(Self::OCSP(ocsp_req))
+                Ok(Self::Ocsp(ocsp_req))
             }
             _ => {
                 let data = Payload::read(r);
@@ -520,7 +520,7 @@ impl CertificateStatusRequest {
             responder_ids: Vec::new(),
             extensions: PayloadU16::empty(),
         };
-        Self::OCSP(ocsp)
+        Self::Ocsp(ocsp)
     }
 }
 
