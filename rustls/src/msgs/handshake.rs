@@ -1488,11 +1488,11 @@ impl Codec for EcParameters {
 }
 
 #[derive(Debug)]
-pub struct ClientECDHParams {
+pub struct ClientEcdhParams {
     pub public: PayloadU8,
 }
 
-impl Codec for ClientECDHParams {
+impl Codec for ClientEcdhParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.public.encode(bytes);
     }
