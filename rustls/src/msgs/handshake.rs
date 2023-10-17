@@ -1560,14 +1560,14 @@ impl Codec for EcdheServerKeyExchange {
 
 #[derive(Debug)]
 pub enum ServerKeyExchangePayload {
-    ECDHE(EcdheServerKeyExchange),
+    Ecdhe(EcdheServerKeyExchange),
     Unknown(Payload),
 }
 
 impl Codec for ServerKeyExchangePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            Self::ECDHE(ref x) => x.encode(bytes),
+            Self::Ecdhe(ref x) => x.encode(bytes),
             Self::Unknown(ref x) => x.encode(bytes),
         }
     }
