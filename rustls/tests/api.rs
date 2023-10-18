@@ -16,7 +16,8 @@ use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
-use rustls::internal::msgs::message::PlainMessage;
+use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
+use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
 use rustls::ConnectionTrafficSecrets;
 use rustls::SupportedCipherSuite;
@@ -4505,11 +4506,6 @@ fn connection_types_are_not_huge() {
     assert_lt(mem::size_of::<ServerConnection>(), 1600);
     assert_lt(mem::size_of::<ClientConnection>(), 1600);
 }
-
-use rustls::internal::msgs::{
-    handshake::ClientExtension, handshake::HandshakePayload, message::Message,
-    message::MessagePayload,
-};
 
 #[test]
 fn test_server_rejects_duplicate_sni_names() {

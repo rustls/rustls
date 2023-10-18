@@ -224,11 +224,11 @@ impl RecordLayer {
 
 /// Result of decryption.
 #[derive(Debug)]
-pub struct Decrypted {
+pub(crate) struct Decrypted {
     /// Whether the peer appears to be getting close to encrypting too many messages with this key.
-    pub want_close_before_decrypt: bool,
+    pub(crate) want_close_before_decrypt: bool,
     /// The decrypted message.
-    pub plaintext: PlainMessage,
+    pub(crate) plaintext: PlainMessage,
 }
 
 #[cfg(test)]

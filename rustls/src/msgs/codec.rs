@@ -126,7 +126,7 @@ impl Codec for u8 {
     }
 }
 
-pub fn put_u16(v: u16, out: &mut [u8]) {
+pub(crate) fn put_u16(v: u16, out: &mut [u8]) {
     let out: &mut [u8; 2] = (&mut out[..2]).try_into().unwrap();
     *out = u16::to_be_bytes(v);
 }
@@ -186,7 +186,7 @@ impl Codec for u32 {
     }
 }
 
-pub fn put_u64(v: u64, bytes: &mut [u8]) {
+pub(crate) fn put_u64(v: u64, bytes: &mut [u8]) {
     let bytes: &mut [u8; 8] = (&mut bytes[..8]).try_into().unwrap();
     *bytes = u64::to_be_bytes(v);
 }

@@ -365,20 +365,43 @@ mod ticketer;
 mod versions;
 mod webpki;
 
-/// Internal classes which may be useful outside the library.
+/// Internal classes that are used in integration tests.
 /// The contents of this section DO NOT form part of the stable interface.
+#[allow(missing_docs)]
 pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
-        pub use crate::msgs::*;
+        pub mod base {
+            pub use crate::msgs::base::{Payload, PayloadU16};
+        }
+        pub mod codec {
+            pub use crate::msgs::codec::{Codec, Reader};
+        }
+        pub mod deframer {
+            pub use crate::msgs::deframer::MessageDeframer;
+        }
+        pub mod enums {
+            pub use crate::msgs::enums::{AlertLevel, Compression, NamedGroup};
+        }
+        pub mod fragmenter {
+            pub use crate::msgs::fragmenter::MessageFragmenter;
+        }
+        pub mod handshake {
+            pub use crate::msgs::handshake::{
+                ClientExtension, ClientHelloPayload, DistinguishedName, HandshakeMessagePayload,
+                HandshakePayload, KeyShareEntry, Random, SessionId,
+            };
+        }
+        pub mod message {
+            pub use crate::msgs::message::{Message, MessagePayload, OpaqueMessage, PlainMessage};
+        }
+        pub mod persist {
+            pub use crate::msgs::persist::ServerSessionValue;
+        }
     }
-    /// Low-level TLS message decryption functions.
-    pub mod cipher {
-        pub use crate::crypto::cipher::MessageDecrypter;
-    }
-    /// Low-level TLS record layer functions.
+
     pub mod record_layer {
-        pub use crate::record_layer::{Decrypted, RecordLayer};
+        pub use crate::record_layer::RecordLayer;
     }
 }
 

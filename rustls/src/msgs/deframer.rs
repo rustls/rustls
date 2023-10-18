@@ -221,7 +221,7 @@ impl MessageDeframer {
 
     /// Allow pushing handshake messages directly into the buffer.
     #[cfg(feature = "quic")]
-    pub fn push(&mut self, version: ProtocolVersion, payload: &[u8]) -> Result<(), Error> {
+    pub(crate) fn push(&mut self, version: ProtocolVersion, payload: &[u8]) -> Result<(), Error> {
         if self.used > 0 && self.joining_hs.is_none() {
             return Err(Error::General(
                 "cannot push QUIC messages into unrelated connection".into(),
@@ -432,14 +432,14 @@ fn payload_size(buf: &[u8]) -> Result<Option<usize>, Error> {
 
 #[derive(Debug)]
 pub struct Deframed {
-    pub want_close_before_decrypt: bool,
-    pub aligned: bool,
-    pub trial_decryption_finished: bool,
+    pub(crate) want_close_before_decrypt: bool,
+    pub(crate) aligned: bool,
+    pub(crate) trial_decryption_finished: bool,
     pub message: PlainMessage,
 }
 
 #[derive(Debug)]
-pub enum DeframerError {
+pub(crate) enum DeframerError {
     HandshakePayloadSizeTooLarge,
 }
 
