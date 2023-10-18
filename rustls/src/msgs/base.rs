@@ -135,10 +135,6 @@ impl PayloadU8 {
     pub(crate) fn empty() -> Self {
         Self(Vec::new())
     }
-
-    pub(crate) fn into_inner(self) -> Vec<u8> {
-        self.0
-    }
 }
 
 impl Codec for PayloadU8 {
