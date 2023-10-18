@@ -358,16 +358,20 @@ impl ConvertProtocolNameList for Vec<ProtocolName> {
 // --- TLS 1.3 Key shares ---
 #[derive(Clone, Debug)]
 pub struct KeyShareEntry {
-    pub group: NamedGroup,
-    pub payload: PayloadU16,
+    pub(crate) group: NamedGroup,
+    pub(crate) payload: PayloadU16,
 }
 
 impl KeyShareEntry {
-    pub(crate) fn new(group: NamedGroup, payload: &[u8]) -> Self {
+    pub fn new(group: NamedGroup, payload: &[u8]) -> Self {
         Self {
             group,
             payload: PayloadU16::new(payload.to_vec()),
         }
+    }
+
+    pub fn group(&self) -> NamedGroup {
+        self.group
     }
 }
 

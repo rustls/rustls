@@ -372,7 +372,7 @@ pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub mod base {
-            pub use crate::msgs::base::{Payload, PayloadU16};
+            pub use crate::msgs::base::Payload;
         }
         pub mod codec {
             pub use crate::msgs::codec::{Codec, Reader};
