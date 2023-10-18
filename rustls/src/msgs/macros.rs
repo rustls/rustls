@@ -67,6 +67,7 @@ macro_rules! enum_builder {
                 }
             }
 
+            #[allow(dead_code)] // generated irrespective if there are callers
             $enum_vis fn as_str(&self) -> Option<&'static str> {
                 match self {
                     $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
