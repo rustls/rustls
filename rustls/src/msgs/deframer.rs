@@ -438,11 +438,6 @@ pub struct Deframed {
     pub message: PlainMessage,
 }
 
-#[derive(Debug)]
-pub(crate) enum DeframerError {
-    HandshakePayloadSizeTooLarge,
-}
-
 const HEADER_SIZE: usize = 1 + 3;
 
 /// TLS allows for handshake messages of up to 16MB.  We
