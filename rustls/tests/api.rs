@@ -3718,7 +3718,6 @@ mod test_quic {
         .unwrap();
 
         use rustls::crypto::ring::RING;
-        use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
@@ -3747,10 +3746,10 @@ mod test_quic {
                     ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
                     ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
                     ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                    ClientExtension::KeyShare(vec![KeyShareEntry {
-                        group: NamedGroup::X25519,
-                        payload: PayloadU16::new(kx.as_ref().to_vec()),
-                    }]),
+                    ClientExtension::KeyShare(vec![KeyShareEntry::new(
+                        NamedGroup::X25519,
+                        kx.as_ref(),
+                    )]),
                 ],
             }),
         });
@@ -3773,7 +3772,6 @@ mod test_quic {
         let server_config = Arc::new(server_config);
 
         use rustls::crypto::ring::RING;
-        use rustls::internal::msgs::base::PayloadU16;
         use rustls::internal::msgs::enums::{Compression, NamedGroup};
         use rustls::internal::msgs::handshake::{
             ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
@@ -3808,10 +3806,10 @@ mod test_quic {
                 extensions: vec![
                     ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
                     ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                    ClientExtension::KeyShare(vec![KeyShareEntry {
-                        group: NamedGroup::X25519,
-                        payload: PayloadU16::new(kx.as_ref().to_vec()),
-                    }]),
+                    ClientExtension::KeyShare(vec![KeyShareEntry::new(
+                        NamedGroup::X25519,
+                        kx.as_ref(),
+                    )]),
                 ],
             }),
         });
@@ -4218,7 +4216,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
                     .get_keyshare_extension()
                     .expect("missing key share extension");
                 assert_eq!(keyshares.len(), 1);
-                assert_eq!(keyshares[0].group, rustls::NamedGroup::secp384r1);
+                assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
 
                 ch.session_id = different_session_id;
                 *encoded = Payload::new(parsed.get_encoding());
