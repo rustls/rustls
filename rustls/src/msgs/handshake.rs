@@ -31,10 +31,10 @@ use std::collections;
 /// the `PayloadU8` or `PayloadU16` types. This is typically used for types where we don't need
 /// anything other than access to the underlying bytes.
 macro_rules! wrapped_payload(
-  ($(#[$comment:meta])* $name:ident, $inner:ident,) => {
+  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident,) => {
     $(#[$comment])*
     #[derive(Clone, Debug)]
-    pub struct $name($inner);
+    $vis struct $name($inner);
 
     impl From<Vec<u8>> for $name {
         fn from(v: Vec<u8>) -> Self {
@@ -315,7 +315,7 @@ impl ConvertServerNameList for [ServerName] {
     }
 }
 
-wrapped_payload!(ProtocolName, PayloadU8,);
+wrapped_payload!(pub struct ProtocolName, PayloadU8,);
 
 impl TlsListElement for ProtocolName {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -417,7 +417,7 @@ impl TlsListElement for PresharedKeyIdentity {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-wrapped_payload!(PresharedKeyBinder, PayloadU8,);
+wrapped_payload!(pub struct PresharedKeyBinder, PayloadU8,);
 
 impl TlsListElement for PresharedKeyBinder {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -454,7 +454,7 @@ impl Codec for PresharedKeyOffer {
 }
 
 // --- RFC6066 certificate status request ---
-wrapped_payload!(ResponderId, PayloadU16,);
+wrapped_payload!(pub struct ResponderId, PayloadU16,);
 
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -1677,7 +1677,7 @@ wrapped_payload!(
     ///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
     /// }
     /// ```
-    DistinguishedName,
+    pub struct DistinguishedName,
     PayloadU16,
 );
 
