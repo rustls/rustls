@@ -75,7 +75,6 @@ fn accepts_short_sessionid() {
     println!("{:?}", sess);
 
     assert!(!sess.is_empty());
-    assert_eq!(sess.len(), 1);
     assert!(!rd.any_left());
 }
 
@@ -87,7 +86,6 @@ fn accepts_empty_sessionid() {
     println!("{:?}", sess);
 
     assert!(sess.is_empty());
-    assert_eq!(sess.len(), 0);
     assert!(!rd.any_left());
 }
 
