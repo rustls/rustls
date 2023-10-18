@@ -8,8 +8,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: HashAlgorithm;
-    EnumVal{
+    pub enum HashAlgorithm {
         NONE => 0x00,
         MD5 => 0x01,
         SHA1 => 0x02,
@@ -25,8 +24,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: ClientCertificateType;
-    EnumVal{
+    pub enum ClientCertificateType {
         RSASign => 0x01,
         DSSSign => 0x02,
         RSAFixedDH => 0x03,
@@ -45,8 +43,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: Compression;
-    EnumVal{
+    pub enum Compression {
         Null => 0x00,
         Deflate => 0x01,
         LSZ => 0x40
@@ -58,8 +55,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: AlertLevel;
-    EnumVal{
+    pub enum AlertLevel {
         Warning => 0x01,
         Fatal => 0x02
     }
@@ -70,8 +66,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: HeartbeatMessageType;
-    EnumVal{
+    pub enum HeartbeatMessageType {
         Request => 0x01,
         Response => 0x02
     }
@@ -82,8 +77,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U16
-    EnumName: ExtensionType;
-    EnumVal{
+    pub enum ExtensionType {
         ServerName => 0x0000,
         MaxFragmentLength => 0x0001,
         ClientCertificateUrl => 0x0002,
@@ -129,8 +123,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: ServerNameType;
-    EnumVal{
+    pub enum ServerNameType {
         HostName => 0x00
     }
 }
@@ -145,8 +138,7 @@ enum_builder! {
     /// Rustls supports. See [`crate::crypto::ring::kx_group`] for the list of supported
     /// elliptic curve groups.
     @U16
-    EnumName: NamedCurve;
-    EnumVal{
+    pub enum NamedCurve {
         sect163k1 => 0x0001,
         sect163r1 => 0x0002,
         sect163r2 => 0x0003,
@@ -187,8 +179,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U16
-    EnumName: NamedGroup;
-    EnumVal{
+    pub enum NamedGroup {
         secp256r1 => 0x0017,
         secp384r1 => 0x0018,
         secp521r1 => 0x0019,
@@ -207,8 +198,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: ECPointFormat;
-    EnumVal{
+    pub enum ECPointFormat {
         Uncompressed => 0x00,
         ANSIX962CompressedPrime => 0x01,
         ANSIX962CompressedChar2 => 0x02
@@ -224,8 +214,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: HeartbeatMode;
-    EnumVal{
+    pub enum HeartbeatMode {
         PeerAllowedToSend => 0x01,
         PeerNotAllowedToSend => 0x02
     }
@@ -236,8 +225,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: ECCurveType;
-    EnumVal{
+    pub enum ECCurveType {
         ExplicitPrime => 0x01,
         ExplicitChar2 => 0x02,
         NamedCurve => 0x03
@@ -249,8 +237,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: PSKKeyExchangeMode;
-    EnumVal{
+    pub enum PSKKeyExchangeMode {
         PSK_KE => 0x00,
         PSK_DHE_KE => 0x01
     }
@@ -261,8 +248,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: KeyUpdateRequest;
-    EnumVal{
+    pub enum KeyUpdateRequest {
         UpdateNotRequested => 0x00,
         UpdateRequested => 0x01
     }
@@ -273,8 +259,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: CertificateStatusType;
-    EnumVal{
+    pub enum CertificateStatusType {
         OCSP => 0x01
     }
 }
