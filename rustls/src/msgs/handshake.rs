@@ -61,7 +61,7 @@ macro_rules! wrapped_payload(
 );
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub struct Random(pub [u8; 32]);
+pub struct Random(pub(crate) [u8; 32]);
 
 impl fmt::Debug for Random {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -94,13 +94,15 @@ impl Codec for Random {
 }
 
 impl Random {
-    pub fn new(provider: &'static dyn CryptoProvider) -> Result<Self, rand::GetRandomFailed> {
+    pub(crate) fn new(
+        provider: &'static dyn CryptoProvider,
+    ) -> Result<Self, rand::GetRandomFailed> {
         let mut data = [0u8; 32];
         provider.fill_random(&mut data)?;
         Ok(Self(data))
     }
 
-    pub fn write_slice(&self, bytes: &mut [u8]) {
+    pub(crate) fn write_slice(&self, bytes: &mut [u8]) {
         let buf = self.get_encoding();
         bytes.copy_from_slice(&buf);
     }
@@ -171,26 +173,26 @@ impl SessionId {
         Ok(Self { data, len: 32 })
     }
 
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             data: [0u8; 32],
             len: 0,
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.len
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct UnknownExtension {
-    pub typ: ExtensionType,
-    pub payload: Payload,
+    pub(crate) typ: ExtensionType,
+    pub(crate) payload: Payload,
 }
 
 impl UnknownExtension {
@@ -217,13 +219,13 @@ impl TlsListElement for SignatureScheme {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerNamePayload {
+pub(crate) enum ServerNamePayload {
     HostName(DnsName),
     Unknown(Payload),
 }
 
 impl ServerNamePayload {
-    pub fn new_hostname(hostname: DnsName) -> Self {
+    pub(crate) fn new_hostname(hostname: DnsName) -> Self {
         Self::HostName(hostname)
     }
 
@@ -255,8 +257,8 @@ impl ServerNamePayload {
 
 #[derive(Clone, Debug)]
 pub struct ServerName {
-    pub typ: ServerNameType,
-    pub payload: ServerNamePayload,
+    pub(crate) typ: ServerNameType,
+    pub(crate) payload: ServerNamePayload,
 }
 
 impl Codec for ServerName {
@@ -281,7 +283,7 @@ impl TlsListElement for ServerName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-pub trait ConvertServerNameList {
+pub(crate) trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
     fn get_single_hostname(&self) -> Option<DnsNameRef>;
 }
@@ -321,7 +323,7 @@ impl TlsListElement for ProtocolName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-pub trait ConvertProtocolNameList {
+pub(crate) trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
     fn to_slices(&self) -> Vec<&[u8]>;
     fn as_single_slice(&self) -> Option<&[u8]>;
@@ -361,7 +363,7 @@ pub struct KeyShareEntry {
 }
 
 impl KeyShareEntry {
-    pub fn new(group: NamedGroup, payload: &[u8]) -> Self {
+    pub(crate) fn new(group: NamedGroup, payload: &[u8]) -> Self {
         Self {
             group,
             payload: PayloadU16::new(payload.to_vec()),
@@ -385,13 +387,13 @@ impl Codec for KeyShareEntry {
 
 // --- TLS 1.3 PresharedKey offers ---
 #[derive(Clone, Debug)]
-pub struct PresharedKeyIdentity {
-    pub identity: PayloadU16,
-    pub obfuscated_ticket_age: u32,
+pub(crate) struct PresharedKeyIdentity {
+    pub(crate) identity: PayloadU16,
+    pub(crate) obfuscated_ticket_age: u32,
 }
 
 impl PresharedKeyIdentity {
-    pub fn new(id: Vec<u8>, age: u32) -> Self {
+    pub(crate) fn new(id: Vec<u8>, age: u32) -> Self {
         Self {
             identity: PayloadU16::new(id),
             obfuscated_ticket_age: age,
@@ -417,7 +419,7 @@ impl TlsListElement for PresharedKeyIdentity {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-wrapped_payload!(pub struct PresharedKeyBinder, PayloadU8,);
+wrapped_payload!(pub(crate) struct PresharedKeyBinder, PayloadU8,);
 
 impl TlsListElement for PresharedKeyBinder {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -425,13 +427,13 @@ impl TlsListElement for PresharedKeyBinder {
 
 #[derive(Clone, Debug)]
 pub struct PresharedKeyOffer {
-    pub identities: Vec<PresharedKeyIdentity>,
-    pub binders: Vec<PresharedKeyBinder>,
+    pub(crate) identities: Vec<PresharedKeyIdentity>,
+    pub(crate) binders: Vec<PresharedKeyBinder>,
 }
 
 impl PresharedKeyOffer {
     /// Make a new one with one entry.
-    pub fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> Self {
+    pub(crate) fn new(id: PresharedKeyIdentity, binder: Vec<u8>) -> Self {
         Self {
             identities: vec![id],
             binders: vec![PresharedKeyBinder::from(binder)],
@@ -454,7 +456,7 @@ impl Codec for PresharedKeyOffer {
 }
 
 // --- RFC6066 certificate status request ---
-wrapped_payload!(pub struct ResponderId, PayloadU16,);
+wrapped_payload!(pub(crate) struct ResponderId, PayloadU16,);
 
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
@@ -462,8 +464,8 @@ impl TlsListElement for ResponderId {
 
 #[derive(Clone, Debug)]
 pub struct OcspCertificateStatusRequest {
-    pub responder_ids: Vec<ResponderId>,
-    pub extensions: PayloadU16,
+    pub(crate) responder_ids: Vec<ResponderId>,
+    pub(crate) extensions: PayloadU16,
 }
 
 impl Codec for OcspCertificateStatusRequest {
@@ -515,7 +517,7 @@ impl Codec for CertificateStatusRequest {
 }
 
 impl CertificateStatusRequest {
-    pub fn build_ocsp() -> Self {
+    pub(crate) fn build_ocsp() -> Self {
         let ocsp = OcspCertificateStatusRequest {
             responder_ids: Vec::new(),
             extensions: PayloadU16::empty(),
@@ -560,7 +562,7 @@ pub enum ClientExtension {
 }
 
 impl ClientExtension {
-    pub fn get_type(&self) -> ExtensionType {
+    pub(crate) fn get_type(&self) -> ExtensionType {
         match *self {
             Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
@@ -672,7 +674,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: DnsNameRef) -> DnsName {
 
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
-    pub fn make_sni(dns_name: DnsNameRef) -> Self {
+    pub(crate) fn make_sni(dns_name: DnsNameRef) -> Self {
         let name = ServerName {
             typ: ServerNameType::HostName,
             payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),
@@ -707,7 +709,7 @@ pub enum ServerExtension {
 }
 
 impl ServerExtension {
-    pub fn get_type(&self) -> ExtensionType {
+    pub(crate) fn get_type(&self) -> ExtensionType {
         match *self {
             Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::ServerNameAck => ExtensionType::ServerName,
@@ -783,11 +785,11 @@ impl Codec for ServerExtension {
 }
 
 impl ServerExtension {
-    pub fn make_alpn(proto: &[&[u8]]) -> Self {
+    pub(crate) fn make_alpn(proto: &[&[u8]]) -> Self {
         Self::Protocols(Vec::from_slices(proto))
     }
 
-    pub fn make_empty_renegotiation_info() -> Self {
+    pub(crate) fn make_empty_renegotiation_info() -> Self {
         let empty = Vec::new();
         Self::RenegotiationInfo(PayloadU8::new(empty))
     }
@@ -853,7 +855,7 @@ impl TlsListElement for ClientExtension {
 impl ClientHelloPayload {
     /// Returns true if there is more than one extension of a given
     /// type.
-    pub fn has_duplicate_extension(&self) -> bool {
+    pub(crate) fn has_duplicate_extension(&self) -> bool {
         let mut seen = collections::HashSet::new();
 
         for ext in &self.extensions {
@@ -868,13 +870,13 @@ impl ClientHelloPayload {
         false
     }
 
-    pub fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
+    pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
         self.extensions
             .iter()
             .find(|x| x.get_type() == ext)
     }
 
-    pub fn get_sni_extension(&self) -> Option<&[ServerName]> {
+    pub(crate) fn get_sni_extension(&self) -> Option<&[ServerName]> {
         let ext = self.find_extension(ExtensionType::ServerName)?;
         match *ext {
             ClientExtension::ServerName(ref req) => Some(req),
@@ -890,7 +892,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_namedgroups_extension(&self) -> Option<&[NamedGroup]> {
+    pub(crate) fn get_namedgroups_extension(&self) -> Option<&[NamedGroup]> {
         let ext = self.find_extension(ExtensionType::EllipticCurves)?;
         match *ext {
             ClientExtension::NamedGroups(ref req) => Some(req),
@@ -898,7 +900,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
+    pub(crate) fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ClientExtension::EcPointFormats(ref req) => Some(req),
@@ -906,7 +908,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
+    pub(crate) fn get_alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
             ClientExtension::Protocols(ref req) => Some(req),
@@ -914,7 +916,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_quic_params_extension(&self) -> Option<Vec<u8>> {
+    pub(crate) fn get_quic_params_extension(&self) -> Option<Vec<u8>> {
         let ext = self
             .find_extension(ExtensionType::TransportParameters)
             .or_else(|| self.find_extension(ExtensionType::TransportParametersDraft))?;
@@ -925,11 +927,11 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_ticket_extension(&self) -> Option<&ClientExtension> {
+    pub(crate) fn get_ticket_extension(&self) -> Option<&ClientExtension> {
         self.find_extension(ExtensionType::SessionTicket)
     }
 
-    pub fn get_versions_extension(&self) -> Option<&[ProtocolVersion]> {
+    pub(crate) fn get_versions_extension(&self) -> Option<&[ProtocolVersion]> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             ClientExtension::SupportedVersions(ref vers) => Some(vers),
@@ -945,7 +947,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn has_keyshare_extension_with_duplicates(&self) -> bool {
+    pub(crate) fn has_keyshare_extension_with_duplicates(&self) -> bool {
         if let Some(entries) = self.get_keyshare_extension() {
             let mut seen = collections::HashSet::new();
 
@@ -961,7 +963,7 @@ impl ClientHelloPayload {
         false
     }
 
-    pub fn get_psk(&self) -> Option<&PresharedKeyOffer> {
+    pub(crate) fn get_psk(&self) -> Option<&PresharedKeyOffer> {
         let ext = self.find_extension(ExtensionType::PreSharedKey)?;
         match *ext {
             ClientExtension::PresharedKey(ref psk) => Some(psk),
@@ -969,13 +971,13 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn check_psk_ext_is_last(&self) -> bool {
+    pub(crate) fn check_psk_ext_is_last(&self) -> bool {
         self.extensions
             .last()
             .map_or(false, |ext| ext.get_type() == ExtensionType::PreSharedKey)
     }
 
-    pub fn get_psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
+    pub(crate) fn get_psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
         let ext = self.find_extension(ExtensionType::PSKKeyExchangeModes)?;
         match *ext {
             ClientExtension::PresharedKeyModes(ref psk_modes) => Some(psk_modes),
@@ -983,32 +985,32 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
+    pub(crate) fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
         self.get_psk_modes()
             .map(|modes| modes.contains(&mode))
             .unwrap_or(false)
     }
 
-    pub fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
+    pub(crate) fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
         let last_extension = self.extensions.last_mut();
         if let Some(ClientExtension::PresharedKey(ref mut offer)) = last_extension {
             offer.binders[0] = PresharedKeyBinder::from(binder.into());
         }
     }
 
-    pub fn ems_support_offered(&self) -> bool {
+    pub(crate) fn ems_support_offered(&self) -> bool {
         self.find_extension(ExtensionType::ExtendedMasterSecret)
             .is_some()
     }
 
-    pub fn early_data_extension_offered(&self) -> bool {
+    pub(crate) fn early_data_extension_offered(&self) -> bool {
         self.find_extension(ExtensionType::EarlyData)
             .is_some()
     }
 }
 
 #[derive(Debug)]
-pub enum HelloRetryExtension {
+pub(crate) enum HelloRetryExtension {
     KeyShare(NamedGroup),
     Cookie(PayloadU16),
     SupportedVersions(ProtocolVersion),
@@ -1016,7 +1018,7 @@ pub enum HelloRetryExtension {
 }
 
 impl HelloRetryExtension {
-    pub fn get_type(&self) -> ExtensionType {
+    pub(crate) fn get_type(&self) -> ExtensionType {
         match *self {
             Self::KeyShare(_) => ExtensionType::KeyShare,
             Self::Cookie(_) => ExtensionType::Cookie,
@@ -1064,10 +1066,10 @@ impl TlsListElement for HelloRetryExtension {
 
 #[derive(Debug)]
 pub struct HelloRetryRequest {
-    pub legacy_version: ProtocolVersion,
+    pub(crate) legacy_version: ProtocolVersion,
     pub session_id: SessionId,
-    pub cipher_suite: CipherSuite,
-    pub extensions: Vec<HelloRetryExtension>,
+    pub(crate) cipher_suite: CipherSuite,
+    pub(crate) extensions: Vec<HelloRetryExtension>,
 }
 
 impl Codec for HelloRetryRequest {
@@ -1101,7 +1103,7 @@ impl Codec for HelloRetryRequest {
 impl HelloRetryRequest {
     /// Returns true if there is more than one extension of a given
     /// type.
-    pub fn has_duplicate_extension(&self) -> bool {
+    pub(crate) fn has_duplicate_extension(&self) -> bool {
         let mut seen = collections::HashSet::new();
 
         for ext in &self.extensions {
@@ -1116,7 +1118,7 @@ impl HelloRetryRequest {
         false
     }
 
-    pub fn has_unknown_extension(&self) -> bool {
+    pub(crate) fn has_unknown_extension(&self) -> bool {
         self.extensions.iter().any(|ext| {
             ext.get_type() != ExtensionType::KeyShare
                 && ext.get_type() != ExtensionType::SupportedVersions
@@ -1138,7 +1140,7 @@ impl HelloRetryRequest {
         }
     }
 
-    pub fn get_cookie(&self) -> Option<&PayloadU16> {
+    pub(crate) fn get_cookie(&self) -> Option<&PayloadU16> {
         let ext = self.find_extension(ExtensionType::Cookie)?;
         match *ext {
             HelloRetryExtension::Cookie(ref ck) => Some(ck),
@@ -1146,7 +1148,7 @@ impl HelloRetryRequest {
         }
     }
 
-    pub fn get_supported_versions(&self) -> Option<ProtocolVersion> {
+    pub(crate) fn get_supported_versions(&self) -> Option<ProtocolVersion> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             HelloRetryExtension::SupportedVersions(ver) => Some(ver),
@@ -1157,12 +1159,12 @@ impl HelloRetryRequest {
 
 #[derive(Debug)]
 pub struct ServerHelloPayload {
-    pub legacy_version: ProtocolVersion,
-    pub random: Random,
-    pub session_id: SessionId,
-    pub cipher_suite: CipherSuite,
-    pub compression_method: Compression,
-    pub extensions: Vec<ServerExtension>,
+    pub(crate) legacy_version: ProtocolVersion,
+    pub(crate) random: Random,
+    pub(crate) session_id: SessionId,
+    pub(crate) cipher_suite: CipherSuite,
+    pub(crate) compression_method: Compression,
+    pub(crate) extensions: Vec<ServerExtension>,
 }
 
 impl Codec for ServerHelloPayload {
@@ -1212,7 +1214,7 @@ impl HasServerExtensions for ServerHelloPayload {
 }
 
 impl ServerHelloPayload {
-    pub fn get_key_share(&self) -> Option<&KeyShareEntry> {
+    pub(crate) fn get_key_share(&self) -> Option<&KeyShareEntry> {
         let ext = self.find_extension(ExtensionType::KeyShare)?;
         match *ext {
             ServerExtension::KeyShare(ref share) => Some(share),
@@ -1220,7 +1222,7 @@ impl ServerHelloPayload {
         }
     }
 
-    pub fn get_psk_index(&self) -> Option<u16> {
+    pub(crate) fn get_psk_index(&self) -> Option<u16> {
         let ext = self.find_extension(ExtensionType::PreSharedKey)?;
         match *ext {
             ServerExtension::PresharedKey(ref index) => Some(*index),
@@ -1228,7 +1230,7 @@ impl ServerHelloPayload {
         }
     }
 
-    pub fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
+    pub(crate) fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ServerExtension::EcPointFormats(ref fmts) => Some(fmts),
@@ -1236,12 +1238,12 @@ impl ServerHelloPayload {
         }
     }
 
-    pub fn ems_support_acked(&self) -> bool {
+    pub(crate) fn ems_support_acked(&self) -> bool {
         self.find_extension(ExtensionType::ExtendedMasterSecret)
             .is_some()
     }
 
-    pub fn get_supported_versions(&self) -> Option<ProtocolVersion> {
+    pub(crate) fn get_supported_versions(&self) -> Option<ProtocolVersion> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             ServerExtension::SupportedVersions(vers) => Some(vers),
@@ -1250,7 +1252,7 @@ impl ServerHelloPayload {
     }
 }
 
-pub type CertificatePayload = Vec<CertificateDer<'static>>;
+pub(crate) type CertificatePayload = Vec<CertificateDer<'static>>;
 
 impl TlsListElement for CertificateDer<'_> {
     const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
@@ -1261,20 +1263,20 @@ impl TlsListElement for CertificateDer<'_> {
 // context-free any more.
 
 #[derive(Debug)]
-pub enum CertificateExtension {
+pub(crate) enum CertificateExtension {
     CertificateStatus(CertificateStatus),
     Unknown(UnknownExtension),
 }
 
 impl CertificateExtension {
-    pub fn get_type(&self) -> ExtensionType {
+    pub(crate) fn get_type(&self) -> ExtensionType {
         match *self {
             Self::CertificateStatus(_) => ExtensionType::StatusRequest,
             Self::Unknown(ref r) => r.typ,
         }
     }
 
-    pub fn get_cert_status(&self) -> Option<&Vec<u8>> {
+    pub(crate) fn get_cert_status(&self) -> Option<&Vec<u8>> {
         match *self {
             Self::CertificateStatus(ref cs) => Some(&cs.ocsp_response.0),
             _ => None,
@@ -1316,9 +1318,9 @@ impl TlsListElement for CertificateExtension {
 }
 
 #[derive(Debug)]
-pub struct CertificateEntry {
-    pub cert: CertificateDer<'static>,
-    pub exts: Vec<CertificateExtension>,
+pub(crate) struct CertificateEntry {
+    pub(crate) cert: CertificateDer<'static>,
+    pub(crate) exts: Vec<CertificateExtension>,
 }
 
 impl Codec for CertificateEntry {
@@ -1336,14 +1338,14 @@ impl Codec for CertificateEntry {
 }
 
 impl CertificateEntry {
-    pub fn new(cert: CertificateDer<'static>) -> Self {
+    pub(crate) fn new(cert: CertificateDer<'static>) -> Self {
         Self {
             cert,
             exts: Vec::new(),
         }
     }
 
-    pub fn has_duplicate_extension(&self) -> bool {
+    pub(crate) fn has_duplicate_extension(&self) -> bool {
         let mut seen = collections::HashSet::new();
 
         for ext in &self.exts {
@@ -1358,13 +1360,13 @@ impl CertificateEntry {
         false
     }
 
-    pub fn has_unknown_extension(&self) -> bool {
+    pub(crate) fn has_unknown_extension(&self) -> bool {
         self.exts
             .iter()
             .any(|ext| ext.get_type() != ExtensionType::StatusRequest)
     }
 
-    pub fn get_ocsp_response(&self) -> Option<&Vec<u8>> {
+    pub(crate) fn get_ocsp_response(&self) -> Option<&Vec<u8>> {
         self.exts
             .iter()
             .find(|ext| ext.get_type() == ExtensionType::StatusRequest)
@@ -1378,8 +1380,8 @@ impl TlsListElement for CertificateEntry {
 
 #[derive(Debug)]
 pub struct CertificatePayloadTls13 {
-    pub context: PayloadU8,
-    pub entries: Vec<CertificateEntry>,
+    pub(crate) context: PayloadU8,
+    pub(crate) entries: Vec<CertificateEntry>,
 }
 
 impl Codec for CertificatePayloadTls13 {
@@ -1397,14 +1399,14 @@ impl Codec for CertificatePayloadTls13 {
 }
 
 impl CertificatePayloadTls13 {
-    pub fn new(entries: Vec<CertificateEntry>) -> Self {
+    pub(crate) fn new(entries: Vec<CertificateEntry>) -> Self {
         Self {
             context: PayloadU8::empty(),
             entries,
         }
     }
 
-    pub fn any_entry_has_duplicate_extension(&self) -> bool {
+    pub(crate) fn any_entry_has_duplicate_extension(&self) -> bool {
         for entry in &self.entries {
             if entry.has_duplicate_extension() {
                 return true;
@@ -1414,7 +1416,7 @@ impl CertificatePayloadTls13 {
         false
     }
 
-    pub fn any_entry_has_unknown_extension(&self) -> bool {
+    pub(crate) fn any_entry_has_unknown_extension(&self) -> bool {
         for entry in &self.entries {
             if entry.has_unknown_extension() {
                 return true;
@@ -1424,7 +1426,7 @@ impl CertificatePayloadTls13 {
         false
     }
 
-    pub fn any_entry_has_extension(&self) -> bool {
+    pub(crate) fn any_entry_has_extension(&self) -> bool {
         for entry in &self.entries {
             if !entry.exts.is_empty() {
                 return true;
@@ -1434,7 +1436,7 @@ impl CertificatePayloadTls13 {
         false
     }
 
-    pub fn get_end_entity_ocsp(&self) -> Vec<u8> {
+    pub(crate) fn get_end_entity_ocsp(&self) -> Vec<u8> {
         self.entries
             .first()
             .and_then(CertificateEntry::get_ocsp_response)
@@ -1442,7 +1444,7 @@ impl CertificatePayloadTls13 {
             .unwrap_or_default()
     }
 
-    pub fn convert(&self) -> CertificatePayload {
+    pub(crate) fn convert(&self) -> CertificatePayload {
         let mut ret = Vec::new();
         for entry in &self.entries {
             ret.push(entry.cert.clone());
@@ -1461,9 +1463,9 @@ pub enum KeyExchangeAlgorithm {
 // idea and unnecessary attack surface.  Please,
 // get a grip.
 #[derive(Debug)]
-pub struct EcParameters {
-    pub curve_type: ECCurveType,
-    pub named_group: NamedGroup,
+pub(crate) struct EcParameters {
+    pub(crate) curve_type: ECCurveType,
+    pub(crate) named_group: NamedGroup,
 }
 
 impl Codec for EcParameters {
@@ -1488,8 +1490,8 @@ impl Codec for EcParameters {
 }
 
 #[derive(Debug)]
-pub struct ClientEcdhParams {
-    pub public: PayloadU8,
+pub(crate) struct ClientEcdhParams {
+    pub(crate) public: PayloadU8,
 }
 
 impl Codec for ClientEcdhParams {
@@ -1504,13 +1506,13 @@ impl Codec for ClientEcdhParams {
 }
 
 #[derive(Debug)]
-pub struct ServerEcdhParams {
-    pub curve_params: EcParameters,
-    pub public: PayloadU8,
+pub(crate) struct ServerEcdhParams {
+    pub(crate) curve_params: EcParameters,
+    pub(crate) public: PayloadU8,
 }
 
 impl ServerEcdhParams {
-    pub fn new(kx: &dyn ActiveKeyExchange) -> Self {
+    pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
         Self {
             curve_params: EcParameters {
                 curve_type: ECCurveType::NamedCurve,
@@ -1540,8 +1542,8 @@ impl Codec for ServerEcdhParams {
 
 #[derive(Debug)]
 pub struct EcdheServerKeyExchange {
-    pub params: ServerEcdhParams,
-    pub dss: DigitallySignedStruct,
+    pub(crate) params: ServerEcdhParams,
+    pub(crate) dss: DigitallySignedStruct,
 }
 
 impl Codec for EcdheServerKeyExchange {
@@ -1580,7 +1582,10 @@ impl Codec for ServerKeyExchangePayload {
 }
 
 impl ServerKeyExchangePayload {
-    pub fn unwrap_given_kxa(&self, kxa: KeyExchangeAlgorithm) -> Option<EcdheServerKeyExchange> {
+    pub(crate) fn unwrap_given_kxa(
+        &self,
+        kxa: KeyExchangeAlgorithm,
+    ) -> Option<EcdheServerKeyExchange> {
         if let Self::Unknown(ref unk) = *self {
             let mut rd = Reader::init(&unk.0);
 
@@ -1603,7 +1608,7 @@ impl TlsListElement for ServerExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-pub trait HasServerExtensions {
+pub(crate) trait HasServerExtensions {
     fn get_extensions(&self) -> &[ServerExtension];
 
     /// Returns true if there is more than one extension of a given
@@ -1690,7 +1695,7 @@ impl DistinguishedName {
     /// use x509_parser::prelude::FromDer;
     /// println!("{}", x509_parser::x509::X509Name::from_der(dn.as_ref())?.1);
     /// ```
-    pub fn in_sequence(bytes: &[u8]) -> Self {
+    pub(crate) fn in_sequence(bytes: &[u8]) -> Self {
         let mut wrapped = bytes.to_owned();
         x509::wrap_in_sequence(&mut wrapped);
         Self(PayloadU16::new(wrapped))
@@ -1703,9 +1708,9 @@ impl TlsListElement for DistinguishedName {
 
 #[derive(Debug)]
 pub struct CertificateRequestPayload {
-    pub certtypes: Vec<ClientCertificateType>,
-    pub sigschemes: Vec<SignatureScheme>,
-    pub canames: Vec<DistinguishedName>,
+    pub(crate) certtypes: Vec<ClientCertificateType>,
+    pub(crate) sigschemes: Vec<SignatureScheme>,
+    pub(crate) canames: Vec<DistinguishedName>,
 }
 
 impl Codec for CertificateRequestPayload {
@@ -1734,14 +1739,14 @@ impl Codec for CertificateRequestPayload {
 }
 
 #[derive(Debug)]
-pub enum CertReqExtension {
+pub(crate) enum CertReqExtension {
     SignatureAlgorithms(Vec<SignatureScheme>),
     AuthorityNames(Vec<DistinguishedName>),
     Unknown(UnknownExtension),
 }
 
 impl CertReqExtension {
-    pub fn get_type(&self) -> ExtensionType {
+    pub(crate) fn get_type(&self) -> ExtensionType {
         match *self {
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             Self::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
@@ -1793,8 +1798,8 @@ impl TlsListElement for CertReqExtension {
 
 #[derive(Debug)]
 pub struct CertificateRequestPayloadTls13 {
-    pub context: PayloadU8,
-    pub extensions: Vec<CertReqExtension>,
+    pub(crate) context: PayloadU8,
+    pub(crate) extensions: Vec<CertReqExtension>,
 }
 
 impl Codec for CertificateRequestPayloadTls13 {
@@ -1815,13 +1820,13 @@ impl Codec for CertificateRequestPayloadTls13 {
 }
 
 impl CertificateRequestPayloadTls13 {
-    pub fn find_extension(&self, ext: ExtensionType) -> Option<&CertReqExtension> {
+    pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&CertReqExtension> {
         self.extensions
             .iter()
             .find(|x| x.get_type() == ext)
     }
 
-    pub fn get_sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
+    pub(crate) fn get_sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
         let ext = self.find_extension(ExtensionType::SignatureAlgorithms)?;
         match *ext {
             CertReqExtension::SignatureAlgorithms(ref sa) => Some(sa),
@@ -1829,7 +1834,7 @@ impl CertificateRequestPayloadTls13 {
         }
     }
 
-    pub fn get_authorities_extension(&self) -> Option<&[DistinguishedName]> {
+    pub(crate) fn get_authorities_extension(&self) -> Option<&[DistinguishedName]> {
         let ext = self.find_extension(ExtensionType::CertificateAuthorities)?;
         match *ext {
             CertReqExtension::AuthorityNames(ref an) => Some(an),
@@ -1841,12 +1846,12 @@ impl CertificateRequestPayloadTls13 {
 // -- NewSessionTicket --
 #[derive(Debug)]
 pub struct NewSessionTicketPayload {
-    pub lifetime_hint: u32,
-    pub ticket: PayloadU16,
+    pub(crate) lifetime_hint: u32,
+    pub(crate) ticket: PayloadU16,
 }
 
 impl NewSessionTicketPayload {
-    pub fn new(lifetime_hint: u32, ticket: Vec<u8>) -> Self {
+    pub(crate) fn new(lifetime_hint: u32, ticket: Vec<u8>) -> Self {
         Self {
             lifetime_hint,
             ticket: PayloadU16::new(ticket),
@@ -1873,13 +1878,13 @@ impl Codec for NewSessionTicketPayload {
 
 // -- NewSessionTicket electric boogaloo --
 #[derive(Debug)]
-pub enum NewSessionTicketExtension {
+pub(crate) enum NewSessionTicketExtension {
     EarlyData(u32),
     Unknown(UnknownExtension),
 }
 
 impl NewSessionTicketExtension {
-    pub fn get_type(&self) -> ExtensionType {
+    pub(crate) fn get_type(&self) -> ExtensionType {
         match *self {
             Self::EarlyData(_) => ExtensionType::EarlyData,
             Self::Unknown(ref r) => r.typ,
@@ -1919,15 +1924,15 @@ impl TlsListElement for NewSessionTicketExtension {
 
 #[derive(Debug)]
 pub struct NewSessionTicketPayloadTls13 {
-    pub lifetime: u32,
-    pub age_add: u32,
-    pub nonce: PayloadU8,
-    pub ticket: PayloadU16,
-    pub exts: Vec<NewSessionTicketExtension>,
+    pub(crate) lifetime: u32,
+    pub(crate) age_add: u32,
+    pub(crate) nonce: PayloadU8,
+    pub(crate) ticket: PayloadU16,
+    pub(crate) exts: Vec<NewSessionTicketExtension>,
 }
 
 impl NewSessionTicketPayloadTls13 {
-    pub fn new(lifetime: u32, age_add: u32, nonce: Vec<u8>, ticket: Vec<u8>) -> Self {
+    pub(crate) fn new(lifetime: u32, age_add: u32, nonce: Vec<u8>, ticket: Vec<u8>) -> Self {
         Self {
             lifetime,
             age_add,
@@ -1937,7 +1942,7 @@ impl NewSessionTicketPayloadTls13 {
         }
     }
 
-    pub fn has_duplicate_extension(&self) -> bool {
+    pub(crate) fn has_duplicate_extension(&self) -> bool {
         let mut seen = collections::HashSet::new();
 
         for ext in &self.exts {
@@ -1952,13 +1957,13 @@ impl NewSessionTicketPayloadTls13 {
         false
     }
 
-    pub fn find_extension(&self, ext: ExtensionType) -> Option<&NewSessionTicketExtension> {
+    pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&NewSessionTicketExtension> {
         self.exts
             .iter()
             .find(|x| x.get_type() == ext)
     }
 
-    pub fn get_max_early_data_size(&self) -> Option<u32> {
+    pub(crate) fn get_max_early_data_size(&self) -> Option<u32> {
         let ext = self.find_extension(ExtensionType::EarlyData)?;
         match *ext {
             NewSessionTicketExtension::EarlyData(ref sz) => Some(*sz),
@@ -1998,7 +2003,7 @@ impl Codec for NewSessionTicketPayloadTls13 {
 /// Only supports OCSP
 #[derive(Debug)]
 pub struct CertificateStatus {
-    pub ocsp_response: PayloadU24,
+    pub(crate) ocsp_response: PayloadU24,
 }
 
 impl Codec for CertificateStatus {
@@ -2020,13 +2025,13 @@ impl Codec for CertificateStatus {
 }
 
 impl CertificateStatus {
-    pub fn new(ocsp: Vec<u8>) -> Self {
+    pub(crate) fn new(ocsp: Vec<u8>) -> Self {
         Self {
             ocsp_response: PayloadU24::new(ocsp),
         }
     }
 
-    pub fn into_inner(self) -> Vec<u8> {
+    pub(crate) fn into_inner(self) -> Vec<u8> {
         self.ocsp_response.0
     }
 }
@@ -2108,7 +2113,10 @@ impl Codec for HandshakeMessagePayload {
 }
 
 impl HandshakeMessagePayload {
-    pub fn read_version(r: &mut Reader, vers: ProtocolVersion) -> Result<Self, InvalidMessage> {
+    pub(crate) fn read_version(
+        r: &mut Reader,
+        vers: ProtocolVersion,
+    ) -> Result<Self, InvalidMessage> {
         let mut typ = HandshakeType::read(r)?;
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
@@ -2200,14 +2208,14 @@ impl HandshakeMessagePayload {
             .map(|_| Self { typ, payload })
     }
 
-    pub fn build_key_update_notify() -> Self {
+    pub(crate) fn build_key_update_notify() -> Self {
         Self {
             typ: HandshakeType::KeyUpdate,
             payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
         }
     }
 
-    pub fn get_encoding_for_binder_signing(&self) -> Vec<u8> {
+    pub(crate) fn get_encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
 
         let binder_len = match self.payload {
@@ -2229,7 +2237,7 @@ impl HandshakeMessagePayload {
         ret
     }
 
-    pub fn build_handshake_hash(hash: &[u8]) -> Self {
+    pub(crate) fn build_handshake_hash(hash: &[u8]) -> Self {
         Self {
             typ: HandshakeType::MessageHash,
             payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec())),

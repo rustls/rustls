@@ -16,20 +16,20 @@ use core::cmp;
 #[cfg(feature = "tls12")]
 use core::mem;
 
-pub struct Retrieved<T> {
-    pub value: T,
+pub(crate) struct Retrieved<T> {
+    pub(crate) value: T,
     retrieved_at: UnixTime,
 }
 
 impl<T> Retrieved<T> {
-    pub fn new(value: T, retrieved_at: UnixTime) -> Self {
+    pub(crate) fn new(value: T, retrieved_at: UnixTime) -> Self {
         Self {
             value,
             retrieved_at,
         }
     }
 
-    pub fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
+    pub(crate) fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
         Some(Retrieved {
             value: f(&self.value)?,
             retrieved_at: self.retrieved_at,
@@ -38,7 +38,7 @@ impl<T> Retrieved<T> {
 }
 
 impl Retrieved<&Tls13ClientSessionValue> {
-    pub fn obfuscated_ticket_age(&self) -> u32 {
+    pub(crate) fn obfuscated_ticket_age(&self) -> u32 {
         let age_secs = self
             .retrieved_at
             .as_secs()
@@ -49,7 +49,7 @@ impl Retrieved<&Tls13ClientSessionValue> {
 }
 
 impl<T: core::ops::Deref<Target = ClientSessionCommon>> Retrieved<T> {
-    pub fn has_expired(&self) -> bool {
+    pub(crate) fn has_expired(&self) -> bool {
         let common = &*self.value;
         common.lifetime_secs != 0
             && common
@@ -252,20 +252,20 @@ static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
 
 // --- Server types ---
-pub type ServerSessionKey = SessionId;
+pub(crate) type ServerSessionKey = SessionId;
 
 #[derive(Debug)]
 pub struct ServerSessionValue {
-    pub sni: Option<DnsName>,
-    pub version: ProtocolVersion,
-    pub cipher_suite: CipherSuite,
-    pub master_secret: PayloadU8,
-    pub extended_ms: bool,
-    pub client_cert_chain: Option<CertificatePayload>,
-    pub alpn: Option<PayloadU8>,
-    pub application_data: PayloadU16,
+    pub(crate) sni: Option<DnsName>,
+    pub(crate) version: ProtocolVersion,
+    pub(crate) cipher_suite: CipherSuite,
+    pub(crate) master_secret: PayloadU8,
+    pub(crate) extended_ms: bool,
+    pub(crate) client_cert_chain: Option<CertificatePayload>,
+    pub(crate) alpn: Option<PayloadU8>,
+    pub(crate) application_data: PayloadU16,
     pub creation_time_sec: u64,
-    pub age_obfuscation_offset: u32,
+    pub(crate) age_obfuscation_offset: u32,
     freshness: Option<bool>,
 }
 
@@ -351,7 +351,7 @@ impl Codec for ServerSessionValue {
 }
 
 impl ServerSessionValue {
-    pub fn new(
+    pub(crate) fn new(
         sni: Option<&DnsName>,
         v: ProtocolVersion,
         cs: CipherSuite,
@@ -377,11 +377,15 @@ impl ServerSessionValue {
         }
     }
 
-    pub fn set_extended_ms_used(&mut self) {
+    pub(crate) fn set_extended_ms_used(&mut self) {
         self.extended_ms = true;
     }
 
-    pub fn set_freshness(mut self, obfuscated_client_age_ms: u32, time_now: UnixTime) -> Self {
+    pub(crate) fn set_freshness(
+        mut self,
+        obfuscated_client_age_ms: u32,
+        time_now: UnixTime,
+    ) -> Self {
         let client_age_ms = obfuscated_client_age_ms.wrapping_sub(self.age_obfuscation_offset);
         let server_age_ms = (time_now
             .as_secs()
@@ -398,7 +402,7 @@ impl ServerSessionValue {
         self
     }
 
-    pub fn is_fresh(&self) -> bool {
+    pub(crate) fn is_fresh(&self) -> bool {
         self.freshness.unwrap_or_default()
     }
 }

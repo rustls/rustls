@@ -2,9 +2,9 @@ use crate::enums::ContentType;
 use crate::enums::ProtocolVersion;
 use crate::msgs::message::{BorrowedPlainMessage, PlainMessage};
 use crate::Error;
-pub const MAX_FRAGMENT_LEN: usize = 16384;
-pub const PACKET_OVERHEAD: usize = 1 + 2 + 2;
-pub const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
+pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
+pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
+pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
 
 pub struct MessageFragmenter {
     max_frag: usize,
@@ -32,7 +32,7 @@ impl MessageFragmenter {
 
     /// Enqueue borrowed fragments of (version, typ, payload) which
     /// are no longer than max_frag onto the `out` deque.
-    pub fn fragment_slice<'a>(
+    pub(crate) fn fragment_slice<'a>(
         &self,
         typ: ContentType,
         version: ProtocolVersion,

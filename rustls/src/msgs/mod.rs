@@ -4,16 +4,16 @@
 #[macro_use]
 mod macros;
 
-pub mod alert;
-pub mod base;
-pub mod ccs;
-pub mod codec;
-pub mod deframer;
-pub mod enums;
-pub mod fragmenter;
-pub mod handshake;
-pub mod message;
-pub mod persist;
+pub(crate) mod alert;
+pub(crate) mod base;
+pub(crate) mod ccs;
+pub(crate) mod codec;
+pub(crate) mod deframer;
+pub(crate) mod enums;
+pub(crate) mod fragmenter;
+pub(crate) mod handshake;
+pub(crate) mod message;
+pub(crate) mod persist;
 
 #[cfg(test)]
 mod handshake_test;

@@ -24,7 +24,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    pub enum ClientCertificateType {
+    pub(crate) enum ClientCertificateType {
         RSASign => 0x01,
         DSSSign => 0x02,
         RSAFixedDH => 0x03,
@@ -66,7 +66,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    pub enum HeartbeatMessageType {
+    pub(crate) enum HeartbeatMessageType {
         Request => 0x01,
         Response => 0x02
     }
@@ -77,7 +77,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U16
-    pub enum ExtensionType {
+    pub(crate) enum ExtensionType {
         ServerName => 0x0000,
         MaxFragmentLength => 0x0001,
         ClientCertificateUrl => 0x0002,
@@ -123,7 +123,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    pub enum ServerNameType {
+    pub(crate) enum ServerNameType {
         HostName => 0x00
     }
 }
@@ -138,7 +138,7 @@ enum_builder! {
     /// Rustls supports. See [`crate::crypto::ring::kx_group`] for the list of supported
     /// elliptic curve groups.
     @U16
-    pub enum NamedCurve {
+    pub(crate) enum NamedCurve {
         sect163k1 => 0x0001,
         sect163r1 => 0x0002,
         sect163r2 => 0x0003,
@@ -206,7 +206,7 @@ enum_builder! {
 }
 
 impl ECPointFormat {
-    pub const SUPPORTED: [Self; 1] = [Self::Uncompressed];
+    pub(crate) const SUPPORTED: [Self; 1] = [Self::Uncompressed];
 }
 
 enum_builder! {
@@ -214,7 +214,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    pub enum HeartbeatMode {
+    pub(crate) enum HeartbeatMode {
         PeerAllowedToSend => 0x01,
         PeerNotAllowedToSend => 0x02
     }
@@ -225,7 +225,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    pub enum ECCurveType {
+    pub(crate) enum ECCurveType {
         ExplicitPrime => 0x01,
         ExplicitChar2 => 0x02,
         NamedCurve => 0x03

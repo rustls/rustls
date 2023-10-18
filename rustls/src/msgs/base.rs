@@ -57,10 +57,10 @@ impl fmt::Debug for Payload {
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
 #[derive(Clone, Eq, PartialEq)]
-pub struct PayloadU24(pub Vec<u8>);
+pub(crate) struct PayloadU24(pub(crate) Vec<u8>);
 
 impl PayloadU24 {
-    pub fn new(bytes: Vec<u8>) -> Self {
+    pub(crate) fn new(bytes: Vec<u8>) -> Self {
         Self(bytes)
     }
 }
@@ -125,18 +125,18 @@ impl fmt::Debug for PayloadU16 {
 
 /// An arbitrary, unknown-content, u8-length-prefixed payload
 #[derive(Clone, Eq, PartialEq)]
-pub struct PayloadU8(pub Vec<u8>);
+pub struct PayloadU8(pub(crate) Vec<u8>);
 
 impl PayloadU8 {
-    pub fn new(bytes: Vec<u8>) -> Self {
+    pub(crate) fn new(bytes: Vec<u8>) -> Self {
         Self(bytes)
     }
 
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self(Vec::new())
     }
 
-    pub fn into_inner(self) -> Vec<u8> {
+    pub(crate) fn into_inner(self) -> Vec<u8> {
         self.0
     }
 }

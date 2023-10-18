@@ -9,7 +9,7 @@ use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVer
 use rustls::crypto::ring::{kx_group, Ticketer, ALL_KX_GROUPS};
 use rustls::crypto::SupportedKxGroup;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::persist;
+use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::{ClientHello, ServerConfig, ServerConnection};
 use rustls::{
     self, client, server, sign, version, AlertDescription, CertificateError, Connection,
@@ -406,7 +406,7 @@ fn align_time() {
 
 impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
     fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-        let mut ssv = persist::ServerSessionValue::read_bytes(&value).unwrap();
+        let mut ssv = ServerSessionValue::read_bytes(&value).unwrap();
         ssv.creation_time_sec -= self.delay as u64;
 
         self.storage
