@@ -180,10 +180,6 @@ impl SessionId {
         }
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.len
-    }
-
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
     }
