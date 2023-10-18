@@ -3,18 +3,18 @@ macro_rules! enum_builder {
     (
     $(#[$comment:meta])*
     @U8
-        EnumName: $enum_name: ident;
-        EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
+        $enum_vis:vis enum $enum_name:ident
+        { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
         $(#[$comment])*
         #[non_exhaustive]
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-        pub enum $enum_name {
+        $enum_vis enum $enum_name {
             $( $enum_var),*
             ,Unknown(u8)
         }
         impl $enum_name {
-            pub fn get_u8(&self) -> u8 {
+            $enum_vis fn get_u8(&self) -> u8 {
                 let x = self.clone();
                 match x {
                     $( $enum_name::$enum_var => $enum_val),*
@@ -48,18 +48,18 @@ macro_rules! enum_builder {
     (
     $(#[$comment:meta])*
     @U16
-        EnumName: $enum_name: ident;
-        EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
+        $enum_vis:vis enum $enum_name:ident
+        { $( $enum_var: ident => $enum_val: expr ),* }
     ) => {
         $(#[$comment])*
         #[non_exhaustive]
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-        pub enum $enum_name {
+        $enum_vis enum $enum_name {
             $( $enum_var),*
             ,Unknown(u16)
         }
         impl $enum_name {
-            pub fn get_u16(&self) -> u16 {
+            $enum_vis fn get_u16(&self) -> u16 {
                 let x = self.clone();
                 match x {
                     $( $enum_name::$enum_var => $enum_val),*
@@ -67,7 +67,7 @@ macro_rules! enum_builder {
                 }
             }
 
-            pub fn as_str(&self) -> Option<&'static str> {
+            $enum_vis fn as_str(&self) -> Option<&'static str> {
                 match self {
                     $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
                     ,$enum_name::Unknown(_) => None,

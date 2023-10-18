@@ -7,8 +7,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: AlertDescription;
-    EnumVal{
+    pub enum AlertDescription {
         CloseNotify => 0x00,
         UnexpectedMessage => 0x0a,
         BadRecordMac => 0x14,
@@ -51,8 +50,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: HandshakeType;
-    EnumVal{
+    pub enum HandshakeType {
         HelloRequest => 0x00,
         ClientHello => 0x01,
         ServerHello => 0x02,
@@ -80,8 +78,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: ContentType;
-    EnumVal{
+    pub enum ContentType {
         ChangeCipherSpec => 0x14,
         Alert => 0x15,
         Handshake => 0x16,
@@ -95,8 +92,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U16
-    EnumName: ProtocolVersion;
-    EnumVal{
+    pub enum ProtocolVersion {
         SSLv2 => 0x0200,
         SSLv3 => 0x0300,
         TLSv1_0 => 0x0301,
@@ -114,8 +110,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U16
-    EnumName: CipherSuite;
-    EnumVal{
+    pub enum CipherSuite {
         TLS_NULL_WITH_NULL_NULL => 0x0000,
         TLS_RSA_WITH_NULL_MD5 => 0x0001,
         TLS_RSA_WITH_NULL_SHA => 0x0002,
@@ -500,8 +495,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U16
-    EnumName: SignatureScheme;
-    EnumVal{
+    pub enum SignatureScheme {
         RSA_PKCS1_SHA1 => 0x0201,
         ECDSA_SHA1_Legacy => 0x0203,
         RSA_PKCS1_SHA256 => 0x0401,
@@ -560,8 +554,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    EnumName: SignatureAlgorithm;
-    EnumVal{
+    pub enum SignatureAlgorithm {
         Anonymous => 0x00,
         RSA => 0x01,
         DSA => 0x02,
