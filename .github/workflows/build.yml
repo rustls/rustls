@@ -329,4 +329,4 @@ jobs:
       - run: cargo install --locked cargo-check-external-types
       - name: run cargo-check-external-types for rustls/
         working-directory: rustls/
-        run: cargo check-external-types --config external-types.toml
+        run: cargo check-external-types
