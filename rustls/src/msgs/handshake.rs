@@ -101,11 +101,6 @@ impl Random {
         provider.fill_random(&mut data)?;
         Ok(Self(data))
     }
-
-    pub(crate) fn write_slice(&self, bytes: &mut [u8]) {
-        let buf = self.get_encoding();
-        bytes.copy_from_slice(&buf);
-    }
 }
 
 impl From<[u8; 32]> for Random {
