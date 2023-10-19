@@ -4,7 +4,7 @@ use core::fmt;
 use std::error::Error as StdError;
 
 use pki_types::CertificateRevocationListDer;
-use webpki::BorrowedCertRevocationList;
+use webpki::{BorrowedCertRevocationList, RevocationCheckDepth};
 
 use super::crl_error;
 use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier, WebPkiSupportedAlgorithms};
@@ -18,6 +18,7 @@ use crate::{CertRevocationListError, RootCertStore};
 pub struct ClientCertVerifierBuilder {
     roots: Arc<RootCertStore>,
     crls: Vec<CertificateRevocationListDer<'static>>,
+    revocation_check_depth: RevocationCheckDepth,
     anon_policy: AnonymousClientPolicy,
     supported_algs: Option<WebPkiSupportedAlgorithms>,
 }
@@ -28,6 +29,7 @@ impl ClientCertVerifierBuilder {
             roots,
             crls: Vec::new(),
             anon_policy: AnonymousClientPolicy::Deny,
+            revocation_check_depth: RevocationCheckDepth::Chain,
             supported_algs: None,
         }
     }
@@ -35,11 +37,30 @@ impl ClientCertVerifierBuilder {
     /// Verify the revocation state of presented client certificates against the provided
     /// certificate revocation lists (CRLs). Calling `with_crls` multiple times appends the
     /// given CRLs to the existing collection.
+    ///
+    /// By default all certificates in the verified chain built from the presented client
+    /// certificate to a trust anchor will have their revocation status checked. Calling
+    /// [`only_check_end_entity_revocation`][Self::only_check_end_entity_revocation] will
+    /// change this behavior to only check the end entity client certificate.
     pub fn with_crls(
         mut self,
         crls: impl IntoIterator<Item = CertificateRevocationListDer<'static>>,
     ) -> Self {
         self.crls.extend(crls);
+        self
+    }
+
+    /// Only check the end entity certificate revocation status when using CRLs.
+    ///
+    /// If CRLs are provided using [`with_crls`][Self::with_crls] only check the end entity
+    /// certificate's revocation status. Overrides the default behavior of checking revocation
+    /// status for each certificate in the verified chain built to a trust anchor
+    /// (excluding the trust anchor itself).
+    ///
+    /// If no CRLs are provided then this setting has no effect. Neither the end entity certificate
+    /// or any intermediates will have revocation status checked.
+    pub fn only_check_end_entity_revocation(mut self) -> Self {
+        self.revocation_check_depth = RevocationCheckDepth::EndEntity;
         self
     }
 
@@ -105,6 +126,7 @@ impl ClientCertVerifierBuilder {
                         .map_err(crl_error)
                 })
                 .collect::<Result<Vec<_>, CertRevocationListError>>()?,
+            self.revocation_check_depth,
             self.anon_policy,
             supported_algs,
         )))
@@ -289,6 +311,17 @@ mod tests {
         let builder = WebPkiClientVerifier::builder(test_roots())
             .with_crls(test_crls())
             .allow_unauthenticated();
+        // The builder should be Debug.
+        println!("{:?}", builder);
+        builder.build().unwrap();
+    }
+
+    #[test]
+    fn test_client_verifier_ee_only() {
+        // We should be able to build a client verifier that only checks EE revocation status.
+        let builder = WebPkiClientVerifier::builder(test_roots())
+            .with_crls(test_crls())
+            .only_check_end_entity_revocation();
         // The builder should be Debug.
         println!("{:?}", builder);
         builder.build().unwrap();
