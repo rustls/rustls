@@ -28,6 +28,7 @@ fn pki_error(error: webpki::Error) -> Error {
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
         CertNotValidForName => CertificateError::NotValidForName.into(),
         CertRevoked => CertificateError::Revoked.into(),
+        UnknownRevocationStatus => CertificateError::UnknownRevocationStatus.into(),
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey

@@ -303,6 +303,9 @@ pub enum CertificateError {
     /// The certificate chain is not issued by a known root certificate.
     UnknownIssuer,
 
+    /// The certificate's revocation status could not be determined.
+    UnknownRevocationStatus,
+
     /// A certificate is not correctly signed by the key of its alleged
     /// issuer.
     BadSignature,
@@ -358,7 +361,10 @@ impl From<CertificateError> for AlertDescription {
     fn from(e: CertificateError) -> Self {
         use CertificateError::*;
         match e {
-            BadEncoding | UnhandledCriticalExtension | NotValidForName => Self::BadCertificate,
+            BadEncoding
+            | UnhandledCriticalExtension
+            | NotValidForName
+            | UnknownRevocationStatus => Self::BadCertificate,
             // RFC 5246/RFC 8446
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
