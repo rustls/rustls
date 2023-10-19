@@ -62,9 +62,9 @@ mod server_hello {
             server_hello: &ServerHelloPayload,
             tls13_supported: bool,
         ) -> hs::NextStateOrError {
-            server_hello
-                .random
-                .write_slice(&mut self.randoms.server);
+            self.randoms
+                .server
+                .clone_from_slice(&server_hello.random.0[..]);
 
             // Look for TLS1.3 downgrade signal in server random
             // both the server random and TLS12_DOWNGRADE_SENTINEL are
