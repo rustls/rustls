@@ -4,6 +4,7 @@ use crate::error::InvalidMessage;
 use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::CertificatePayload;
+#[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
@@ -375,6 +376,7 @@ impl ServerSessionValue {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn set_extended_ms_used(&mut self) {
         self.extended_ms = true;
     }

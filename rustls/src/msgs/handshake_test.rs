@@ -74,7 +74,9 @@ fn accepts_short_sessionid() {
     let sess = SessionId::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
+    #[cfg(feature = "tls12")]
     assert!(!sess.is_empty());
+    assert_ne!(sess, SessionId::empty());
     assert!(!rd.any_left());
 }
 
@@ -85,7 +87,9 @@ fn accepts_empty_sessionid() {
     let sess = SessionId::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
+    #[cfg(feature = "tls12")]
     assert!(sess.is_empty());
+    assert_eq!(sess, SessionId::empty());
     assert!(!rd.any_left());
 }
 
@@ -520,6 +524,7 @@ fn client_get_namedgroups_extension() {
     });
 }
 
+#[cfg(feature = "tls12")]
 #[test]
 fn client_get_ecpoints_extension() {
     test_client_extension_getter(ExtensionType::ECPointFormats, |chp| {
