@@ -4,7 +4,7 @@ use core::fmt;
 use std::error::Error as StdError;
 
 use pki_types::CertificateRevocationListDer;
-use webpki::{BorrowedCertRevocationList, RevocationCheckDepth};
+use webpki::{BorrowedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
 use super::crl_error;
 use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier, WebPkiSupportedAlgorithms};
@@ -19,6 +19,7 @@ pub struct ClientCertVerifierBuilder {
     roots: Arc<RootCertStore>,
     crls: Vec<CertificateRevocationListDer<'static>>,
     revocation_check_depth: RevocationCheckDepth,
+    unknown_revocation_policy: UnknownStatusPolicy,
     anon_policy: AnonymousClientPolicy,
     supported_algs: Option<WebPkiSupportedAlgorithms>,
 }
@@ -30,6 +31,7 @@ impl ClientCertVerifierBuilder {
             crls: Vec::new(),
             anon_policy: AnonymousClientPolicy::Deny,
             revocation_check_depth: RevocationCheckDepth::Chain,
+            unknown_revocation_policy: UnknownStatusPolicy::Deny,
             supported_algs: None,
         }
     }
@@ -42,6 +44,11 @@ impl ClientCertVerifierBuilder {
     /// certificate to a trust anchor will have their revocation status checked. Calling
     /// [`only_check_end_entity_revocation`][Self::only_check_end_entity_revocation] will
     /// change this behavior to only check the end entity client certificate.
+    ///
+    /// By default if a certificate's revocation status can not be determined using the
+    /// configured CRLs, it will be treated as an error. Calling
+    /// [`allow_unknown_revocation_status`][Self::allow_unknown_revocation_status] will change
+    /// this behavior to allow unknown revocation status.
     pub fn with_crls(
         mut self,
         crls: impl IntoIterator<Item = CertificateRevocationListDer<'static>>,
@@ -70,6 +77,19 @@ impl ClientCertVerifierBuilder {
     /// client certificate will be allowed to connect.
     pub fn allow_unauthenticated(mut self) -> Self {
         self.anon_policy = AnonymousClientPolicy::Allow;
+        self
+    }
+
+    /// Allow unknown certificate revocation status when using CRLs.
+    ///
+    /// If CRLs are provided with [`with_crls`][Self::with_crls] and it isn't possible to
+    /// determine the revocation status of a certificate, do not treat it as an error condition.
+    /// Overrides the default behavior where unknown revocation status is considered an error.
+    ///
+    /// If no CRLs are provided then this setting has no effect as revocation status checks
+    /// are not performed.
+    pub fn allow_unknown_revocation_status(mut self) -> Self {
+        self.unknown_revocation_policy = UnknownStatusPolicy::Allow;
         self
     }
 
@@ -127,6 +147,7 @@ impl ClientCertVerifierBuilder {
                 })
                 .collect::<Result<Vec<_>, CertRevocationListError>>()?,
             self.revocation_check_depth,
+            self.unknown_revocation_policy,
             self.anon_policy,
             supported_algs,
         )))
@@ -322,6 +343,17 @@ mod tests {
         let builder = WebPkiClientVerifier::builder(test_roots())
             .with_crls(test_crls())
             .only_check_end_entity_revocation();
+        // The builder should be Debug.
+        println!("{:?}", builder);
+        builder.build().unwrap();
+    }
+
+    #[test]
+    fn test_client_verifier_allow_unknown() {
+        // We should be able to build a client verifier that allows unknown revocation status
+        let builder = WebPkiClientVerifier::builder(test_roots())
+            .with_crls(test_crls())
+            .allow_unknown_revocation_status();
         // The builder should be Debug.
         println!("{:?}", builder);
         builder.build().unwrap();

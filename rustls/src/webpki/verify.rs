@@ -247,6 +247,7 @@ pub struct WebPkiClientVerifier {
     subjects: Vec<DistinguishedName>,
     crls: Vec<webpki::OwnedCertRevocationList>,
     revocation_check_depth: webpki::RevocationCheckDepth,
+    unknown_revocation_policy: webpki::UnknownStatusPolicy,
     anonymous_policy: AnonymousClientPolicy,
     supported_algs: WebPkiSupportedAlgorithms,
 }
@@ -273,18 +274,21 @@ impl WebPkiClientVerifier {
 
     /// Construct a new `WebpkiClientVerifier`.
     ///
-    /// `roots` is the list of trust anchors to use for certificate validation.
-    /// `crls` are an iterable of owned certificate revocation lists (CRLs) to use for
-    /// client certificate validation.
-    /// `revocation_check_depth` controls which certificates have their revocation status checked
-    /// when `crls` are provided.
-    /// `anonymous_policy` controls whether client authentication is required, or if anonymous
-    /// clients can connect.
-    /// `supported_algs` is which signature verification algorithms should be used.
+    /// * `roots` is a list of trust anchors to use for certificate validation.
+    /// * `crls` is a `Vec` of owned certificate revocation lists (CRLs) to use for
+    ///   client certificate validation.
+    /// * `revocation_check_depth` controls which certificates have their revocation status checked
+    ///   when `crls` are provided.
+    /// * `unknown_revocation_policy` controls how certificates with an unknown revocation status
+    ///   are handled when `crls` are provided.
+    /// * `anonymous_policy` controls whether client authentication is required, or if anonymous
+    ///   clients can connect.
+    /// * `supported_algs` specifies which signature verification algorithms should be used.
     pub(crate) fn new(
         roots: Arc<RootCertStore>,
         crls: Vec<webpki::OwnedCertRevocationList>,
         revocation_check_depth: webpki::RevocationCheckDepth,
+        unknown_revocation_policy: webpki::UnknownStatusPolicy,
         anonymous_policy: AnonymousClientPolicy,
         supported_algs: WebPkiSupportedAlgorithms,
     ) -> Self {
@@ -296,6 +300,7 @@ impl WebPkiClientVerifier {
                 .collect(),
             crls,
             revocation_check_depth,
+            unknown_revocation_policy,
             roots,
             anonymous_policy,
             supported_algs,
@@ -337,13 +342,16 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         let revocation = if crls.is_empty() {
             None
         } else {
-            Some(
-                webpki::RevocationOptionsBuilder::new(&crls)
-                    .expect("invalid crls")
-                    .allow_unknown_status()
-                    .with_depth(self.revocation_check_depth)
-                    .build(),
-            )
+            let mut builder = webpki::RevocationOptionsBuilder::new(&crls)
+                .expect("invalid crls")
+                .with_depth(self.revocation_check_depth);
+            if matches!(
+                self.unknown_revocation_policy,
+                webpki::UnknownStatusPolicy::Allow
+            ) {
+                builder = builder.allow_unknown_status();
+            }
+            Some(builder.build())
         };
 
         cert.0
