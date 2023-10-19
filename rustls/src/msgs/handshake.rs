@@ -1,6 +1,8 @@
 #![allow(non_camel_case_types)]
 
-use crate::crypto::{ActiveKeyExchange, CryptoProvider};
+#[cfg(feature = "tls12")]
+use crate::crypto::ActiveKeyExchange;
+use crate::crypto::CryptoProvider;
 use crate::dns_name::{DnsName, DnsNameRef};
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::InvalidMessage;
@@ -175,6 +177,7 @@ impl SessionId {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -784,6 +787,7 @@ impl ServerExtension {
         Self::Protocols(Vec::from_slices(proto))
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn make_empty_renegotiation_info() -> Self {
         let empty = Vec::new();
         Self::RenegotiationInfo(PayloadU8::new(empty))
@@ -895,6 +899,7 @@ impl ClientHelloPayload {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
@@ -923,6 +928,7 @@ impl ClientHelloPayload {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn get_ticket_extension(&self) -> Option<&ClientExtension> {
         self.find_extension(ExtensionType::SessionTicket)
     }
@@ -994,6 +1000,7 @@ impl ClientHelloPayload {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn ems_support_offered(&self) -> bool {
         self.find_extension(ExtensionType::ExtendedMasterSecret)
             .is_some()
@@ -1234,6 +1241,7 @@ impl ServerHelloPayload {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn ems_support_acked(&self) -> bool {
         self.find_extension(ExtensionType::ExtendedMasterSecret)
             .is_some()
@@ -1508,6 +1516,7 @@ pub(crate) struct ServerEcdhParams {
 }
 
 impl ServerEcdhParams {
+    #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
         Self {
             curve_params: EcParameters {
@@ -1578,6 +1587,7 @@ impl Codec for ServerKeyExchangePayload {
 }
 
 impl ServerKeyExchangePayload {
+    #[cfg(feature = "tls12")]
     pub(crate) fn unwrap_given_kxa(
         &self,
         kxa: KeyExchangeAlgorithm,
@@ -1847,6 +1857,7 @@ pub struct NewSessionTicketPayload {
 }
 
 impl NewSessionTicketPayload {
+    #[cfg(feature = "tls12")]
     pub(crate) fn new(lifetime_hint: u32, ticket: Vec<u8>) -> Self {
         Self {
             lifetime_hint,
@@ -2027,6 +2038,7 @@ impl CertificateStatus {
         }
     }
 
+    #[cfg(feature = "tls12")]
     pub(crate) fn into_inner(self) -> Vec<u8> {
         self.ocsp_response.0
     }
