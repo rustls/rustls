@@ -405,16 +405,6 @@ pub struct WebPkiSupportedAlgorithms {
     )],
 }
 
-impl fmt::Debug for WebPkiSupportedAlgorithms {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "WebPkiSupportedAlgorithms {{ all: [ .. ], mapping: ")?;
-        f.debug_list()
-            .entries(self.mapping.iter().map(|item| item.0))
-            .finish()?;
-        write!(f, " }}")
-    }
-}
-
 impl WebPkiSupportedAlgorithms {
     /// Return all the `scheme` items in `mapping`, maintaining order.
     fn supported_schemes(&self) -> Vec<SignatureScheme> {
@@ -434,6 +424,16 @@ impl WebPkiSupportedAlgorithms {
             .filter_map(|item| if item.0 == scheme { Some(item.1) } else { None })
             .next()
             .ok_or_else(|| PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into())
+    }
+}
+
+impl fmt::Debug for WebPkiSupportedAlgorithms {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "WebPkiSupportedAlgorithms {{ all: [ .. ], mapping: ")?;
+        f.debug_list()
+            .entries(self.mapping.iter().map(|item| item.0))
+            .finish()?;
+        write!(f, " }}")
     }
 }
 
