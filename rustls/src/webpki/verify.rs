@@ -437,6 +437,18 @@ impl fmt::Debug for WebPkiSupportedAlgorithms {
     }
 }
 
+/// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
+pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
+
+impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
+    type Error = Error;
+    fn try_from(value: &'a CertificateDer<'a>) -> Result<ParsedCertificate<'a>, Self::Error> {
+        webpki::EndEntityCert::try_from(value)
+            .map_err(pki_error)
+            .map(ParsedCertificate)
+    }
+}
+
 /// Controls how the [WebPkiClientVerifier] handles anonymous clients.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AnonymousClientPolicy {
@@ -557,18 +569,6 @@ fn verify_tls13(
     cert.verify_signature(alg, msg, dss.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
-}
-
-/// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
-pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
-
-impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
-    type Error = Error;
-    fn try_from(value: &'a CertificateDer<'a>) -> Result<ParsedCertificate<'a>, Self::Error> {
-        webpki::EndEntityCert::try_from(value)
-            .map_err(pki_error)
-            .map(ParsedCertificate)
-    }
 }
 
 #[cfg(test)]
