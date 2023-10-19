@@ -376,15 +376,6 @@ impl ClientCertVerifier for WebPkiClientVerifier {
     }
 }
 
-/// Controls how the [WebPkiClientVerifier] handles anonymous clients.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AnonymousClientPolicy {
-    /// Clients that do not present a client certificate are allowed.
-    Allow,
-    /// Clients that do not present a client certificate are denied.
-    Deny,
-}
-
 /// Describes which `webpki` signature verification algorithms are supported and
 /// how they map to TLS `SignatureScheme`s.
 #[derive(Clone, Copy)]
@@ -444,6 +435,15 @@ impl WebPkiSupportedAlgorithms {
             .next()
             .ok_or_else(|| PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into())
     }
+}
+
+/// Controls how the [WebPkiClientVerifier] handles anonymous clients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnonymousClientPolicy {
+    /// Clients that do not present a client certificate are allowed.
+    Allow,
+    /// Clients that do not present a client certificate are denied.
+    Deny,
 }
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
