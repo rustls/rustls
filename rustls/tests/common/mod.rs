@@ -6,10 +6,11 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
+use webpki::extract_trust_anchor;
 
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
-use rustls::server::WebPkiClientVerifier;
+use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::Connection;
 use rustls::Error;
 use rustls::RootCertStore;
@@ -48,6 +49,7 @@ embed_files! {
     (ECDSA_CLIENT_KEY, "ecdsa", "client.key");
     (ECDSA_CLIENT_REQ, "ecdsa", "client.req");
     (ECDSA_CLIENT_CRL_PEM, "ecdsa", "client.revoked.crl.pem");
+    (ECDSA_INTERMEDIATE_CRL_PEM, "ecdsa", "inter.revoked.crl.pem");
     (ECDSA_END_CERT, "ecdsa", "end.cert");
     (ECDSA_END_CHAIN, "ecdsa", "end.chain");
     (ECDSA_END_FULLCHAIN, "ecdsa", "end.fullchain");
@@ -68,6 +70,7 @@ embed_files! {
     (EDDSA_CLIENT_KEY, "eddsa", "client.key");
     (EDDSA_CLIENT_REQ, "eddsa", "client.req");
     (EDDSA_CLIENT_CRL_PEM, "eddsa", "client.revoked.crl.pem");
+    (EDDSA_INTERMEDIATE_CRL_PEM, "eddsa", "inter.revoked.crl.pem");
     (EDDSA_END_CERT, "eddsa", "end.cert");
     (EDDSA_END_CHAIN, "eddsa", "end.chain");
     (EDDSA_END_FULLCHAIN, "eddsa", "end.fullchain");
@@ -87,6 +90,7 @@ embed_files! {
     (RSA_CLIENT_REQ, "rsa", "client.req");
     (RSA_CLIENT_RSA, "rsa", "client.rsa");
     (RSA_CLIENT_CRL_PEM, "rsa", "client.revoked.crl.pem");
+    (RSA_INTERMEDIATE_CRL_PEM, "rsa", "inter.revoked.crl.pem");
     (RSA_END_CERT, "rsa", "end.cert");
     (RSA_END_CHAIN, "rsa", "end.chain");
     (RSA_END_FULLCHAIN, "rsa", "end.fullchain");
@@ -221,12 +225,11 @@ impl KeyType {
     }
 
     pub fn client_crl(&self) -> CertificateRevocationListDer<'static> {
-        rustls_pemfile::crls(&mut io::BufReader::new(
-            self.bytes_for("client.revoked.crl.pem"),
-        ))
-        .map(|result| result.unwrap())
-        .next() // We only expect one CRL.
-        .unwrap()
+        self.get_crl("client")
+    }
+
+    pub fn intermediate_crl(&self) -> CertificateRevocationListDer<'static> {
+        self.get_crl("inter")
     }
 
     fn get_client_key(&self) -> PrivateKeyDer<'static> {
@@ -238,6 +241,15 @@ impl KeyType {
             .unwrap()
             .unwrap(),
         )
+    }
+
+    fn get_crl(&self, role: &str) -> CertificateRevocationListDer<'static> {
+        rustls_pemfile::crls(&mut io::BufReader::new(
+            self.bytes_for(&format!("{role}.revoked.crl.pem")),
+        ))
+        .map(|result| result.unwrap())
+        .next() // We only expect one CRL.
+        .unwrap()
     }
 }
 
@@ -283,53 +295,55 @@ pub fn make_server_config_with_kx_groups(
 }
 
 pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
-    let mut roots = kt.get_chain();
-    // drop server cert
-    roots.drain(0..1);
-    let mut client_auth_roots = RootCertStore::empty();
-    for root in roots {
-        client_auth_roots.add(root).unwrap();
+    // The key type's chain file contains the DER encoding of the EE cert, the intermediate cert,
+    // and the root trust anchor. We want only the trust anchor to build the root cert store.
+    let chain = kt.get_chain();
+    let trust_anchor = chain.last().unwrap();
+    RootCertStore {
+        roots: vec![extract_trust_anchor(trust_anchor)
+            .unwrap()
+            .to_owned()],
     }
-    client_auth_roots.into()
+    .into()
 }
 
 pub fn make_server_config_with_mandatory_client_auth_crls(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
 ) -> ServerConfig {
-    let client_auth_roots = get_client_root_store(kt);
-
-    let client_auth = WebPkiClientVerifier::builder(client_auth_roots)
-        .with_crls(crls)
-        .build()
-        .unwrap();
-
-    ServerConfig::builder()
-        .with_safe_defaults()
-        .with_client_cert_verifier(client_auth)
-        .with_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap()
+    make_server_config_with_client_verifier(
+        kt,
+        WebPkiClientVerifier::builder(get_client_root_store(kt)).with_crls(crls),
+    )
 }
 
 pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
-    make_server_config_with_mandatory_client_auth_crls(kt, Vec::new())
+    make_server_config_with_client_verifier(
+        kt,
+        WebPkiClientVerifier::builder(get_client_root_store(kt)),
+    )
 }
 
 pub fn make_server_config_with_optional_client_auth(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
 ) -> ServerConfig {
-    let client_auth_roots = get_client_root_store(kt);
+    make_server_config_with_client_verifier(
+        kt,
+        WebPkiClientVerifier::builder(get_client_root_store(kt))
+            .with_crls(crls)
+            .allow_unknown_revocation_status()
+            .allow_unauthenticated(),
+    )
+}
 
-    let client_auth = WebPkiClientVerifier::builder(client_auth_roots)
-        .with_crls(crls)
-        .allow_unauthenticated()
-        .build()
-        .unwrap();
-
+pub fn make_server_config_with_client_verifier(
+    kt: KeyType,
+    verifier_builder: ClientCertVerifierBuilder,
+) -> ServerConfig {
     ServerConfig::builder()
         .with_safe_defaults()
-        .with_client_cert_verifier(client_auth)
+        .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
 }
