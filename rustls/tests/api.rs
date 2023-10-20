@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use pki_types::CertificateDer;
-use rustls::client::{ResolvesClientCert, Resumption};
+use rustls::client::{ResolvesClientCert, Resumption, WebPkiServerVerifier};
 use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
@@ -1052,6 +1052,133 @@ fn client_checks_server_certificate_with_given_ip_address() {
                     CertificateError::NotValidForName
                 )))
             );
+        }
+    }
+}
+
+#[test]
+fn client_check_server_certificate_ee_revoked() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let server_config = Arc::new(make_server_config(*kt));
+
+        // Setup a server verifier that will check the EE certificate's revocation status.
+        let crls = vec![kt.end_entity_crl()];
+        let builder = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+            .with_crls(crls)
+            .only_check_end_entity_revocation();
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config = make_client_config_with_verifier(&[version], builder.clone());
+            let mut client =
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+
+            // We expect the handshake to fail since the server's EE certificate is revoked.
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(
+                err,
+                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                    CertificateError::Revoked
+                )))
+            );
+        }
+    }
+}
+
+#[test]
+fn client_check_server_certificate_ee_unknown_revocation() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let server_config = Arc::new(make_server_config(*kt));
+
+        // Setup a server verifier builder that will check the EE certificate's revocation status, but not
+        // allow unknown revocation status (the default). We'll provide CRLs that are not relevant
+        // to the EE cert to ensure its status is unknown.
+        let unrelated_crls = vec![kt.intermediate_crl()];
+        let forbid_unknown_verifier = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+            .with_crls(unrelated_crls.clone())
+            .only_check_end_entity_revocation();
+
+        // Also set up a verifier builder that will allow unknown revocation status.
+        let allow_unknown_verifier = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+            .with_crls(unrelated_crls)
+            .only_check_end_entity_revocation()
+            .allow_unknown_revocation_status();
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config =
+                make_client_config_with_verifier(&[version], forbid_unknown_verifier.clone());
+            let mut client =
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+
+            // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
+            // server's EE certificate's revocation status is unknown given the CRLs we've provided.
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert!(matches!(
+                err,
+                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                    CertificateError::UnknownRevocationStatus
+                )))
+            ));
+
+            // We expect if we use the allow_unknown_verifier that the handshake will not fail.
+            let client_config =
+                make_client_config_with_verifier(&[version], allow_unknown_verifier.clone());
+            let mut client =
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let res = do_handshake_until_error(&mut client, &mut server);
+            assert!(res.is_ok());
+        }
+    }
+}
+
+#[test]
+fn client_check_server_certificate_intermediate_revoked() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let server_config = Arc::new(make_server_config(*kt));
+
+        // Setup a server verifier builder that will check the full chain revocation status against a CRL
+        // that marks the intermediate certificate as revoked. We allow unknown revocation status
+        // so the EE cert's unknown status doesn't cause an error.
+        let crls = vec![kt.intermediate_crl()];
+        let full_chain_verifier_builder = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+            .with_crls(crls.clone())
+            .allow_unknown_revocation_status();
+
+        // Also set up a verifier builder that will use the same CRL, but only check the EE certificate
+        // revocation status.
+        let ee_verifier_builder = WebPkiServerVerifier::builder(get_client_root_store(*kt))
+            .with_crls(crls.clone())
+            .only_check_end_entity_revocation()
+            .allow_unknown_revocation_status();
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config =
+                make_client_config_with_verifier(&[version], full_chain_verifier_builder.clone());
+            let mut client =
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+
+            // We expect the handshake to fail when using the full chain verifier since the intermediate's
+            // EE certificate is revoked.
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(
+                err,
+                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                    CertificateError::Revoked
+                )))
+            );
+
+            let client_config =
+                make_client_config_with_verifier(&[version], ee_verifier_builder.clone());
+            let mut client =
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
+            // revocation status. The revoked intermediate status should not be checked.
+            let res = do_handshake_until_error(&mut client, &mut server);
+            assert!(res.is_ok())
         }
     }
 }
