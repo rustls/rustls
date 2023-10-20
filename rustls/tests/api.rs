@@ -1121,18 +1121,15 @@ fn client_cert_resolve() {
         let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
 
         let expected_issuers = match *kt {
-            KeyType::Rsa => vec![
-                b"0,1*0(\x06\x03U\x04\x03\x0c!ponytown RSA level 2 intermediate".to_vec(),
-                b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA".to_vec(),
-            ],
-            KeyType::Ecdsa => vec![
-                b"0.1,0*\x06\x03U\x04\x03\x0c#ponytown ECDSA level 2 intermediate".to_vec(),
-                b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA".to_vec(),
-            ],
-            KeyType::Ed25519 => vec![
-                b"0.1,0*\x06\x03U\x04\x03\x0c#ponytown EdDSA level 2 intermediate".to_vec(),
-                b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA".to_vec(),
-            ],
+            KeyType::Rsa => {
+                vec![b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA".to_vec()]
+            }
+            KeyType::Ecdsa => {
+                vec![b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA".to_vec()]
+            }
+            KeyType::Ed25519 => {
+                vec![b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA".to_vec()]
+            }
         };
 
         for version in rustls::ALL_VERSIONS {
@@ -1194,20 +1191,49 @@ fn client_auth_works() {
 }
 
 #[test]
-fn client_mandatory_auth_revocation_works() {
+fn client_mandatory_auth_client_revocation_works() {
     for kt in ALL_KEY_TYPES.iter() {
         // Create a server configuration that includes a CRL that specifies the client certificate
         // is revoked.
-        let crls = vec![kt.client_crl()];
-        let server_config = Arc::new(make_server_config_with_mandatory_client_auth_crls(
-            *kt, crls,
+        let relevant_crls = vec![kt.client_crl()];
+        // Only check the EE certificate status. See client_mandatory_auth_intermediate_revocation_works
+        // for testing revocation status of the whole chain.
+        let ee_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+            .with_crls(relevant_crls)
+            .only_check_end_entity_revocation();
+        let revoked_server_config = Arc::new(make_server_config_with_client_verifier(
+            *kt,
+            ee_verifier_builder,
         ));
 
+        // Create a server configuration that includes a CRL that doesn't cover the client certificate,
+        // and uses the default behaviour of treating unknown revocation status as an error.
+        let unrelated_crls = vec![kt.intermediate_crl()];
+        let ee_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+            .with_crls(unrelated_crls.clone())
+            .only_check_end_entity_revocation();
+        let missing_client_crl_server_config = Arc::new(make_server_config_with_client_verifier(
+            *kt,
+            ee_verifier_builder,
+        ));
+
+        // Create a server configuration that includes a CRL that doesn't cover the client certificate,
+        // but change the builder to allow unknown revocation status.
+        let ee_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+            .with_crls(unrelated_crls.clone())
+            .only_check_end_entity_revocation()
+            .allow_unknown_revocation_status();
+        let allow_missing_client_crl_server_config = Arc::new(
+            make_server_config_with_client_verifier(*kt, ee_verifier_builder),
+        );
+
         for version in rustls::ALL_VERSIONS {
-            let client_config = make_client_config_with_versions_with_auth(*kt, &[version]);
+            // Connecting to the server with a CRL that indicates the client certificate is revoked
+            // should fail with the expected error.
+            let client_config =
+                Arc::new(make_client_config_with_versions_with_auth(*kt, &[version]));
             let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            // Because the client certificate is revoked, the handshake should fail.
+                make_pair_for_arc_configs(&client_config, &revoked_server_config);
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
                 err,
@@ -1215,12 +1241,77 @@ fn client_mandatory_auth_revocation_works() {
                     CertificateError::Revoked
                 )))
             );
+            // Connecting to the server missing CRL information for the client certificate should
+            // fail with the expected unknown revocation status error.
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&client_config, &missing_client_crl_server_config);
+            let res = do_handshake_until_error(&mut client, &mut server);
+            assert!(matches!(
+                res,
+                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                    CertificateError::UnknownRevocationStatus
+                )))
+            ));
+            // Connecting to the server missing CRL information for the client should not error
+            // if the server's verifier allows unknown revocation status.
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&client_config, &allow_missing_client_crl_server_config);
+            let res = do_handshake_until_error(&mut client, &mut server);
+            assert!(res.is_ok());
         }
     }
 }
 
 #[test]
-fn client_optional_auth_revocation_works() {
+fn client_mandatory_auth_intermediate_revocation_works() {
+    for kt in ALL_KEY_TYPES.iter() {
+        // Create a server configuration that includes a CRL that specifies the intermediate certificate
+        // is revoked. We check the full chain for revocation status (default), and allow unknown
+        // revocation status so the EE's unknown revocation status isn't an error.
+        let crls = vec![kt.intermediate_crl()];
+        let full_chain_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+            .with_crls(crls.clone())
+            .allow_unknown_revocation_status();
+        let full_chain_server_config = Arc::new(make_server_config_with_client_verifier(
+            *kt,
+            full_chain_verifier_builder,
+        ));
+
+        // Also create a server configuration that uses the same CRL, but that only checks the EE
+        // cert revocation status.
+        let ee_only_verifier_builder = WebPkiClientVerifier::builder(get_client_root_store(*kt))
+            .with_crls(crls)
+            .only_check_end_entity_revocation()
+            .allow_unknown_revocation_status();
+        let ee_server_config = Arc::new(make_server_config_with_client_verifier(
+            *kt,
+            ee_only_verifier_builder,
+        ));
+
+        for version in rustls::ALL_VERSIONS {
+            // When checking the full chain, we expect an error - the intermediate is revoked.
+            let client_config =
+                Arc::new(make_client_config_with_versions_with_auth(*kt, &[version]));
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&client_config, &full_chain_server_config);
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(
+                err,
+                Err(ErrorFromPeer::Server(Error::InvalidCertificate(
+                    CertificateError::Revoked
+                )))
+            );
+            // However, when checking just the EE cert we expect no error - the intermediate's
+            // revocation status should not be checked.
+            let (mut client, mut server) =
+                make_pair_for_arc_configs(&client_config, &ee_server_config);
+            assert!(do_handshake_until_error(&mut client, &mut server).is_ok());
+        }
+    }
+}
+
+#[test]
+fn client_optional_auth_client_revocation_works() {
     for kt in ALL_KEY_TYPES.iter() {
         // Create a server configuration that includes a CRL that specifies the client certificate
         // is revoked.
