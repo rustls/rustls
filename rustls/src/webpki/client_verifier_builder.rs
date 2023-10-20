@@ -195,13 +195,13 @@ mod tests {
     }
 
     #[test]
-    fn test_noauth() {
+    fn test_client_verifier_no_auth() {
         // We should be able to build a verifier that turns off client authentication.
         WebPkiClientVerifier::no_client_auth();
     }
 
     #[test]
-    fn test_required_auth() {
+    fn test_client_verifier_required_auth() {
         // We should be able to build a verifier that requires client authentication, and does
         // no revocation checking.
         let builder = WebPkiClientVerifier::builder(test_roots());
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn test_optional_auth() {
+    fn test_client_verifier_optional_auth() {
         // We should be able to build a verifier that allows client authentication, and anonymous
         // access, and does no revocation checking.
         let builder = WebPkiClientVerifier::builder(test_roots()).allow_unauthenticated();
@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn test_without_crls_required_auth() {
+    fn test_client_verifier_without_crls_required_auth() {
         // We should be able to build a verifier that requires client authentication, and does
         // no revocation checking, that hasn't been configured to determine how to handle
         // unauthenticated clients yet.
@@ -232,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn test_without_crls_opptional_auth() {
+    fn test_client_verifier_without_crls_opptional_auth() {
         // We should be able to build a verifier that allows client authentication,
         // and anonymous access, that does no revocation checking.
         let builder = WebPkiClientVerifier::builder(test_roots()).allow_unauthenticated();
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_with_invalid_crls() {
-        // Trying to build a verifier with invalid CRLs should error at build time.
+        // Trying to build a client verifier with invalid CRLs should error at build time.
         let result = WebPkiClientVerifier::builder(test_roots())
             .with_crls(vec![CertificateRevocationListDer::from(vec![0xFF])])
             .build();
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_with_crls_multiple_calls() {
-        // We should be able to call `with_crls` multiple times.
+        // We should be able to call `with_crls` on a client verifier multiple times.
         let initial_crls = test_crls();
         let extra_crls =
             load_crls(&[
@@ -273,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_crls_required_auth_implicit() {
+    fn test_client_verifier_with_crls_required_auth_implicit() {
         // We should be able to build a verifier that requires client authentication, and that does
         // revocation checking with CRLs, and that does not allow any anonymous access.
         let builder = WebPkiClientVerifier::builder(test_roots()).with_crls(test_crls());
@@ -283,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn test_with_crls_optional_auth() {
+    fn test_client_verifier_with_crls_optional_auth() {
         // We should be able to build a verifier that supports client authentication, that does
         // revocation checking with CRLs, and that allows anonymous access.
         let builder = WebPkiClientVerifier::builder(test_roots())
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_builder_no_roots() {
-        // Trying to create a builder with no trust anchors should fail at build time
+        // Trying to create a client verifier builder with no trust anchors should fail at build time
         let result = WebPkiClientVerifier::builder(RootCertStore::empty().into()).build();
         assert!(matches!(
             result,
