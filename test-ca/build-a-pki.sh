@@ -135,6 +135,44 @@ openssl req -nodes \
           -batch \
           -subj "/CN=ponytown client"
 
+# Generate a CRL revoking a specific certificate, signed by the specified issuer.
+# Arguments:
+#  1. the key type (e.g. "rsa")
+#  2. the name of the issuer (e.g. "inter")
+#  3. the name of the certificate to revoke (e.g. "end")
+function gen_crl {
+  local kt=$1
+  local issuer_name=$2
+  local revoked_cert_name=$3
+
+  # Overwrite the CA state for each revocation - this avoids an
+  # "already revoked" error since we're re-using serial numbers across
+  # key types.
+  echo -n '' > index.txt
+  echo '1000' > crlnumber
+
+  # Revoke the certificate in the openssl CA index. This produces a CRL but
+  # doesn't include the revoked certificate in the CRL...
+  openssl ca \
+            -config ./crl-openssl.cnf \
+            -keyfile "$kt/$issuer_name.key" \
+            -cert "$kt/$issuer_name.cert" \
+            -gencrl \
+            -crldays 7 \
+            -revoke "$kt/$revoked_cert_name.cert" \
+            -crl_reason keyCompromise \
+            -out "$kt/$revoked_cert_name.revoked.crl.pem"
+
+  # Run -gencrl again to actually include the revoked certificate in the CRL.
+  openssl ca \
+            -config ./crl-openssl.cnf \
+            -keyfile "$kt/$issuer_name.key" \
+            -cert "$kt/$issuer_name.cert" \
+            -gencrl \
+            -crldays 7 \
+            -out "$kt/$revoked_cert_name.revoked.crl.pem"
+}
+
 for kt in rsa ecdsa eddsa ; do
   openssl x509 -req \
             -in $kt/inter.req \
@@ -166,32 +204,12 @@ for kt in rsa ecdsa eddsa ; do
             -set_serial 789 \
             -extensions v3_client -extfile openssl.cnf
 
-  # Overwrite the CA state for each revocation - this avoids an 
-  # "already revoked" error since we're re-using serial numbers across
-  # key types.
-  echo -n '' > index.txt
-  echo '1000' > crlnumber
-
-  # Revoke the certificate in the openssl CA index. This produces a CRL but
-  # doesn't include the revoked certificate...
-  openssl ca \
-            -config ./crl-openssl.cnf \
-            -keyfile $kt/inter.key \
-            -cert $kt/inter.cert \
-            -gencrl \
-            -crldays 7 \
-            -revoke $kt/client.cert \
-            -crl_reason keyCompromise \
-            -out $kt/client.revoked.crl.pem
-
-  # Run -gencrl again to actually include the revoked certificate in the CRL.
-  openssl ca \
-            -config ./crl-openssl.cnf \
-            -keyfile $kt/inter.key \
-            -cert $kt/inter.cert \
-            -gencrl \
-            -crldays 7 \
-            -out $kt/client.revoked.crl.pem
+  # Generate a CRL revoking the client certificate
+  gen_crl $kt inter client
+  # Generate a CRL revoking the server certificate
+  gen_crl $kt inter end
+  # Generate a CRL revoking the intermediate certificate
+  gen_crl $kt ca inter
 
   cat $kt/inter.cert $kt/ca.cert > $kt/end.chain
   cat $kt/end.cert $kt/inter.cert $kt/ca.cert > $kt/end.fullchain
