@@ -8,6 +8,7 @@ use std::sync::Arc;
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use webpki::extract_trust_anchor;
 
+use rustls::client::ServerCertVerifierBuilder;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
@@ -48,6 +49,7 @@ embed_files! {
     (ECDSA_CLIENT_FULLCHAIN, "ecdsa", "client.fullchain");
     (ECDSA_CLIENT_KEY, "ecdsa", "client.key");
     (ECDSA_CLIENT_REQ, "ecdsa", "client.req");
+    (ECDSA_END_CRL_PEM, "ecdsa", "end.revoked.crl.pem");
     (ECDSA_CLIENT_CRL_PEM, "ecdsa", "client.revoked.crl.pem");
     (ECDSA_INTERMEDIATE_CRL_PEM, "ecdsa", "inter.revoked.crl.pem");
     (ECDSA_END_CERT, "ecdsa", "end.cert");
@@ -69,6 +71,7 @@ embed_files! {
     (EDDSA_CLIENT_FULLCHAIN, "eddsa", "client.fullchain");
     (EDDSA_CLIENT_KEY, "eddsa", "client.key");
     (EDDSA_CLIENT_REQ, "eddsa", "client.req");
+    (EDDSA_END_CRL_PEM, "eddsa", "end.revoked.crl.pem");
     (EDDSA_CLIENT_CRL_PEM, "eddsa", "client.revoked.crl.pem");
     (EDDSA_INTERMEDIATE_CRL_PEM, "eddsa", "inter.revoked.crl.pem");
     (EDDSA_END_CERT, "eddsa", "end.cert");
@@ -89,6 +92,7 @@ embed_files! {
     (RSA_CLIENT_KEY, "rsa", "client.key");
     (RSA_CLIENT_REQ, "rsa", "client.req");
     (RSA_CLIENT_RSA, "rsa", "client.rsa");
+    (RSA_END_CRL_PEM, "rsa", "end.revoked.crl.pem");
     (RSA_CLIENT_CRL_PEM, "rsa", "client.revoked.crl.pem");
     (RSA_INTERMEDIATE_CRL_PEM, "rsa", "inter.revoked.crl.pem");
     (RSA_END_CERT, "rsa", "end.cert");
@@ -222,6 +226,10 @@ impl KeyType {
         rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain")))
             .map(|result| result.unwrap())
             .collect()
+    }
+
+    pub fn end_entity_crl(&self) -> CertificateRevocationListDer<'static> {
+        self.get_crl("end")
     }
 
     pub fn client_crl(&self) -> CertificateRevocationListDer<'static> {
@@ -422,6 +430,20 @@ pub fn make_client_config_with_versions_with_auth(
         .with_protocol_versions(versions)
         .unwrap();
     finish_client_config_with_creds(kt, builder)
+}
+
+pub fn make_client_config_with_verifier(
+    versions: &[&'static rustls::SupportedProtocolVersion],
+    verifier_builder: ServerCertVerifierBuilder,
+) -> ClientConfig {
+    ClientConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(versions)
+        .unwrap()
+        .dangerous()
+        .with_custom_certificate_verifier(verifier_builder.build().unwrap())
+        .with_no_client_auth()
 }
 
 pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection) {
