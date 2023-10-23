@@ -13,7 +13,7 @@ mod verify;
 pub use anchors::RootCertStore;
 
 pub use client_verifier::{ClientCertVerifierBuilder, WebPkiClientVerifier};
-pub use server_verifier::WebPkiServerVerifier;
+pub use server_verifier::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 
 pub use verify::WebPkiSupportedAlgorithms;
 

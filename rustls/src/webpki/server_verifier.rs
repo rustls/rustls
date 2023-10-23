@@ -3,45 +3,201 @@ use crate::log::trace;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
+use webpki::{
+    BorrowedCertRevocationList, OwnedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy,
+};
 
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
+#[cfg(feature = "ring")]
+use crate::webpki::verify::SUPPORTED_SIG_ALGS;
 use crate::webpki::verify::{
-    verify_signed_struct, verify_tls13, ParsedCertificate, SUPPORTED_SIG_ALGS,
+    verify_server_cert_signed_by_trust_anchor_impl, verify_signed_struct, verify_tls13,
+    ParsedCertificate,
 };
-use crate::webpki::{verify_server_cert_signed_by_trust_anchor, verify_server_name};
-use crate::{Error, RootCertStore, ServerName, SignatureScheme, WebPkiSupportedAlgorithms};
+use crate::webpki::{borrow_crls, crl_error, verify_server_name, VerifierBuilderError};
+use crate::{
+    CertRevocationListError, Error, RootCertStore, ServerName, SignatureScheme,
+    WebPkiSupportedAlgorithms,
+};
+
+/// A builder for configuring a `webpki` server certificate verifier.
+///
+/// For more information, see the [`WebPkiServerVerifier`] documentation.
+#[derive(Debug, Clone)]
+pub struct ServerCertVerifierBuilder {
+    roots: Arc<RootCertStore>,
+    crls: Vec<CertificateRevocationListDer<'static>>,
+    revocation_check_depth: RevocationCheckDepth,
+    unknown_revocation_policy: UnknownStatusPolicy,
+    supported_algs: Option<WebPkiSupportedAlgorithms>,
+}
+
+impl ServerCertVerifierBuilder {
+    pub(crate) fn new(roots: Arc<RootCertStore>) -> Self {
+        Self {
+            roots,
+            crls: Vec::new(),
+            revocation_check_depth: RevocationCheckDepth::Chain,
+            unknown_revocation_policy: UnknownStatusPolicy::Deny,
+            supported_algs: None,
+        }
+    }
+
+    /// Verify the revocation state of presented client certificates against the provided
+    /// certificate revocation lists (CRLs). Calling `with_crls` multiple times appends the
+    /// given CRLs to the existing collection.
+    pub fn with_crls(
+        mut self,
+        crls: impl IntoIterator<Item = CertificateRevocationListDer<'static>>,
+    ) -> Self {
+        self.crls.extend(crls);
+        self
+    }
+
+    /// Only check the end entity certificate revocation status when using CRLs.
+    ///
+    /// If CRLs are provided using [`with_crls`][Self::with_crls] only check the end entity
+    /// certificate's revocation status. Overrides the default behavior of checking revocation
+    /// status for each certificate in the verified chain built to a trust anchor
+    /// (excluding the trust anchor itself).
+    ///
+    /// If no CRLs are provided then this setting has no effect. Neither the end entity certificate
+    /// or any intermediates will have revocation status checked.
+    pub fn only_check_end_entity_revocation(mut self) -> Self {
+        self.revocation_check_depth = RevocationCheckDepth::EndEntity;
+        self
+    }
+
+    /// Allow unknown certificate revocation status when using CRLs.
+    ///
+    /// If CRLs are provided with [`with_crls`][Self::with_crls] and it isn't possible to
+    /// determine the revocation status of a certificate, do not treat it as an error condition.
+    /// Overrides the default behavior where unknown revocation status is considered an error.
+    ///
+    /// If no CRLs are provided then this setting has no effect as revocation status checks
+    /// are not performed.
+    pub fn allow_unknown_revocation_status(mut self) -> Self {
+        self.unknown_revocation_policy = UnknownStatusPolicy::Allow;
+        self
+    }
+
+    /// Sets which signature verification algorithms are enabled.
+    ///
+    /// If this is called multiple times, the last call wins.
+    pub fn with_signature_verification_algorithms(
+        mut self,
+        supported_algs: WebPkiSupportedAlgorithms,
+    ) -> Self {
+        self.supported_algs = Some(supported_algs);
+        self
+    }
+
+    /// Build a server certificate verifier, allowing control over the root certificates to use as
+    /// trust anchors, and to control how server certificate revocation checking is performed.
+    ///
+    /// If the `ring` crate feature is supplied, and `with_signature_verification_algorithms` was not
+    /// called on the builder, a default set of signature verification algorithms is used.
+    ///
+    /// Once built, the provided `Arc<dyn ServerCertVerifier>` can be used with a Rustls
+    /// [crate::server::ServerConfig] to configure client certificate validation using
+    /// [`with_client_cert_verifier`][crate::ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
+    ///
+    /// # Errors
+    /// This function will return a `CertVerifierBuilderError` if:
+    /// 1. No trust anchors have been provided.
+    /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
+    /// 3. No signature verification algorithms were set and the `ring` feature is not enabled.
+    #[cfg_attr(not(feature = "ring"), allow(unused_mut))]
+    pub fn build(mut self) -> Result<Arc<dyn ServerCertVerifier>, VerifierBuilderError> {
+        if self.roots.is_empty() {
+            return Err(VerifierBuilderError::NoRootAnchors);
+        }
+
+        #[cfg(feature = "ring")]
+        if self.supported_algs.is_none() {
+            self.supported_algs = Some(SUPPORTED_SIG_ALGS);
+        }
+
+        let supported_algs = self
+            .supported_algs
+            .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
+
+        Ok(Arc::new(WebPkiServerVerifier::new(
+            self.roots,
+            self.crls
+                .into_iter()
+                .map(|der_crl| {
+                    BorrowedCertRevocationList::from_der(der_crl.as_ref())
+                        .and_then(|crl| crl.to_owned())
+                        .map_err(crl_error)
+                })
+                .collect::<Result<Vec<_>, CertRevocationListError>>()?,
+            self.revocation_check_depth,
+            self.unknown_revocation_policy,
+            supported_algs,
+        )))
+    }
+}
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
 #[allow(unreachable_pub)]
 pub struct WebPkiServerVerifier {
     roots: Arc<RootCertStore>,
+    crls: Vec<OwnedCertRevocationList>,
+    revocation_check_depth: RevocationCheckDepth,
+    unknown_revocation_policy: UnknownStatusPolicy,
     supported: WebPkiSupportedAlgorithms,
 }
 
 #[allow(unreachable_pub)]
 impl WebPkiServerVerifier {
-    /// Constructs a new `WebPkiServerVerifier`.
+    /// Create builder to build up the `webpki` server certificate verifier configuration.
+    /// Server certificates will be verified using the trust anchors found in the provided `roots`.
     ///
-    /// `roots` is the set of trust anchors to trust for issuing server certs.
+    /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
+    pub fn builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
+        ServerCertVerifierBuilder::new(roots)
+    }
+
+    /// Short-cut for creating a `WebPkiServerVerifier` that does not perform certificate revocation
+    /// checking, avoiding the need to use a builder.
     #[cfg(feature = "ring")]
-    pub fn new(roots: impl Into<Arc<RootCertStore>>) -> Self {
-        Self::new_with_algorithms(roots, SUPPORTED_SIG_ALGS)
+    pub(crate) fn new_without_revocation(roots: impl Into<Arc<RootCertStore>>) -> Self {
+        Self::new(
+            roots,
+            Vec::default(),
+            RevocationCheckDepth::Chain,
+            UnknownStatusPolicy::Allow,
+            SUPPORTED_SIG_ALGS,
+        )
     }
 
     /// Constructs a new `WebPkiServerVerifier`.
     ///
-    /// `roots` is the set of trust anchors to trust for issuing server certs.
-    /// `supported` is the set of supported algorithms that will be used for
-    /// certificate verification and TLS handshake signature verification.
-    pub fn new_with_algorithms(
+    /// * `roots` is the set of trust anchors to trust for issuing server certs.
+    /// * `crls` are a vec of owned certificate revocation lists (CRLs) to use for
+    ///   client certificate validation.
+    /// * `revocation_check_depth` controls which certificates have their revocation status checked
+    ///   when `crls` are provided.
+    /// * `unknown_revocation_policy` controls how certificates with an unknown revocation status
+    ///   are handled when `crls` are provided.
+    /// * `supported` is the set of supported algorithms that will be used for
+    ///   certificate verification and TLS handshake signature verification.
+    pub(crate) fn new(
         roots: impl Into<Arc<RootCertStore>>,
+        crls: Vec<OwnedCertRevocationList>,
+        revocation_check_depth: RevocationCheckDepth,
+        unknown_revocation_policy: UnknownStatusPolicy,
         supported: WebPkiSupportedAlgorithms,
     ) -> Self {
         Self {
             roots: roots.into(),
+            crls,
+            revocation_check_depth,
+            unknown_revocation_policy,
             supported,
         }
     }
@@ -78,9 +234,15 @@ impl WebPkiServerVerifier {
 
 impl ServerCertVerifier for WebPkiServerVerifier {
     /// Will verify the certificate is valid in the following ways:
-    /// - Signed by a  trusted `RootCertStore` CA
+    /// - Signed by a trusted `RootCertStore` CA
     /// - Not Expired
     /// - Valid for DNS entry
+    /// - Valid revocation status (if applicable).
+    ///
+    /// Depending on the verifier's configuration revocation status checking may be performed for
+    /// each certificate in the chain to a root CA (excluding the root itself), or only the
+    /// end entity certificate. Similarly, unknown revocation status may be treated as an error
+    /// or allowed based on configuration.
     fn verify_server_cert(
         &self,
         end_entity: &CertificateDer<'_>,
@@ -91,10 +253,31 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     ) -> Result<ServerCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
 
-        verify_server_cert_signed_by_trust_anchor(
+        let crls = borrow_crls(&self.crls);
+        let revocation = if crls.is_empty() {
+            None
+        } else {
+            // Note: unwrap here is safe because RevocationOptionsBuilder only errors when given
+            //       empty CRLs.
+            let mut builder = webpki::RevocationOptionsBuilder::new(&crls)
+                .unwrap()
+                .with_depth(self.revocation_check_depth);
+            if matches!(
+                self.unknown_revocation_policy,
+                webpki::UnknownStatusPolicy::Allow
+            ) {
+                builder = builder.allow_unknown_status();
+            }
+            Some(builder.build())
+        };
+
+        // Note: we use the crate-internal `_impl` fn here in order to provide revocation
+        // checking information, if applicable.
+        verify_server_cert_signed_by_trust_anchor_impl(
             &cert,
             &self.roots,
             intermediates,
+            revocation,
             now,
             self.supported.all,
         )?;
@@ -127,5 +310,119 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.supported.supported_schemes()
+    }
+}
+
+#[cfg(all(test, feature = "ring"))]
+mod tests {
+    use std::sync::Arc;
+
+    use pki_types::{CertificateDer, CertificateRevocationListDer};
+
+    use super::{VerifierBuilderError, WebPkiServerVerifier};
+    use crate::RootCertStore;
+
+    fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
+        crls_der
+            .iter()
+            .map(|pem_bytes| {
+                rustls_pemfile::crls(&mut &pem_bytes[..])
+                    .next()
+                    .unwrap()
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    fn test_crls() -> Vec<CertificateRevocationListDer<'static>> {
+        load_crls(&[
+            include_bytes!("../../../test-ca/ecdsa/client.revoked.crl.pem").as_slice(),
+            include_bytes!("../../../test-ca/rsa/client.revoked.crl.pem").as_slice(),
+        ])
+    }
+
+    fn load_roots(roots_der: &[&[u8]]) -> Arc<RootCertStore> {
+        let mut roots = RootCertStore::empty();
+        roots_der.iter().for_each(|der| {
+            roots
+                .add(CertificateDer::from(der.to_vec()))
+                .unwrap()
+        });
+        roots.into()
+    }
+
+    fn test_roots() -> Arc<RootCertStore> {
+        load_roots(&[
+            include_bytes!("../../../test-ca/ecdsa/ca.der").as_slice(),
+            include_bytes!("../../../test-ca/rsa/ca.der").as_slice(),
+        ])
+    }
+
+    #[test]
+    fn test_with_invalid_crls() {
+        // Trying to build a server verifier with invalid CRLs should error at build time.
+        let result = WebPkiServerVerifier::builder(test_roots())
+            .with_crls(vec![CertificateRevocationListDer::from(vec![0xFF])])
+            .build();
+        assert!(matches!(result, Err(VerifierBuilderError::InvalidCrl(_))));
+    }
+
+    #[test]
+    fn test_with_crls_multiple_calls() {
+        // We should be able to call `with_crls` on a server verifier multiple times.
+        let initial_crls = test_crls();
+        let extra_crls =
+            load_crls(&[
+                include_bytes!("../../../test-ca/eddsa/client.revoked.crl.pem").as_slice(),
+            ]);
+
+        let builder = WebPkiServerVerifier::builder(test_roots())
+            .with_crls(initial_crls.clone())
+            .with_crls(extra_crls.clone());
+
+        // There should be the expected number of crls.
+        assert_eq!(builder.crls.len(), initial_crls.len() + extra_crls.len());
+        // The builder should be Debug.
+        println!("{:?}", builder);
+        builder.build().unwrap();
+    }
+
+    #[test]
+    fn test_builder_no_roots() {
+        // Trying to create a server verifier builder with no trust anchors should fail at build time
+        let result = WebPkiServerVerifier::builder(RootCertStore::empty().into()).build();
+        assert!(matches!(result, Err(VerifierBuilderError::NoRootAnchors)));
+    }
+
+    #[test]
+    fn test_server_verifier_ee_only() {
+        // We should be able to build a server cert. verifier that only checks the EE cert.
+        let builder =
+            WebPkiServerVerifier::builder(test_roots()).only_check_end_entity_revocation();
+        // The builder should be Debug.
+        println!("{:?}", builder);
+        builder.build().unwrap();
+    }
+
+    #[test]
+    fn test_server_verifier_allow_unknown() {
+        // We should be able to build a server cert. verifier that allows unknown revocation
+        // status.
+        let builder = WebPkiServerVerifier::builder(test_roots()).allow_unknown_revocation_status();
+        // The builder should be Debug.
+        println!("{:?}", builder);
+        builder.build().unwrap();
+    }
+
+    #[test]
+    fn test_server_verifier_allow_unknown_ee_only() {
+        // We should be able to build a server cert. verifier that allows unknown revocation
+        // status and only checks the EE cert.
+        let builder = WebPkiServerVerifier::builder(test_roots())
+            .allow_unknown_revocation_status()
+            .only_check_end_entity_revocation();
+        // The builder should be Debug.
+        println!("{:?}", builder);
+        builder.build().unwrap();
     }
 }
