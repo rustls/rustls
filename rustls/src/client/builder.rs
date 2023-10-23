@@ -31,7 +31,9 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 kx_groups: self.state.kx_groups,
                 provider: self.state.provider,
                 versions: self.state.versions,
-                verifier: Arc::new(webpki::WebPkiServerVerifier::new(root_store)),
+                verifier: Arc::new(webpki::WebPkiServerVerifier::new_without_revocation(
+                    root_store,
+                )),
             },
             side: PhantomData,
         }

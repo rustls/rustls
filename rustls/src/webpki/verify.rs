@@ -16,6 +16,11 @@ use crate::verify::{DigitallySignedStruct, HandshakeSignatureValid};
 /// Verify that the end-entity certificate `end_entity` is a valid server cert
 /// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
 ///
+/// This function is primarily useful when building a custom certificate verifier. It
+/// performs **no revocation checking**. Implementors must handle this themselves,
+/// along with checking that the server certificate is valid for the subject name
+/// being used (see [`verify_server_name`]).
+///
 /// `intermediates` contains all certificates other than `end_entity` that
 /// were sent as part of the server's `Certificate` message. It is in the
 /// same order that the server sent them and may be empty.
@@ -27,17 +32,14 @@ pub fn verify_server_cert_signed_by_trust_anchor(
     now: UnixTime,
     supported_algs: &[&dyn SignatureVerificationAlgorithm],
 ) -> Result<(), Error> {
-    cert.0
-        .verify_for_usage(
-            supported_algs,
-            &roots.roots,
-            intermediates,
-            now,
-            webpki::KeyUsage::server_auth(),
-            None, // no CRLs
-        )
-        .map_err(pki_error)
-        .map(|_| ())
+    verify_server_cert_signed_by_trust_anchor_impl(
+        cert,
+        roots,
+        intermediates,
+        None, // No revocation checking supported with this API.
+        now,
+        supported_algs,
+    )
 }
 
 /// Verify that the `end_entity` has a name or alternative name matching the `server_name`
@@ -253,6 +255,41 @@ pub(crate) fn verify_tls13(
     cert.verify_signature(alg, msg, dss.signature())
         .map_err(pki_error)
         .map(|_| HandshakeSignatureValid::assertion())
+}
+
+/// Verify that the end-entity certificate `end_entity` is a valid server cert
+/// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
+///
+/// `intermediates` contains all certificates other than `end_entity` that
+/// were sent as part of the server's `Certificate` message. It is in the
+/// same order that the server sent them and may be empty.
+///
+/// `revocation` controls how revocation checking is performed, if at all.
+///
+/// This function exists to be used by [`verify_server_cert_signed_by_trust_anchor`],
+/// and differs only in providing a `Option<webpki::RevocationOptions>` argument. We
+/// can't include this argument in `verify_server_cert_signed_by_trust_anchor` because
+/// it will leak the webpki types into Rustls' public API.
+pub(crate) fn verify_server_cert_signed_by_trust_anchor_impl(
+    cert: &ParsedCertificate,
+    roots: &RootCertStore,
+    intermediates: &[CertificateDer<'_>],
+    revocation: Option<webpki::RevocationOptions>,
+    now: UnixTime,
+    supported_algs: &[&dyn SignatureVerificationAlgorithm],
+) -> Result<(), Error> {
+    let result = cert.0.verify_for_usage(
+        supported_algs,
+        &roots.roots,
+        intermediates,
+        now,
+        webpki::KeyUsage::server_auth(),
+        revocation,
+    );
+    match result {
+        Ok(_) => Ok(()),
+        Err(e) => Err(pki_error(e)),
+    }
 }
 
 #[cfg(test)]

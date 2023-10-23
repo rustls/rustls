@@ -460,7 +460,8 @@ pub mod client {
     }
 
     pub use crate::webpki::{
-        verify_server_cert_signed_by_trust_anchor, verify_server_name, WebPkiServerVerifier,
+        verify_server_cert_signed_by_trust_anchor, verify_server_name, ServerCertVerifierBuilder,
+        VerifierBuilderError, WebPkiServerVerifier,
     };
 
     pub use crate::msgs::persist::Tls12ClientSessionValue;
