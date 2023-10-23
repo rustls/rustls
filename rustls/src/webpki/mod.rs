@@ -7,11 +7,13 @@ use crate::error::{CertRevocationListError, CertificateError, Error};
 
 mod anchors;
 mod client_verifier;
+mod server_verifier;
 mod verify;
 
 pub use anchors::RootCertStore;
 
 pub use client_verifier::{ClientCertVerifierBuilder, WebPkiClientVerifier};
+pub use server_verifier::WebPkiServerVerifier;
 
 pub use verify::WebPkiSupportedAlgorithms;
 
@@ -19,7 +21,6 @@ pub use verify::WebPkiSupportedAlgorithms;
 #[allow(unreachable_pub)]
 pub use verify::{
     verify_server_cert_signed_by_trust_anchor, verify_server_name, ParsedCertificate,
-    WebPkiServerVerifier,
 };
 
 /// An error that can occur when building a certificate verifier.
