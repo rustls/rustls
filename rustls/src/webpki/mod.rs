@@ -8,9 +8,11 @@ mod verify;
 
 pub use anchors::RootCertStore;
 
-pub use client_verifier::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
+pub use client_verifier::{
+    ClientCertVerifierBuilder, ClientCertVerifierBuilderError, WebPkiClientVerifier,
+};
 
-pub use verify::{WebPkiClientVerifier, WebPkiSupportedAlgorithms};
+pub use verify::WebPkiSupportedAlgorithms;
 
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]
