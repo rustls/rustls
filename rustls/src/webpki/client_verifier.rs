@@ -6,7 +6,7 @@ use webpki::{
     BorrowedCertRevocationList, OwnedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy,
 };
 
-use super::{crl_error, pki_error, VerifierBuilderError};
+use super::{borrow_crls, crl_error, pki_error, VerifierBuilderError};
 use crate::verify::{
     ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
     NoClientAuth,
@@ -301,13 +301,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
-
-        #[allow(trivial_casts)] // Cast to &dyn trait is required.
-        let crls = self
-            .crls
-            .iter()
-            .map(|crl| crl as &dyn webpki::CertRevocationList)
-            .collect::<Vec<_>>();
+        let crls = borrow_crls(&self.crls);
 
         let revocation = if crls.is_empty() {
             None

@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::fmt;
 use std::error::Error as StdError;
 
@@ -100,6 +101,15 @@ fn crl_error(e: webpki::Error) -> CertRevocationListError {
 
         _ => CertRevocationListError::Other(Arc::new(e)),
     }
+}
+
+fn borrow_crls(
+    crls: &Vec<webpki::OwnedCertRevocationList>,
+) -> Vec<&dyn webpki::CertRevocationList> {
+    #[allow(trivial_casts)] // Cast to &dyn trait is required.
+    crls.iter()
+        .map(|crl| crl as &dyn webpki::CertRevocationList)
+        .collect::<Vec<_>>()
 }
 
 mod tests {
