@@ -2,20 +2,16 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
-use webpki::{
-    BorrowedCertRevocationList, OwnedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy,
-};
+use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
-use super::{borrow_crls, crl_error, pki_error, VerifierBuilderError};
+use super::{pki_error, VerifierBuilderError};
 use crate::verify::{
     ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
     NoClientAuth,
 };
+use crate::webpki::parse_crls;
 use crate::webpki::verify::{verify_signed_struct, verify_tls13, ParsedCertificate};
-use crate::{
-    CertRevocationListError, DistinguishedName, Error, RootCertStore, SignatureScheme,
-    WebPkiSupportedAlgorithms,
-};
+use crate::{DistinguishedName, Error, RootCertStore, SignatureScheme, WebPkiSupportedAlgorithms};
 
 /// A builder for configuring a `webpki` client certificate verifier.
 ///
@@ -178,14 +174,7 @@ impl ClientCertVerifierBuilder {
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
             self.root_hint_subjects,
-            self.crls
-                .into_iter()
-                .map(|der_crl| {
-                    BorrowedCertRevocationList::from_der(der_crl.as_ref())
-                        .and_then(|crl| crl.to_owned())
-                        .map_err(crl_error)
-                })
-                .collect::<Result<Vec<_>, CertRevocationListError>>()?,
+            parse_crls(self.crls)?,
             self.revocation_check_depth,
             self.unknown_revocation_policy,
             self.anon_policy,
@@ -249,7 +238,7 @@ impl ClientCertVerifierBuilder {
 pub struct WebPkiClientVerifier {
     roots: Arc<RootCertStore>,
     root_hint_subjects: Vec<DistinguishedName>,
-    crls: Vec<OwnedCertRevocationList>,
+    crls: Vec<CertRevocationList<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
     anonymous_policy: AnonymousClientPolicy,
@@ -293,7 +282,7 @@ impl WebPkiClientVerifier {
     pub(crate) fn new(
         roots: Arc<RootCertStore>,
         root_hint_subjects: Vec<DistinguishedName>,
-        crls: Vec<OwnedCertRevocationList>,
+        crls: Vec<CertRevocationList<'static>>,
         revocation_check_depth: RevocationCheckDepth,
         unknown_revocation_policy: UnknownStatusPolicy,
         anonymous_policy: AnonymousClientPolicy,
@@ -334,21 +323,21 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
-        let crls = borrow_crls(&self.crls);
 
-        let revocation = if crls.is_empty() {
+        let crl_refs = self.crls.iter().collect::<Vec<_>>();
+
+        let revocation = if self.crls.is_empty() {
             None
         } else {
-            let mut builder = webpki::RevocationOptionsBuilder::new(&crls)
-                .expect("invalid crls")
-                .with_depth(self.revocation_check_depth);
-            if matches!(
-                self.unknown_revocation_policy,
-                webpki::UnknownStatusPolicy::Allow
-            ) {
-                builder = builder.allow_unknown_status();
-            }
-            Some(builder.build())
+            Some(
+                webpki::RevocationOptionsBuilder::new(&crl_refs)
+                    // Note: safe to unwrap here - new is only fallible if no CRLs are provided
+                    //       and we verify this above.
+                    .unwrap()
+                    .with_depth(self.revocation_check_depth)
+                    .with_status_policy(self.unknown_revocation_policy)
+                    .build(),
+            )
         };
 
         cert.0
@@ -359,6 +348,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
                 now,
                 webpki::KeyUsage::client_auth(),
                 revocation,
+                None,
             )
             .map_err(pki_error)
             .map(|_| ClientCertVerified::assertion())
