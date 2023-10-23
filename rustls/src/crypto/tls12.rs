@@ -1,4 +1,67 @@
-pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn super::hmac::Key, label: &[u8], seed: &[u8]) {
+use super::hmac;
+use super::ActiveKeyExchange;
+use crate::error::Error;
+
+use alloc::boxed::Box;
+
+/// Implements [`Prf`] using a [`hmac::Hmac`].
+pub struct PrfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
+
+impl<'a> Prf for PrfUsingHmac<'a> {
+    fn for_key_exchange(
+        &self,
+        output: &mut [u8],
+        kx: Box<dyn ActiveKeyExchange>,
+        peer_pub_key: &[u8],
+        label: &[u8],
+        seed: &[u8],
+    ) -> Result<(), Error> {
+        prf(
+            output,
+            self.0
+                .with_key(
+                    kx.complete(peer_pub_key)?
+                        .secret_bytes(),
+                )
+                .as_ref(),
+            label,
+            seed,
+        );
+        Ok(())
+    }
+
+    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]) {
+        prf(output, self.0.with_key(secret).as_ref(), label, seed);
+    }
+}
+
+/// An instantiation of the TLS1.2 PRF with a specific, implicit hash function.
+///
+/// See the definition in [RFC5246 section 5](https://www.rfc-editor.org/rfc/rfc5246#section-5).
+///
+/// See [`PrfUsingHmac`] as a route to implementing this trait with just
+/// an implementation of [`hmac::Hmac`].
+pub trait Prf: Send + Sync {
+    /// Computes `PRF(secret, label, seed)` using the secret from a completed key exchange.
+    ///
+    /// Completes the given key exchange, and then uses the resulting shared secret
+    /// to compute the PRF, writing the result into `output`.
+    ///
+    /// This can fail only if the key exchange fails.
+    fn for_key_exchange(
+        &self,
+        output: &mut [u8],
+        kx: Box<dyn ActiveKeyExchange>,
+        peer_pub_key: &[u8],
+        label: &[u8],
+        seed: &[u8],
+    ) -> Result<(), Error>;
+
+    /// Computes `PRF(secret, label, seed)`, writing the result into `output`.
+    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]);
+}
+
+pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: &[u8]) {
     // A(1)
     let mut current_a = hmac_key.sign(&[label, seed]);
 
