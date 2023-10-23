@@ -482,7 +482,7 @@ pub mod server {
 
     pub use crate::verify::NoClientAuth;
     pub use crate::webpki::WebPkiClientVerifier;
-    pub use crate::webpki::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
+    pub use crate::webpki::{ClientCertVerifierBuilder, VerifierBuilderError};
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
