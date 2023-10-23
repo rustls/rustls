@@ -1,6 +1,4 @@
-use crate::crypto;
-
-pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn crypto::hmac::Key, label: &[u8], seed: &[u8]) {
+pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn super::hmac::Key, label: &[u8], seed: &[u8]) {
     // A(1)
     let mut current_a = hmac_key.sign(&[label, seed]);
 
