@@ -3,12 +3,12 @@ use alloc::sync::Arc;
 use crate::error::{CertRevocationListError, CertificateError, Error};
 
 mod anchors;
-mod client_verifier_builder;
+mod client_verifier;
 mod verify;
 
 pub use anchors::RootCertStore;
 
-pub use client_verifier_builder::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
+pub use client_verifier::{ClientCertVerifierBuilder, ClientCertVerifierBuilderError};
 
 pub use verify::{WebPkiClientVerifier, WebPkiSupportedAlgorithms};
 
