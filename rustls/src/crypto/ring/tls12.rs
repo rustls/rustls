@@ -2,6 +2,7 @@ use crate::crypto::cipher::{
     make_tls12_aad, AeadKey, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
     Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
 };
+use crate::crypto::tls12::PrfUsingHmac;
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
@@ -25,7 +26,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &ChaCha20Poly1305,
-        hmac_provider: &super::hmac::HMAC_SHA256,
+        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
@@ -38,7 +39,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &ChaCha20Poly1305,
-        hmac_provider: &super::hmac::HMAC_SHA256,
+        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
@@ -51,7 +52,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &AES128_GCM,
-        hmac_provider: &super::hmac::HMAC_SHA256,
+        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
@@ -64,7 +65,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &AES256_GCM,
-        hmac_provider: &super::hmac::HMAC_SHA384,
+        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA384),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
@@ -77,7 +78,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &AES128_GCM,
-        hmac_provider: &super::hmac::HMAC_SHA256,
+        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
@@ -90,7 +91,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &AES256_GCM,
-        hmac_provider: &super::hmac::HMAC_SHA384,
+        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA384),
     });
 
 static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[

@@ -3,7 +3,6 @@ use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::hash;
-use crate::crypto::tls12::prf;
 use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
@@ -22,8 +21,8 @@ pub struct Tls12CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
 
-    /// How to compute HMAC for the suite's hash function.
-    pub hmac_provider: &'static dyn crypto::hmac::Hmac,
+    /// How to compute the TLS1.2 PRF for the suite's hash function.
+    pub prf_provider: &'static dyn crypto::tls12::Prf,
 
     /// How to exchange/agree keys.
     pub kx: KeyExchangeAlgorithm,
@@ -98,16 +97,15 @@ impl ConnectionSecrets {
             ),
         };
 
-        let shared_secret = kx.complete(peer_pub_key)?;
-        prf(
-            &mut ret.master_secret,
-            &*ret
-                .suite
-                .hmac_provider
-                .with_key(shared_secret.secret_bytes()),
-            label.as_bytes(),
-            seed.as_ref(),
-        );
+        ret.suite
+            .prf_provider
+            .for_key_exchange(
+                &mut ret.master_secret,
+                kx,
+                peer_pub_key,
+                label.as_bytes(),
+                seed.as_ref(),
+            )?;
 
         Ok(ret)
     }
@@ -175,12 +173,9 @@ impl ConnectionSecrets {
         // NOTE: opposite order to above for no good reason.
         // Don't design security protocols on drugs, kids.
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
-        prf(
+        self.suite.prf_provider.for_secret(
             &mut out,
-            &*self
-                .suite
-                .hmac_provider
-                .with_key(&self.master_secret),
+            &self.master_secret,
             b"key expansion",
             &randoms,
         );
@@ -199,15 +194,13 @@ impl ConnectionSecrets {
     fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {
         let mut out = vec![0u8; 12];
 
-        prf(
+        self.suite.prf_provider.for_secret(
             &mut out,
-            &*self
-                .suite
-                .hmac_provider
-                .with_key(&self.master_secret),
+            &self.master_secret,
             label,
             handshake_hash.as_ref(),
         );
+
         out
     }
 
@@ -234,15 +227,9 @@ impl ConnectionSecrets {
             randoms.extend_from_slice(context);
         }
 
-        prf(
-            output,
-            &*self
-                .suite
-                .hmac_provider
-                .with_key(&self.master_secret),
-            label,
-            &randoms,
-        );
+        self.suite
+            .prf_provider
+            .for_secret(output, &self.master_secret, label, &randoms);
     }
 
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
