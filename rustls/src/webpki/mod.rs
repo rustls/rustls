@@ -8,9 +8,7 @@ mod verify;
 
 pub use anchors::RootCertStore;
 
-pub use client_verifier::{
-    ClientCertVerifierBuilder, ClientCertVerifierBuilderError, WebPkiClientVerifier,
-};
+pub use client_verifier::{ClientCertVerifierBuilder, VerifierBuilderError, WebPkiClientVerifier};
 
 pub use verify::WebPkiSupportedAlgorithms;
 

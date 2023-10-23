@@ -130,9 +130,9 @@ impl ClientCertVerifierBuilder {
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
     /// 3. No signature verification algorithms were set and the `ring` feature is not enabled.
     #[cfg_attr(not(feature = "ring"), allow(unused_mut))]
-    pub fn build(mut self) -> Result<Arc<dyn ClientCertVerifier>, ClientCertVerifierBuilderError> {
+    pub fn build(mut self) -> Result<Arc<dyn ClientCertVerifier>, VerifierBuilderError> {
         if self.roots.is_empty() {
-            return Err(ClientCertVerifierBuilderError::NoRootAnchors);
+            return Err(VerifierBuilderError::NoRootAnchors);
         }
 
         #[cfg(feature = "ring")]
@@ -142,7 +142,7 @@ impl ClientCertVerifierBuilder {
 
         let supported_algs = self
             .supported_algs
-            .ok_or(ClientCertVerifierBuilderError::NoSupportedAlgorithms)?;
+            .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
 
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
@@ -162,12 +162,10 @@ impl ClientCertVerifierBuilder {
     }
 }
 
-/// One or more root trust anchors must be provided to create a [ClientCertVerifierBuilder].
-/// If you wish to disable client authentication, then use [WebPkiClientVerifier::no_client_auth]
-/// instead of constructing a builder.
+/// An error that can occur when building a certificate verifier.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub enum ClientCertVerifierBuilderError {
+pub enum VerifierBuilderError {
     /// No root trust anchors were provided.
     NoRootAnchors,
     /// A provided CRL could not be parsed.
@@ -179,13 +177,13 @@ pub enum ClientCertVerifierBuilderError {
     NoSupportedAlgorithms,
 }
 
-impl From<CertRevocationListError> for ClientCertVerifierBuilderError {
+impl From<CertRevocationListError> for VerifierBuilderError {
     fn from(value: CertRevocationListError) -> Self {
         Self::InvalidCrl(value)
     }
 }
 
-impl fmt::Display for ClientCertVerifierBuilderError {
+impl fmt::Display for VerifierBuilderError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NoRootAnchors => write!(f, "no root trust anchors were provided"),
@@ -197,7 +195,7 @@ impl fmt::Display for ClientCertVerifierBuilderError {
     }
 }
 
-impl StdError for ClientCertVerifierBuilderError {}
+impl StdError for VerifierBuilderError {}
 
 /// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
 /// validation. It must be created via the [WebPkiClientVerifier::builder()] function.
@@ -411,7 +409,7 @@ pub(crate) enum AnonymousClientPolicy {
 #[cfg(all(test, feature = "ring"))]
 mod tests {
     use super::WebPkiClientVerifier;
-    use crate::server::ClientCertVerifierBuilderError;
+    use crate::server::VerifierBuilderError;
     use crate::RootCertStore;
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
@@ -507,10 +505,7 @@ mod tests {
         let result = WebPkiClientVerifier::builder(test_roots())
             .with_crls(vec![CertificateRevocationListDer::from(vec![0xFF])])
             .build();
-        assert!(matches!(
-            result,
-            Err(ClientCertVerifierBuilderError::InvalidCrl(_))
-        ));
+        assert!(matches!(result, Err(VerifierBuilderError::InvalidCrl(_))));
     }
 
     #[test]
@@ -580,18 +575,15 @@ mod tests {
     fn test_builder_no_roots() {
         // Trying to create a client verifier builder with no trust anchors should fail at build time
         let result = WebPkiClientVerifier::builder(RootCertStore::empty().into()).build();
-        assert!(matches!(
-            result,
-            Err(ClientCertVerifierBuilderError::NoRootAnchors)
-        ));
+        assert!(matches!(result, Err(VerifierBuilderError::NoRootAnchors)));
     }
 
     #[test]
     fn smoke() {
         let all = vec![
-            ClientCertVerifierBuilderError::NoRootAnchors,
-            ClientCertVerifierBuilderError::InvalidCrl(crate::CertRevocationListError::ParseError),
-            ClientCertVerifierBuilderError::NoSupportedAlgorithms,
+            VerifierBuilderError::NoRootAnchors,
+            VerifierBuilderError::InvalidCrl(crate::CertRevocationListError::ParseError),
+            VerifierBuilderError::NoSupportedAlgorithms,
         ];
 
         for err in all {
