@@ -7,7 +7,7 @@ use pki_types::{CertificateDer, SignatureVerificationAlgorithm, UnixTime};
 use webpki::ring as webpki_algs;
 
 use super::anchors::RootCertStore;
-use super::client_verifier_builder::ClientCertVerifierBuilder;
+use super::client_verifier::ClientCertVerifierBuilder;
 use super::pki_error;
 use crate::client::ServerName;
 use crate::enums::SignatureScheme;
