@@ -3,13 +3,21 @@ use alloc::vec::Vec;
 use core::fmt;
 use std::error::Error as StdError;
 
-use pki_types::CertificateRevocationListDer;
-use webpki::{BorrowedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
+use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
+use webpki::{
+    BorrowedCertRevocationList, OwnedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy,
+};
 
-use super::crl_error;
-use super::verify::{AnonymousClientPolicy, WebPkiClientVerifier, WebPkiSupportedAlgorithms};
-use crate::verify::ClientCertVerifier;
-use crate::{CertRevocationListError, RootCertStore};
+use super::{crl_error, pki_error};
+use crate::verify::{
+    ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
+    NoClientAuth,
+};
+use crate::webpki::verify::{verify_signed_struct, verify_tls13, ParsedCertificate};
+use crate::{
+    CertRevocationListError, DistinguishedName, Error, RootCertStore, SignatureScheme,
+    WebPkiSupportedAlgorithms,
+};
 
 /// A builder for configuring a `webpki` client certificate verifier.
 ///
@@ -191,10 +199,219 @@ impl fmt::Display for ClientCertVerifierBuilderError {
 
 impl StdError for ClientCertVerifierBuilderError {}
 
+/// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
+/// validation. It must be created via the [WebPkiClientVerifier::builder()] function.
+///
+/// Once built, the provided `Arc<dyn ClientCertVerifier>` can be used with a Rustls [crate::server::ServerConfig]
+/// to configure client certificate validation using [`with_client_cert_verifier`][crate::ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
+///
+/// Example:
+///
+/// To require all clients present a client certificate issued by a trusted CA:
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::WebPkiClientVerifier;
+/// # let roots = RootCertStore::empty();
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
+///   .build()
+///   .unwrap();
+/// ```
+///
+/// Or, to allow clients presenting a client certificate authenticated by a trusted CA, or
+/// anonymous clients that present no client certificate:
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::WebPkiClientVerifier;
+/// # let roots = RootCertStore::empty();
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
+///   .allow_unauthenticated()
+///   .build()
+///   .unwrap();
+/// ```
+///
+/// If you wish to disable advertising client authentication:
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::WebPkiClientVerifier;
+/// # let roots = RootCertStore::empty();
+/// let client_verifier = WebPkiClientVerifier::no_client_auth();
+/// ```
+///
+/// You can also configure the client verifier to check for certificate revocation with
+/// client certificate revocation lists (CRLs):
+/// ```no_run
+/// # use rustls::RootCertStore;
+/// # use rustls::server::{WebPkiClientVerifier};
+/// # let roots = RootCertStore::empty();
+/// # let crls = Vec::new();
+/// let client_verifier = WebPkiClientVerifier::builder(roots.into())
+///   .with_crls(crls)
+///   .build()
+///   .unwrap();
+/// ```
+///
+/// [^1]: <https://github.com/rustls/webpki>
+pub struct WebPkiClientVerifier {
+    roots: Arc<RootCertStore>,
+    subjects: Vec<DistinguishedName>,
+    crls: Vec<OwnedCertRevocationList>,
+    revocation_check_depth: RevocationCheckDepth,
+    unknown_revocation_policy: UnknownStatusPolicy,
+    anonymous_policy: AnonymousClientPolicy,
+    supported_algs: WebPkiSupportedAlgorithms,
+}
+
+impl WebPkiClientVerifier {
+    /// Create builder to build up the `webpki` client certificate verifier configuration.
+    /// Client certificate authentication will be offered by the server, and client certificates
+    /// will be verified using the trust anchors found in the provided `roots`. If you
+    /// wish to disable client authentication use [WebPkiClientVerifier::no_client_auth()] instead.
+    ///
+    /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
+    pub fn builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
+        ClientCertVerifierBuilder::new(roots)
+    }
+
+    /// Create a new `WebPkiClientVerifier` that disables client authentication. The server will
+    /// not offer client authentication and anonymous clients will be accepted.
+    ///
+    /// This is in contrast to using `WebPkiClientVerifier::builder().allow_unauthenticated().build()`,
+    /// which will produce a verifier that will offer client authentication, but not require it.
+    pub fn no_client_auth() -> Arc<dyn ClientCertVerifier> {
+        Arc::new(NoClientAuth {})
+    }
+
+    /// Construct a new `WebpkiClientVerifier`.
+    ///
+    /// * `roots` is a list of trust anchors to use for certificate validation.
+    /// * `crls` is a `Vec` of owned certificate revocation lists (CRLs) to use for
+    ///   client certificate validation.
+    /// * `revocation_check_depth` controls which certificates have their revocation status checked
+    ///   when `crls` are provided.
+    /// * `unknown_revocation_policy` controls how certificates with an unknown revocation status
+    ///   are handled when `crls` are provided.
+    /// * `anonymous_policy` controls whether client authentication is required, or if anonymous
+    ///   clients can connect.
+    /// * `supported_algs` specifies which signature verification algorithms should be used.
+    pub(crate) fn new(
+        roots: Arc<RootCertStore>,
+        crls: Vec<OwnedCertRevocationList>,
+        revocation_check_depth: RevocationCheckDepth,
+        unknown_revocation_policy: UnknownStatusPolicy,
+        anonymous_policy: AnonymousClientPolicy,
+        supported_algs: WebPkiSupportedAlgorithms,
+    ) -> Self {
+        Self {
+            subjects: roots
+                .roots
+                .iter()
+                .map(|ta| DistinguishedName::in_sequence(ta.subject.as_ref()))
+                .collect(),
+            crls,
+            revocation_check_depth,
+            unknown_revocation_policy,
+            roots,
+            anonymous_policy,
+            supported_algs,
+        }
+    }
+}
+
+impl ClientCertVerifier for WebPkiClientVerifier {
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        match self.anonymous_policy {
+            AnonymousClientPolicy::Allow => false,
+            AnonymousClientPolicy::Deny => true,
+        }
+    }
+
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+        &self.subjects
+    }
+
+    fn verify_client_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    ) -> Result<ClientCertVerified, Error> {
+        let cert = ParsedCertificate::try_from(end_entity)?;
+
+        #[allow(trivial_casts)] // Cast to &dyn trait is required.
+        let crls = self
+            .crls
+            .iter()
+            .map(|crl| crl as &dyn webpki::CertRevocationList)
+            .collect::<Vec<_>>();
+
+        let revocation = if crls.is_empty() {
+            None
+        } else {
+            let mut builder = webpki::RevocationOptionsBuilder::new(&crls)
+                .expect("invalid crls")
+                .with_depth(self.revocation_check_depth);
+            if matches!(
+                self.unknown_revocation_policy,
+                webpki::UnknownStatusPolicy::Allow
+            ) {
+                builder = builder.allow_unknown_status();
+            }
+            Some(builder.build())
+        };
+
+        cert.0
+            .verify_for_usage(
+                self.supported_algs.all,
+                &self.roots.roots,
+                intermediates,
+                now,
+                webpki::KeyUsage::client_auth(),
+                revocation,
+            )
+            .map_err(pki_error)
+            .map(|_| ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        verify_signed_struct(message, cert, dss, &self.supported_algs)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        verify_tls13(message, cert, dss, &self.supported_algs)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.supported_algs.supported_schemes()
+    }
+}
+
+/// Controls how the [WebPkiClientVerifier] handles anonymous clients.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnonymousClientPolicy {
+    /// Clients that do not present a client certificate are allowed.
+    Allow,
+    /// Clients that do not present a client certificate are denied.
+    Deny,
+}
+
 #[cfg(all(test, feature = "ring"))]
 mod tests {
+    use super::WebPkiClientVerifier;
     use crate::server::ClientCertVerifierBuilderError;
-    use crate::webpki::verify::WebPkiClientVerifier;
     use crate::RootCertStore;
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
