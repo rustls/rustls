@@ -361,16 +361,15 @@ impl From<CertificateError> for AlertDescription {
     fn from(e: CertificateError) -> Self {
         use CertificateError::*;
         match e {
-            BadEncoding
-            | UnhandledCriticalExtension
-            | NotValidForName
-            | UnknownRevocationStatus => Self::BadCertificate,
+            BadEncoding | UnhandledCriticalExtension | NotValidForName => Self::BadCertificate,
             // RFC 5246/RFC 8446
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
             Expired | NotValidYet => Self::CertificateExpired,
             Revoked => Self::CertificateRevoked,
-            UnknownIssuer => Self::UnknownCA,
+            // OpenSSL, BoringSSL and AWS-LC all generate an Unknown CA alert for
+            // the case where revocation status can not be determined, so we do the same here.
+            UnknownIssuer | UnknownRevocationStatus => Self::UnknownCA,
             BadSignature => Self::DecryptError,
             InvalidPurpose => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
