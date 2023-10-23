@@ -4,9 +4,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
-use webpki::{
-    BorrowedCertRevocationList, OwnedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy,
-};
+use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
@@ -17,11 +15,8 @@ use crate::webpki::verify::{
     verify_server_cert_signed_by_trust_anchor_impl, verify_signed_struct, verify_tls13,
     ParsedCertificate,
 };
-use crate::webpki::{borrow_crls, crl_error, verify_server_name, VerifierBuilderError};
-use crate::{
-    CertRevocationListError, Error, RootCertStore, ServerName, SignatureScheme,
-    WebPkiSupportedAlgorithms,
-};
+use crate::webpki::{parse_crls, verify_server_name, VerifierBuilderError};
+use crate::{Error, RootCertStore, ServerName, SignatureScheme, WebPkiSupportedAlgorithms};
 
 /// A builder for configuring a `webpki` server certificate verifier.
 ///
@@ -127,14 +122,7 @@ impl ServerCertVerifierBuilder {
 
         Ok(Arc::new(WebPkiServerVerifier::new(
             self.roots,
-            self.crls
-                .into_iter()
-                .map(|der_crl| {
-                    BorrowedCertRevocationList::from_der(der_crl.as_ref())
-                        .and_then(|crl| crl.to_owned())
-                        .map_err(crl_error)
-                })
-                .collect::<Result<Vec<_>, CertRevocationListError>>()?,
+            parse_crls(self.crls)?,
             self.revocation_check_depth,
             self.unknown_revocation_policy,
             supported_algs,
@@ -146,7 +134,7 @@ impl ServerCertVerifierBuilder {
 #[allow(unreachable_pub)]
 pub struct WebPkiServerVerifier {
     roots: Arc<RootCertStore>,
-    crls: Vec<OwnedCertRevocationList>,
+    crls: Vec<CertRevocationList<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
     supported: WebPkiSupportedAlgorithms,
@@ -188,7 +176,7 @@ impl WebPkiServerVerifier {
     ///   certificate verification and TLS handshake signature verification.
     pub(crate) fn new(
         roots: impl Into<Arc<RootCertStore>>,
-        crls: Vec<OwnedCertRevocationList>,
+        crls: Vec<CertRevocationList<'static>>,
         revocation_check_depth: RevocationCheckDepth,
         unknown_revocation_policy: UnknownStatusPolicy,
         supported: WebPkiSupportedAlgorithms,
@@ -253,22 +241,22 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     ) -> Result<ServerCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
 
-        let crls = borrow_crls(&self.crls);
-        let revocation = if crls.is_empty() {
+        let crl_refs = self.crls.iter().collect::<Vec<_>>();
+
+        let revocation = if self.crls.is_empty() {
             None
         } else {
             // Note: unwrap here is safe because RevocationOptionsBuilder only errors when given
             //       empty CRLs.
-            let mut builder = webpki::RevocationOptionsBuilder::new(&crls)
-                .unwrap()
-                .with_depth(self.revocation_check_depth);
-            if matches!(
-                self.unknown_revocation_policy,
-                webpki::UnknownStatusPolicy::Allow
-            ) {
-                builder = builder.allow_unknown_status();
-            }
-            Some(builder.build())
+            Some(
+                webpki::RevocationOptionsBuilder::new(crl_refs.as_slice())
+                    // Note: safe to unwrap here - new is only fallible if no CRLs are provided
+                    //       and we verify this above.
+                    .unwrap()
+                    .with_depth(self.revocation_check_depth)
+                    .with_status_policy(self.unknown_revocation_policy)
+                    .build(),
+            )
         };
 
         // Note: we use the crate-internal `_impl` fn here in order to provide revocation

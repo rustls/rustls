@@ -285,6 +285,7 @@ pub(crate) fn verify_server_cert_signed_by_trust_anchor_impl(
         now,
         webpki::KeyUsage::server_auth(),
         revocation,
+        None,
     );
     match result {
         Ok(_) => Ok(()),
