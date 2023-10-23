@@ -437,7 +437,9 @@ impl fmt::Debug for WebPkiSupportedAlgorithms {
     }
 }
 
-/// wrapper around internal representation of a parsed certificate. This is used in order to avoid parsing twice when specifying custom verification
+/// Wrapper around internal representation of a parsed certificate.
+///
+/// This is used in order to avoid parsing twice when specifying custom verification
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
 
 impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
