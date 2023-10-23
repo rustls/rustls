@@ -3,6 +3,7 @@ use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
 use crate::crypto::hash;
+use crate::crypto::tls12::prf;
 use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
@@ -15,8 +16,6 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use zeroize::Zeroize;
-
-mod prf;
 
 /// A TLS 1.2 cipher suite supported by rustls.
 pub struct Tls12CipherSuite {
@@ -100,7 +99,7 @@ impl ConnectionSecrets {
         };
 
         let shared_secret = kx.complete(peer_pub_key)?;
-        prf::prf(
+        prf(
             &mut ret.master_secret,
             &*ret
                 .suite
@@ -176,7 +175,7 @@ impl ConnectionSecrets {
         // NOTE: opposite order to above for no good reason.
         // Don't design security protocols on drugs, kids.
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
-        prf::prf(
+        prf(
             &mut out,
             &*self
                 .suite
@@ -200,7 +199,7 @@ impl ConnectionSecrets {
     fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {
         let mut out = vec![0u8; 12];
 
-        prf::prf(
+        prf(
             &mut out,
             &*self
                 .suite
@@ -235,7 +234,7 @@ impl ConnectionSecrets {
             randoms.extend_from_slice(context);
         }
 
-        prf::prf(
+        prf(
             output,
             &*self
                 .suite

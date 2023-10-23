@@ -23,6 +23,9 @@ pub mod hmac;
 /// Message signing interfaces.
 pub mod signer;
 
+/// Cryptography specific to TLS1.2.
+pub mod tls12;
+
 pub use crate::rand::GetRandomFailed;
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
