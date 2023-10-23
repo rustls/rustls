@@ -1,14 +1,12 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::fmt;
-use std::error::Error as StdError;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
 use webpki::{
     BorrowedCertRevocationList, OwnedCertRevocationList, RevocationCheckDepth, UnknownStatusPolicy,
 };
 
-use super::{crl_error, pki_error};
+use super::{crl_error, pki_error, VerifierBuilderError};
 use crate::verify::{
     ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
     NoClientAuth,
@@ -161,41 +159,6 @@ impl ClientCertVerifierBuilder {
         )))
     }
 }
-
-/// An error that can occur when building a certificate verifier.
-#[derive(Debug, Clone)]
-#[non_exhaustive]
-pub enum VerifierBuilderError {
-    /// No root trust anchors were provided.
-    NoRootAnchors,
-    /// A provided CRL could not be parsed.
-    InvalidCrl(CertRevocationListError),
-    /// No supported signature verification algorithms were provided.
-    ///
-    /// Call `with_signature_verification_algorithms` on the builder, or compile
-    /// with the `ring` feature.
-    NoSupportedAlgorithms,
-}
-
-impl From<CertRevocationListError> for VerifierBuilderError {
-    fn from(value: CertRevocationListError) -> Self {
-        Self::InvalidCrl(value)
-    }
-}
-
-impl fmt::Display for VerifierBuilderError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NoRootAnchors => write!(f, "no root trust anchors were provided"),
-            Self::InvalidCrl(e) => write!(f, "provided CRL could not be parsed: {:?}", e),
-            Self::NoSupportedAlgorithms => {
-                write!(f, "no signature verification algorithms were provided")
-            }
-        }
-    }
-}
-
-impl StdError for VerifierBuilderError {}
 
 /// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
 /// validation. It must be created via the [WebPkiClientVerifier::builder()] function.
