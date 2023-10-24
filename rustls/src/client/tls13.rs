@@ -150,8 +150,8 @@ pub(super) fn handle_server_hello(
         KeySchedulePreHandshake::new(suite)
     };
 
-    let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
-    let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+    let key_schedule =
+        key_schedule_pre_handshake.into_handshake(our_key_share, &their_key_share.payload.0)?;
 
     // Remember what KX group the server liked for next time.
     config
