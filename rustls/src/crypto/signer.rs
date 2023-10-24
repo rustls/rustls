@@ -59,7 +59,7 @@ impl CertifiedKey {
     /// The end-entity certificate.
     pub fn end_entity_cert(&self) -> Result<&CertificateDer<'_>, Error> {
         self.cert
-            .get(0)
+            .first()
             .ok_or(Error::NoCertificatesPresented)
     }
 }
