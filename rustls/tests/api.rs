@@ -2678,6 +2678,54 @@ fn test_tls13_exporter() {
     }
 }
 
+#[test]
+fn test_tls13_exporter_maximum_output_length() {
+    let client_config =
+        make_client_config_with_versions(KeyType::Ecdsa, &[&rustls::version::TLS13]);
+    let server_config = make_server_config(KeyType::Ecdsa);
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    assert_eq!(
+        client.negotiated_cipher_suite(),
+        Some(find_suite(CipherSuite::TLS13_AES_256_GCM_SHA384))
+    );
+
+    let mut maximum_allowed_output_client = [0u8; 255 * 48];
+    let mut maximum_allowed_output_server = [0u8; 255 * 48];
+    client
+        .export_keying_material(
+            &mut maximum_allowed_output_client,
+            b"label",
+            Some(b"context"),
+        )
+        .unwrap();
+    server
+        .export_keying_material(
+            &mut maximum_allowed_output_server,
+            b"label",
+            Some(b"context"),
+        )
+        .unwrap();
+
+    assert_eq!(maximum_allowed_output_client, maximum_allowed_output_server);
+
+    let mut too_long_output = [0u8; 255 * 48 + 1];
+    assert_eq!(
+        client
+            .export_keying_material(&mut too_long_output, b"label", Some(b"context"),)
+            .err(),
+        Some(Error::General("exporting too much".into()))
+    );
+    assert_eq!(
+        server
+            .export_keying_material(&mut too_long_output, b"label", Some(b"context"),)
+            .err(),
+        Some(Error::General("exporting too much".into()))
+    );
+}
+
 fn do_suite_test(
     client_config: ClientConfig,
     server_config: ServerConfig,

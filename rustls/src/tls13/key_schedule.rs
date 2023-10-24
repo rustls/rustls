@@ -740,7 +740,6 @@ impl KeySchedule {
             .suite
             .hkdf_provider
             .expander_for_okm(&secret);
-        // TODO: Test what happens when this fails due to large `out.len()`
         hkdf_expand_label_slice(expander.as_ref(), b"exporter", h_context.as_ref(), out)
             .map_err(|_| Error::General("exporting too much".to_string()))
     }
