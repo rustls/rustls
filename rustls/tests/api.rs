@@ -10,15 +10,17 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use pki_types::CertificateDer;
-use rustls::client::{ResolvesClientCert, Resumption, WebPkiServerVerifier};
+use pki_types::{CertificateDer, UnixTime};
+use rustls::client::{
+    verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption, WebPkiServerVerifier,
+};
 use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
-use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
+use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert, WebPkiClientVerifier};
 use rustls::ConnectionTrafficSecrets;
 use rustls::SupportedCipherSuite;
 use rustls::{
@@ -1180,6 +1182,42 @@ fn client_check_server_certificate_intermediate_revoked() {
             let res = do_handshake_until_error(&mut client, &mut server);
             assert!(res.is_ok())
         }
+    }
+}
+
+/// Simple smoke-test of the webpki verify_server_cert_signed_by_trust_anchor helper API.
+/// This public API is intended to be used by consumers implementing their own verifier and
+/// so isn't used by the other existing verifier tests.
+#[test]
+fn client_check_server_certificate_helper_api() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let chain = kt.get_chain();
+        let correct_roots = get_client_root_store(*kt);
+        let incorrect_roots = get_client_root_store(match kt {
+            KeyType::Rsa => KeyType::Ecdsa,
+            _ => KeyType::Rsa,
+        });
+        // Using the correct trust anchors, we should verify without error.
+        assert!(verify_server_cert_signed_by_trust_anchor(
+            &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
+            &correct_roots,
+            &[chain.get(1).unwrap().clone()],
+            UnixTime::now(),
+            webpki::ALL_VERIFICATION_ALGS,
+        )
+        .is_ok());
+        // Using the wrong trust anchors, we should get the expected error.
+        assert_eq!(
+            verify_server_cert_signed_by_trust_anchor(
+                &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
+                &incorrect_roots,
+                &[chain.get(1).unwrap().clone()],
+                UnixTime::now(),
+                webpki::ALL_VERIFICATION_ALGS,
+            )
+            .unwrap_err(),
+            Error::InvalidCertificate(CertificateError::UnknownIssuer)
+        );
     }
 }
 
