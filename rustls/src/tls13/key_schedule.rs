@@ -1,7 +1,7 @@
 use crate::common_state::{CommonState, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
 use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use crate::crypto::{hash, hmac, SharedSecret};
+use crate::crypto::{hash, hmac, ActiveKeyExchange};
 use crate::error::Error;
 #[cfg(feature = "quic")]
 use crate::quic;
@@ -143,10 +143,14 @@ impl KeySchedulePreHandshake {
         }
     }
 
-    pub(crate) fn into_handshake(mut self, secret: SharedSecret) -> KeyScheduleHandshakeStart {
+    pub(crate) fn into_handshake(
+        mut self,
+        kx: Box<dyn ActiveKeyExchange>,
+        peer_public_key: &[u8],
+    ) -> Result<KeyScheduleHandshakeStart, Error> {
         self.ks
-            .input_secret(secret.secret_bytes());
-        KeyScheduleHandshakeStart { ks: self.ks }
+            .input_from_key_exchange(kx, peer_public_key)?;
+        Ok(KeyScheduleHandshakeStart { ks: self.ks })
     }
 }
 
@@ -605,12 +609,27 @@ impl KeySchedule {
     }
 
     /// Input the given secret.
+    #[cfg(all(test, feature = "ring"))]
     fn input_secret(&mut self, secret: &[u8]) {
         let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
         self.current = self
             .suite
             .hkdf_provider
             .extract_from_secret(Some(salt.as_ref()), secret);
+    }
+
+    /// Input the shared secret resulting from completing the given key exchange.
+    fn input_from_key_exchange(
+        &mut self,
+        kx: Box<dyn ActiveKeyExchange>,
+        peer_public_key: &[u8],
+    ) -> Result<(), Error> {
+        let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
+        self.current = self
+            .suite
+            .hkdf_provider
+            .extract_from_kx_shared_secret(Some(salt.as_ref()), kx, peer_public_key)?;
+        Ok(())
     }
 
     /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.

@@ -542,8 +542,7 @@ mod client_hello {
         };
 
         // Do key exchange
-        let shared_secret = kx.complete(&share.payload.0)?;
-        let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+        let key_schedule = key_schedule_pre_handshake.into_handshake(kx, &share.payload.0)?;
 
         let handshake_hash = transcript.get_current_hash();
         let key_schedule = key_schedule.derive_server_handshake_secrets(
