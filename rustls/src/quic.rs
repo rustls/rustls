@@ -2,9 +2,9 @@
 use crate::client::{ClientConfig, ClientConnectionData, ServerName};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
+use crate::crypto::tls13::{HkdfExpander, OkmBlock};
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
-use crate::hkdf;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::server::{ServerConfig, ServerConnectionData};
 use crate::tls13::key_schedule::hkdf_expand_label_block;
@@ -386,7 +386,7 @@ pub(crate) struct Quic {
     pub(crate) params: Option<Vec<u8>>,
     pub(crate) alert: Option<AlertDescription>,
     pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub(crate) early_secret: Option<hkdf::OkmBlock>,
+    pub(crate) early_secret: Option<OkmBlock>,
     pub(crate) hs_secrets: Option<Secrets>,
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
@@ -432,9 +432,9 @@ impl Quic {
 #[derive(Clone)]
 pub struct Secrets {
     /// Secret used to encrypt packets transmitted by the client
-    pub(crate) client: hkdf::OkmBlock,
+    pub(crate) client: OkmBlock,
     /// Secret used to encrypt packets transmitted by the server
-    pub(crate) server: hkdf::OkmBlock,
+    pub(crate) server: OkmBlock,
     /// Cipher suite used with these secrets
     suite: &'static Tls13CipherSuite,
     side: Side,
@@ -443,8 +443,8 @@ pub struct Secrets {
 
 impl Secrets {
     pub(crate) fn new(
-        client: hkdf::OkmBlock,
-        server: hkdf::OkmBlock,
+        client: OkmBlock,
+        server: OkmBlock,
         suite: &'static Tls13CipherSuite,
         side: Side,
         version: Version,
@@ -467,18 +467,24 @@ impl Secrets {
 
     pub(crate) fn update(&mut self) {
         self.client = hkdf_expand_label_block(
-            &hkdf::Expander::from_okm(&self.client, self.suite.hmac_provider),
+            self.suite
+                .hkdf_provider
+                .expander_for_okm(&self.client)
+                .as_ref(),
             self.version.key_update_label(),
             &[],
         );
         self.server = hkdf_expand_label_block(
-            &hkdf::Expander::from_okm(&self.server, self.suite.hmac_provider),
+            self.suite
+                .hkdf_provider
+                .expander_for_okm(&self.server)
+                .as_ref(),
             self.version.key_update_label(),
             &[],
         );
     }
 
-    fn local_remote(&self) -> (&hkdf::OkmBlock, &hkdf::OkmBlock) {
+    fn local_remote(&self) -> (&OkmBlock, &OkmBlock) {
         match self.side {
             Side::Client => (&self.client, &self.server),
             Side::Server => (&self.server, &self.client),
@@ -497,17 +503,19 @@ pub struct DirectionalKeys {
 impl DirectionalKeys {
     pub(crate) fn new(
         suite: &'static Tls13CipherSuite,
-        secret: &hkdf::OkmBlock,
+        secret: &OkmBlock,
         version: Version,
     ) -> Self {
-        let expander = hkdf::Expander::from_okm(secret, suite.hmac_provider);
+        let expander = suite
+            .hkdf_provider
+            .expander_for_okm(secret);
         Self {
             header: suite
                 .quic
-                .header_protection_key(&expander, version),
+                .header_protection_key(expander.as_ref(), version),
             packet: suite
                 .quic
-                .packet_key(suite, &expander, version),
+                .packet_key(suite, expander.as_ref(), version),
         }
     }
 }
@@ -537,13 +545,13 @@ pub(crate) trait Algorithm: Send + Sync {
     fn packet_key(
         &self,
         suite: &'static Tls13CipherSuite,
-        secret: &hkdf::Expander,
+        secret: &dyn HkdfExpander,
         version: Version,
     ) -> Box<dyn PacketKey>;
 
     fn header_protection_key(
         &self,
-        secret: &hkdf::Expander,
+        secret: &dyn HkdfExpander,
         version: Version,
     ) -> Box<dyn HeaderProtectionKey>;
 }
@@ -667,12 +675,20 @@ impl PacketKeySet {
         Self {
             local: secrets.suite.quic.packet_key(
                 secrets.suite,
-                &hkdf::Expander::from_okm(local, secrets.suite.hmac_provider),
+                secrets
+                    .suite
+                    .hkdf_provider
+                    .expander_for_okm(local)
+                    .as_ref(),
                 secrets.version,
             ),
             remote: secrets.suite.quic.packet_key(
                 secrets.suite,
-                &hkdf::Expander::from_okm(remote, secrets.suite.hmac_provider),
+                secrets
+                    .suite
+                    .hkdf_provider
+                    .expander_for_okm(remote)
+                    .as_ref(),
                 secrets.version,
             ),
         }
@@ -698,13 +714,14 @@ impl Keys {
         const CLIENT_LABEL: &[u8] = b"client in";
         const SERVER_LABEL: &[u8] = b"server in";
         let salt = version.initial_salt();
-        let hs_secret =
-            hkdf::Extractor::new(suite.hmac_provider, salt).extract(client_dst_connection_id);
+        let hs_secret = suite
+            .hkdf_provider
+            .extract_from_secret(Some(salt), client_dst_connection_id);
 
         let secrets = Secrets {
             version,
-            client: hkdf_expand_label_block(&hs_secret, CLIENT_LABEL, &[]),
-            server: hkdf_expand_label_block(&hs_secret, SERVER_LABEL, &[]),
+            client: hkdf_expand_label_block(hs_secret.as_ref(), CLIENT_LABEL, &[]),
+            server: hkdf_expand_label_block(hs_secret.as_ref(), SERVER_LABEL, &[]),
             suite,
             side,
         };

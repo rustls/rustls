@@ -1,6 +1,6 @@
 use crate::crypto::cipher::{Iv, Nonce};
+use crate::crypto::tls13;
 use crate::error::Error;
-use crate::hkdf;
 use crate::quic;
 use crate::tls13::key_schedule::{hkdf_expand_label, hkdf_expand_label_aead_key};
 use crate::tls13::Tls13CipherSuite;
@@ -13,7 +13,7 @@ pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
 
 impl HeaderProtectionKey {
     pub(crate) fn new(
-        expander: &hkdf::Expander,
+        expander: &dyn tls13::HkdfExpander,
         version: quic::Version,
         alg: &'static aead::quic::Algorithm,
     ) -> Self {
@@ -114,7 +114,7 @@ pub(crate) struct PacketKey {
 impl PacketKey {
     pub(crate) fn new(
         suite: &'static Tls13CipherSuite,
-        expander: &hkdf::Expander,
+        expander: &dyn tls13::HkdfExpander,
         version: quic::Version,
         aead_algorithm: &'static aead::Algorithm,
     ) -> Self {
@@ -208,7 +208,7 @@ impl crate::quic::Algorithm for KeyBuilder {
     fn packet_key(
         &self,
         suite: &'static Tls13CipherSuite,
-        expander: &hkdf::Expander,
+        expander: &dyn tls13::HkdfExpander,
         version: quic::Version,
     ) -> Box<dyn quic::PacketKey> {
         Box::new(super::quic::PacketKey::new(
@@ -218,7 +218,7 @@ impl crate::quic::Algorithm for KeyBuilder {
 
     fn header_protection_key(
         &self,
-        expander: &hkdf::Expander,
+        expander: &dyn tls13::HkdfExpander,
         version: quic::Version,
     ) -> Box<dyn quic::HeaderProtectionKey> {
         Box::new(super::quic::HeaderProtectionKey::new(
@@ -231,10 +231,10 @@ impl crate::quic::Algorithm for KeyBuilder {
 mod tests {
     use super::*;
     use crate::common_state::Side;
-    use crate::crypto::ring;
     use crate::crypto::ring::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
+    use crate::crypto::tls13::OkmBlock;
     use crate::quic::HeaderProtectionKey;
     use crate::quic::PacketKey;
     use crate::quic::*;
@@ -247,12 +247,14 @@ mod tests {
             0x0f, 0x21, 0x63, 0x2b,
         ];
 
-        let expander =
-            hkdf::Expander::from_okm(&hkdf::OkmBlock::from(SECRET), &ring::hmac::HMAC_SHA256);
-        let hpk = super::HeaderProtectionKey::new(&expander, version, &aead::quic::CHACHA20);
+        let expander = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
+            .hkdf_provider
+            .expander_for_okm(&OkmBlock::new(SECRET));
+        let hpk =
+            super::HeaderProtectionKey::new(expander.as_ref(), version, &aead::quic::CHACHA20);
         let packet = super::PacketKey::new(
             TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
-            &expander,
+            expander.as_ref(),
             version,
             &aead::CHACHA20_POLY1305,
         );
@@ -303,20 +305,20 @@ mod tests {
 
     #[test]
     fn key_update_test_vector() {
-        fn equal_okm(x: &hkdf::OkmBlock, y: &hkdf::OkmBlock) -> bool {
+        fn equal_okm(x: &OkmBlock, y: &OkmBlock) -> bool {
             x.as_ref() == y.as_ref()
         }
 
         let mut secrets = Secrets::new(
             // Constant dummy values for reproducibility
-            hkdf::OkmBlock::from(
+            OkmBlock::new(
                 &[
                     0xb8, 0x76, 0x77, 0x08, 0xf8, 0x77, 0x23, 0x58, 0xa6, 0xea, 0x9f, 0xc4, 0x3e,
                     0x4a, 0xdd, 0x2c, 0x96, 0x1b, 0x3f, 0x52, 0x87, 0xa6, 0xd1, 0x46, 0x7e, 0xe0,
                     0xae, 0xab, 0x33, 0x72, 0x4d, 0xbf,
                 ][..],
             ),
-            hkdf::OkmBlock::from(
+            OkmBlock::new(
                 &[
                     0x42, 0xdc, 0x97, 0x21, 0x40, 0xe0, 0xf2, 0xe3, 0x98, 0x45, 0xb7, 0x67, 0x61,
                     0x34, 0x39, 0xdc, 0x67, 0x58, 0xca, 0x43, 0x25, 0x9b, 0x87, 0x85, 0x06, 0x82,
@@ -331,7 +333,7 @@ mod tests {
 
         assert!(equal_okm(
             &secrets.client,
-            &hkdf::OkmBlock::from(
+            &OkmBlock::new(
                 &[
                     0x42, 0xca, 0xc8, 0xc9, 0x1c, 0xd5, 0xeb, 0x40, 0x68, 0x2e, 0x43, 0x2e, 0xdf,
                     0x2d, 0x2b, 0xe9, 0xf4, 0x1a, 0x52, 0xca, 0x6b, 0x22, 0xd8, 0xe6, 0xcd, 0xb1,
@@ -341,7 +343,7 @@ mod tests {
         ));
         assert!(equal_okm(
             &secrets.server,
-            &hkdf::OkmBlock::from(
+            &OkmBlock::new(
                 &[
                     0xeb, 0x7f, 0x5e, 0x2a, 0x12, 0x3f, 0x40, 0x7d, 0xb4, 0x99, 0xe3, 0x61, 0xca,
                     0xe5, 0x90, 0xd4, 0xd9, 0x92, 0xe1, 0x4b, 0x7a, 0xce, 0x3, 0xc2, 0x44, 0xe0,

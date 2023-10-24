@@ -340,7 +340,6 @@ pub mod crypto;
 mod dns_name;
 mod error;
 mod hash_hs;
-mod hkdf;
 mod limited_cache;
 mod rand;
 mod record_layer;
