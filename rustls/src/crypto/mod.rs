@@ -26,6 +26,9 @@ pub mod signer;
 /// Cryptography specific to TLS1.2.
 pub mod tls12;
 
+/// Cryptography specific to TLS1.3.
+pub mod tls13;
+
 pub use crate::rand::GetRandomFailed;
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;

@@ -1,8 +1,8 @@
 use crate::common_state::{CommonState, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
+use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::crypto::{hash, hmac, SharedSecret};
 use crate::error::Error;
-use crate::hkdf;
 #[cfg(feature = "quic")]
 use crate::quic;
 use crate::suites::PartiallyExtractedSecrets;
@@ -63,7 +63,7 @@ impl SecretKind {
 /// the type of hash.  This isn't used directly; but only through the
 /// typestates.
 struct KeySchedule {
-    current: hkdf::Expander,
+    current: Box<dyn HkdfExpander>,
     suite: &'static Tls13CipherSuite,
 }
 
@@ -250,8 +250,8 @@ impl KeyScheduleHandshakeStart {
 
 pub(crate) struct KeyScheduleHandshake {
     ks: KeySchedule,
-    client_handshake_traffic_secret: hkdf::OkmBlock,
-    server_handshake_traffic_secret: hkdf::OkmBlock,
+    client_handshake_traffic_secret: OkmBlock,
+    server_handshake_traffic_secret: OkmBlock,
 }
 
 impl KeyScheduleHandshake {
@@ -378,7 +378,7 @@ impl KeyScheduleClientBeforeFinished {
 /// finished verify_data. The traffic stage key schedule can be extracted from it
 /// through signing the client finished hash.
 pub(crate) struct KeyScheduleTrafficWithClientFinishedPending {
-    handshake_client_traffic_secret: hkdf::OkmBlock,
+    handshake_client_traffic_secret: OkmBlock,
     traffic: KeyScheduleTraffic,
 }
 
@@ -417,9 +417,9 @@ impl KeyScheduleTrafficWithClientFinishedPending {
 /// to be available.
 pub(crate) struct KeyScheduleTraffic {
     ks: KeySchedule,
-    current_client_traffic_secret: hkdf::OkmBlock,
-    current_server_traffic_secret: hkdf::OkmBlock,
-    current_exporter_secret: hkdf::OkmBlock,
+    current_client_traffic_secret: OkmBlock,
+    current_server_traffic_secret: OkmBlock,
+    current_exporter_secret: OkmBlock,
 }
 
 impl KeyScheduleTraffic {
@@ -471,7 +471,7 @@ impl KeyScheduleTraffic {
         self.ks.set_decrypter(&secret, common);
     }
 
-    pub(crate) fn next_application_traffic_secret(&mut self, side: Side) -> hkdf::OkmBlock {
+    pub(crate) fn next_application_traffic_secret(&mut self, side: Side) -> OkmBlock {
         let current = match side {
             Side::Client => &mut self.current_client_traffic_secret,
             Side::Server => &mut self.current_server_traffic_secret,
@@ -486,7 +486,7 @@ impl KeyScheduleTraffic {
         &self,
         hs_hash: &hash::Output,
         nonce: &[u8],
-    ) -> hkdf::OkmBlock {
+    ) -> OkmBlock {
         let resumption_master_secret = self
             .ks
             .derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref());
@@ -506,26 +506,26 @@ impl KeyScheduleTraffic {
 
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         fn expand(
-            secret: &hkdf::OkmBlock,
-            hmac: &'static dyn hmac::Hmac,
+            secret: &OkmBlock,
+            hkdf: &'static dyn Hkdf,
             aead_key_len: usize,
         ) -> (AeadKey, Iv) {
-            let expander = hkdf::Expander::from_okm(secret, hmac);
+            let expander = hkdf.expander_for_okm(secret);
 
             (
-                hkdf_expand_label_aead_key(&expander, aead_key_len, b"key", &[]),
-                hkdf_expand_label(&expander, b"iv", &[]),
+                hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, b"key", &[]),
+                hkdf_expand_label(expander.as_ref(), b"iv", &[]),
             )
         }
 
         let (client_key, client_iv) = expand(
             &self.current_client_traffic_secret,
-            self.ks.suite.hmac_provider,
+            self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
         );
         let (server_key, server_iv) = expand(
             &self.current_server_traffic_secret,
-            self.ks.suite.hmac_provider,
+            self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
         );
         let client_secrets = self
@@ -550,60 +550,72 @@ impl KeyScheduleTraffic {
 impl KeySchedule {
     fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
         Self {
-            current: hkdf::Extractor::without_salt(suite.hmac_provider).extract(secret),
+            current: suite
+                .hkdf_provider
+                .extract_from_secret(None, secret),
             suite,
         }
     }
 
-    fn set_encrypter(&self, secret: &hkdf::OkmBlock, common: &mut CommonState) {
-        let expander = hkdf::Expander::from_okm(secret, self.suite.hmac_provider);
-        let key = derive_traffic_key(&expander, self.suite.aead_alg.key_len());
-        let iv = derive_traffic_iv(&expander);
+    fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(secret);
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
+        let iv = derive_traffic_iv(expander.as_ref());
 
         common
             .record_layer
             .set_message_encrypter(self.suite.aead_alg.encrypter(key, iv));
     }
 
-    fn set_decrypter(&self, secret: &hkdf::OkmBlock, common: &mut CommonState) {
+    fn set_decrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
         common
             .record_layer
             .set_message_decrypter(self.derive_decrypter(secret));
     }
 
-    fn derive_decrypter(&self, secret: &hkdf::OkmBlock) -> Box<dyn MessageDecrypter> {
-        let expander = hkdf::Expander::from_okm(secret, self.suite.hmac_provider);
-        let key = derive_traffic_key(&expander, self.suite.aead_alg.key_len());
-        let iv = derive_traffic_iv(&expander);
+    fn derive_decrypter(&self, secret: &OkmBlock) -> Box<dyn MessageDecrypter> {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(secret);
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
+        let iv = derive_traffic_iv(expander.as_ref());
         self.suite.aead_alg.decrypter(key, iv)
     }
 
     fn new_with_empty_secret(suite: &'static Tls13CipherSuite) -> Self {
-        let zeroes = [0u8; hash::Output::MAX_LEN];
-        Self::new(suite, &zeroes[..suite.hmac_provider.hash_output_len()])
+        Self {
+            current: suite
+                .hkdf_provider
+                .extract_from_zero_ikm(None),
+            suite,
+        }
     }
 
     /// Input the empty secret.
     fn input_empty(&mut self) {
-        let zeroes = [0u8; hash::Output::MAX_LEN];
-        self.input_secret(
-            &zeroes[..self
-                .suite
-                .hmac_provider
-                .hash_output_len()],
-        );
+        let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
+        self.current = self
+            .suite
+            .hkdf_provider
+            .extract_from_zero_ikm(Some(salt.as_ref()));
     }
 
     /// Input the given secret.
     fn input_secret(&mut self, secret: &[u8]) {
         let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
-        self.current =
-            hkdf::Extractor::new(self.suite.hmac_provider, salt.as_ref()).extract(secret);
+        self.current = self
+            .suite
+            .hkdf_provider
+            .extract_from_secret(Some(salt.as_ref()), secret);
     }
 
     /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.
-    fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> hkdf::OkmBlock {
-        hkdf_expand_label_block(&self.current, kind.to_bytes(), hs_hash)
+    fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> OkmBlock {
+        hkdf_expand_label_block(self.current.as_ref(), kind.to_bytes(), hs_hash)
     }
 
     fn derive_logged_secret(
@@ -612,7 +624,7 @@ impl KeySchedule {
         hs_hash: &[u8],
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-    ) -> hkdf::OkmBlock {
+    ) -> OkmBlock {
         let output = self.derive(kind, hs_hash);
 
         let log_label = kind
@@ -628,7 +640,7 @@ impl KeySchedule {
     /// for the handshake hash.  Useful only for
     /// `SecretKind::ResumptionPSKBinderKey` and
     /// `SecretKind::DerivedSecret`.
-    fn derive_for_empty_hash(&self, kind: SecretKind) -> hkdf::OkmBlock {
+    fn derive_for_empty_hash(&self, kind: SecretKind) -> OkmBlock {
         let empty_hash = self
             .suite
             .common
@@ -640,15 +652,18 @@ impl KeySchedule {
 
     /// Sign the finished message consisting of `hs_hash` using a current
     /// traffic secret.
-    fn sign_finish(&self, base_key: &hkdf::OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
+    fn sign_finish(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
         self.sign_verify_data(base_key, hs_hash)
     }
 
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
-    fn sign_verify_data(&self, base_key: &hkdf::OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
-        let expander = hkdf::Expander::from_okm(base_key, self.suite.hmac_provider);
-        let hmac_key = hkdf_expand_label_block(&expander, b"finished", &[]);
+    fn sign_verify_data(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(base_key);
+        let hmac_key = hkdf_expand_label_block(expander.as_ref(), b"finished", &[]);
 
         self.suite
             .hmac_provider
@@ -657,21 +672,27 @@ impl KeySchedule {
     }
 
     /// Derive the next application traffic secret, returning it.
-    fn derive_next(&self, base_key: &hkdf::OkmBlock) -> hkdf::OkmBlock {
-        let expander = hkdf::Expander::from_okm(base_key, self.suite.hmac_provider);
-        hkdf_expand_label_block(&expander, b"traffic upd", &[])
+    fn derive_next(&self, base_key: &OkmBlock) -> OkmBlock {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(base_key);
+        hkdf_expand_label_block(expander.as_ref(), b"traffic upd", &[])
     }
 
     /// Derive the PSK to use given a resumption_master_secret and
     /// ticket_nonce.
-    fn derive_ticket_psk(&self, rms: &hkdf::OkmBlock, nonce: &[u8]) -> hkdf::OkmBlock {
-        let expander = hkdf::Expander::from_okm(rms, self.suite.hmac_provider);
-        hkdf_expand_label_block(&expander, b"resumption", nonce)
+    fn derive_ticket_psk(&self, rms: &OkmBlock, nonce: &[u8]) -> OkmBlock {
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(rms);
+        hkdf_expand_label_block(expander.as_ref(), b"resumption", nonce)
     }
 
     fn export_keying_material(
         &self,
-        current_exporter_secret: &hkdf::OkmBlock,
+        current_exporter_secret: &OkmBlock,
         out: &mut [u8],
         label: &[u8],
         context: Option<&[u8]>,
@@ -683,9 +704,11 @@ impl KeySchedule {
                 .hash_provider
                 .hash(&[]);
 
-            let expander =
-                hkdf::Expander::from_okm(current_exporter_secret, self.suite.hmac_provider);
-            hkdf_expand_label_block(&expander, label, h_empty.as_ref())
+            let expander = self
+                .suite
+                .hkdf_provider
+                .expander_for_okm(current_exporter_secret);
+            hkdf_expand_label_block(expander.as_ref(), label, h_empty.as_ref())
         };
 
         let h_context = self
@@ -694,9 +717,12 @@ impl KeySchedule {
             .hash_provider
             .hash(context.unwrap_or(&[]));
 
-        let expander = hkdf::Expander::from_okm(&secret, self.suite.hmac_provider);
+        let expander = self
+            .suite
+            .hkdf_provider
+            .expander_for_okm(&secret);
         // TODO: Test what happens when this fails due to large `out.len()`
-        hkdf_expand_label_slice(&expander, b"exporter", h_context.as_ref(), out)
+        hkdf_expand_label_slice(expander.as_ref(), b"exporter", h_context.as_ref(), out)
             .map_err(|_| Error::General("exporting too much".to_string()))
     }
 }
@@ -706,33 +732,33 @@ impl KeySchedule {
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
 pub(crate) fn hkdf_expand_label<T: From<[u8; N]>, const N: usize>(
-    expander: &hkdf::Expander,
+    expander: &dyn HkdfExpander,
     label: &[u8],
     context: &[u8],
 ) -> T {
-    hkdf_expand_label_inner(expander, label, context, N, |e, info| e.expand(info))
+    hkdf_expand_label_inner(expander, label, context, N, |e, info| expand(e, info))
 }
 
 /// [HKDF-Expand-Label] where the output is one block in size.
 pub(crate) fn hkdf_expand_label_block(
-    expander: &hkdf::Expander,
+    expander: &dyn HkdfExpander,
     label: &[u8],
     context: &[u8],
-) -> hkdf::OkmBlock {
-    hkdf_expand_label_inner(expander, label, context, expander.block_len(), |e, info| {
+) -> OkmBlock {
+    hkdf_expand_label_inner(expander, label, context, expander.hash_len(), |e, info| {
         e.expand_block(info)
     })
 }
 
 /// [HKDF-Expand-Label] where the output is an AEAD key.
 pub(crate) fn hkdf_expand_label_aead_key(
-    expander: &hkdf::Expander,
+    expander: &dyn HkdfExpander,
     key_len: usize,
     label: &[u8],
     context: &[u8],
 ) -> AeadKey {
     hkdf_expand_label_inner(expander, label, context, key_len, |e, info| {
-        let key: AeadKey = e.expand(info);
+        let key: AeadKey = expand(e, info);
         key.with_length(key_len)
     })
 }
@@ -741,33 +767,33 @@ pub(crate) fn hkdf_expand_label_aead_key(
 ///
 /// This can fail because HKDF-Expand is limited in its maximum output length.
 fn hkdf_expand_label_slice(
-    expander: &hkdf::Expander,
+    expander: &dyn HkdfExpander,
     label: &[u8],
     context: &[u8],
     output: &mut [u8],
-) -> Result<(), hkdf::OutputLengthError> {
+) -> Result<(), OutputLengthError> {
     hkdf_expand_label_inner(expander, label, context, output.len(), |e, info| {
         e.expand_slice(info, output)
     })
 }
 
-pub(crate) fn derive_traffic_key(expander: &hkdf::Expander, aead_key_len: usize) -> AeadKey {
+pub(crate) fn derive_traffic_key(expander: &dyn HkdfExpander, aead_key_len: usize) -> AeadKey {
     hkdf_expand_label_aead_key(expander, aead_key_len, b"key", &[])
 }
 
-pub(crate) fn derive_traffic_iv(expander: &hkdf::Expander) -> Iv {
+pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
     hkdf_expand_label(expander, b"iv", &[])
 }
 
 fn hkdf_expand_label_inner<F, T>(
-    expander: &hkdf::Expander,
+    expander: &dyn HkdfExpander,
     label: &[u8],
     context: &[u8],
     n: usize,
     f: F,
 ) -> T
 where
-    F: FnOnce(&hkdf::Expander, &[&[u8]]) -> T,
+    F: FnOnce(&dyn HkdfExpander, &[&[u8]]) -> T,
 {
     const LABEL_PREFIX: &[u8] = b"tls13 ";
 
@@ -790,7 +816,9 @@ where
 #[cfg(all(test, feature = "ring"))]
 mod tests {
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-    use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
+    use crate::crypto::ring::tls13::{
+        TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
+    };
     use crate::KeyLog;
     use ring::aead;
 
@@ -936,11 +964,10 @@ mod tests {
 
         // Since we can't test key equality, we test the output of sealing with the key instead.
         let aead_alg = &aead::AES_128_GCM;
-        let expander = crate::hkdf::Expander::from_okm(
-            &traffic_secret,
-            &crate::crypto::ring::hmac::HMAC_SHA256,
-        );
-        let key = derive_traffic_key(&expander, aead_alg.key_len());
+        let expander = TLS13_AES_128_GCM_SHA256_INTERNAL
+            .hkdf_provider
+            .expander_for_okm(&traffic_secret);
+        let key = derive_traffic_key(expander.as_ref(), aead_alg.key_len());
         let key = aead::UnboundKey::new(aead_alg, key.as_ref()).unwrap();
         let seal_output = seal_zeroes(key);
         let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();
@@ -948,7 +975,7 @@ mod tests {
         assert_eq!(seal_output, expected_seal_output);
         assert!(seal_output.len() >= 48); // Sanity check.
 
-        let iv = derive_traffic_iv(&expander);
+        let iv = derive_traffic_iv(expander.as_ref());
         assert_eq!(iv.as_ref(), expected_iv);
     }
 
@@ -972,7 +999,6 @@ mod benchmarks {
     fn bench_sha256(b: &mut test::Bencher) {
         use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
         use crate::crypto::ring::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
-        use crate::hkdf;
         use crate::KeyLog;
         use ring::aead;
 
@@ -986,15 +1012,14 @@ mod benchmarks {
             let aead_alg = &aead::CHACHA20_POLY1305;
             let hash = [0u8; 32];
             let traffic_secret = ks.derive_logged_secret(kind, &hash, &Log, &[0u8; 32]);
-            let traffic_secret_expander = hkdf::Expander::from_okm(
-                &traffic_secret,
-                TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.hmac_provider,
-            );
+            let traffic_secret_expander = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
+                .hkdf_provider
+                .expander_for_okm(&traffic_secret);
             test::black_box(derive_traffic_key(
-                &traffic_secret_expander,
+                traffic_secret_expander.as_ref(),
                 aead_alg.key_len(),
             ));
-            test::black_box(derive_traffic_iv(&traffic_secret_expander));
+            test::black_box(derive_traffic_iv(traffic_secret_expander.as_ref()));
         }
 
         b.iter(|| {

@@ -5,6 +5,7 @@ use crate::crypto::cipher::{
     make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
+use crate::crypto::tls13::HkdfUsingHmac;
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec::Codec;
@@ -24,6 +25,7 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
         hash_provider: &super::hash::SHA256,
     },
     hmac_provider: &super::hmac::HMAC_SHA256,
+    hkdf_provider: &HkdfUsingHmac(&super::hmac::HMAC_SHA256),
     aead_alg: &Chacha20Poly1305Aead(AeadAlgorithm(&ring::aead::CHACHA20_POLY1305)),
     #[cfg(feature = "quic")]
     confidentiality_limit: u64::MAX,
@@ -41,6 +43,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
             hash_provider: &super::hash::SHA384,
         },
         hmac_provider: &super::hmac::HMAC_SHA384,
+        hkdf_provider: &HkdfUsingHmac(&super::hmac::HMAC_SHA384),
         aead_alg: &Aes256GcmAead(AeadAlgorithm(&ring::aead::AES_256_GCM)),
         #[cfg(feature = "quic")]
         confidentiality_limit: 1 << 23,
@@ -60,6 +63,7 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
         hash_provider: &super::hash::SHA256,
     },
     hmac_provider: &super::hmac::HMAC_SHA256,
+    hkdf_provider: &HkdfUsingHmac(&super::hmac::HMAC_SHA256),
     aead_alg: &Aes128GcmAead(AeadAlgorithm(&ring::aead::AES_128_GCM)),
     #[cfg(feature = "quic")]
     confidentiality_limit: 1 << 23,

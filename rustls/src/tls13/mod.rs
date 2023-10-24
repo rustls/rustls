@@ -15,6 +15,9 @@ pub struct Tls13CipherSuite {
     /// How to compute HMAC with the suite's hash function.
     pub hmac_provider: &'static dyn crypto::hmac::Hmac,
 
+    /// How to complete HKDF with the suite's hash function.
+    pub hkdf_provider: &'static dyn crypto::tls13::Hkdf,
+
     /// How to produce a [MessageDecrypter] or [MessageEncrypter]
     /// from raw key material.
     ///
