@@ -685,9 +685,8 @@ impl KeySchedule {
         let hmac_key = hkdf_expand_label_block(expander.as_ref(), b"finished", &[]);
 
         self.suite
-            .hmac_provider
-            .with_key(hmac_key.as_ref())
-            .sign(&[hs_hash.as_ref()])
+            .hkdf_provider
+            .hmac_sign(&hmac_key, hs_hash.as_ref())
     }
 
     /// Derive the next application traffic secret, returning it.

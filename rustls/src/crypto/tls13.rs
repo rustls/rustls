@@ -85,6 +85,12 @@ impl<'a> Hkdf for HkdfUsingHmac<'a> {
     fn expander_for_okm(&self, okm: &OkmBlock) -> Box<dyn HkdfExpander> {
         Box::new(HkdfExpanderUsingHmac(self.0.with_key(okm.as_ref())))
     }
+
+    fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> hmac::Tag {
+        self.0
+            .with_key(key.as_ref())
+            .sign(&[message])
+    }
 }
 
 /// Implementation of `HKDF-Expand` with an implicitly stored and immutable `PRK`.
@@ -161,6 +167,15 @@ pub trait Hkdf: Send + Sync {
 
     /// Build a `HkdfExpander` using `okm` as the secret PRK.
     fn expander_for_okm(&self, okm: &OkmBlock) -> Box<dyn HkdfExpander>;
+
+    /// Signs `message` using `key` viewed as a HMAC key.
+    ///
+    /// This should use the same hash function as the HKDF functions in this
+    /// trait.
+    ///
+    /// See [RFC2104](https://datatracker.ietf.org/doc/html/rfc2104) for the
+    /// definition of HMAC.
+    fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> hmac::Tag;
 }
 
 /// `HKDF-Expand(PRK, info, L)` to construct any type from a byte array.
