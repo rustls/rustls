@@ -1,11 +1,12 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use crate::crypto;
 use crate::crypto::cipher::{
     make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm,
     UnsupportedOperationError,
 };
-use crate::crypto::tls13::HkdfUsingHmac;
+use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec::Codec;
@@ -13,7 +14,8 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls13::Tls13CipherSuite;
 
-use ring::aead;
+use ring::hkdf::KeyType;
+use ring::{aead, hkdf, hmac};
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
@@ -24,7 +26,7 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
         suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
         hash_provider: &super::hash::SHA256,
     },
-    hkdf_provider: &HkdfUsingHmac(&super::hmac::HMAC_SHA256),
+    hkdf_provider: &RingHkdf(hkdf::HKDF_SHA256, hmac::HMAC_SHA256),
     aead_alg: &Chacha20Poly1305Aead(AeadAlgorithm(&ring::aead::CHACHA20_POLY1305)),
     #[cfg(feature = "quic")]
     confidentiality_limit: u64::MAX,
@@ -41,7 +43,7 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
             hash_provider: &super::hash::SHA384,
         },
-        hkdf_provider: &HkdfUsingHmac(&super::hmac::HMAC_SHA384),
+        hkdf_provider: &RingHkdf(hkdf::HKDF_SHA384, hmac::HMAC_SHA384),
         aead_alg: &Aes256GcmAead(AeadAlgorithm(&ring::aead::AES_256_GCM)),
         #[cfg(feature = "quic")]
         confidentiality_limit: 1 << 23,
@@ -60,7 +62,7 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
         suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
         hash_provider: &super::hash::SHA256,
     },
-    hkdf_provider: &HkdfUsingHmac(&super::hmac::HMAC_SHA256),
+    hkdf_provider: &RingHkdf(hkdf::HKDF_SHA256, hmac::HMAC_SHA256),
     aead_alg: &Aes128GcmAead(AeadAlgorithm(&ring::aead::AES_128_GCM)),
     #[cfg(feature = "quic")]
     confidentiality_limit: 1 << 23,
@@ -215,5 +217,80 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         payload.truncate(plain_len);
         msg.into_tls13_unpadded_message()
+    }
+}
+
+struct RingHkdf(hkdf::Algorithm, hmac::Algorithm);
+
+impl Hkdf for RingHkdf {
+    fn extract_from_zero_ikm(&self, salt: Option<&[u8]>) -> Box<dyn HkdfExpander> {
+        let zeroes = [0u8; OkmBlock::MAX_LEN];
+        let salt = match salt {
+            Some(salt) => salt,
+            None => &zeroes[..self.0.len()],
+        };
+        Box::new(RingHkdfExpander {
+            alg: self.0,
+            prk: hkdf::Salt::new(self.0, salt).extract(&zeroes[..self.0.len()]),
+        })
+    }
+
+    fn extract_from_secret(&self, salt: Option<&[u8]>, secret: &[u8]) -> Box<dyn HkdfExpander> {
+        let zeroes = [0u8; OkmBlock::MAX_LEN];
+        let salt = match salt {
+            Some(salt) => salt,
+            None => &zeroes[..self.0.len()],
+        };
+        Box::new(RingHkdfExpander {
+            alg: self.0,
+            prk: hkdf::Salt::new(self.0, salt).extract(secret),
+        })
+    }
+
+    fn expander_for_okm(&self, okm: &OkmBlock) -> Box<dyn HkdfExpander> {
+        Box::new(RingHkdfExpander {
+            alg: self.0,
+            prk: hkdf::Prk::new_less_safe(self.0, okm.as_ref()),
+        })
+    }
+
+    fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> crypto::hmac::Tag {
+        crypto::hmac::Tag::new(hmac::sign(&hmac::Key::new(self.1, key.as_ref()), message).as_ref())
+    }
+}
+
+struct RingHkdfExpander {
+    alg: hkdf::Algorithm,
+    prk: hkdf::Prk,
+}
+
+impl HkdfExpander for RingHkdfExpander {
+    fn expand_slice(&self, info: &[&[u8]], output: &mut [u8]) -> Result<(), OutputLengthError> {
+        self.prk
+            .expand(info, Len(output.len()))
+            .and_then(|okm| okm.fill(output))
+            .map_err(|_| OutputLengthError)
+    }
+
+    fn expand_block(&self, info: &[&[u8]]) -> OkmBlock {
+        let mut buf = [0u8; OkmBlock::MAX_LEN];
+        let output = &mut buf[..self.hash_len()];
+        self.prk
+            .expand(info, Len(output.len()))
+            .and_then(|okm| okm.fill(output))
+            .unwrap();
+        OkmBlock::new(output)
+    }
+
+    fn hash_len(&self) -> usize {
+        self.alg.len()
+    }
+}
+
+struct Len(usize);
+
+impl KeyType for Len {
+    fn len(&self) -> usize {
+        self.0
     }
 }
