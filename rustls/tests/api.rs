@@ -21,7 +21,6 @@ use rustls::internal::msgs::enums::AlertLevel;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert, WebPkiClientVerifier};
-use rustls::ConnectionTrafficSecrets;
 use rustls::SupportedCipherSuite;
 use rustls::{
     sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, KeyLog,
@@ -29,6 +28,7 @@ use rustls::{
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
+use rustls::{ConnectionTrafficSecrets, DistinguishedName};
 use rustls::{ServerConfig, ServerConnection};
 use rustls::{Stream, StreamOwned};
 
@@ -1333,19 +1333,54 @@ fn client_cert_resolve_default() {
 
         // In a default configuration we expect that the verifier's trust anchors are used
         // for the hint subjects.
-        let expected_root_hint_subjects = match key_type {
-            KeyType::Rsa => {
-                vec![b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA".to_vec()]
-            }
-            KeyType::Ecdsa => {
-                vec![b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA".to_vec()]
-            }
-            KeyType::Ed25519 => {
-                vec![b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA".to_vec()]
-            }
-        };
+        let expected_root_hint_subjects = vec![match key_type {
+            KeyType::Rsa => &b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA"[..],
+            KeyType::Ecdsa => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA"[..],
+            KeyType::Ed25519 => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA"[..],
+        }
+        .to_vec()];
 
         test_client_cert_resolve(key_type, server_config, expected_root_hint_subjects);
+    }
+}
+
+#[test]
+fn client_cert_resolve_server_no_hints() {
+    // Test that a server can provide no hints and the client cert resolver gets the expected
+    // arguments.
+    for key_type in ALL_KEY_TYPES.into_iter() {
+        // Build a verifier with no hint subjects.
+        let verifier = WebPkiClientVerifier::builder(get_client_root_store(key_type))
+            .clear_root_hint_subjects();
+        let server_config = make_server_config_with_client_verifier(key_type, verifier);
+        let expected_root_hint_subjects = Vec::default(); // no hints expected.
+        test_client_cert_resolve(key_type, server_config.into(), expected_root_hint_subjects);
+    }
+}
+
+#[test]
+fn client_cert_resolve_server_added_hint() {
+    // Test that a server can add an extra subject above/beyond those found in its trust store
+    // and the client cert resolver gets the expected arguments.
+    let extra_name = b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponyland IDK CA".to_vec();
+    for key_type in ALL_KEY_TYPES.into_iter() {
+        let expected_hint_subjects = vec![
+            match key_type {
+                KeyType::Rsa => &b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA"[..],
+                KeyType::Ecdsa => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA"[..],
+                KeyType::Ed25519 => {
+                    &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA"[..]
+                }
+            }
+            .to_vec(),
+            extra_name.clone(),
+        ];
+        // Create a verifier that adds the extra_name as a hint subject in addition to the ones
+        // from the root cert store.
+        let verifier = WebPkiClientVerifier::builder(get_client_root_store(key_type))
+            .add_root_hint_subjects([DistinguishedName::from(extra_name.clone())].into_iter());
+        let server_config = make_server_config_with_client_verifier(key_type, verifier);
+        test_client_cert_resolve(key_type, server_config.into(), expected_hint_subjects);
     }
 }
 
