@@ -165,6 +165,14 @@ impl Signer for RsaSigner {
     }
 }
 
+impl Debug for RsaSigner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RsaSigner")
+            .field("scheme", &self.scheme)
+            .finish()
+    }
+}
+
 /// A SigningKey that uses exactly one TLS-level SignatureScheme
 /// and one ring-level signature::SigningAlgorithm.
 ///
@@ -296,6 +304,14 @@ impl Signer for EcdsaSigner {
     }
 }
 
+impl Debug for EcdsaSigner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EcdsaSigner")
+            .field("scheme", &self.scheme)
+            .finish()
+    }
+}
+
 /// A SigningKey that uses exactly one TLS-level SignatureScheme
 /// and one ring-level signature::SigningAlgorithm.
 ///
@@ -363,6 +379,14 @@ impl Signer for Ed25519Signer {
 
     fn scheme(&self) -> SignatureScheme {
         self.scheme
+    }
+}
+
+impl Debug for Ed25519Signer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Ed25519Signer")
+            .field("scheme", &self.scheme)
+            .finish()
     }
 }
 
