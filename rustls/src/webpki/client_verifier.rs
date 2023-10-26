@@ -23,6 +23,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct ClientCertVerifierBuilder {
     roots: Arc<RootCertStore>,
+    root_hint_subjects: Vec<DistinguishedName>,
     crls: Vec<CertificateRevocationListDer<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
@@ -33,6 +34,7 @@ pub struct ClientCertVerifierBuilder {
 impl ClientCertVerifierBuilder {
     pub(crate) fn new(roots: Arc<RootCertStore>) -> Self {
         Self {
+            root_hint_subjects: roots.subjects(),
             roots,
             crls: Vec::new(),
             anon_policy: AnonymousClientPolicy::Deny,
@@ -40,6 +42,37 @@ impl ClientCertVerifierBuilder {
             unknown_revocation_policy: UnknownStatusPolicy::Deny,
             supported_algs: None,
         }
+    }
+
+    /// Clear the list of trust anchor hint subjects.
+    ///
+    /// By default, the client cert verifier will use the subjects provided by the root cert
+    /// store configured for client authentication. Calling this function will remove these
+    /// hint subjects, indicating the client should make a free choice of which certificate
+    /// to send.
+    ///
+    /// See [`ClientCertVerifier::root_hint_subjects`] for more information on
+    /// circumstances where you may want to clear the default hint subjects.
+    pub fn clear_root_hint_subjects(mut self) -> Self {
+        self.root_hint_subjects = Vec::default();
+        self
+    }
+
+    /// Add additional [`DistinguishedName`]s to the list of trust anchor hint subjects.
+    ///
+    /// By default, the client cert verifier will use the subjects provided by the root cert
+    /// store configured for client authentication. Calling this function will add to these
+    /// existing hint subjects. Calling this function with empty `subjects` will have no
+    /// effect.
+    ///
+    /// See [`ClientCertVerifier::root_hint_subjects`] for more information on
+    /// circumstances where you may want to override the default hint subjects.
+    pub fn add_root_hint_subjects(
+        mut self,
+        subjects: impl IntoIterator<Item = DistinguishedName>,
+    ) -> Self {
+        self.root_hint_subjects.extend(subjects);
+        self
     }
 
     /// Verify the revocation state of presented client certificates against the provided
@@ -142,11 +175,9 @@ impl ClientCertVerifierBuilder {
             .supported_algs
             .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
 
-        let root_hint_subjects = self.roots.subjects();
-
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
-            root_hint_subjects,
+            self.root_hint_subjects,
             self.crls
                 .into_iter()
                 .map(|der_crl| {
