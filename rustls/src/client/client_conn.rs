@@ -86,20 +86,28 @@ pub trait ClientSessionStore: Send + Sync {
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
 pub trait ResolvesClientCert: Send + Sync {
-    /// With the server-supplied acceptable issuers in `acceptable_issuers`,
-    /// the server's supported signature schemes in `sigschemes`,
-    /// return a certificate chain and signing key to authenticate.
+    /// Resolve a client certificate chain/private key to use as the client's
+    /// identity.
     ///
-    /// `acceptable_issuers` is undecoded and unverified by the rustls
-    /// library, but it should be expected to contain a DER encodings
-    /// of X501 NAMEs.
+    /// `root_hint_subjects` is an optional list of certificate authority
+    /// subject distinguished names that the client can use to help
+    /// decide on a client certificate the server is likely to accept. If
+    /// the list is empty, the client should send whatever certificate it
+    /// has. The hints are expected to be DER-encoded X.500 distinguished names,
+    /// per [RFC 5280 A.1]. See [`crate::DistinguishedName`] for more information
+    /// on decoding with external crates like `x509-parser`.
     ///
-    /// Return None to continue the handshake without any client
+    /// `sigschemes` is the list of the [`SignatureScheme`]s the server
+    /// supports.
+    ///
+    /// Return `None` to continue the handshake without any client
     /// authentication.  The server may reject the handshake later
     /// if it requires authentication.
+    ///
+    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
     fn resolve(
         &self,
-        acceptable_issuers: &[&[u8]],
+        root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>>;
 

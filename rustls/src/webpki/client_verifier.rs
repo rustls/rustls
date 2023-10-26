@@ -142,7 +142,7 @@ impl ClientCertVerifierBuilder {
             .supported_algs
             .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
 
-        let subjects = self
+        let root_hint_subjects = self
             .roots
             .roots
             .iter()
@@ -151,7 +151,7 @@ impl ClientCertVerifierBuilder {
 
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
-            subjects,
+            root_hint_subjects,
             self.crls
                 .into_iter()
                 .map(|der_crl| {
@@ -222,7 +222,7 @@ impl ClientCertVerifierBuilder {
 /// [^1]: <https://github.com/rustls/webpki>
 pub struct WebPkiClientVerifier {
     roots: Arc<RootCertStore>,
-    subjects: Vec<DistinguishedName>,
+    root_hint_subjects: Vec<DistinguishedName>,
     crls: Vec<OwnedCertRevocationList>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
@@ -253,6 +253,8 @@ impl WebPkiClientVerifier {
     /// Construct a new `WebpkiClientVerifier`.
     ///
     /// * `roots` is a list of trust anchors to use for certificate validation.
+    /// * `root_hint_subjects` is a list of distinguished names to use for hinting acceptable
+    ///   certificate authority subjects to a client.
     /// * `crls` is a `Vec` of owned certificate revocation lists (CRLs) to use for
     ///   client certificate validation.
     /// * `revocation_check_depth` controls which certificates have their revocation status checked
@@ -264,7 +266,7 @@ impl WebPkiClientVerifier {
     /// * `supported_algs` specifies which signature verification algorithms should be used.
     pub(crate) fn new(
         roots: Arc<RootCertStore>,
-        subjects: Vec<DistinguishedName>,
+        root_hint_subjects: Vec<DistinguishedName>,
         crls: Vec<OwnedCertRevocationList>,
         revocation_check_depth: RevocationCheckDepth,
         unknown_revocation_policy: UnknownStatusPolicy,
@@ -273,7 +275,7 @@ impl WebPkiClientVerifier {
     ) -> Self {
         Self {
             roots,
-            subjects,
+            root_hint_subjects,
             crls,
             revocation_check_depth,
             unknown_revocation_policy,
@@ -295,8 +297,8 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         }
     }
 
-    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
-        &self.subjects
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &self.root_hint_subjects
     }
 
     fn verify_client_cert(

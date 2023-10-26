@@ -200,7 +200,7 @@ impl server::danger::ClientCertVerifier for DummyClientAuth {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
         &[]
     }
 
@@ -315,7 +315,7 @@ struct FixedSignatureSchemeClientCertResolver {
 impl client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
     fn resolve(
         &self,
-        acceptable_issuers: &[&[u8]],
+        root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
         if !sigschemes.contains(&self.scheme) {
@@ -323,7 +323,7 @@ impl client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
         }
         let mut certkey = self
             .resolver
-            .resolve(acceptable_issuers, sigschemes)?;
+            .resolve(root_hint_subjects, sigschemes)?;
         Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
             scheme: self.scheme,
