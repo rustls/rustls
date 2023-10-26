@@ -6,9 +6,10 @@ use pki_types::CertificateDer;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt::Debug;
 
 /// An abstract signing key.
-pub trait SigningKey: Send + Sync {
+pub trait SigningKey: Debug + Send + Sync {
     /// Choose a `SignatureScheme` from those offered.
     ///
     /// Expresses the choice by returning something that implements `Signer`,
