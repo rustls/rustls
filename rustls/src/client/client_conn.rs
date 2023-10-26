@@ -38,7 +38,7 @@ use std::net::IpAddr;
 /// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
-pub trait ClientSessionStore: Send + Sync {
+pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
     fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
 

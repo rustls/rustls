@@ -12,9 +12,11 @@ use pki_types::CertificateDer;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt;
 use std::sync::Mutex;
 
 /// An implementer of `ClientSessionStore` which does nothing.
+#[derive(Debug)]
 pub(super) struct NoClientSessionStorage;
 
 impl client::ClientSessionStore for NoClientSessionStorage {
@@ -157,6 +159,14 @@ impl client::ClientSessionStore for ClientSessionMemoryCache {
             .unwrap()
             .get_mut(server_name)
             .and_then(|data| data.tls13.pop_back())
+    }
+}
+
+impl fmt::Debug for ClientSessionMemoryCache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Note: we omit self.servers as it may contain sensitive data.
+        f.debug_struct("ClientSessionMemoryCache")
+            .finish()
     }
 }
 
