@@ -167,8 +167,8 @@ pub trait ClientCertVerifier: Send + Sync {
     /// These hint values help the client pick a client certificate it believes the server will
     /// accept. The hints must be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. They
     /// are sent in the [`certificate_authorities`] extension of a [`CertificateRequest`] message
-    /// when [ClientCertVerifier::offer_client_auth] is true. If the return value is empty, no
-    /// CertificateRequest message will be sent.
+    /// when [ClientCertVerifier::offer_client_auth] is true. When an empty list is sent the client
+    /// should always provide a client certificate if it has one.
     ///
     /// Generally this list should contain the [`DistinguishedName`] of each root trust
     /// anchor in the root cert store that the server is configured to use for authenticating

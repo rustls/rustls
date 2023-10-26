@@ -715,15 +715,13 @@ mod client_hello {
         cr.extensions
             .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
 
-        let names = config
-            .verifier
-            .root_hint_subjects()
-            .to_vec();
-
-        if !names.is_empty() {
-            cr.extensions
-                .push(CertReqExtension::AuthorityNames(names));
-        }
+        cr.extensions
+            .push(CertReqExtension::AuthorityNames(
+                config
+                    .verifier
+                    .root_hint_subjects()
+                    .to_vec(),
+            ));
 
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
