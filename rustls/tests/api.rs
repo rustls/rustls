@@ -1224,20 +1224,20 @@ fn client_check_server_certificate_helper_api() {
 struct ClientCheckCertResolve {
     query_count: AtomicUsize,
     expect_queries: usize,
-    expect_issuers: Vec<Vec<u8>>,
+    expect_root_hint_subjects: Vec<Vec<u8>>,
     expect_sigschemes: Vec<SignatureScheme>,
 }
 
 impl ClientCheckCertResolve {
     fn new(
         expect_queries: usize,
-        expect_issuers: Vec<Vec<u8>>,
+        expect_root_hint_subjects: Vec<Vec<u8>>,
         expect_sigschemes: Vec<SignatureScheme>,
     ) -> Self {
         Self {
             query_count: AtomicUsize::new(0),
             expect_queries,
-            expect_issuers,
+            expect_root_hint_subjects,
             expect_sigschemes,
         }
     }
@@ -1261,16 +1261,12 @@ impl ResolvesClientCert for ClientCheckCertResolve {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 
-        if root_hint_subjects.is_empty() {
-            panic!("no issuers offered by server");
-        }
-
         if sigschemes.is_empty() {
             panic!("no signature schemes shared by server");
         }
 
-        assert_eq!(root_hint_subjects, self.expect_issuers);
         assert_eq!(sigschemes, self.expect_sigschemes);
+        assert_eq!(root_hint_subjects, self.expect_root_hint_subjects);
 
         None
     }
@@ -1280,12 +1276,64 @@ impl ResolvesClientCert for ClientCheckCertResolve {
     }
 }
 
-#[test]
-fn client_cert_resolve() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*kt));
+fn test_client_cert_resolve(
+    key_type: KeyType,
+    server_config: Arc<ServerConfig>,
+    expected_root_hint_subjects: Vec<Vec<u8>>,
+) {
+    for version in rustls::ALL_VERSIONS {
+        let expected_sigschemes = match version.version {
+            ProtocolVersion::TLSv1_2 => vec![
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ED25519,
+                SignatureScheme::RSA_PSS_SHA512,
+                SignatureScheme::RSA_PSS_SHA384,
+                SignatureScheme::RSA_PSS_SHA256,
+                SignatureScheme::RSA_PKCS1_SHA512,
+                SignatureScheme::RSA_PKCS1_SHA384,
+                SignatureScheme::RSA_PKCS1_SHA256,
+            ],
+            ProtocolVersion::TLSv1_3 => vec![
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ED25519,
+                SignatureScheme::RSA_PSS_SHA512,
+                SignatureScheme::RSA_PSS_SHA384,
+                SignatureScheme::RSA_PSS_SHA256,
+            ],
+            _ => unreachable!(),
+        };
 
-        let expected_issuers = match *kt {
+        println!("{:?} {:?}:", version.version, key_type);
+
+        let mut client_config = make_client_config_with_versions(key_type, &[version]);
+        client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
+            1,
+            expected_root_hint_subjects.clone(),
+            expected_sigschemes,
+        ));
+
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+
+        assert_eq!(
+            do_handshake_until_error(&mut client, &mut server),
+            Err(ErrorFromPeer::Server(Error::NoCertificatesPresented))
+        );
+    }
+}
+
+#[test]
+fn client_cert_resolve_default() {
+    // Test that in the default configuration that a client cert resolver gets the expected
+    // CA subject hints, and supported signature algorithms.
+    for key_type in ALL_KEY_TYPES.into_iter() {
+        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(key_type));
+
+        // In a default configuration we expect that the verifier's trust anchors are used
+        // for the hint subjects.
+        let expected_root_hint_subjects = match key_type {
             KeyType::Rsa => {
                 vec![b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA".to_vec()]
             }
@@ -1297,47 +1345,7 @@ fn client_cert_resolve() {
             }
         };
 
-        for version in rustls::ALL_VERSIONS {
-            let expected_sigschemes = match version.version {
-                ProtocolVersion::TLSv1_2 => vec![
-                    SignatureScheme::ECDSA_NISTP384_SHA384,
-                    SignatureScheme::ECDSA_NISTP256_SHA256,
-                    SignatureScheme::ED25519,
-                    SignatureScheme::RSA_PSS_SHA512,
-                    SignatureScheme::RSA_PSS_SHA384,
-                    SignatureScheme::RSA_PSS_SHA256,
-                    SignatureScheme::RSA_PKCS1_SHA512,
-                    SignatureScheme::RSA_PKCS1_SHA384,
-                    SignatureScheme::RSA_PKCS1_SHA256,
-                ],
-                ProtocolVersion::TLSv1_3 => vec![
-                    SignatureScheme::ECDSA_NISTP384_SHA384,
-                    SignatureScheme::ECDSA_NISTP256_SHA256,
-                    SignatureScheme::ED25519,
-                    SignatureScheme::RSA_PSS_SHA512,
-                    SignatureScheme::RSA_PSS_SHA384,
-                    SignatureScheme::RSA_PSS_SHA256,
-                ],
-                _ => unreachable!(),
-            };
-
-            println!("{:?} {:?}:", version.version, *kt);
-
-            let mut client_config = make_client_config_with_versions(*kt, &[version]);
-            client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
-                1,
-                expected_issuers.clone(),
-                expected_sigschemes,
-            ));
-
-            let (mut client, mut server) =
-                make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-
-            assert_eq!(
-                do_handshake_until_error(&mut client, &mut server),
-                Err(ErrorFromPeer::Server(Error::NoCertificatesPresented))
-            );
-        }
+        test_client_cert_resolve(key_type, server_config, expected_root_hint_subjects);
     }
 }
 
