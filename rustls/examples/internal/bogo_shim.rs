@@ -566,6 +566,15 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
     }
 }
 
+impl Debug for ClientCacheWithoutKxHints {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Note: we omit self.storage here as it may contain sensitive data.
+        f.debug_struct("ClientCacheWithoutKxHints")
+            .field("delay", &self.delay)
+            .finish()
+    }
+}
+
 fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     let kx_groups = if let Some(curves) = &opts.curves {
         curves
