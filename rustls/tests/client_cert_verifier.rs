@@ -150,11 +150,7 @@ impl MockClientVerifier {
     pub fn new(verified: fn() -> Result<ClientCertVerified, Error>, kt: KeyType) -> Self {
         Self {
             verified,
-            subjects: get_client_root_store(kt)
-                .roots
-                .iter()
-                .map(|ta| DistinguishedName::in_sequence(ta.subject.as_ref()))
-                .collect(),
+            subjects: get_client_root_store(kt).subjects(),
             mandatory: true,
             offered_schemes: None,
         }
