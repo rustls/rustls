@@ -15,7 +15,7 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::fmt;
+use core::fmt::{self, Debug, Formatter};
 use std::error::Error as StdError;
 
 /// Parse `der` as any supported key encoding/type, returning
@@ -112,6 +112,14 @@ impl SigningKey for RsaSigningKey {
 
     fn algorithm(&self) -> SignatureAlgorithm {
         SignatureAlgorithm::RSA
+    }
+}
+
+impl Debug for RsaSigningKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RsaSigningKey")
+            .field("algorithm", &self.algorithm())
+            .finish()
     }
 }
 
@@ -261,6 +269,14 @@ impl SigningKey for EcdsaSigningKey {
     }
 }
 
+impl Debug for EcdsaSigningKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EcdsaSigningKey")
+            .field("algorithm", &self.algorithm())
+            .finish()
+    }
+}
+
 struct EcdsaSigner {
     key: Arc<EcdsaKeyPair>,
     scheme: SignatureScheme,
@@ -327,6 +343,14 @@ impl SigningKey for Ed25519SigningKey {
     }
 }
 
+impl Debug for Ed25519SigningKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Ed25519SigningKey")
+            .field("algorithm", &self.algorithm())
+            .finish()
+    }
+}
+
 struct Ed25519Signer {
     key: Arc<Ed25519KeyPair>,
     scheme: SignatureScheme,
@@ -347,7 +371,7 @@ impl Signer for Ed25519Signer {
 pub struct SignError(());
 
 impl fmt::Display for SignError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("sign error")
     }
 }

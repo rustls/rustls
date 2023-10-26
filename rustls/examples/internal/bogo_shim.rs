@@ -3,7 +3,6 @@
 //
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
-
 use rustls::client::danger::HandshakeSignatureValid;
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
 use rustls::crypto::SupportedKxGroup;
@@ -25,6 +24,7 @@ use rustls::crypto::ring as provider;
 use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
 
+use std::fmt::{Debug, Formatter};
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
 use std::time;
@@ -292,6 +292,14 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
     }
     fn algorithm(&self) -> SignatureAlgorithm {
         self.key.algorithm()
+    }
+}
+
+impl Debug for FixedSignatureSchemeSigningKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FixedSignatureSchemeSigningKey")
+            .field("scheme", &self.scheme)
+            .finish()
     }
 }
 
