@@ -21,7 +21,7 @@ pub trait SigningKey: Debug + Send + Sync {
 }
 
 /// A thing that can sign a message.
-pub trait Signer: Send + Sync {
+pub trait Signer: Debug + Send + Sync {
     /// Signs `message` using the selected scheme.
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error>;
 
