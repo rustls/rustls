@@ -161,19 +161,36 @@ pub trait ClientCertVerifier: Send + Sync {
         self.offer_client_auth()
     }
 
-    /// Returns the [Subjects] of the client authentication trust anchors to
-    /// share with the client when requesting client authentication.
+    /// Returns the [`DistinguishedName`] [subjects] that the server will hint to clients to
+    /// identify acceptable authentication trust anchors.
     ///
-    /// These must be DER-encoded X.500 distinguished names, per RFC 5280.
-    /// They are sent in the [`certificate_authorities`] extension of a
-    /// [`CertificateRequest`] message.
+    /// These hint values help the client pick a client certificate it believes the server will
+    /// accept. The hints must be DER-encoded X.500 distinguished names, per [RFC 5280 A.1]. They
+    /// are sent in the [`certificate_authorities`] extension of a [`CertificateRequest`] message
+    /// when [ClientCertVerifier::offer_client_auth] is true. If the return value is empty, no
+    /// CertificateRequest message will be sent.
     ///
-    /// [Subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
+    /// Generally this list should contain the [`DistinguishedName`] of each root trust
+    /// anchor in the root cert store that the server is configured to use for authenticating
+    /// presented client certificates.
+    ///
+    /// In some circumstances this list may be customized to include [`DistinguishedName`] entries
+    /// that do not correspond to a trust anchor in the server's root cert store. For example,
+    /// the server may be configured to trust a root CA that cross-signed an issuer certificate
+    /// that the client considers a trust anchor. From the server's perspective the cross-signed
+    /// certificate is an intermediate, and not present in the server's root cert store. The client
+    /// may have the cross-signed certificate configured as a trust anchor, and be unaware of the
+    /// root CA that cross-signed it. If the server's hints list only contained the subjects of the
+    /// server's root store the client would consider a client certificate issued by the cross-signed
+    /// issuer unacceptable, since its subject was not hinted. To avoid this circumstance the server
+    /// should customize the hints list to include the subject of the cross-signed issuer in addition
+    /// to the subjects from the root cert store.
+    ///
+    /// [subjects]: https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.6
+    /// [RFC 5280 A.1]: https://www.rfc-editor.org/rfc/rfc5280#appendix-A.1
     /// [`CertificateRequest`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.3.2
     /// [`certificate_authorities`]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
-    ///
-    /// If the return value is empty, no CertificateRequest message will be sent.
-    fn client_auth_root_subjects(&self) -> &[DistinguishedName];
+    fn root_hint_subjects(&self) -> &[DistinguishedName];
 
     /// Verify the end-entity certificate `end_entity` is valid, acceptable,
     /// and chains to at least one of the trust anchors trusted by
@@ -258,7 +275,7 @@ impl ClientCertVerifier for NoClientAuth {
         false
     }
 
-    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
         unimplemented!();
     }
 

@@ -1255,13 +1255,13 @@ impl Drop for ClientCheckCertResolve {
 impl ResolvesClientCert for ClientCheckCertResolve {
     fn resolve(
         &self,
-        acceptable_issuers: &[&[u8]],
+        root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 
-        if acceptable_issuers.is_empty() {
+        if root_hint_subjects.is_empty() {
             panic!("no issuers offered by server");
         }
 
@@ -1269,7 +1269,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
             panic!("no signature schemes shared by server");
         }
 
-        assert_eq!(acceptable_issuers, self.expect_issuers);
+        assert_eq!(root_hint_subjects, self.expect_issuers);
         assert_eq!(sigschemes, self.expect_sigschemes);
 
         None

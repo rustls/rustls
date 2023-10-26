@@ -168,7 +168,7 @@ pub(super) struct FailResolveClientCert {}
 impl client::ResolvesClientCert for FailResolveClientCert {
     fn resolve(
         &self,
-        _acceptable_issuers: &[&[u8]],
+        _root_hint_subjects: &[&[u8]],
         _sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
         None
@@ -196,7 +196,7 @@ impl AlwaysResolvesClientCert {
 impl client::ResolvesClientCert for AlwaysResolvesClientCert {
     fn resolve(
         &self,
-        _acceptable_issuers: &[&[u8]],
+        _root_hint_subjects: &[&[u8]],
         _sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
         Some(Arc::clone(&self.0))

@@ -166,7 +166,7 @@ impl ClientCertVerifier for MockClientVerifier {
         self.mandatory
     }
 
-    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
         &self.subjects
     }
 

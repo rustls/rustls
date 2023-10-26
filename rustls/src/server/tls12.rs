@@ -461,7 +461,7 @@ mod client_hello {
 
         let names = config
             .verifier
-            .client_auth_root_subjects()
+            .root_hint_subjects()
             .to_vec();
 
         let cr = CertificateRequestPayload {
