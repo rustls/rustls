@@ -142,8 +142,16 @@ impl ClientCertVerifierBuilder {
             .supported_algs
             .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
 
+        let subjects = self
+            .roots
+            .roots
+            .iter()
+            .map(|ta| DistinguishedName::in_sequence(ta.subject.as_ref()))
+            .collect();
+
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
+            subjects,
             self.crls
                 .into_iter()
                 .map(|der_crl| {
@@ -256,6 +264,7 @@ impl WebPkiClientVerifier {
     /// * `supported_algs` specifies which signature verification algorithms should be used.
     pub(crate) fn new(
         roots: Arc<RootCertStore>,
+        subjects: Vec<DistinguishedName>,
         crls: Vec<OwnedCertRevocationList>,
         revocation_check_depth: RevocationCheckDepth,
         unknown_revocation_policy: UnknownStatusPolicy,
@@ -263,15 +272,11 @@ impl WebPkiClientVerifier {
         supported_algs: WebPkiSupportedAlgorithms,
     ) -> Self {
         Self {
-            subjects: roots
-                .roots
-                .iter()
-                .map(|ta| DistinguishedName::in_sequence(ta.subject.as_ref()))
-                .collect(),
+            roots,
+            subjects,
             crls,
             revocation_check_depth,
             unknown_revocation_policy,
-            roots,
             anonymous_policy,
             supported_algs,
         }
