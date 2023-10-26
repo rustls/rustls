@@ -832,6 +832,8 @@ where
 
 #[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
+    use core::fmt::Debug;
+
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
     use crate::test_provider::ring_like::aead;
     use crate::test_provider::tls13::{
@@ -970,6 +972,7 @@ mod tests {
         expected_key: &[u8],
         expected_iv: &[u8],
     ) {
+        #[derive(Debug)]
         struct Log<'a>(&'a [u8]);
         impl KeyLog for Log<'_> {
             fn log(&self, _label: &str, _client_random: &[u8], secret: &[u8]) {
@@ -1014,11 +1017,14 @@ mod benchmarks {
     #[cfg(any(feature = "ring", feature = "aws_lc_rs"))]
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
+        use core::fmt::Debug;
+
         use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
         use crate::test_provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::KeyLog;
 
         fn extract_traffic_secret(ks: &KeySchedule, kind: SecretKind) {
+            #[derive(Debug)]
             struct Log;
 
             impl KeyLog for Log {

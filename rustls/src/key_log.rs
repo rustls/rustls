@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 /// This trait represents the ability to do something useful
 /// with key material, such as logging it to a file for debugging.
 ///
@@ -10,7 +12,7 @@
 ///
 /// See [`KeyLogFile`](crate::KeyLogFile) that implements the standard
 /// `SSLKEYLOGFILE` environment variable behaviour.
-pub trait KeyLog: Send + Sync {
+pub trait KeyLog: Debug + Send + Sync {
     /// Log the given `secret`.  `client_random` is provided for
     /// session identification.  `label` describes precisely what
     /// `secret` means:
@@ -44,6 +46,7 @@ pub trait KeyLog: Send + Sync {
 }
 
 /// KeyLog that does exactly nothing.
+#[derive(Debug)]
 pub struct NoKeyLog;
 
 impl KeyLog for NoKeyLog {

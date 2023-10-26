@@ -3,6 +3,7 @@
 //! Assorted public API tests.
 use std::cell::RefCell;
 use std::fmt;
+use std::fmt::Debug;
 use std::io::{self, IoSlice, Read, Write};
 use std::mem;
 use std::ops::{Deref, DerefMut};
@@ -2950,6 +2951,7 @@ struct KeyLogItem {
     secret: Vec<u8>,
 }
 
+#[derive(Debug)]
 struct KeyLogToVec {
     label: &'static str,
     items: Mutex<Vec<KeyLogItem>>,

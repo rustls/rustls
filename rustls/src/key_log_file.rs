@@ -3,6 +3,7 @@ use crate::log::warn;
 use crate::KeyLog;
 
 use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
@@ -69,6 +70,15 @@ impl KeyLogFileInner {
     }
 }
 
+impl Debug for KeyLogFileInner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeyLogFileInner")
+            // Note: we omit self.buf deliberately as it may contain key data.
+            .field("file", &self.file)
+            .finish()
+    }
+}
+
 /// [`KeyLog`] implementation that opens a file whose name is
 /// given by the `SSLKEYLOGFILE` environment variable, and writes
 /// keys into it.
@@ -101,6 +111,15 @@ impl KeyLog for KeyLogFile {
             Err(e) => {
                 warn!("error writing to key log file: {}", e);
             }
+        }
+    }
+}
+
+impl Debug for KeyLogFile {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self.0.try_lock() {
+            Ok(key_log_file) => write!(f, "{:?}", key_log_file),
+            Err(_) => write!(f, "KeyLogFile {{ <locked> }}"),
         }
     }
 }
