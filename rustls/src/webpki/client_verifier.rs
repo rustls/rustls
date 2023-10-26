@@ -142,12 +142,7 @@ impl ClientCertVerifierBuilder {
             .supported_algs
             .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
 
-        let root_hint_subjects = self
-            .roots
-            .roots
-            .iter()
-            .map(|ta| DistinguishedName::in_sequence(ta.subject.as_ref()))
-            .collect();
+        let root_hint_subjects = self.roots.subjects();
 
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
