@@ -139,6 +139,7 @@ fn client_verifier_fails_properly() {
     }
 }
 
+#[derive(Debug)]
 pub struct MockClientVerifier {
     parent: Arc<dyn ClientCertVerifier>,
     pub verified: fn() -> Result<ClientCertVerified, Error>,

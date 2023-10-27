@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::fmt;
+use core::fmt::Debug;
 
 use pki_types::{CertificateDer, UnixTime};
 
@@ -139,15 +139,9 @@ pub trait ServerCertVerifier: Send + Sync {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
 }
 
-impl fmt::Debug for dyn ServerCertVerifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "dyn ServerCertVerifier")
-    }
-}
-
 /// Something that can verify a client certificate chain
 #[allow(unreachable_pub)]
-pub trait ClientCertVerifier: Send + Sync {
+pub trait ClientCertVerifier: Debug + Send + Sync {
     /// Returns `true` to enable the server to request a client certificate and
     /// `false` to skip requesting a client certificate. Defaults to `true`.
     fn offer_client_auth(&self) -> bool {
@@ -258,16 +252,11 @@ pub trait ClientCertVerifier: Send + Sync {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
 }
 
-impl fmt::Debug for dyn ClientCertVerifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "dyn ClientCertVerifier")
-    }
-}
-
 /// Turns off client authentication. In contrast to using
 /// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the `NoClientAuth`
 /// `ClientCertVerifier` will not offer client authentication at all, vs offering but not
 /// requiring it.
+#[derive(Debug)]
 pub struct NoClientAuth;
 
 impl ClientCertVerifier for NoClientAuth {

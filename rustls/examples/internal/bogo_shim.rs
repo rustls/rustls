@@ -191,6 +191,7 @@ fn split_protocols(protos: &str) -> Vec<String> {
     ret
 }
 
+#[derive(Debug)]
 struct DummyClientAuth {
     mandatory: bool,
 }

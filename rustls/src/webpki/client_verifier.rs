@@ -223,6 +223,7 @@ impl ClientCertVerifierBuilder {
 /// ```
 ///
 /// [^1]: <https://github.com/rustls/webpki>
+#[derive(Debug)]
 pub struct WebPkiClientVerifier {
     roots: Arc<RootCertStore>,
     root_hint_subjects: Vec<DistinguishedName>,
