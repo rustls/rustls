@@ -9,6 +9,7 @@ use alloc::vec::Vec;
 use core::mem;
 use std::sync::{Mutex, MutexGuard};
 
+#[derive(Debug)]
 pub(crate) struct TicketSwitcherState {
     next: Option<Box<dyn ProducesTickets>>,
     current: Box<dyn ProducesTickets>,
@@ -19,6 +20,7 @@ pub(crate) struct TicketSwitcherState {
 /// A ticketer that has a 'current' sub-ticketer and a single
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
+#[derive(Debug)]
 pub struct TicketSwitcher {
     pub(crate) generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
     lifetime: u32,

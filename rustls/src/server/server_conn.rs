@@ -66,7 +66,7 @@ pub trait StoresServerSessions: Send + Sync {
 }
 
 /// A trait for the ability to encrypt and decrypt tickets.
-pub trait ProducesTickets: Send + Sync {
+pub trait ProducesTickets: Debug + Send + Sync {
     /// Returns true if this implementation will encrypt/decrypt
     /// tickets.  Should return false if this is a dummy
     /// implementation: the server will not send the SessionTicket

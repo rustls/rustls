@@ -10,6 +10,8 @@ use super::ring_like::rand::{SecureRandom, SystemRandom};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt;
+use core::fmt::{Debug, Formatter};
 
 /// A concrete, safe ticket creation mechanism.
 pub struct Ticketer {}
@@ -103,6 +105,16 @@ impl ProducesTickets for AeadTicketer {
         out.truncate(plain_len);
 
         Some(out)
+    }
+}
+
+impl Debug for AeadTicketer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        // Note: we deliberately omit the key from the debug output.
+        f.debug_struct("AeadTicketer")
+            .field("alg", &self.alg)
+            .field("lifetime", &self.lifetime)
+            .finish()
     }
 }
 
