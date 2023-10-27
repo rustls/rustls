@@ -2,8 +2,8 @@ use crate::crypto::cipher::{
     make_tls12_aad, AeadKey, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
     Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
 };
-use crate::crypto::tls12::PrfUsingHmac;
-use crate::crypto::KeyExchangeAlgorithm;
+use crate::crypto::tls12::Prf;
+use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
@@ -14,7 +14,7 @@ use crate::tls12::Tls12CipherSuite;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use aws_lc_rs::aead;
+use aws_lc_rs::{aead, tls_prf};
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
@@ -28,7 +28,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &ChaCha20Poly1305,
-        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
+        prf_provider: &Tls12Prf(&tls_prf::P_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
@@ -43,7 +43,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &ChaCha20Poly1305,
-        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
+        prf_provider: &Tls12Prf(&tls_prf::P_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
@@ -58,7 +58,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &AES128_GCM,
-        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
+        prf_provider: &Tls12Prf(&tls_prf::P_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
@@ -73,7 +73,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
         aead_alg: &AES256_GCM,
-        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA384),
+        prf_provider: &Tls12Prf(&tls_prf::P_SHA384),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
@@ -88,7 +88,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &AES128_GCM,
-        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA256),
+        prf_provider: &Tls12Prf(&tls_prf::P_SHA256),
     });
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
@@ -103,7 +103,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
         aead_alg: &AES256_GCM,
-        prf_provider: &PrfUsingHmac(&super::hmac::HMAC_SHA384),
+        prf_provider: &Tls12Prf(&tls_prf::P_SHA384),
     });
 
 static TLS12_ECDSA_SCHEMES: &[SignatureScheme] = &[
@@ -383,4 +383,39 @@ fn gcm_iv(write_iv: &[u8], explicit: &[u8]) -> Iv {
     iv[4..].copy_from_slice(explicit);
 
     Iv::new(iv)
+}
+
+struct Tls12Prf(&'static tls_prf::Algorithm);
+
+impl Prf for Tls12Prf {
+    fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]) {
+        // safety:
+        // - [1] is safe because our caller guarantees `secret` is non-empty; this is
+        //   the only documented error case.
+        // - [2] is safe in practice because the only failure from `derive()` is due
+        //   to zero `output.len()`; this is outlawed at higher levels
+        let derived = tls_prf::Secret::new(self.0, secret)
+            .unwrap() // [1]
+            .derive(label, seed, output.len())
+            .unwrap(); // [2]
+        output.copy_from_slice(derived.as_ref());
+    }
+
+    fn for_key_exchange(
+        &self,
+        output: &mut [u8],
+        kx: Box<dyn ActiveKeyExchange>,
+        peer_pub_key: &[u8],
+        label: &[u8],
+        seed: &[u8],
+    ) -> Result<(), Error> {
+        self.for_secret(
+            output,
+            kx.complete(peer_pub_key)?
+                .secret_bytes(),
+            label,
+            seed,
+        );
+        Ok(())
+    }
 }
