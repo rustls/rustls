@@ -107,7 +107,7 @@ pub trait ProducesTickets: Debug + Send + Sync {
 /// For applications that use async I/O and need to do I/O to choose
 /// a certificate (for instance, fetching a certificate from a data store),
 /// the [`Acceptor`] interface is more suitable.
-pub trait ResolvesServerCert: Send + Sync {
+pub trait ResolvesServerCert: Debug + Send + Sync {
     /// Choose a certificate chain and matching key given simplified
     /// ClientHello information.
     ///

@@ -769,7 +769,7 @@ fn test_tls13_late_plaintext_alert() {
     assert_eq!(server.process_new_packets(), Err(Error::DecryptError));
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct ServerCheckCertResolve {
     expected_sni: Option<String>,
     expected_sigalgs: Option<Vec<SignatureScheme>>,
@@ -953,6 +953,7 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
     );
 }
 
+#[derive(Debug)]
 struct ServerCheckNoSni {}
 
 impl ResolvesServerCert for ServerCheckNoSni {

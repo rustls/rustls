@@ -9,6 +9,7 @@ use rustls::{ServerConfig, ServerConnection};
 use std::io;
 use std::sync::Arc;
 
+#[derive(Debug)]
 struct Fail;
 
 impl ResolvesServerCert for Fail {
