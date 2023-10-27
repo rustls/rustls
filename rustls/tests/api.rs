@@ -14,6 +14,7 @@ use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
 use rustls::client::{
     verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption, WebPkiServerVerifier,
 };
+use rustls::crypto::ring::sign::RsaSigningKey;
 use rustls::crypto::ring::{cipher_suite, ALL_CIPHER_SUITES};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
@@ -2524,7 +2525,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 fn sni_resolver_works() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
     resolver
         .add(
@@ -2562,7 +2563,7 @@ fn sni_resolver_works() {
 fn sni_resolver_rejects_wrong_names() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
@@ -2592,7 +2593,7 @@ fn sni_resolver_rejects_wrong_names() {
 fn sni_resolver_lower_cases_configured_names() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
@@ -2619,7 +2620,7 @@ fn sni_resolver_lower_cases_queried_names() {
     // actually, the handshake parser does this, but the effect is the same.
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
@@ -2645,7 +2646,7 @@ fn sni_resolver_lower_cases_queried_names() {
 fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
-    let signing_key = sign::RsaSigningKey::new(&kt.get_key()).unwrap();
+    let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
