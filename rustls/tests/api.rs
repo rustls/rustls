@@ -460,7 +460,7 @@ fn test_config_builders_debug() {
         .with_protocol_versions(&[&rustls::version::TLS13])
         .unwrap();
     let b = b.with_no_client_auth();
-    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsServerCert { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], provider: Ring, versions: [TLSv1_3], verifier: dyn ClientCertVerifier } }", format!("{:?}", b));
+    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsServerCert { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], provider: Ring, versions: [TLSv1_3], verifier: NoClientAuth } }", format!("{:?}", b));
 
     let b = client_config_builder();
     assert_eq!(
