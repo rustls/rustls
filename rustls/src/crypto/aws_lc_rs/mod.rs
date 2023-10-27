@@ -33,7 +33,6 @@ pub(crate) mod quic;
 #[path = "../ring/ticketer.rs"]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
-#[path = "../ring/tls12.rs"]
 pub(crate) mod tls12;
 #[path = "../ring/tls13.rs"]
 pub(crate) mod tls13;
