@@ -12,10 +12,12 @@ use pki_types::CertificateDer;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
 use std::collections;
 use std::sync::Mutex;
 
 /// Something which never stores sessions.
+#[derive(Debug)]
 pub struct NoServerSessionStorage {}
 
 impl server::StoresServerSessions for NoServerSessionStorage {
@@ -74,6 +76,13 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
 
     fn can_cache(&self) -> bool {
         true
+    }
+}
+
+impl Debug for ServerSessionMemoryCache {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ServerSessionMemoryCache")
+            .finish()
     }
 }
 
