@@ -134,6 +134,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// * [`ClientConfig::key_log`]: key material is not logged.
 ///
 /// [`RootCertStore`]: crate::RootCertStore
+#[derive(Debug)]
 pub struct ClientConfig {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
@@ -232,18 +233,6 @@ impl Clone for ClientConfig {
             enable_secret_extraction: self.enable_secret_extraction,
             enable_early_data: self.enable_early_data,
         }
-    }
-}
-
-impl fmt::Debug for ClientConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClientConfig")
-            .field("alpn_protocols", &self.alpn_protocols)
-            .field("resumption", &self.resumption)
-            .field("max_fragment_size", &self.max_fragment_size)
-            .field("enable_sni", &self.enable_sni)
-            .field("enable_early_data", &self.enable_early_data)
-            .finish_non_exhaustive()
     }
 }
 
