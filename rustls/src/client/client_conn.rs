@@ -473,6 +473,7 @@ enum EarlyDataState {
     Rejected,
 }
 
+#[derive(Debug)]
 pub(super) struct EarlyData {
     state: EarlyDataState,
     left: usize,
@@ -721,6 +722,7 @@ impl ConnectionCore<ClientConnectionData> {
 }
 
 /// State associated with a client connection.
+#[derive(Debug)]
 pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
