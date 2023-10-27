@@ -305,6 +305,7 @@ impl Debug for FixedSignatureSchemeSigningKey {
     }
 }
 
+#[derive(Debug)]
 struct FixedSignatureSchemeServerCertResolver {
     resolver: Arc<dyn server::ResolvesServerCert>,
     scheme: SignatureScheme,

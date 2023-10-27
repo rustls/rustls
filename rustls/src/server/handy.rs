@@ -97,6 +97,7 @@ impl server::ProducesTickets for NeverProducesTickets {
 }
 
 /// Something which always resolves to the same cert chain.
+#[derive(Debug)]
 pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesChain {
@@ -137,6 +138,7 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
 
 /// Something that resolves do different cert chains/keys based
 /// on client-supplied server name (via SNI).
+#[derive(Debug)]
 pub struct ResolvesServerCertUsingSni {
     by_name: collections::HashMap<String, Arc<sign::CertifiedKey>>,
 }

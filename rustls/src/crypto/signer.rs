@@ -31,7 +31,7 @@ pub trait Signer: Debug + Send + Sync {
 
 /// A packaged-together certificate chain, matching `SigningKey` and
 /// optional stapled OCSP response and/or SCT list.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CertifiedKey {
     /// The certificate chain.
     pub cert: Vec<CertificateDer<'static>>,
