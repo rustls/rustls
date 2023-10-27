@@ -187,6 +187,7 @@ impl client::ResolvesClientCert for FailResolveClientCert {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesClientCert {
@@ -209,14 +210,6 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 
     fn has_certs(&self) -> bool {
         true
-    }
-}
-
-impl fmt::Debug for AlwaysResolvesClientCert {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("AlwaysResolvesClientCert")
-            .field("cert", &self.0.cert)
-            .finish()
     }
 }
 
