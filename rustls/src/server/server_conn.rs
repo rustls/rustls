@@ -22,6 +22,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
+use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use std::io;
@@ -340,8 +341,8 @@ impl Clone for ServerConfig {
     }
 }
 
-impl fmt::Debug for ServerConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for ServerConfig {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerConfig")
             .field("ignore_client_order", &self.ignore_client_order)
             .field("max_fragment_size", &self.max_fragment_size)
@@ -514,8 +515,8 @@ impl ServerConnection {
     }
 }
 
-impl fmt::Debug for ServerConnection {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Debug for ServerConnection {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         f.debug_struct("ServerConnection")
             .finish()
     }
@@ -788,6 +789,16 @@ impl EarlyDataState {
     }
 }
 
+impl Debug for EarlyDataState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::New => write!(f, "EarlyDataState::New"),
+            Self::Accepted(buf) => write!(f, "EarlyDataState::Accepted({})", buf.len()),
+            Self::Rejected => write!(f, "EarlyDataState::Rejected"),
+        }
+    }
+}
+
 impl ConnectionCore<ServerConnectionData> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
@@ -817,7 +828,7 @@ impl ConnectionCore<ServerConnectionData> {
 }
 
 /// State associated with a server connection.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ServerConnectionData {
     pub(super) sni: Option<DnsName>,
     pub(super) received_resumption_data: Option<Vec<u8>>,

@@ -751,4 +751,4 @@ impl<Data> ConnectionCore<Data> {
 }
 
 /// Data specific to the peer's side (client or server).
-pub trait SideData {}
+pub trait SideData: Debug {}
