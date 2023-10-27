@@ -241,6 +241,7 @@ impl server::danger::ClientCertVerifier for DummyClientAuth {
     }
 }
 
+#[derive(Debug)]
 struct DummyServerAuth {}
 
 impl client::danger::ServerCertVerifier for DummyServerAuth {

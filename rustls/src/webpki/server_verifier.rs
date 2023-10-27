@@ -112,6 +112,7 @@ impl ServerCertVerifierBuilder {
 
 /// Default `ServerCertVerifier`, see the trait impl for more information.
 #[allow(unreachable_pub)]
+#[derive(Debug)]
 pub struct WebPkiServerVerifier {
     roots: Arc<RootCertStore>,
     crls: Vec<CertRevocationList<'static>>,
