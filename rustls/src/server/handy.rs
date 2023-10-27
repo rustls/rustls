@@ -78,6 +78,7 @@ impl server::StoresServerSessions for ServerSessionMemoryCache {
 }
 
 /// Something which never produces tickets.
+#[derive(Debug)]
 pub(super) struct NeverProducesTickets {}
 
 impl server::ProducesTickets for NeverProducesTickets {
