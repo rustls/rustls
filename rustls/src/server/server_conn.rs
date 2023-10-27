@@ -209,6 +209,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
 ///
 /// [`RootCertStore`]: crate::RootCertStore
+#[derive(Debug)]
 pub struct ServerConfig {
     /// List of ciphersuites, in preference order.
     pub(super) cipher_suites: Vec<SupportedCipherSuite>,
@@ -338,19 +339,6 @@ impl Clone for ServerConfig {
             send_half_rtt_data: self.send_half_rtt_data,
             send_tls13_tickets: self.send_tls13_tickets,
         }
-    }
-}
-
-impl Debug for ServerConfig {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServerConfig")
-            .field("ignore_client_order", &self.ignore_client_order)
-            .field("max_fragment_size", &self.max_fragment_size)
-            .field("alpn_protocols", &self.alpn_protocols)
-            .field("max_early_data_size", &self.max_early_data_size)
-            .field("send_half_rtt_data", &self.send_half_rtt_data)
-            .field("send_tls13_tickets", &self.send_tls13_tickets)
-            .finish_non_exhaustive()
     }
 }
 
