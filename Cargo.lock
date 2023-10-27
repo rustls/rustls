@@ -846,7 +846,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.22.0-alpha.3"
+version = "0.22.0-alpha.4"
 dependencies = [
  "base64",
  "bencher",
