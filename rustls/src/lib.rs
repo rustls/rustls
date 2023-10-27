@@ -517,12 +517,8 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
-/// Message signing interfaces and implementations.
+/// Message signing interfaces.
 pub mod sign {
-    #[cfg(feature = "ring")]
-    pub use crate::crypto::ring::sign::{
-        any_ecdsa_type, any_eddsa_type, any_supported_type, RsaSigningKey,
-    };
     pub use crate::crypto::signer::{CertifiedKey, Signer, SigningKey};
 }
 
