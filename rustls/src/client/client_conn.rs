@@ -291,7 +291,7 @@ impl ClientConfig {
 }
 
 /// Configuration for how/when a client is allowed to resume a previous session.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Resumption {
     /// How we store session data or tickets. The default is to use an in-memory
     /// [ClientSessionMemoryCache].
@@ -337,14 +337,6 @@ impl Resumption {
     pub fn tls12_resumption(mut self, tls12: Tls12Resumption) -> Self {
         self.tls12_resumption = tls12;
         self
-    }
-}
-
-impl fmt::Debug for Resumption {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Resumption")
-            .field("tls12_resumption", &self.tls12_resumption)
-            .finish()
     }
 }
 
