@@ -384,6 +384,7 @@ fn lookup_kx_group(group: u16) -> &'static dyn SupportedKxGroup {
     }
 }
 
+#[derive(Debug)]
 struct ServerCacheWithResumptionDelay {
     delay: u32,
     storage: Arc<dyn server::StoresServerSessions>,
