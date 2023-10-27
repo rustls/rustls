@@ -1701,7 +1701,7 @@ impl DistinguishedName {
     /// use x509_parser::prelude::FromDer;
     /// println!("{}", x509_parser::x509::X509Name::from_der(dn.as_ref())?.1);
     /// ```
-    pub(crate) fn in_sequence(bytes: &[u8]) -> Self {
+    pub fn in_sequence(bytes: &[u8]) -> Self {
         let mut wrapped = bytes.to_owned();
         x509::wrap_in_sequence(&mut wrapped);
         Self(PayloadU16::new(wrapped))
