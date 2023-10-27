@@ -279,6 +279,7 @@ impl client::danger::ServerCertVerifier for DummyServerAuth {
     }
 }
 
+#[derive(Debug)]
 struct FixedSignatureSchemeSigningKey {
     key: Arc<dyn sign::SigningKey>,
     scheme: SignatureScheme,
@@ -294,14 +295,6 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
     }
     fn algorithm(&self) -> SignatureAlgorithm {
         self.key.algorithm()
-    }
-}
-
-impl Debug for FixedSignatureSchemeSigningKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FixedSignatureSchemeSigningKey")
-            .field("scheme", &self.scheme)
-            .finish()
     }
 }
 
