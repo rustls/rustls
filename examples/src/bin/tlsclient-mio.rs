@@ -315,6 +315,7 @@ mod danger {
     use rustls::client::WebPkiServerVerifier;
     use rustls::DigitallySignedStruct;
 
+    #[derive(Debug)]
     pub struct NoCertificateVerification {}
 
     impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {

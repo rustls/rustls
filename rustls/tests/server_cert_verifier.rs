@@ -154,6 +154,7 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
     }
 }
 
+#[derive(Debug)]
 pub struct MockServerVerifier {
     cert_rejection_error: Option<Error>,
     tls12_signature_error: Option<Error>,

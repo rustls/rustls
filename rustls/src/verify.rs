@@ -67,7 +67,7 @@ impl ClientCertVerified {
 /// Something that can verify a server certificate chain, and verify
 /// signatures made by certificates.
 #[allow(unreachable_pub)]
-pub trait ServerCertVerifier: Send + Sync {
+pub trait ServerCertVerifier: Debug + Send + Sync {
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// hostname `dns_name` and chains to at least one trust anchor.
     ///
