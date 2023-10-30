@@ -14,7 +14,7 @@ hmac = "0.12.0"
 pki-types = { package = "rustls-pki-types", version = "0.2.0" }
 rand_core = "0.6.0"
 rustls = { path = "../rustls", default-features = false, features = ["logging", "tls12"] }
-rsa = { version = "0.9.0", features = ["sha2"] }
+rsa = { version = "0.9.3", features = ["sha2"] }
 sha2 = "0.10.0"
 webpki = { package = "rustls-webpki", version = "0.102.0-alpha.1", default-features = false, features = ["alloc", "std"] }
 webpki-roots = "0.26.0-alpha.1"
