@@ -9,6 +9,7 @@
 use core::time::Duration;
 use std::time::Instant;
 
+use crate::crypto::ring;
 use crate::verify::ServerCertVerifier;
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
@@ -208,7 +209,10 @@ impl Context {
     }
 
     fn bench(&self, count: usize) {
-        let verifier = WebPkiServerVerifier::new_without_revocation(self.roots.clone());
+        let verifier = WebPkiServerVerifier::new_without_revocation(
+            self.roots.clone(),
+            ring::RING.signature_verification_algorithms(),
+        );
         const OCSP_RESPONSE: &[u8] = &[];
         let mut times = Vec::new();
 

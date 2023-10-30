@@ -36,6 +36,10 @@ impl rustls::crypto::CryptoProvider for Provider {
     ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
         unimplemented!()
     }
+
+    fn signature_verification_algorithms(&self) -> rustls::WebPkiSupportedAlgorithms {
+        verify::ALGORITHMS
+    }
 }
 
 static ALL_CIPHER_SUITES: &[rustls::SupportedCipherSuite] = &[
@@ -67,12 +71,3 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherS
         prf_provider: &rustls::crypto::tls12::PrfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,
     });
-
-pub fn certificate_verifier(
-    roots: rustls::RootCertStore,
-) -> Arc<dyn rustls::client::danger::ServerCertVerifier> {
-    rustls::client::WebPkiServerVerifier::builder(roots.into())
-        .with_signature_verification_algorithms(verify::ALGORITHMS)
-        .build()
-        .unwrap()
-}

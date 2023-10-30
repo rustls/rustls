@@ -2,7 +2,7 @@ use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls_provider_example::{certificate_verifier, PROVIDER};
+use rustls_provider_example::PROVIDER;
 
 fn main() {
     env_logger::init();
@@ -16,8 +16,7 @@ fn main() {
 
     let config = rustls::ClientConfig::builder_with_provider(PROVIDER)
         .with_safe_defaults()
-        .dangerous()
-        .with_custom_certificate_verifier(certificate_verifier(root_store))
+        .with_root_certificates(root_store)
         .with_no_client_auth();
 
     let server_name = "www.rust-lang.org".try_into().unwrap();

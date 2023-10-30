@@ -59,6 +59,10 @@ impl CryptoProvider for Ring {
         sign::any_supported_type(&key_der)
             .map_err(|_| Error::General("invalid private key".to_owned()))
     }
+
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
+        SUPPORTED_SIG_ALGS
+    }
 }
 
 /// The cipher suite configuration that an application should use by default.
@@ -103,7 +107,7 @@ pub mod cipher_suite {
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
 /// compiled against *ring*.
-pub(crate) static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[
         webpki_algs::ECDSA_P256_SHA256,
         webpki_algs::ECDSA_P256_SHA384,
