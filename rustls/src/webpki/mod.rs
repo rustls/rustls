@@ -34,11 +34,6 @@ pub enum VerifierBuilderError {
     NoRootAnchors,
     /// A provided CRL could not be parsed.
     InvalidCrl(CertRevocationListError),
-    /// No supported signature verification algorithms were provided.
-    ///
-    /// Call `with_signature_verification_algorithms` on the builder, or compile
-    /// with the `ring` feature.
-    NoSupportedAlgorithms,
 }
 
 impl From<CertRevocationListError> for VerifierBuilderError {
@@ -52,9 +47,6 @@ impl fmt::Display for VerifierBuilderError {
         match self {
             Self::NoRootAnchors => write!(f, "no root trust anchors were provided"),
             Self::InvalidCrl(e) => write!(f, "provided CRL could not be parsed: {:?}", e),
-            Self::NoSupportedAlgorithms => {
-                write!(f, "no signature verification algorithms were provided")
-            }
         }
     }
 }

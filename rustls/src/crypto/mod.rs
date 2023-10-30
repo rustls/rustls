@@ -1,5 +1,6 @@
 use crate::sign::SigningKey;
 use crate::suites;
+use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, NamedGroup};
 
 use alloc::boxed::Box;
@@ -54,6 +55,11 @@ pub trait CryptoProvider: Send + Sync + Debug + 'static {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn SigningKey>, Error>;
+
+    /// Return the signature verification algorithms for use with webpki.
+    ///
+    /// These are used for both certificate chain verification and handshake signature verification.
+    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms;
 }
 
 /// A supported key exchange group.

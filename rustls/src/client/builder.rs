@@ -5,7 +5,6 @@ use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
-#[cfg(feature = "ring")]
 use crate::webpki;
 use crate::{verify, versions};
 
@@ -15,11 +14,9 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-#[cfg(any(feature = "dangerous_configuration", feature = "ring"))]
 use core::marker::PhantomData;
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
-    #[cfg(feature = "ring")]
     /// Choose how to verify server certificates.
     pub fn with_root_certificates(
         self,
@@ -33,6 +30,9 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 versions: self.state.versions,
                 verifier: Arc::new(webpki::WebPkiServerVerifier::new_without_revocation(
                     root_store,
+                    self.state
+                        .provider
+                        .signature_verification_algorithms(),
                 )),
             },
             side: PhantomData,

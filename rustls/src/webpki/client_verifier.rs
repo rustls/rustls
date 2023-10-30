@@ -5,6 +5,7 @@ use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
 use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
 use super::{pki_error, VerifierBuilderError};
+use crate::crypto::CryptoProvider;
 use crate::verify::{
     ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
     NoClientAuth,
@@ -24,11 +25,14 @@ pub struct ClientCertVerifierBuilder {
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
     anon_policy: AnonymousClientPolicy,
-    supported_algs: Option<WebPkiSupportedAlgorithms>,
+    supported_algs: WebPkiSupportedAlgorithms,
 }
 
 impl ClientCertVerifierBuilder {
-    pub(crate) fn new(roots: Arc<RootCertStore>) -> Self {
+    pub(crate) fn new(
+        roots: Arc<RootCertStore>,
+        supported_algs: WebPkiSupportedAlgorithms,
+    ) -> Self {
         Self {
             root_hint_subjects: roots.subjects(),
             roots,
@@ -36,7 +40,7 @@ impl ClientCertVerifierBuilder {
             anon_policy: AnonymousClientPolicy::Deny,
             revocation_check_depth: RevocationCheckDepth::Chain,
             unknown_revocation_policy: UnknownStatusPolicy::Deny,
-            supported_algs: None,
+            supported_algs,
         }
     }
 
@@ -135,7 +139,7 @@ impl ClientCertVerifierBuilder {
         mut self,
         supported_algs: WebPkiSupportedAlgorithms,
     ) -> Self {
-        self.supported_algs = Some(supported_algs);
+        self.supported_algs = supported_algs;
         self
     }
 
@@ -144,8 +148,8 @@ impl ClientCertVerifierBuilder {
     /// and to determine what to do with anonymous clients that do not respond to the client
     /// certificate authentication offer with a client certificate.
     ///
-    /// If the `ring` crate feature is supplied, and `with_signature_verification_algorithms` was not
-    /// called on the builder, a default set of signature verification algorithms is used.
+    /// If `with_signature_verification_algorithms` was not called on the builder, a default set of
+    /// signature verification algorithms is used, controlled by the selected [`crate::crypto::CryptoProvider`].
     ///
     /// Once built, the provided `Arc<dyn ClientCertVerifier>` can be used with a Rustls
     /// [crate::server::ServerConfig] to configure client certificate validation using
@@ -155,21 +159,10 @@ impl ClientCertVerifierBuilder {
     /// This function will return a `ClientCertVerifierBuilderError` if:
     /// 1. No trust anchors have been provided.
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
-    /// 3. No signature verification algorithms were set and the `ring` feature is not enabled.
-    #[cfg_attr(not(feature = "ring"), allow(unused_mut))]
-    pub fn build(mut self) -> Result<Arc<dyn ClientCertVerifier>, VerifierBuilderError> {
+    pub fn build(self) -> Result<Arc<dyn ClientCertVerifier>, VerifierBuilderError> {
         if self.roots.is_empty() {
             return Err(VerifierBuilderError::NoRootAnchors);
         }
-
-        #[cfg(feature = "ring")]
-        if self.supported_algs.is_none() {
-            self.supported_algs = Some(crate::crypto::ring::SUPPORTED_SIG_ALGS);
-        }
-
-        let supported_algs = self
-            .supported_algs
-            .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
 
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
@@ -178,7 +171,7 @@ impl ClientCertVerifierBuilder {
             self.revocation_check_depth,
             self.unknown_revocation_policy,
             self.anon_policy,
-            supported_algs,
+            self.supported_algs,
         )))
     }
 }
@@ -246,14 +239,37 @@ pub struct WebPkiClientVerifier {
 }
 
 impl WebPkiClientVerifier {
-    /// Create builder to build up the `webpki` client certificate verifier configuration.
+    /// Create a builder for the `webpki` client certificate verifier configuration using
+    /// the default [`CryptoProvider`].
+    ///
     /// Client certificate authentication will be offered by the server, and client certificates
     /// will be verified using the trust anchors found in the provided `roots`. If you
     /// wish to disable client authentication use [WebPkiClientVerifier::no_client_auth()] instead.
     ///
+    /// The cryptography used comes from the default [`CryptoProvider`]: [`crate::crypto::ring::RING`].
+    /// Use [`Self::builder_with_provider`] if you wish to customize this.
+    ///
     /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
+    #[cfg(feature = "ring")]
     pub fn builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
-        ClientCertVerifierBuilder::new(roots)
+        Self::builder_with_provider(roots, crate::crypto::ring::RING)
+    }
+
+    /// Create a builder for the `webpki` client certificate verifier configuration using
+    /// a specified [`CryptoProvider`].
+    ///
+    /// Client certificate authentication will be offered by the server, and client certificates
+    /// will be verified using the trust anchors found in the provided `roots`. If you
+    /// wish to disable client authentication use [WebPkiClientVerifier::no_client_auth()] instead.
+    ///
+    /// The cryptography used comes from the specified [`CryptoProvider`].
+    ///
+    /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
+    pub fn builder_with_provider(
+        roots: Arc<RootCertStore>,
+        provider: &'static dyn CryptoProvider,
+    ) -> ClientCertVerifierBuilder {
+        ClientCertVerifierBuilder::new(roots, provider.signature_verification_algorithms())
     }
 
     /// Create a new `WebPkiClientVerifier` that disables client authentication. The server will
@@ -563,7 +579,6 @@ mod tests {
         let all = vec![
             VerifierBuilderError::NoRootAnchors,
             VerifierBuilderError::InvalidCrl(crate::CertRevocationListError::ParseError),
-            VerifierBuilderError::NoSupportedAlgorithms,
         ];
 
         for err in all {

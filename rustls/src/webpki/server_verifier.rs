@@ -6,8 +6,7 @@ use alloc::vec::Vec;
 use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
 use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
-#[cfg(feature = "ring")]
-use crate::crypto::ring::SUPPORTED_SIG_ALGS;
+use crate::crypto::CryptoProvider;
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
@@ -27,17 +26,20 @@ pub struct ServerCertVerifierBuilder {
     crls: Vec<CertificateRevocationListDer<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
-    supported_algs: Option<WebPkiSupportedAlgorithms>,
+    supported_algs: WebPkiSupportedAlgorithms,
 }
 
 impl ServerCertVerifierBuilder {
-    pub(crate) fn new(roots: Arc<RootCertStore>) -> Self {
+    pub(crate) fn new(
+        roots: Arc<RootCertStore>,
+        supported_algs: WebPkiSupportedAlgorithms,
+    ) -> Self {
         Self {
             roots,
             crls: Vec::new(),
             revocation_check_depth: RevocationCheckDepth::Chain,
             unknown_revocation_policy: UnknownStatusPolicy::Deny,
-            supported_algs: None,
+            supported_algs,
         }
     }
 
@@ -86,15 +88,15 @@ impl ServerCertVerifierBuilder {
         mut self,
         supported_algs: WebPkiSupportedAlgorithms,
     ) -> Self {
-        self.supported_algs = Some(supported_algs);
+        self.supported_algs = supported_algs;
         self
     }
 
     /// Build a server certificate verifier, allowing control over the root certificates to use as
     /// trust anchors, and to control how server certificate revocation checking is performed.
     ///
-    /// If the `ring` crate feature is supplied, and `with_signature_verification_algorithms` was not
-    /// called on the builder, a default set of signature verification algorithms is used.
+    /// If `with_signature_verification_algorithms` was not called on the builder, a default set of
+    /// signature verification algorithms is used, controlled by the selected [`crate::crypto::CryptoProvider`].
     ///
     /// Once built, the provided `Arc<dyn ServerCertVerifier>` can be used with a Rustls
     /// [crate::server::ServerConfig] to configure client certificate validation using
@@ -104,28 +106,17 @@ impl ServerCertVerifierBuilder {
     /// This function will return a `CertVerifierBuilderError` if:
     /// 1. No trust anchors have been provided.
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
-    /// 3. No signature verification algorithms were set and the `ring` feature is not enabled.
-    #[cfg_attr(not(feature = "ring"), allow(unused_mut))]
-    pub fn build(mut self) -> Result<Arc<dyn ServerCertVerifier>, VerifierBuilderError> {
+    pub fn build(self) -> Result<Arc<dyn ServerCertVerifier>, VerifierBuilderError> {
         if self.roots.is_empty() {
             return Err(VerifierBuilderError::NoRootAnchors);
         }
-
-        #[cfg(feature = "ring")]
-        if self.supported_algs.is_none() {
-            self.supported_algs = Some(SUPPORTED_SIG_ALGS);
-        }
-
-        let supported_algs = self
-            .supported_algs
-            .ok_or(VerifierBuilderError::NoSupportedAlgorithms)?;
 
         Ok(Arc::new(WebPkiServerVerifier::new(
             self.roots,
             parse_crls(self.crls)?,
             self.revocation_check_depth,
             self.unknown_revocation_policy,
-            supported_algs,
+            self.supported_algs,
         )))
     }
 }
@@ -142,24 +133,47 @@ pub struct WebPkiServerVerifier {
 
 #[allow(unreachable_pub)]
 impl WebPkiServerVerifier {
-    /// Create builder to build up the `webpki` server certificate verifier configuration.
+    /// Create a builder for the `webpki` server certificate verifier configuration using
+    /// the default [`CryptoProvider`].
+    ///
     /// Server certificates will be verified using the trust anchors found in the provided `roots`.
     ///
+    /// The cryptography used comes from the default [`CryptoProvider`]: [`crate::crypto::ring::RING`].
+    /// Use [`Self::builder_with_provider`] if you wish to customize this.
+    ///
     /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
+    #[cfg(feature = "ring")]
     pub fn builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
-        ServerCertVerifierBuilder::new(roots)
+        Self::builder_with_provider(roots, crate::crypto::ring::RING)
+    }
+
+    /// Create a builder for the `webpki` server certificate verifier configuration using
+    /// a specified [`CryptoProvider`].
+    ///
+    /// Server certificates will be verified using the trust anchors found in the provided `roots`.
+    ///
+    /// The cryptography used comes from the specified [`CryptoProvider`].
+    ///
+    /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
+    pub fn builder_with_provider(
+        roots: Arc<RootCertStore>,
+        provider: &'static dyn CryptoProvider,
+    ) -> ServerCertVerifierBuilder {
+        ServerCertVerifierBuilder::new(roots, provider.signature_verification_algorithms())
     }
 
     /// Short-cut for creating a `WebPkiServerVerifier` that does not perform certificate revocation
     /// checking, avoiding the need to use a builder.
-    #[cfg(feature = "ring")]
-    pub(crate) fn new_without_revocation(roots: impl Into<Arc<RootCertStore>>) -> Self {
+    pub(crate) fn new_without_revocation(
+        roots: impl Into<Arc<RootCertStore>>,
+        supported_algs: WebPkiSupportedAlgorithms,
+    ) -> Self {
         Self::new(
             roots,
             Vec::default(),
             RevocationCheckDepth::Chain,
             UnknownStatusPolicy::Allow,
-            SUPPORTED_SIG_ALGS,
+            supported_algs,
         )
     }
 
@@ -198,7 +212,12 @@ impl WebPkiServerVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_signed_struct(message, cert, dss, &SUPPORTED_SIG_ALGS)
+        verify_signed_struct(
+            message,
+            cert,
+            dss,
+            &crate::crypto::ring::RING.signature_verification_algorithms(),
+        )
     }
 
     /// A full implementation of `ServerCertVerifier::verify_tls13_signature` or
@@ -209,14 +228,21 @@ impl WebPkiServerVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13(message, cert, dss, &SUPPORTED_SIG_ALGS)
+        verify_tls13(
+            message,
+            cert,
+            dss,
+            &crate::crypto::ring::RING.signature_verification_algorithms(),
+        )
     }
 
     /// A full implementation of `ServerCertVerifier::supported_verify_schemes()` or
     /// `ClientCertVerifier::supported_verify_schemes()`.
     #[cfg(feature = "ring")]
     pub fn default_supported_verify_schemes() -> Vec<SignatureScheme> {
-        SUPPORTED_SIG_ALGS.supported_schemes()
+        crate::crypto::ring::RING
+            .signature_verification_algorithms()
+            .supported_schemes()
     }
 }
 

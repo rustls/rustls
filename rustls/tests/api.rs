@@ -5489,6 +5489,11 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
     ) -> Result<Arc<dyn rustls::sign::SigningKey>, Error> {
         self.parent.load_private_key(key_der)
     }
+
+    fn signature_verification_algorithms(&self) -> rustls::WebPkiSupportedAlgorithms {
+        self.parent
+            .signature_verification_algorithms()
+    }
 }
 
 #[test]
