@@ -10,11 +10,11 @@ use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
-use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::verify;
 use crate::versions;
 use crate::KeyLog;
+use crate::{sign, AlertDescription, PeerMisbehaved};
 
 use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 use super::hs;
@@ -115,6 +115,17 @@ pub trait ResolvesClientCert: Send + Sync {
     fn has_certs(&self) -> bool;
 }
 
+/// A trait providing the ability to camouflage ClientHello to resist fingerprinting.
+/// Notice: wrongly configured cipher suites and extensions may result in failure in connection.
+pub trait ClientHelloCamouflager: Send + Sync {
+    /// Transform cipher suites created from rustls to camouflaged cipher suites.
+    fn transform_cipher_suites(&self, cipher_suites: Vec<CipherSuite>) -> Vec<CipherSuite>;
+
+    /// Transform extensions created from rustls to camouflaged extensions. Users may need to
+    /// reuse some provided extensions for a successful connection.
+    fn transform_extensions(&self, extensions: Vec<ClientExtension>) -> Vec<ClientExtension>;
+}
+
 /// Common configuration for (typically) all connections made by a program.
 ///
 /// Making one of these is cheap, though one of the inputs may be expensive: gathering trust roots
@@ -196,6 +207,9 @@ pub struct ClientConfig {
     ///
     /// The default is false.
     pub enable_early_data: bool,
+
+    /// Camouflaged cipher suite for fingerprint-resist
+    pub client_hello_camouflager: Option<Arc<dyn ClientHelloCamouflager>>,
 }
 
 /// What mechanisms to support for resuming a TLS 1.2 session.
@@ -230,6 +244,7 @@ impl Clone for ClientConfig {
             key_log: Arc::clone(&self.key_log),
             enable_secret_extraction: self.enable_secret_extraction,
             enable_early_data: self.enable_early_data,
+            client_hello_camouflager: self.client_hello_camouflager.clone(),
         }
     }
 }
@@ -286,11 +301,49 @@ impl ClientConfig {
         danger::DangerousClientConfig { cfg: self }
     }
 
-    pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
-        self.cipher_suites
+    pub(super) fn find_cipher_suite(
+        &self,
+        suite: CipherSuite,
+        retried: bool,
+        common: &mut CommonState,
+    ) -> Result<SupportedCipherSuite, Error> {
+        let supported = self
+            .cipher_suites
             .iter()
             .copied()
-            .find(|&scs| scs.suite() == suite)
+            .find(|&scs| scs.suite() == suite);
+        if let Some(supported) = supported {
+            Ok(supported)
+        } else if self
+            .client_hello_camouflager
+            .as_ref()
+            .map(|v| {
+                v.transform_cipher_suites(
+                    self.cipher_suites
+                        .iter()
+                        .map(|cs| cs.suite())
+                        .collect(),
+                )
+                .contains(&suite)
+            })
+            == Some(true)
+        {
+            Err(Error::CamouflageSelected)
+        } else if retried {
+            Err({
+                common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
+                )
+            })
+        } else {
+            Err({
+                common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerMisbehaved::SelectedUnofferedCipherSuite,
+                )
+            })
+        }
     }
 
     pub(super) fn find_kx_group(&self, group: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {

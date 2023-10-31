@@ -153,6 +153,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             key_log: Arc::new(NoKeyLog {}),
             enable_secret_extraction: false,
             enable_early_data: false,
+            client_hello_camouflager: None,
         }
     }
 }

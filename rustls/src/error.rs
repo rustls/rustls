@@ -94,6 +94,10 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+
+    /// When the client with camouflaged ClientHello cannot handle the server's
+    /// response.
+    CamouflageSelected,
 }
 
 /// A corrupt TLS message payload that resulted in an error.
@@ -512,6 +516,9 @@ impl fmt::Display for Error {
             Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
             Self::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
+            }
+            Self::CamouflageSelected => {
+                write!(f, "peer selected camouflaged tls options")
             }
             Self::General(ref err) => write!(f, "unexpected error: {}", err),
         }

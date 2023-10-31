@@ -275,6 +275,11 @@ fn emit_client_hello_for_retry(
     // Do we have a SessionID or ticket cached for this host?
     let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
 
+    let exts = match &config.client_hello_camouflager {
+        None => exts,
+        Some(c) => c.transform_extensions(exts),
+    };
+
     // Note what extensions we sent.
     input.hello.sent_extensions = exts
         .iter()
@@ -288,6 +293,10 @@ fn emit_client_hello_for_retry(
         .collect();
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+
+    if let Some(c) = config.client_hello_camouflager.as_ref() {
+        cipher_suites = c.transform_cipher_suites(cipher_suites)
+    }
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
@@ -577,14 +586,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
         }
 
-        let suite = config
-            .find_cipher_suite(server_hello.cipher_suite)
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    PeerMisbehaved::SelectedUnofferedCipherSuite,
-                )
-            })?;
+        let suite = config.find_cipher_suite(server_hello.cipher_suite, false, cx.common)?;
 
         if version != suite.version().version {
             return Err({
@@ -787,17 +789,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks us to use a ciphersuite we didn't offer.
         let config = &self.next.input.config;
-        let cs = match config.find_cipher_suite(hrr.cipher_suite) {
-            Some(cs) => cs,
-            None => {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
-                    )
-                });
-            }
-        };
+        let cs = config.find_cipher_suite(hrr.cipher_suite, true, cx.common)?;
 
         // HRR selects the ciphersuite.
         cx.common.suite = Some(cs);
