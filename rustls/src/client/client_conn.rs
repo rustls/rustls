@@ -122,7 +122,8 @@ pub trait ResolvesClientCert: Send + Sync {
 /// (the rustls-native-certs crate is often used for this) may take on the order of a few hundred
 /// milliseconds.
 ///
-/// These must be created via the [`ClientConfig::builder()`] function.
+/// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder_with_provider()`]
+/// function.
 ///
 /// # Defaults
 ///
@@ -248,16 +249,15 @@ impl fmt::Debug for ClientConfig {
 
 impl ClientConfig {
     #[cfg(feature = "ring")]
-    /// Create a builder to build up the client configuration with the default
-    /// [`CryptoProvider`].
+    /// Create a builder for a client configuration with the default
+    /// [`CryptoProvider`]: [`crate::crypto::ring::RING`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
         Self::builder_with_provider(crate::crypto::ring::RING)
     }
 
-    /// Create builder to build up the client configuration with a specific
-    /// `CryptoProvider`.
+    /// Create a builder for a client configuration with a specific [`CryptoProvider`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_provider(

@@ -196,7 +196,8 @@ impl<'a> ClientHello<'a> {
 /// from the operating system to add to the [`RootCertStore`] passed to a `ClientCertVerifier`
 /// builder may take on the order of a few hundred milliseconds.
 ///
-/// These must be created via the [`ServerConfig::builder()`] function.
+/// These must be created via the [`ServerConfig::builder()`] or [`ServerConfig::builder_with_provider()`]
+/// function.
 ///
 /// # Defaults
 ///
@@ -354,16 +355,15 @@ impl fmt::Debug for ServerConfig {
 
 impl ServerConfig {
     #[cfg(feature = "ring")]
-    /// Create builder to build up the server configuration with the default
-    /// `CryptoProvider`.
+    /// Create a builder for a server configuration with the default
+    /// [`CryptoProvider`]: [`crate::crypto::ring::RING`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
         Self::builder_with_provider(crate::crypto::ring::RING)
     }
 
-    /// Create builder to build up the server configuration with a specific
-    /// `CryptoProvider`.
+    /// Create a builder for a server configuration with a specific [`CryptoProvider`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_provider(
