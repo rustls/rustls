@@ -12,7 +12,8 @@ use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    ExtensionType, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
+    EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest, NamedGroup,
+    PSKKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
 use crate::verify::DigitallySignedStruct;
@@ -2248,4 +2249,116 @@ impl HandshakeMessagePayload {
             payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec())),
         }
     }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct HpkeSymmetricCipherSuite {
+    pub kdf_id: HpkeKdf,
+    pub aead_id: HpkeAead,
+}
+
+impl Codec for HpkeSymmetricCipherSuite {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.kdf_id.encode(bytes);
+        self.aead_id.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            kdf_id: HpkeKdf::read(r)?,
+            aead_id: HpkeAead::read(r)?,
+        })
+    }
+}
+
+impl TlsListElement for HpkeSymmetricCipherSuite {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+#[derive(Clone, Debug)]
+pub struct HpkeKeyConfig {
+    pub config_id: u8,
+    pub kem_id: HpkeKem,
+    pub public_key: PayloadU16,
+    pub symmetric_cipher_suites: Vec<HpkeSymmetricCipherSuite>,
+}
+
+impl Codec for HpkeKeyConfig {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.config_id.encode(bytes);
+        self.kem_id.encode(bytes);
+        self.public_key.encode(bytes);
+        self.symmetric_cipher_suites
+            .encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            config_id: u8::read(r)?,
+            kem_id: HpkeKem::read(r)?,
+            public_key: PayloadU16::read(r)?,
+            symmetric_cipher_suites: Vec::<HpkeSymmetricCipherSuite>::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct EchConfigContents {
+    pub key_config: HpkeKeyConfig,
+    pub maximum_name_length: u8,
+    pub public_name: DnsName,
+    pub extensions: PayloadU16,
+}
+
+impl Codec for EchConfigContents {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.key_config.encode(bytes);
+        self.maximum_name_length.encode(bytes);
+        let dns_name = &self.public_name.borrow();
+        PayloadU8::encode_slice(dns_name.as_ref().as_ref(), bytes);
+        self.extensions.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            key_config: HpkeKeyConfig::read(r)?,
+            maximum_name_length: u8::read(r)?,
+            public_name: {
+                DnsName::try_from_ascii(PayloadU8::read(r)?.0.as_slice())
+                    .map_err(|_| InvalidMessage::InvalidServerName)?
+            },
+            extensions: PayloadU16::read(r)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct EchConfig {
+    pub version: EchVersion,
+    pub contents: EchConfigContents,
+}
+
+impl Codec for EchConfig {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.version.encode(bytes);
+        let mut contents = Vec::with_capacity(128);
+        self.contents.encode(&mut contents);
+        let length: &mut [u8; 2] = &mut [0, 0];
+        codec::put_u16(contents.len() as u16, length);
+        bytes.extend_from_slice(length);
+        bytes.extend(contents);
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        let version = EchVersion::read(r)?;
+        let length = u16::read(r)?;
+        Ok(Self {
+            version,
+            contents: EchConfigContents::read(&mut r.sub(length as usize)?)?,
+        })
+    }
+}
+
+impl TlsListElement for EchConfig {
+    const SIZE_LEN: ListLength = ListLength::U16;
 }
