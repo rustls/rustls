@@ -264,6 +264,75 @@ enum_builder! {
     }
 }
 
+enum_builder! {
+    /// The Key Encapsulation Mechanism (`Kem`) type for HPKE operations.
+    /// Listed by IANA, as specified in [RFC 9180 Section 7.1]
+    ///
+    /// [RFC 9180 Section 7.1]: <https://datatracker.ietf.org/doc/html/rfc9180#kemid-values>
+    @U16
+    pub enum HpkeKem {
+        DHKEM_P256_HKDF_SHA256 => 0x0010,
+        DHKEM_P384_HKDF_SHA384 => 0x0011,
+        DHKEM_P521_HKDF_SHA512 => 0x0012,
+        DHKEM_X25519_HKDF_SHA256 => 0x0020,
+        DHKEM_X448_HKDF_SHA512 => 0x0021
+    }
+}
+
+enum_builder! {
+    /// The Key Derivation Function (`Kdf`) type for HPKE operations.
+    /// Listed by IANA, as specified in [RFC 9180 Section 7.2]
+    ///
+    /// [RFC 9180 Section 7.2]: <https://datatracker.ietf.org/doc/html/rfc9180#name-key-derivation-functions-kd>
+    @U16
+    pub enum HpkeKdf {
+        HKDF_SHA256 => 0x0001,
+        HKDF_SHA384 => 0x0002,
+        HKDF_SHA512 => 0x0003
+    }
+}
+
+impl Default for HpkeKdf {
+    // TODO(XXX): revisit the default configuration. This is just what Cloudflare ships right now.
+    fn default() -> Self {
+        Self::HKDF_SHA256
+    }
+}
+
+enum_builder! {
+    /// The Authenticated Encryption with Associated Data (`Aead`) type for HPKE operations.
+    /// Listed by IANA, as specified in [RFC 9180 Section 7.3]
+    ///
+    /// [RFC 9180 Section 7.3]: <https://datatracker.ietf.org/doc/html/rfc9180#name-authenticated-encryption-wi>
+    @U16
+    pub enum HpkeAead {
+        AES_128_GCM => 0x0001,
+        AES_256_GCM => 0x0002,
+        CHACHA20_POLY_1305 => 0x0003,
+        EXPORT_ONLY => 0xFFFF
+    }
+}
+
+impl Default for HpkeAead {
+    // TODO(XXX): revisit the default configuration. This is just what Cloudflare ships right now.
+    fn default() -> Self {
+        Self::AES_128_GCM
+    }
+}
+
+enum_builder! {
+    /// The Encrypted Client Hello protocol version (`EchVersion`).
+    ///
+    /// Specified in [draft-ietf-tls-esni Section 4].
+    /// TODO(XXX): Update reference once RFC is published.
+    ///
+    /// [draft-ietf-tls-esni Section 4]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-4>
+    @U16
+    pub enum EchVersion {
+        V14 => 0xfe0d
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     //! These tests are intended to provide coverage and

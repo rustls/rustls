@@ -380,15 +380,18 @@ pub mod internal {
             pub use crate::msgs::deframer::MessageDeframer;
         }
         pub mod enums {
-            pub use crate::msgs::enums::{AlertLevel, Compression, NamedGroup};
+            pub use crate::msgs::enums::{
+                AlertLevel, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem, NamedGroup,
+            };
         }
         pub mod fragmenter {
             pub use crate::msgs::fragmenter::MessageFragmenter;
         }
         pub mod handshake {
             pub use crate::msgs::handshake::{
-                ClientExtension, ClientHelloPayload, DistinguishedName, HandshakeMessagePayload,
-                HandshakePayload, KeyShareEntry, Random, SessionId,
+                ClientExtension, ClientHelloPayload, DistinguishedName, EchConfig,
+                EchConfigContents, HandshakeMessagePayload, HandshakePayload, HpkeKeyConfig,
+                HpkeSymmetricCipherSuite, KeyShareEntry, Random, SessionId,
             };
         }
         pub mod message {
