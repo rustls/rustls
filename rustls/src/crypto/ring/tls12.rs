@@ -268,8 +268,8 @@ impl MessageEncrypter for GcmMessageEncrypter {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 
-        let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
-        let mut payload = Vec::with_capacity(GCM_EXPLICIT_NONCE_LEN + total_len);
+        let total_len = self.encrypted_payload_len(msg.payload.len());
+        let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(&nonce.as_ref()[4..]);
         payload.extend_from_slice(msg.payload);
 
@@ -279,6 +279,10 @@ impl MessageEncrypter for GcmMessageEncrypter {
             .map_err(|_| Error::EncryptError)?;
 
         Ok(OpaqueMessage::new(msg.typ, msg.version, payload))
+    }
+
+    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
+        payload_len + GCM_EXPLICIT_NONCE_LEN + self.enc_key.algorithm().tag_len()
     }
 }
 
@@ -337,7 +341,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 
-        let total_len = msg.payload.len() + self.enc_key.algorithm().tag_len();
+        let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut buf = Vec::with_capacity(total_len);
         buf.extend_from_slice(msg.payload);
 
@@ -346,6 +350,10 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
             .map_err(|_| Error::EncryptError)?;
 
         Ok(OpaqueMessage::new(msg.typ, msg.version, buf))
+    }
+
+    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
+        payload_len + self.enc_key.algorithm().tag_len()
     }
 }
 
