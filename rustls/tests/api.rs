@@ -12,12 +12,13 @@ use std::sync::Mutex;
 
 use pki_types::{CertificateDer, UnixTime};
 use rustls::client::{
-    verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption, WebPkiServerVerifier,
+    verify_server_cert_signed_by_trust_anchor, ClientHelloCamouflager, ResolvesClientCert,
+    Resumption, WebPkiServerVerifier,
 };
 use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::AlertLevel;
+use rustls::internal::msgs::enums::{AlertLevel, ECPointFormat};
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert, WebPkiClientVerifier};
@@ -1219,6 +1220,65 @@ fn client_check_server_certificate_helper_api() {
             Error::InvalidCertificate(CertificateError::UnknownIssuer)
         );
     }
+}
+
+struct NaiveClientHelloCamouflager;
+
+impl ClientHelloCamouflager for NaiveClientHelloCamouflager {
+    fn transform_cipher_suites(&self, mut cipher_suites: Vec<CipherSuite>) -> Vec<CipherSuite> {
+        // GREASE
+        cipher_suites.insert(0, CipherSuite::Unknown(0x7a7a));
+        cipher_suites
+    }
+
+    fn transform_extensions(&self, mut extensions: Vec<ClientExtension>) -> Vec<ClientExtension> {
+        let sni_index = extensions
+            .iter()
+            .position(|e| matches!(e, ClientExtension::EcPointFormats(_)));
+        let version_index = extensions
+            .iter()
+            .position(|e| matches!(e, ClientExtension::SupportedVersions(_)));
+        if let (Some(sni), Some(ver)) = (sni_index, version_index) {
+            extensions.swap(sni, ver);
+        }
+        extensions
+    }
+}
+
+#[test]
+fn client_hello_camouflage() {
+    let cr = NaiveClientHelloCamouflager;
+    let ciphers = vec![
+        CipherSuite::TLS13_AES_256_GCM_SHA384,
+        CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    ];
+    let extensions = vec![
+        ClientExtension::SupportedVersions(vec![
+            ProtocolVersion::TLSv1_3,
+            ProtocolVersion::TLSv1_2,
+        ]),
+        ClientExtension::EcPointFormats(vec![ECPointFormat::Uncompressed]),
+    ];
+    assert_eq!(
+        vec![
+            CipherSuite::Unknown(0x7a7a),
+            CipherSuite::TLS13_AES_256_GCM_SHA384,
+            CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        ],
+        cr.transform_cipher_suites(ciphers)
+    );
+    let mut ext2 = extensions.clone();
+    ext2.swap(0, 1);
+    let result = cr.transform_extensions(extensions);
+    assert_eq!(ext2.len(), result.len());
+    assert!(matches!(
+        result.get(0).unwrap(),
+        ClientExtension::EcPointFormats(_)
+    ));
+    assert!(matches!(
+        result.get(1).unwrap(),
+        ClientExtension::SupportedVersions(_)
+    ));
 }
 
 struct ClientCheckCertResolve {
