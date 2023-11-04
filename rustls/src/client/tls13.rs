@@ -601,12 +601,12 @@ struct ExpectCertificate {
 
 impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
-        let cert_chain = require_handshake_msg!(
+        self.transcript.add_message(&m);
+        let cert_chain = require_handshake_msg_move!(
             m,
             HandshakeType::Certificate,
             HandshakePayload::CertificateTls13
         )?;
-        self.transcript.add_message(&m);
 
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
@@ -624,9 +624,8 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 PeerMisbehaved::BadCertChainExtensions,
             ));
         }
-
-        let server_cert =
-            ServerCertDetails::new(cert_chain.convert(), cert_chain.get_end_entity_ocsp());
+        let end_entity_ocsp = cert_chain.get_end_entity_ocsp();
+        let server_cert = ServerCertDetails::new(cert_chain.convert(), end_entity_ocsp);
 
         Ok(Box::new(ExpectCertificateVerify {
             config: self.config,

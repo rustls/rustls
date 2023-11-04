@@ -881,12 +881,12 @@ struct ExpectCertificate {
 
 impl State<ServerConnectionData> for ExpectCertificate {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
-        let certp = require_handshake_msg!(
+        self.transcript.add_message(&m);
+        let certp = require_handshake_msg_move!(
             m,
             HandshakeType::Certificate,
             HandshakePayload::CertificateTls13
         )?;
-        self.transcript.add_message(&m);
 
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
