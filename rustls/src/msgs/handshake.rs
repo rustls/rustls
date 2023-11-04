@@ -1448,12 +1448,11 @@ impl CertificatePayloadTls13 {
             .unwrap_or_default()
     }
 
-    pub(crate) fn convert(&self) -> CertificatePayload {
-        let mut ret = Vec::new();
-        for entry in &self.entries {
-            ret.push(entry.cert.clone());
-        }
-        ret
+    pub(crate) fn convert(self) -> CertificatePayload {
+        self.entries
+            .into_iter()
+            .map(|e| e.cert)
+            .collect()
     }
 }
 
