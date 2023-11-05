@@ -2,13 +2,12 @@
 use crate::log::warn;
 use crate::KeyLog;
 
-use alloc::string::String;
 use alloc::vec::Vec;
 use std::env;
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::Write;
-use std::path::Path;
 use std::sync::Mutex;
 
 // Internal mutable state for KeyLogFile
@@ -18,11 +17,10 @@ struct KeyLogFileInner {
 }
 
 impl KeyLogFileInner {
-    fn new(var: Result<String, env::VarError>) -> Self {
-        let path = match var {
-            Ok(ref s) => Path::new(s),
-            Err(env::VarError::NotUnicode(ref s)) => Path::new(s),
-            Err(env::VarError::NotPresent) => {
+    fn new(var: Option<OsString>) -> Self {
+        let path = match &var {
+            Some(path) => path,
+            None => {
                 return Self {
                     file: None,
                     buf: Vec::new(),
@@ -85,7 +83,7 @@ impl KeyLogFile {
     /// Makes a new `KeyLogFile`.  The environment variable is
     /// inspected and the named file is opened during this call.
     pub fn new() -> Self {
-        let var = env::var("SSLKEYLOGFILE");
+        let var = env::var_os("SSLKEYLOGFILE");
         Self(Mutex::new(KeyLogFileInner::new(var)))
     }
 }
@@ -118,20 +116,9 @@ mod tests {
     }
 
     #[test]
-    fn test_env_var_is_not_unicode() {
-        init();
-        let mut inner = KeyLogFileInner::new(Err(env::VarError::NotUnicode(
-            "/tmp/keylogfileinnertest".into(),
-        )));
-        assert!(inner
-            .try_write("label", b"random", b"secret")
-            .is_ok());
-    }
-
-    #[test]
     fn test_env_var_is_not_set() {
         init();
-        let mut inner = KeyLogFileInner::new(Err(env::VarError::NotPresent));
+        let mut inner = KeyLogFileInner::new(None);
         assert!(inner
             .try_write("label", b"random", b"secret")
             .is_ok());
@@ -140,7 +127,7 @@ mod tests {
     #[test]
     fn test_env_var_cannot_be_opened() {
         init();
-        let mut inner = KeyLogFileInner::new(Ok("/dev/does-not-exist".into()));
+        let mut inner = KeyLogFileInner::new(Some("/dev/does-not-exist".into()));
         assert!(inner
             .try_write("label", b"random", b"secret")
             .is_ok());
@@ -149,7 +136,7 @@ mod tests {
     #[test]
     fn test_env_var_cannot_be_written() {
         init();
-        let mut inner = KeyLogFileInner::new(Ok("/dev/full".into()));
+        let mut inner = KeyLogFileInner::new(Some("/dev/full".into()));
         assert!(inner
             .try_write("label", b"random", b"secret")
             .is_err());
