@@ -94,6 +94,15 @@ pub enum Error {
     /// The `max_fragment_size` value supplied in configuration was too small,
     /// or too large.
     BadMaxFragmentSize,
+
+    /// Any other error.
+    ///
+    /// This variant should only be used when the error is not better described by a more
+    /// specific variant. For example, if a custom crypto provider returns a
+    /// provider specific error.
+    ///
+    /// Enums holding this variant will never compare equal to each other.
+    Other(OtherError),
 }
 
 /// A corrupt TLS message payload that resulted in an error.
@@ -514,6 +523,7 @@ impl fmt::Display for Error {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
             Self::General(ref err) => write!(f, "unexpected error: {}", err),
+            Self::Other(ref err) => write!(f, "other error: {:?}", err),
         }
     }
 }
@@ -533,10 +543,31 @@ impl From<rand::GetRandomFailed> for Error {
     }
 }
 
+/// Any other error that cannot be expressed by a more specific [`Error`] variant.
+///
+/// For example, an `OtherError` could be produced by a custom crypto provider
+/// exposing a provider specific error.
+///
+/// Enums holding this type will never compare equal to each other.
+#[derive(Debug, Clone)]
+pub struct OtherError(pub Arc<dyn StdError + Send + Sync>);
+
+impl PartialEq<Self> for OtherError {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
+impl From<OtherError> for Error {
+    fn from(value: OtherError) -> Self {
+        Self::Other(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Error, InvalidMessage};
-    use crate::error::CertRevocationListError;
+    use crate::error::{CertRevocationListError, OtherError};
 
     #[test]
     fn certificate_error_equality() {
@@ -581,6 +612,14 @@ mod tests {
     }
 
     #[test]
+    fn other_error_equality() {
+        let other_error = OtherError(alloc::sync::Arc::from(Box::from("")));
+        assert_ne!(other_error, other_error);
+        let other: Error = other_error.into();
+        assert_ne!(other, other);
+    }
+
+    #[test]
     fn smoke() {
         use crate::enums::{AlertDescription, ContentType, HandshakeType};
 
@@ -608,6 +647,7 @@ mod tests {
             Error::NoApplicationProtocol,
             Error::BadMaxFragmentSize,
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+            Error::Other(OtherError(alloc::sync::Arc::from(Box::from("")))),
         ];
 
         for err in all {
