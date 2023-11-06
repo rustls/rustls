@@ -3,7 +3,7 @@ use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme}
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
-    ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
+    ClientCertificateType, Compression, ECCurveType, EcPointFormat, ExtensionType,
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::msgs::handshake::{
@@ -365,7 +365,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
         extensions: vec![
-            ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
+            ClientExtension::EcPointFormats(EcPointFormat::SUPPORTED.to_vec()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             ClientExtension::make_sni(DnsNameRef::try_from("hello").unwrap()),
@@ -749,7 +749,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: vec![
-            ServerExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
+            ServerExtension::EcPointFormats(EcPointFormat::SUPPORTED.to_vec()),
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
             ServerExtension::RenegotiationInfo(PayloadU8(vec![0])),

@@ -18,7 +18,7 @@ use rustls::client::{
 use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::{AlertLevel, ECPointFormat};
+use rustls::internal::msgs::enums::{AlertLevel, EcPointFormat};
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert, WebPkiClientVerifier};
@@ -1257,7 +1257,7 @@ fn client_hello_camouflage() {
             ProtocolVersion::TLSv1_3,
             ProtocolVersion::TLSv1_2,
         ]),
-        ClientExtension::EcPointFormats(vec![ECPointFormat::Uncompressed]),
+        ClientExtension::EcPointFormats(vec![EcPointFormat::Uncompressed]),
     ];
     assert_eq!(
         vec![

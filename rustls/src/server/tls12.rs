@@ -38,7 +38,7 @@ pub(super) use client_hello::CompleteClientHelloHandling;
 mod client_hello {
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
-    use crate::msgs::enums::ECPointFormat;
+    use crate::msgs::enums::EcPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::ServerEcdhParams;
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
@@ -99,7 +99,7 @@ mod client_hello {
             trace!("namedgroups {:?}", groups_ext);
             trace!("ecpoints {:?}", ecpoints_ext);
 
-            if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
+            if !ecpoints_ext.contains(&EcPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerIncompatible::UncompressedEcPointsRequired,
@@ -186,7 +186,7 @@ mod client_hello {
                     )
                 })?;
 
-            let ecpoint = ECPointFormat::SUPPORTED
+            let ecpoint = EcPointFormat::SUPPORTED
                 .iter()
                 .find(|format| ecpoints_ext.contains(format))
                 .cloned()
@@ -197,7 +197,7 @@ mod client_hello {
                     )
                 })?;
 
-            debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
+            debug_assert_eq!(ecpoint, EcPointFormat::Uncompressed);
 
             let mut ocsp_response = server_key.get_ocsp();
 

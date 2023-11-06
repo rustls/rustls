@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use rustls::client::ClientHelloCamouflager;
 use rustls::internal::msgs::base::Payload;
-use rustls::internal::msgs::enums::{ECPointFormat, ExtensionType, PSKKeyExchangeMode};
+use rustls::internal::msgs::enums::{EcPointFormat, ExtensionType, PSKKeyExchangeMode};
 use rustls::internal::msgs::handshake::ClientExtension::*;
 use rustls::internal::msgs::handshake::{
     ClientExtension, ClientSessionTicket, ProtocolName, UnknownExtension,
@@ -85,7 +85,7 @@ fn main() {
                     NamedGroup::secp256r1,
                     NamedGroup::secp384r1,
                 ]),
-                EcPointFormats(vec![ECPointFormat::Uncompressed]),
+                EcPointFormats(vec![EcPointFormat::Uncompressed]),
                 SessionTicket(ClientSessionTicket::Request),
                 Protocols(vec![
                     // ProtocolName::from("h2".as_bytes().to_vec()),

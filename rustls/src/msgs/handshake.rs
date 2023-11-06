@@ -11,7 +11,7 @@ use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
-    CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
+    CertificateStatusType, ClientCertificateType, Compression, ECCurveType, EcPointFormat,
     ExtensionType, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::verify::DigitallySignedStruct;
@@ -200,7 +200,7 @@ impl UnknownExtension {
     }
 }
 
-impl TlsListElement for ECPointFormat {
+impl TlsListElement for EcPointFormat {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
 
@@ -540,7 +540,7 @@ impl TlsListElement for ProtocolVersion {
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
-    EcPointFormats(Vec<ECPointFormat>),
+    EcPointFormats(Vec<EcPointFormat>),
     NamedGroups(Vec<NamedGroup>),
     SignatureAlgorithms(Vec<SignatureScheme>),
     ServerName(Vec<ServerName>),
@@ -690,7 +690,7 @@ pub enum ClientSessionTicket {
 
 #[derive(Clone, Debug)]
 pub enum ServerExtension {
-    EcPointFormats(Vec<ECPointFormat>),
+    EcPointFormats(Vec<EcPointFormat>),
     ServerNameAck,
     SessionTicketAck,
     RenegotiationInfo(PayloadU8),
@@ -900,7 +900,7 @@ impl ClientHelloPayload {
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
+    pub(crate) fn get_ecpoints_extension(&self) -> Option<&[EcPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ClientExtension::EcPointFormats(ref req) => Some(req),
@@ -1233,7 +1233,7 @@ impl ServerHelloPayload {
         }
     }
 
-    pub(crate) fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
+    pub(crate) fn get_ecpoints_extension(&self) -> Option<&[EcPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ServerExtension::EcPointFormats(ref fmts) => Some(fmts),

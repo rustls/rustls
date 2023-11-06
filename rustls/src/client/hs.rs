@@ -11,7 +11,7 @@ use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{Compression, ExtensionType};
-use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
+use crate::msgs::enums::{EcPointFormat, PSKKeyExchangeMode};
 use crate::msgs::handshake::ConvertProtocolNameList;
 use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket};
 use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
@@ -221,7 +221,7 @@ fn emit_client_hello_for_retry(
 
     let mut exts = vec![
         ClientExtension::SupportedVersions(supported_versions),
-        ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
+        ClientExtension::EcPointFormats(EcPointFormat::SUPPORTED.to_vec()),
         ClientExtension::NamedGroups(
             config
                 .kx_groups
@@ -578,7 +578,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
         if let Some(point_fmts) = server_hello.get_ecpoints_extension() {
-            if !point_fmts.contains(&ECPointFormat::Uncompressed) {
+            if !point_fmts.contains(&EcPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
                     PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints,

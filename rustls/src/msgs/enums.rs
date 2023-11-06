@@ -198,14 +198,14 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    pub enum ECPointFormat {
+    pub enum EcPointFormat {
         Uncompressed => 0x00,
         ANSIX962CompressedPrime => 0x01,
         ANSIX962CompressedChar2 => 0x02
     }
 }
 
-impl ECPointFormat {
+impl EcPointFormat {
     pub(crate) const SUPPORTED: [Self; 1] = [Self::Uncompressed];
 }
 
@@ -292,9 +292,9 @@ pub(crate) mod tests {
             NamedCurve::arbitrary_explicit_char2_curves,
         );
         test_enum16::<NamedGroup>(NamedGroup::secp256r1, NamedGroup::FFDHE8192);
-        test_enum8::<ECPointFormat>(
-            ECPointFormat::Uncompressed,
-            ECPointFormat::ANSIX962CompressedChar2,
+        test_enum8::<EcPointFormat>(
+            EcPointFormat::Uncompressed,
+            EcPointFormat::ANSIX962CompressedChar2,
         );
         test_enum8::<HeartbeatMode>(
             HeartbeatMode::PeerAllowedToSend,
