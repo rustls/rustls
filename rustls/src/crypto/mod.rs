@@ -59,7 +59,7 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// # Errors
     ///
     /// This can fail if the random source fails during ephemeral key generation.
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, GetRandomFailed>;
+    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error>;
 
     /// Named group the SupportedKxGroup operates in.
     fn name(&self) -> NamedGroup;

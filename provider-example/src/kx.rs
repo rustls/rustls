@@ -34,7 +34,7 @@ pub const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&X25519 as &dyn SupportedK
 pub struct X25519;
 
 impl crypto::SupportedKxGroup for X25519 {
-    fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::crypto::GetRandomFailed> {
+    fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
         let priv_key = x25519_dalek::EphemeralSecret::random_from_rng(rand_core::OsRng);
         Ok(Box::new(KeyExchange {
             pub_key: (&priv_key).into(),
