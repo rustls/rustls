@@ -22,7 +22,7 @@ struct KxGroup {
 }
 
 impl SupportedKxGroup for KxGroup {
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, GetRandomFailed> {
+    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         let rng = SystemRandom::new();
         let priv_key = EphemeralPrivateKey::generate(self.agreement_algorithm, &rng)
             .map_err(|_| GetRandomFailed)?;
