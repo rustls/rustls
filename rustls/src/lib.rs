@@ -382,7 +382,7 @@ pub mod internal {
         pub mod enums {
             pub use crate::msgs::enums::{
                 AlertLevel, Compression, EcPointFormat, ExtensionType, NamedGroup,
-                PSKKeyExchangeMode,
+                PskKeyExchangeMode,
             };
         }
         pub mod fragmenter {

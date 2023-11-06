@@ -237,7 +237,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
-    pub enum PSKKeyExchangeMode {
+    pub enum PskKeyExchangeMode {
         PSK_KE => 0x00,
         PSK_DHE_KE => 0x01
     }
@@ -301,9 +301,9 @@ pub(crate) mod tests {
             HeartbeatMode::PeerNotAllowedToSend,
         );
         test_enum8::<ECCurveType>(ECCurveType::ExplicitPrime, ECCurveType::NamedCurve);
-        test_enum8::<PSKKeyExchangeMode>(
-            PSKKeyExchangeMode::PSK_KE,
-            PSKKeyExchangeMode::PSK_DHE_KE,
+        test_enum8::<PskKeyExchangeMode>(
+            PskKeyExchangeMode::PSK_KE,
+            PskKeyExchangeMode::PSK_DHE_KE,
         );
         test_enum8::<KeyUpdateRequest>(
             KeyUpdateRequest::UpdateNotRequested,

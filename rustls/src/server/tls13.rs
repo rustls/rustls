@@ -47,7 +47,7 @@ mod client_hello {
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::NamedGroup;
-    use crate::msgs::enums::{Compression, PSKKeyExchangeMode};
+    use crate::msgs::enums::{Compression, PskKeyExchangeMode};
     use crate::msgs::handshake::CertReqExtension;
     use crate::msgs::handshake::CertificateEntry;
     use crate::msgs::handshake::CertificateExtension;
@@ -341,7 +341,7 @@ mod client_hello {
                 }
             }
 
-            if !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE) {
+            if !client_hello.psk_mode_offered(PskKeyExchangeMode::PSK_DHE_KE) {
                 debug!("Client unwilling to resume, DHE_KE not offered");
                 self.send_tickets = 0;
                 chosen_psk_index = None;

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use rustls::client::ClientHelloCamouflager;
 use rustls::internal::msgs::base::Payload;
-use rustls::internal::msgs::enums::{EcPointFormat, ExtensionType, PSKKeyExchangeMode};
+use rustls::internal::msgs::enums::{EcPointFormat, ExtensionType, PskKeyExchangeMode};
 use rustls::internal::msgs::handshake::ClientExtension::*;
 use rustls::internal::msgs::handshake::{
     ClientExtension, ClientSessionTicket, ProtocolName, UnknownExtension,
@@ -110,7 +110,7 @@ fn main() {
                     payload: Payload::new(vec![]),
                 }),
                 keyshare,
-                PresharedKeyModes(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
+                PresharedKeyModes(vec![PskKeyExchangeMode::PSK_DHE_KE]),
                 SupportedVersions(vec![
                     ProtocolVersion::Unknown(0x5a5a),
                     ProtocolVersion::TLSv1_3,

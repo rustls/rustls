@@ -12,7 +12,7 @@ use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, EcPointFormat,
-    ExtensionType, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
+    ExtensionType, KeyUpdateRequest, NamedGroup, PskKeyExchangeMode, ServerNameType,
 };
 use crate::verify::DigitallySignedStruct;
 use crate::{rand, x509};
@@ -526,7 +526,7 @@ impl CertificateStatusRequest {
 
 // ---
 
-impl TlsListElement for PSKKeyExchangeMode {
+impl TlsListElement for PskKeyExchangeMode {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
 
@@ -548,7 +548,7 @@ pub enum ClientExtension {
     Protocols(Vec<ProtocolName>),
     SupportedVersions(Vec<ProtocolVersion>),
     KeyShare(Vec<KeyShareEntry>),
-    PresharedKeyModes(Vec<PSKKeyExchangeMode>),
+    PresharedKeyModes(Vec<PskKeyExchangeMode>),
     PresharedKey(PresharedKeyOffer),
     Cookie(PayloadU16),
     ExtendedMasterSecretRequest,
@@ -979,7 +979,7 @@ impl ClientHelloPayload {
             .map_or(false, |ext| ext.get_type() == ExtensionType::PreSharedKey)
     }
 
-    pub(crate) fn get_psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
+    pub(crate) fn get_psk_modes(&self) -> Option<&[PskKeyExchangeMode]> {
         let ext = self.find_extension(ExtensionType::PSKKeyExchangeModes)?;
         match *ext {
             ClientExtension::PresharedKeyModes(ref psk_modes) => Some(psk_modes),
@@ -987,7 +987,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
+    pub(crate) fn psk_mode_offered(&self, mode: PskKeyExchangeMode) -> bool {
         self.get_psk_modes()
             .map(|modes| modes.contains(&mode))
             .unwrap_or(false)

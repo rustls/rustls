@@ -4,7 +4,7 @@ use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
     ClientCertificateType, Compression, ECCurveType, EcPointFormat, ExtensionType,
-    KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
+    KeyUpdateRequest, NamedGroup, PskKeyExchangeMode, ServerNameType,
 };
 use crate::msgs::handshake::{
     CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTls13,
@@ -374,7 +374,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
             ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
             ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3])]),
-            ClientExtension::PresharedKeyModes(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
+            ClientExtension::PresharedKeyModes(vec![PskKeyExchangeMode::PSK_DHE_KE]),
             ClientExtension::PresharedKey(PresharedKeyOffer {
                 identities: vec![
                     PresharedKeyIdentity::new(vec![3, 4, 5], 123456),
