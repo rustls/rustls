@@ -239,7 +239,7 @@ impl AsRef<[u8]> for OkmBlock {
 #[derive(Debug)]
 pub struct OutputLengthError;
 
-#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
+#[cfg(all(test, feature = "ring"))]
 mod tests {
     use super::{expand, Hkdf, HkdfUsingHmac};
     use crate::test_provider::hmac;
