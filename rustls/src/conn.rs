@@ -325,12 +325,12 @@ impl<Data> ConnectionCommon<Data> {
     pub fn reader(&mut self) -> Reader {
         let common = &mut self.core.common_state;
         Reader {
-            received_plaintext: &mut common.received_plaintext,
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
             peer_cleanly_closed: common.has_received_close_notify
                 && !self.core.message_deframer.has_pending(),
             has_seen_eof: common.has_seen_eof,
+            received_plaintext: &mut common.received_plaintext,
         }
     }
 
@@ -552,14 +552,14 @@ impl<Data> ConnectionCommon<Data> {
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+    pub fn dangerous_extract_secrets(mut self) -> Result<ExtractedSecrets, Error> {
         if !self.enable_secret_extraction {
             return Err(Error::General("Secret extraction is disabled".into()));
         }
 
         let st = self.core.state?;
 
-        let record_layer = self.core.common_state.record_layer;
+        let record_layer = &mut self.core.common_state.record_layer;
         let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
         Ok(ExtractedSecrets {
             tx: (record_layer.write_seq(), tx),
@@ -639,10 +639,11 @@ impl<Data> ConnectionCore<Data> {
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
     fn deframe(&mut self) -> Result<Option<PlainMessage>, Error> {
-        match self.message_deframer.pop(
-            &mut self.common_state.record_layer,
-            self.common_state.negotiated_version,
-        ) {
+        let negotiated_version = self.common_state.negotiated_version;
+        match self
+            .message_deframer
+            .pop(&mut self.common_state.record_layer, negotiated_version)
+        {
             Ok(Some(Deframed {
                 want_close_before_decrypt,
                 aligned,

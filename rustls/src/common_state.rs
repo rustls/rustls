@@ -1,3 +1,5 @@
+use core::ops;
+
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "logging")]
@@ -25,62 +27,35 @@ use pki_types::CertificateDer;
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
-    pub(crate) negotiated_version: Option<ProtocolVersion>,
-    pub(crate) side: Side,
-    pub(crate) record_layer: record_layer::RecordLayer,
-    pub(crate) suite: Option<SupportedCipherSuite>,
-    pub(crate) alpn_protocol: Option<Vec<u8>>,
-    pub(crate) aligned_handshake: bool,
-    pub(crate) may_send_application_data: bool,
-    pub(crate) may_receive_application_data: bool,
-    pub(crate) early_traffic: bool,
-    sent_fatal_alert: bool,
-    /// If the peer has signaled end of stream.
-    pub(crate) has_received_close_notify: bool,
-    pub(crate) has_seen_eof: bool,
-    pub(crate) received_middlebox_ccs: u8,
-    pub(crate) peer_certificates: Option<Vec<CertificateDer<'static>>>,
-    message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
-    queued_key_update_message: Option<Vec<u8>>,
 
-    #[allow(dead_code)] // only read for QUIC
-    /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
-    pub(crate) protocol: Protocol,
-    #[cfg(feature = "quic")]
-    pub(crate) quic: quic::Quic,
-    pub(crate) enable_secret_extraction: bool,
+    inner: CommonStateInner,
+}
+
+impl ops::DerefMut for CommonState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl ops::Deref for CommonState {
+    type Target = CommonStateInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 impl CommonState {
     pub(crate) fn new(side: Side) -> Self {
         Self {
-            negotiated_version: None,
-            side,
-            record_layer: record_layer::RecordLayer::new(),
-            suite: None,
-            alpn_protocol: None,
-            aligned_handshake: true,
-            may_send_application_data: false,
-            may_receive_application_data: false,
-            early_traffic: false,
-            sent_fatal_alert: false,
-            has_received_close_notify: false,
-            has_seen_eof: false,
-            received_middlebox_ccs: 0,
-            peer_certificates: None,
-            message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            queued_key_update_message: None,
 
-            protocol: Protocol::Tcp,
-            #[cfg(feature = "quic")]
-            quic: quic::Quic::default(),
-            enable_secret_extraction: false,
+            inner: CommonStateInner::new(side),
         }
     }
 
@@ -580,6 +555,66 @@ impl CommonState {
     pub(crate) fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
             self.sendable_tls.append(message);
+        }
+    }
+}
+
+// cannot be `pub(crate)` due to the `impl Deref<Target=CommonStateInner> for CommonState` so
+// it gets marked as `pub`. this should be fine because this type and its API is not exposed outside
+// this crate
+#[doc(hidden)]
+pub struct CommonStateInner {
+    pub(crate) negotiated_version: Option<ProtocolVersion>,
+    pub(crate) side: Side,
+    pub(crate) record_layer: record_layer::RecordLayer,
+    pub(crate) suite: Option<SupportedCipherSuite>,
+    pub(crate) alpn_protocol: Option<Vec<u8>>,
+    pub(crate) aligned_handshake: bool,
+    pub(crate) may_send_application_data: bool,
+    pub(crate) may_receive_application_data: bool,
+    pub(crate) early_traffic: bool,
+    sent_fatal_alert: bool,
+    /// If the peer has signaled end of stream.
+    pub(crate) has_received_close_notify: bool,
+    pub(crate) has_seen_eof: bool,
+    pub(crate) received_middlebox_ccs: u8,
+    pub(crate) peer_certificates: Option<Vec<CertificateDer<'static>>>,
+    message_fragmenter: MessageFragmenter,
+
+    queued_key_update_message: Option<Vec<u8>>,
+
+    #[allow(dead_code)] // only read for QUIC
+    /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
+    pub(crate) protocol: Protocol,
+    #[cfg(feature = "quic")]
+    pub(crate) quic: quic::Quic,
+    pub(crate) enable_secret_extraction: bool,
+}
+
+impl CommonStateInner {
+    fn new(side: Side) -> Self {
+        Self {
+            negotiated_version: None,
+            side,
+            record_layer: record_layer::RecordLayer::new(),
+            suite: None,
+            alpn_protocol: None,
+            aligned_handshake: true,
+            may_send_application_data: false,
+            may_receive_application_data: false,
+            early_traffic: false,
+            sent_fatal_alert: false,
+            has_received_close_notify: false,
+            has_seen_eof: false,
+            received_middlebox_ccs: 0,
+            peer_certificates: None,
+            message_fragmenter: MessageFragmenter::default(),
+            queued_key_update_message: None,
+
+            protocol: Protocol::Tcp,
+            #[cfg(feature = "quic")]
+            quic: quic::Quic::default(),
+            enable_secret_extraction: false,
         }
     }
 }
