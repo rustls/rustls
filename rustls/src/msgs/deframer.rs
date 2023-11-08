@@ -379,6 +379,273 @@ impl MessageDeframer {
     }
 }
 
+/// A low-level version of `MessageDeframer` that does not maintains an internal buffer. instead, it
+/// operates on a caller-provided buffer
+#[allow(dead_code)]
+#[derive(Default)]
+pub(crate) struct LlMessageDeframer {
+    /// Set if the peer is not talking TLS, but some other
+    /// protocol.  The caller should abort the connection, because
+    /// the deframer cannot recover.
+    last_error: Option<Error>,
+
+    /// If we're in the middle of joining a handshake payload, this is the metadata.
+    joining_hs: Option<HandshakePayloadMeta>,
+
+    /// Tracks how many bytes must be removed from the front of the caller-provided buffer
+    discard: usize,
+}
+
+#[allow(dead_code)]
+impl LlMessageDeframer {
+    // TODO share code between this and `MessageDeframer::pop`
+    pub(crate) fn pop(
+        &mut self,
+        record_layer: &mut RecordLayer,
+        negotiated_version: Option<ProtocolVersion>,
+        buf: &mut [u8],
+    ) -> Result<Option<LlDeframed>, Error> {
+        if let Some(last_err) = self.last_error.clone() {
+            return Err(last_err);
+        } else if buf.is_empty() {
+            return Ok(None);
+        }
+
+        // We loop over records we've received but not processed yet.
+        // For records that decrypt as `Handshake`, we keep the current state of the joined
+        // handshake message payload in `self.joining_hs`, appending to it as we see records.
+        let expected_len = loop {
+            let start = match &self.joining_hs {
+                Some(meta) => {
+                    match meta.expected_len {
+                        // We're joining a handshake payload, and we've seen the full payload.
+                        Some(len) if len <= meta.payload.len() => break len,
+                        // Not enough data, and we can't parse any more out of the buffer (QUIC).
+                        _ if meta.quic => return Ok(None),
+                        // Try parsing some more of the encrypted buffered data.
+                        _ => meta.message.end,
+                    }
+                }
+                None => 0,
+            };
+
+            // Does our `buf` contain a full message?  It does if it is big enough to
+            // contain a header, and that header has a length which falls within `buf`.
+            // If so, deframe it and place the message onto the frames output queue.
+            let mut rd = codec::Reader::init(&buf[start..]);
+            let m = match OpaqueMessage::read(&mut rd) {
+                Ok(m) => m,
+                Err(msg_err) => {
+                    let err_kind = match msg_err {
+                        MessageError::TooShortForHeader | MessageError::TooShortForLength => {
+                            return Ok(None)
+                        }
+                        MessageError::InvalidEmptyPayload => InvalidMessage::InvalidEmptyPayload,
+                        MessageError::MessageTooLarge => InvalidMessage::MessageTooLarge,
+                        MessageError::InvalidContentType => InvalidMessage::InvalidContentType,
+                        MessageError::UnknownProtocolVersion => {
+                            InvalidMessage::UnknownProtocolVersion
+                        }
+                    };
+
+                    return Err(self.set_err(err_kind));
+                }
+            };
+
+            // Return CCS messages and early plaintext alerts immediately without decrypting.
+            let end = start + rd.used();
+            let version_is_tls13 = matches!(negotiated_version, Some(ProtocolVersion::TLSv1_3));
+            let allowed_plaintext = match m.typ {
+                // CCS messages are always plaintext.
+                ContentType::ChangeCipherSpec => true,
+                // Alerts are allowed to be plaintext if-and-only-if:
+                // * The negotiated protocol version is TLS 1.3. - In TLS 1.2 it is unambiguous when
+                //   keying changes based on the CCS message. Only TLS 1.3 requires these heuristics.
+                // * We have not yet decrypted any messages from the peer - if we have we don't
+                //   expect any plaintext.
+                // * The payload size is indicative of a plaintext alert message.
+                ContentType::Alert
+                    if version_is_tls13
+                        && !record_layer.has_decrypted()
+                        && m.payload().len() <= 2 =>
+                {
+                    true
+                }
+                // In other circumstances, we expect all messages to be encrypted.
+                _ => false,
+            };
+            if self.joining_hs.is_none() && allowed_plaintext {
+                // This is unencrypted. We check the contents later.
+                self.discard(end);
+                let deframed = Deframed {
+                    want_close_before_decrypt: false,
+                    aligned: true,
+                    trial_decryption_finished: false,
+                    message: m.into_plain_message(),
+                };
+                return Ok(Some(LlDeframed {
+                    deframed,
+                    discard: self.take_discard(),
+                }));
+            }
+
+            // Decrypt the encrypted message (if necessary).
+            let msg = match record_layer.decrypt_incoming(m) {
+                Ok(Some(decrypted)) => {
+                    let Decrypted {
+                        want_close_before_decrypt,
+                        plaintext,
+                    } = decrypted;
+                    debug_assert!(!want_close_before_decrypt);
+                    plaintext
+                }
+                // This was rejected early data, discard it. If we currently have a handshake
+                // payload in progress, this counts as interleaved, so we error out.
+                Ok(None) if self.joining_hs.is_some() => {
+                    return Err(self.set_err(
+                        PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage,
+                    ));
+                }
+                Ok(None) => {
+                    self.discard(end);
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
+
+            if self.joining_hs.is_some() && msg.typ != ContentType::Handshake {
+                // "Handshake messages MUST NOT be interleaved with other record
+                // types.  That is, if a handshake message is split over two or more
+                // records, there MUST NOT be any other records between them."
+                // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
+                return Err(self.set_err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage));
+            }
+
+            // If it's not a handshake message, just return it -- no joining necessary.
+            if msg.typ != ContentType::Handshake {
+                let end = start + rd.used();
+                self.discard(end);
+                let deframed = Deframed {
+                    want_close_before_decrypt: false,
+                    aligned: true,
+                    trial_decryption_finished: false,
+                    message: msg,
+                };
+                return Ok(Some(LlDeframed {
+                    deframed,
+                    discard: self.take_discard(),
+                }));
+            }
+
+            // If we don't know the payload size yet or if the payload size is larger
+            // than the currently buffered payload, we need to wait for more data.
+            match self.append_hs(msg.version, &msg.payload.0, end, false, buf)? {
+                HandshakePayloadState::Blocked => return Ok(None),
+                HandshakePayloadState::Complete(len) => break len,
+                HandshakePayloadState::Continue => continue,
+            }
+        };
+
+        let meta = self.joining_hs.as_mut().unwrap(); // safe after calling `append_hs()`
+
+        // We can now wrap the complete handshake payload in a `PlainMessage`, to be returned.
+        let message = PlainMessage {
+            typ: ContentType::Handshake,
+            version: meta.version,
+            payload: Payload::new(&buf[meta.payload.start..meta.payload.start + expected_len]),
+        };
+
+        // But before we return, update the `joining_hs` state to skip past this payload.
+        if meta.payload.len() > expected_len {
+            // If we have another (beginning of) a handshake payload left in the buffer, update
+            // the payload start to point past the payload we're about to yield, and update the
+            // `expected_len` to match the state of that remaining payload.
+            meta.payload.start += expected_len;
+            meta.expected_len = payload_size(&buf[meta.payload.start..meta.payload.end])?;
+        } else {
+            // Otherwise, we've yielded the last handshake payload in the buffer, so we can
+            // discard all of the bytes that we're previously buffered as handshake data.
+            let end = meta.message.end;
+            self.joining_hs = None;
+            self.discard(end);
+        }
+
+        let deframed = Deframed {
+            want_close_before_decrypt: false,
+            aligned: self.joining_hs.is_none(),
+            trial_decryption_finished: true,
+            message,
+        };
+        Ok(Some(LlDeframed {
+            deframed,
+            discard: self.take_discard(),
+        }))
+    }
+
+    fn append_hs(
+        &mut self,
+        version: ProtocolVersion,
+        payload: &[u8],
+        end: usize,
+        quic: bool,
+        buf: &mut [u8],
+    ) -> Result<HandshakePayloadState, Error> {
+        let meta = match &mut self.joining_hs {
+            Some(_meta) => {
+                // currently untested
+                todo!()
+            }
+            None => {
+                // We've found a new handshake message here.
+                // Write it into the buffer and create the metadata.
+
+                let expected_len = payload_size(payload)?;
+                let dst = &mut buf[..payload.len()];
+                dst.copy_from_slice(payload);
+                self.joining_hs
+                    .insert(HandshakePayloadMeta {
+                        message: Range { start: 0, end },
+                        payload: Range {
+                            start: 0,
+                            end: payload.len(),
+                        },
+                        version,
+                        expected_len,
+                        quic,
+                    })
+            }
+        };
+
+        Ok(match meta.expected_len {
+            Some(len) if len <= meta.payload.len() => HandshakePayloadState::Complete(len),
+            _ => match buf.len() > meta.message.end {
+                true => HandshakePayloadState::Continue,
+                false => HandshakePayloadState::Blocked,
+            },
+        })
+    }
+
+    fn set_err(&mut self, err: impl Into<Error>) -> Error {
+        let err = err.into();
+        self.last_error = Some(err.clone());
+        err
+    }
+
+    fn discard(&mut self, taken: usize) {
+        self.discard += taken;
+    }
+
+    fn take_discard(&mut self) -> usize {
+        core::mem::take(&mut self.discard)
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) struct LlDeframed {
+    pub(crate) deframed: Deframed,
+    pub(crate) discard: usize,
+}
+
 enum HandshakePayloadState {
     /// Waiting for more data.
     Blocked,
