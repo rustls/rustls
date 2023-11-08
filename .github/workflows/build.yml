@@ -347,6 +347,29 @@ jobs:
       - name: Check formatting (fuzz workspace)
         run: cargo fmt --all --manifest-path=fuzz/Cargo.toml -- --check
 
+  format-unstable:
+    name: Format (unstable)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install rust nightly toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          components: rustfmt
+          toolchain: nightly-2024-02-21
+      - name: Check formatting (unstable)
+        run: cargo fmt-unstable --all -- --check
+        continue-on-error: true
+      - name: Check formatting (unstable, connect-tests workspace)
+        run: cargo fmt-unstable --all --manifest-path=connect-tests/Cargo.toml -- --check
+        continue-on-error: true
+      - name: Check formatting (unstable, fuzz workspace)
+        run: cargo fmt-unstable --all --manifest-path=fuzz/Cargo.toml -- --check
+        continue-on-error: true
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
