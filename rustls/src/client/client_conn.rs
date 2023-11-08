@@ -1,5 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, CommonState2, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::{DnsName, DnsNameRef, InvalidDnsNameError};
@@ -707,7 +707,9 @@ impl ConnectionCore<ClientConnectionData> {
         let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {
-            common: &mut common_state,
+            common: CommonState2::Eager {
+                common_state: &mut common_state,
+            },
             data: &mut data,
         };
 

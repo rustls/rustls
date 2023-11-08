@@ -3,7 +3,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::check::inappropriate_message;
 #[cfg(feature = "quic")]
 use crate::common_state::Protocol;
-use crate::common_state::{CommonState, Side, State};
+use crate::common_state::{CommonState2, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
@@ -42,6 +42,7 @@ use subtle::ConstantTimeEq;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
+    use crate::common_state::CommonState2;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::base::{Payload, PayloadU8};
@@ -238,10 +239,10 @@ mod client_hello {
                             &mut self.transcript,
                             self.suite,
                             client_hello.session_id,
-                            cx.common,
+                            &mut cx.common,
                             group.name(),
                         );
-                        emit_fake_ccs(cx.common);
+                        emit_fake_ccs(&mut cx.common);
 
                         let skip_early_data = max_early_data_size(self.config.max_early_data_size);
 
@@ -371,7 +372,7 @@ mod client_hello {
                 &self.config,
             )?;
             if !self.done_retry {
-                emit_fake_ccs(cx.common);
+                emit_fake_ccs(&mut cx.common);
             }
 
             let mut ocsp_response = server_key.get_ocsp();
@@ -391,13 +392,13 @@ mod client_hello {
                     emit_certificate_req_tls13(&mut self.transcript, cx, &self.config)?;
                 emit_certificate_tls13(
                     &mut self.transcript,
-                    cx.common,
+                    &mut cx.common,
                     server_key.get_cert(),
                     ocsp_response,
                 );
                 emit_certificate_verify_tls13(
                     &mut self.transcript,
-                    cx.common,
+                    &mut cx.common,
                     server_key.get_key(),
                     &sigschemes_ext,
                 )?;
@@ -410,14 +411,14 @@ mod client_hello {
             // are encrypted with the handshake keys.
             match doing_early_data {
                 EarlyDataDecision::Disabled => {
-                    key_schedule.set_handshake_decrypter(None, cx.common);
+                    key_schedule.set_handshake_decrypter(None, &mut cx.common);
                     cx.data.early_data.reject();
                 }
                 EarlyDataDecision::RequestedButRejected => {
                     debug!("Client requested early_data, but not accepted: switching to handshake keys with trial decryption");
                     key_schedule.set_handshake_decrypter(
                         Some(max_early_data_size(self.config.max_early_data_size)),
-                        cx.common,
+                        &mut cx.common,
                     );
                     cx.data.early_data.reject();
                 }
@@ -533,7 +534,7 @@ mod client_hello {
                 &client_hello_hash,
                 &*config.key_log,
                 &randoms.client,
-                cx.common,
+                &mut cx.common,
             );
 
             KeySchedulePreHandshake::from(early_key_schedule)
@@ -549,13 +550,13 @@ mod client_hello {
             handshake_hash,
             &*config.key_log,
             &randoms.client,
-            cx.common,
+            &mut cx.common,
         );
 
         Ok(key_schedule)
     }
 
-    fn emit_fake_ccs(common: &mut CommonState) {
+    fn emit_fake_ccs(common: &mut CommonState2) {
         if common.is_quic() {
             return;
         }
@@ -570,7 +571,7 @@ mod client_hello {
         transcript: &mut HandshakeHash,
         suite: &'static Tls13CipherSuite,
         session_id: SessionId,
-        common: &mut CommonState,
+        common: &mut CommonState2,
         group: NamedGroup,
     ) {
         let mut req = HelloRetryRequest {
@@ -739,7 +740,7 @@ mod client_hello {
 
     fn emit_certificate_tls13(
         transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        common: &mut CommonState2,
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
     ) {
@@ -780,7 +781,7 @@ mod client_hello {
 
     fn emit_certificate_verify_tls13(
         transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        common: &mut CommonState2,
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
@@ -844,7 +845,7 @@ mod client_hello {
             hash_at_server_fin,
             &*config.key_log,
             &randoms.client,
-            cx.common,
+            &mut cx.common,
         )
     }
 }
@@ -1025,7 +1026,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 ..
             } => {
                 self.key_schedule
-                    .update_decrypter(cx.common);
+                    .update_decrypter(&mut cx.common);
                 self.transcript.add_message(&m);
                 Ok(Box::new(ExpectFinished {
                     config: self.config,
@@ -1160,7 +1161,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         let handshake_hash = self.transcript.get_current_hash();
         let (key_schedule_traffic, expect_verify_data) = self
             .key_schedule
-            .sign_client_finish(&handshake_hash, cx.common);
+            .sign_client_finish(&handshake_hash, &mut cx.common);
 
         let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), &finished.0[..]).into() {
             true => verify::FinishedMessageVerified::assertion(),
@@ -1216,7 +1217,7 @@ struct ExpectTraffic {
 impl ExpectTraffic {
     fn handle_key_update(
         &mut self,
-        common: &mut CommonState,
+        common: &mut CommonState2,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
@@ -1256,7 +1257,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
                         ..
                     },
                 ..
-            } => self.handle_key_update(cx.common, &key_update)?,
+            } => self.handle_key_update(&mut cx.common, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,

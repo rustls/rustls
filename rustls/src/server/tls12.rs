@@ -1,5 +1,5 @@
 use crate::check::inappropriate_message;
-use crate::common_state::{CommonState, Side, State};
+use crate::common_state::{CommonState2, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::ProtocolVersion;
@@ -36,6 +36,7 @@ use alloc::vec::Vec;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
+    use crate::common_state::CommonState2;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
@@ -221,20 +222,20 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(&mut self.transcript, cx.common, server_key.get_cert());
+            emit_certificate(&mut self.transcript, &mut cx.common, server_key.get_cert());
             if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut self.transcript, cx.common, ocsp_response);
+                emit_cert_status(&mut self.transcript, &mut cx.common, ocsp_response);
             }
             let server_kx = emit_server_kx(
                 &mut self.transcript,
-                cx.common,
+                &mut cx.common,
                 sigschemes,
                 group,
                 server_key.get_key(),
                 &self.randoms,
             )?;
             let doing_client_auth = emit_certificate_req(&self.config, &mut self.transcript, cx)?;
-            emit_server_hello_done(&mut self.transcript, cx.common);
+            emit_server_hello_done(&mut self.transcript, &mut cx.common);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -316,11 +317,11 @@ mod client_hello {
                     &*self.config.ticketer,
                 )?;
             }
-            emit_ccs(cx.common);
+            emit_ccs(&mut cx.common);
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&secrets, &mut self.transcript, cx.common);
+            emit_finished(&secrets, &mut self.transcript, &mut cx.common);
 
             Ok(Box::new(ExpectCcs {
                 config: self.config,
@@ -374,7 +375,7 @@ mod client_hello {
 
     fn emit_certificate(
         transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        common: &mut CommonState2,
         cert_chain: &[CertificateDer<'static>],
     ) {
         let c = Message {
@@ -389,7 +390,7 @@ mod client_hello {
         common.send_msg(c, false);
     }
 
-    fn emit_cert_status(transcript: &mut HandshakeHash, common: &mut CommonState, ocsp: &[u8]) {
+    fn emit_cert_status(transcript: &mut HandshakeHash, common: &mut CommonState2, ocsp: &[u8]) {
         let st = CertificateStatus::new(ocsp.to_owned());
 
         let c = Message {
@@ -406,7 +407,7 @@ mod client_hello {
 
     fn emit_server_kx(
         transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        common: &mut CommonState2,
         sigschemes: Vec<SignatureScheme>,
         selected_group: &'static dyn SupportedKxGroup,
         signing_key: &dyn sign::SigningKey,
@@ -487,7 +488,7 @@ mod client_hello {
         Ok(true)
     }
 
-    fn emit_server_hello_done(transcript: &mut HandshakeHash, common: &mut CommonState) {
+    fn emit_server_hello_done(transcript: &mut HandshakeHash, common: &mut CommonState2) {
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
@@ -597,7 +598,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let peer_kx_params =
-            tls12::decode_ecdh_params::<ClientEcdhParams>(cx.common, &client_kx.0)?;
+            tls12::decode_ecdh_params::<ClientEcdhParams>(&mut cx.common, &client_kx.0)?;
         let secrets = ConnectionSecrets::from_key_exchange(
             self.server_kx,
             &peer_kx_params.public.0,
@@ -804,7 +805,7 @@ fn emit_ticket(
     Ok(())
 }
 
-fn emit_ccs(common: &mut CommonState) {
+fn emit_ccs(common: &mut CommonState2) {
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
@@ -816,7 +817,7 @@ fn emit_ccs(common: &mut CommonState) {
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    common: &mut CommonState,
+    common: &mut CommonState2,
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.server_verify_data(&vh);
@@ -896,11 +897,11 @@ impl State<ServerConnectionData> for ExpectFinished {
                     &*self.config.ticketer,
                 )?;
             }
-            emit_ccs(cx.common);
+            emit_ccs(&mut cx.common);
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&self.secrets, &mut self.transcript, cx.common);
+            emit_finished(&self.secrets, &mut self.transcript, &mut cx.common);
         }
 
         cx.common.start_traffic();

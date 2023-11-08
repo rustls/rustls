@@ -1,7 +1,7 @@
 use crate::check::inappropriate_handshake_message;
 #[cfg(feature = "quic")]
 use crate::common_state::Protocol;
-use crate::common_state::{CommonState, Side, State};
+use crate::common_state::{CommonState2, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::ActiveKeyExchange;
@@ -79,7 +79,7 @@ pub(super) fn handle_server_hello(
     our_key_share: Box<dyn ActiveKeyExchange>,
     mut sent_tls13_fake_ccs: bool,
 ) -> hs::NextStateOrError {
-    validate_server_hello(cx.common, server_hello)?;
+    validate_server_hello(&mut cx.common, server_hello)?;
 
     let their_key_share = server_hello
         .get_key_share()
@@ -170,10 +170,10 @@ pub(super) fn handle_server_hello(
         suite,
         &*config.key_log,
         &randoms.client,
-        cx.common,
+        &mut cx.common,
     );
 
-    emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
+    emit_fake_ccs(&mut sent_tls13_fake_ccs, &mut cx.common);
 
     Ok(Box::new(ExpectEncryptedExtensions {
         config,
@@ -188,7 +188,7 @@ pub(super) fn handle_server_hello(
 }
 
 fn validate_server_hello(
-    common: &mut CommonState,
+    common: &mut CommonState2,
     server_hello: &ServerHelloPayload,
 ) -> Result<(), Error> {
     for ext in &server_hello.extensions {
@@ -303,7 +303,7 @@ pub(super) fn derive_early_traffic_secret(
     client_random: &[u8; 32],
 ) {
     // For middlebox compatibility
-    emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
+    emit_fake_ccs(sent_tls13_fake_ccs, &mut cx.common);
 
     let client_hello_hash =
         transcript_buffer.get_hash_given(resuming_suite.common.hash_provider, &[]);
@@ -311,7 +311,7 @@ pub(super) fn derive_early_traffic_secret(
         &client_hello_hash,
         key_log,
         client_random,
-        cx.common,
+        &mut cx.common,
     );
 
     // Now the client can send encrypted early data
@@ -319,7 +319,7 @@ pub(super) fn derive_early_traffic_secret(
     trace!("Starting early data traffic");
 }
 
-pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonState) {
+pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonState2) {
     if common.is_quic() {
         return;
     }
@@ -336,7 +336,7 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
 }
 
 fn validate_encrypted_extensions(
-    common: &mut CommonState,
+    common: &mut CommonState2,
     hello: &ClientHelloDetails,
     exts: &Vec<ServerExtension>,
 ) -> Result<(), Error> {
@@ -389,8 +389,8 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         debug!("TLS1.3 encrypted extensions: {:?}", exts);
         self.transcript.add_message(&m);
 
-        validate_encrypted_extensions(cx.common, &self.hello, exts)?;
-        hs::process_alpn_protocol(cx.common, &self.config, exts.get_alpn_protocol())?;
+        validate_encrypted_extensions(&mut cx.common, &self.hello, exts)?;
+        hs::process_alpn_protocol(&mut cx.common, &self.config, exts.get_alpn_protocol())?;
 
         #[cfg(feature = "quic")]
         {
@@ -421,7 +421,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             if was_early_traffic && !cx.common.early_traffic {
                 // If no early traffic, set the encryption key for handshakes
                 self.key_schedule
-                    .set_handshake_encrypter(cx.common);
+                    .set_handshake_encrypter(&mut cx.common);
             }
 
             cx.common.peer_certificates = Some(
@@ -719,7 +719,7 @@ fn emit_certificate_tls13(
     transcript: &mut HandshakeHash,
     certkey: Option<&CertifiedKey>,
     auth_context: Option<Vec<u8>>,
-    common: &mut CommonState,
+    common: &mut CommonState2,
 ) {
     let context = auth_context.unwrap_or_default();
 
@@ -750,7 +750,7 @@ fn emit_certificate_tls13(
 fn emit_certverify_tls13(
     transcript: &mut HandshakeHash,
     signer: &dyn Signer,
-    common: &mut CommonState,
+    common: &mut CommonState2,
 ) -> Result<(), Error> {
     let message = construct_client_verify_message(&transcript.get_current_hash());
 
@@ -774,7 +774,7 @@ fn emit_certverify_tls13(
 fn emit_finished_tls13(
     transcript: &mut HandshakeHash,
     verify_data: &crypto::hmac::Tag,
-    common: &mut CommonState,
+    common: &mut CommonState2,
 ) {
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
@@ -790,7 +790,7 @@ fn emit_finished_tls13(
     common.send_msg(m, true);
 }
 
-fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState) {
+fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState2) {
     if common.is_quic() {
         return;
     }
@@ -845,11 +845,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if cx.common.early_traffic {
-            emit_end_of_early_data_tls13(&mut st.transcript, cx.common);
+            emit_end_of_early_data_tls13(&mut st.transcript, &mut cx.common);
             cx.common.early_traffic = false;
             cx.data.early_data.finished();
             st.key_schedule
-                .set_handshake_encrypter(cx.common);
+                .set_handshake_encrypter(&mut cx.common);
         }
 
         /* Send our authentication/finished messages.  These are still encrypted
@@ -859,7 +859,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 ClientAuthDetails::Empty {
                     auth_context_tls13: auth_context,
                 } => {
-                    emit_certificate_tls13(&mut st.transcript, None, auth_context, cx.common);
+                    emit_certificate_tls13(&mut st.transcript, None, auth_context, &mut cx.common);
                 }
                 ClientAuthDetails::Verify {
                     certkey,
@@ -870,9 +870,9 @@ impl State<ClientConnectionData> for ExpectFinished {
                         &mut st.transcript,
                         Some(&certkey),
                         auth_context,
-                        cx.common,
+                        &mut cx.common,
                     );
-                    emit_certverify_tls13(&mut st.transcript, signer.as_ref(), cx.common)?;
+                    emit_certverify_tls13(&mut st.transcript, signer.as_ref(), &mut cx.common)?;
                 }
             }
         }
@@ -886,7 +886,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 &st.randoms.client,
             );
 
-        emit_finished_tls13(&mut st.transcript, &verify_data, cx.common);
+        emit_finished_tls13(&mut st.transcript, &verify_data, &mut cx.common);
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
@@ -897,7 +897,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
-        let key_schedule_traffic = key_schedule_pre_finished.into_traffic(cx.common);
+        let key_schedule_traffic = key_schedule_pre_finished.into_traffic(&mut cx.common);
         cx.common.start_traffic();
 
         let st = ExpectTraffic {
@@ -989,7 +989,7 @@ impl ExpectTraffic {
 
     fn handle_key_update(
         &mut self,
-        common: &mut CommonState,
+        common: &mut CommonState2,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
         #[cfg(feature = "quic")]
@@ -1038,7 +1038,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
                         ..
                     },
                 ..
-            } => self.handle_key_update(cx.common, key_update)?,
+            } => self.handle_key_update(&mut cx.common, key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,

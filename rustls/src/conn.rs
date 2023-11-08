@@ -1,4 +1,4 @@
-use crate::common_state::{CommonState, Context, IoState, State};
+use crate::common_state::{CommonState, CommonState2, Context, IoState, State};
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
@@ -571,7 +571,9 @@ impl<Data> ConnectionCommon<Data> {
 impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
     fn from(conn: &'a mut ConnectionCommon<Data>) -> Self {
         Self {
-            common: &mut conn.core.common_state,
+            common: CommonState2::Eager {
+                common_state: &mut conn.core.common_state,
+            },
             data: &mut conn.core.data,
         }
     }

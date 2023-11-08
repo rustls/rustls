@@ -1,4 +1,4 @@
-use crate::common_state::{CommonState, Side};
+use crate::common_state::{CommonStateInner, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
 use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::crypto::{hash, hmac, ActiveKeyExchange};
@@ -90,7 +90,7 @@ impl KeyScheduleEarly {
         hs_hash: &hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        common: &mut CommonState,
+        common: &mut CommonStateInner,
     ) {
         let client_early_traffic_secret = self.ks.derive_logged_secret(
             SecretKind::ClientEarlyTrafficSecret,
@@ -173,7 +173,7 @@ impl KeyScheduleHandshakeStart {
         suite: &'static Tls13CipherSuite,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        common: &mut CommonState,
+        common: &mut CommonStateInner,
     ) -> KeyScheduleHandshake {
         debug_assert_eq!(common.side, Side::Client);
         // Suite might have changed due to resumption
@@ -198,7 +198,7 @@ impl KeyScheduleHandshakeStart {
         hs_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        common: &mut CommonState,
+        common: &mut CommonStateInner,
     ) -> KeyScheduleHandshake {
         debug_assert_eq!(common.side, Side::Server);
         let new = self.into_handshake(hs_hash, key_log, client_random, common);
@@ -216,7 +216,7 @@ impl KeyScheduleHandshakeStart {
         hs_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        _common: &mut CommonState,
+        _common: &mut CommonStateInner,
     ) -> KeyScheduleHandshake {
         // Use an empty handshake hash for the initial handshake.
         let client_secret = self.ks.derive_logged_secret(
@@ -264,7 +264,7 @@ impl KeyScheduleHandshake {
             .sign_finish(&self.server_handshake_traffic_secret, hs_hash)
     }
 
-    pub(crate) fn set_handshake_encrypter(&self, common: &mut CommonState) {
+    pub(crate) fn set_handshake_encrypter(&self, common: &mut CommonStateInner) {
         debug_assert_eq!(common.side, Side::Client);
         self.ks
             .set_encrypter(&self.client_handshake_traffic_secret, common);
@@ -273,7 +273,7 @@ impl KeyScheduleHandshake {
     pub(crate) fn set_handshake_decrypter(
         &self,
         skip_requested: Option<usize>,
-        common: &mut CommonState,
+        common: &mut CommonStateInner,
     ) {
         debug_assert_eq!(common.side, Side::Server);
         let secret = &self.client_handshake_traffic_secret;
@@ -294,7 +294,7 @@ impl KeyScheduleHandshake {
         hs_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        common: &mut CommonState,
+        common: &mut CommonStateInner,
     ) -> KeyScheduleTrafficWithClientFinishedPending {
         debug_assert_eq!(common.side, Side::Server);
 
@@ -345,7 +345,7 @@ pub(crate) struct KeyScheduleClientBeforeFinished {
 }
 
 impl KeyScheduleClientBeforeFinished {
-    pub(crate) fn into_traffic(self, common: &mut CommonState) -> KeyScheduleTraffic {
+    pub(crate) fn into_traffic(self, common: &mut CommonStateInner) -> KeyScheduleTraffic {
         debug_assert_eq!(common.side, Side::Client);
         let (client_secret, server_secret) = (
             &self
@@ -387,7 +387,7 @@ pub(crate) struct KeyScheduleTrafficWithClientFinishedPending {
 }
 
 impl KeyScheduleTrafficWithClientFinishedPending {
-    pub(crate) fn update_decrypter(&self, common: &mut CommonState) {
+    pub(crate) fn update_decrypter(&self, common: &mut CommonStateInner) {
         debug_assert_eq!(common.side, Side::Server);
         self.traffic
             .ks
@@ -397,7 +397,7 @@ impl KeyScheduleTrafficWithClientFinishedPending {
     pub(crate) fn sign_client_finish(
         self,
         hs_hash: &hash::Output,
-        common: &mut CommonState,
+        common: &mut CommonStateInner,
     ) -> (KeyScheduleTraffic, hmac::Tag) {
         debug_assert_eq!(common.side, Side::Server);
         let tag = self
@@ -464,13 +464,13 @@ impl KeyScheduleTraffic {
         }
     }
 
-    pub(crate) fn update_encrypter_and_notify(&mut self, common: &mut CommonState) {
+    pub(crate) fn update_encrypter_and_notify(&mut self, common: &mut CommonStateInner) {
         let secret = self.next_application_traffic_secret(common.side);
         common.enqueue_key_update_notification();
         self.ks.set_encrypter(&secret, common);
     }
 
-    pub(crate) fn update_decrypter(&mut self, common: &mut CommonState) {
+    pub(crate) fn update_decrypter(&mut self, common: &mut CommonStateInner) {
         let secret = self.next_application_traffic_secret(common.side.peer());
         self.ks.set_decrypter(&secret, common);
     }
@@ -561,7 +561,7 @@ impl KeySchedule {
         }
     }
 
-    fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
+    fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonStateInner) {
         let expander = self
             .suite
             .hkdf_provider
@@ -574,7 +574,7 @@ impl KeySchedule {
             .set_message_encrypter(self.suite.aead_alg.encrypter(key, iv));
     }
 
-    fn set_decrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
+    fn set_decrypter(&self, secret: &OkmBlock, common: &mut CommonStateInner) {
         common
             .record_layer
             .set_message_decrypter(self.derive_decrypter(secret));

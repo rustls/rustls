@@ -2,6 +2,7 @@ use core::ops;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::ll::LlDeferredActions;
 #[cfg(feature = "logging")]
 use crate::log::{debug, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -24,6 +25,202 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use pki_types::CertificateDer;
+
+#[allow(dead_code)]
+pub(crate) enum CommonState2<'a> {
+    Eager {
+        common_state: &'a mut CommonState,
+    },
+
+    Lazy {
+        common_state: &'a mut LlCommonState,
+        deferred_actions: &'a mut LlDeferredActions,
+    },
+}
+
+impl CommonState2<'_> {
+    // Changing the keys must not span any fragmented handshake
+    // messages.  Otherwise the defragmented messages will have
+    // been protected with two different record layer protections,
+    // which is illegal.  Not mentioned in RFC.
+    pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
+        if !self.aligned_handshake {
+            Err(self.send_fatal_alert(
+                AlertDescription::UnexpectedMessage,
+                PeerMisbehaved::KeyEpochWithPendingFragment,
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Fragment `m`, encrypt the fragments, and then queue
+    /// the encrypted fragments for sending.
+    pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {
+        let iter = self
+            .message_fragmenter
+            .fragment_message(&m);
+        for m in iter {
+            self.send_single_fragment(m);
+        }
+    }
+
+    fn send_single_fragment(&mut self, m: BorrowedPlainMessage) {
+        // Close connection once we start to run out of
+        // sequence space.
+        if self
+            .record_layer
+            .wants_close_before_encrypt()
+        {
+            self.send_close_notify();
+        }
+
+        // Refuse to wrap counter at all costs.  This
+        // is basically untestable unfortunately.
+        if self.record_layer.encrypt_exhausted() {
+            return;
+        }
+
+        let em = self.record_layer.encrypt_outgoing(m);
+        self.queue_tls_message(em);
+    }
+
+    pub(crate) fn start_outgoing_traffic(&mut self) {
+        match self {
+            CommonState2::Eager { common_state } => common_state.start_outgoing_traffic(),
+            CommonState2::Lazy { .. } => todo!(),
+        }
+    }
+
+    pub(crate) fn start_traffic(&mut self) {
+        self.may_receive_application_data = true;
+        self.start_outgoing_traffic();
+    }
+
+    fn queue_tls_message(&mut self, m: OpaqueMessage) {
+        match self {
+            CommonState2::Eager { common_state } => common_state.queue_tls_message(m),
+            CommonState2::Lazy {
+                deferred_actions, ..
+            } => deferred_actions.queue_tls_message(m),
+        }
+    }
+
+    /// Send a raw TLS message, fragmenting it if needed.
+    pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool) {
+        #[cfg(feature = "quic")]
+        {
+            if let Protocol::Quic = self.protocol {
+                if let MessagePayload::Alert(alert) = m.payload {
+                    self.quic.alert = Some(alert.description);
+                } else {
+                    debug_assert!(
+                        matches!(m.payload, MessagePayload::Handshake { .. }),
+                        "QUIC uses TLS for the cryptographic handshake only"
+                    );
+                    let mut bytes = Vec::new();
+                    m.payload.encode(&mut bytes);
+                    self.quic
+                        .hs_queue
+                        .push_back((must_encrypt, bytes));
+                }
+                return;
+            }
+        }
+        if !must_encrypt {
+            let msg = &m.into();
+            let iter = self
+                .message_fragmenter
+                .fragment_message(msg);
+            for m in iter {
+                self.queue_tls_message(m.to_unencrypted_opaque());
+            }
+        } else {
+            self.send_msg_encrypt(m.into());
+        }
+    }
+
+    pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
+        match self {
+            CommonState2::Eager { common_state } => common_state.take_received_plaintext(bytes),
+            CommonState2::Lazy {
+                deferred_actions, ..
+            } => deferred_actions.take_received_plaintext(bytes),
+        }
+    }
+
+    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
+        let m = Message::build_alert(AlertLevel::Warning, desc);
+        self.send_msg(m, self.record_layer.is_encrypting());
+    }
+
+    pub(crate) fn send_cert_verify_error_alert(&mut self, err: Error) -> Error {
+        self.send_fatal_alert(
+            match &err {
+                Error::InvalidCertificate(e) => e.clone().into(),
+                Error::PeerMisbehaved(_) => AlertDescription::IllegalParameter,
+                _ => AlertDescription::HandshakeFailure,
+            },
+            err,
+        )
+    }
+
+    pub(crate) fn send_fatal_alert(
+        &mut self,
+        desc: AlertDescription,
+        err: impl Into<Error>,
+    ) -> Error {
+        debug_assert!(!self.sent_fatal_alert);
+        let m = Message::build_alert(AlertLevel::Fatal, desc);
+        self.send_msg(m, self.record_layer.is_encrypting());
+        self.sent_fatal_alert = true;
+        err.into()
+    }
+
+    /// Queues a close_notify warning alert to be sent in the next
+    /// [`Connection::write_tls`] call.  This informs the peer that the
+    /// connection is being closed.
+    ///
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    pub(crate) fn send_close_notify(&mut self) {
+        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
+    }
+
+    pub(crate) fn should_update_key(
+        &mut self,
+        key_update_request: &KeyUpdateRequest,
+    ) -> Result<bool, Error> {
+        match key_update_request {
+            KeyUpdateRequest::UpdateNotRequested => Ok(false),
+            KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
+            _ => Err(self.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                InvalidMessage::InvalidKeyUpdate,
+            )),
+        }
+    }
+}
+
+impl ops::Deref for CommonState2<'_> {
+    type Target = CommonStateInner;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            CommonState2::Eager { common_state } => &common_state.inner,
+            CommonState2::Lazy { common_state, .. } => &common_state.inner,
+        }
+    }
+}
+
+impl ops::DerefMut for CommonState2<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            CommonState2::Eager { common_state } => &mut common_state.inner,
+            CommonState2::Lazy { common_state, .. } => &mut common_state.inner,
+        }
+    }
+}
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -119,10 +316,6 @@ impl CommonState {
         self.negotiated_version
     }
 
-    pub(crate) fn is_tls13(&self) -> bool {
-        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
-    }
-
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
         msg: Message,
@@ -142,7 +335,10 @@ impl CommonState {
             }
         }
 
-        let mut cx = Context { common: self, data };
+        let mut cx = Context {
+            common: CommonState2::Eager { common_state: self },
+            data,
+        };
         match state.handle(&mut cx, msg) {
             Ok(next) => {
                 state = next;
@@ -178,32 +374,6 @@ impl CommonState {
         self.send_appdata_encrypt(data, Limit::Yes)
     }
 
-    // Changing the keys must not span any fragmented handshake
-    // messages.  Otherwise the defragmented messages will have
-    // been protected with two different record layer protections,
-    // which is illegal.  Not mentioned in RFC.
-    pub(crate) fn check_aligned_handshake(&mut self) -> Result<(), Error> {
-        if !self.aligned_handshake {
-            Err(self.send_fatal_alert(
-                AlertDescription::UnexpectedMessage,
-                PeerMisbehaved::KeyEpochWithPendingFragment,
-            ))
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Fragment `m`, encrypt the fragments, and then queue
-    /// the encrypted fragments for sending.
-    pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage) {
-        let iter = self
-            .message_fragmenter
-            .fragment_message(&m);
-        for m in iter {
-            self.send_single_fragment(m);
-        }
-    }
-
     /// Like send_msg_encrypt, but operate on an appdata directly.
     fn send_appdata_encrypt(&mut self, payload: &[u8], limit: Limit) -> usize {
         // Here, the limit on sendable_tls applies to encrypted data,
@@ -230,23 +400,7 @@ impl CommonState {
     }
 
     fn send_single_fragment(&mut self, m: BorrowedPlainMessage) {
-        // Close connection once we start to run out of
-        // sequence space.
-        if self
-            .record_layer
-            .wants_close_before_encrypt()
-        {
-            self.send_close_notify();
-        }
-
-        // Refuse to wrap counter at all costs.  This
-        // is basically untestable unfortunately.
-        if self.record_layer.encrypt_exhausted() {
-            return;
-        }
-
-        let em = self.record_layer.encrypt_outgoing(m);
-        self.queue_tls_message(em);
+        CommonState2::Eager { common_state: self }.send_single_fragment(m)
     }
 
     /// Encrypt and send some plaintext `data`.  `limit` controls
@@ -279,14 +433,9 @@ impl CommonState {
         self.send_appdata_encrypt(data, limit)
     }
 
-    pub(crate) fn start_outgoing_traffic(&mut self) {
+    fn start_outgoing_traffic(&mut self) {
         self.may_send_application_data = true;
         self.flush_plaintext();
-    }
-
-    pub(crate) fn start_traffic(&mut self) {
-        self.may_receive_application_data = true;
-        self.start_outgoing_traffic();
     }
 
     /// Sets a limit on the internal buffers used to buffer
@@ -354,51 +503,8 @@ impl CommonState {
         self.sendable_tls.append(m.encode());
     }
 
-    /// Send a raw TLS message, fragmenting it if needed.
-    pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool) {
-        #[cfg(feature = "quic")]
-        {
-            if let Protocol::Quic = self.protocol {
-                if let MessagePayload::Alert(alert) = m.payload {
-                    self.quic.alert = Some(alert.description);
-                } else {
-                    debug_assert!(
-                        matches!(m.payload, MessagePayload::Handshake { .. }),
-                        "QUIC uses TLS for the cryptographic handshake only"
-                    );
-                    let mut bytes = Vec::new();
-                    m.payload.encode(&mut bytes);
-                    self.quic
-                        .hs_queue
-                        .push_back((must_encrypt, bytes));
-                }
-                return;
-            }
-        }
-        if !must_encrypt {
-            let msg = &m.into();
-            let iter = self
-                .message_fragmenter
-                .fragment_message(msg);
-            for m in iter {
-                self.queue_tls_message(m.to_unencrypted_opaque());
-            }
-        } else {
-            self.send_msg_encrypt(m.into());
-        }
-    }
-
-    pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
+    fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext.append(bytes.0);
-    }
-
-    #[cfg(feature = "tls12")]
-    pub(crate) fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
-        let (dec, enc) = secrets.make_cipher_pair(side);
-        self.record_layer
-            .prepare_message_encrypter(enc);
-        self.record_layer
-            .prepare_message_decrypter(dec);
     }
 
     #[cfg(feature = "quic")]
@@ -442,27 +548,12 @@ impl CommonState {
         Err(err)
     }
 
-    pub(crate) fn send_cert_verify_error_alert(&mut self, err: Error) -> Error {
-        self.send_fatal_alert(
-            match &err {
-                Error::InvalidCertificate(e) => e.clone().into(),
-                Error::PeerMisbehaved(_) => AlertDescription::IllegalParameter,
-                _ => AlertDescription::HandshakeFailure,
-            },
-            err,
-        )
-    }
-
     pub(crate) fn send_fatal_alert(
         &mut self,
         desc: AlertDescription,
         err: impl Into<Error>,
     ) -> Error {
-        debug_assert!(!self.sent_fatal_alert);
-        let m = Message::build_alert(AlertLevel::Fatal, desc);
-        self.send_msg(m, self.record_layer.is_encrypting());
-        self.sent_fatal_alert = true;
-        err.into()
+        CommonState2::Eager { common_state: self }.send_fatal_alert(desc, err)
     }
 
     /// Queues a close_notify warning alert to be sent in the next
@@ -471,13 +562,11 @@ impl CommonState {
     ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
-        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
+        CommonState2::Eager { common_state: self }.send_close_notify()
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
-        let m = Message::build_alert(AlertLevel::Warning, desc);
-        self.send_msg(m, self.record_layer.is_encrypting());
+        CommonState2::Eager { common_state: self }.send_warning_alert_no_log(desc)
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
@@ -520,41 +609,23 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn is_quic(&self) -> bool {
-        #[cfg(feature = "quic")]
-        {
-            self.protocol == Protocol::Quic
-        }
-        #[cfg(not(feature = "quic"))]
-        false
-    }
-
-    pub(crate) fn should_update_key(
-        &mut self,
-        key_update_request: &KeyUpdateRequest,
-    ) -> Result<bool, Error> {
-        match key_update_request {
-            KeyUpdateRequest::UpdateNotRequested => Ok(false),
-            KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
-            _ => Err(self.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                InvalidMessage::InvalidKeyUpdate,
-            )),
-        }
-    }
-
-    pub(crate) fn enqueue_key_update_notification(&mut self) {
-        let message = PlainMessage::from(Message::build_key_update_notify());
-        self.queued_key_update_message = Some(
-            self.record_layer
-                .encrypt_outgoing(message.borrow())
-                .encode(),
-        );
-    }
-
     pub(crate) fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
             self.sendable_tls.append(message);
+        }
+    }
+}
+
+// low-level version of `CommonState` that defers some IO operations
+pub(crate) struct LlCommonState {
+    inner: CommonStateInner,
+}
+
+impl LlCommonState {
+    #[allow(dead_code)]
+    pub(crate) fn new(side: Side) -> Self {
+        Self {
+            inner: CommonStateInner::new(side),
         }
     }
 }
@@ -591,6 +662,7 @@ pub struct CommonStateInner {
     pub(crate) enable_secret_extraction: bool,
 }
 
+// NOTE this type MUST NOT have `pub` method / associated functions
 impl CommonStateInner {
     fn new(side: Side) -> Self {
         Self {
@@ -616,6 +688,37 @@ impl CommonStateInner {
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
         }
+    }
+
+    pub(crate) fn is_tls13(&self) -> bool {
+        matches!(self.negotiated_version, Some(ProtocolVersion::TLSv1_3))
+    }
+
+    #[cfg(feature = "tls12")]
+    pub(crate) fn start_encryption_tls12(&mut self, secrets: &ConnectionSecrets, side: Side) {
+        let (dec, enc) = secrets.make_cipher_pair(side);
+        self.record_layer
+            .prepare_message_encrypter(enc);
+        self.record_layer
+            .prepare_message_decrypter(dec);
+    }
+
+    pub(crate) fn is_quic(&self) -> bool {
+        #[cfg(feature = "quic")]
+        {
+            self.protocol == Protocol::Quic
+        }
+        #[cfg(not(feature = "quic"))]
+        false
+    }
+
+    pub(crate) fn enqueue_key_update_notification(&mut self) {
+        let message = PlainMessage::from(Message::build_key_update_notify());
+        self.queued_key_update_message = Some(
+            self.record_layer
+                .encrypt_outgoing(message.borrow())
+                .encode(),
+        );
     }
 }
 
@@ -680,7 +783,7 @@ pub(crate) trait State<Data>: Send + Sync {
 }
 
 pub(crate) struct Context<'a, Data> {
-    pub(crate) common: &'a mut CommonState,
+    pub(crate) common: CommonState2<'a>,
     pub(crate) data: &'a mut Data,
 }
 

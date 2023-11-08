@@ -1,7 +1,7 @@
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::{CommonState, State};
+use crate::common_state::{CommonState2, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
@@ -323,7 +323,7 @@ fn emit_client_hello_for_retry(
     if retryreq.is_some() {
         // send dummy CCS to fool middleboxes prior
         // to second client hello
-        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, cx.common);
+        tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, &mut cx.common);
     }
 
     trace!("Sending ClientHello {:#?}", ch);
@@ -435,7 +435,7 @@ fn prepare_resumption<'a>(
 }
 
 pub(super) fn process_alpn_protocol(
-    common: &mut CommonState,
+    common: &mut CommonState2,
     config: &ClientConfig,
     proto: Option<&[u8]>,
 ) -> Result<(), Error> {
@@ -563,7 +563,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
-            process_alpn_protocol(cx.common, config, server_hello.get_alpn_protocol())?;
+            process_alpn_protocol(&mut cx.common, config, server_hello.get_alpn_protocol())?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain

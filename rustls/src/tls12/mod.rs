@@ -1,4 +1,4 @@
-use crate::common_state::{CommonState, Side};
+use crate::common_state::{CommonState2, Side};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
 use crate::crypto::cipher::{AeadKey, MessageDecrypter, MessageEncrypter, Tls12AeadAlgorithm};
@@ -291,7 +291,7 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
 pub(crate) fn decode_ecdh_params<T: Codec>(
-    common: &mut CommonState,
+    common: &mut CommonState2,
     kx_params: &[u8],
 ) -> Result<T, Error> {
     let mut rd = Reader::init(kx_params);
@@ -323,12 +323,18 @@ mod tests {
         server_buf.push(34);
 
         let mut common = CommonState::new(Side::Client);
-        assert!(decode_ecdh_params::<ServerEcdhParams>(&mut common, &server_buf).is_err());
+        let mut common2 = CommonState2::Eager {
+            common_state: &mut common,
+        };
+        assert!(decode_ecdh_params::<ServerEcdhParams>(&mut common2, &server_buf).is_err());
     }
 
     #[test]
     fn client_ecdhe_invalid() {
         let mut common = CommonState::new(Side::Server);
-        assert!(decode_ecdh_params::<ClientEcdhParams>(&mut common, &[34]).is_err());
+        let mut common2 = CommonState2::Eager {
+            common_state: &mut common,
+        };
+        assert!(decode_ecdh_params::<ClientEcdhParams>(&mut common2, &[34]).is_err());
     }
 }

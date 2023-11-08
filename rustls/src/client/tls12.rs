@@ -1,5 +1,5 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, Side, State};
+use crate::common_state::{CommonState2, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
@@ -415,7 +415,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
 fn emit_certificate(
     transcript: &mut HandshakeHash,
     cert_chain: CertificatePayload,
-    common: &mut CommonState,
+    common: &mut CommonState2,
 ) {
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
@@ -429,7 +429,7 @@ fn emit_certificate(
     common.send_msg(cert, false);
 }
 
-fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
+fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState2, pub_key: &[u8]) {
     let mut buf = Vec::new();
     let ecpoint = PayloadU8::new(Vec::from(pub_key));
     ecpoint.encode(&mut buf);
@@ -450,7 +450,7 @@ fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_k
 fn emit_certverify(
     transcript: &mut HandshakeHash,
     signer: &dyn Signer,
-    common: &mut CommonState,
+    common: &mut CommonState2,
 ) -> Result<(), Error> {
     let message = transcript
         .take_handshake_buf()
@@ -473,7 +473,7 @@ fn emit_certverify(
     Ok(())
 }
 
-fn emit_ccs(common: &mut CommonState) {
+fn emit_ccs(common: &mut CommonState2) {
     let ccs = Message {
         version: ProtocolVersion::TLSv1_2,
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
@@ -485,7 +485,7 @@ fn emit_ccs(common: &mut CommonState) {
 fn emit_finished(
     secrets: &ConnectionSecrets,
     transcript: &mut HandshakeHash,
-    common: &mut CommonState,
+    common: &mut CommonState2,
 ) {
     let vh = transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
@@ -758,12 +758,12 @@ impl State<ClientConnectionData> for ExpectServerDone {
                 ClientAuthDetails::Empty { .. } => Vec::new(),
                 ClientAuthDetails::Verify { certkey, .. } => certkey.cert.clone(),
             };
-            emit_certificate(&mut st.transcript, certs, cx.common);
+            emit_certificate(&mut st.transcript, certs, &mut cx.common);
         }
 
         // 5a.
         let ecdh_params =
-            tls12::decode_ecdh_params::<ServerEcdhParams>(cx.common, &st.server_kx.kx_params)?;
+            tls12::decode_ecdh_params::<ServerEcdhParams>(&mut cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
         let skxg = match st.config.find_kx_group(named_group) {
             Some(skxg) => skxg,
@@ -777,7 +777,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
 
         // 5b.
         let mut transcript = st.transcript;
-        emit_clientkx(&mut transcript, cx.common, kx.pub_key());
+        emit_clientkx(&mut transcript, &mut cx.common, kx.pub_key());
         // nb. EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = st
             .using_ems
@@ -785,11 +785,11 @@ impl State<ClientConnectionData> for ExpectServerDone {
 
         // 5c.
         if let Some(ClientAuthDetails::Verify { signer, .. }) = &st.client_auth {
-            emit_certverify(&mut transcript, signer.as_ref(), cx.common)?;
+            emit_certverify(&mut transcript, signer.as_ref(), &mut cx.common)?;
         }
 
         // 5d.
-        emit_ccs(cx.common);
+        emit_ccs(&mut cx.common);
 
         // 5e. Now commit secrets.
         let secrets = ConnectionSecrets::from_key_exchange(
@@ -812,7 +812,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
             .start_encrypting();
 
         // 6.
-        emit_finished(&secrets, &mut transcript, cx.common);
+        emit_finished(&secrets, &mut transcript, &mut cx.common);
 
         if st.must_issue_new_ticket {
             Ok(Box::new(ExpectNewTicket {
@@ -1025,11 +1025,11 @@ impl State<ClientConnectionData> for ExpectFinished {
         st.save_session(cx);
 
         if st.resuming {
-            emit_ccs(cx.common);
+            emit_ccs(&mut cx.common);
             cx.common
                 .record_layer
                 .start_encrypting();
-            emit_finished(&st.secrets, &mut st.transcript, cx.common);
+            emit_finished(&st.secrets, &mut st.transcript, &mut cx.common);
         }
 
         cx.common.start_traffic();
