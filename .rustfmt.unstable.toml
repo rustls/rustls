@@ -1,0 +1,6 @@
+# keep in sync with .rustfmt.toml
+chain_width = 40
+
+# format imports
+group_imports = "StdExternalCrate"
+imports_granularity = "Module"
