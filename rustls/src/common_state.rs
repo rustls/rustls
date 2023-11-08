@@ -403,41 +403,13 @@ impl CommonState {
         self.negotiated_version
     }
 
-    // TODO remove?
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
         msg: Message,
-        mut state: Box<dyn State<Data>>,
+        state: Box<dyn State<Data>>,
         data: &mut Data,
     ) -> Result<Box<dyn State<Data>>, Error> {
-        // For TLS1.2, outside of the handshake, send rejection alerts for
-        // renegotiation requests.  These can occur any time.
-        if self.may_receive_application_data && !self.is_tls13() {
-            let reject_ty = match self.side {
-                Side::Client => HandshakeType::HelloRequest,
-                Side::Server => HandshakeType::ClientHello,
-            };
-            if msg.is_handshake_type(reject_ty) {
-                self.send_warning_alert(AlertDescription::NoRenegotiation);
-                return Ok(state);
-            }
-        }
-
-        let mut cx = Context {
-            common: CommonState2::Eager { common_state: self },
-            data,
-        };
-        match state.handle(&mut cx, msg) {
-            Ok(next) => {
-                state = next;
-                Ok(state)
-            }
-            Err(e @ Error::InappropriateMessage { .. })
-            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
-                Err(self.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
-            }
-            Err(e) => Err(e),
-        }
+        CommonState2::Eager { common_state: self }.process_main_protocol(msg, state, data)
     }
 
     /// Send plaintext application data, fragmenting and
@@ -600,12 +572,6 @@ impl CommonState {
         self.send_fatal_alert(AlertDescription::MissingExtension, why)
     }
 
-    // TODO remove?
-    fn send_warning_alert(&mut self, desc: AlertDescription) {
-        warn!("Sending warning alert {:?}", desc);
-        self.send_warning_alert_no_log(desc);
-    }
-
     pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
         CommonState2::Eager { common_state: self }.process_alert(alert)
     }
@@ -625,10 +591,6 @@ impl CommonState {
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
         CommonState2::Eager { common_state: self }.send_close_notify()
-    }
-
-    fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
-        CommonState2::Eager { common_state: self }.send_warning_alert_no_log(desc)
     }
 
     pub(crate) fn get_alpn_protocol(&self) -> Option<&[u8]> {
