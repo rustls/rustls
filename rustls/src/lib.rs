@@ -421,6 +421,11 @@ pub use crate::error::{
 };
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
+pub use crate::ll::{
+    AppDataAvailable, AppDataRecord, EncodeError, EncryptError, InsufficientSizeError,
+    LlConnectionCommon, LlState, LlStatus, MayEncryptAppData, MustEncodeTlsData,
+    MustTransmitTlsData,
+};
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::handshake::DistinguishedName;
 pub use crate::stream::{Stream, StreamOwned};
@@ -448,7 +453,8 @@ pub mod client {
     pub use builder::WantsClientCert;
     pub use client_conn::{
         ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
-        ResolvesClientCert, Resumption, ServerName, Tls12Resumption, WriteEarlyData,
+        LlClientConnection, ResolvesClientCert, Resumption, ServerName, Tls12Resumption,
+        WriteEarlyData,
     };
     pub use handy::ClientSessionMemoryCache;
 

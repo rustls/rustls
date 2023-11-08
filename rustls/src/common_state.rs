@@ -2,7 +2,7 @@ use core::ops;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
-use crate::ll::LlDeferredActions;
+use crate::ll::{EncryptError, LlDeferredActions};
 #[cfg(feature = "logging")]
 use crate::log::{debug, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -39,6 +39,55 @@ pub(crate) enum CommonState2<'a> {
 }
 
 impl CommonState2<'_> {
+    fn reborrow(&mut self) -> CommonState2 {
+        match self {
+            CommonState2::Eager { common_state } => CommonState2::Eager { common_state },
+            CommonState2::Lazy {
+                common_state,
+                deferred_actions,
+            } => CommonState2::Lazy {
+                common_state,
+                deferred_actions,
+            },
+        }
+    }
+
+    pub(crate) fn process_main_protocol<Data>(
+        &mut self,
+        msg: Message,
+        mut state: Box<dyn State<Data>>,
+        data: &mut Data,
+    ) -> Result<Box<dyn State<Data>>, Error> {
+        // For TLS1.2, outside of the handshake, send rejection alerts for
+        // renegotiation requests.  These can occur any time.
+        if self.may_receive_application_data && !self.is_tls13() {
+            let reject_ty = match self.side {
+                Side::Client => HandshakeType::HelloRequest,
+                Side::Server => HandshakeType::ClientHello,
+            };
+            if msg.is_handshake_type(reject_ty) {
+                self.send_warning_alert(AlertDescription::NoRenegotiation);
+                return Ok(state);
+            }
+        }
+
+        let mut cx = Context {
+            common: self.reborrow(),
+            data,
+        };
+        match state.handle(&mut cx, msg) {
+            Ok(next) => {
+                state = next;
+                Ok(state)
+            }
+            Err(e @ Error::InappropriateMessage { .. })
+            | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
+                Err(self.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     // Changing the keys must not span any fragmented handshake
     // messages.  Otherwise the defragmented messages will have
     // been protected with two different record layer protections,
@@ -88,7 +137,9 @@ impl CommonState2<'_> {
     pub(crate) fn start_outgoing_traffic(&mut self) {
         match self {
             CommonState2::Eager { common_state } => common_state.start_outgoing_traffic(),
-            CommonState2::Lazy { .. } => todo!(),
+            CommonState2::Lazy { common_state, .. } => {
+                common_state.may_send_application_data = true;
+            }
         }
     }
 
@@ -147,6 +198,42 @@ impl CommonState2<'_> {
                 deferred_actions, ..
             } => deferred_actions.take_received_plaintext(bytes),
         }
+    }
+
+    fn send_warning_alert(&mut self, desc: AlertDescription) {
+        warn!("Sending warning alert {:?}", desc);
+        self.send_warning_alert_no_log(desc);
+    }
+
+    pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
+        // Reject unknown AlertLevels.
+        if let AlertLevel::Unknown(_) = alert.level {
+            return Err(self.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                Error::AlertReceived(alert.description),
+            ));
+        }
+
+        // If we get a CloseNotify, make a note to declare EOF to our
+        // caller.
+        if alert.description == AlertDescription::CloseNotify {
+            self.has_received_close_notify = true;
+            return Ok(());
+        }
+
+        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
+        // (except, for no good reason, user_cancelled).
+        let err = Error::AlertReceived(alert.description);
+        if alert.level == AlertLevel::Warning {
+            if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
+                return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
+            } else {
+                warn!("TLS alert warning received: {:#?}", alert);
+                return Ok(());
+            }
+        }
+
+        Err(err)
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
@@ -316,6 +403,7 @@ impl CommonState {
         self.negotiated_version
     }
 
+    // TODO remove?
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
         msg: Message,
@@ -512,40 +600,14 @@ impl CommonState {
         self.send_fatal_alert(AlertDescription::MissingExtension, why)
     }
 
+    // TODO remove?
     fn send_warning_alert(&mut self, desc: AlertDescription) {
         warn!("Sending warning alert {:?}", desc);
         self.send_warning_alert_no_log(desc);
     }
 
     pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
-        // Reject unknown AlertLevels.
-        if let AlertLevel::Unknown(_) = alert.level {
-            return Err(self.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                Error::AlertReceived(alert.description),
-            ));
-        }
-
-        // If we get a CloseNotify, make a note to declare EOF to our
-        // caller.
-        if alert.description == AlertDescription::CloseNotify {
-            self.has_received_close_notify = true;
-            return Ok(());
-        }
-
-        // Warnings are nonfatal for TLS1.2, but outlawed in TLS1.3
-        // (except, for no good reason, user_cancelled).
-        let err = Error::AlertReceived(alert.description);
-        if alert.level == AlertLevel::Warning {
-            if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
-                return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
-            } else {
-                warn!("TLS alert warning received: {:#?}", alert);
-                return Ok(());
-            }
-        }
-
-        Err(err)
+        CommonState2::Eager { common_state: self }.process_alert(alert)
     }
 
     pub(crate) fn send_fatal_alert(
@@ -567,11 +629,6 @@ impl CommonState {
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
         CommonState2::Eager { common_state: self }.send_warning_alert_no_log(desc)
-    }
-
-    pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
-        self.message_fragmenter
-            .set_max_fragment_size(new)
     }
 
     pub(crate) fn get_alpn_protocol(&self) -> Option<&[u8]> {
@@ -621,12 +678,110 @@ pub(crate) struct LlCommonState {
     inner: CommonStateInner,
 }
 
+impl ops::DerefMut for LlCommonState {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl ops::Deref for LlCommonState {
+    type Target = CommonStateInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
 impl LlCommonState {
-    #[allow(dead_code)]
     pub(crate) fn new(side: Side) -> Self {
         Self {
             inner: CommonStateInner::new(side),
         }
+    }
+
+    pub(crate) fn process_alert(
+        &mut self,
+        alert: &AlertMessagePayload,
+        deferred_actions: &mut LlDeferredActions,
+    ) -> Result<(), Error> {
+        CommonState2::Lazy {
+            common_state: self,
+            deferred_actions,
+        }
+        .process_alert(alert)
+    }
+
+    pub(crate) fn send_fatal_alert(
+        &mut self,
+        desc: AlertDescription,
+        err: impl Into<Error>,
+        deferred_actions: &mut LlDeferredActions,
+    ) -> Error {
+        CommonState2::Lazy {
+            common_state: self,
+            deferred_actions,
+        }
+        .send_fatal_alert(desc, err)
+    }
+
+    pub(crate) fn send_close_notify(&mut self, deferred_actions: &mut LlDeferredActions) {
+        CommonState2::Lazy {
+            common_state: self,
+            deferred_actions,
+        }
+        .send_close_notify()
+    }
+
+    pub(crate) fn eager_send_some_plaintext(
+        &mut self,
+        plaintext: &[u8],
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, EncryptError> {
+        if plaintext.is_empty() {
+            return Ok(0);
+        }
+
+        let fragments = self.message_fragmenter.fragment_slice(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2,
+            plaintext,
+        );
+
+        let Some(remaining_encryptions) = self.record_layer.remaining_write_seq() else {
+            return Err(EncryptError::EncryptExhausted);
+        };
+        let num_fragments = fragments.count();
+
+        if num_fragments as u64 > remaining_encryptions.get() {
+            return Err(EncryptError::EncryptExhausted);
+        }
+
+        // TODO compute and check the required size
+        let mut written = 0;
+
+        if let Some(message) = self.queued_key_update_message.take() {
+            let len = message.len();
+            outgoing_tls[written..written + len].copy_from_slice(&message);
+            written += len;
+        }
+
+        let fragments = self.message_fragmenter.fragment_slice(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2,
+            plaintext,
+        );
+        for m in fragments {
+            let em = self
+                .record_layer
+                .encrypt_outgoing(m)
+                .encode();
+
+            let len = em.len();
+            outgoing_tls[written..written + len].copy_from_slice(&em);
+            written += len;
+        }
+
+        Ok(written)
     }
 }
 
@@ -701,6 +856,11 @@ impl CommonStateInner {
             .prepare_message_encrypter(enc);
         self.record_layer
             .prepare_message_decrypter(dec);
+    }
+
+    pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {
+        self.message_fragmenter
+            .set_max_fragment_size(new)
     }
 
     pub(crate) fn is_quic(&self) -> bool {

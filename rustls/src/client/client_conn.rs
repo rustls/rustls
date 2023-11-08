@@ -1,10 +1,11 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::common_state::{CommonState, CommonState2, Protocol, Side};
-use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::common_state::{CommonState, CommonState2, LlCommonState, Protocol, Side};
+use crate::conn::{ConnectionCommon, ConnectionCore, LlConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::{DnsName, DnsNameRef, InvalidDnsNameError};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
+use crate::ll::LlDeferredActions;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
@@ -14,7 +15,7 @@ use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::verify;
 use crate::versions;
-use crate::KeyLog;
+use crate::{KeyLog, LlConnectionCommon};
 
 use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 use super::hs;
@@ -719,6 +720,62 @@ impl ConnectionCore<ClientConnectionData> {
 
     pub(crate) fn is_early_data_accepted(&self) -> bool {
         self.data.early_data.is_accepted()
+    }
+}
+
+/// A lower level version of `ClientConnection` that operates on caller-provided buffers
+pub struct LlClientConnection {
+    inner: LlConnectionCommon<ClientConnectionData>,
+}
+
+impl LlClientConnection {
+    /// Make a new ClientConnection. `config` controls how we behave in the TLS protocol, `name` is
+    /// the name of the server we want to talk to.
+    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
+        Ok(Self {
+            inner: LlConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
+        })
+    }
+}
+
+impl Deref for LlClientConnection {
+    type Target = LlConnectionCommon<ClientConnectionData>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for LlClientConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl LlConnectionCore<ClientConnectionData> {
+    fn for_client(
+        config: Arc<ClientConfig>,
+        name: ServerName,
+        extra_exts: Vec<ClientExtension>,
+        proto: Protocol,
+    ) -> Result<Self, Error> {
+        let mut common_state = LlCommonState::new(Side::Client);
+        common_state.set_max_fragment_size(config.max_fragment_size)?;
+        common_state.protocol = proto;
+        common_state.enable_secret_extraction = config.enable_secret_extraction;
+        let mut data = ClientConnectionData::new();
+        let mut deferred_actions = LlDeferredActions::default();
+
+        let mut cx = hs::ClientContext {
+            common: CommonState2::Lazy {
+                common_state: &mut common_state,
+                deferred_actions: &mut deferred_actions,
+            },
+            data: &mut data,
+        };
+
+        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        Ok(Self::new(common_state, data, deferred_actions, state))
     }
 }
 

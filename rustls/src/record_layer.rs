@@ -1,3 +1,5 @@
+use core::num::NonZeroU64;
+
 use crate::crypto::cipher::{MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
@@ -202,6 +204,13 @@ impl RecordLayer {
 
     pub(crate) fn write_seq(&self) -> u64 {
         self.write_seq
+    }
+
+    /// Returns the number of remaining write sequences
+    pub(crate) fn remaining_write_seq(&self) -> Option<NonZeroU64> {
+        SEQ_SOFT_LIMIT
+            .checked_sub(self.write_seq)
+            .and_then(NonZeroU64::new)
     }
 
     pub(crate) fn read_seq(&self) -> u64 {

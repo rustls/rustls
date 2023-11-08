@@ -165,6 +165,15 @@ impl OpaqueMessage {
         buf
     }
 
+    pub fn encode_len(&self) -> usize {
+        let typ = 1;
+        let version = 2;
+        let payload_len = 2;
+        let payload = self.payload.0.len();
+
+        typ + version + payload_len + payload
+    }
+
     /// Force conversion into a plaintext message.
     ///
     /// This should only be used for messages that are known to be in plaintext. Otherwise, the
