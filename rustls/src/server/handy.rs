@@ -13,7 +13,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
-use std::collections;
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// Something which never stores sessions.
@@ -149,14 +149,14 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
 /// on client-supplied server name (via SNI).
 #[derive(Debug)]
 pub struct ResolvesServerCertUsingSni {
-    by_name: collections::HashMap<String, Arc<sign::CertifiedKey>>,
+    by_name: HashMap<String, Arc<sign::CertifiedKey>>,
 }
 
 impl ResolvesServerCertUsingSni {
     /// Create a new and empty (i.e., knows no certificates) resolver.
     pub fn new() -> Self {
         Self {
-            by_name: collections::HashMap::new(),
+            by_name: HashMap::new(),
         }
     }
 
