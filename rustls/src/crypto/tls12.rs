@@ -76,7 +76,7 @@ pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: 
     }
 }
 
-#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
+#[cfg(all(test, feature = "ring"))]
 mod tests {
     use crate::crypto::hmac::Hmac;
     use crate::test_provider::hmac;
