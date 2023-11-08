@@ -200,6 +200,11 @@ impl CommonState2<'_> {
         }
     }
 
+    #[cfg(feature = "quic")]
+    pub(crate) fn missing_extension(&mut self, why: PeerMisbehaved) -> Error {
+        self.send_fatal_alert(AlertDescription::MissingExtension, why)
+    }
+
     fn send_warning_alert(&mut self, desc: AlertDescription) {
         warn!("Sending warning alert {:?}", desc);
         self.send_warning_alert_no_log(desc);
@@ -565,11 +570,6 @@ impl CommonState {
 
     fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext.append(bytes.0);
-    }
-
-    #[cfg(feature = "quic")]
-    pub(crate) fn missing_extension(&mut self, why: PeerMisbehaved) -> Error {
-        self.send_fatal_alert(AlertDescription::MissingExtension, why)
     }
 
     pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
