@@ -1223,6 +1223,7 @@ fn client_check_server_certificate_helper_api() {
     }
 }
 
+#[derive(Debug)]
 struct ClientCheckCertResolve {
     query_count: AtomicUsize,
     expect_queries: usize,

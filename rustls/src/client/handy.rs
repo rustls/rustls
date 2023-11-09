@@ -170,6 +170,7 @@ impl fmt::Debug for ClientSessionMemoryCache {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct FailResolveClientCert {}
 
 impl client::ResolvesClientCert for FailResolveClientCert {
@@ -208,6 +209,14 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 
     fn has_certs(&self) -> bool {
         true
+    }
+}
+
+impl fmt::Debug for AlwaysResolvesClientCert {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AlwaysResolvesClientCert")
+            .field("cert", &self.0.cert)
+            .finish()
     }
 }
 
