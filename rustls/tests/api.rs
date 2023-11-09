@@ -4849,6 +4849,39 @@ fn bad_client_max_fragment_sizes() {
     );
 }
 
+#[test]
+fn handshakes_complete_and_data_flows_with_gratuitious_max_fragment_sizes() {
+    // general exercising of msgs::fragmenter and msgs::deframer
+    for kt in ALL_KEY_TYPES.iter() {
+        for version in rustls::ALL_VERSIONS {
+            // no hidden significance to these numbers
+            for frag_size in [37, 61, 101, 257] {
+                println!("test kt={kt:?} version={version:?} frag={frag_size:?}");
+                let mut client_config = make_client_config_with_versions(*kt, &[version]);
+                client_config.max_fragment_size = Some(frag_size);
+                let mut server_config = make_server_config(*kt);
+                server_config.max_fragment_size = Some(frag_size);
+
+                let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+                do_handshake(&mut client, &mut server);
+
+                // check server -> client data flow
+                let pattern = (0x00..=0xffu8).collect::<Vec<u8>>();
+                assert_eq!(pattern.len(), server.writer().write(&pattern).unwrap());
+                transfer(&mut server, &mut client);
+                client.process_new_packets().unwrap();
+                check_read(&mut client.reader(), &pattern);
+
+                // and client -> server
+                assert_eq!(pattern.len(), client.writer().write(&pattern).unwrap());
+                transfer(&mut client, &mut server);
+                server.process_new_packets().unwrap();
+                check_read(&mut server.reader(), &pattern);
+            }
+        }
+    }
+}
+
 fn assert_lt(left: usize, right: usize) {
     if left >= right {
         panic!("expected {} < {}", left, right);
