@@ -81,17 +81,6 @@ impl ServerCertVerifierBuilder {
         self
     }
 
-    /// Sets which signature verification algorithms are enabled.
-    ///
-    /// If this is called multiple times, the last call wins.
-    pub fn with_signature_verification_algorithms(
-        mut self,
-        supported_algs: WebPkiSupportedAlgorithms,
-    ) -> Self {
-        self.supported_algs = supported_algs;
-        self
-    }
-
     /// Build a server certificate verifier, allowing control over the root certificates to use as
     /// trust anchors, and to control how server certificate revocation checking is performed.
     ///
