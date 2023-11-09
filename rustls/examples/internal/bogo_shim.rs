@@ -319,6 +319,7 @@ impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
     }
 }
 
+#[derive(Debug)]
 struct FixedSignatureSchemeClientCertResolver {
     resolver: Arc<dyn client::ResolvesClientCert>,
     scheme: SignatureScheme,
