@@ -591,9 +591,20 @@ impl LlMessageDeframer {
         buf: &mut [u8],
     ) -> Result<HandshakePayloadState, Error> {
         let meta = match &mut self.joining_hs {
-            Some(_meta) => {
-                // currently untested
-                todo!()
+            Some(meta) => {
+                debug_assert_eq!(meta.quic, quic);
+
+                let dst = &mut buf[meta.payload.end..meta.payload.end + payload.len()];
+                dst.copy_from_slice(payload);
+                meta.message.end = end;
+                meta.payload.end += payload.len();
+
+                // If we haven't parsed the payload size yet, try to do so now.
+                if meta.expected_len.is_none() {
+                    meta.expected_len = payload_size(&buf[meta.payload.start..meta.payload.end])?;
+                }
+
+                meta
             }
             None => {
                 // We've found a new handshake message here.
