@@ -756,7 +756,7 @@ impl<Data> ConnectionCore<Data> {
 
 pub(crate) struct LlConnectionCore<Data> {
     pub(crate) common_state: LlCommonState,
-    data: Data,
+    pub(crate) data: Data,
     pub(crate) deferred_actions: LlDeferredActions,
     message_deframer: LlMessageDeframer,
     pub(crate) state: Result<Box<dyn State<Data>>, Error>,

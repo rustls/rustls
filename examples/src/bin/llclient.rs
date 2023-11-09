@@ -7,26 +7,41 @@ use rustls::client::{ClientConnectionData, LlClientConnection};
 #[allow(unused_imports)]
 use rustls::version::{TLS12, TLS13};
 use rustls::{
-    AppDataRecord, ClientConfig, EncodeError, InsufficientSizeError, LlState, LlStatus,
-    MayEncryptAppData, RootCertStore,
+    AppDataRecord, ClientConfig, EarlyDataError, EncodeError, EncryptError, InsufficientSizeError,
+    LlState, LlStatus, MayEncryptAppData, RootCertStore,
 };
 
 const SERVER_NAME: &str = "example.com";
 const PORT: u16 = 443;
-const MAX_ITERATIONS: usize = 15;
+const MAX_ITERATIONS: usize = 20;
+const SEND_EARLY_DATA: bool = true;
+const EARLY_DATA: &[u8] = b"hello";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let config = ClientConfig::builder()
+    let mut config = ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
-        .with_protocol_versions(&[&TLS12])
-        // .with_protocol_versions(&[&TLS13])
+        // .with_protocol_versions(&[&TLS12])
+        .with_protocol_versions(&[&TLS13])
         .unwrap()
         .with_root_certificates(build_root_store())
         .with_no_client_auth();
+    config.enable_early_data = SEND_EARLY_DATA;
 
+    let config = Arc::new(config);
+
+    converse(&config, false)?;
+    if SEND_EARLY_DATA {
+        eprintln!("---- second connection ----");
+        converse(&config, true)?;
+    }
+
+    Ok(())
+}
+
+fn converse(config: &Arc<ClientConfig>, send_early_data: bool) -> Result<(), Box<dyn Error>> {
+    let mut conn = LlClientConnection::new(Arc::clone(config), SERVER_NAME.try_into()?)?;
     let mut sock = TcpStream::connect(format!("{SERVER_NAME}:{PORT}"))?;
-    let mut conn = LlClientConnection::new(Arc::new(config), SERVER_NAME.try_into()?)?;
 
     let mut incoming_tls = [0; 16 * 1024];
     let mut incoming_used = 0;
@@ -37,6 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut open_connection = true;
     let mut sent_request = false;
     let mut received_response = false;
+    let mut sent_early_data = false;
 
     let mut iter_count = 0;
     while open_connection {
@@ -52,30 +68,57 @@ fn main() -> Result<(), Box<dyn Error>> {
                     } = res?;
                     discard += new_discard;
 
-                    println!("{}", core::str::from_utf8(payload)?);
+                    if payload.starts_with(b"HTTP") {
+                        let response = core::str::from_utf8(payload)?;
+                        let header = response
+                            .lines()
+                            .next()
+                            .unwrap_or(response);
+
+                        println!("{header}");
+                    } else {
+                        println!("(.. continued HTTP response ..)");
+                    }
+
                     received_response = true;
                 }
             }
 
             LlState::MustEncodeTlsData(mut state) => {
-                let written = match state.encode(&mut outgoing_tls[outgoing_used..]) {
-                    Ok(written) => written,
-                    Err(EncodeError::InsufficientSize(InsufficientSizeError { required_size })) => {
-                        let new_len = outgoing_used + required_size;
-                        outgoing_tls.resize(new_len, 0);
-                        eprintln!("resized `outgoing_tls` buffer to {new_len}B");
-
-                        state
-                            .encode(&mut outgoing_tls[outgoing_used..])
-                            .expect("should not fail")
-                    }
-                    Err(e) => return Err(e.into()),
-                };
-
-                outgoing_used += written;
+                try_or_resize_and_retry(
+                    |out_buffer| state.encode(out_buffer),
+                    |e| {
+                        if let EncodeError::InsufficientSize(is) = &e {
+                            Ok(*is)
+                        } else {
+                            Err(e.into())
+                        }
+                    },
+                    &mut outgoing_tls,
+                    &mut outgoing_used,
+                )?;
             }
 
             LlState::MustTransmitTlsData(mut state) => {
+                if let Some(mut may_encrypt_early_data) = state.may_encrypt_early_data() {
+                    let written = try_or_resize_and_retry(
+                        |out_buffer| may_encrypt_early_data.encrypt(EARLY_DATA, out_buffer),
+                        |e| {
+                            if let EarlyDataError::Encrypt(EncryptError::InsufficientSize(is)) = &e
+                            {
+                                Ok(*is)
+                            } else {
+                                Err(e.into())
+                            }
+                        },
+                        &mut outgoing_tls,
+                        &mut outgoing_used,
+                    )?;
+
+                    eprintln!("queued {written}B of early data");
+                    sent_early_data = true;
+                }
+
                 if let Some(mut may_encrypt) = state.may_encrypt() {
                     make_http_request(
                         &mut sent_request,
@@ -107,6 +150,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                     // `MustTransmitTlsData` state. the server should have already a response which
                     // we can read out from the socket
                     recv_tls(&mut sock, &mut incoming_tls, &mut incoming_used)?;
+                } else {
+                    try_or_resize_and_retry(
+                        |out_buffer| may_encrypt.queue_close_notify(out_buffer),
+                        |e| {
+                            if let EncryptError::InsufficientSize(is) = &e {
+                                Ok(*is)
+                            } else {
+                                Err(e.into())
+                            }
+                        },
+                        &mut outgoing_tls,
+                        &mut outgoing_used,
+                    )?;
+                    send_tls(&mut sock, &mut outgoing_tls, &mut outgoing_used)?;
+                    open_connection = false;
                 }
             }
 
@@ -134,10 +192,38 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     assert!(sent_request);
     assert!(received_response);
+    assert_eq!(send_early_data, sent_early_data);
     assert_eq!(0, incoming_used);
     assert_eq!(0, outgoing_used);
 
     Ok(())
+}
+
+fn try_or_resize_and_retry<E>(
+    mut f: impl FnMut(&mut [u8]) -> Result<usize, E>,
+    map_err: impl FnOnce(E) -> Result<InsufficientSizeError, Box<dyn Error>>,
+    outgoing_tls: &mut Vec<u8>,
+    outgoing_used: &mut usize,
+) -> Result<usize, Box<dyn Error>>
+where
+    E: Error + 'static,
+{
+    let written = match f(&mut outgoing_tls[*outgoing_used..]) {
+        Ok(written) => written,
+
+        Err(e) => {
+            let InsufficientSizeError { required_size } = map_err(e)?;
+            let new_len = *outgoing_used + required_size;
+            outgoing_tls.resize(new_len, 0);
+            eprintln!("resized `outgoing_tls` buffer to {new_len}B");
+
+            f(&mut outgoing_tls[*outgoing_used..])?
+        }
+    };
+
+    *outgoing_used += written;
+
+    Ok(written)
 }
 
 fn recv_tls(

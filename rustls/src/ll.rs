@@ -3,7 +3,9 @@
 use alloc::collections::VecDeque;
 use core::num::NonZeroUsize;
 use core::{fmt, mem};
+use std::error::Error as StdError;
 
+use crate::client::ClientConnectionData;
 use crate::conn::LlConnectionCore;
 use crate::crypto::cipher::OpaqueMessage;
 use crate::msgs::base::Payload;
@@ -71,16 +73,7 @@ impl<Data> LlConnectionCommon<Data> {
 
                 self.core.state = Ok(state);
             } else if self.wants_write {
-                let may_send_application_data = self
-                    .core
-                    .common_state
-                    .may_send_application_data;
-
-                break MustTransmitTlsData {
-                    conn: self,
-                    may_send_application_data,
-                }
-                .into();
+                break MustTransmitTlsData { conn: self }.into();
             } else if self
                 .core
                 .common_state
@@ -314,6 +307,8 @@ impl fmt::Display for EncodeError {
     }
 }
 
+impl StdError for EncodeError {}
+
 /// Errors that may arise when encrypting application data
 #[derive(Debug)]
 pub enum EncryptError {
@@ -330,19 +325,30 @@ impl From<InsufficientSizeError> for EncryptError {
     }
 }
 
+impl fmt::Display for EncryptError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InsufficientSize(InsufficientSizeError { required_size }) => write!(
+                f,
+                "cannot encrypt due to insufficient size, {required_size} bytes are required"
+            ),
+            Self::EncryptExhausted => f.write_str("encrypter has been exhausted"),
+        }
+    }
+}
+
+impl StdError for EncryptError {}
+
 /// Provided buffer was too small
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct InsufficientSizeError {
     /// buffer must be at least this size
     pub required_size: usize,
 }
 
-impl std::error::Error for EncodeError {}
-
 /// Previously encoded TLS data must be transmitted
 pub struct MustTransmitTlsData<'c, Data> {
     conn: &'c mut LlConnectionCommon<Data>,
-    may_send_application_data: bool,
 }
 
 impl<Data> MustTransmitTlsData<'_, Data> {
@@ -357,8 +363,30 @@ impl<Data> MustTransmitTlsData<'_, Data> {
     /// IF allowed by the protocol
     // XXX unclear if this stage can be reached in practice
     pub fn may_encrypt(&mut self) -> Option<MayEncryptAppData<Data>> {
-        if self.may_send_application_data {
+        if self
+            .conn
+            .core
+            .common_state
+            .may_send_application_data
+        {
             Some(MayEncryptAppData { conn: self.conn })
+        } else {
+            None
+        }
+    }
+}
+
+impl MustTransmitTlsData<'_, ClientConnectionData> {
+    ///
+    pub fn may_encrypt_early_data(&mut self) -> Option<MayEncryptEarlyData> {
+        if self
+            .conn
+            .core
+            .data
+            .early_data
+            .is_enabled()
+        {
+            Some(MayEncryptEarlyData { conn: self.conn })
         } else {
             None
         }
@@ -397,6 +425,61 @@ impl<Data> MayEncryptAppData<'_, Data> {
             .eager_send_close_notify(outgoing_tls)
     }
 }
+
+pub struct MayEncryptEarlyData<'c> {
+    conn: &'c mut LlConnectionCommon<ClientConnectionData>,
+}
+
+impl MayEncryptEarlyData<'_> {
+    ///
+    pub fn encrypt(
+        &mut self,
+        early_data: &[u8],
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, EarlyDataError> {
+        let Some(allowed) = self
+            .conn
+            .core
+            .data
+            .early_data
+            .check_write_opt(early_data.len())
+        else {
+            return Err(EarlyDataError::ExceededAllowedEarlyData);
+        };
+
+        self.conn
+            .core
+            .common_state
+            .eager_send_some_plaintext(&early_data[..allowed], outgoing_tls)
+            .map_err(|e| e.into())
+    }
+}
+
+/// Errors that may arise when encrypting early (RTT-0) data
+#[derive(Debug)]
+pub enum EarlyDataError {
+    /// Cannot encrypt more early data due to imposed limits
+    ExceededAllowedEarlyData,
+    /// Encryption error
+    Encrypt(EncryptError),
+}
+
+impl From<EncryptError> for EarlyDataError {
+    fn from(v: EncryptError) -> Self {
+        Self::Encrypt(v)
+    }
+}
+
+impl fmt::Display for EarlyDataError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ExceededAllowedEarlyData => f.write_str("cannot send any more early data"),
+            Self::Encrypt(e) => fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl StdError for EarlyDataError {}
 
 #[derive(Default)]
 pub(crate) struct LlDeferredActions {

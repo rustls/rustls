@@ -474,7 +474,7 @@ enum EarlyDataState {
     Rejected,
 }
 
-pub(super) struct EarlyData {
+pub(crate) struct EarlyData {
     state: EarlyDataState,
     left: usize,
 }
@@ -487,7 +487,7 @@ impl EarlyData {
         }
     }
 
-    pub(super) fn is_enabled(&self) -> bool {
+    pub(crate) fn is_enabled(&self) -> bool {
         matches!(self.state, EarlyDataState::Ready | EarlyDataState::Accepted)
     }
 
@@ -524,6 +524,11 @@ impl EarlyData {
     }
 
     fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+        self.check_write_opt(sz)
+            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
+    }
+
+    pub(crate) fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
         match self.state {
             EarlyDataState::Disabled => unreachable!(),
             EarlyDataState::Ready | EarlyDataState::Accepted => {
@@ -534,11 +539,9 @@ impl EarlyData {
                     sz
                 };
 
-                Ok(take)
+                Some(take)
             }
-            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
-                Err(io::Error::from(io::ErrorKind::InvalidInput))
-            }
+            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => None,
         }
     }
 
@@ -781,7 +784,7 @@ impl LlConnectionCore<ClientConnectionData> {
 
 /// State associated with a client connection.
 pub struct ClientConnectionData {
-    pub(super) early_data: EarlyData,
+    pub(crate) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
 }
 

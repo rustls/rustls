@@ -422,9 +422,9 @@ pub use crate::error::{
 pub use crate::key_log::{KeyLog, NoKeyLog};
 pub use crate::key_log_file::KeyLogFile;
 pub use crate::ll::{
-    AppDataAvailable, AppDataRecord, EncodeError, EncryptError, InsufficientSizeError,
-    LlConnectionCommon, LlState, LlStatus, MayEncryptAppData, MustEncodeTlsData,
-    MustTransmitTlsData,
+    AppDataAvailable, AppDataRecord, EarlyDataError, EncodeError, EncryptError,
+    InsufficientSizeError, LlConnectionCommon, LlState, LlStatus, MayEncryptAppData,
+    MustEncodeTlsData, MustTransmitTlsData,
 };
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::handshake::DistinguishedName;
