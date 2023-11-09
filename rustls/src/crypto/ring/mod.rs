@@ -1,10 +1,13 @@
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
 use crate::suites::SupportedCipherSuite;
+use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::Error;
 
 use pki_types::PrivateKeyDer;
+use webpki::ring as webpki_algs;
 
 use alloc::borrow::ToOwned;
 use alloc::sync::Arc;
@@ -97,6 +100,67 @@ pub mod cipher_suite {
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     };
 }
+
+/// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
+/// compiled against *ring*.
+pub(crate) static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
+    all: &[
+        webpki_algs::ECDSA_P256_SHA256,
+        webpki_algs::ECDSA_P256_SHA384,
+        webpki_algs::ECDSA_P384_SHA256,
+        webpki_algs::ECDSA_P384_SHA384,
+        webpki_algs::ED25519,
+        webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
+        webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
+        webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
+        webpki_algs::RSA_PKCS1_2048_8192_SHA256,
+        webpki_algs::RSA_PKCS1_2048_8192_SHA384,
+        webpki_algs::RSA_PKCS1_2048_8192_SHA512,
+        webpki_algs::RSA_PKCS1_3072_8192_SHA384,
+    ],
+    mapping: &[
+        // nb. for TLS1.2 the curve is not fixed by SignatureScheme. for TLS1.3 it is.
+        (
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            &[
+                webpki_algs::ECDSA_P384_SHA384,
+                webpki_algs::ECDSA_P256_SHA384,
+            ],
+        ),
+        (
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            &[
+                webpki_algs::ECDSA_P256_SHA256,
+                webpki_algs::ECDSA_P384_SHA256,
+            ],
+        ),
+        (SignatureScheme::ED25519, &[webpki_algs::ED25519]),
+        (
+            SignatureScheme::RSA_PSS_SHA512,
+            &[webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PSS_SHA384,
+            &[webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PSS_SHA256,
+            &[webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
+        ),
+        (
+            SignatureScheme::RSA_PKCS1_SHA512,
+            &[webpki_algs::RSA_PKCS1_2048_8192_SHA512],
+        ),
+        (
+            SignatureScheme::RSA_PKCS1_SHA384,
+            &[webpki_algs::RSA_PKCS1_2048_8192_SHA384],
+        ),
+        (
+            SignatureScheme::RSA_PKCS1_SHA256,
+            &[webpki_algs::RSA_PKCS1_2048_8192_SHA256],
+        ),
+    ],
+};
 
 /// All defined key exchange groups supported by *ring* appear in this module.
 ///

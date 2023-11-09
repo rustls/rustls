@@ -164,7 +164,7 @@ impl ClientCertVerifierBuilder {
 
         #[cfg(feature = "ring")]
         if self.supported_algs.is_none() {
-            self.supported_algs = Some(super::verify::SUPPORTED_SIG_ALGS);
+            self.supported_algs = Some(crate::crypto::ring::SUPPORTED_SIG_ALGS);
         }
 
         let supported_algs = self
