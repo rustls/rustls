@@ -2,8 +2,6 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::{CertificateDer, SignatureVerificationAlgorithm, UnixTime};
-#[cfg(feature = "ring")]
-use webpki::ring as webpki_algs;
 
 use super::anchors::RootCertStore;
 use super::pki_error;
@@ -144,68 +142,6 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
     }
 }
 
-/// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
-/// compiled against *ring*.
-#[cfg(feature = "ring")]
-pub(crate) static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
-    all: &[
-        webpki_algs::ECDSA_P256_SHA256,
-        webpki_algs::ECDSA_P256_SHA384,
-        webpki_algs::ECDSA_P384_SHA256,
-        webpki_algs::ECDSA_P384_SHA384,
-        webpki_algs::ED25519,
-        webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
-        webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
-        webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY,
-        webpki_algs::RSA_PKCS1_2048_8192_SHA256,
-        webpki_algs::RSA_PKCS1_2048_8192_SHA384,
-        webpki_algs::RSA_PKCS1_2048_8192_SHA512,
-        webpki_algs::RSA_PKCS1_3072_8192_SHA384,
-    ],
-    mapping: &[
-        // nb. for TLS1.2 the curve is not fixed by SignatureScheme. for TLS1.3 it is.
-        (
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            &[
-                webpki_algs::ECDSA_P384_SHA384,
-                webpki_algs::ECDSA_P256_SHA384,
-            ],
-        ),
-        (
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            &[
-                webpki_algs::ECDSA_P256_SHA256,
-                webpki_algs::ECDSA_P384_SHA256,
-            ],
-        ),
-        (SignatureScheme::ED25519, &[webpki_algs::ED25519]),
-        (
-            SignatureScheme::RSA_PSS_SHA512,
-            &[webpki_algs::RSA_PSS_2048_8192_SHA512_LEGACY_KEY],
-        ),
-        (
-            SignatureScheme::RSA_PSS_SHA384,
-            &[webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY],
-        ),
-        (
-            SignatureScheme::RSA_PSS_SHA256,
-            &[webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY],
-        ),
-        (
-            SignatureScheme::RSA_PKCS1_SHA512,
-            &[webpki_algs::RSA_PKCS1_2048_8192_SHA512],
-        ),
-        (
-            SignatureScheme::RSA_PKCS1_SHA384,
-            &[webpki_algs::RSA_PKCS1_2048_8192_SHA384],
-        ),
-        (
-            SignatureScheme::RSA_PKCS1_SHA256,
-            &[webpki_algs::RSA_PKCS1_2048_8192_SHA256],
-        ),
-    ],
-};
-
 fn verify_sig_using_any_alg(
     cert: &webpki::EndEntityCert,
     algs: &[&'static dyn SignatureVerificationAlgorithm],
@@ -310,7 +246,7 @@ mod tests {
     fn webpki_supported_algorithms_is_debug() {
         assert_eq!(
             "WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }",
-            format!("{:?}", SUPPORTED_SIG_ALGS)
+            format!("{:?}", crate::crypto::ring::SUPPORTED_SIG_ALGS)
         );
     }
 }

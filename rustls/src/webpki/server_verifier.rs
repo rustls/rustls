@@ -6,11 +6,11 @@ use alloc::vec::Vec;
 use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
 use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
+#[cfg(feature = "ring")]
+use crate::crypto::ring::SUPPORTED_SIG_ALGS;
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
-#[cfg(feature = "ring")]
-use crate::webpki::verify::SUPPORTED_SIG_ALGS;
 use crate::webpki::verify::{
     verify_server_cert_signed_by_trust_anchor_impl, verify_signed_struct, verify_tls13,
     ParsedCertificate,
