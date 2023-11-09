@@ -132,17 +132,6 @@ impl ClientCertVerifierBuilder {
         self
     }
 
-    /// Sets which signature verification algorithms are enabled.
-    ///
-    /// If this is called multiple times, the last call wins.
-    pub fn with_signature_verification_algorithms(
-        mut self,
-        supported_algs: WebPkiSupportedAlgorithms,
-    ) -> Self {
-        self.supported_algs = supported_algs;
-        self
-    }
-
     /// Build a client certificate verifier. The built verifier will be used for the server to offer
     /// client certificate authentication, to control how offered client certificates are validated,
     /// and to determine what to do with anonymous clients that do not respond to the client
