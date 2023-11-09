@@ -495,7 +495,8 @@ pub mod server {
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{
-        Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData,
+        Accepted, Acceptor, LlServerConnection, ReadEarlyData, ServerConfig, ServerConnection,
+        ServerConnectionData,
     };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
 

@@ -385,6 +385,17 @@ impl<Data> MayEncryptAppData<'_, Data> {
             .common_state
             .eager_send_some_plaintext(application_data, outgoing_tls)
     }
+
+    /// Queues a close_notify warning alert in `outgoing_tls`
+    ///
+    /// returns the number of bytes that were written into `outgoing_tls`, or an error if
+    /// the provided buffer was too small. in the error case, `outgoing_tls` is not modified
+    pub fn queue_close_notify(&mut self, outgoing_tls: &mut [u8]) -> Result<usize, EncryptError> {
+        self.conn
+            .core
+            .common_state
+            .eager_send_close_notify(outgoing_tls)
+    }
 }
 
 #[derive(Default)]

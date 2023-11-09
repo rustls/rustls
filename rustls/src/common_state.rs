@@ -745,6 +745,38 @@ impl LlCommonState {
 
         Ok(written)
     }
+
+    pub(crate) fn eager_send_close_notify(
+        &mut self,
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, EncryptError> {
+        debug_assert!(self.record_layer.is_encrypting());
+
+        // TODO compute and check the required size
+
+        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+
+        let desc = AlertDescription::CloseNotify;
+        let m = Message::build_alert(AlertLevel::Warning, desc).into();
+
+        let mut written = 0;
+
+        let iter = self
+            .message_fragmenter
+            .fragment_message(&m);
+        for m in iter {
+            let em = self
+                .record_layer
+                .encrypt_outgoing(m)
+                .encode();
+
+            let len = em.len();
+            outgoing_tls[written..written + len].copy_from_slice(&em);
+            written += len;
+        }
+
+        Ok(written)
+    }
 }
 
 // cannot be `pub(crate)` due to the `impl Deref<Target=CommonStateInner> for CommonState` so

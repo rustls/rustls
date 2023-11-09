@@ -1,6 +1,6 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::common_state::{CommonState, Context, Side, State};
-use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::common_state::{CommonState, Context, LlCommonState, Side, State};
+use crate::conn::{ConnectionCommon, ConnectionCore, LlConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -10,11 +10,11 @@ use crate::log::trace;
 use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
-use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
 use crate::KeyLog;
+use crate::{sign, LlConnectionCommon};
 
 use super::hs;
 
@@ -541,6 +541,38 @@ impl From<ServerConnection> for crate::Connection {
     }
 }
 
+/// A lower level version of `ClientConnection` that operates on caller-provided buffers
+pub struct LlServerConnection {
+    inner: LlConnectionCommon<ServerConnectionData>,
+}
+
+impl Deref for LlServerConnection {
+    type Target = LlConnectionCommon<ServerConnectionData>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for LlServerConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl LlServerConnection {
+    /// Make a new ClientConnection. `config` controls how we behave in the TLS protocol, `name` is
+    /// the name of the server we want to talk to.
+    pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
+        let mut common = LlCommonState::new(Side::Server);
+        common.set_max_fragment_size(config.max_fragment_size)?;
+        common.enable_secret_extraction = config.enable_secret_extraction;
+        Ok(Self {
+            inner: LlConnectionCommon::from(LlConnectionCore::for_server(config, Vec::new())?),
+        })
+    }
+}
+
 /// Handle a server-side connection before configuration is available.
 ///
 /// `Acceptor` allows the caller to choose a [`ServerConfig`] after reading
@@ -813,6 +845,23 @@ impl ConnectionCore<ServerConnectionData> {
 
     pub(crate) fn get_sni_str(&self) -> Option<&str> {
         self.data.get_sni_str()
+    }
+}
+
+impl LlConnectionCore<ServerConnectionData> {
+    pub(crate) fn for_server(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+    ) -> Result<Self, Error> {
+        let mut common = LlCommonState::new(Side::Server);
+        common.set_max_fragment_size(config.max_fragment_size)?;
+        common.enable_secret_extraction = config.enable_secret_extraction;
+        Ok(Self::new(
+            common,
+            ServerConnectionData::default(),
+            <_>::default(),
+            Box::new(hs::ExpectClientHello::new(config, extra_exts)),
+        ))
     }
 }
 
