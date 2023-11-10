@@ -5,6 +5,7 @@ use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
+use crate::ll::LlDeferredActions;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::base::Payload;
@@ -767,6 +768,7 @@ impl State<ServerConnectionData> for Accepting {
 pub(super) enum EarlyDataState {
     New,
     Accepted(ChunkVecBuffer),
+    LazyAccepted { accepted: usize, limit: usize },
     Rejected,
 }
 
@@ -783,6 +785,13 @@ impl EarlyDataState {
 
     pub(super) fn accept(&mut self, max_size: usize) {
         *self = Self::Accepted(ChunkVecBuffer::new(Some(max_size)));
+    }
+
+    pub(super) fn lazy_accept(&mut self, max_size: usize) {
+        *self = Self::LazyAccepted {
+            accepted: 0,
+            limit: max_size,
+        };
     }
 
     fn was_accepted(&self) -> bool {
@@ -814,6 +823,26 @@ impl EarlyDataState {
             Self::Accepted(ref mut received) if received.apply_limit(available) == available => {
                 received.append(bytes.0);
                 true
+            }
+            _ => false,
+        }
+    }
+
+    pub(super) fn lazy_take_received_plaintext(
+        &mut self,
+        bytes: Payload,
+        deferred_actions: &mut LlDeferredActions,
+    ) -> bool {
+        let available = bytes.0.len();
+        match self {
+            Self::LazyAccepted { accepted, limit } => {
+                if available <= limit.saturating_sub(*accepted) {
+                    *accepted += available;
+                    deferred_actions.take_early_data(bytes);
+                    true
+                } else {
+                    false
+                }
             }
             _ => false,
         }

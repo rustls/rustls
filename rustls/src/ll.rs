@@ -42,8 +42,11 @@ impl<Data> LlConnectionCommon<Data> {
                     LlDeferredAction::QueueTlsMessage { m } => {
                         break 'outer MustEncodeTlsData::new(self, m).into()
                     }
-                    LlDeferredAction::ReceivedPlainText { bytes } => {
+                    LlDeferredAction::ReceivedAppData { bytes } => {
                         break 'outer AppDataAvailable::new(self, incoming_tls, bytes).into();
+                    }
+                    LlDeferredAction::ReceivedEarlyData { bytes } => {
+                        break 'outer EarlyDataAvailable::new(self, incoming_tls, bytes).into();
                     }
                 }
             }
@@ -115,6 +118,9 @@ pub enum LlState<'c, 'i, Data> {
     /// One, or more, application data record is available
     AppDataAvailable(AppDataAvailable<'c, 'i, Data>),
 
+    /// One, or more, early (RTT-0) data record is available
+    EarlyDataAvailable(EarlyDataAvailable<'c, 'i, Data>),
+
     /// A Handshake record must be encoded into the `outgoing_tls` buffer
     MustEncodeTlsData(MustEncodeTlsData<'c, Data>),
 
@@ -136,11 +142,20 @@ pub enum LlState<'c, 'i, Data> {
     ConnectionClosed,
 }
 
+impl<'c, 'i, Data> From<EarlyDataAvailable<'c, 'i, Data>> for LlState<'c, 'i, Data> {
+    fn from(v: EarlyDataAvailable<'c, 'i, Data>) -> Self {
+        Self::EarlyDataAvailable(v)
+    }
+}
+
 impl<Data> fmt::Debug for LlState<'_, '_, Data> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AppDataAvailable(..) => f
                 .debug_tuple("AppDataAvailable")
+                .finish(),
+            Self::EarlyDataAvailable(..) => f
+                .debug_tuple("EarlyDataAvailable")
                 .finish(),
             Self::MustEncodeTlsData(..) => f
                 .debug_tuple("MustEncodeTlsData")
@@ -214,6 +229,55 @@ impl<'c, 'i, Data> AppDataAvailable<'c, 'i, Data> {
     }
 
     /// returns the payload size of the next app-data record *without* decrypting it
+    ///
+    /// returns `None` if there are no more app-data records
+    pub fn peek_len(&self) -> Option<NonZeroUsize> {
+        if self.taken {
+            None
+        } else {
+            NonZeroUsize::new(self.payload.0.len())
+        }
+    }
+}
+
+/// Early (RTT-0) data is available
+pub struct EarlyDataAvailable<'c, 'i, Data> {
+    _conn: &'c mut LlConnectionCommon<Data>,
+    // for forwards compatibility; to support in-place decryption in the future
+    _incoming_tls: &'i mut [u8],
+    payload: Payload,
+    taken: bool,
+}
+
+impl<'c, 'i, Data> EarlyDataAvailable<'c, 'i, Data> {
+    fn new(
+        _conn: &'c mut LlConnectionCommon<Data>,
+        _incoming_tls: &'i mut [u8],
+        payload: Payload,
+    ) -> Self {
+        Self {
+            _conn,
+            _incoming_tls,
+            payload,
+            taken: false,
+        }
+    }
+
+    /// decrypts and returns the next available early-data record
+    // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
+    pub fn next_record(&mut self) -> Option<Result<AppDataRecord, Error>> {
+        if self.taken {
+            None
+        } else {
+            self.taken = true;
+            Some(Ok(AppDataRecord {
+                discard: 0,
+                payload: &self.payload.0,
+            }))
+        }
+    }
+
+    /// returns the payload size of the next early-data record *without* decrypting it
     ///
     /// returns `None` if there are no more app-data records
     pub fn peek_len(&self) -> Option<NonZeroUsize> {
@@ -494,7 +558,12 @@ impl LlDeferredActions {
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
         self.inner
-            .push_back(LlDeferredAction::ReceivedPlainText { bytes });
+            .push_back(LlDeferredAction::ReceivedAppData { bytes });
+    }
+
+    pub(crate) fn take_early_data(&mut self, bytes: Payload) {
+        self.inner
+            .push_back(LlDeferredAction::ReceivedEarlyData { bytes });
     }
 
     fn pop(&mut self) -> Option<LlDeferredAction> {
@@ -504,5 +573,6 @@ impl LlDeferredActions {
 
 enum LlDeferredAction {
     QueueTlsMessage { m: OpaqueMessage },
-    ReceivedPlainText { bytes: Payload },
+    ReceivedAppData { bytes: Payload },
+    ReceivedEarlyData { bytes: Payload },
 }

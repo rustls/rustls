@@ -5,11 +5,15 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::EncryptError;
 use rustls::{
     server::LlServerConnection, AppDataRecord, EncodeError, InsufficientSizeError, LlState,
     LlStatus, ServerConfig,
 };
 use rustls_pemfile::Item;
+
+const INCOMING_TLS_BUFSIZ: usize = 16 * 1024;
+const OUTGOING_TLS_INITIAL_BUFSIZ: usize = 0;
 
 const PORT: u16 = 1443;
 const MAX_ITERATIONS: usize = 20;
@@ -17,31 +21,39 @@ const CERTFILE: &str = "localhost.pem";
 const PRIV_KEY_FILE: &str = "localhost-key.pem";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let config = Arc::new(
-        ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-            .with_single_cert(load_certs()?, load_private_key()?)?,
-    );
+    let mut config = ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        .with_single_cert(load_certs()?, load_private_key()?)?;
+
+    config.max_early_data_size = 128;
+
+    let config = Arc::new(config);
 
     let listener = TcpListener::bind(format!("[::]:{PORT}"))?;
 
+    let mut incoming_tls = [0; INCOMING_TLS_BUFSIZ];
+    let mut outgoing_tls = vec![0; OUTGOING_TLS_INITIAL_BUFSIZ];
     for stream in listener.incoming() {
-        handle(stream?, &config)?;
+        handle(stream?, &config, &mut incoming_tls, &mut outgoing_tls)?;
     }
 
     Ok(())
 }
 
-fn handle(mut sock: TcpStream, config: &Arc<ServerConfig>) -> Result<(), Box<dyn Error>> {
+fn handle(
+    mut sock: TcpStream,
+    config: &Arc<ServerConfig>,
+    incoming_tls: &mut [u8],
+    outgoing_tls: &mut Vec<u8>,
+) -> Result<(), Box<dyn Error>> {
+    eprintln!("\n---- new client ----");
+
     dbg!(sock.peer_addr()?);
 
     let mut conn = LlServerConnection::new(config.clone())?;
 
-    let mut incoming_tls = [0; 16 * 1024];
     let mut incoming_used = 0;
-
-    let mut outgoing_tls = Vec::<u8>::new();
     let mut outgoing_used = 0;
 
     let mut open_connection = true;
@@ -62,29 +74,49 @@ fn handle(mut sock: TcpStream, config: &Arc<ServerConfig>) -> Result<(), Box<dyn
                     } = res?;
                     discard += new_discard;
 
-                    println!("{}", core::str::from_utf8(payload)?);
+                    if payload.starts_with(b"GET") {
+                        let response = core::str::from_utf8(payload)?;
+                        let header = response
+                            .lines()
+                            .next()
+                            .unwrap_or(response);
+
+                        println!("{header}");
+                    } else {
+                        println!("(.. continued HTTP request ..)");
+                    }
+
+                    received_request = true;
+                }
+            }
+
+            LlState::EarlyDataAvailable(mut state) => {
+                while let Some(res) = state.next_record() {
+                    let AppDataRecord {
+                        discard: new_discard,
+                        payload,
+                    } = res?;
+                    discard += new_discard;
+
+                    println!("early data: {:?}", core::str::from_utf8(payload));
+
                     received_request = true;
                 }
             }
 
             LlState::MustEncodeTlsData(mut state) => {
-                let written = match state.encode(&mut outgoing_tls[outgoing_used..]) {
-                    Ok(written) => written,
-
-                    Err(EncodeError::InsufficientSize(InsufficientSizeError { required_size })) => {
-                        let new_len = outgoing_used + required_size;
-                        outgoing_tls.resize(new_len, 0);
-                        eprintln!("resized `outgoing_tls` buffer to {new_len}B");
-
-                        state
-                            .encode(&mut outgoing_tls[outgoing_used..])
-                            .expect("should not fail")
-                    }
-
-                    Err(e) => return Err(e.into()),
-                };
-
-                outgoing_used += written;
+                try_or_resize_and_retry(
+                    |out_buffer| state.encode(out_buffer),
+                    |e| {
+                        if let EncodeError::InsufficientSize(is) = &e {
+                            Ok(*is)
+                        } else {
+                            Err(e.into())
+                        }
+                    },
+                    outgoing_tls,
+                    &mut outgoing_used,
+                )?;
             }
 
             LlState::MustTransmitTlsData(mut state) => {
@@ -95,23 +127,36 @@ fn handle(mut sock: TcpStream, config: &Arc<ServerConfig>) -> Result<(), Box<dyn
             }
 
             LlState::NeedsMoreTlsData { .. } => {
-                recv_tls(&mut sock, &mut incoming_tls, &mut incoming_used)?;
+                recv_tls(&mut sock, incoming_tls, &mut incoming_used)?;
             }
 
             LlState::TrafficTransit(mut state) => {
                 if !received_request {
-                    recv_tls(&mut sock, &mut incoming_tls, &mut incoming_used)?;
+                    recv_tls(&mut sock, incoming_tls, &mut incoming_used)?;
                 } else {
-                    let written = state
-                        .encrypt(build_http_response(), &mut outgoing_tls[outgoing_used..])
-                        .expect("encrypted request does not fit in `outgoing_tls`");
-                    outgoing_used += written;
+                    let map_err = |e| {
+                        if let EncryptError::InsufficientSize(is) = &e {
+                            Ok(*is)
+                        } else {
+                            Err(e.into())
+                        }
+                    };
+
+                    let http_response = build_http_response();
+                    try_or_resize_and_retry(
+                        |out_buffer| state.encrypt(http_response, out_buffer),
+                        map_err,
+                        outgoing_tls,
+                        &mut outgoing_used,
+                    )?;
                     sent_response = true;
 
-                    let written = state
-                        .queue_close_notify(&mut outgoing_tls[outgoing_used..])
-                        .expect("encrypted close-notify does not fit in `outgoing_tls`");
-                    outgoing_used += written;
+                    try_or_resize_and_retry(
+                        |out_buffer| state.queue_close_notify(out_buffer),
+                        map_err,
+                        outgoing_tls,
+                        &mut outgoing_used,
+                    )?;
                     open_connection = false;
 
                     send_tls(&mut sock, &outgoing_tls, &mut outgoing_used)?;
@@ -143,6 +188,32 @@ fn handle(mut sock: TcpStream, config: &Arc<ServerConfig>) -> Result<(), Box<dyn
     Ok(())
 }
 
+fn try_or_resize_and_retry<E>(
+    mut f: impl FnMut(&mut [u8]) -> Result<usize, E>,
+    map_err: impl FnOnce(E) -> Result<InsufficientSizeError, Box<dyn Error>>,
+    outgoing_tls: &mut Vec<u8>,
+    outgoing_used: &mut usize,
+) -> Result<usize, Box<dyn Error>>
+where
+    E: Error + 'static,
+{
+    let written = match f(&mut outgoing_tls[*outgoing_used..]) {
+        Ok(written) => written,
+
+        Err(e) => {
+            let InsufficientSizeError { required_size } = map_err(e)?;
+            let new_len = *outgoing_used + required_size;
+            outgoing_tls.resize(new_len, 0);
+            eprintln!("resized `outgoing_tls` buffer to {new_len}B");
+
+            f(&mut outgoing_tls[*outgoing_used..])?
+        }
+    };
+
+    *outgoing_used += written;
+
+    Ok(written)
+}
 fn recv_tls(
     sock: &mut TcpStream,
     incoming_tls: &mut [u8],

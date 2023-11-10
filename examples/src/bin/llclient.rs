@@ -1,5 +1,6 @@
 use std::error::Error;
-use std::io::{Read, Write};
+use std::fs::File;
+use std::io::{BufReader, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
@@ -11,8 +12,19 @@ use rustls::{
     LlState, LlStatus, MayEncryptAppData, RootCertStore,
 };
 
-const SERVER_NAME: &str = "example.com";
-const PORT: u16 = 443;
+// remote
+// const CERTFILE: Option<&str> = None;
+// const SERVER_NAME: &str = "example.com";
+// const PORT: u16 = 443;
+
+// local
+const CERTFILE: Option<&str> = Some(concat!(env!("HOME"), "/.local/share/mkcert/rootCA.pem")); // see `mkcert`
+const SERVER_NAME: &str = "localhost";
+const PORT: u16 = 1443;
+
+const INCOMING_TLS_BUFSIZ: usize = 16 * 1024;
+const OUTGOING_TLS_INITIAL_BUFSIZ: usize = 1 * 1024;
+
 const MAX_ITERATIONS: usize = 20;
 const SEND_EARLY_DATA: bool = true;
 const EARLY_DATA: &[u8] = b"hello";
@@ -24,29 +36,34 @@ fn main() -> Result<(), Box<dyn Error>> {
         // .with_protocol_versions(&[&TLS12])
         .with_protocol_versions(&[&TLS13])
         .unwrap()
-        .with_root_certificates(build_root_store())
+        .with_root_certificates(build_root_store()?)
         .with_no_client_auth();
     config.enable_early_data = SEND_EARLY_DATA;
 
     let config = Arc::new(config);
 
-    converse(&config, false)?;
+    let mut incoming_tls = [0; INCOMING_TLS_BUFSIZ];
+    let mut outgoing_tls = vec![0; OUTGOING_TLS_INITIAL_BUFSIZ];
+
+    converse(&config, false, &mut incoming_tls, &mut outgoing_tls)?;
     if SEND_EARLY_DATA {
         eprintln!("---- second connection ----");
-        converse(&config, true)?;
+        converse(&config, true, &mut incoming_tls, &mut outgoing_tls)?;
     }
 
     Ok(())
 }
 
-fn converse(config: &Arc<ClientConfig>, send_early_data: bool) -> Result<(), Box<dyn Error>> {
+fn converse(
+    config: &Arc<ClientConfig>,
+    send_early_data: bool,
+    incoming_tls: &mut [u8],
+    outgoing_tls: &mut Vec<u8>,
+) -> Result<(), Box<dyn Error>> {
     let mut conn = LlClientConnection::new(Arc::clone(config), SERVER_NAME.try_into()?)?;
     let mut sock = TcpStream::connect(format!("{SERVER_NAME}:{PORT}"))?;
 
-    let mut incoming_tls = [0; 16 * 1024];
     let mut incoming_used = 0;
-
-    let mut outgoing_tls = Vec::<u8>::new();
     let mut outgoing_used = 0;
 
     let mut open_connection = true;
@@ -94,7 +111,7 @@ fn converse(config: &Arc<ClientConfig>, send_early_data: bool) -> Result<(), Box
                             Err(e.into())
                         }
                     },
-                    &mut outgoing_tls,
+                    outgoing_tls,
                     &mut outgoing_used,
                 )?;
             }
@@ -111,7 +128,7 @@ fn converse(config: &Arc<ClientConfig>, send_early_data: bool) -> Result<(), Box
                                 Err(e.into())
                             }
                         },
-                        &mut outgoing_tls,
+                        outgoing_tls,
                         &mut outgoing_used,
                     )?;
 
@@ -123,7 +140,7 @@ fn converse(config: &Arc<ClientConfig>, send_early_data: bool) -> Result<(), Box
                     make_http_request(
                         &mut sent_request,
                         &mut may_encrypt,
-                        &mut outgoing_tls,
+                        outgoing_tls,
                         &mut outgoing_used,
                     );
                 }
@@ -133,23 +150,23 @@ fn converse(config: &Arc<ClientConfig>, send_early_data: bool) -> Result<(), Box
             }
 
             LlState::NeedsMoreTlsData { .. } => {
-                recv_tls(&mut sock, &mut incoming_tls, &mut incoming_used)?;
+                recv_tls(&mut sock, incoming_tls, &mut incoming_used)?;
             }
 
             LlState::TrafficTransit(mut may_encrypt) => {
                 if make_http_request(
                     &mut sent_request,
                     &mut may_encrypt,
-                    &mut outgoing_tls,
+                    outgoing_tls,
                     &mut outgoing_used,
                 ) {
                     send_tls(&mut sock, &outgoing_tls, &mut outgoing_used)?;
-                    recv_tls(&mut sock, &mut incoming_tls, &mut incoming_used)?;
+                    recv_tls(&mut sock, incoming_tls, &mut incoming_used)?;
                 } else if !received_response {
                     // this happens in the TLS 1.3 case. the app-data was sent in the preceding
                     // `MustTransmitTlsData` state. the server should have already a response which
                     // we can read out from the socket
-                    recv_tls(&mut sock, &mut incoming_tls, &mut incoming_used)?;
+                    recv_tls(&mut sock, incoming_tls, &mut incoming_used)?;
                 } else {
                     try_or_resize_and_retry(
                         |out_buffer| may_encrypt.queue_close_notify(out_buffer),
@@ -160,10 +177,10 @@ fn converse(config: &Arc<ClientConfig>, send_early_data: bool) -> Result<(), Box
                                 Err(e.into())
                             }
                         },
-                        &mut outgoing_tls,
+                        outgoing_tls,
                         &mut outgoing_used,
                     )?;
-                    send_tls(&mut sock, &mut outgoing_tls, &mut outgoing_used)?;
+                    send_tls(&mut sock, outgoing_tls, &mut outgoing_used)?;
                     open_connection = false;
                 }
             }
@@ -267,14 +284,22 @@ fn make_http_request(
     }
 }
 
-fn build_root_store() -> RootCertStore {
+fn build_root_store() -> Result<RootCertStore, Box<dyn Error>> {
     let mut root_store = RootCertStore::empty();
-    root_store.extend(
-        webpki_roots::TLS_SERVER_ROOTS
-            .iter()
-            .cloned(),
-    );
-    root_store
+    if let Some(path) = CERTFILE {
+        let certfile = File::open(path)?;
+        let mut reader = BufReader::new(certfile);
+        root_store.add_parsable_certificates(
+            rustls_pemfile::certs(&mut reader).collect::<Result<Vec<_>, _>>()?,
+        );
+    } else {
+        root_store.extend(
+            webpki_roots::TLS_SERVER_ROOTS
+                .iter()
+                .cloned(),
+        );
+    }
+    Ok(root_store)
 }
 
 fn build_http_request() -> Vec<u8> {

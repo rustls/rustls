@@ -423,9 +423,15 @@ mod client_hello {
                     cx.data.early_data.reject();
                 }
                 EarlyDataDecision::Accepted => {
-                    cx.data
-                        .early_data
-                        .accept(self.config.max_early_data_size as usize);
+                    if matches!(cx.common, CommonState2::Lazy { .. }) {
+                        cx.data
+                            .early_data
+                            .lazy_accept(self.config.max_early_data_size as usize);
+                    } else {
+                        cx.data
+                            .early_data
+                            .accept(self.config.max_early_data_size as usize);
+                    }
                 }
             }
 
@@ -1005,16 +1011,33 @@ impl State<ServerConnectionData> for ExpectEarlyData {
     fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         match m.payload {
             MessagePayload::ApplicationData(payload) => {
-                match cx
-                    .data
-                    .early_data
-                    .take_received_plaintext(payload)
+                if let CommonState2::Lazy {
+                    deferred_actions, ..
+                } = &mut cx.common
                 {
-                    true => Ok(self),
-                    false => Err(cx.common.send_fatal_alert(
-                        AlertDescription::UnexpectedMessage,
-                        PeerMisbehaved::TooMuchEarlyDataReceived,
-                    )),
+                    match cx
+                        .data
+                        .early_data
+                        .lazy_take_received_plaintext(payload, deferred_actions)
+                    {
+                        true => Ok(self),
+                        false => Err(cx.common.send_fatal_alert(
+                            AlertDescription::UnexpectedMessage,
+                            PeerMisbehaved::TooMuchEarlyDataReceived,
+                        )),
+                    }
+                } else {
+                    match cx
+                        .data
+                        .early_data
+                        .take_received_plaintext(payload)
+                    {
+                        true => Ok(self),
+                        false => Err(cx.common.send_fatal_alert(
+                            AlertDescription::UnexpectedMessage,
+                            PeerMisbehaved::TooMuchEarlyDataReceived,
+                        )),
+                    }
                 }
             }
             MessagePayload::Handshake {
