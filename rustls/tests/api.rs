@@ -200,7 +200,8 @@ fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
 
 #[cfg(read_buf)]
 fn check_read_buf(reader: &mut dyn io::Read, bytes: &[u8]) {
-    use std::{io::BorrowedBuf, mem::MaybeUninit};
+    use core::io::BorrowedBuf;
+    use std::mem::MaybeUninit;
 
     let mut buf = [MaybeUninit::<u8>::uninit(); 128];
     let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
@@ -210,7 +211,8 @@ fn check_read_buf(reader: &mut dyn io::Read, bytes: &[u8]) {
 
 #[cfg(read_buf)]
 fn check_read_buf_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
-    use std::{io::BorrowedBuf, mem::MaybeUninit};
+    use core::io::BorrowedBuf;
+    use std::mem::MaybeUninit;
 
     let mut buf = [MaybeUninit::<u8>::uninit(); 1];
     let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
