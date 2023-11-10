@@ -305,6 +305,7 @@
 // is used to avoid needing `rustversion` to be compiled twice during
 // cross-compiling.
 #![cfg_attr(read_buf, feature(read_buf))]
+#![cfg_attr(read_buf, feature(core_io_borrowed_buf))]
 #![cfg_attr(bench, feature(test))]
 
 // Import `test` sysroot crate for `Bencher` definitions.
