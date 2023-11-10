@@ -66,7 +66,7 @@ where
     }
 
     #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: std::io::BorrowedCursor<'_>) -> Result<()> {
+    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
         self.complete_prior_io()?;
 
         // We call complete_io() in a loop since a single call may read only
@@ -194,7 +194,7 @@ where
     }
 
     #[cfg(read_buf)]
-    fn read_buf(&mut self, cursor: std::io::BorrowedCursor<'_>) -> Result<()> {
+    fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
         self.as_stream().read_buf(cursor)
     }
 }
