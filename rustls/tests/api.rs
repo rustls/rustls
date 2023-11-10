@@ -1,5 +1,6 @@
 #![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
 #![cfg_attr(read_buf, feature(read_buf))]
+#![cfg_attr(read_buf, feature(core_io_borrowed_buf))]
 //! Assorted public API tests.
 use std::cell::RefCell;
 use std::fmt;
