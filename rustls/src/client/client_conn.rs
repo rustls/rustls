@@ -11,6 +11,7 @@ use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
 use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
+use crate::unbuffered::{EncryptError, TransmitTlsData};
 use crate::versions;
 use crate::KeyLog;
 #[cfg(feature = "ring")]
@@ -28,6 +29,7 @@ use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
+use std::error::Error as StdError;
 use std::io;
 
 #[cfg(doc)]
@@ -466,6 +468,11 @@ impl EarlyData {
     }
 
     fn check_write(&mut self, sz: usize) -> io::Result<usize> {
+        self.check_write_opt(sz)
+            .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))
+    }
+
+    fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
         match self.state {
             EarlyDataState::Disabled => unreachable!(),
             EarlyDataState::Ready | EarlyDataState::Accepted => {
@@ -476,11 +483,9 @@ impl EarlyData {
                     sz
                 };
 
-                Ok(take)
+                Some(take)
             }
-            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => {
-                Err(io::Error::from(io::ErrorKind::InvalidInput))
-            }
+            EarlyDataState::Rejected | EarlyDataState::AcceptedFinished => None,
         }
     }
 
@@ -693,6 +698,86 @@ impl DerefMut for UnbufferedClientConnection {
         &mut self.inner
     }
 }
+
+impl TransmitTlsData<'_, ClientConnectionData> {
+    /// returns an adapter that allows encrypting early (RTT-0) data before transmitting the
+    /// already encoded TLS data
+    ///
+    /// IF allowed by the protocol
+    pub fn may_encrypt_early_data(&mut self) -> Option<MayEncryptEarlyData> {
+        if self
+            .conn
+            .core
+            .data
+            .early_data
+            .is_enabled()
+        {
+            Some(MayEncryptEarlyData { conn: self.conn })
+        } else {
+            None
+        }
+    }
+}
+
+/// Allows encrypting early (RTT-0) data
+pub struct MayEncryptEarlyData<'c> {
+    conn: &'c mut UnbufferedConnectionCommon<ClientConnectionData>,
+}
+
+impl MayEncryptEarlyData<'_> {
+    /// Encrypts `application_data` into the `outgoing_tls` buffer
+    ///
+    /// returns the number of bytes that were written into `outgoing_tls`, or an error if
+    /// the provided buffer was too small. In the error case, `outgoing_tls` is not modified
+    pub fn encrypt(
+        &mut self,
+        early_data: &[u8],
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, EarlyDataError> {
+        let allowed = match self
+            .conn
+            .core
+            .data
+            .early_data
+            .check_write_opt(early_data.len())
+        {
+            Some(allowed) => allowed,
+            None => return Err(EarlyDataError::ExceededAllowedEarlyData),
+        };
+
+        self.conn
+            .core
+            .common_state
+            .write_plaintext(&early_data[..allowed], outgoing_tls)
+            .map_err(|e| e.into())
+    }
+}
+
+/// Errors that may arise when encrypting early (RTT-0) data
+#[derive(Debug)]
+pub enum EarlyDataError {
+    /// Cannot encrypt more early data due to imposed limits
+    ExceededAllowedEarlyData,
+    /// Encryption error
+    Encrypt(EncryptError),
+}
+
+impl From<EncryptError> for EarlyDataError {
+    fn from(v: EncryptError) -> Self {
+        Self::Encrypt(v)
+    }
+}
+
+impl fmt::Display for EarlyDataError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ExceededAllowedEarlyData => f.write_str("cannot send any more early data"),
+            Self::Encrypt(e) => fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl StdError for EarlyDataError {}
 
 /// State associated with a client connection.
 #[derive(Debug)]
