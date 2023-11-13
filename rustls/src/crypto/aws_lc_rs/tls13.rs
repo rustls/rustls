@@ -150,7 +150,7 @@ struct AeadAlgorithm(&'static aead::Algorithm);
 impl AeadAlgorithm {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(Tls13MessageEncrypter {
+        Box::new(AeadMessageEncrypter {
             enc_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0, key.as_ref()).unwrap()),
             iv,
         })
@@ -158,7 +158,7 @@ impl AeadAlgorithm {
 
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(Tls13MessageDecrypter {
+        Box::new(AeadMessageDecrypter {
             dec_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0, key.as_ref()).unwrap()),
             iv,
         })
@@ -169,17 +169,17 @@ impl AeadAlgorithm {
     }
 }
 
-struct Tls13MessageEncrypter {
+struct AeadMessageEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-struct Tls13MessageDecrypter {
+struct AeadMessageDecrypter {
     dec_key: aead::LessSafeKey,
     iv: Iv,
 }
 
-impl MessageEncrypter for Tls13MessageEncrypter {
+impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = Vec::with_capacity(total_len);
@@ -204,7 +204,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
     }
 }
 
-impl MessageDecrypter for Tls13MessageDecrypter {
+impl MessageDecrypter for AeadMessageDecrypter {
     fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
         let payload = msg.payload_mut();
         if payload.len() < self.dec_key.algorithm().tag_len() {
