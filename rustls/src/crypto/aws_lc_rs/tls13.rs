@@ -14,8 +14,8 @@ use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls13::Tls13CipherSuite;
 
-use super::ring_like::hkdf::KeyType;
-use super::ring_like::{aead, hkdf, hmac};
+use aws_lc_rs::hkdf::KeyType;
+use aws_lc_rs::{aead, hkdf, hmac};
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
