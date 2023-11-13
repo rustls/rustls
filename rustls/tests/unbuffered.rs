@@ -28,11 +28,13 @@ fn handshake() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data: false,
+                    sent_close_notify: false,
                     sent_early_data: false,
                 } => buffers.client_send(),
                 State::BlockedHandshake => buffers.server_send(),
                 State::WriteTraffic {
                     sent_app_data: false,
+                    sent_close_notify: false,
                 } => client_handshake_done = true,
                 state => unreachable!("{state:?}"),
             }
@@ -41,11 +43,13 @@ fn handshake() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data: false,
+                    sent_close_notify: false,
                     sent_early_data: false,
                 } => buffers.server_send(),
                 State::BlockedHandshake => buffers.client_send(),
                 State::WriteTraffic {
                     sent_app_data: false,
+                    sent_close_notify: false,
                 } => server_handshake_done = true,
                 state => unreachable!("{state:?}"),
             }
@@ -82,6 +86,7 @@ fn app_data_client_to_server() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data,
+                    sent_close_notify: false,
                     sent_early_data: false,
                 } => {
                     buffers.client_send();
@@ -91,7 +96,10 @@ fn app_data_client_to_server() {
                     }
                 }
                 State::BlockedHandshake => buffers.server_send(),
-                State::WriteTraffic { sent_app_data } => {
+                State::WriteTraffic {
+                    sent_app_data,
+                    sent_close_notify: false,
+                } => {
                     if sent_app_data {
                         buffers.client_send();
                         client_actions.app_data_to_send = None;
@@ -106,6 +114,7 @@ fn app_data_client_to_server() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data: false,
+                    sent_close_notify: false,
                     sent_early_data: false,
                 } => buffers.server_send(),
                 State::BlockedHandshake => buffers.client_send(),
@@ -114,6 +123,7 @@ fn app_data_client_to_server() {
                 }
                 State::WriteTraffic {
                     sent_app_data: false,
+                    sent_close_notify: false,
                 } => server_handshake_done = true,
                 state => unreachable!("{state:?}"),
             }
@@ -158,11 +168,13 @@ fn app_data_server_to_client() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data: false,
+                    sent_close_notify: false,
                     sent_early_data: false,
                 } => buffers.client_send(),
                 State::BlockedHandshake => buffers.server_send(),
                 State::WriteTraffic {
                     sent_app_data: false,
+                    sent_close_notify: false,
                 } => client_handshake_done = true,
                 State::ReceivedAppData { records } => {
                     received_app_data.extend(records);
@@ -174,6 +186,7 @@ fn app_data_server_to_client() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data,
+                    sent_close_notify: false,
                     sent_early_data: false,
                 } => {
                     buffers.server_send();
@@ -188,6 +201,7 @@ fn app_data_server_to_client() {
                 // server does not need to reach this state to send data to the client
                 State::WriteTraffic {
                     sent_app_data: false,
+                    sent_close_notify: false,
                 } => server_handshake_done = true,
                 state => unreachable!("{state:?}"),
             }
@@ -243,6 +257,7 @@ fn early_data() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data: false,
+                    sent_close_notify: false,
                     sent_early_data,
                 } => {
                     buffers.client_send();
@@ -254,6 +269,7 @@ fn early_data() {
                 State::BlockedHandshake => buffers.server_send(),
                 State::WriteTraffic {
                     sent_app_data: false,
+                    sent_close_notify: false,
                 } => client_handshake_done = true,
                 state => unreachable!("{state:?}"),
             }
@@ -262,11 +278,13 @@ fn early_data() {
                 State::EncodedTlsData => {}
                 State::TransmitTlsData {
                     sent_app_data: false,
+                    sent_close_notify: false,
                     sent_early_data: false,
                 } => buffers.server_send(),
                 State::BlockedHandshake => buffers.client_send(),
                 State::WriteTraffic {
                     sent_app_data: false,
+                    sent_close_notify: false,
                 } => server_handshake_done = true,
                 State::ReceivedEarlyData { records } => {
                     received_early_data.extend(records);
@@ -289,11 +307,158 @@ fn early_data() {
     }
 }
 
+#[test]
+fn close_notify_client_to_server() {
+    for version in rustls::ALL_VERSIONS {
+        eprintln!("{version:?}");
+
+        let (mut client, mut server) = make_connection_pair(version);
+        let mut buffers = BothBuffers::default();
+
+        let mut client_actions = Actions {
+            send_close_notify: true,
+            ..NO_ACTIONS
+        };
+        let mut count = 0;
+        let mut client_handshake_done = false;
+        let mut server_handshake_done = false;
+        let mut reached_connection_closed_state = false;
+        while !client_handshake_done || !server_handshake_done {
+            match advance_client(&mut client, &mut buffers.client, client_actions) {
+                State::EncodedTlsData => {}
+                State::TransmitTlsData {
+                    sent_app_data: false,
+                    sent_close_notify,
+                    sent_early_data: false,
+                } => {
+                    buffers.client_send();
+                    if sent_close_notify {
+                        client_actions.send_close_notify = false;
+                    }
+                }
+                State::BlockedHandshake => buffers.server_send(),
+                State::WriteTraffic {
+                    sent_app_data: false,
+                    sent_close_notify,
+                } => {
+                    if sent_close_notify {
+                        buffers.client_send();
+                        client_actions.send_close_notify = false;
+                    }
+                    client_handshake_done = true;
+                }
+                state => unreachable!("{state:?}"),
+            }
+
+            match advance_server(&mut server, &mut buffers.server, NO_ACTIONS) {
+                State::EncodedTlsData => {}
+                State::TransmitTlsData {
+                    sent_app_data: false,
+                    sent_close_notify: false,
+                    sent_early_data: false,
+                } => buffers.server_send(),
+                State::BlockedHandshake => buffers.client_send(),
+                State::WriteTraffic {
+                    sent_app_data: false,
+                    sent_close_notify: false,
+                } => server_handshake_done = true,
+                State::Closed => {
+                    server_handshake_done = true;
+                    reached_connection_closed_state = true
+                }
+                state => unreachable!("{state:?}"),
+            }
+
+            count += 1;
+
+            assert!(
+                count <= MAX_ITERATIONS,
+                "handshake {version:?} was not completed"
+            );
+        }
+
+        assert!(!client_actions.send_close_notify);
+        assert!(reached_connection_closed_state);
+    }
+}
+
+#[test]
+fn close_notify_server_to_client() {
+    for version in rustls::ALL_VERSIONS {
+        eprintln!("{version:?}");
+
+        let (mut client, mut server) = make_connection_pair(version);
+        let mut buffers = BothBuffers::default();
+
+        let mut server_actions = Actions {
+            send_close_notify: true,
+            ..NO_ACTIONS
+        };
+        let mut count = 0;
+        let mut client_handshake_done = false;
+        let mut server_handshake_done = false;
+        let mut reached_connection_closed_state = false;
+        while !client_handshake_done || !server_handshake_done {
+            match advance_client(&mut client, &mut buffers.client, NO_ACTIONS) {
+                State::EncodedTlsData => {}
+                State::TransmitTlsData {
+                    sent_app_data: false,
+                    sent_close_notify: false,
+                    sent_early_data: false,
+                } => buffers.client_send(),
+                State::BlockedHandshake => buffers.server_send(),
+                State::WriteTraffic {
+                    sent_app_data: false,
+                    sent_close_notify: false,
+                } => client_handshake_done = true,
+                State::Closed => {
+                    client_handshake_done = true;
+                    reached_connection_closed_state = true
+                }
+                state => unreachable!("{state:?}"),
+            }
+
+            match advance_server(&mut server, &mut buffers.server, server_actions) {
+                State::EncodedTlsData => {}
+                State::TransmitTlsData {
+                    sent_app_data: false,
+                    sent_close_notify,
+                    sent_early_data: false,
+                } => {
+                    buffers.server_send();
+                    if sent_close_notify {
+                        server_actions.send_close_notify = false;
+                    }
+                }
+                State::BlockedHandshake => buffers.client_send(),
+                State::WriteTraffic {
+                    sent_app_data: false,
+                    // servers don't need to reach this state to send a close_notify alert
+                    sent_close_notify: false,
+                } => server_handshake_done = true,
+                state => unreachable!("{state:?}"),
+            }
+
+            count += 1;
+
+            assert!(
+                count <= MAX_ITERATIONS,
+                "handshake {version:?} was not completed"
+            );
+        }
+
+        assert!(!server_actions.send_close_notify);
+        assert!(reached_connection_closed_state);
+    }
+}
+
 #[derive(Debug)]
 enum State {
+    Closed,
     EncodedTlsData,
     TransmitTlsData {
         sent_app_data: bool,
+        sent_close_notify: bool,
         sent_early_data: bool,
     },
     BlockedHandshake,
@@ -305,18 +470,21 @@ enum State {
     },
     WriteTraffic {
         sent_app_data: bool,
+        sent_close_notify: bool,
     },
 }
 
 const NO_ACTIONS: Actions = Actions {
     app_data_to_send: None,
     early_data_to_send: None,
+    send_close_notify: false,
 };
 
 #[derive(Clone, Copy, Debug)]
 struct Actions<'a> {
     app_data_to_send: Option<&'a [u8]>,
     early_data_to_send: Option<&'a [u8]>,
+    send_close_notify: bool,
 }
 
 fn advance_client(
@@ -343,6 +511,7 @@ fn advance_client(
             state.done();
             State::TransmitTlsData {
                 sent_app_data: false,
+                sent_close_notify: false,
                 sent_early_data,
             }
         }
@@ -405,12 +574,21 @@ fn handle_state<Data>(
                 }
             }
 
+            let mut sent_close_notify = false;
+            if let Some(mut state) = state.may_encrypt_app_data() {
+                if actions.send_close_notify {
+                    queue_close_notify(&mut state, outgoing);
+                    sent_close_notify = true;
+                }
+            }
+
             // this should be called *after* the data has been transmitted but it's easier to
             // do it in reverse
             state.done();
             State::TransmitTlsData {
                 sent_app_data,
                 sent_early_data: false,
+                sent_close_notify,
             }
         }
 
@@ -423,7 +601,16 @@ fn handle_state<Data>(
                 sent_app_data = true;
             }
 
-            State::WriteTraffic { sent_app_data }
+            let mut sent_close_notify = false;
+            if actions.send_close_notify {
+                queue_close_notify(&mut state, outgoing);
+                sent_close_notify = true;
+            }
+
+            State::WriteTraffic {
+                sent_app_data,
+                sent_close_notify,
+            }
         }
 
         ConnectionState::ReadTraffic(mut state) => {
@@ -436,8 +623,17 @@ fn handle_state<Data>(
             State::ReceivedAppData { records }
         }
 
+        ConnectionState::Closed => State::Closed,
+
         _ => unreachable!(),
     }
+}
+
+fn queue_close_notify<Data>(state: &mut WriteTraffic<'_, Data>, outgoing: &mut Buffer) {
+    let written = state
+        .queue_close_notify(outgoing.unfilled())
+        .unwrap();
+    outgoing.advance(written);
 }
 
 fn encrypt<Data>(state: &mut WriteTraffic<'_, Data>, app_data: &[u8], outgoing: &mut Buffer) {
