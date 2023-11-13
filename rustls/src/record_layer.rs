@@ -241,7 +241,7 @@ mod tests {
 
         struct PassThroughDecrypter;
         impl MessageDecrypter for PassThroughDecrypter {
-            fn decrypt(&self, m: OpaqueMessage, _: u64) -> Result<PlainMessage, Error> {
+            fn decrypt(&mut self, m: OpaqueMessage, _: u64) -> Result<PlainMessage, Error> {
                 Ok(m.into_plain_message())
             }
         }
