@@ -129,8 +129,10 @@ pub(crate) struct GcmAlgorithm(&'static aead::Algorithm);
 
 impl Tls12AeadAlgorithm for GcmAlgorithm {
     fn decrypter(&self, dec_key: AeadKey, dec_iv: &[u8]) -> Box<dyn MessageDecrypter> {
+        // safety: see `encrypter()`.
         let dec_key =
-            aead::LessSafeKey::new(aead::UnboundKey::new(self.0, dec_key.as_ref()).unwrap());
+            aead::TlsRecordOpeningKey::new(self.0, aead::TlsProtocolId::TLS12, dec_key.as_ref())
+                .unwrap();
 
         let mut ret = GcmMessageDecrypter {
             dec_key,
@@ -242,7 +244,7 @@ struct GcmMessageEncrypter {
 
 /// A `MessageDecrypter` for AES-GCM AEAD ciphersuites.  TLS1.2 only.
 struct GcmMessageDecrypter {
-    dec_key: aead::LessSafeKey,
+    dec_key: aead::TlsRecordOpeningKey,
     dec_salt: [u8; 4],
 }
 
