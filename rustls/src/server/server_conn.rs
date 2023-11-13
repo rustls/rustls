@@ -1,6 +1,6 @@
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Context, Protocol, Side, State};
-use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -558,6 +558,42 @@ impl DerefMut for ServerConnection {
 impl From<ServerConnection> for crate::Connection {
     fn from(conn: ServerConnection) -> Self {
         Self::Server(conn)
+    }
+}
+
+/// Unbuffered version of `ServerConnection`
+///
+/// See the [`crate::unbuffered`] module docs for more details
+pub struct UnbufferedServerConnection {
+    inner: UnbufferedConnectionCommon<ServerConnectionData>,
+}
+
+impl UnbufferedServerConnection {
+    /// Make a new ServerConnection. `config` controls how we behave in the TLS protocol.
+    pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
+        let mut common = CommonState::new(Side::Server);
+        common.set_max_fragment_size(config.max_fragment_size)?;
+        common.enable_secret_extraction = config.enable_secret_extraction;
+        Ok(Self {
+            inner: UnbufferedConnectionCommon::from(ConnectionCore::for_server(
+                config,
+                Vec::new(),
+            )?),
+        })
+    }
+}
+
+impl Deref for UnbufferedServerConnection {
+    type Target = UnbufferedConnectionCommon<ServerConnectionData>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for UnbufferedServerConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
