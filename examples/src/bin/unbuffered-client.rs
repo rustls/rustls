@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
+use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
@@ -23,28 +23,36 @@ const INCOMING_TLS_BUFSIZE: usize = 16 * KB;
 const OUTGOING_TLS_INITIAL_BUFSIZE: usize = KB;
 
 const MAX_ITERATIONS: usize = 20;
+const SEND_EARLY_DATA: bool = false;
+const EARLY_DATA: &[u8] = b"hello";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let root_store = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
 
-    let config = ClientConfig::builder_with_protocol_versions(&[&TLS13])
+    let mut config = ClientConfig::builder_with_protocol_versions(&[&TLS13])
         .with_root_certificates(root_store)
         .with_no_client_auth();
+    config.enable_early_data = SEND_EARLY_DATA;
 
     let config = Arc::new(config);
 
     let mut incoming_tls = [0; INCOMING_TLS_BUFSIZE];
     let mut outgoing_tls = vec![0; OUTGOING_TLS_INITIAL_BUFSIZE];
 
-    converse(&config, &mut incoming_tls, &mut outgoing_tls)?;
+    converse(&config, false, &mut incoming_tls, &mut outgoing_tls)?;
+    if SEND_EARLY_DATA {
+        eprintln!("---- second connection ----");
+        converse(&config, true, &mut incoming_tls, &mut outgoing_tls)?;
+    }
 
     Ok(())
 }
 
 fn converse(
     config: &Arc<ClientConfig>,
+    send_early_data: bool,
     incoming_tls: &mut [u8],
     outgoing_tls: &mut Vec<u8>,
 ) -> Result<(), Box<dyn Error>> {
@@ -57,6 +65,7 @@ fn converse(
     let mut open_connection = true;
     let mut sent_request = false;
     let mut received_response = false;
+    let mut sent_early_data = false;
 
     let mut iter_count = 0;
     while open_connection {
@@ -104,6 +113,21 @@ fn converse(
             }
 
             ConnectionState::TransmitTlsData(mut state) => {
+                if let Some(mut may_encrypt_early_data) = state.may_encrypt_early_data() {
+                    let written = try_or_resize_and_retry(
+                        |out_buffer| may_encrypt_early_data.encrypt(EARLY_DATA, out_buffer),
+                        |e| match &e {
+                            EarlyDataError::Encrypt(EncryptError::InsufficientSize(is)) => Ok(*is),
+                            _ => Err(e.into()),
+                        },
+                        outgoing_tls,
+                        &mut outgoing_used,
+                    )?;
+
+                    eprintln!("queued {written}B of early data");
+                    sent_early_data = true;
+                }
+
                 if let Some(mut may_encrypt) = state.may_encrypt_app_data() {
                     encrypt_http_request(
                         &mut sent_request,
@@ -179,6 +203,7 @@ fn converse(
 
     assert!(sent_request);
     assert!(received_response);
+    assert_eq!(send_early_data, sent_early_data);
     assert_eq!(0, incoming_used);
     assert_eq!(0, outgoing_used);
 

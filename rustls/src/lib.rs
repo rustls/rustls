@@ -452,7 +452,8 @@ pub mod internal {
 pub mod unbuffered {
     pub use crate::conn::unbuffered::{
         AppDataRecord, ConnectionState, EncodeError, EncodeTlsData, EncryptError,
-        InsufficientSizeError, ReadTraffic, TransmitTlsData, UnbufferedStatus, WriteTraffic,
+        InsufficientSizeError, ReadEarlyData, ReadTraffic, TransmitTlsData, UnbufferedStatus,
+        WriteTraffic,
     };
     pub use crate::conn::UnbufferedConnectionCommon;
 }
@@ -502,7 +503,7 @@ pub mod client {
 
     pub use builder::WantsClientCert;
     pub use client_conn::{
-        ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
+        ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore, EarlyDataError,
         ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
         WriteEarlyData,
     };
