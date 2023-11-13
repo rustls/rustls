@@ -148,8 +148,21 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Box<dyn MessageEncrypter> {
+        // safety: `TlsRecordSealingKey::new` fails if
+        // - `enc_key`'s length is wrong for `algorithm`.  But the length is defined by
+        //   `algorithm.key_len()` in `key_block_shape()`, below.
+        // - `algorithm` is not supported: but `AES_128_GCM` and `AES_256_GCM` is.
+        // thus, this `unwrap()` is unreachable.
+        //
+        // `TlsProtocolId::TLS13` is deliberate: we reuse the nonce construction from
+        // RFC7905 and TLS13: a random starting point, XOR'd with the sequence number.  This means
+        // `TlsProtocolId::TLS12` (which wants to see a plain sequence number) is unsuitable.
+        //
+        // The most important property is that nonce is unique per key, which is satisfied by
+        // this construction, even if the nonce is not monotonically increasing.
         let enc_key =
-            aead::LessSafeKey::new(aead::UnboundKey::new(self.0, enc_key.as_ref()).unwrap());
+            aead::TlsRecordSealingKey::new(self.0, aead::TlsProtocolId::TLS13, enc_key.as_ref())
+                .unwrap();
         let iv = gcm_iv(write_iv, explicit);
         Box::new(GcmMessageEncrypter { enc_key, iv })
     }
@@ -223,7 +236,7 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
 
 /// A `MessageEncrypter` for AES-GCM AEAD ciphersuites. TLS 1.2 only.
 struct GcmMessageEncrypter {
-    enc_key: aead::LessSafeKey,
+    enc_key: aead::TlsRecordSealingKey,
     iv: Iv,
 }
 
