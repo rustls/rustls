@@ -237,7 +237,7 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GcmMessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
+    fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
         let payload = msg.payload();
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
@@ -274,7 +274,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
 }
 
 impl MessageEncrypter for GcmMessageEncrypter {
-    fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 
@@ -315,7 +315,7 @@ struct ChaCha20Poly1305MessageDecrypter {
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
+    fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
         let payload = msg.payload();
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
@@ -347,7 +347,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 

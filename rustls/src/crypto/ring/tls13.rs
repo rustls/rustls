@@ -182,7 +182,7 @@ struct Tls13MessageDecrypter {
 }
 
 impl MessageEncrypter for Tls13MessageEncrypter {
-    fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(msg.payload);
@@ -207,7 +207,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
-    fn decrypt(&self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
+    fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
         let payload = msg.payload_mut();
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);

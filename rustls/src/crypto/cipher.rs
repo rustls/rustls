@@ -124,14 +124,14 @@ pub struct KeyBlockShape {
 pub trait MessageDecrypter: Send + Sync {
     /// Decrypt the given TLS message `msg`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
-    fn decrypt(&self, msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
+    fn decrypt(&mut self, msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter: Send + Sync {
     /// Encrypt the given TLS message `msg`, using the sequence number
     /// `seq which can be used to derive a unique [`Nonce`].
-    fn encrypt(&self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error>;
+    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of
     /// length `payload_len`
@@ -301,7 +301,7 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
 struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(&self, _m: BorrowedPlainMessage, _seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, _m: BorrowedPlainMessage, _seq: u64) -> Result<OpaqueMessage, Error> {
         Err(Error::EncryptError)
     }
 
@@ -314,7 +314,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
 struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {
-    fn decrypt(&self, _m: OpaqueMessage, _seq: u64) -> Result<PlainMessage, Error> {
+    fn decrypt(&mut self, _m: OpaqueMessage, _seq: u64) -> Result<PlainMessage, Error> {
         Err(Error::DecryptError)
     }
 }
