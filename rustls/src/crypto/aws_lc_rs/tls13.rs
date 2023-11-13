@@ -76,11 +76,23 @@ struct Chacha20Poly1305Aead(AeadAlgorithm);
 
 impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
-        self.0.encrypter(key, iv)
+        // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
+        Box::new(AeadMessageEncrypter {
+            enc_key: aead::LessSafeKey::new(
+                aead::UnboundKey::new(self.0 .0, key.as_ref()).unwrap(),
+            ),
+            iv,
+        })
     }
 
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
-        self.0.decrypter(key, iv)
+        // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
+        Box::new(AeadMessageDecrypter {
+            dec_key: aead::LessSafeKey::new(
+                aead::UnboundKey::new(self.0 .0, key.as_ref()).unwrap(),
+            ),
+            iv,
+        })
     }
 
     fn key_len(&self) -> usize {
@@ -148,18 +160,34 @@ impl Tls13AeadAlgorithm for Aes128GcmAead {
 struct AeadAlgorithm(&'static aead::Algorithm);
 
 impl AeadAlgorithm {
+    // using aead::TlsRecordSealingKey
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
-        // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(AeadMessageEncrypter {
-            enc_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0, key.as_ref()).unwrap()),
+        // safety:
+        // - the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
+        // - this function should only be used for `Algorithm::AES_128_GCM` or `Algorithm::AES_256_GCM`
+        Box::new(GcmMessageEncrypter {
+            enc_key: aead::TlsRecordSealingKey::new(
+                self.0,
+                aead::TlsProtocolId::TLS13,
+                key.as_ref(),
+            )
+            .unwrap(),
             iv,
         })
     }
 
+    // using aead::TlsRecordOpeningKey
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
-        // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
-        Box::new(AeadMessageDecrypter {
-            dec_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0, key.as_ref()).unwrap()),
+        // safety:
+        // - the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
+        // - this function should only be used for `Algorithm::AES_128_GCM` or `Algorithm::AES_256_GCM`
+        Box::new(GcmMessageDecrypter {
+            dec_key: aead::TlsRecordOpeningKey::new(
+                self.0,
+                aead::TlsProtocolId::TLS13,
+                key.as_ref(),
+            )
+            .unwrap(),
             iv,
         })
     }
@@ -205,6 +233,61 @@ impl MessageEncrypter for AeadMessageEncrypter {
 }
 
 impl MessageDecrypter for AeadMessageDecrypter {
+    fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
+        let payload = msg.payload_mut();
+        if payload.len() < self.dec_key.algorithm().tag_len() {
+            return Err(Error::DecryptError);
+        }
+
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
+        let aad = aead::Aad::from(make_tls13_aad(payload.len()));
+        let plain_len = self
+            .dec_key
+            .open_in_place(nonce, aad, payload)
+            .map_err(|_| Error::DecryptError)?
+            .len();
+
+        payload.truncate(plain_len);
+        msg.into_tls13_unpadded_message()
+    }
+}
+
+struct GcmMessageEncrypter {
+    enc_key: aead::TlsRecordSealingKey,
+    iv: Iv,
+}
+
+impl MessageEncrypter for GcmMessageEncrypter {
+    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+        let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
+        let mut payload = Vec::with_capacity(total_len);
+        payload.extend_from_slice(msg.payload);
+        msg.typ.encode(&mut payload);
+
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
+        let aad = aead::Aad::from(make_tls13_aad(total_len));
+        self.enc_key
+            .seal_in_place_append_tag(nonce, aad, &mut payload)
+            .map_err(|_| Error::EncryptError)?;
+
+        Ok(OpaqueMessage::new(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2,
+            payload,
+        ))
+    }
+
+    fn encrypted_payload_len(&self, payload_len: usize) -> usize {
+        payload_len + 1 + self.enc_key.algorithm().tag_len()
+    }
+}
+
+struct GcmMessageDecrypter {
+    dec_key: aead::TlsRecordOpeningKey,
+    iv: Iv,
+}
+
+impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
         let payload = msg.payload_mut();
         if payload.len() < self.dec_key.algorithm().tag_len() {
