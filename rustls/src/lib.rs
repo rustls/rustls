@@ -448,6 +448,7 @@ pub mod internal {
 /// std, non-async context.
 ///
 /// [`unbuffered-client`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/unbuffererd-client.rs
+/// [`unbuffered-server`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/unbuffererd-server.rs
 pub mod unbuffered {
     pub use crate::conn::unbuffered::{
         AppDataRecord, ConnectionState, EncodeError, EncodeTlsData, EncryptError,
@@ -546,6 +547,7 @@ pub mod server {
     pub use server_conn::StoresServerSessions;
     pub use server_conn::{
         Accepted, Acceptor, ReadEarlyData, ServerConfig, ServerConnection, ServerConnectionData,
+        UnbufferedServerConnection,
     };
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
 
