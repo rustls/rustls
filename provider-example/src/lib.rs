@@ -4,8 +4,11 @@ use std::sync::Arc;
 mod aead;
 mod hash;
 mod hmac;
+mod hpke;
 mod kx;
 mod verify;
+
+pub use hpke::HPKE_PROVIDER;
 
 pub static PROVIDER: &'static dyn rustls::crypto::CryptoProvider = &Provider;
 
