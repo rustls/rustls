@@ -177,11 +177,14 @@ jobs:
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Smoke-test benchmark program
-        run: cargo run --release --locked --example bench
+      - name: Smoke-test benchmark program (ring)
+        run: cargo run -p rustls --release --locked --example bench
+
+      - name: Smoke-test benchmark program (aws-lc-rs)
+        run: cargo run -p rustls --release --locked --example bench --no-default-features --features aws_lc_rs,tls12
 
       - name: Run micro-benchmarks
-        run: cargo bench --locked
+        run: cargo bench --locked --all-features
         env:
           RUSTFLAGS: --cfg=bench
 

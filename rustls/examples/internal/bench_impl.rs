@@ -14,12 +14,25 @@ use std::time::{Duration, Instant};
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use rustls::client::Resumption;
-use rustls::crypto::ring::{cipher_suite, Ticketer};
+#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+use rustls::crypto::aws_lc_rs::{cipher_suite, Ticketer, AWS_LC_RS as PROVIDER};
+#[cfg(feature = "ring")]
+use rustls::crypto::ring::{cipher_suite, Ticketer, RING as PROVIDER};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ConnectionCommon, SideData};
 use rustls::{ServerConfig, ServerConnection};
+
+pub fn main() {
+    let mut args = std::env::args();
+    if args.len() > 1 {
+        args.next();
+        selected_tests(args);
+    } else {
+        all_tests();
+    }
+}
 
 fn duration_nanos(d: Duration) -> f64 {
     (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
@@ -300,14 +313,14 @@ fn make_server_config(
             for root in roots {
                 client_auth_roots.add(root).unwrap();
             }
-            WebPkiClientVerifier::builder(client_auth_roots.into())
+            WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), PROVIDER)
                 .build()
                 .unwrap()
         }
         ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
     };
 
-    let mut cfg = ServerConfig::builder()
+    let mut cfg = ServerConfig::builder_with_provider(PROVIDER)
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[params.version])
@@ -340,7 +353,7 @@ fn make_client_config(
         rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
     );
 
-    let cfg = ClientConfig::builder()
+    let cfg = ClientConfig::builder_with_provider(PROVIDER)
         .with_cipher_suites(&[params.ciphersuite])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[params.version])
@@ -659,15 +672,5 @@ fn all_tests() {
         bench_handshake(test, ClientAuth::Yes, ResumptionParam::SessionId);
         bench_handshake(test, ClientAuth::No, ResumptionParam::Tickets);
         bench_handshake(test, ClientAuth::Yes, ResumptionParam::Tickets);
-    }
-}
-
-fn main() {
-    let mut args = env::args();
-    if args.len() > 1 {
-        args.next();
-        selected_tests(args);
-    } else {
-        all_tests();
     }
 }
