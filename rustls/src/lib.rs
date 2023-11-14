@@ -440,7 +440,7 @@ pub use crate::enums::{
     SignatureScheme,
 };
 pub use crate::error::{
-    CertRevocationListError, CertificateError, Error, InvalidMessage, PeerIncompatible,
+    CertRevocationListError, CertificateError, Error, InvalidMessage, OtherError, PeerIncompatible,
     PeerMisbehaved,
 };
 pub use crate::key_log::{KeyLog, NoKeyLog};
