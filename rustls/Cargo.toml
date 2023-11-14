@@ -48,7 +48,6 @@ required-features = ["tls12"]
 [[example]]
 name = "bench"
 path = "examples/internal/bench.rs"
-required-features = ["ring"]
 
 [[bench]]
 name = "benchmarks"
