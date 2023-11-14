@@ -37,6 +37,9 @@ pub mod tls12;
 /// Cryptography specific to TLS1.3.
 pub mod tls13;
 
+/// Hybrid public key encryption (RFC 9180).
+pub mod hpke;
+
 pub use crate::rand::GetRandomFailed;
 
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
