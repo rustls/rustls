@@ -333,6 +333,11 @@ impl CommonState {
             return len;
         }
 
+        self.send_plain_non_buffering(data, limit)
+    }
+
+    fn send_plain_non_buffering(&mut self, data: &[u8], limit: Limit) -> usize {
+        debug_assert!(self.may_send_application_data);
         debug_assert!(self.record_layer.is_encrypting());
 
         if data.is_empty() {
@@ -409,7 +414,7 @@ impl CommonState {
         }
 
         while let Some(buf) = self.sendable_plaintext.pop() {
-            self.send_plain(&buf, Limit::No);
+            self.send_plain_non_buffering(&buf, Limit::No);
         }
     }
 
