@@ -539,6 +539,8 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This function fails if called prior to the handshake completing;
     /// check with [`CommonState::is_handshaking`] first.
+    ///
+    /// This function fails if `output.len()` is zero.
     #[inline]
     pub fn export_keying_material<T: AsMut<[u8]>>(
         &self,
@@ -740,6 +742,12 @@ impl<Data> ConnectionCore<Data> {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<T, Error> {
+        if output.as_mut().is_empty() {
+            return Err(Error::General(
+                "export_keying_material with zero-length output".into(),
+            ));
+        }
+
         match self.state.as_ref() {
             Ok(st) => st
                 .export_keying_material(output.as_mut(), label, context)
