@@ -2698,6 +2698,24 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
         .is_ok());
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 
+    let mut empty = vec![];
+    assert_eq!(
+        client
+            .export_keying_material(&mut empty, b"label", Some(b"context"))
+            .err(),
+        Some(Error::General(
+            "export_keying_material with zero-length output".into()
+        ))
+    );
+    assert_eq!(
+        server
+            .export_keying_material(&mut empty, b"label", Some(b"context"))
+            .err(),
+        Some(Error::General(
+            "export_keying_material with zero-length output".into()
+        ))
+    );
+
     assert!(client
         .export_keying_material(&mut client_secret, b"label", None)
         .is_ok());
