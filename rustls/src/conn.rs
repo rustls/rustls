@@ -107,6 +107,16 @@ impl Connection {
             Self::Server(server) => server.dangerous_extract_secrets(),
         }
     }
+
+    /// Sets a limit on the internal buffers
+    ///
+    /// See [`ConnectionCommon::set_buffer_limit()`] for more information.
+    pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
+        match self {
+            Self::Client(client) => client.set_buffer_limit(limit),
+            Self::Server(server) => server.set_buffer_limit(limit),
+        }
+    }
 }
 
 impl Deref for Connection {
@@ -283,7 +293,7 @@ impl<'a> io::Write for Writer<'a> {
     ///
     /// This function buffers plaintext sent before the
     /// TLS handshake completes, and sends it as soon
-    /// as it can.  See [`CommonState::set_buffer_limit`] to control
+    /// as it can.  See [`ConnectionCommon::set_buffer_limit`] to control
     /// the size of this buffer.
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.sink.write(buf)
@@ -587,6 +597,54 @@ impl<Data> ConnectionCommon<Data> {
             tx: (record_layer.write_seq(), tx),
             rx: (record_layer.read_seq(), rx),
         })
+    }
+
+    /// Sets a limit on the internal buffers used to buffer
+    /// unsent plaintext (prior to completing the TLS handshake)
+    /// and unsent TLS records.  This limit acts only on application
+    /// data written through [`Connection::writer`].
+    ///
+    /// By default the limit is 64KB.  The limit can be set
+    /// at any time, even if the current buffer use is higher.
+    ///
+    /// [`None`] means no limit applies, and will mean that written
+    /// data is buffered without bound -- it is up to the application
+    /// to appropriately schedule its plaintext and TLS writes to bound
+    /// memory usage.
+    ///
+    /// For illustration: `Some(1)` means a limit of one byte applies:
+    /// [`Connection::writer`] will accept only one byte, encrypt it and
+    /// add a TLS header.  Once this is sent via [`Connection::write_tls`],
+    /// another byte may be sent.
+    ///
+    /// # Internal write-direction buffering
+    /// rustls has two buffers whose size are bounded by this setting:
+    ///
+    /// ## Buffering of unsent plaintext data prior to handshake completion
+    ///
+    /// Calls to [`Connection::writer`] before or during the handshake
+    /// are buffered (up to the limit specified here).  Once the
+    /// handshake completes this data is encrypted and the resulting
+    /// TLS records are added to the outgoing buffer.
+    ///
+    /// ## Buffering of outgoing TLS records
+    ///
+    /// This buffer is used to store TLS records that rustls needs to
+    /// send to the peer.  It is used in these two circumstances:
+    ///
+    /// - by [`Connection::process_new_packets`] when a handshake or alert
+    ///   TLS record needs to be sent.
+    /// - by [`Connection::writer`] post-handshake: the plaintext is
+    ///   encrypted and the resulting TLS record is buffered.
+    ///
+    /// This buffer is emptied by [`Connection::write_tls`].
+    ///
+    /// [`Connection::writer`]: crate::Connection::writer
+    /// [`Connection::write_tls`]: crate::Connection::write_tls
+    /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
+    pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
+        self.sendable_plaintext.set_limit(limit);
+        self.sendable_tls.set_limit(limit);
     }
 }
 
