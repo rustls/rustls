@@ -1,6 +1,8 @@
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt::{Debug, Formatter};
 use std::error::Error as StdError;
-use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_crypto::HpkeCrypto;
@@ -44,7 +46,7 @@ impl HpkeProvider for HpkeRsProvider {
 struct HpkeRs(hpke_rs::Hpke<HpkeRustCrypto>);
 
 impl Debug for HpkeRs {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("HpkeRsHpke").finish()
     }
 }
