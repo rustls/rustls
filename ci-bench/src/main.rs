@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hint::black_box;
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::mem;
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
+use async_trait::async_trait;
 use clap::{Parser, Subcommand, ValueEnum};
 use fxhash::FxHashMap;
 use itertools::Itertools;
@@ -26,6 +27,7 @@ use crate::benchmark::{
     ResumptionKind,
 };
 use crate::cachegrind::CachegrindRunner;
+use crate::util::async_io::{self, AsyncRead, AsyncWrite};
 use crate::util::transport::{
     read_handshake_message, read_plaintext_to_end_bounded, send_handshake_message,
     write_all_plaintext_bounded,
@@ -150,26 +152,32 @@ fn main() -> anyhow::Result<()> {
                 writer: &mut stdout,
                 handshake_buf,
             };
-            let result = match side {
-                Side::Server => run_bench(
-                    ServerSideStepper {
-                        io,
-                        config: ServerSideStepper::make_config(params, resumption_kind),
-                    },
-                    bench.kind,
-                ),
-                Side::Client => run_bench(
-                    ClientSideStepper {
-                        io,
-                        resumption_kind,
-                        config: ClientSideStepper::make_config(params, resumption_kind),
-                    },
-                    bench.kind,
-                ),
-            };
-
-            result
-                .with_context(|| format!("{} crashed for {} side", bench.name(), side.as_str()))?;
+            async_io::block_on_single_poll(async {
+                match side {
+                    Side::Server => {
+                        run_bench(
+                            ServerSideStepper {
+                                io,
+                                config: ServerSideStepper::make_config(params, resumption_kind),
+                            },
+                            bench.kind,
+                        )
+                        .await
+                    }
+                    Side::Client => {
+                        run_bench(
+                            ClientSideStepper {
+                                io,
+                                resumption_kind,
+                                config: ClientSideStepper::make_config(params, resumption_kind),
+                            },
+                            bench.kind,
+                        )
+                        .await
+                    }
+                }
+            })
+            .with_context(|| format!("{} crashed for {} side", bench.name(), side.as_str()))?;
 
             // Prevent stdin / stdout from being closed
             mem::forget(stdin);
@@ -373,18 +381,19 @@ pub fn run_all(
 /// Drives the different steps in a benchmark.
 ///
 /// See [`run_bench`] for specific details on how it is used.
+#[async_trait(?Send)]
 trait BenchStepper {
     type Endpoint;
 
-    fn handshake(&mut self) -> anyhow::Result<Self::Endpoint>;
-    fn sync_before_resumed_handshake(&mut self) -> anyhow::Result<()>;
-    fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()>;
+    async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint>;
+    async fn sync_before_resumed_handshake(&mut self) -> anyhow::Result<()>;
+    async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()>;
 }
 
 /// Stepper fields necessary for IO
 struct StepperIo<'a> {
-    reader: &'a mut dyn Read,
-    writer: &'a mut dyn Write,
+    reader: &'a mut dyn AsyncRead,
+    writer: &'a mut dyn AsyncWrite,
     handshake_buf: &'a mut [u8],
 }
 
@@ -423,20 +432,21 @@ impl ClientSideStepper<'_> {
     }
 }
 
+#[async_trait(?Send)]
 impl BenchStepper for ClientSideStepper<'_> {
     type Endpoint = ClientConnection;
 
-    fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
+    async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let server_name = "localhost".try_into().unwrap();
         let mut client = ClientConnection::new(self.config.clone(), server_name).unwrap();
         client.set_buffer_limit(None);
 
         loop {
-            send_handshake_message(&mut client, self.io.writer, self.io.handshake_buf)?;
+            send_handshake_message(&mut client, self.io.writer, self.io.handshake_buf).await?;
             if !client.is_handshaking() && !client.wants_write() {
                 break;
             }
-            read_handshake_message(&mut client, self.io.reader, self.io.handshake_buf)?;
+            read_handshake_message(&mut client, self.io.reader, self.io.handshake_buf).await?;
         }
 
         // Session ids and tickets are no longer part of the handshake in TLS 1.3, so we need to
@@ -444,23 +454,23 @@ impl BenchStepper for ClientSideStepper<'_> {
         if self.resumption_kind != ResumptionKind::No
             && client.protocol_version().unwrap() == ProtocolVersion::TLSv1_3
         {
-            read_handshake_message(&mut client, self.io.reader, self.io.handshake_buf)?;
+            read_handshake_message(&mut client, self.io.reader, self.io.handshake_buf).await?;
         }
 
         Ok(client)
     }
 
-    fn sync_before_resumed_handshake(&mut self) -> anyhow::Result<()> {
+    async fn sync_before_resumed_handshake(&mut self) -> anyhow::Result<()> {
         // The client syncs by receiving a single byte (we assert that it matches the `42` byte sent
         // by the server, just to be sure)
         let buf = &mut [0];
-        self.io.reader.read_exact(buf)?;
+        self.io.reader.read_exact(buf).await?;
         assert_eq!(buf[0], 42);
         Ok(())
     }
 
-    fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
-        let total_plaintext_read = read_plaintext_to_end_bounded(endpoint, self.io.reader)?;
+    async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
+        let total_plaintext_read = read_plaintext_to_end_bounded(endpoint, self.io.reader).await?;
         assert_eq!(total_plaintext_read, TRANSFER_PLAINTEXT_SIZE);
         Ok(())
     }
@@ -497,37 +507,38 @@ impl ServerSideStepper<'_> {
     }
 }
 
+#[async_trait(?Send)]
 impl BenchStepper for ServerSideStepper<'_> {
     type Endpoint = ServerConnection;
 
-    fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
+    async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let mut server = ServerConnection::new(self.config.clone()).unwrap();
         server.set_buffer_limit(None);
 
         while server.is_handshaking() {
-            read_handshake_message(&mut server, self.io.reader, self.io.handshake_buf)?;
-            send_handshake_message(&mut server, self.io.writer, self.io.handshake_buf)?;
+            read_handshake_message(&mut server, self.io.reader, self.io.handshake_buf).await?;
+            send_handshake_message(&mut server, self.io.writer, self.io.handshake_buf).await?;
         }
 
         Ok(server)
     }
 
-    fn sync_before_resumed_handshake(&mut self) -> anyhow::Result<()> {
+    async fn sync_before_resumed_handshake(&mut self) -> anyhow::Result<()> {
         // The server syncs by sending a single byte
-        self.io.writer.write_all(&[42])?;
-        self.io.writer.flush()?;
+        self.io.writer.write_all(&[42]).await?;
+        self.io.writer.flush().await?;
         Ok(())
     }
 
-    fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
-        write_all_plaintext_bounded(endpoint, self.io.writer, TRANSFER_PLAINTEXT_SIZE)?;
+    async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()> {
+        write_all_plaintext_bounded(endpoint, self.io.writer, TRANSFER_PLAINTEXT_SIZE).await?;
         Ok(())
     }
 }
 
 /// Runs the benchmark using the provided stepper
-fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyhow::Result<()> {
-    let mut endpoint = stepper.handshake()?;
+async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyhow::Result<()> {
+    let mut endpoint = stepper.handshake().await?;
 
     match kind {
         BenchmarkKind::Handshake(ResumptionKind::No) => {
@@ -543,12 +554,16 @@ fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyhow::Re
                 // connection and be ready for a new handshake, otherwise the client will start a
                 // handshake before the server is ready and the bytes will be fed to the old
                 // connection!)
-                stepper.sync_before_resumed_handshake()?;
-                stepper.handshake()?;
+                stepper
+                    .sync_before_resumed_handshake()
+                    .await?;
+                stepper.handshake().await?;
             }
         }
         BenchmarkKind::Transfer => {
-            stepper.transmit_data(&mut endpoint)?;
+            stepper
+                .transmit_data(&mut endpoint)
+                .await?;
         }
     }
 

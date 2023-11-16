@@ -35,8 +35,89 @@ impl KeyType {
     }
 }
 
+pub mod async_io {
+    //! Async IO building blocks required for sharing code between the instruction count and
+    //! wall-time benchmarks
+
+    use std::fs::File;
+    use std::future::Future;
+    use std::pin::pin;
+    use std::task::{Poll, RawWaker, RawWakerVTable, Waker};
+    use std::{io, ptr, task};
+
+    use async_trait::async_trait;
+
+    /// Block on a future that should complete in a single poll.
+    ///
+    /// Safe to use when the underlying futures are blocking (e.g. waiting for an IO operation to
+    /// complete, and returning Poll::Ready afterwards, without yielding in between).
+    ///
+    /// Useful when counting CPU instructions, because the server and the client side of the
+    /// connection run in two separate processes and communicate through stdio using blocking
+    /// operations.
+    pub fn block_on_single_poll(
+        future: impl Future<Output = anyhow::Result<()>>,
+    ) -> anyhow::Result<()> {
+        // We don't need a waker, because the future will complete in one go
+        let waker = noop_waker();
+        let mut ctx = task::Context::from_waker(&waker);
+
+        match pin!(future).poll(&mut ctx) {
+            Poll::Ready(result) => result,
+            Poll::Pending => {
+                panic!("the provided future did not finish after one poll!")
+            }
+        }
+    }
+
+    // Copied from Waker::noop, which we cannot use directly because it hasn't been stabilized
+    fn noop_waker() -> Waker {
+        const VTABLE: RawWakerVTable = RawWakerVTable::new(|_| RAW, |_| {}, |_| {}, |_| {});
+        const RAW: RawWaker = RawWaker::new(ptr::null(), &VTABLE);
+        unsafe { Waker::from_raw(RAW) }
+    }
+
+    /// Read bytes asynchronously
+    #[async_trait(?Send)]
+    pub trait AsyncRead {
+        async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+        async fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()>;
+    }
+
+    /// Write bytes asynchronously
+    #[async_trait(?Send)]
+    pub trait AsyncWrite {
+        async fn write_all(&mut self, buf: &[u8]) -> io::Result<()>;
+        async fn flush(&mut self) -> io::Result<()>;
+    }
+
+    // Blocking implementation of AsyncRead for files (used to read from stdin)
+    #[async_trait(?Send)]
+    impl AsyncRead for File {
+        async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            io::Read::read(self, buf)
+        }
+
+        async fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+            io::Read::read_exact(self, buf)
+        }
+    }
+
+    // Blocking implementation of AsyncWrite for files (used to write to stdout)
+    #[async_trait(?Send)]
+    impl AsyncWrite for File {
+        async fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+            io::Write::write_all(self, buf)
+        }
+
+        async fn flush(&mut self) -> io::Result<()> {
+            io::Write::flush(self)
+        }
+    }
+}
+
 pub mod transport {
-    //! This module implements custom functions to interact between rustls clients and a servers.
+    //! Custom functions to interact between rustls clients and a servers.
     //!
     //! The goal of these functions is to ensure messages are exchanged in chunks of a fixed size, to make
     //! instruction counts more deterministic. This is particularly important for the receiver of the
@@ -49,9 +130,10 @@ pub mod transport {
     //! but that doesn't matter (we are measuring performance differences, and overhead is automatically
     //! ignored as long as it remains constant).
 
+    use super::async_io::{AsyncRead, AsyncWrite};
     use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
     use rustls::{ClientConnection, ConnectionCommon, ServerConnection, SideData};
-    use std::io::{Read, Write};
+    use std::io::{Cursor, Read, Write};
 
     /// Sends one side's handshake data to the other side in one go.
     ///
@@ -60,9 +142,9 @@ pub mod transport {
     /// length, followed by the message itself.
     ///
     /// The receiving end should use [`read_handshake_message`] to process the transmission.
-    pub fn send_handshake_message<T: SideData>(
+    pub async fn send_handshake_message<T: SideData>(
         conn: &mut ConnectionCommon<T>,
-        writer: &mut dyn Write,
+        writer: &mut dyn AsyncWrite,
         buf: &mut [u8],
     ) -> anyhow::Result<()> {
         // Write all bytes the connection wants to send to an intermediate buffer
@@ -83,9 +165,13 @@ pub mod transport {
         }
 
         // Write the whole buffer in one go, preceded by its length
-        writer.write_u32::<BigEndian>(written as u32)?;
-        writer.write_all(&buf[..written])?;
-        writer.flush()?;
+        let mut length_buf = Vec::with_capacity(4);
+        length_buf.write_u32::<BigEndian>(written as u32)?;
+        writer.write_all(&length_buf).await?;
+        writer
+            .write_all(&buf[..written])
+            .await?;
+        writer.flush().await?;
 
         Ok(())
     }
@@ -94,20 +180,29 @@ pub mod transport {
     ///
     /// Used in combination with [`send_handshake_message`] (see that function's documentation for
     /// more details).
-    pub fn read_handshake_message<T: SideData>(
+    pub async fn read_handshake_message<T: SideData>(
         conn: &mut ConnectionCommon<T>,
-        reader: &mut dyn Read,
+        reader: &mut dyn AsyncRead,
         buf: &mut [u8],
     ) -> anyhow::Result<usize> {
-        // Read the message to an intermediate buffer
-        let length = reader.read_u32::<BigEndian>()? as usize;
+        // Read the length of the message to an intermediate buffer and parse it
+        let mut length_buf = [0; 4];
+        reader
+            .read_exact(&mut length_buf)
+            .await?;
+        let length = Cursor::new(length_buf).read_u32::<BigEndian>()? as usize;
+
+        // Read the rest of the message to an intermediate buffer
         if length >= buf.len() {
             anyhow::bail!(
-            "Not enough space in buffer for incoming message (msg len = {length}, buf len = {})",
-            buf.len()
-        );
+                "Not enough space in buffer for incoming message (msg len = {length}, buf len = {})",
+                buf.len()
+            );
         }
-        reader.read_exact(&mut buf[..length])?;
+
+        reader
+            .read_exact(&mut buf[..length])
+            .await?;
 
         // Feed the data to rustls
         let in_memory_reader = &mut &buf[..length];
@@ -121,9 +216,9 @@ pub mod transport {
     /// Reads plaintext until the reader reaches EOF, using a bounded amount of memory.
     ///
     /// Returns the amount of plaintext bytes received.
-    pub fn read_plaintext_to_end_bounded(
+    pub async fn read_plaintext_to_end_bounded(
         client: &mut ClientConnection,
-        reader: &mut dyn Read,
+        reader: &mut dyn AsyncRead,
     ) -> anyhow::Result<usize> {
         let mut chunk_buf = [0u8; 262_144];
         let mut plaintext_buf = [0u8; 262_144];
@@ -133,7 +228,9 @@ pub mod transport {
             // Read until the whole chunk is received
             let mut chunk_buf_end = 0;
             while chunk_buf_end != chunk_buf.len() {
-                let read = reader.read(&mut chunk_buf[chunk_buf_end..])?;
+                let read = reader
+                    .read(&mut chunk_buf[chunk_buf_end..])
+                    .await?;
                 if read == 0 {
                     // Stream closed
                     break;
@@ -171,12 +268,12 @@ pub mod transport {
     }
 
     /// Writes a plaintext of size `plaintext_size`, using a bounded amount of memory
-    pub fn write_all_plaintext_bounded(
+    pub async fn write_all_plaintext_bounded(
         server: &mut ServerConnection,
-        writer: &mut dyn Write,
+        writer: &mut dyn AsyncWrite,
         plaintext_size: usize,
     ) -> anyhow::Result<()> {
-        let send_buf = [0u8; 262_144];
+        let mut send_buf = [0u8; 262_144];
         assert_eq!(plaintext_size % send_buf.len(), 0);
         let iterations = plaintext_size / send_buf.len();
 
@@ -185,8 +282,11 @@ pub mod transport {
 
             // Empty the server's buffer, so we can re-fill it in the next iteration
             while server.wants_write() {
-                server.write_tls(writer)?;
-                writer.flush()?;
+                let written = server.write_tls(&mut send_buf.as_mut())?;
+                writer
+                    .write_all(&send_buf[..written])
+                    .await?;
+                writer.flush().await?;
             }
         }
 
