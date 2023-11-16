@@ -236,6 +236,7 @@ impl KeyScheduleHandshakeStart {
                 client_secret.clone(),
                 server_secret.clone(),
                 self.ks.suite,
+                self.ks.suite.quic.unwrap(),
                 common.side,
                 common.quic.version,
             ));
@@ -310,6 +311,7 @@ impl KeyScheduleHandshake {
                 _client_secret.clone(),
                 server_secret.clone(),
                 traffic.ks.suite,
+                traffic.ks.suite.quic.unwrap(),
                 common.side,
                 common.quic.version,
             ));
@@ -364,6 +366,7 @@ impl KeyScheduleClientBeforeFinished {
                 client_secret.clone(),
                 server_secret.clone(),
                 self.traffic.ks.suite,
+                self.traffic.ks.suite.quic.unwrap(),
                 common.side,
                 common.quic.version,
             ));

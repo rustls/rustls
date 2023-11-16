@@ -4229,6 +4229,11 @@ mod test_quic {
             TLS13_AES_128_GCM_SHA256
                 .tls13()
                 .unwrap(),
+            TLS13_AES_128_GCM_SHA256
+                .tls13()
+                .unwrap()
+                .quic
+                .unwrap(),
             CONNECTION_ID,
             Side::Client,
         );
@@ -4371,6 +4376,11 @@ mod test_quic {
             Version::V1,
             TLS13_AES_128_GCM_SHA256
                 .tls13()
+                .unwrap(),
+            TLS13_AES_128_GCM_SHA256
+                .tls13()
+                .unwrap()
+                .quic
                 .unwrap(),
             CONNECTION_ID,
             Side::Server,
