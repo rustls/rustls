@@ -269,6 +269,12 @@ impl ClientConfig {
                 .any(|cs| cs.version().version == v)
     }
 
+    pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
+        self.cipher_suites
+            .iter()
+            .any(|cs| cs.usable_for_protocol(proto))
+    }
+
     /// Access configuration options whose use is dangerous and requires
     /// extra care.
     pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {

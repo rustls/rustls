@@ -153,6 +153,12 @@ impl ClientConnection {
             ));
         }
 
+        if !config.supports_protocol(Protocol::Quic) {
+            return Err(Error::General(
+                "At least one ciphersuite must support QUIC".into(),
+            ));
+        }
+
         let ext = match quic_version {
             Version::V1Draft => ClientExtension::TransportParametersDraft(params),
             Version::V1 | Version::V2 => ClientExtension::TransportParameters(params),
@@ -219,6 +225,12 @@ impl ServerConnection {
         if !config.supports_version(ProtocolVersion::TLSv1_3) {
             return Err(Error::General(
                 "TLS 1.3 support is required for QUIC".into(),
+            ));
+        }
+
+        if !config.supports_protocol(Protocol::Quic) {
+            return Err(Error::General(
+                "At least one ciphersuite must support QUIC".into(),
             ));
         }
 
