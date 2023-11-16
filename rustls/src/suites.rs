@@ -58,7 +58,6 @@ impl SupportedCipherSuite {
         }
     }
 
-    #[cfg(any(test, feature = "quic"))]
     /// Return the inner `Tls13CipherSuite` for this suite, if it is a TLS1.3 suite.
     pub fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
         match self {

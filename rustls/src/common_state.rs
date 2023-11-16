@@ -6,10 +6,8 @@ use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-#[cfg(feature = "quic")]
 use crate::msgs::message::MessagePayload;
 use crate::msgs::message::{BorrowedPlainMessage, Message, OpaqueMessage, PlainMessage};
-#[cfg(feature = "quic")]
 use crate::quic;
 use crate::record_layer;
 use crate::suites::PartiallyExtractedSecrets;
@@ -46,10 +44,8 @@ pub struct CommonState {
     pub(crate) sendable_tls: ChunkVecBuffer,
     queued_key_update_message: Option<Vec<u8>>,
 
-    #[allow(dead_code)] // only read for QUIC
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,
-    #[cfg(feature = "quic")]
     pub(crate) quic: quic::Quic,
     pub(crate) enable_secret_extraction: bool,
 }
@@ -76,9 +72,7 @@ impl CommonState {
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             queued_key_update_message: None,
-
             protocol: Protocol::Tcp,
-            #[cfg(feature = "quic")]
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
         }
@@ -381,7 +375,6 @@ impl CommonState {
 
     /// Send a raw TLS message, fragmenting it if needed.
     pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool) {
-        #[cfg(feature = "quic")]
         {
             if let Protocol::Quic = self.protocol {
                 if let MessagePayload::Alert(alert) = m.payload {
@@ -426,7 +419,6 @@ impl CommonState {
             .prepare_message_decrypter(dec);
     }
 
-    #[cfg(feature = "quic")]
     pub(crate) fn missing_extension(&mut self, why: PeerMisbehaved) -> Error {
         self.send_fatal_alert(AlertDescription::MissingExtension, why)
     }
@@ -546,12 +538,7 @@ impl CommonState {
     }
 
     pub(crate) fn is_quic(&self) -> bool {
-        #[cfg(feature = "quic")]
-        {
-            self.protocol == Protocol::Quic
-        }
-        #[cfg(not(feature = "quic"))]
-        false
+        self.protocol == Protocol::Quic
     }
 
     pub(crate) fn should_update_key(
@@ -670,7 +657,6 @@ impl Side {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(crate) enum Protocol {
     Tcp,
-    #[cfg(feature = "quic")]
     Quic,
 }
 

@@ -3,7 +3,7 @@
 // and run.
 
 #[test]
-#[cfg(all(coverage, feature = "quic"))]
+#[cfg(coverage)]
 fn run_bogo_tests() {
     use std::process::Command;
 

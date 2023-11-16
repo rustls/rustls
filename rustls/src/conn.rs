@@ -664,7 +664,6 @@ impl<Data> ConnectionCore<Data> {
             }
             Ok(None) => Ok(None),
             Err(err @ Error::InvalidMessage(_)) => {
-                #[cfg(feature = "quic")]
                 if self.common_state.is_quic() {
                     self.common_state.quic.alert = Some(AlertDescription::DecodeError);
                 }

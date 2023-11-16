@@ -20,7 +20,6 @@ pub mod sign;
 pub(crate) mod hash;
 pub(crate) mod hmac;
 pub(crate) mod kx;
-#[cfg(feature = "quic")]
 pub(crate) mod quic;
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]

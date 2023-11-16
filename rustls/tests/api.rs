@@ -3721,7 +3721,6 @@ fn early_data_can_be_rejected_by_server() {
     assert!(!client.is_early_data_accepted());
 }
 
-#[cfg(feature = "quic")]
 mod test_quic {
     use super::*;
     use rustls::quic::{self, ConnectionCommon};

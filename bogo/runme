@@ -7,10 +7,10 @@ set -xe
 
 case ${BOGO_SHIM_PROVIDER:-ring} in
   ring)
-      cargo build --example bogo_shim --features quic
+      cargo build --example bogo_shim
       ;;
   aws-lc-rs)
-      cargo build --example bogo_shim --no-default-features --features quic,aws_lc_rs,tls12,logging
+      cargo build --example bogo_shim --no-default-features --features aws_lc_rs,tls12,logging
       ;;
   existing)
       ;;

@@ -29,7 +29,6 @@ default = ["logging", "ring", "tls12"]
 logging = ["log"]
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 ring = ["dep:ring", "webpki/ring"]
-quic = []
 tls12 = []
 read_buf = ["rustversion"]
 
@@ -44,7 +43,7 @@ base64 = "0.21"
 [[example]]
 name = "bogo_shim"
 path = "examples/internal/bogo_shim.rs"
-required-features = ["quic", "tls12"]
+required-features = ["tls12"]
 
 [[example]]
 name = "bench"

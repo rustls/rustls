@@ -6,9 +6,6 @@ license = "Apache-2.0 OR ISC OR MIT"
 description = "Rustls connectivity based integration tests."
 publish = false
 
-[features]
-quic = ["rustls/quic"]
-
 [dependencies]
 rustls = { path = "../rustls", features = [ "logging" ]}
 

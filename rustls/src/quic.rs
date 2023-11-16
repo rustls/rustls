@@ -382,7 +382,6 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
     }
 }
 
-#[cfg(feature = "quic")]
 #[derive(Default)]
 pub(crate) struct Quic {
     /// QUIC transport parameters received from the peer during the handshake

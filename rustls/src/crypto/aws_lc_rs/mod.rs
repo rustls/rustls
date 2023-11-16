@@ -28,7 +28,6 @@ pub(crate) mod hash;
 pub(crate) mod hmac;
 #[path = "../ring/kx.rs"]
 pub(crate) mod kx;
-#[cfg(feature = "quic")]
 #[path = "../ring/quic.rs"]
 pub(crate) mod quic;
 #[path = "../ring/ticketer.rs"]

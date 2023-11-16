@@ -213,13 +213,13 @@ impl crate::quic::Algorithm for KeyBuilder {
 mod tests {
     use super::*;
     use crate::common_state::Side;
-    use crate::crypto::ring::tls13::{
-        TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
-    };
     use crate::crypto::tls13::OkmBlock;
     use crate::quic::HeaderProtectionKey;
     use crate::quic::PacketKey;
     use crate::quic::*;
+    use crate::test_provider::tls13::{
+        TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
+    };
     use crate::tls13::key_schedule::{hkdf_expand_label, hkdf_expand_label_aead_key};
 
     fn test_short_packet(version: Version, expected: &[u8]) {
