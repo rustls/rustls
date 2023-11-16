@@ -7,4 +7,9 @@ cargo llvm-cov clean --workspace
 
 cargo build --locked --all-targets --all-features
 cargo test --locked --all-features
+
+## bogo
+cargo test --locked --all-features run_bogo_tests_ring -- --ignored
+cargo test --locked --all-features run_bogo_tests_aws_lc_rs -- --ignored
+
 cargo llvm-cov report "$@"
