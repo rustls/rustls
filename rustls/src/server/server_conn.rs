@@ -1,5 +1,5 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
-use crate::common_state::{CommonState, Context, Side, State};
+use crate::common_state::{CommonState, Context, Protocol, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::DnsName;
@@ -373,6 +373,12 @@ impl ServerConfig {
                 .cipher_suites
                 .iter()
                 .any(|cs| cs.version().version == v)
+    }
+
+    pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
+        self.cipher_suites
+            .iter()
+            .any(|cs| cs.usable_for_protocol(proto))
     }
 }
 
