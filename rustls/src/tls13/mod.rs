@@ -24,7 +24,13 @@ pub struct Tls13CipherSuite {
 
     pub(crate) confidentiality_limit: u64,
     pub(crate) integrity_limit: u64,
-    pub(crate) quic: &'static dyn crate::quic::Algorithm,
+
+    /// How to create QUIC header and record protection algorithms
+    /// for this suite.
+    ///
+    /// Provide `None` to opt out of QUIC support for this suite.  It will
+    /// not be offered in QUIC handshakes.
+    pub quic: Option<&'static dyn crate::quic::Algorithm>,
 }
 
 impl Tls13CipherSuite {

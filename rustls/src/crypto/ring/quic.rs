@@ -235,6 +235,7 @@ mod tests {
             .expander_for_okm(&OkmBlock::new(SECRET));
         let key_len = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
             .quic
+            .unwrap()
             .aead_key_len();
         let header_key =
             hkdf_expand_label_aead_key(expander.as_ref(), key_len, version.header_key_label(), &[]);
@@ -316,6 +317,9 @@ mod tests {
                 ][..],
             ),
             TLS13_AES_128_GCM_SHA256_INTERNAL,
+            TLS13_AES_128_GCM_SHA256_INTERNAL
+                .quic
+                .unwrap(),
             Side::Client,
             Version::V1,
         );
@@ -362,6 +366,9 @@ mod tests {
         let server = Keys::initial(
             Version::V2,
             TLS13_AES_128_GCM_SHA256_INTERNAL,
+            TLS13_AES_128_GCM_SHA256_INTERNAL
+                .quic
+                .unwrap(),
             &icid,
             Side::Server,
         );

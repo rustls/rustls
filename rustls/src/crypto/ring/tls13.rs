@@ -32,7 +32,10 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
     aead_alg: &Chacha20Poly1305Aead(AeadAlgorithm(&aead::CHACHA20_POLY1305)),
     confidentiality_limit: u64::MAX,
     integrity_limit: 1 << 36,
-    quic: &super::quic::KeyBuilder(&aead::CHACHA20_POLY1305, &aead::quic::CHACHA20),
+    quic: Some(&super::quic::KeyBuilder(
+        &aead::CHACHA20_POLY1305,
+        &aead::quic::CHACHA20,
+    )),
 };
 
 /// The TLS1.3 ciphersuite TLS_AES_256_GCM_SHA384
@@ -46,7 +49,10 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         aead_alg: &Aes256GcmAead(AeadAlgorithm(&aead::AES_256_GCM)),
         confidentiality_limit: 1 << 23,
         integrity_limit: 1 << 52,
-        quic: &super::quic::KeyBuilder(&aead::AES_256_GCM, &aead::quic::AES_256),
+        quic: Some(&super::quic::KeyBuilder(
+            &aead::AES_256_GCM,
+            &aead::quic::AES_256,
+        )),
     });
 
 /// The TLS1.3 ciphersuite TLS_AES_128_GCM_SHA256
@@ -62,7 +68,10 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
     aead_alg: &Aes128GcmAead(AeadAlgorithm(&aead::AES_128_GCM)),
     confidentiality_limit: 1 << 23,
     integrity_limit: 1 << 52,
-    quic: &super::quic::KeyBuilder(&aead::AES_128_GCM, &aead::quic::AES_128),
+    quic: Some(&super::quic::KeyBuilder(
+        &aead::AES_128_GCM,
+        &aead::quic::AES_128,
+    )),
 };
 
 struct Chacha20Poly1305Aead(AeadAlgorithm);

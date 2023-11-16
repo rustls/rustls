@@ -319,11 +319,14 @@ impl<Data: SideData> ConnectionCommon<Data> {
 
     /// Compute the keys for encrypting/decrypting 0-RTT packets, if available
     pub fn zero_rtt_keys(&self) -> Option<DirectionalKeys> {
+        let suite = self
+            .core
+            .common_state
+            .suite
+            .and_then(|suite| suite.tls13())?;
         Some(DirectionalKeys::new(
-            self.core
-                .common_state
-                .suite
-                .and_then(|suite| suite.tls13())?,
+            suite,
+            suite.quic?,
             self.core
                 .common_state
                 .quic
@@ -439,6 +442,7 @@ pub struct Secrets {
     pub(crate) server: OkmBlock,
     /// Cipher suite used with these secrets
     suite: &'static Tls13CipherSuite,
+    quic: &'static dyn Algorithm,
     side: Side,
     version: Version,
 }
@@ -448,6 +452,7 @@ impl Secrets {
         client: OkmBlock,
         server: OkmBlock,
         suite: &'static Tls13CipherSuite,
+        quic: &'static dyn Algorithm,
         side: Side,
         version: Version,
     ) -> Self {
@@ -455,6 +460,7 @@ impl Secrets {
             client,
             server,
             suite,
+            quic,
             side,
             version,
         }
@@ -505,6 +511,7 @@ pub struct DirectionalKeys {
 impl DirectionalKeys {
     pub(crate) fn new(
         suite: &'static Tls13CipherSuite,
+        quic: &'static dyn Algorithm,
         secret: &OkmBlock,
         version: Version,
     ) -> Self {
@@ -512,7 +519,7 @@ impl DirectionalKeys {
             .hkdf_provider
             .expander_for_okm(secret);
 
-        let aead_key_len = suite.quic.aead_key_len();
+        let aead_key_len = quic.aead_key_len();
 
         let packet_key = hkdf_expand_label_aead_key(
             expander.as_ref(),
@@ -530,12 +537,8 @@ impl DirectionalKeys {
         );
 
         Self {
-            header: suite
-                .quic
-                .header_protection_key(header_key),
-            packet: suite
-                .quic
-                .packet_key(suite, packet_key, packet_iv),
+            header: quic.header_protection_key(header_key),
+            packet: quic.packet_key(suite, packet_key, packet_iv),
         }
     }
 }
@@ -561,7 +564,11 @@ impl AsRef<[u8]> for Tag {
 }
 
 /// How a `Tls13CipherSuite` generates `PacketKey`s and `HeaderProtectionKey`s.
-pub(crate) trait Algorithm: Send + Sync {
+pub trait Algorithm: Send + Sync {
+    /// Produce a `PacketKey` encrypter/decrypter for this suite.
+    ///
+    /// `suite` is the entire suite this `Algorithm` appeared in.
+    /// `key` and `iv` is the key material to use.
     fn packet_key(
         &self,
         suite: &'static Tls13CipherSuite,
@@ -569,8 +576,14 @@ pub(crate) trait Algorithm: Send + Sync {
         iv: Iv,
     ) -> Box<dyn PacketKey>;
 
+    /// Produce a `HeaderProtectionKey` encrypter/decrypter for this suite.
+    ///
+    /// `key` is the key material, which is `aead_key_len()` bytes in length.
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn HeaderProtectionKey>;
 
+    /// The length in bytes of keys for this Algorithm.
+    ///
+    /// This controls the size of `AeadKey`s presented to `packet_key()` and `header_protection_key()`.
     fn aead_key_len(&self) -> usize;
 }
 
@@ -701,7 +714,7 @@ impl PacketKeySet {
             .expander_for_okm(remote);
 
         fn make_packet_key(expander: &dyn HkdfExpander, secrets: &Secrets) -> Box<dyn PacketKey> {
-            let aead_key_len = secrets.suite.quic.aead_key_len();
+            let aead_key_len = secrets.quic.aead_key_len();
             let packet_key = hkdf_expand_label_aead_key(
                 expander,
                 aead_key_len,
@@ -710,7 +723,6 @@ impl PacketKeySet {
             );
             let packet_iv = hkdf_expand_label(expander, secrets.version.packet_iv_label(), &[]);
             secrets
-                .suite
                 .quic
                 .packet_key(secrets.suite, packet_key, packet_iv)
         }
@@ -735,6 +747,7 @@ impl Keys {
     pub fn initial(
         version: Version,
         suite: &'static Tls13CipherSuite,
+        quic: &'static dyn Algorithm,
         client_dst_connection_id: &[u8],
         side: Side,
     ) -> Self {
@@ -750,6 +763,7 @@ impl Keys {
             client: hkdf_expand_label_block(hs_secret.as_ref(), CLIENT_LABEL, &[]),
             server: hkdf_expand_label_block(hs_secret.as_ref(), SERVER_LABEL, &[]),
             suite,
+            quic,
             side,
         };
         Self::new(&secrets)
@@ -758,8 +772,8 @@ impl Keys {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
         Self {
-            local: DirectionalKeys::new(secrets.suite, local, secrets.version),
-            remote: DirectionalKeys::new(secrets.suite, remote, secrets.version),
+            local: DirectionalKeys::new(secrets.suite, secrets.quic, local, secrets.version),
+            remote: DirectionalKeys::new(secrets.suite, secrets.quic, remote, secrets.version),
         }
     }
 }
@@ -828,6 +842,7 @@ impl Version {
         }
     }
 
+    /// Key derivation label for packet keys.
     pub(crate) fn packet_key_label(&self) -> &'static [u8] {
         match self {
             Self::V1Draft | Self::V1 => b"quic key",
@@ -835,6 +850,7 @@ impl Version {
         }
     }
 
+    /// Key derivation label for packet "IV"s.
     pub(crate) fn packet_iv_label(&self) -> &'static [u8] {
         match self {
             Self::V1Draft | Self::V1 => b"quic iv",
@@ -842,6 +858,7 @@ impl Version {
         }
     }
 
+    /// Key derivation for header keys.
     pub(crate) fn header_key_label(&self) -> &'static [u8] {
         match self {
             Self::V1Draft | Self::V1 => b"quic hp",
