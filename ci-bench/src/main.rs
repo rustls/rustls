@@ -71,10 +71,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Run all benchmarks and prints the measured CPU instruction counts in CSV format
+    /// Run all benchmarks and print the measured CPU instruction counts in CSV format
     RunAll {
-        #[arg(short, long)]
-        output_dir: Option<PathBuf>,
+        #[arg(short, long, default_value = "target/ci-bench")]
+        output_dir: PathBuf,
     },
     /// Run a single benchmark at the provided index (used by the bench runner to start each benchmark in its own process)
     RunSingle { index: u32, side: Side },
@@ -115,7 +115,6 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::RunAll { output_dir } => {
             let executable = std::env::args().next().unwrap();
-            let output_dir = output_dir.unwrap_or("target/ci-bench".into());
             let results = run_all(executable, output_dir.clone(), &benchmarks)?;
 
             // Output results in CSV (note: not using a library here to avoid extra dependencies)
