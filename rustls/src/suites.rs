@@ -1,3 +1,4 @@
+use crate::common_state::Protocol;
 use crate::crypto;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm, SignatureScheme};
@@ -105,6 +106,20 @@ impl SupportedCipherSuite {
                 .any(|scheme| scheme.sign() == _sig_alg),
         }
     }
+
+    /// Return true if this suite is usable for the given [`Protocol`].
+    ///
+    /// All cipher suites are usable for TCP-TLS.  Only TLS1.3 suites
+    /// with `Tls13CipherSuite::quic` provided are usable for QUIC.
+    pub(crate) fn usable_for_protocol(&self, proto: Protocol) -> bool {
+        match proto {
+            Protocol::Tcp => true,
+            Protocol::Quic => self
+                .tls13()
+                .and_then(|cs| cs.quic)
+                .is_some(),
+        }
+    }
 }
 
 // These both O(N^2)!
@@ -152,12 +167,13 @@ pub(crate) fn reduce_given_sigalg(
 
 /// Return a list of the ciphersuites in `all` with the suites
 /// incompatible with the chosen `version` removed.
-pub(crate) fn reduce_given_version(
+pub(crate) fn reduce_given_version_and_protocol(
     all: &[SupportedCipherSuite],
     version: ProtocolVersion,
+    proto: Protocol,
 ) -> Vec<SupportedCipherSuite> {
     all.iter()
-        .filter(|&&suite| suite.version().version == version)
+        .filter(|&&suite| suite.version().version == version && suite.usable_for_protocol(proto))
         .copied()
         .collect()
 }
