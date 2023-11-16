@@ -6,6 +6,7 @@ use std::mem;
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -77,6 +78,11 @@ pub enum Command {
     },
     /// Run a single benchmark at the provided index (used by the bench runner to start each benchmark in its own process)
     RunSingle { index: u32, side: Side },
+    /// Run all benchmarks in walltime mode and print the measured timings in CSV format
+    Walltime {
+        #[arg(short, long)]
+        iterations_per_scenario: usize,
+    },
     /// Compare the results from two previous benchmark runs and print a user-friendly markdown overview
     Compare {
         /// Path to the directory with the results of a previous `run-all` execution
@@ -182,6 +188,77 @@ fn main() -> anyhow::Result<()> {
             // Prevent stdin / stdout from being closed
             mem::forget(stdin);
             mem::forget(stdout);
+        }
+        Command::Walltime {
+            iterations_per_scenario,
+        } => {
+            let mut timings = vec![Vec::with_capacity(iterations_per_scenario); benchmarks.len()];
+            for _ in 0..iterations_per_scenario {
+                for (i, bench) in benchmarks.iter().enumerate() {
+                    let start = Instant::now();
+
+                    // The variables below are used to initialize the client and server configs. We
+                    // let them go through `black_box` to ensure the optimizer doesn't take
+                    // advantage of knowing both the client and the server side of the
+                    // configuration.
+                    let resumption_kind = black_box(bench.kind.resumption_kind());
+                    let params = black_box(&bench.params);
+
+                    let (mut client_writer, mut server_reader) = async_io::async_pipe(262144);
+                    let (mut server_writer, mut client_reader) = async_io::async_pipe(262144);
+
+                    let server_side = async move {
+                        let handshake_buf = &mut [0u8; 262144];
+                        run_bench(
+                            ServerSideStepper {
+                                io: StepperIo {
+                                    reader: &mut server_reader,
+                                    writer: &mut server_writer,
+                                    handshake_buf,
+                                },
+                                config: ServerSideStepper::make_config(params, resumption_kind),
+                            },
+                            bench.kind,
+                        )
+                        .await
+                    };
+
+                    let client_side = async move {
+                        let handshake_buf = &mut [0u8; 262144];
+                        run_bench(
+                            ClientSideStepper {
+                                io: StepperIo {
+                                    reader: &mut client_reader,
+                                    writer: &mut client_writer,
+                                    handshake_buf,
+                                },
+                                resumption_kind,
+                                config: ClientSideStepper::make_config(params, resumption_kind),
+                            },
+                            bench.kind,
+                        )
+                        .await
+                    };
+
+                    let (client_result, server_result) =
+                        async_io::block_on_concurrent(client_side, server_side);
+                    client_result
+                        .with_context(|| format!("client side of {} crashed", bench.name()))?;
+                    server_result
+                        .with_context(|| format!("server side of {} crashed", bench.name()))?;
+
+                    timings[i].push(start.elapsed());
+                }
+            }
+
+            // Output the results
+            for (i, bench_timings) in timings.into_iter().enumerate() {
+                print!("{}", benchmarks[i].name());
+                for timing in bench_timings {
+                    print!(",{}", timing.as_nanos())
+                }
+                println!();
+            }
         }
         Command::Compare {
             baseline_dir,

@@ -39,9 +39,12 @@ pub mod async_io {
     //! Async IO building blocks required for sharing code between the instruction count and
     //! wall-time benchmarks
 
+    use std::cell::{Cell, RefCell};
+    use std::collections::VecDeque;
     use std::fs::File;
     use std::future::Future;
-    use std::pin::pin;
+    use std::pin::{pin, Pin};
+    use std::rc::Rc;
     use std::task::{Poll, RawWaker, RawWakerVTable, Waker};
     use std::{io, ptr, task};
 
@@ -67,6 +70,61 @@ pub mod async_io {
             Poll::Pending => {
                 panic!("the provided future did not finish after one poll!")
             }
+        }
+    }
+
+    /// Block on two futures that are run concurrently and return their results.
+    ///
+    /// Useful when measuring wall-time, because the server and the client side of the connection
+    /// run in a single process _and_ thread to minimize noise. Each side of the connection runs
+    /// inside its own future and they are polled in turns.
+    ///
+    /// Using this together with blocking futures can lead to deadlocks (i.e. when one of the
+    /// futures is blocked while it waits on a message from the other).
+    pub fn block_on_concurrent(
+        x: impl Future<Output = anyhow::Result<()>>,
+        y: impl Future<Output = anyhow::Result<()>>,
+    ) -> (anyhow::Result<()>, anyhow::Result<()>) {
+        let mut x = pin!(x);
+        let mut y = pin!(y);
+
+        // The futures won't complete right away, but since there are only two of them we can poll
+        // them in turns without a more complex waking mechanism.
+        let waker = noop_waker();
+        let mut ctx = task::Context::from_waker(&waker);
+
+        let mut x_output = None;
+        let mut y_output = None;
+
+        // Fuel makes sure we can exit a potential infinite loop if the futures are endlessly
+        // waiting on each other due to a bug (e.g. a read without a corresponding write)
+        let mut fuel = 1_000;
+        loop {
+            let futures_done = x_output.is_some() && y_output.is_some();
+            if futures_done || fuel == 0 {
+                break;
+            }
+
+            fuel -= 1;
+
+            if x_output.is_none() {
+                match x.as_mut().poll(&mut ctx) {
+                    Poll::Ready(output) => x_output = Some(output),
+                    Poll::Pending => {}
+                }
+            }
+
+            if y_output.is_none() {
+                match y.as_mut().poll(&mut ctx) {
+                    Poll::Ready(output) => y_output = Some(output),
+                    Poll::Pending => {}
+                }
+            }
+        }
+
+        match (x_output, y_output) {
+            (Some(x_output), Some(y_output)) => (x_output, y_output),
+            _ => panic!("at least one of the futures seems to be stuck"),
         }
     }
 
@@ -112,6 +170,219 @@ pub mod async_io {
 
         async fn flush(&mut self) -> io::Result<()> {
             io::Write::flush(self)
+        }
+    }
+
+    /// Creates an unidirectional byte pipe of the given capacity, suitable for async reading and
+    /// writing
+    pub fn async_pipe(capacity: usize) -> (AsyncSender, AsyncReceiver) {
+        let open = Rc::new(Cell::new(true));
+        let buf = Rc::new(RefCell::new(VecDeque::with_capacity(capacity)));
+        (
+            AsyncSender {
+                inner: AsyncPipeSide {
+                    open: open.clone(),
+                    buf: buf.clone(),
+                },
+            },
+            AsyncReceiver {
+                inner: AsyncPipeSide { open, buf },
+            },
+        )
+    }
+
+    /// The sender end of an asynchronous byte pipe
+    pub struct AsyncSender {
+        inner: AsyncPipeSide,
+    }
+
+    /// The receiver end of an asynchronous byte pipe
+    pub struct AsyncReceiver {
+        inner: AsyncPipeSide,
+    }
+
+    struct AsyncPipeSide {
+        open: Rc<Cell<bool>>,
+        buf: Rc<RefCell<VecDeque<u8>>>,
+    }
+
+    impl Drop for AsyncPipeSide {
+        fn drop(&mut self) {
+            self.open.set(false);
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl AsyncRead for AsyncReceiver {
+        async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            AsyncPipeReadFuture {
+                reader: self,
+                user_buf: buf,
+            }
+            .await
+        }
+
+        async fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+            let mut read = 0;
+            while read < buf.len() {
+                read += self.read(&mut buf[read..]).await?;
+            }
+
+            Ok(())
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl AsyncWrite for AsyncSender {
+        async fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+            AsyncPipeWriteFuture {
+                writer: self,
+                user_buf: buf,
+            }
+            .await
+        }
+
+        async fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    struct AsyncPipeReadFuture<'a> {
+        reader: &'a AsyncReceiver,
+        user_buf: &'a mut [u8],
+    }
+
+    impl<'a> Future for AsyncPipeReadFuture<'a> {
+        type Output = io::Result<usize>;
+
+        fn poll(mut self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<Self::Output> {
+            let inner_buf = &mut self.reader.inner.buf.borrow_mut();
+            if inner_buf.is_empty() {
+                return if self.reader.inner.open.get() {
+                    // Wait for data to arrive, or EOF
+                    Poll::Pending
+                } else {
+                    // EOF
+                    Poll::Ready(Ok(0))
+                };
+            }
+
+            let bytes_to_write = inner_buf.len().min(self.user_buf.len());
+
+            // This is a convoluted way to copy the bytes from the inner buffer into the user's
+            // buffer
+            let (first_half, second_half) = inner_buf.as_slices();
+            let bytes_to_write_from_first_half = first_half.len().min(bytes_to_write);
+            let bytes_to_write_from_second_half =
+                bytes_to_write.saturating_sub(bytes_to_write_from_first_half);
+            self.user_buf[..bytes_to_write_from_first_half]
+                .copy_from_slice(&first_half[..bytes_to_write_from_first_half]);
+            self.user_buf[bytes_to_write_from_first_half..bytes_to_write]
+                .copy_from_slice(&second_half[..bytes_to_write_from_second_half]);
+
+            inner_buf.drain(..bytes_to_write);
+
+            Poll::Ready(Ok(bytes_to_write))
+        }
+    }
+
+    struct AsyncPipeWriteFuture<'a> {
+        writer: &'a AsyncSender,
+        user_buf: &'a [u8],
+    }
+
+    impl<'a> Future for AsyncPipeWriteFuture<'a> {
+        type Output = io::Result<()>;
+
+        fn poll(mut self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<Self::Output> {
+            if !self.writer.inner.open.get() {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "channel was closed",
+                )));
+            }
+
+            let mut pipe_buf = self.writer.inner.buf.borrow_mut();
+            let capacity_left = pipe_buf.capacity() - pipe_buf.len();
+            let bytes_to_write = self.user_buf.len().min(capacity_left);
+            pipe_buf.extend(&self.user_buf[..bytes_to_write]);
+
+            if self.user_buf.len() > capacity_left {
+                self.user_buf = &self.user_buf[bytes_to_write..];
+
+                // Continue writing later once capacity is available
+                Poll::Pending
+            } else {
+                Poll::Ready(Ok(()))
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn test_block_on_concurrent_minimal_capacity() {
+            test_block_on_concurrent(1);
+        }
+
+        #[test]
+        fn test_block_on_concurrent_enough_capacity() {
+            test_block_on_concurrent(100);
+        }
+
+        fn test_block_on_concurrent(capacity: usize) {
+            let (mut server_writer, mut client_reader) = async_pipe(capacity);
+            let (mut client_writer, mut server_reader) = async_pipe(capacity);
+
+            let client = async {
+                client_writer
+                    .write_all(b"hello")
+                    .await
+                    .unwrap();
+
+                let mut buf = [0; 2];
+                client_reader
+                    .read_exact(&mut buf)
+                    .await
+                    .unwrap();
+                assert_eq!(&buf, b"42");
+
+                client_writer
+                    .write_all(b"bye bye")
+                    .await
+                    .unwrap();
+
+                Ok(())
+            };
+
+            let server = async {
+                let mut buf = [0; 5];
+                server_reader
+                    .read_exact(&mut buf)
+                    .await
+                    .unwrap();
+                assert_eq!(&buf, b"hello");
+
+                server_writer
+                    .write_all(b"42")
+                    .await
+                    .unwrap();
+
+                let mut buf = [0; 7];
+                server_reader
+                    .read_exact(&mut buf)
+                    .await
+                    .unwrap();
+                assert_eq!(&buf, b"bye bye");
+
+                Ok(())
+            };
+
+            let (client_result, server_result) = block_on_concurrent(client, server);
+            client_result.unwrap();
+            server_result.unwrap();
         }
     }
 }
