@@ -40,7 +40,7 @@ mod cachegrind;
 mod util;
 
 /// The size in bytes of the plaintext sent in the transfer benchmark
-const TRANSFER_PLAINTEXT_SIZE: usize = 1024 * 1024;
+const TRANSFER_PLAINTEXT_SIZE: usize = 1024 * 1024 * 10; // 10 MB
 
 /// The amount of times a resumed handshake should be executed during benchmarking.
 ///
