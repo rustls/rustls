@@ -3,23 +3,25 @@
 //
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
-use rustls::client::danger::HandshakeSignatureValid;
+
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
 use rustls::crypto::SupportedKxGroup;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
-use rustls::server::{ClientHello, ServerConfig, ServerConnection};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::server::{ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
 use rustls::{
     self, client, server, sign, version, AlertDescription, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, ServerName, Side, SignatureAlgorithm, SignatureScheme,
-    SupportedProtocolVersion,
+    PeerMisbehaved, ProtocolVersion, RootCertStore, ServerName, Side, SignatureAlgorithm,
+    SignatureScheme, SupportedProtocolVersion,
 };
 
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
-use rustls::crypto::aws_lc_rs as provider;
+use rustls::crypto::{aws_lc_rs as provider, aws_lc_rs::AWS_LC_RS as PROVIDER};
 #[cfg(feature = "ring")]
-use rustls::crypto::ring as provider;
+use rustls::crypto::{ring as provider, ring::RING as PROVIDER};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
@@ -177,6 +179,15 @@ fn load_key(filename: &str) -> PrivateKeyDer<'static> {
     keys.pop().unwrap().into()
 }
 
+fn load_root_certs() -> Arc<RootCertStore> {
+    let mut roots = RootCertStore::empty();
+
+    // this is not actually used by the tests, but must be non-empty
+    roots.add_parsable_certificates(load_cert("cert.pem"));
+
+    Arc::new(roots)
+}
+
 fn split_protocols(protos: &str) -> Vec<String> {
     let mut ret = Vec::new();
 
@@ -194,9 +205,21 @@ fn split_protocols(protos: &str) -> Vec<String> {
 #[derive(Debug)]
 struct DummyClientAuth {
     mandatory: bool,
+    parent: Arc<dyn ClientCertVerifier>,
 }
 
-impl server::danger::ClientCertVerifier for DummyClientAuth {
+impl DummyClientAuth {
+    fn new(mandatory: bool) -> Self {
+        Self {
+            mandatory,
+            parent: WebPkiClientVerifier::builder_with_provider(load_root_certs(), PROVIDER)
+                .build()
+                .unwrap(),
+        }
+    }
+}
+
+impl ClientCertVerifier for DummyClientAuth {
     fn offer_client_auth(&self) -> bool {
         true
     }
@@ -214,8 +237,8 @@ impl server::danger::ClientCertVerifier for DummyClientAuth {
         _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
-    ) -> Result<server::danger::ClientCertVerified, Error> {
-        Ok(server::danger::ClientCertVerified::assertion())
+    ) -> Result<ClientCertVerified, Error> {
+        Ok(ClientCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -224,7 +247,8 @@ impl server::danger::ClientCertVerifier for DummyClientAuth {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+        self.parent
+            .verify_tls12_signature(message, cert, dss)
     }
 
     fn verify_tls13_signature(
@@ -233,18 +257,31 @@ impl server::danger::ClientCertVerifier for DummyClientAuth {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+        self.parent
+            .verify_tls13_signature(message, cert, dss)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPkiServerVerifier::default_supported_verify_schemes()
+        self.parent.supported_verify_schemes()
     }
 }
 
 #[derive(Debug)]
-struct DummyServerAuth {}
+struct DummyServerAuth {
+    parent: Arc<dyn ServerCertVerifier>,
+}
 
-impl client::danger::ServerCertVerifier for DummyServerAuth {
+impl DummyServerAuth {
+    fn new() -> Self {
+        DummyServerAuth {
+            parent: WebPkiServerVerifier::builder_with_provider(load_root_certs(), PROVIDER)
+                .build()
+                .unwrap(),
+        }
+    }
+}
+
+impl ServerCertVerifier for DummyServerAuth {
     fn verify_server_cert(
         &self,
         _end_entity: &CertificateDer<'_>,
@@ -252,8 +289,8 @@ impl client::danger::ServerCertVerifier for DummyServerAuth {
         _hostname: &ServerName,
         _ocsp: &[u8],
         _now: UnixTime,
-    ) -> Result<client::danger::ServerCertVerified, Error> {
-        Ok(client::danger::ServerCertVerified::assertion())
+    ) -> Result<ServerCertVerified, Error> {
+        Ok(ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -262,7 +299,8 @@ impl client::danger::ServerCertVerifier for DummyServerAuth {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+        self.parent
+            .verify_tls12_signature(message, cert, dss)
     }
 
     fn verify_tls13_signature(
@@ -271,11 +309,12 @@ impl client::danger::ServerCertVerifier for DummyServerAuth {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+        self.parent
+            .verify_tls13_signature(message, cert, dss)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPkiServerVerifier::default_supported_verify_schemes()
+        self.parent.supported_verify_schemes()
     }
 }
 
@@ -439,9 +478,7 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
 fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
-            Arc::new(DummyClientAuth {
-                mandatory: opts.require_any_client_cert,
-            })
+            Arc::new(DummyClientAuth::new(opts.require_any_client_cert))
         } else {
             server::WebPkiClientVerifier::no_client_auth()
         };
@@ -458,7 +495,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
         provider::ALL_KX_GROUPS.to_vec()
     };
 
-    let mut cfg = ServerConfig::builder()
+    let mut cfg = ServerConfig::builder_with_provider(PROVIDER)
         .with_safe_default_cipher_suites()
         .with_kx_groups(&kx_groups)
         .with_protocol_versions(&opts.supported_versions())
@@ -583,13 +620,13 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         provider::ALL_KX_GROUPS.to_vec()
     };
 
-    let cfg = ClientConfig::builder()
+    let cfg = ClientConfig::builder_with_provider(PROVIDER)
         .with_safe_default_cipher_suites()
         .with_kx_groups(&kx_groups)
         .with_protocol_versions(&opts.supported_versions())
         .expect("inconsistent settings")
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(DummyServerAuth {}));
+        .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new()));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
