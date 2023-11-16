@@ -75,7 +75,6 @@ pub struct Tls13ClientSessionValue {
     age_add: u32,
     max_early_data_size: u32,
     pub(crate) common: ClientSessionCommon,
-    #[cfg(feature = "quic")]
     quic_params: PayloadU16,
 }
 
@@ -101,7 +100,6 @@ impl Tls13ClientSessionValue {
                 lifetime_secs,
                 server_cert_chain,
             ),
-            #[cfg(feature = "quic")]
             quic_params: PayloadU16(Vec::new()),
         }
     }
@@ -120,12 +118,10 @@ impl Tls13ClientSessionValue {
         self.common.epoch -= delta as u64;
     }
 
-    #[cfg(feature = "quic")]
     pub fn set_quic_params(&mut self, quic_params: &[u8]) {
         self.quic_params = PayloadU16(quic_params.to_vec());
     }
 
-    #[cfg(feature = "quic")]
     pub fn quic_params(&self) -> Vec<u8> {
         self.quic_params.0.clone()
     }

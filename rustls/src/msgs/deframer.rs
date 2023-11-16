@@ -220,7 +220,6 @@ impl MessageDeframer {
     }
 
     /// Allow pushing handshake messages directly into the buffer.
-    #[cfg(feature = "quic")]
     pub(crate) fn push(&mut self, version: ProtocolVersion, payload: &[u8]) -> Result<(), Error> {
         if self.used > 0 && self.joining_hs.is_none() {
             return Err(Error::General(

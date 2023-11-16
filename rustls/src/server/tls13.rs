@@ -1,7 +1,5 @@
 use crate::check::inappropriate_handshake_message;
-#[cfg(feature = "quic")]
 use crate::check::inappropriate_message;
-#[cfg(feature = "quic")]
 use crate::common_state::Protocol;
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -601,8 +599,6 @@ mod client_hello {
         common.send_msg(m, false);
     }
 
-    #[allow(unknown_lints)] // The lint allowed below is nightly only for now
-    #[cfg_attr(not(feature = "quic"), allow(clippy::needless_pass_by_ref_mut))]
     fn decide_if_early_data_allowed(
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
@@ -653,7 +649,6 @@ mod client_hello {
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
         } else {
-            #[cfg(feature = "quic")]
             if cx.common.is_quic() {
                 // Clobber value set in tls13::emit_server_hello
                 cx.common.quic.early_secret = None;
@@ -1190,20 +1185,17 @@ impl State<ServerConnectionData> for ExpectFinished {
         // Application data may now flow, even if we have client auth enabled.
         cx.common.start_traffic();
 
-        #[cfg(feature = "quic")]
-        {
-            if cx.common.protocol == Protocol::Quic {
-                return Ok(Box::new(ExpectQuicTraffic {
-                    key_schedule: key_schedule_traffic,
-                    _fin_verified: fin,
-                }));
-            }
+        if cx.common.protocol == Protocol::Quic {
+            Ok(Box::new(ExpectQuicTraffic {
+                key_schedule: key_schedule_traffic,
+                _fin_verified: fin,
+            }))
+        } else {
+            Ok(Box::new(ExpectTraffic {
+                key_schedule: key_schedule_traffic,
+                _fin_verified: fin,
+            }))
         }
-
-        Ok(Box::new(ExpectTraffic {
-            key_schedule: key_schedule_traffic,
-            _fin_verified: fin,
-        }))
     }
 }
 
@@ -1219,14 +1211,11 @@ impl ExpectTraffic {
         common: &mut CommonState,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        #[cfg(feature = "quic")]
-        {
-            if let Protocol::Quic = common.protocol {
-                return Err(common.send_fatal_alert(
-                    AlertDescription::UnexpectedMessage,
-                    PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
-                ));
-            }
+        if let Protocol::Quic = common.protocol {
+            return Err(common.send_fatal_alert(
+                AlertDescription::UnexpectedMessage,
+                PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
+            ));
         }
 
         common.check_aligned_handshake()?;
@@ -1285,13 +1274,11 @@ impl State<ServerConnectionData> for ExpectTraffic {
     }
 }
 
-#[cfg(feature = "quic")]
 struct ExpectQuicTraffic {
     key_schedule: KeyScheduleTraffic,
     _fin_verified: verify::FinishedMessageVerified,
 }
 
-#[cfg(feature = "quic")]
 impl State<ServerConnectionData> for ExpectQuicTraffic {
     fn handle(self: Box<Self>, _cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
         // reject all messages

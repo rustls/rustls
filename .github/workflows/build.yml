@@ -52,7 +52,7 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; aws-lc-rs)
-        run: cargo test --no-default-features --features aws_lc_rs,tls12,quic,read_buf,logging
+        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging
         env:
           RUST_BACKTRACE: 1
 

@@ -1,5 +1,4 @@
 use crate::check::inappropriate_handshake_message;
-#[cfg(feature = "quic")]
 use crate::common_state::Protocol;
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -392,17 +391,14 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
         hs::process_alpn_protocol(cx.common, &self.config, exts.get_alpn_protocol())?;
 
-        #[cfg(feature = "quic")]
-        {
-            // QUIC transport parameters
-            if cx.common.is_quic() {
-                match exts.get_quic_params_extension() {
-                    Some(params) => cx.common.quic.params = Some(params),
-                    None => {
-                        return Err(cx
-                            .common
-                            .missing_extension(PeerMisbehaved::MissingQuicTransportParameters));
-                    }
+        // QUIC transport parameters
+        if cx.common.is_quic() {
+            match exts.get_quic_params_extension() {
+                Some(params) => cx.common.quic.params = Some(params),
+                None => {
+                    return Err(cx
+                        .common
+                        .missing_extension(PeerMisbehaved::MissingQuicTransportParameters));
                 }
             }
         }
@@ -911,12 +907,11 @@ impl State<ClientConnectionData> for ExpectFinished {
             _fin_verified: fin,
         };
 
-        #[cfg(feature = "quic")]
         if cx.common.is_quic() {
-            return Ok(Box::new(ExpectQuicTraffic(st)));
+            Ok(Box::new(ExpectQuicTraffic(st)))
+        } else {
+            Ok(Box::new(st))
         }
-
-        Ok(Box::new(st))
     }
 }
 
@@ -935,7 +930,6 @@ struct ExpectTraffic {
 }
 
 impl ExpectTraffic {
-    #[allow(clippy::unnecessary_wraps)] // returns Err for #[cfg(feature = "quic")]
     fn handle_new_ticket_tls13(
         &mut self,
         cx: &mut ClientContext<'_>,
@@ -969,7 +963,6 @@ impl ExpectTraffic {
                 .unwrap_or_default(),
         );
 
-        #[cfg(feature = "quic")]
         if cx.common.is_quic() {
             if let Some(sz) = nst.get_max_early_data_size() {
                 if sz != 0 && sz != 0xffff_ffff {
@@ -992,14 +985,11 @@ impl ExpectTraffic {
         common: &mut CommonState,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<(), Error> {
-        #[cfg(feature = "quic")]
-        {
-            if let Protocol::Quic = common.protocol {
-                return Err(common.send_fatal_alert(
-                    AlertDescription::UnexpectedMessage,
-                    PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
-                ));
-            }
+        if let Protocol::Quic = common.protocol {
+            return Err(common.send_fatal_alert(
+                AlertDescription::UnexpectedMessage,
+                PeerMisbehaved::KeyUpdateReceivedInQuicConnection,
+            ));
         }
 
         // Mustn't be interleaved with other handshake messages.
@@ -1067,10 +1057,8 @@ impl State<ClientConnectionData> for ExpectTraffic {
     }
 }
 
-#[cfg(feature = "quic")]
 struct ExpectQuicTraffic(ExpectTraffic);
 
-#[cfg(feature = "quic")]
 impl State<ClientConnectionData> for ExpectQuicTraffic {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         let nst = require_handshake_msg!(

@@ -237,11 +237,6 @@
 //!   messages do not contain secret key data, and so are safe to archive without
 //!   affecting session security.  This feature is in the default set.
 //!
-//! - `quic`: this feature exposes additional constructors and functions
-//!   for using rustls as a TLS library for QUIC.  See the `quic` module for
-//!   details of these.  You will only need this if you're writing a QUIC
-//!   implementation.
-//!
 //! - `tls12`: enables support for TLS version 1.2. This feature is in the default
 //!   set. Note that, due to the additive nature of Cargo features and because it
 //!   is enabled by default, other crates in your dependency graph could re-enable
@@ -544,7 +539,6 @@ pub mod sign {
     pub use crate::crypto::signer::{CertifiedKey, Signer, SigningKey};
 }
 
-#[cfg(feature = "quic")]
 /// APIs for implementing QUIC TLS
 pub mod quic;
 

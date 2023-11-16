@@ -6,9 +6,6 @@ license = "Apache-2.0 OR ISC OR MIT"
 description = "Rustls example code and tests."
 publish = false
 
-[features]
-quic = ["rustls/quic"]
-
 [dependencies]
 docopt = "~1.1"
 env_logger = "0.10"

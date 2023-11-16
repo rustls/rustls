@@ -3,7 +3,6 @@ use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
 use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::crypto::{hash, hmac, ActiveKeyExchange};
 use crate::error::Error;
-#[cfg(feature = "quic")]
 use crate::quic;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{KeyLog, Tls13CipherSuite};
@@ -108,7 +107,6 @@ impl KeyScheduleEarly {
                 .set_decrypter(&client_early_traffic_secret, common),
         }
 
-        #[cfg(feature = "quic")]
         if common.is_quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
             // before the application can see.
@@ -216,7 +214,7 @@ impl KeyScheduleHandshakeStart {
         hs_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-        _common: &mut CommonState,
+        common: &mut CommonState,
     ) -> KeyScheduleHandshake {
         // Use an empty handshake hash for the initial handshake.
         let client_secret = self.ks.derive_logged_secret(
@@ -233,14 +231,13 @@ impl KeyScheduleHandshakeStart {
             client_random,
         );
 
-        #[cfg(feature = "quic")]
-        if _common.is_quic() {
-            _common.quic.hs_secrets = Some(quic::Secrets::new(
+        if common.is_quic() {
+            common.quic.hs_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),
                 server_secret.clone(),
                 self.ks.suite,
-                _common.side,
-                _common.quic.version,
+                common.side,
+                common.quic.version,
             ));
         }
 
@@ -308,7 +305,6 @@ impl KeyScheduleHandshake {
             .ks
             .set_encrypter(server_secret, common);
 
-        #[cfg(feature = "quic")]
         if common.is_quic() {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
                 _client_secret.clone(),
@@ -363,7 +359,6 @@ impl KeyScheduleClientBeforeFinished {
             .ks
             .set_encrypter(client_secret, common);
 
-        #[cfg(feature = "quic")]
         if common.is_quic() {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
                 client_secret.clone(),

@@ -539,7 +539,6 @@ fn client_get_alpn_extension() {
     });
 }
 
-#[cfg(feature = "quic")]
 #[test]
 fn client_get_quic_params_extension() {
     test_client_extension_getter(ExtensionType::TransportParameters, |chp| {

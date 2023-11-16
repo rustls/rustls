@@ -22,11 +22,8 @@ pub struct Tls13CipherSuite {
     /// [MessageEncrypter]: crate::crypto::cipher::MessageEncrypter
     pub aead_alg: &'static dyn crypto::cipher::Tls13AeadAlgorithm,
 
-    #[cfg(feature = "quic")]
     pub(crate) confidentiality_limit: u64,
-    #[cfg(feature = "quic")]
     pub(crate) integrity_limit: u64,
-    #[cfg(feature = "quic")]
     pub(crate) quic: &'static dyn crate::quic::Algorithm,
 }
 

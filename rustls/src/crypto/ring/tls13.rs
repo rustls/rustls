@@ -30,11 +30,8 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
     },
     hkdf_provider: &RingHkdf(hkdf::HKDF_SHA256, hmac::HMAC_SHA256),
     aead_alg: &Chacha20Poly1305Aead(AeadAlgorithm(&aead::CHACHA20_POLY1305)),
-    #[cfg(feature = "quic")]
     confidentiality_limit: u64::MAX,
-    #[cfg(feature = "quic")]
     integrity_limit: 1 << 36,
-    #[cfg(feature = "quic")]
     quic: &super::quic::KeyBuilder(&aead::CHACHA20_POLY1305, &aead::quic::CHACHA20),
 };
 
@@ -47,11 +44,8 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         },
         hkdf_provider: &RingHkdf(hkdf::HKDF_SHA384, hmac::HMAC_SHA384),
         aead_alg: &Aes256GcmAead(AeadAlgorithm(&aead::AES_256_GCM)),
-        #[cfg(feature = "quic")]
         confidentiality_limit: 1 << 23,
-        #[cfg(feature = "quic")]
         integrity_limit: 1 << 52,
-        #[cfg(feature = "quic")]
         quic: &super::quic::KeyBuilder(&aead::AES_256_GCM, &aead::quic::AES_256),
     });
 
@@ -66,11 +60,8 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
     },
     hkdf_provider: &RingHkdf(hkdf::HKDF_SHA256, hmac::HMAC_SHA256),
     aead_alg: &Aes128GcmAead(AeadAlgorithm(&aead::AES_128_GCM)),
-    #[cfg(feature = "quic")]
     confidentiality_limit: 1 << 23,
-    #[cfg(feature = "quic")]
     integrity_limit: 1 << 52,
-    #[cfg(feature = "quic")]
     quic: &super::quic::KeyBuilder(&aead::AES_128_GCM, &aead::quic::AES_128),
 };
 

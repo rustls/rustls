@@ -917,7 +917,6 @@ impl ClientHelloPayload {
         }
     }
 
-    #[cfg(feature = "quic")]
     pub(crate) fn get_quic_params_extension(&self) -> Option<Vec<u8>> {
         let ext = self
             .find_extension(ExtensionType::TransportParameters)

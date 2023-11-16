@@ -46,7 +46,7 @@ pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConne
 fn find_session(
     server_name: &ServerName,
     config: &ClientConfig,
-    #[cfg(feature = "quic")] cx: &mut ClientContext<'_>,
+    cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
     #[allow(clippy::let_and_return, clippy::unnecessary_lazy_evaluations)]
     let found = config
@@ -79,7 +79,6 @@ fn find_session(
             None
         });
 
-    #[cfg(feature = "quic")]
     if let Some(resuming) = &found {
         if cx.common.is_quic() {
             cx.common.quic.params = resuming
@@ -105,12 +104,7 @@ pub(super) fn start_handshake(
         transcript_buffer.set_client_auth_enabled();
     }
 
-    let mut resuming = find_session(
-        &server_name,
-        &config,
-        #[cfg(feature = "quic")]
-        cx,
-    );
+    let mut resuming = find_session(&server_name, &config, cx);
 
     let key_share = if config.supports_version(ProtocolVersion::TLSv1_3) {
         Some(tls13::initial_key_share(&config, &server_name)?)
@@ -453,20 +447,17 @@ pub(super) fn process_alpn_protocol(
         }
     }
 
-    #[cfg(feature = "quic")]
-    {
-        // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
-        // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
-        // the user intended to use ALPN (rather than some out-of-band protocol negotiation
-        // mechanism) iff any ALPN protocols were configured. This defends against badly-behaved
-        // servers which accept a connection that requires an application-layer protocol they do not
-        // understand.
-        if common.is_quic() && common.alpn_protocol.is_none() && !config.alpn_protocols.is_empty() {
-            return Err(common.send_fatal_alert(
-                AlertDescription::NoApplicationProtocol,
-                Error::NoApplicationProtocol,
-            ));
-        }
+    // RFC 9001 says: "While ALPN only specifies that servers use this alert, QUIC clients MUST
+    // use error 0x0178 to terminate a connection when ALPN negotiation fails." We judge that
+    // the user intended to use ALPN (rather than some out-of-band protocol negotiation
+    // mechanism) iff any ALPN protocols were configured. This defends against badly-behaved
+    // servers which accept a connection that requires an application-layer protocol they do not
+    // understand.
+    if common.is_quic() && common.alpn_protocol.is_none() && !config.alpn_protocols.is_empty() {
+        return Err(common.send_fatal_alert(
+            AlertDescription::NoApplicationProtocol,
+            Error::NoApplicationProtocol,
+        ));
     }
 
     debug!(
