@@ -278,6 +278,7 @@ fn emit_client_hello_for_retry(
     let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()
+        .filter(|cs| cs.usable_for_protocol(cx.common.protocol))
         .map(|cs| cs.suite())
         .collect();
     // We don't do renegotiation at all, in fact.

@@ -338,7 +338,11 @@ impl ExpectClientHello {
             suites::reduce_given_sigalg(&self.config.cipher_suites, certkey.get_key().algorithm());
 
         // And version
-        let suitable_suites = suites::reduce_given_version(&suitable_suites, version);
+        let suitable_suites = suites::reduce_given_version_and_protocol(
+            &suitable_suites,
+            version,
+            cx.common.protocol,
+        );
 
         let suite = if self.config.ignore_client_order {
             suites::choose_ciphersuite_preferring_server(
