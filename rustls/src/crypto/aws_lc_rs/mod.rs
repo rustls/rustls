@@ -192,10 +192,6 @@ mod ring_shim {
     use super::ring_like;
     use crate::crypto::SharedSecret;
 
-    pub(super) fn digest_output_len(alg: &ring_like::digest::Algorithm) -> usize {
-        alg.output_len
-    }
-
     pub(super) fn agree_ephemeral(
         priv_key: ring_like::agreement::EphemeralPrivateKey,
         peer_key: &ring_like::agreement::UnparsedPublicKey<&[u8]>,
