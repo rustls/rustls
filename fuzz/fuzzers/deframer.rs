@@ -20,7 +20,9 @@ fuzz_target!(|data: &[u8]| {
     buf.has_pending();
 
     let mut rl = RecordLayer::new();
-    while let Ok(Some(decrypted)) = dfm.pop(&mut rl, None, &mut buf) {
+    let mut to_discard = 0;
+    while let Ok(Some(decrypted)) = dfm.pop(&mut rl, None, &mut buf.borrow(&mut to_discard)) {
         Message::try_from(decrypted.message).ok();
     }
+    buf.discard(to_discard);
 });

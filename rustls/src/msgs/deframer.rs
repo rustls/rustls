@@ -37,7 +37,7 @@ impl MessageDeframer {
         &mut self,
         record_layer: &mut RecordLayer,
         negotiated_version: Option<ProtocolVersion>,
-        buffer: &mut DeframerVecBuffer,
+        buffer: &mut DeframerSliceBuffer,
     ) -> Result<Option<Deframed>, Error> {
         if let Some(last_err) = self.last_error.clone() {
             return Err(last_err);
@@ -110,7 +110,7 @@ impl MessageDeframer {
             };
             if self.joining_hs.is_none() && allowed_plaintext {
                 // This is unencrypted. We check the contents later.
-                buffer.discard(end);
+                buffer.queue_discard(end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -137,7 +137,7 @@ impl MessageDeframer {
                     ));
                 }
                 Ok(None) => {
-                    buffer.discard(end);
+                    buffer.queue_discard(end);
                     continue;
                 }
                 Err(e) => return Err(e),
@@ -154,7 +154,7 @@ impl MessageDeframer {
             // If it's not a handshake message, just return it -- no joining necessary.
             if msg.typ != ContentType::Handshake {
                 let end = start + rd.used();
-                buffer.discard(end);
+                buffer.queue_discard(end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -196,7 +196,7 @@ impl MessageDeframer {
             // discard all of the bytes that we're previously buffered as handshake data.
             let end = meta.message.end;
             self.joining_hs = None;
-            buffer.discard(end);
+            buffer.queue_discard(end);
         }
 
         Ok(Some(Deframed {
@@ -328,6 +328,15 @@ pub struct DeframerVecBuffer {
 }
 
 impl DeframerVecBuffer {
+    /// Borrows the initialized contents of this buffer and tracks pending discard operations via
+    /// the `discard` reference
+    pub fn borrow<'b, 'd>(&'b mut self, discard: &'d mut usize) -> DeframerSliceBuffer<'b, 'd> {
+        DeframerSliceBuffer {
+            buf: &mut self.buf[..self.used],
+            discard,
+        }
+    }
+
     /// Returns true if we have messages for the caller
     /// to process, either whole messages in our output
     /// queue or partial messages in our buffer.
@@ -374,7 +383,7 @@ impl DeframerVecBuffer {
     }
 
     /// Discard `taken` bytes from the start of our buffer.
-    fn discard(&mut self, taken: usize) {
+    pub fn discard(&mut self, taken: usize) {
         #[allow(clippy::comparison_chain)]
         if taken < self.used {
             /* Before:
@@ -396,6 +405,23 @@ impl DeframerVecBuffer {
         } else if taken == self.used {
             self.used = 0;
         }
+    }
+}
+
+pub struct DeframerSliceBuffer<'b, 'd> {
+    // a fully initialized buffer that will be deframed
+    buf: &'b mut [u8],
+    // number of bytes to discard from the front of `buf` at a later time
+    discard: &'d mut usize,
+}
+
+impl DeframerSliceBuffer<'_, '_> {
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn queue_discard(&mut self, num_bytes: usize) {
+        *self.discard += num_bytes;
     }
 }
 
@@ -444,6 +470,24 @@ impl DeframerBuffer for DeframerVecBuffer {
 
     fn unfilled(&mut self) -> &mut [u8] {
         &mut self.buf[self.used..]
+    }
+}
+
+impl DeframerBuffer for DeframerSliceBuffer<'_, '_> {
+    fn advance(&mut self, _num_bytes: usize) {
+        unimplemented!("operation not supported by this type of buffer")
+    }
+
+    fn filled(&self) -> &[u8] {
+        &self.buf[*self.discard..]
+    }
+
+    fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[*self.discard..]
+    }
+
+    fn unfilled(&mut self) -> &mut [u8] {
+        unimplemented!("operation not supported by this type of buffer")
     }
 }
 
@@ -573,8 +617,14 @@ mod tests {
             record_layer: &mut RecordLayer,
             negotiated_version: Option<ProtocolVersion>,
         ) -> Result<Option<Deframed>, Error> {
-            self.inner
-                .pop(record_layer, negotiated_version, &mut self.buffer)
+            let mut to_discard = 0;
+            let res = self.inner.pop(
+                record_layer,
+                negotiated_version,
+                &mut self.buffer.borrow(&mut to_discard),
+            );
+            self.buffer.discard(to_discard);
+            res
         }
 
         fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
