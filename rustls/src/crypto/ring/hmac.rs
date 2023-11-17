@@ -19,7 +19,7 @@ impl crypto::hmac::Hmac for Hmac {
     }
 
     fn hash_output_len(&self) -> usize {
-        super::ring_shim::digest_output_len(self.0.digest_algorithm())
+        self.0.digest_algorithm().output_len()
     }
 }
 
@@ -37,6 +37,9 @@ impl crypto::hmac::Key for Key {
     }
 
     fn tag_len(&self) -> usize {
-        super::ring_shim::digest_output_len(self.0.algorithm().digest_algorithm())
+        self.0
+            .algorithm()
+            .digest_algorithm()
+            .output_len()
     }
 }

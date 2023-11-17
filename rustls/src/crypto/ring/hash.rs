@@ -23,7 +23,7 @@ impl crypto::hash::Hash for Hash {
     }
 
     fn output_len(&self) -> usize {
-        super::ring_shim::digest_output_len(self.0)
+        self.0.output_len()
     }
 
     fn algorithm(&self) -> HashAlgorithm {
