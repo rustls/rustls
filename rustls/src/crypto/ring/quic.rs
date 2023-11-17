@@ -1,10 +1,8 @@
 #![allow(clippy::duplicate_mod)]
 
-use crate::crypto::cipher::{Iv, Nonce};
-use crate::crypto::tls13;
+use crate::crypto::cipher::{AeadKey, Iv, Nonce};
 use crate::error::Error;
 use crate::quic;
-use crate::tls13::key_schedule::{hkdf_expand_label, hkdf_expand_label_aead_key};
 use crate::tls13::Tls13CipherSuite;
 
 use alloc::boxed::Box;
@@ -14,13 +12,7 @@ use super::ring_like::aead;
 pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
 
 impl HeaderProtectionKey {
-    pub(crate) fn new(
-        expander: &dyn tls13::HkdfExpander,
-        version: quic::Version,
-        alg: &'static aead::quic::Algorithm,
-    ) -> Self {
-        let key =
-            hkdf_expand_label_aead_key(expander, alg.key_len(), version.header_key_label(), &[]);
+    pub(crate) fn new(key: AeadKey, alg: &'static aead::quic::Algorithm) -> Self {
         Self(aead::quic::HeaderProtectionKey::new(alg, key.as_ref()).unwrap())
     }
 
@@ -116,18 +108,10 @@ pub(crate) struct PacketKey {
 impl PacketKey {
     pub(crate) fn new(
         suite: &'static Tls13CipherSuite,
-        expander: &dyn tls13::HkdfExpander,
-        version: quic::Version,
+        key: AeadKey,
+        iv: Iv,
         aead_algorithm: &'static aead::Algorithm,
     ) -> Self {
-        let key = hkdf_expand_label_aead_key(
-            expander,
-            aead_algorithm.key_len(),
-            version.packet_key_label(),
-            &[],
-        );
-        let iv = hkdf_expand_label(expander, version.packet_iv_label(), &[]);
-
         Self {
             key: aead::LessSafeKey::new(
                 aead::UnboundKey::new(aead_algorithm, key.as_ref()).unwrap(),
@@ -210,22 +194,18 @@ impl crate::quic::Algorithm for KeyBuilder {
     fn packet_key(
         &self,
         suite: &'static Tls13CipherSuite,
-        expander: &dyn tls13::HkdfExpander,
-        version: quic::Version,
+        key: AeadKey,
+        iv: Iv,
     ) -> Box<dyn quic::PacketKey> {
-        Box::new(super::quic::PacketKey::new(
-            suite, expander, version, self.0,
-        ))
+        Box::new(super::quic::PacketKey::new(suite, key, iv, self.0))
     }
 
-    fn header_protection_key(
-        &self,
-        expander: &dyn tls13::HkdfExpander,
-        version: quic::Version,
-    ) -> Box<dyn quic::HeaderProtectionKey> {
-        Box::new(super::quic::HeaderProtectionKey::new(
-            expander, version, self.1,
-        ))
+    fn header_protection_key(&self, key: AeadKey) -> Box<dyn quic::HeaderProtectionKey> {
+        Box::new(super::quic::HeaderProtectionKey::new(key, self.1))
+    }
+
+    fn aead_key_len(&self) -> usize {
+        self.0.key_len()
     }
 }
 
@@ -240,6 +220,7 @@ mod tests {
     use crate::quic::HeaderProtectionKey;
     use crate::quic::PacketKey;
     use crate::quic::*;
+    use crate::tls13::key_schedule::{hkdf_expand_label, hkdf_expand_label_aead_key};
 
     fn test_short_packet(version: Version, expected: &[u8]) {
         const PN: u64 = 654360564;
@@ -252,12 +233,19 @@ mod tests {
         let expander = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
             .hkdf_provider
             .expander_for_okm(&OkmBlock::new(SECRET));
-        let hpk =
-            super::HeaderProtectionKey::new(expander.as_ref(), version, &aead::quic::CHACHA20);
+        let key_len = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
+            .quic
+            .aead_key_len();
+        let header_key =
+            hkdf_expand_label_aead_key(expander.as_ref(), key_len, version.header_key_label(), &[]);
+        let packet_key =
+            hkdf_expand_label_aead_key(expander.as_ref(), key_len, version.packet_key_label(), &[]);
+        let packet_iv = hkdf_expand_label(expander.as_ref(), version.packet_iv_label(), &[]);
+        let hpk = super::HeaderProtectionKey::new(header_key, &aead::quic::CHACHA20);
         let packet = super::PacketKey::new(
             TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
-            expander.as_ref(),
-            version,
+            packet_key,
+            packet_iv,
             &aead::CHACHA20_POLY1305,
         );
 
