@@ -62,6 +62,9 @@ const CHANGE_THRESHOLD: f64 = 0.002; // 0.2%
 /// The name of the file where the instruction counts are stored after a `run-all` run
 const ICOUNTS_FILENAME: &str = "icounts.csv";
 
+/// Default size in bytes for internal buffers (256 KB)
+const DEFAULT_BUFFER_SIZE: usize = 262144;
+
 #[derive(Parser)]
 #[command(about)]
 pub struct Cli {
@@ -149,7 +152,7 @@ fn main() -> anyhow::Result<()> {
             let mut stdin = unsafe { File::from_raw_fd(stdin_lock.as_raw_fd()) };
             let mut stdout = unsafe { File::from_raw_fd(stdout_lock.as_raw_fd()) };
 
-            let handshake_buf = &mut [0u8; 262144];
+            let handshake_buf = &mut [0u8; DEFAULT_BUFFER_SIZE];
             let resumption_kind = black_box(bench.kind.resumption_kind());
             let params = black_box(&bench.params);
             let io = StepperIo {
@@ -203,11 +206,13 @@ fn main() -> anyhow::Result<()> {
                     let resumption_kind = black_box(bench.kind.resumption_kind());
                     let params = black_box(&bench.params);
 
-                    let (mut client_writer, mut server_reader) = async_io::async_pipe(262144);
-                    let (mut server_writer, mut client_reader) = async_io::async_pipe(262144);
+                    let (mut client_writer, mut server_reader) =
+                        async_io::async_pipe(DEFAULT_BUFFER_SIZE);
+                    let (mut server_writer, mut client_reader) =
+                        async_io::async_pipe(DEFAULT_BUFFER_SIZE);
 
                     let server_side = async move {
-                        let handshake_buf = &mut [0u8; 262144];
+                        let handshake_buf = &mut [0u8; DEFAULT_BUFFER_SIZE];
                         run_bench(
                             ServerSideStepper {
                                 io: StepperIo {
@@ -223,7 +228,7 @@ fn main() -> anyhow::Result<()> {
                     };
 
                     let client_side = async move {
-                        let handshake_buf = &mut [0u8; 262144];
+                        let handshake_buf = &mut [0u8; DEFAULT_BUFFER_SIZE];
                         run_bench(
                             ClientSideStepper {
                                 io: StepperIo {
