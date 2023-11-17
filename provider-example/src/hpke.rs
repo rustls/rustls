@@ -3,7 +3,6 @@ use std::fmt::{Debug, Formatter};
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_crypto::HpkeCrypto;
 use hpke_rs_rust_crypto::HpkeRustCrypto;
-
 use rustls::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkePrivateKey, HpkeProvider, HpkePublicKey, HpkeSuite,
 };

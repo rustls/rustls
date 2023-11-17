@@ -1,11 +1,10 @@
 use std::fs::File;
 
-use serde::Deserialize;
-
 use rustls::crypto::hpke::{HpkePrivateKey, HpkePublicKey, HpkeSuite};
 use rustls::internal::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
 use rustls_provider_example::HPKE_PROVIDER;
+use serde::Deserialize;
 
 /// Confirm opne/seal operations work using using the test vectors from [RFC 9180 Appendix A].
 ///

@@ -1,5 +1,6 @@
-use pki_types::PrivateKeyDer;
 use std::sync::Arc;
+
+use pki_types::PrivateKeyDer;
 
 mod aead;
 mod hash;
