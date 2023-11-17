@@ -187,8 +187,10 @@ impl MessageDeframer {
 
             // If we don't know the payload size yet or if the payload size is larger
             // than the currently buffered payload, we need to wait for more data.
-            let payload = msg.payload.to_vec();
-            match self.append_hs(msg.version, &payload, end, false, buffer)? {
+            let raw = RawSlice::from(msg.payload);
+            let version = msg.version;
+            let src = buffer.raw_slice_to_filled_range(raw);
+            match self.append_hs(version, AppendPayload::Internal(src), end, buffer)? {
                 HandshakePayloadState::Blocked => return Ok(None),
                 HandshakePayloadState::Complete(len) => break len,
                 HandshakePayloadState::Continue => continue,
@@ -259,7 +261,7 @@ impl MessageDeframer {
         }
 
         let end = buffer.len() + payload.len();
-        self.append_hs(version, payload, end, true, buffer)?;
+        self.append_hs(version, AppendPayload::External(payload), end, buffer)?;
         Ok(())
     }
 
@@ -269,19 +271,16 @@ impl MessageDeframer {
     fn append_hs(
         &mut self,
         version: ProtocolVersion,
-        payload: &[u8],
+        payload: AppendPayload,
         end: usize,
-        quic: bool,
         buffer: &mut impl DeframerBuffer,
     ) -> Result<HandshakePayloadState, Error> {
         let meta = match &mut self.joining_hs {
             Some(meta) => {
-                debug_assert_eq!(meta.quic, quic);
-
                 // We're joining a handshake message to the previous one here.
                 // Write it into the buffer and update the metadata.
 
-                buffer.copy(payload, meta.payload.end, quic);
+                buffer.copy(&payload, meta.payload.end);
                 meta.message.end = end;
                 meta.payload.end += payload.len();
 
@@ -297,8 +296,13 @@ impl MessageDeframer {
                 // We've found a new handshake message here.
                 // Write it into the buffer and create the metadata.
 
-                let expected_len = payload_size(payload)?;
-                buffer.copy(payload, 0, quic);
+                let expected_len = match &payload {
+                    AppendPayload::External(payload) => payload_size(payload)?,
+                    AppendPayload::Internal(range) => {
+                        payload_size(buffer.filled_get(range.clone()))?
+                    }
+                };
+                buffer.copy(&payload, 0);
                 self.joining_hs
                     .insert(HandshakePayloadMeta {
                         message: Range { start: 0, end },
@@ -308,7 +312,7 @@ impl MessageDeframer {
                         },
                         version,
                         expected_len,
-                        quic,
+                        quic: payload.is_external(),
                     })
             }
         };
@@ -340,6 +344,25 @@ impl MessageDeframer {
         let new_bytes = rd.read(buffer.unfilled())?;
         buffer.advance(new_bytes);
         Ok(new_bytes)
+    }
+}
+
+enum AppendPayload<'a> {
+    External(&'a [u8]),
+    /// payload is internal and lies within *filled* part of the buffer
+    Internal(Range<usize>),
+}
+
+impl AppendPayload<'_> {
+    fn len(&self) -> usize {
+        match self {
+            AppendPayload::External(payload) => payload.len(),
+            AppendPayload::Internal(Range { start, end }) => end - start,
+        }
+    }
+
+    fn is_external(&self) -> bool {
+        matches!(self, Self::External(..))
     }
 }
 
@@ -466,6 +489,13 @@ impl<'b> DeframerSliceBuffer<'b, '_> {
 
         &mut taken[start..]
     }
+
+    fn raw_slice_to_filled_range(&self, raw: RawSlice) -> Range<usize> {
+        let adjust = self.discard.get() - self.taken;
+        let start = ((raw.ptr as usize).checked_sub(self.buf.as_ptr() as usize)).unwrap() - adjust;
+        let end = start + raw.len;
+        start..end
+    }
 }
 
 pub(crate) struct RawSlice {
@@ -484,17 +514,19 @@ impl From<&'_ [u8]> for RawSlice {
 
 trait DeframerBuffer {
     fn advance(&mut self, num_bytes: usize);
-    fn copy(&mut self, from: &[u8], at: usize, quic: bool) {
-        let buf = if quic {
-            self.unfilled()
-        } else {
-            self.filled_mut()
-        };
-        let len = from.len();
-        let into = &mut buf[at..at + len];
-        into.copy_from_slice(from);
-        if quic {
-            self.advance(len);
+    fn copy(&mut self, payload: &AppendPayload, at: usize) {
+        match payload {
+            AppendPayload::External(payload) => {
+                let buf = self.unfilled();
+                let len = payload.len();
+                buf[at..at + len].copy_from_slice(payload);
+                self.advance(len);
+            }
+
+            AppendPayload::Internal(src) => {
+                let buf = self.filled_mut();
+                buf.copy_within(src.clone(), at)
+            }
         }
     }
     fn filled(&self) -> &[u8];
