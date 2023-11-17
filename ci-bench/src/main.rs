@@ -153,8 +153,7 @@ fn main() -> anyhow::Result<()> {
             let mut stdout = unsafe { File::from_raw_fd(stdout_lock.as_raw_fd()) };
 
             let handshake_buf = &mut [0u8; DEFAULT_BUFFER_SIZE];
-            let resumption_kind = black_box(bench.kind.resumption_kind());
-            let params = black_box(&bench.params);
+            let resumption_kind = bench.kind.resumption_kind();
             let io = StepperIo {
                 reader: &mut stdin,
                 writer: &mut stdout,
@@ -166,7 +165,10 @@ fn main() -> anyhow::Result<()> {
                         run_bench(
                             ServerSideStepper {
                                 io,
-                                config: ServerSideStepper::make_config(params, resumption_kind),
+                                config: ServerSideStepper::make_config(
+                                    &bench.params,
+                                    resumption_kind,
+                                ),
                             },
                             bench.kind,
                         )
@@ -177,7 +179,10 @@ fn main() -> anyhow::Result<()> {
                             ClientSideStepper {
                                 io,
                                 resumption_kind,
-                                config: ClientSideStepper::make_config(params, resumption_kind),
+                                config: ClientSideStepper::make_config(
+                                    &bench.params,
+                                    resumption_kind,
+                                ),
                             },
                             bench.kind,
                         )
