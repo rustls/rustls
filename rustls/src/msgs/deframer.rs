@@ -165,7 +165,7 @@ impl MessageDeframer {
 
             // If we don't know the payload size yet or if the payload size is larger
             // than the currently buffered payload, we need to wait for more data.
-            match self.append_hs(msg.version, &msg.payload.0, end, false, buffer)? {
+            match self.append_hs::<_, false>(msg.version, &msg.payload.0, end, buffer)? {
                 HandshakePayloadState::Blocked => return Ok(None),
                 HandshakePayloadState::Complete(len) => break len,
                 HandshakePayloadState::Continue => continue,
@@ -232,29 +232,28 @@ impl MessageDeframer {
         }
 
         let end = buffer.len() + payload.len();
-        self.append_hs(version, payload, end, true, buffer)?;
+        self.append_hs::<_, true>(version, payload, end, buffer)?;
         Ok(())
     }
 
     /// Write the handshake message contents into the buffer and update the metadata.
     ///
     /// Returns true if a complete message is found.
-    fn append_hs(
+    fn append_hs<T: DeframerBuffer<QUIC>, const QUIC: bool>(
         &mut self,
         version: ProtocolVersion,
         payload: &[u8],
         end: usize,
-        quic: bool,
-        buffer: &mut DeframerVecBuffer,
+        buffer: &mut T,
     ) -> Result<HandshakePayloadState, Error> {
         let meta = match &mut self.joining_hs {
             Some(meta) => {
-                debug_assert_eq!(meta.quic, quic);
+                debug_assert_eq!(meta.quic, QUIC);
 
                 // We're joining a handshake message to the previous one here.
                 // Write it into the buffer and update the metadata.
 
-                buffer.copy(payload, meta.payload.end, quic);
+                DeframerBuffer::<QUIC>::copy(buffer, payload, meta.payload.end);
                 meta.message.end = end;
                 meta.payload.end += payload.len();
 
@@ -271,7 +270,7 @@ impl MessageDeframer {
                 // Write it into the buffer and create the metadata.
 
                 let expected_len = payload_size(payload)?;
-                buffer.copy(payload, 0, quic);
+                DeframerBuffer::<QUIC>::copy(buffer, payload, 0);
                 self.joining_hs
                     .insert(HandshakePayloadMeta {
                         message: Range { start: 0, end },
@@ -281,7 +280,7 @@ impl MessageDeframer {
                         },
                         version,
                         expected_len,
-                        quic,
+                        quic: QUIC,
                     })
             }
         };
@@ -367,25 +366,6 @@ impl DeframerVecBuffer {
         Ok(())
     }
 
-    /// Copies from the `src` buffer into this buffer at the requested index
-    ///
-    /// If `quic` is true the data will be copied into the *un*filled section of the buffer
-    ///
-    /// If `quic` is false the data will be copied into the filled section of the buffer
-    fn copy(&mut self, from: &[u8], at: usize, quic: bool) {
-        let buf = if quic {
-            self.unfilled()
-        } else {
-            self.filled_mut()
-        };
-        let len = from.len();
-        let into = &mut buf[at..at + len];
-        into.copy_from_slice(from);
-        if quic {
-            self.advance(len);
-        }
-    }
-
     /// Discard `taken` bytes from the start of our buffer.
     fn discard(&mut self, taken: usize) {
         #[allow(clippy::comparison_chain)]
@@ -411,17 +391,57 @@ impl DeframerVecBuffer {
         }
     }
 
-    fn advance(&mut self, new_bytes: usize) {
-        self.used += new_bytes;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
-    fn filled_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[..self.used]
+    fn advance(&mut self, num_bytes: usize) {
+        self.used += num_bytes;
     }
 
     fn unfilled(&mut self) -> &mut [u8] {
         &mut self.buf[self.used..]
     }
+}
+
+impl FilledDeframerBuffer for DeframerVecBuffer {
+    fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[..self.used]
+    }
+
+    fn filled(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
+}
+
+impl DeframerBuffer<true> for DeframerVecBuffer {
+    fn copy(&mut self, src: &[u8], at: usize) {
+        copy_into_buffer(self.unfilled(), src, at);
+        self.advance(src.len());
+    }
+}
+
+impl DeframerBuffer<false> for DeframerVecBuffer {
+    fn copy(&mut self, src: &[u8], at: usize) {
+        copy_into_buffer(self.filled_mut(), src, at)
+    }
+}
+
+trait DeframerBuffer<const QUIC: bool>: FilledDeframerBuffer {
+    /// Copies from the `src` buffer into this buffer at the requested index
+    ///
+    /// If `QUIC` is true the data will be copied into the *un*filled section of the buffer
+    ///
+    /// If `QUIC` is false the data will be copied into the filled section of the buffer
+    fn copy(&mut self, src: &[u8], at: usize);
+}
+
+fn copy_into_buffer(buf: &mut [u8], src: &[u8], at: usize) {
+    buf[at..at + src.len()].copy_from_slice(src);
+}
+
+trait FilledDeframerBuffer {
+    fn filled_mut(&mut self) -> &mut [u8];
 
     fn filled_get<I>(&self, index: I) -> &I::Output
     where
@@ -430,17 +450,11 @@ impl DeframerVecBuffer {
         self.filled().get(index).unwrap()
     }
 
-    fn filled(&self) -> &[u8] {
-        &self.buf[..self.used]
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     fn len(&self) -> usize {
-        self.used
+        self.filled().len()
     }
+
+    fn filled(&self) -> &[u8];
 }
 
 enum HandshakePayloadState {
