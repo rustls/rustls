@@ -6,6 +6,7 @@ use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
+use crate::msgs::deframer::DeframerVecBuffer;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::server::{ServerConfig, ServerConnectionData};
 use crate::tls13::key_schedule::{
@@ -312,6 +313,7 @@ impl From<ServerConnection> for Connection {
 /// A shared interface for QUIC connections.
 pub struct ConnectionCommon<Data> {
     core: ConnectionCore<Data>,
+    deframer_buffer: DeframerVecBuffer,
 }
 
 impl<Data: SideData> ConnectionCommon<Data> {
@@ -354,10 +356,13 @@ impl<Data: SideData> ConnectionCommon<Data> {
     ///
     /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
     pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
+        self.core.message_deframer.push(
+            ProtocolVersion::TLSv1_3,
+            plaintext,
+            &mut self.deframer_buffer,
+        )?;
         self.core
-            .message_deframer
-            .push(ProtocolVersion::TLSv1_3, plaintext)?;
-        self.core.process_new_packets()?;
+            .process_new_packets(&mut self.deframer_buffer)?;
         Ok(())
     }
 
@@ -395,7 +400,10 @@ impl<Data> DerefMut for ConnectionCommon<Data> {
 
 impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
     fn from(core: ConnectionCore<Data>) -> Self {
-        Self { core }
+        Self {
+            core,
+            deframer_buffer: <_>::default(),
+        }
     }
 }
 
