@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::cell::Cell;
 use core::ops::Range;
 use core::slice::SliceIndex;
 use std::io;
@@ -333,7 +334,7 @@ impl DeframerVecBuffer {
     pub fn borrow<'b, 'd>(&'b mut self, discard: &'d mut usize) -> DeframerSliceBuffer<'b, 'd> {
         DeframerSliceBuffer {
             buf: &mut self.buf[..self.used],
-            discard,
+            discard: Cell::from_mut(discard),
         }
     }
 
@@ -412,7 +413,7 @@ pub struct DeframerSliceBuffer<'b, 'd> {
     // a fully initialized buffer that will be deframed
     buf: &'b mut [u8],
     // number of bytes to discard from the front of `buf` at a later time
-    discard: &'d mut usize,
+    discard: &'d Cell<usize>,
 }
 
 impl DeframerSliceBuffer<'_, '_> {
@@ -420,8 +421,9 @@ impl DeframerSliceBuffer<'_, '_> {
         self.len() == 0
     }
 
-    pub fn queue_discard(&mut self, num_bytes: usize) {
-        *self.discard += num_bytes;
+    pub fn queue_discard(&self, num_bytes: usize) {
+        let old = self.discard.get();
+        self.discard.set(old + num_bytes);
     }
 }
 
@@ -479,11 +481,11 @@ impl DeframerBuffer for DeframerSliceBuffer<'_, '_> {
     }
 
     fn filled(&self) -> &[u8] {
-        &self.buf[*self.discard..]
+        &self.buf[self.discard.get()..]
     }
 
     fn filled_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[*self.discard..]
+        &mut self.buf[self.discard.get()..]
     }
 
     fn unfilled(&mut self) -> &mut [u8] {
