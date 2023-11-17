@@ -2,12 +2,15 @@
 use crate::client::{ClientConfig, ClientConnectionData, ServerName};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
+use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{HkdfExpander, OkmBlock};
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
 use crate::server::{ServerConfig, ServerConnectionData};
-use crate::tls13::key_schedule::hkdf_expand_label_block;
+use crate::tls13::key_schedule::{
+    hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
+};
 use crate::tls13::Tls13CipherSuite;
 
 use alloc::boxed::Box;
@@ -509,13 +512,31 @@ impl DirectionalKeys {
         let expander = suite
             .hkdf_provider
             .expander_for_okm(secret);
+
+        let aead_key_len = suite.quic.aead_key_len();
+
+        let packet_key = hkdf_expand_label_aead_key(
+            expander.as_ref(),
+            aead_key_len,
+            version.packet_key_label(),
+            &[],
+        );
+        let packet_iv = hkdf_expand_label(expander.as_ref(), version.packet_iv_label(), &[]);
+
+        let header_key = hkdf_expand_label_aead_key(
+            expander.as_ref(),
+            aead_key_len,
+            version.header_key_label(),
+            &[],
+        );
+
         Self {
             header: suite
                 .quic
-                .header_protection_key(expander.as_ref(), version),
+                .header_protection_key(header_key),
             packet: suite
                 .quic
-                .packet_key(suite, expander.as_ref(), version),
+                .packet_key(suite, packet_key, packet_iv),
         }
     }
 }
@@ -545,15 +566,13 @@ pub(crate) trait Algorithm: Send + Sync {
     fn packet_key(
         &self,
         suite: &'static Tls13CipherSuite,
-        secret: &dyn HkdfExpander,
-        version: Version,
+        key: AeadKey,
+        iv: Iv,
     ) -> Box<dyn PacketKey>;
 
-    fn header_protection_key(
-        &self,
-        secret: &dyn HkdfExpander,
-        version: Version,
-    ) -> Box<dyn HeaderProtectionKey>;
+    fn header_protection_key(&self, key: AeadKey) -> Box<dyn HeaderProtectionKey>;
+
+    fn aead_key_len(&self) -> usize;
 }
 
 /// A QUIC header protection key
@@ -672,25 +691,34 @@ pub struct PacketKeySet {
 impl PacketKeySet {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
+
+        let local_expander = secrets
+            .suite
+            .hkdf_provider
+            .expander_for_okm(local);
+        let remote_expander = secrets
+            .suite
+            .hkdf_provider
+            .expander_for_okm(remote);
+
+        fn make_packet_key(expander: &dyn HkdfExpander, secrets: &Secrets) -> Box<dyn PacketKey> {
+            let aead_key_len = secrets.suite.quic.aead_key_len();
+            let packet_key = hkdf_expand_label_aead_key(
+                expander,
+                aead_key_len,
+                secrets.version.packet_key_label(),
+                &[],
+            );
+            let packet_iv = hkdf_expand_label(expander, secrets.version.packet_iv_label(), &[]);
+            secrets
+                .suite
+                .quic
+                .packet_key(secrets.suite, packet_key, packet_iv)
+        }
+
         Self {
-            local: secrets.suite.quic.packet_key(
-                secrets.suite,
-                secrets
-                    .suite
-                    .hkdf_provider
-                    .expander_for_okm(local)
-                    .as_ref(),
-                secrets.version,
-            ),
-            remote: secrets.suite.quic.packet_key(
-                secrets.suite,
-                secrets
-                    .suite
-                    .hkdf_provider
-                    .expander_for_okm(remote)
-                    .as_ref(),
-                secrets.version,
-            ),
+            local: make_packet_key(local_expander.as_ref(), secrets),
+            remote: make_packet_key(remote_expander.as_ref(), secrets),
         }
     }
 }
