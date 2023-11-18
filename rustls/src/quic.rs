@@ -550,7 +550,7 @@ impl DirectionalKeys {
 
         Self {
             header: quic.header_protection_key(header_key),
-            packet: quic.packet_key(suite, packet_key, packet_iv),
+            packet: quic.packet_key(packet_key, packet_iv),
         }
     }
 }
@@ -581,12 +581,7 @@ pub trait Algorithm: Send + Sync {
     ///
     /// `suite` is the entire suite this `Algorithm` appeared in.
     /// `key` and `iv` is the key material to use.
-    fn packet_key(
-        &self,
-        suite: &'static Tls13CipherSuite,
-        key: AeadKey,
-        iv: Iv,
-    ) -> Box<dyn PacketKey>;
+    fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn PacketKey>;
 
     /// Produce a `HeaderProtectionKey` encrypter/decrypter for this suite.
     ///
@@ -690,16 +685,6 @@ pub trait PacketKey {
         payload: &'a mut [u8],
     ) -> Result<&'a [u8], Error>;
 
-    /// Number of times the packet key can be used without sacrificing confidentiality
-    ///
-    /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-confidentiality-limit>.
-    fn confidentiality_limit(&self) -> u64;
-
-    /// Number of times the packet key can be used without sacrificing integrity
-    ///
-    /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-integrity-limit>.
-    fn integrity_limit(&self) -> u64;
-
     /// Tag length for the underlying AEAD algorithm
     fn tag_len(&self) -> usize;
 }
@@ -736,7 +721,7 @@ impl PacketKeySet {
             let packet_iv = hkdf_expand_label(expander, secrets.version.packet_iv_label(), &[]);
             secrets
                 .quic
-                .packet_key(secrets.suite, packet_key, packet_iv)
+                .packet_key(packet_key, packet_iv)
         }
 
         Self {

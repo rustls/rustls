@@ -4237,20 +4237,6 @@ mod test_quic {
             CONNECTION_ID,
             Side::Client,
         );
-        assert_eq!(
-            client_keys
-                .local
-                .packet
-                .confidentiality_limit(),
-            2u64.pow(23)
-        );
-        assert_eq!(
-            client_keys
-                .local
-                .packet
-                .integrity_limit(),
-            2u64.pow(52)
-        );
         assert_eq!(client_keys.local.packet.tag_len(), 16);
 
         let mut buf = Vec::new();
