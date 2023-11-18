@@ -907,11 +907,10 @@ impl State<ClientConnectionData> for ExpectFinished {
             _fin_verified: fin,
         };
 
-        if cx.common.is_quic() {
-            Ok(Box::new(ExpectQuicTraffic(st)))
-        } else {
-            Ok(Box::new(st))
-        }
+        Ok(match cx.common.is_quic() {
+            true => Box::new(ExpectQuicTraffic(st)),
+            false => Box::new(st),
+        })
     }
 }
 
