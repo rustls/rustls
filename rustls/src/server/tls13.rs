@@ -1185,17 +1185,16 @@ impl State<ServerConnectionData> for ExpectFinished {
         // Application data may now flow, even if we have client auth enabled.
         cx.common.start_traffic();
 
-        if cx.common.protocol == Protocol::Quic {
-            Ok(Box::new(ExpectQuicTraffic {
+        Ok(match cx.common.is_quic() {
+            true => Box::new(ExpectQuicTraffic {
                 key_schedule: key_schedule_traffic,
                 _fin_verified: fin,
-            }))
-        } else {
-            Ok(Box::new(ExpectTraffic {
+            }),
+            false => Box::new(ExpectTraffic {
                 key_schedule: key_schedule_traffic,
                 _fin_verified: fin,
-            }))
-        }
+            }),
+        })
     }
 }
 
