@@ -3,7 +3,7 @@ use crate::client::{ClientConfig, ClientConnectionData, ServerName};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
 use crate::crypto::cipher::{AeadKey, Iv};
-use crate::crypto::tls13::{Hkdf, OkmBlock};
+use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
@@ -527,30 +527,10 @@ impl DirectionalKeys {
         secret: &OkmBlock,
         version: Version,
     ) -> Self {
-        let expander = suite
-            .hkdf_provider
-            .expander_for_okm(secret);
-
-        let aead_key_len = quic.aead_key_len();
-
-        let packet_key = hkdf_expand_label_aead_key(
-            expander.as_ref(),
-            aead_key_len,
-            version.packet_key_label(),
-            &[],
-        );
-        let packet_iv = hkdf_expand_label(expander.as_ref(), version.packet_iv_label(), &[]);
-
-        let header_key = hkdf_expand_label_aead_key(
-            expander.as_ref(),
-            aead_key_len,
-            version.header_key_label(),
-            &[],
-        );
-
+        let builder = KeyBuilder::new(secret, version, quic, suite.hkdf_provider);
         Self {
-            header: quic.header_protection_key(header_key),
-            packet: quic.packet_key(packet_key, packet_iv),
+            header: builder.header_protection_key(),
+            packet: builder.packet_key(),
         }
     }
 }
@@ -700,30 +680,61 @@ pub struct PacketKeySet {
 impl PacketKeySet {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
-        let hkdf = secrets.suite.hkdf_provider;
+        let (version, alg, hkdf) = (secrets.version, secrets.quic, secrets.suite.hkdf_provider);
         Self {
-            local: make_packet_key(local, hkdf, secrets.version, secrets.quic),
-            remote: make_packet_key(remote, hkdf, secrets.version, secrets.quic),
+            local: KeyBuilder::new(local, version, alg, hkdf).packet_key(),
+            remote: KeyBuilder::new(remote, version, alg, hkdf).packet_key(),
         }
     }
 }
 
-fn make_packet_key(
-    secret: &OkmBlock,
-    hkdf: &dyn Hkdf,
+pub(crate) struct KeyBuilder<'a> {
+    expander: Box<dyn HkdfExpander>,
     version: Version,
-    alg: &dyn Algorithm,
-) -> Box<dyn PacketKey> {
-    let expander = hkdf.expander_for_okm(secret);
-    let aead_key_len = alg.aead_key_len();
-    let packet_key = hkdf_expand_label_aead_key(
-        expander.as_ref(),
-        aead_key_len,
-        version.packet_key_label(),
-        &[],
-    );
-    let packet_iv = hkdf_expand_label(expander.as_ref(), version.packet_iv_label(), &[]);
-    alg.packet_key(packet_key, packet_iv)
+    alg: &'a dyn Algorithm,
+}
+
+impl<'a> KeyBuilder<'a> {
+    pub(crate) fn new(
+        secret: &OkmBlock,
+        version: Version,
+        alg: &'a dyn Algorithm,
+        hkdf: &'a dyn Hkdf,
+    ) -> Self {
+        Self {
+            expander: hkdf.expander_for_okm(secret),
+            version,
+            alg,
+        }
+    }
+
+    /// Derive packet keys
+    pub(crate) fn packet_key(&self) -> Box<dyn PacketKey> {
+        let aead_key_len = self.alg.aead_key_len();
+        let packet_key = hkdf_expand_label_aead_key(
+            self.expander.as_ref(),
+            aead_key_len,
+            self.version.packet_key_label(),
+            &[],
+        );
+
+        let packet_iv =
+            hkdf_expand_label(self.expander.as_ref(), self.version.packet_iv_label(), &[]);
+        self.alg
+            .packet_key(packet_key, packet_iv)
+    }
+
+    /// Derive header protection keys
+    pub(crate) fn header_protection_key(&self) -> Box<dyn HeaderProtectionKey> {
+        let header_key = hkdf_expand_label_aead_key(
+            self.expander.as_ref(),
+            self.alg.aead_key_len(),
+            self.version.header_key_label(),
+            &[],
+        );
+        self.alg
+            .header_protection_key(header_key)
+    }
 }
 
 /// Complete set of keys used to communicate with the peer
