@@ -3,7 +3,6 @@
 use crate::crypto::cipher::{AeadKey, Iv, Nonce};
 use crate::error::Error;
 use crate::quic;
-use crate::tls13::Tls13CipherSuite;
 
 use alloc::boxed::Box;
 
@@ -101,13 +100,10 @@ pub(crate) struct PacketKey {
     key: aead::LessSafeKey,
     /// Computes unique nonces for each packet
     iv: Iv,
-    /// The cipher suite used for this packet key
-    suite: &'static Tls13CipherSuite,
 }
 
 impl PacketKey {
     pub(crate) fn new(
-        suite: &'static Tls13CipherSuite,
         key: AeadKey,
         iv: Iv,
         aead_algorithm: &'static aead::Algorithm,
@@ -117,7 +113,6 @@ impl PacketKey {
                 aead::UnboundKey::new(aead_algorithm, key.as_ref()).unwrap(),
             ),
             iv,
-            suite,
         }
     }
 }
@@ -162,22 +157,6 @@ impl quic::PacketKey for PacketKey {
         Ok(&payload[..plain_len])
     }
 
-    /// Number of times the packet key can be used without sacrificing confidentiality
-    ///
-    /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-confidentiality-limit>.
-    #[inline]
-    fn confidentiality_limit(&self) -> u64 {
-        self.suite.common.confidentiality_limit
-    }
-
-    /// Number of times the packet key can be used without sacrificing integrity
-    ///
-    /// See <https://www.rfc-editor.org/rfc/rfc9001.html#name-integrity-limit>.
-    #[inline]
-    fn integrity_limit(&self) -> u64 {
-        self.suite.common.integrity_limit
-    }
-
     /// Tag length for the underlying AEAD algorithm
     #[inline]
     fn tag_len(&self) -> usize {
@@ -193,11 +172,10 @@ pub(crate) struct KeyBuilder(
 impl crate::quic::Algorithm for KeyBuilder {
     fn packet_key(
         &self,
-        suite: &'static Tls13CipherSuite,
         key: AeadKey,
         iv: Iv,
     ) -> Box<dyn quic::PacketKey> {
-        Box::new(super::quic::PacketKey::new(suite, key, iv, self.0))
+        Box::new(super::quic::PacketKey::new(key, iv, self.0))
     }
 
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn quic::HeaderProtectionKey> {
@@ -244,7 +222,6 @@ mod tests {
         let packet_iv = hkdf_expand_label(expander.as_ref(), version.packet_iv_label(), &[]);
         let hpk = super::HeaderProtectionKey::new(header_key, &aead::quic::CHACHA20);
         let packet = super::PacketKey::new(
-            TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
             packet_key,
             packet_iv,
             &aead::CHACHA20_POLY1305,
