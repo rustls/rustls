@@ -3,7 +3,7 @@ use crate::client::{ClientConfig, ClientConnectionData, ServerName};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
 use crate::crypto::cipher::{AeadKey, Iv};
-use crate::crypto::tls13::{HkdfExpander, OkmBlock};
+use crate::crypto::tls13::{Hkdf, OkmBlock};
 use crate::enums::{AlertDescription, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
@@ -700,35 +700,30 @@ pub struct PacketKeySet {
 impl PacketKeySet {
     fn new(secrets: &Secrets) -> Self {
         let (local, remote) = secrets.local_remote();
-
-        let local_expander = secrets
-            .suite
-            .hkdf_provider
-            .expander_for_okm(local);
-        let remote_expander = secrets
-            .suite
-            .hkdf_provider
-            .expander_for_okm(remote);
-
-        fn make_packet_key(expander: &dyn HkdfExpander, secrets: &Secrets) -> Box<dyn PacketKey> {
-            let aead_key_len = secrets.quic.aead_key_len();
-            let packet_key = hkdf_expand_label_aead_key(
-                expander,
-                aead_key_len,
-                secrets.version.packet_key_label(),
-                &[],
-            );
-            let packet_iv = hkdf_expand_label(expander, secrets.version.packet_iv_label(), &[]);
-            secrets
-                .quic
-                .packet_key(packet_key, packet_iv)
-        }
-
+        let hkdf = secrets.suite.hkdf_provider;
         Self {
-            local: make_packet_key(local_expander.as_ref(), secrets),
-            remote: make_packet_key(remote_expander.as_ref(), secrets),
+            local: make_packet_key(local, hkdf, secrets.version, secrets.quic),
+            remote: make_packet_key(remote, hkdf, secrets.version, secrets.quic),
         }
     }
+}
+
+fn make_packet_key(
+    secret: &OkmBlock,
+    hkdf: &dyn Hkdf,
+    version: Version,
+    alg: &dyn Algorithm,
+) -> Box<dyn PacketKey> {
+    let expander = hkdf.expander_for_okm(secret);
+    let aead_key_len = alg.aead_key_len();
+    let packet_key = hkdf_expand_label_aead_key(
+        expander.as_ref(),
+        aead_key_len,
+        version.packet_key_label(),
+        &[],
+    );
+    let packet_iv = hkdf_expand_label(expander.as_ref(), version.packet_iv_label(), &[]);
+    alg.packet_key(packet_key, packet_iv)
 }
 
 /// Complete set of keys used to communicate with the peer
