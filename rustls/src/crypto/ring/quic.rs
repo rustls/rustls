@@ -103,11 +103,7 @@ pub(crate) struct PacketKey {
 }
 
 impl PacketKey {
-    pub(crate) fn new(
-        key: AeadKey,
-        iv: Iv,
-        aead_algorithm: &'static aead::Algorithm,
-    ) -> Self {
+    pub(crate) fn new(key: AeadKey, iv: Iv, aead_algorithm: &'static aead::Algorithm) -> Self {
         Self {
             key: aead::LessSafeKey::new(
                 aead::UnboundKey::new(aead_algorithm, key.as_ref()).unwrap(),
@@ -170,11 +166,7 @@ pub(crate) struct KeyBuilder(
 );
 
 impl crate::quic::Algorithm for KeyBuilder {
-    fn packet_key(
-        &self,
-        key: AeadKey,
-        iv: Iv,
-    ) -> Box<dyn quic::PacketKey> {
+    fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
         Box::new(super::quic::PacketKey::new(key, iv, self.0))
     }
 
@@ -189,16 +181,12 @@ impl crate::quic::Algorithm for KeyBuilder {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::common_state::Side;
     use crate::crypto::tls13::OkmBlock;
-    use crate::quic::HeaderProtectionKey;
-    use crate::quic::PacketKey;
     use crate::quic::*;
     use crate::test_provider::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
-    use crate::tls13::key_schedule::{hkdf_expand_label, hkdf_expand_label_aead_key};
 
     fn test_short_packet(version: Version, expected: &[u8]) {
         const PN: u64 = 654360564;
@@ -208,24 +196,17 @@ mod tests {
             0x0f, 0x21, 0x63, 0x2b,
         ];
 
-        let expander = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
-            .hkdf_provider
-            .expander_for_okm(&OkmBlock::new(SECRET));
-        let key_len = TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
-            .quic
-            .unwrap()
-            .aead_key_len();
-        let header_key =
-            hkdf_expand_label_aead_key(expander.as_ref(), key_len, version.header_key_label(), &[]);
-        let packet_key =
-            hkdf_expand_label_aead_key(expander.as_ref(), key_len, version.packet_key_label(), &[]);
-        let packet_iv = hkdf_expand_label(expander.as_ref(), version.packet_iv_label(), &[]);
-        let hpk = super::HeaderProtectionKey::new(header_key, &aead::quic::CHACHA20);
-        let packet = super::PacketKey::new(
-            packet_key,
-            packet_iv,
-            &aead::CHACHA20_POLY1305,
+        let secret = OkmBlock::new(SECRET);
+        let builder = KeyBuilder::new(
+            &secret,
+            version,
+            TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
+                .quic
+                .unwrap(),
+            TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.hkdf_provider,
         );
+        let packet = builder.packet_key();
+        let hpk = builder.header_protection_key();
 
         const PLAIN: &[u8] = &[0x42, 0x00, 0xbf, 0xf4, 0x01];
 
