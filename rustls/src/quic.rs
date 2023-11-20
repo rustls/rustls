@@ -138,9 +138,10 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
-    /// Make a new QUIC ClientConnection. This differs from `ClientConnection::new()`
-    /// in that it takes an extra argument, `params`, which contains the
-    /// TLS-encoded transport parameters to send.
+    /// Make a new QUIC ClientConnection.
+    ///
+    /// This differs from `ClientConnection::new()` in that it takes an extra `params` argument,
+    /// which contains the TLS-encoded transport parameters to send.
     pub fn new(
         config: Arc<ClientConfig>,
         quic_version: Version,
@@ -214,9 +215,10 @@ pub struct ServerConnection {
 }
 
 impl ServerConnection {
-    /// Make a new QUIC ServerConnection. This differs from `ServerConnection::new()`
-    /// in that it takes an extra argument, `params`, which contains the
-    /// TLS-encoded transport parameters to send.
+    /// Make a new QUIC ServerConnection.
+    ///
+    /// This differs from `ServerConnection::new()` in that it takes an extra `params` argument,
+    /// which contains the TLS-encoded transport parameters to send.
     pub fn new(
         config: Arc<ServerConfig>,
         quic_version: Version,
