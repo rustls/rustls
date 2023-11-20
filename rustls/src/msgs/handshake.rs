@@ -188,7 +188,7 @@ impl SessionId {
 #[derive(Clone, Debug)]
 pub struct UnknownExtension {
     pub(crate) typ: ExtensionType,
-    pub(crate) payload: Payload,
+    pub(crate) payload: Payload<'static>,
 }
 
 impl UnknownExtension {
@@ -217,7 +217,7 @@ impl TlsListElement for SignatureScheme {
 #[derive(Clone, Debug)]
 pub(crate) enum ServerNamePayload {
     HostName(DnsName),
-    Unknown(Payload),
+    Unknown(Payload<'static>),
 }
 
 impl ServerNamePayload {
@@ -486,7 +486,7 @@ impl<'a> Codec<'a> for OcspCertificateStatusRequest {
 #[derive(Clone, Debug)]
 pub enum CertificateStatusRequest {
     Ocsp(OcspCertificateStatusRequest),
-    Unknown((CertificateStatusType, Payload)),
+    Unknown((CertificateStatusType, Payload<'static>)),
 }
 
 impl<'a> Codec<'a> for CertificateStatusRequest {
@@ -687,7 +687,7 @@ impl ClientExtension {
 #[derive(Clone, Debug)]
 pub enum ClientSessionTicket {
     Request,
-    Offer(Payload),
+    Offer(Payload<'static>),
 }
 
 #[derive(Clone, Debug)]
@@ -1589,7 +1589,7 @@ impl<'a> Codec<'a> for EcdheServerKeyExchange {
 #[derive(Debug)]
 pub enum ServerKeyExchangePayload {
     Ecdhe(EcdheServerKeyExchange),
-    Unknown(Payload),
+    Unknown(Payload<'static>),
 }
 
 impl<'a> Codec<'a> for ServerKeyExchangePayload {
@@ -1614,7 +1614,7 @@ impl ServerKeyExchangePayload {
         kxa: KeyExchangeAlgorithm,
     ) -> Option<EcdheServerKeyExchange> {
         if let Self::Unknown(ref unk) = *self {
-            let mut rd = Reader::init(&unk.0);
+            let mut rd = Reader::init(unk.bytes());
 
             let result = match kxa {
                 KeyExchangeAlgorithm::ECDHE => EcdheServerKeyExchange::read(&mut rd),
@@ -2077,15 +2077,15 @@ pub enum HandshakePayload {
     CertificateVerify(DigitallySignedStruct),
     ServerHelloDone,
     EndOfEarlyData,
-    ClientKeyExchange(Payload),
+    ClientKeyExchange(Payload<'static>),
     NewSessionTicket(NewSessionTicketPayload),
     NewSessionTicketTls13(NewSessionTicketPayloadTls13),
     EncryptedExtensions(Vec<ServerExtension>),
     KeyUpdate(KeyUpdateRequest),
-    Finished(Payload),
+    Finished(Payload<'static>),
     CertificateStatus(CertificateStatus),
-    MessageHash(Payload),
-    Unknown(Payload),
+    MessageHash(Payload<'static>),
+    Unknown(Payload<'static>),
 }
 
 impl HandshakePayload {

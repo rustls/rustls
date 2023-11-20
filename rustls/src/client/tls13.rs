@@ -826,7 +826,8 @@ impl State<ClientConnectionData> for ExpectFinished {
             .key_schedule
             .sign_server_finish(&handshake_hash);
 
-        let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), &finished.0).into() {
+        let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
+        {
             true => verify::FinishedMessageVerified::assertion(),
             false => {
                 return Err(cx

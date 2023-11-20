@@ -772,10 +772,10 @@ impl EarlyDataState {
     }
 
     pub(super) fn take_received_plaintext(&mut self, bytes: Payload) -> bool {
-        let available = bytes.0.len();
+        let available = bytes.bytes().len();
         match self {
             Self::Accepted(ref mut received) if received.apply_limit(available) == available => {
-                received.append(bytes.0);
+                received.append(bytes.into_vec());
                 true
             }
             _ => false,

@@ -27,7 +27,7 @@ impl MessageFragmenter {
         &self,
         msg: &'a PlainMessage,
     ) -> impl Iterator<Item = BorrowedPlainMessage<'a>> + 'a {
-        self.fragment_slice(msg.typ, msg.version, &msg.payload.0)
+        self.fragment_slice(msg.typ, msg.version, msg.payload.bytes())
     }
 
     /// Enqueue borrowed fragments of (version, typ, payload) which

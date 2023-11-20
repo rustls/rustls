@@ -976,7 +976,7 @@ mod tests {
         let mut rl = RecordLayer::new();
         let m = d.pop_message(&mut rl, None);
         assert_eq!(m.typ, ContentType::ApplicationData);
-        assert_eq!(m.payload.0.len(), 0);
+        assert_eq!(m.payload.bytes().len(), 0);
         assert!(!d.has_pending());
         assert!(d.last_error.is_none());
     }
