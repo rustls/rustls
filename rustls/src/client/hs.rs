@@ -278,8 +278,10 @@ fn emit_client_hello_for_retry(
     let mut cipher_suites: Vec<_> = config
         .cipher_suites
         .iter()
-        .filter(|cs| cs.usable_for_protocol(cx.common.protocol))
-        .map(|cs| cs.suite())
+        .filter_map(|cs| match cs.usable_for_protocol(cx.common.protocol) {
+            true => Some(cs.suite()),
+            false => None,
+        })
         .collect();
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
