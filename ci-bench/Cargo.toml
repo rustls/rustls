@@ -11,7 +11,7 @@ anyhow = "1.0.73"
 byteorder = "1.4.3"
 clap = { version = "4.3.21", features = ["derive"] }
 fxhash = "0.2.1"
-itertools = "0.11.0"
+itertools = "0.12"
 pki-types = { package = "rustls-pki-types", version = "0.2" }
 rayon = "1.7.0"
 rustls = { path = "../rustls", features = ["ring", "aws_lc_rs"] }
