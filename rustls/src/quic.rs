@@ -155,7 +155,7 @@ impl ClientConnection {
 
         if !config.supports_protocol(Protocol::Quic) {
             return Err(Error::General(
-                "At least one ciphersuite must support QUIC".into(),
+                "at least one ciphersuite must support QUIC".into(),
             ));
         }
 
@@ -230,7 +230,7 @@ impl ServerConnection {
 
         if !config.supports_protocol(Protocol::Quic) {
             return Err(Error::General(
-                "At least one ciphersuite must support QUIC".into(),
+                "at least one ciphersuite must support QUIC".into(),
             ));
         }
 
