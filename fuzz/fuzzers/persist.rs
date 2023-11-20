@@ -8,7 +8,7 @@ use rustls::internal::msgs::persist;
 
 fn try_type<T>(data: &[u8])
 where
-    T: Codec,
+    T: for<'a> Codec<'a>,
 {
     let mut rdr = Reader::init(data);
 

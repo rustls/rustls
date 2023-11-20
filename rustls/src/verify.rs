@@ -322,7 +322,7 @@ impl DigitallySignedStruct {
     }
 }
 
-impl Codec for DigitallySignedStruct {
+impl<'a> Codec<'a> for DigitallySignedStruct {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.scheme.encode(bytes);
         self.sig.encode(bytes);

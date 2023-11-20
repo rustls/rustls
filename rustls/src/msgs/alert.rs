@@ -11,7 +11,7 @@ pub struct AlertMessagePayload {
     pub description: AlertDescription,
 }
 
-impl Codec for AlertMessagePayload {
+impl<'a> Codec<'a> for AlertMessagePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.level.encode(bytes);
         self.description.encode(bytes);

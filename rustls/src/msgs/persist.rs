@@ -265,7 +265,7 @@ pub struct ServerSessionValue {
     freshness: Option<bool>,
 }
 
-impl Codec for ServerSessionValue {
+impl<'a> Codec<'a> for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let Some(ref sni) = self.sni {
             1u8.encode(bytes);

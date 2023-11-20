@@ -6,7 +6,7 @@ use crate::msgs::codec::{Codec, Reader};
 #[derive(Debug)]
 pub struct ChangeCipherSpecPayload;
 
-impl Codec for ChangeCipherSpecPayload {
+impl<'a> Codec<'a> for ChangeCipherSpecPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         1u8.encode(bytes);
     }
