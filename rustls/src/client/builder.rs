@@ -116,23 +116,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
     }
 
-    /// Sets a single certificate chain and matching private key for use
-    /// in client authentication.
-    ///
-    /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
-    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
-    ///
-    /// This function fails if `key_der` is invalid.
-    #[deprecated(since = "0.21.4", note = "Use `with_client_auth_cert` instead")]
-    pub fn with_single_cert(
-        self,
-        cert_chain: Vec<CertificateDer<'static>>,
-        key_der: PrivateKeyDer<'static>,
-    ) -> Result<ClientConfig, Error> {
-        self.with_client_auth_cert(cert_chain, key_der)
-    }
-
     /// Do not support client auth.
     pub fn with_no_client_auth(self) -> ClientConfig {
         self.with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
