@@ -237,7 +237,7 @@ jobs:
 
 
   minver:
-    name: Check minimum versions
+    name: Check minimum versions of direct dependencies
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout sources
@@ -248,9 +248,9 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Update to minimal-versions
+      - name: Update to direct-minimal-versions
         # This has no effect if no `Cargo.lock` exists yet.
-        run: cargo update -Z minimal-versions
+        run: cargo update -Z direct-minimal-versions
 
       - name: cargo test (debug; all features)
         run: cargo test --locked --all-features
