@@ -6,6 +6,8 @@ members = [
   "connect-tests",
   # tests and example code
   "examples",
+  # the pki-types library
+  "pki-types",
   # the main library and tests
   "rustls",
   # example of custom provider

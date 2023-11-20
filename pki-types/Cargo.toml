@@ -1,0 +1,20 @@
+[package]
+name = "rustls-pki-types"
+version = "0.2.1"
+edition = "2021"
+rust-version = "1.60"
+license = "MIT OR Apache-2.0"
+description = "Shared types for the rustls PKI ecosystem"
+documentation = "https://docs.rs/rustls-pki-types"
+homepage = "https://github.com/rustls/pki-types"
+repository = "https://github.com/rustls/pki-types"
+categories = ["network-programming", "data-structures", "cryptography"]
+
+[features]
+default = ["alloc"]
+alloc = []
+std = ["alloc"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

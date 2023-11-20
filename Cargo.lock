@@ -1710,7 +1710,7 @@ dependencies = [
  "log",
  "ring 0.17.5",
  "rustls-pemfile 2.0.0-alpha.1",
- "rustls-pki-types",
+ "rustls-pki-types 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustls-webpki 0.102.0-alpha.6",
  "rustversion",
  "subtle",
@@ -1730,7 +1730,7 @@ dependencies = [
  "rayon",
  "rustls 0.22.0-alpha.4",
  "rustls-pemfile 2.0.0-alpha.1",
- "rustls-pki-types",
+ "rustls-pki-types 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1754,7 +1754,7 @@ dependencies = [
  "rcgen",
  "rustls 0.22.0-alpha.4",
  "rustls-pemfile 2.0.0-alpha.1",
- "rustls-pki-types",
+ "rustls-pki-types 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_derive",
  "webpki-roots 0.26.0-alpha.1",
@@ -1776,8 +1776,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4aaa4fe93b39faddb6a8f99568c3e5880680156da0d46818e884a071381f67fe"
 dependencies = [
  "base64",
- "rustls-pki-types",
+ "rustls-pki-types 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "rustls-pki-types"
+version = "0.2.1"
 
 [[package]]
 name = "rustls-pki-types"
@@ -1804,7 +1808,7 @@ dependencies = [
  "rcgen",
  "rsa",
  "rustls 0.22.0-alpha.4",
- "rustls-pki-types",
+ "rustls-pki-types 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustls-webpki 0.102.0-alpha.6",
  "serde",
  "serde_json",
@@ -1832,7 +1836,7 @@ checksum = "34d9ed3a8267782ba32d257ff5b197b63eef19a467dbd1be011caaae35ee416e"
 dependencies = [
  "aws-lc-rs",
  "ring 0.17.5",
- "rustls-pki-types",
+ "rustls-pki-types 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "untrusted 0.9.0",
 ]
 
@@ -2326,7 +2330,7 @@ version = "0.26.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42157929d7ca9c353222a4d1763c52ef86d25d0fd2eca66076df5975fd4e25ed"
 dependencies = [
- "rustls-pki-types",
+ "rustls-pki-types 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
