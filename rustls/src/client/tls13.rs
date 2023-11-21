@@ -423,7 +423,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             cx.common.peer_certificates = Some(
                 resuming_session
                     .server_cert_chain()
-                    .to_vec(),
+                    .clone(),
             );
 
             // We *don't* reverify the certificate chain here: resumption is a

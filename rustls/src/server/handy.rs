@@ -1,13 +1,12 @@
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::limited_cache;
+use crate::msgs::handshake::CertificateChain;
 use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
 use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
-
-use pki_types::CertificateDer;
 
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -111,11 +110,8 @@ pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, using the supplied key and certificate chain.
-    pub(super) fn new(
-        private_key: Arc<dyn sign::SigningKey>,
-        chain: Vec<CertificateDer<'static>>,
-    ) -> Self {
-        Self(Arc::new(sign::CertifiedKey::new(chain, private_key)))
+    pub(super) fn new(private_key: Arc<dyn sign::SigningKey>, chain: CertificateChain) -> Self {
+        Self(Arc::new(sign::CertifiedKey::new(chain.0, private_key)))
     }
 
     /// Creates an `AlwaysResolvesChain`, using the supplied key, certificate chain and OCSP response.
@@ -123,7 +119,7 @@ impl AlwaysResolvesChain {
     /// If non-empty, the given OCSP response is attached.
     pub(super) fn new_with_extras(
         private_key: Arc<dyn sign::SigningKey>,
-        chain: Vec<CertificateDer<'static>>,
+        chain: CertificateChain,
         ocsp: Vec<u8>,
     ) -> Self {
         let mut r = Self::new(private_key, chain);

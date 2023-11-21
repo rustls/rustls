@@ -3,14 +3,14 @@ use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::CertificatePayload;
+use crate::msgs::handshake::CertificateChain;
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::UnixTime;
 use zeroize::Zeroizing;
 
 use alloc::vec::Vec;
@@ -83,7 +83,7 @@ impl Tls13ClientSessionValue {
         suite: &'static Tls13CipherSuite,
         ticket: Vec<u8>,
         secret: &[u8],
-        server_cert_chain: Vec<CertificateDer<'static>>,
+        server_cert_chain: CertificateChain,
         time_now: UnixTime,
         lifetime_secs: u32,
         age_add: u32,
@@ -155,7 +155,7 @@ impl Tls12ClientSessionValue {
         session_id: SessionId,
         ticket: Vec<u8>,
         master_secret: &[u8],
-        server_cert_chain: Vec<CertificateDer<'static>>,
+        server_cert_chain: CertificateChain,
         time_now: UnixTime,
         lifetime_secs: u32,
         extended_ms: bool,
@@ -208,7 +208,7 @@ pub struct ClientSessionCommon {
     secret: Zeroizing<PayloadU8>,
     epoch: u64,
     lifetime_secs: u32,
-    server_cert_chain: CertificatePayload,
+    server_cert_chain: CertificateChain,
 }
 
 impl ClientSessionCommon {
@@ -217,7 +217,7 @@ impl ClientSessionCommon {
         secret: &[u8],
         time_now: UnixTime,
         lifetime_secs: u32,
-        server_cert_chain: Vec<CertificateDer<'static>>,
+        server_cert_chain: CertificateChain,
     ) -> Self {
         Self {
             ticket: PayloadU16(ticket),
@@ -228,8 +228,8 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn server_cert_chain(&self) -> &[CertificateDer<'static>] {
-        self.server_cert_chain.as_ref()
+    pub(crate) fn server_cert_chain(&self) -> &CertificateChain {
+        &self.server_cert_chain
     }
 
     pub(crate) fn secret(&self) -> &[u8] {
@@ -257,7 +257,7 @@ pub struct ServerSessionValue {
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) master_secret: Zeroizing<PayloadU8>,
     pub(crate) extended_ms: bool,
-    pub(crate) client_cert_chain: Option<CertificatePayload>,
+    pub(crate) client_cert_chain: Option<CertificateChain>,
     pub(crate) alpn: Option<PayloadU8>,
     pub(crate) application_data: PayloadU16,
     pub creation_time_sec: u64,
@@ -316,7 +316,7 @@ impl Codec for ServerSessionValue {
         let ems = u8::read(r)?;
         let has_ccert = u8::read(r)? == 1;
         let ccert = if has_ccert {
-            Some(CertificatePayload::read(r)?)
+            Some(CertificateChain::read(r)?)
         } else {
             None
         };
@@ -352,7 +352,7 @@ impl ServerSessionValue {
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: &[u8],
-        client_cert_chain: Option<CertificatePayload>,
+        client_cert_chain: Option<CertificateChain>,
         alpn: Option<Vec<u8>>,
         application_data: Vec<u8>,
         creation_time: UnixTime,

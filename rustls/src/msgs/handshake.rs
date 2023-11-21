@@ -27,6 +27,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
+use core::ops::Deref;
 
 /// Create a newtype wrapper around a given type.
 ///
@@ -1256,7 +1257,26 @@ impl ServerHelloPayload {
     }
 }
 
-pub(crate) type CertificatePayload = Vec<CertificateDer<'static>>;
+#[derive(Clone, Default, Debug)]
+pub struct CertificateChain(pub Vec<CertificateDer<'static>>);
+
+impl Codec for CertificateChain {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        Vec::encode(&self.0, bytes)
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Vec::read(r).map(Self)
+    }
+}
+
+impl Deref for CertificateChain {
+    type Target = [CertificateDer<'static>];
+
+    fn deref(&self) -> &[CertificateDer<'static>] {
+        &self.0
+    }
+}
 
 impl TlsListElement for CertificateDer<'_> {
     const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
@@ -1448,11 +1468,13 @@ impl CertificatePayloadTls13 {
             .unwrap_or_default()
     }
 
-    pub(crate) fn convert(self) -> CertificatePayload {
-        self.entries
-            .into_iter()
-            .map(|e| e.cert)
-            .collect()
+    pub(crate) fn convert(self) -> CertificateChain {
+        CertificateChain(
+            self.entries
+                .into_iter()
+                .map(|e| e.cert)
+                .collect(),
+        )
     }
 }
 
@@ -2047,7 +2069,7 @@ pub enum HandshakePayload {
     ClientHello(ClientHelloPayload),
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
-    Certificate(CertificatePayload),
+    Certificate(CertificateChain),
     CertificateTls13(CertificatePayloadTls13),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
@@ -2152,7 +2174,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::CertificateTls13(p)
             }
             HandshakeType::Certificate => {
-                HandshakePayload::Certificate(CertificatePayload::read(&mut sub)?)
+                HandshakePayload::Certificate(CertificateChain::read(&mut sub)?)
             }
             HandshakeType::ServerKeyExchange => {
                 let p = ServerKeyExchangePayload::read(&mut sub)?;

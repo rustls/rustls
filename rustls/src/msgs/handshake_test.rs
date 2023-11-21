@@ -7,15 +7,16 @@ use crate::msgs::enums::{
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::msgs::handshake::{
-    CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTls13,
-    CertificateRequestPayload, CertificateRequestPayloadTls13, CertificateStatus,
-    CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
-    ConvertProtocolNameList, ConvertServerNameList, DistinguishedName, EcParameters,
-    EcdheServerKeyExchange, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerEcdhParams,
-    ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId, UnknownExtension,
+    CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
+    CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
+    CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
+    ClientSessionTicket, ConvertProtocolNameList, ConvertServerNameList, DistinguishedName,
+    EcParameters, EcdheServerKeyExchange, HandshakeMessagePayload, HandshakePayload,
+    HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
+    NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
+    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId,
+    UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
 
@@ -901,7 +902,9 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
         },
         HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(vec![CertificateDer::from(vec![1, 2, 3])]),
+            payload: HandshakePayload::Certificate(CertificateChain(vec![CertificateDer::from(
+                vec![1, 2, 3],
+            )])),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,

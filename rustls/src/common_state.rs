@@ -6,6 +6,7 @@ use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
+use crate::msgs::handshake::CertificateChain;
 use crate::msgs::message::MessagePayload;
 use crate::msgs::message::{BorrowedPlainMessage, Message, OpaqueMessage, PlainMessage};
 use crate::quic;
@@ -37,7 +38,7 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     pub(crate) has_seen_eof: bool,
     pub(crate) received_middlebox_ccs: u8,
-    pub(crate) peer_certificates: Option<Vec<CertificateDer<'static>>>,
+    pub(crate) peer_certificates: Option<CertificateChain>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
