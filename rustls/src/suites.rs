@@ -42,9 +42,6 @@ pub struct CipherSuiteCommon {
 }
 
 /// A cipher suite supported by rustls.
-///
-/// All possible instances of this type are provided by the library in
-/// the [`crypto::ring::ALL_CIPHER_SUITES`] array.
 #[derive(Clone, Copy, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite
