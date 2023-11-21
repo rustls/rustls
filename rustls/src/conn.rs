@@ -310,7 +310,7 @@ impl ConnectionRandoms {
 
 fn is_valid_ccs(msg: &PlainMessage) -> bool {
     // We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
-    // nb. this is prior to the record layer, so is unencrypted. see
+    // Note: this is prior to the record layer, so is unencrypted. See
     // third paragraph of section 5 in RFC8446.
     msg.typ == ContentType::ChangeCipherSpec && msg.payload.0 == [0x01]
 }

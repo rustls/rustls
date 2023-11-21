@@ -94,7 +94,7 @@ impl StdError for UnsupportedOperationError {}
 
 /// How a TLS1.2 `key_block` is partitioned.
 ///
-/// nb. ciphersuites with non-zero `mac_key_length` not currently supported
+/// Note: ciphersuites with non-zero `mac_key_length` are  not currently supported.
 pub struct KeyBlockShape {
     /// How long keys are.
     ///
@@ -218,7 +218,7 @@ pub const NONCE_LEN: usize = 12;
 pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
     [
         ContentType::ApplicationData.get_u8(),
-        // nb. this is `legacy_record_version`, ie TLS1.2 even for TLS1.3.
+        // Note: this is `legacy_record_version`, i.e. TLS1.2 even for TLS1.3.
         (ProtocolVersion::TLSv1_2.get_u16() >> 8) as u8,
         (ProtocolVersion::TLSv1_2.get_u16() & 0xff) as u8,
         (payload_len >> 8) as u8,

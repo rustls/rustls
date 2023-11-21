@@ -35,7 +35,7 @@ fn main() {
                 )
                 .as_bytes();
 
-                // nb. do not used `unwrap()` on IO in real programs!
+                // Note: do not use `unwrap()` on IO in real programs!
                 conn.writer().write_all(msg).unwrap();
                 conn.write_tls(&mut stream).unwrap();
                 conn.complete_io(&mut stream).unwrap();

@@ -47,7 +47,7 @@ EOF
 )
 
 # rsa_chain_cert.pem/rsa_chain_key.pem: rsa2048/sha256 with chain rsa2048/sha256
-# nb. chain is not validated
+# Note: chain is not validated
 openssl req -batch -x509 \
           -utf8 \
           -newkey rsa:2048 \

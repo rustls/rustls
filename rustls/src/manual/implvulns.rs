@@ -86,7 +86,7 @@ the message type before further operations.
 
 A sample sequence for a full TLSv1.2 handshake by a client looks like:
 
-- `hs::ExpectServerHello` (nb. ClientHello is logically sent before this state); transition to `tls12::ExpectCertificate`
+- `hs::ExpectServerHello` (Note: ClientHello is logically sent before this state); transition to `tls12::ExpectCertificate`
 - `tls12::ExpectCertificate`; transition to `tls12::ExpectServerKX`
 - `tls12::ExpectServerKX`; transition to `tls12::ExpectServerDoneOrCertReq`
 - `tls12::ExpectServerDoneOrCertReq`; delegates to `tls12::ExpectCertificateRequest` or `tls12::ExpectServerDone` depending on incoming message.

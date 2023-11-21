@@ -778,7 +778,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 5b.
         let mut transcript = st.transcript;
         emit_clientkx(&mut transcript, cx.common, kx.pub_key());
-        // nb. EMS handshake hash only runs up to ClientKeyExchange.
+        // Note: EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = st
             .using_ems
             .then(|| transcript.get_current_hash());
@@ -918,7 +918,7 @@ impl State<ClientConnectionData> for ExpectCcs {
         // message.
         cx.common.check_aligned_handshake()?;
 
-        // nb. msgs layer validates trivial contents of CCS
+        // Note: msgs layer validates trivial contents of CCS.
         cx.common
             .record_layer
             .start_decrypting();
