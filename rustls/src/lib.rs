@@ -4,7 +4,7 @@
 //! requires no configuration to achieve that security, and provides no unsafe features or
 //! obsolete cryptography by default.
 //!
-//! ## Current features
+//! ## Current functionality (with default crate features)
 //!
 //! * TLS1.2 and TLS1.3.
 //! * ECDSA, Ed25519 or RSA server authentication by clients.
@@ -54,7 +54,7 @@
 //!
 //! ### Platform support
 //!
-//! While Rustls itself is platform independent, it uses
+//! While Rustls itself is platform independent, by default it uses
 //! [`ring`](https://crates.io/crates/ring) for implementing the cryptography in
 //! TLS. As a result, rustls only runs on platforms
 //! supported by `ring`. At the time of writing, this means 32-bit ARM, Aarch64 (64-bit ARM),
@@ -62,6 +62,12 @@
 //! 64-bit PowerPC (Big and Little Endian), 64-bit RISC-V, and s390x. We do not presently
 //! support WebAssembly.
 //! For more information, see [the supported `ring` target platforms][ring-target-platforms].
+//!
+//! By providing a custom implementation of the [`crate::crypto::CryptoProvider`] trait, you
+//! can replace all cryptography dependencies of rustls.  This is a route to being portable
+//! to a wider set of architectures and environments, or compliance requirements.
+//! Specifying `default-features = false` when depending on rustls will remove the
+//! dependency on *ring*.
 //!
 //! Rustls requires Rust 1.61 or later.
 //!
@@ -247,10 +253,10 @@
 //!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
 //!   buffers. Will do nothing on non-Nightly releases.
 //!
-//! - `ring`: this makes the rustls crate depend on the *ring* crate, which is
-//!   which is used for cryptography.
+//! - `ring`: this makes the rustls crate depend on the *ring* crate,
+//!   which is used for cryptography by default
 //!   Without this feature, these items must be provided externally to the core
-//!   rustls crate.
+//!   rustls crate: see [`crate::crypto::CryptoProvider`].
 //!
 //! - `aws_lc_rs`: this makes the rustls crate depend on the aws-lc-rs crate,
 //!   which can be used for cryptography as an alternative to *ring*.

@@ -33,7 +33,7 @@ Rustls is a TLS library that aims to provide a good level of cryptographic secur
 requires no configuration to achieve that security, and provides no unsafe features or
 obsolete cryptography by default.
 
-## Current features
+## Current functionality (with default crate features)
 
 * TLS1.2 and TLS1.3.
 * ECDSA, Ed25519 or RSA server authentication by clients.
@@ -83,7 +83,7 @@ need them.
 
 ### Platform support
 
-While Rustls itself is platform independent, it uses
+While Rustls itself is platform independent, by default it uses
 [`ring`](https://crates.io/crates/ring) for implementing the cryptography in
 TLS. As a result, rustls only runs on platforms
 supported by `ring`. At the time of writing, this means 32-bit ARM, Aarch64 (64-bit ARM),
@@ -91,6 +91,12 @@ x86, x86-64, LoongArch64, 32-bit & 64-bit Little Endian MIPS, 32-bit PowerPC (Bi
 64-bit PowerPC (Big and Little Endian), 64-bit RISC-V, and s390x. We do not presently
 support WebAssembly.
 For more information, see [the supported `ring` target platforms][ring-target-platforms].
+
+By providing a custom implementation of the [`crate::crypto::CryptoProvider`] trait, you
+can replace all cryptography dependencies of rustls.  This is a route to being portable
+to a wider set of architectures and environments, or compliance requirements.
+Specifying `default-features = false` when depending on rustls will remove the
+dependency on *ring*.
 
 Rustls requires Rust 1.61 or later.
 
