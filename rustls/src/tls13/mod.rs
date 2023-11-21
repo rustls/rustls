@@ -13,6 +13,12 @@ pub struct Tls13CipherSuite {
     pub common: CipherSuiteCommon,
 
     /// How to complete HKDF with the suite's hash function.
+    ///
+    /// If you have a HKDF implementation, you should directly implement the `crypto::tls13::Hkdf`
+    /// trait (and associated).
+    ///
+    /// If not, you can implement the [`crypto::hmac::Hmac`] trait (and associated), and then use
+    /// [`crypto::tls13::HkdfUsingHmac`].
     pub hkdf_provider: &'static dyn crypto::tls13::Hkdf,
 
     /// How to produce a [MessageDecrypter] or [MessageEncrypter]

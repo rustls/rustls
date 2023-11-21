@@ -18,6 +18,19 @@ use core::marker::PhantomData;
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates.
+    ///
+    /// Using this function does not configure revocation.  If you wish to
+    /// configure revocation, instead use:
+    ///
+    /// ```diff
+    /// - .with_root_certificates(root_store)
+    /// + .dangerous()
+    /// + .with_custom_certificate_verifier(
+    /// +   WebPkiServerVerifier::builder_with_provider(root_store, crypto_provider)
+    /// +   .with_crls(...)
+    /// +   .build()?
+    /// + )
+    /// ```
     pub fn with_root_certificates(
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
@@ -99,8 +112,9 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// in client authentication.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
-    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
+    /// `key_der` is a DER-encoded private key -- the precise set of supported key
+    /// types and parameters is defined by the selected [`CryptoProvider`]'s `load_private_key()`
+    /// method.
     ///
     /// This function fails if `key_der` is invalid.
     pub fn with_client_auth_cert(

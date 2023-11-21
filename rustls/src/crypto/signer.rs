@@ -9,6 +9,9 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 
 /// An abstract signing key.
+///
+/// This interface is used by rustls to use a private signing key
+/// for authentication.  This includes server and client authentication.
 pub trait SigningKey: Debug + Send + Sync {
     /// Choose a `SignatureScheme` from those offered.
     ///
@@ -23,9 +26,14 @@ pub trait SigningKey: Debug + Send + Sync {
 /// A thing that can sign a message.
 pub trait Signer: Debug + Send + Sync {
     /// Signs `message` using the selected scheme.
+    ///
+    /// `message` is not hashed; the implementer must hash it using the hash function
+    /// implicit in [`Self::scheme()`].
+    ///
+    /// The returned signature format is also defined by [`Self::scheme()`].
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error>;
 
-    /// Reveals which scheme will be used when you call `sign()`.
+    /// Reveals which scheme will be used when you call [`Self::sign()`].
     fn scheme(&self) -> SignatureScheme;
 }
 
