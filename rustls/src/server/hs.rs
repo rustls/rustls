@@ -30,8 +30,8 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-pub(super) type NextState = Box<dyn State<ServerConnectionData>>;
-pub(super) type NextStateOrError = Result<NextState, Error>;
+pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
+pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
 pub(super) fn can_resume(
@@ -242,7 +242,7 @@ impl ExpectClientHello {
         client_hello: &ClientHelloPayload,
         m: &Message,
         cx: &mut ServerContext<'_>,
-    ) -> NextStateOrError {
+    ) -> NextStateOrError<'static> {
         let tls13_enabled = self
             .config
             .supports_version(ProtocolVersion::TLSv1_3);
@@ -420,9 +420,20 @@ impl ExpectClientHello {
 }
 
 impl State<ServerConnectionData> for ExpectClientHello {
-    fn handle(self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> NextStateOrError {
+    fn handle<'m>(
+        self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
+    }
+
+    fn into_owned(self: Box<Self>) -> NextState<'static> {
+        self
     }
 }
 

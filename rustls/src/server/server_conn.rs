@@ -718,12 +718,19 @@ impl Accepted {
 struct Accepting;
 
 impl State<ServerConnectionData> for Accepting {
-    fn handle(
+    fn handle<'m>(
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
         _m: Message,
-    ) -> Result<Box<dyn State<ServerConnectionData>>, Error> {
+    ) -> Result<Box<dyn State<ServerConnectionData>>, Error>
+    where
+        Self: 'm,
+    {
         Err(Error::General("unreachable state".into()))
+    }
+
+    fn into_owned(self: Box<Self>) -> Box<dyn State<ServerConnectionData> + 'static> {
+        self
     }
 }
 
