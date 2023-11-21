@@ -62,8 +62,9 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// disregarded.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
-    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
+    /// `key_der` is a DER-encoded private key -- the precise set of supported key
+    /// types and parameters is defined by the selected [`CryptoProvider`]'s `load_private_key()`
+    /// method.
     ///
     /// This function fails if `key_der` is invalid.
     pub fn with_single_cert(
@@ -84,8 +85,9 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// subsequent connections, irrespective of things like SNI hostname.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
-    /// `key_der` is a DER-encoded RSA, ECDSA, or Ed25519 private key -- the precise
-    /// set of supported key types and parameters is defined by the selected `CryptoProvider`.
+    /// `key_der` is a DER-encoded private key -- the precise set of supported key
+    /// types and parameters is defined by the selected [`CryptoProvider`]'s `load_private_key()`
+    /// method.
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
     ///
     /// This function fails if `key_der` is invalid.

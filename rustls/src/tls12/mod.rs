@@ -22,12 +22,28 @@ pub struct Tls12CipherSuite {
     pub common: CipherSuiteCommon,
 
     /// How to compute the TLS1.2 PRF for the suite's hash function.
+    ///
+    /// If you have a TLS1.2 PRF implementation, you should directly implement the [`crypto::tls12::Prf`] trait.
+    ///
+    /// If not, you can implement the [`crypto::hmac::Hmac`] trait (and associated), and then use
+    /// [`crypto::tls12::PrfUsingHmac`].
     pub prf_provider: &'static dyn crypto::tls12::Prf,
 
     /// How to exchange/agree keys.
+    ///
+    /// In TLS1.2, the key exchange method (eg, Elliptic Curve Diffie-Hellman with Ephemeral keys -- ECDHE)
+    /// is baked into the cipher suite, but the details to achieve it are negotiated separately.
+    ///
+    /// This controls how protocol messages (like the `ClientKeyExchange` message) are interpreted
+    /// once this cipher suite has been negotiated.
     pub kx: KeyExchangeAlgorithm,
 
     /// How to sign messages for authentication.
+    ///
+    /// This is a set of [`SignatureScheme`]s that are usable once this cipher suite has been
+    /// negotiated.
+    ///
+    /// The precise scheme used is then chosen from this set by the selected authentication key.
     pub sign: &'static [SignatureScheme],
 
     /// How to produce a [`MessageDecrypter`] or [`MessageEncrypter`]

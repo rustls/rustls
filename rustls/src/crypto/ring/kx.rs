@@ -14,7 +14,7 @@ use core::fmt;
 /// A key-exchange group supported by *ring*.
 ///
 /// All possible instances of this class are provided by the library in
-/// the `ALL_KX_GROUPS` array.
+/// the [`ALL_KX_GROUPS`] array.
 struct KxGroup {
     /// The IANA "TLS Supported Groups" name of the group
     name: NamedGroup,
