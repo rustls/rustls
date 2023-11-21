@@ -11,7 +11,9 @@ use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
-use crate::msgs::handshake::{ClientEcdhParams, HandshakeMessagePayload, HandshakePayload};
+use crate::msgs::handshake::{
+    CertificateChain, ClientEcdhParams, HandshakeMessagePayload, HandshakePayload,
+};
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -23,7 +25,7 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::UnixTime;
 use subtle::ConstantTimeEq;
 
 use alloc::borrow::ToOwned;
@@ -36,11 +38,13 @@ use alloc::vec::Vec;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
+    use pki_types::CertificateDer;
+
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression};
-    use crate::msgs::handshake::ServerEcdhParams;
+    use crate::msgs::handshake::{CertificateChain, ServerEcdhParams};
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
     use crate::msgs::handshake::{CertificateStatus, EcdheServerKeyExchange};
     use crate::msgs::handshake::{ClientExtension, SessionId};
@@ -381,7 +385,7 @@ mod client_hello {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(cert_chain.to_owned()),
+                payload: HandshakePayload::Certificate(CertificateChain(cert_chain.to_vec())),
             }),
         };
 
@@ -578,7 +582,7 @@ struct ExpectClientKx {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: Box<dyn ActiveKeyExchange>,
-    client_cert: Option<Vec<CertificateDer<'static>>>,
+    client_cert: Option<CertificateChain>,
     send_ticket: bool,
 }
 
@@ -645,7 +649,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
-    client_cert: Vec<CertificateDer<'static>>,
+    client_cert: CertificateChain,
     send_ticket: bool,
 }
 

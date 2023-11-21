@@ -3,7 +3,7 @@ use super::ResolvesClientCert;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ServerExtension;
-use crate::msgs::handshake::{CertificatePayload, DistinguishedName};
+use crate::msgs::handshake::{CertificateChain, DistinguishedName};
 use crate::{sign, SignatureScheme};
 
 use alloc::boxed::Box;
@@ -12,12 +12,12 @@ use alloc::vec::Vec;
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails {
-    pub(super) cert_chain: CertificatePayload,
+    pub(super) cert_chain: CertificateChain,
     pub(super) ocsp_response: Vec<u8>,
 }
 
 impl ServerCertDetails {
-    pub(super) fn new(cert_chain: CertificatePayload, ocsp_response: Vec<u8>) -> Self {
+    pub(super) fn new(cert_chain: CertificateChain, ocsp_response: Vec<u8>) -> Self {
         Self {
             cert_chain,
             ocsp_response,

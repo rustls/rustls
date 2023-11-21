@@ -11,7 +11,7 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
-    CertificatePayload, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
+    CertificateChain, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
     ServerEcdhParams, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
@@ -129,7 +129,7 @@ mod server_hello {
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
-                    cx.common.peer_certificates = Some(resuming.server_cert_chain().to_vec());
+                    cx.common.peer_certificates = Some(resuming.server_cert_chain().clone());
                     let cert_verified = verify::ServerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -247,7 +247,7 @@ struct ExpectCertificateStatusOrServerKx {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_chain: CertificatePayload,
+    server_cert_chain: CertificateChain,
     must_issue_new_ticket: bool,
 }
 
@@ -315,7 +315,7 @@ struct ExpectCertificateStatus {
     using_ems: bool,
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
-    server_cert_chain: CertificatePayload,
+    server_cert_chain: CertificateChain,
     must_issue_new_ticket: bool,
 }
 
@@ -414,7 +414,7 @@ impl State<ClientConnectionData> for ExpectServerKx {
 
 fn emit_certificate(
     transcript: &mut HandshakeHash,
-    cert_chain: CertificatePayload,
+    cert_chain: CertificateChain,
     common: &mut CommonState,
 ) {
     let cert = Message {
@@ -755,8 +755,8 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // 4.
         if let Some(client_auth) = &st.client_auth {
             let certs = match client_auth {
-                ClientAuthDetails::Empty { .. } => Vec::new(),
-                ClientAuthDetails::Verify { certkey, .. } => certkey.cert.clone(),
+                ClientAuthDetails::Empty { .. } => CertificateChain::default(),
+                ClientAuthDetails::Verify { certkey, .. } => CertificateChain(certkey.cert.clone()),
             };
             emit_certificate(&mut st.transcript, certs, cx.common);
         }

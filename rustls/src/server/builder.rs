@@ -1,6 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::error::Error;
+use crate::msgs::handshake::CertificateChain;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
 use crate::suites::SupportedCipherSuite;
@@ -75,7 +76,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             .state
             .provider
             .load_private_key(key_der)?;
-        let resolver = handy::AlwaysResolvesChain::new(private_key, cert_chain);
+        let resolver = handy::AlwaysResolvesChain::new(private_key, CertificateChain(cert_chain));
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
@@ -99,7 +100,11 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             .state
             .provider
             .load_private_key(key_der)?;
-        let resolver = handy::AlwaysResolvesChain::new_with_extras(private_key, cert_chain, ocsp);
+        let resolver = handy::AlwaysResolvesChain::new_with_extras(
+            private_key,
+            CertificateChain(cert_chain),
+            ocsp,
+        );
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 

@@ -11,6 +11,7 @@ use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, trace, warn};
 use crate::msgs::codec::Codec;
 use crate::msgs::enums::KeyUpdateRequest;
+use crate::msgs::handshake::CertificateChain;
 use crate::msgs::handshake::HandshakeMessagePayload;
 use crate::msgs::handshake::HandshakePayload;
 use crate::msgs::handshake::{NewSessionTicketExtension, NewSessionTicketPayloadTls13};
@@ -942,7 +943,7 @@ struct ExpectCertificateVerify {
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    client_cert: Vec<CertificateDer<'static>>,
+    client_cert: CertificateChain,
     send_tickets: usize,
 }
 

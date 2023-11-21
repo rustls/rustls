@@ -4,6 +4,7 @@ use crate::client::{ClientConfig, ResolvesClientCert};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
+use crate::msgs::handshake::CertificateChain;
 use crate::suites::SupportedCipherSuite;
 use crate::webpki;
 use crate::{verify, versions};
@@ -112,7 +113,8 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             .state
             .provider
             .load_private_key(key_der)?;
-        let resolver = handy::AlwaysResolvesClientCert::new(private_key, cert_chain)?;
+        let resolver =
+            handy::AlwaysResolvesClientCert::new(private_key, CertificateChain(cert_chain))?;
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
     }
 

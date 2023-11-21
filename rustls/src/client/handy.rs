@@ -2,16 +2,14 @@ use crate::client;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::limited_cache;
+use crate::msgs::handshake::CertificateChain;
 use crate::msgs::persist;
 use crate::sign;
 use crate::NamedGroup;
 use crate::ServerName;
 
-use pki_types::CertificateDer;
-
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::fmt;
 use std::sync::Mutex;
 
@@ -193,9 +191,12 @@ pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 impl AlwaysResolvesClientCert {
     pub(super) fn new(
         private_key: Arc<dyn sign::SigningKey>,
-        chain: Vec<CertificateDer<'static>>,
+        chain: CertificateChain,
     ) -> Result<Self, Error> {
-        Ok(Self(Arc::new(sign::CertifiedKey::new(chain, private_key))))
+        Ok(Self(Arc::new(sign::CertifiedKey::new(
+            chain.0,
+            private_key,
+        ))))
     }
 }
 
@@ -218,6 +219,7 @@ mod tests {
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
     use crate::msgs::enums::NamedGroup;
+    use crate::msgs::handshake::CertificateChain;
     #[cfg(feature = "tls12")]
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
@@ -253,7 +255,7 @@ mod tests {
                     SessionId::empty(),
                     Vec::new(),
                     &[],
-                    Vec::new(),
+                    CertificateChain::default(),
                     now,
                     0,
                     true,
@@ -271,7 +273,16 @@ mod tests {
         };
         c.insert_tls13_ticket(
             &name,
-            Tls13ClientSessionValue::new(tls13_suite, Vec::new(), &[], Vec::new(), now, 0, 0, 0),
+            Tls13ClientSessionValue::new(
+                tls13_suite,
+                Vec::new(),
+                &[],
+                CertificateChain::default(),
+                now,
+                0,
+                0,
+                0,
+            ),
         );
         assert!(c.take_tls13_ticket(&name).is_none());
     }
