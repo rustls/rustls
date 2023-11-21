@@ -1,9 +1,9 @@
 use base64::prelude::{Engine, BASE64_STANDARD};
+use pki_types::DnsName;
 
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::enums::{EchVersion, HpkeAead, HpkeKdf, HpkeKem};
 use rustls::internal::msgs::handshake::{EchConfig, HpkeKeyConfig, HpkeSymmetricCipherSuite};
-use rustls::server::danger::DnsName;
 
 #[test]
 fn test_decode_config_list() {
@@ -12,7 +12,7 @@ fn test_decode_config_list() {
         assert_eq!(config.contents.maximum_name_length, max_len);
         assert_eq!(
             config.contents.public_name,
-            DnsName::try_from_ascii(public_name.as_ref()).unwrap()
+            DnsName::try_from(public_name.as_ref()).unwrap()
         );
         assert!(config.contents.extensions.0.is_empty());
     }

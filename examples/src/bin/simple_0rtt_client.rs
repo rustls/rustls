@@ -2,12 +2,14 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
+use pki_types::ServerName;
+
 use rustls::RootCertStore;
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
-    let server_name = domain_name
-        .try_into()
-        .expect("invalid DNS name");
+    let server_name = ServerName::try_from(domain_name)
+        .expect("invalid DNS name")
+        .to_owned();
     let mut conn = rustls::ClientConnection::new(Arc::clone(config), server_name).unwrap();
     let mut sock = TcpStream::connect(format!("{}:443", domain_name)).unwrap();
     sock.set_nodelay(true).unwrap();

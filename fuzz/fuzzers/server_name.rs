@@ -3,7 +3,7 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::client::ServerName;
+use pki_types::ServerName;
 
 fuzz_target!(|data: &[u8]| {
     let _ = std::str::from_utf8(data)

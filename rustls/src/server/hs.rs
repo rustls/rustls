@@ -1,6 +1,5 @@
 use crate::common_state::State;
 use crate::conn::ConnectionRandoms;
-use crate::dns_name::DnsName;
 #[cfg(feature = "tls12")]
 use crate::enums::CipherSuite;
 use crate::enums::{AlertDescription, HandshakeType, ProtocolVersion, SignatureScheme};
@@ -24,6 +23,8 @@ use super::server_conn::ServerConnectionData;
 use super::tls12;
 use crate::server::common::ActiveCertifiedKey;
 use crate::server::tls13;
+
+use pki_types::DnsName;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;

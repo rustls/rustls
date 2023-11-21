@@ -353,7 +353,6 @@ mod common_state;
 mod conn;
 /// Crypto provider interface.
 pub mod crypto;
-mod dns_name;
 mod error;
 mod hash_hs;
 mod limited_cache;
@@ -471,11 +470,10 @@ pub mod client {
     mod tls12;
     mod tls13;
 
-    pub use crate::dns_name::InvalidDnsNameError;
     pub use builder::WantsClientCert;
     pub use client_conn::{
         ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
-        ResolvesClientCert, Resumption, ServerName, Tls12Resumption, WriteEarlyData,
+        ResolvesClientCert, Resumption, Tls12Resumption, WriteEarlyData,
     };
     pub use handy::ClientSessionMemoryCache;
 
@@ -495,7 +493,7 @@ pub mod client {
     pub use crate::msgs::persist::Tls13ClientSessionValue;
 }
 
-pub use client::{ClientConfig, ClientConnection, ServerName};
+pub use client::{ClientConfig, ClientConnection};
 
 /// Items for use in a server.
 pub mod server {
@@ -522,7 +520,6 @@ pub mod server {
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
-        pub use crate::dns_name::DnsName;
         pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
     }
 

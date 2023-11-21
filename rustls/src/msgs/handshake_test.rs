@@ -1,4 +1,3 @@
-use crate::dns_name::DnsNameRef;
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
@@ -20,7 +19,7 @@ use crate::msgs::handshake::{
 };
 use crate::verify::DigitallySignedStruct;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, DnsName};
 
 #[test]
 fn rejects_short_random() {
@@ -369,7 +368,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            ClientExtension::make_sni(DnsNameRef::try_from("hello").unwrap()),
+            ClientExtension::make_sni(&DnsName::try_from("hello").unwrap()),
             ClientExtension::SessionTicket(ClientSessionTicket::Request),
             ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload(vec![]))),
             ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),

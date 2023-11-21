@@ -3,7 +3,6 @@
 #[cfg(feature = "tls12")]
 use crate::crypto::ActiveKeyExchange;
 use crate::crypto::CryptoProvider;
-use crate::dns_name::{DnsName, DnsNameRef};
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::InvalidMessage;
 #[cfg(feature = "logging")]
@@ -19,7 +18,7 @@ use crate::rand;
 use crate::verify::DigitallySignedStruct;
 use crate::x509::wrap_in_sequence;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, DnsName};
 
 use alloc::collections::BTreeSet;
 #[cfg(feature = "logging")]
@@ -216,20 +215,20 @@ impl TlsListElement for SignatureScheme {
 
 #[derive(Clone, Debug)]
 pub(crate) enum ServerNamePayload {
-    HostName(DnsName),
+    HostName(DnsName<'static>),
     Unknown(Payload),
 }
 
 impl ServerNamePayload {
-    pub(crate) fn new_hostname(hostname: DnsName) -> Self {
+    pub(crate) fn new_hostname(hostname: DnsName<'static>) -> Self {
         Self::HostName(hostname)
     }
 
     fn read_hostname(r: &mut Reader) -> Result<Self, InvalidMessage> {
         let raw = PayloadU16::read(r)?;
 
-        match DnsName::try_from_ascii(&raw.0) {
-            Ok(dns_name) => Ok(Self::HostName(dns_name)),
+        match DnsName::try_from(raw.0.as_slice()) {
+            Ok(dns_name) => Ok(Self::HostName(dns_name.to_owned())),
             Err(_) => {
                 warn!(
                     "Illegal SNI hostname received {:?}",
@@ -281,7 +280,7 @@ impl TlsListElement for ServerName {
 
 pub(crate) trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
-    fn get_single_hostname(&self) -> Option<DnsNameRef>;
+    fn get_single_hostname(&self) -> Option<DnsName<'_>>;
 }
 
 impl ConvertServerNameList for [ServerName] {
@@ -298,8 +297,8 @@ impl ConvertServerNameList for [ServerName] {
         false
     }
 
-    fn get_single_hostname(&self) -> Option<DnsNameRef> {
-        fn only_dns_hostnames(name: &ServerName) -> Option<DnsNameRef> {
+    fn get_single_hostname(&self) -> Option<DnsName<'_>> {
+        fn only_dns_hostnames(name: &ServerName) -> Option<DnsName<'_>> {
             if let ServerNamePayload::HostName(ref dns) = name.payload {
                 Some(dns.borrow())
             } else {
@@ -657,14 +656,14 @@ impl Codec for ClientExtension {
     }
 }
 
-fn trim_hostname_trailing_dot_for_sni(dns_name: DnsNameRef) -> DnsName {
-    let dns_name_str: &str = dns_name.as_ref();
+fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static> {
+    let dns_name_str = dns_name.as_ref();
 
     // RFC6066: "The hostname is represented as a byte string using
     // ASCII encoding without a trailing dot"
     if dns_name_str.ends_with('.') {
         let trimmed = &dns_name_str[0..dns_name_str.len() - 1];
-        DnsNameRef::try_from(trimmed)
+        DnsName::try_from(trimmed)
             .unwrap()
             .to_owned()
     } else {
@@ -674,7 +673,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: DnsNameRef) -> DnsName {
 
 impl ClientExtension {
     /// Make a basic SNI ServerNameRequest quoting `hostname`.
-    pub(crate) fn make_sni(dns_name: DnsNameRef) -> Self {
+    pub(crate) fn make_sni(dns_name: &DnsName<'_>) -> Self {
         let name = ServerName {
             typ: ServerNameType::HostName,
             payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),
@@ -2327,7 +2326,7 @@ impl Codec for HpkeKeyConfig {
 pub struct EchConfigContents {
     pub key_config: HpkeKeyConfig,
     pub maximum_name_length: u8,
-    pub public_name: DnsName,
+    pub public_name: DnsName<'static>,
     pub extensions: PayloadU16,
 }
 
@@ -2345,8 +2344,9 @@ impl Codec for EchConfigContents {
             key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u8::read(r)?,
             public_name: {
-                DnsName::try_from_ascii(PayloadU8::read(r)?.0.as_slice())
+                DnsName::try_from(PayloadU8::read(r)?.0.as_slice())
                     .map_err(|_| InvalidMessage::InvalidServerName)?
+                    .to_owned()
             },
             extensions: PayloadU16::read(r)?,
         })

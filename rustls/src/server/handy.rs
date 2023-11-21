@@ -1,4 +1,3 @@
-use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::limited_cache;
 use crate::msgs::handshake::CertificateChain;
@@ -6,7 +5,8 @@ use crate::server;
 use crate::server::ClientHello;
 use crate::sign;
 use crate::webpki::{verify_server_name, ParsedCertificate};
-use crate::ServerName;
+
+use pki_types::{DnsName, ServerName};
 
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -163,7 +163,7 @@ impl ResolvesServerCertUsingSni {
     /// chain is syntactically faulty.
     pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
         let server_name = {
-            let checked_name = DnsNameRef::try_from(name)
+            let checked_name = DnsName::try_from(name)
                 .map_err(|_| Error::General("Bad DNS name".into()))
                 .map(|name| name.to_lowercase_owned())?;
             ServerName::DnsName(checked_name)
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn test_resolvesservercertusingsni_handles_unknown_name() {
         let rscsni = ResolvesServerCertUsingSni::new();
-        let name = DnsNameRef::try_from("hello.com")
+        let name = DnsName::try_from("hello.com")
             .unwrap()
             .to_owned();
         assert!(rscsni
