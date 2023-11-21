@@ -5,7 +5,7 @@ use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::suites::SupportedCipherSuite;
-use crate::webpki;
+use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{verify, versions};
 
 use super::client_conn::Resumption;
@@ -24,8 +24,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     ///
     /// ```diff
     /// - .with_root_certificates(root_store)
-    /// + .dangerous()
-    /// + .with_custom_certificate_verifier(
+    /// + .with_webpki_verifier(
     /// +   WebPkiServerVerifier::builder_with_provider(root_store, crypto_provider)
     /// +   .with_crls(...)
     /// +   .build()?
@@ -35,18 +34,30 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
+        let sig_algs = self
+            .state
+            .provider
+            .signature_verification_algorithms();
+        self.with_webpki_verifier(
+            WebPkiServerVerifier::new_without_revocation(root_store, sig_algs).into(),
+        )
+    }
+
+    /// Choose how to verify server certificates using a webpki verifier.
+    ///
+    /// See [`webpki::WebPkiServerVerifier::builder`] and
+    /// [`webpki::WebPkiServerVerifier::builder_with_provider`] for more information.
+    pub fn with_webpki_verifier(
+        self,
+        verifier: Arc<WebPkiServerVerifier>,
+    ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
                 cipher_suites: self.state.cipher_suites,
                 kx_groups: self.state.kx_groups,
                 provider: self.state.provider,
                 versions: self.state.versions,
-                verifier: Arc::new(webpki::WebPkiServerVerifier::new_without_revocation(
-                    root_store,
-                    self.state
-                        .provider
-                        .signature_verification_algorithms(),
-                )),
+                verifier,
             },
             side: PhantomData,
         }

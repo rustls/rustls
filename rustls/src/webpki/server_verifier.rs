@@ -95,18 +95,19 @@ impl ServerCertVerifierBuilder {
     /// This function will return a `CertVerifierBuilderError` if:
     /// 1. No trust anchors have been provided.
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
-    pub fn build(self) -> Result<Arc<dyn ServerCertVerifier>, VerifierBuilderError> {
+    pub fn build(self) -> Result<Arc<WebPkiServerVerifier>, VerifierBuilderError> {
         if self.roots.is_empty() {
             return Err(VerifierBuilderError::NoRootAnchors);
         }
 
-        Ok(Arc::new(WebPkiServerVerifier::new(
+        Ok(WebPkiServerVerifier::new(
             self.roots,
             parse_crls(self.crls)?,
             self.revocation_check_depth,
             self.unknown_revocation_policy,
             self.supported_algs,
-        )))
+        )
+        .into())
     }
 }
 
