@@ -5,7 +5,7 @@ use std::{fs, process, str};
 
 use docopt::Docopt;
 use mio::net::TcpStream;
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use serde::Deserialize;
 
 use rustls::RootCertStore;
@@ -24,7 +24,7 @@ struct TlsClient {
 impl TlsClient {
     fn new(
         sock: TcpStream,
-        server_name: rustls::ServerName,
+        server_name: ServerName<'static>,
         cfg: Arc<rustls::ClientConfig>,
     ) -> Self {
         Self {
@@ -310,7 +310,7 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 }
 
 mod danger {
-    use pki_types::{CertificateDer, UnixTime};
+    use pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::client::WebPkiServerVerifier;
     use rustls::DigitallySignedStruct;
@@ -323,7 +323,7 @@ mod danger {
             &self,
             _end_entity: &CertificateDer<'_>,
             _intermediates: &[CertificateDer<'_>],
-            _server_name: &rustls::ServerName,
+            _server_name: &ServerName<'_>,
             _ocsp: &[u8],
             _now: UnixTime,
         ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
@@ -462,11 +462,9 @@ fn main() {
         .next()
         .unwrap();
     let sock = TcpStream::connect(sock_addr).unwrap();
-    let server_name = args
-        .arg_hostname
-        .as_str()
-        .try_into()
-        .expect("invalid DNS name");
+    let server_name = ServerName::try_from(args.arg_hostname.as_str())
+        .expect("invalid DNS name")
+        .to_owned();
     let mut tlsclient = TlsClient::new(sock, server_name, config);
 
     if args.flag_http {

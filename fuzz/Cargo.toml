@@ -1,4 +1,3 @@
-
 [package]
 name = "rustls-fuzz"
 version = "0.0.1"
@@ -9,10 +8,10 @@ edition = "2021"
 [package.metadata]
 cargo-fuzz = true
 
-[dependencies.rustls]
-path = "../rustls"
-[dependencies.libfuzzer-sys]
-git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+[dependencies]
+libfuzzer-sys = { git = "https://github.com/rust-fuzz/libfuzzer-sys.git" }
+pki-types = { package = "rustls-pki-types", version = "0.2.2" }
+rustls = { path = "../rustls" }
 
 # Prevent this from interfering with workspaces
 [workspace]

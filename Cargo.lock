@@ -1724,10 +1724,10 @@ dependencies = [
  "ring 0.17.5",
  "rustls-pemfile 2.0.0-alpha.2",
  "rustls-pki-types",
- "rustls-webpki 0.102.0-alpha.6",
+ "rustls-webpki 0.102.0-alpha.7",
  "rustversion",
  "subtle",
- "webpki-roots 0.26.0-alpha.1",
+ "webpki-roots 0.26.0-alpha.2",
  "zeroize",
 ]
 
@@ -1771,7 +1771,7 @@ dependencies = [
  "rustls-pki-types",
  "serde",
  "serde_derive",
- "webpki-roots 0.26.0-alpha.1",
+ "webpki-roots 0.26.0-alpha.2",
 ]
 
 [[package]]
@@ -1795,9 +1795,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a47003264dea418db67060fa420ad16d0d2f8f0a0360d825c00e177ac52cb5d8"
+checksum = "cdf0cbc2bc68777eb846b2b7fedf03807bb763adc585bf006ac2fa2884daa9d1"
 
 [[package]]
 name = "rustls-provider-example"
@@ -1819,12 +1819,12 @@ dependencies = [
  "rsa",
  "rustls 0.22.0-alpha.4",
  "rustls-pki-types",
- "rustls-webpki 0.102.0-alpha.6",
+ "rustls-webpki 0.102.0-alpha.7",
  "serde",
  "serde_json",
  "sha2",
  "signature",
- "webpki-roots 0.26.0-alpha.1",
+ "webpki-roots 0.26.0-alpha.2",
  "x25519-dalek",
 ]
 
@@ -1840,9 +1840,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.0-alpha.6"
+version = "0.102.0-alpha.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34d9ed3a8267782ba32d257ff5b197b63eef19a467dbd1be011caaae35ee416e"
+checksum = "39c0e946e5f395d68bfc4a43e9b584d2169c2685e2c584a268b6d7ef8117bcfa"
 dependencies = [
  "aws-lc-rs",
  "ring 0.17.5",
@@ -2336,9 +2336,9 @@ checksum = "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
 
 [[package]]
 name = "webpki-roots"
-version = "0.26.0-alpha.1"
+version = "0.26.0-alpha.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42157929d7ca9c353222a4d1763c52ef86d25d0fd2eca66076df5975fd4e25ed"
+checksum = "87e3d99d80231fabcc72d887ed09f843b7f3942c75907285e51112a46c8f6f81"
 dependencies = [
  "rustls-pki-types",
 ]

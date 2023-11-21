@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
+use pki_types::{CertificateDer, IpAddr, PrivateKeyDer, ServerName, UnixTime};
 use primary_provider::cipher_suite;
 use primary_provider::sign::RsaSigningKey;
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
@@ -3401,13 +3401,13 @@ impl rustls::server::StoresServerSessions for ServerStorage {
 
 #[derive(Debug, Clone)]
 enum ClientStorageOp {
-    SetKxHint(rustls::ServerName, rustls::NamedGroup),
-    GetKxHint(rustls::ServerName, Option<rustls::NamedGroup>),
-    SetTls12Session(rustls::ServerName),
-    GetTls12Session(rustls::ServerName, bool),
-    RemoveTls12Session(rustls::ServerName),
-    InsertTls13Ticket(rustls::ServerName),
-    TakeTls13Ticket(rustls::ServerName, bool),
+    SetKxHint(ServerName<'static>, rustls::NamedGroup),
+    GetKxHint(ServerName<'static>, Option<rustls::NamedGroup>),
+    SetTls12Session(ServerName<'static>),
+    GetTls12Session(ServerName<'static>, bool),
+    RemoveTls12Session(ServerName<'static>),
+    InsertTls13Ticket(ServerName<'static>),
+    TakeTls13Ticket(ServerName<'static>, bool),
 }
 
 struct ClientStorage {
@@ -3441,7 +3441,7 @@ impl fmt::Debug for ClientStorage {
 }
 
 impl rustls::client::ClientSessionStore for ClientStorage {
-    fn set_kx_hint(&self, server_name: &rustls::ServerName, group: rustls::NamedGroup) {
+    fn set_kx_hint(&self, server_name: ServerName<'static>, group: rustls::NamedGroup) {
         self.ops
             .lock()
             .unwrap()
@@ -3450,18 +3450,18 @@ impl rustls::client::ClientSessionStore for ClientStorage {
             .set_kx_hint(server_name, group)
     }
 
-    fn kx_hint(&self, server_name: &rustls::ServerName) -> Option<rustls::NamedGroup> {
+    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<rustls::NamedGroup> {
         let rc = self.storage.kx_hint(server_name);
         self.ops
             .lock()
             .unwrap()
-            .push(ClientStorageOp::GetKxHint(server_name.clone(), rc));
+            .push(ClientStorageOp::GetKxHint(server_name.to_owned(), rc));
         rc
     }
 
     fn set_tls12_session(
         &self,
-        server_name: &rustls::ServerName,
+        server_name: ServerName<'static>,
         value: rustls::client::Tls12ClientSessionValue,
     ) {
         self.ops
@@ -3474,20 +3474,20 @@ impl rustls::client::ClientSessionStore for ClientStorage {
 
     fn tls12_session(
         &self,
-        server_name: &rustls::ServerName,
+        server_name: &ServerName<'_>,
     ) -> Option<rustls::client::Tls12ClientSessionValue> {
         let rc = self.storage.tls12_session(server_name);
         self.ops
             .lock()
             .unwrap()
             .push(ClientStorageOp::GetTls12Session(
-                server_name.clone(),
+                server_name.to_owned(),
                 rc.is_some(),
             ));
         rc
     }
 
-    fn remove_tls12_session(&self, server_name: &rustls::ServerName) {
+    fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
         self.ops
             .lock()
             .unwrap()
@@ -3498,7 +3498,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
 
     fn insert_tls13_ticket(
         &self,
-        server_name: &rustls::ServerName,
+        server_name: ServerName<'static>,
         value: rustls::client::Tls13ClientSessionValue,
     ) {
         self.ops
@@ -3511,7 +3511,7 @@ impl rustls::client::ClientSessionStore for ClientStorage {
 
     fn take_tls13_ticket(
         &self,
-        server_name: &rustls::ServerName,
+        server_name: &ServerName<'static>,
     ) -> Option<rustls::client::Tls13ClientSessionValue> {
         let rc = self
             .storage
@@ -5471,16 +5471,16 @@ fn test_debug_server_name_from_ip() {
     assert_eq!(
         format!(
             "{:?}",
-            rustls::ServerName::IpAddress("127.0.0.1".parse().unwrap())
+            ServerName::IpAddress(IpAddr::try_from("127.0.0.1").unwrap())
         ),
-        "IpAddress(127.0.0.1)"
+        "IpAddress(V4(Ipv4Addr([127, 0, 0, 1])))"
     )
 }
 
 #[test]
 fn test_debug_server_name_from_string() {
     assert_eq!(
-        format!("{:?}", rustls::ServerName::try_from("a.com").unwrap()),
+        format!("{:?}", ServerName::try_from("a.com").unwrap()),
         "DnsName(\"a.com\")"
     )
 }

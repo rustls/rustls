@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, TrustAnchor};
-use webpki::extract_trust_anchor;
+use webpki::anchor_from_trusted_cert;
 
 use super::pki_error;
 #[cfg(feature = "logging")]
@@ -38,7 +38,7 @@ impl RootCertStore {
 
         for der_cert in der_certs {
             #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
-            match extract_trust_anchor(&der_cert) {
+            match anchor_from_trusted_cert(&der_cert) {
                 Ok(anchor) => {
                     self.roots.push(anchor.to_owned());
                     valid_count += 1;
@@ -70,7 +70,7 @@ impl RootCertStore {
     /// have been diagnosed as malformed.
     pub fn add(&mut self, der: CertificateDer<'_>) -> Result<(), Error> {
         self.roots.push(
-            extract_trust_anchor(&der)
+            anchor_from_trusted_cert(&der)
                 .map_err(pki_error)?
                 .to_owned(),
         );

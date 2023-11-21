@@ -11,7 +11,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::DigitallySignedStruct;
 use rustls::{AlertDescription, Error, InvalidMessage, SignatureScheme};
 
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, ServerName, UnixTime};
 
 use std::sync::Arc;
 
@@ -167,7 +167,7 @@ impl ServerCertVerifier for MockServerVerifier {
         &self,
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
-        server_name: &rustls::ServerName,
+        server_name: &ServerName<'_>,
         oscp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {

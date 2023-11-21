@@ -1,13 +1,12 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use pki_types::{CertificateDer, SignatureVerificationAlgorithm, UnixTime};
+use pki_types::{CertificateDer, ServerName, SignatureVerificationAlgorithm, UnixTime};
 
 use super::anchors::RootCertStore;
 use super::pki_error;
-use crate::client::ServerName;
 use crate::enums::SignatureScheme;
-use crate::error::{CertificateError, Error, PeerMisbehaved};
+use crate::error::{Error, PeerMisbehaved};
 
 use crate::verify::{DigitallySignedStruct, HandshakeSignatureValid};
 
@@ -43,28 +42,13 @@ pub fn verify_server_cert_signed_by_trust_anchor(
 /// Verify that the `end_entity` has a name or alternative name matching the `server_name`
 /// note: this only verifies the name and should be used in conjuction with more verification
 /// like [verify_server_cert_signed_by_trust_anchor]
-pub fn verify_server_name(cert: &ParsedCertificate, server_name: &ServerName) -> Result<(), Error> {
-    match server_name {
-        ServerName::DnsName(dns_name) => {
-            // unlikely error because dns_name::DnsNameRef and webpki::DnsNameRef
-            // should have the same encoding rules.
-            let dns_name = webpki::DnsNameRef::try_from_ascii_str(dns_name.as_ref())
-                .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
-            let name = webpki::SubjectNameRef::DnsName(dns_name);
-            cert.0
-                .verify_is_valid_for_subject_name(name)
-                .map_err(pki_error)?;
-        }
-        ServerName::IpAddress(ip_addr) => {
-            let ip_addr = webpki::IpAddr::from(*ip_addr);
-            cert.0
-                .verify_is_valid_for_subject_name(webpki::SubjectNameRef::IpAddress(
-                    webpki::IpAddrRef::from(&ip_addr),
-                ))
-                .map_err(pki_error)?;
-        }
-    }
-    Ok(())
+pub fn verify_server_name(
+    cert: &ParsedCertificate,
+    server_name: &ServerName<'_>,
+) -> Result<(), Error> {
+    cert.0
+        .verify_is_valid_for_subject_name(server_name)
+        .map_err(pki_error)
 }
 
 /// Describes which `webpki` signature verification algorithms are supported and

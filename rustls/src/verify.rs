@@ -1,9 +1,8 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, ServerName, UnixTime};
 
-use crate::client::ServerName;
 use crate::enums::SignatureScheme;
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::base::PayloadU16;
@@ -84,7 +83,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
         &self,
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
-        server_name: &ServerName,
+        server_name: &ServerName<'_>,
         ocsp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, Error>;
