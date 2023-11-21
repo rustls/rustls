@@ -1166,7 +1166,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             }
         };
 
-        // nb. future derivations include Client Finished, but not the
+        // Note: future derivations include Client Finished, but not the
         // main application data keying.
         self.transcript.add_message(&m);
 

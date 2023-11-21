@@ -128,7 +128,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
         webpki_algs::RSA_PKCS1_3072_8192_SHA384,
     ],
     mapping: &[
-        // nb. for TLS1.2 the curve is not fixed by SignatureScheme. for TLS1.3 it is.
+        // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
         (
             SignatureScheme::ECDSA_NISTP384_SHA384,
             &[

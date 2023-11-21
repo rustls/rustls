@@ -16,7 +16,7 @@ impl<'a> DnsName {
 
     /// Validate the given bytes are a DNS name if they are viewed as ASCII.
     pub fn try_from_ascii(bytes: &[u8]) -> Result<Self, InvalidDnsNameError> {
-        // nb. a sequence of bytes that is accepted by `validate()` is both
+        // Note: a sequence of bytes that is accepted by `validate()` is both
         // valid UTF-8, and valid ASCII.
         String::from_utf8(bytes.to_vec())
             .map_err(|_| InvalidDnsNameError)

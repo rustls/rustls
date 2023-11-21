@@ -145,7 +145,7 @@ impl ConnectionSecrets {
     /// and the session's `secrets`.
     pub(crate) fn make_cipher_pair(&self, side: Side) -> MessageCipherPair {
         // Make a key block, and chop it up.
-        // nb. we don't implement any ciphersuites with nonzero mac_key_len.
+        // Note: we don't implement any ciphersuites with nonzero mac_key_len.
         let key_block = self.make_key_block();
         let shape = self.suite.aead_alg.key_block_shape();
 

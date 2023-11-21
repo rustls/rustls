@@ -57,7 +57,7 @@ where
     pub(crate) fn insert(&mut self, k: K, v: V) {
         let inserted_new_item = match self.map.entry(k) {
             Entry::Occupied(mut old) => {
-                // nb. does not freshen entry in `oldest`
+                // Note: does not freshen entry in `oldest`
                 old.insert(v);
                 false
             }
