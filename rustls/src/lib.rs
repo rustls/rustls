@@ -423,6 +423,39 @@ pub mod internal {
     }
 }
 
+/// Unbuffered connection API
+///
+/// This is an alternative to the [`crate::ConnectionCommon`] API that does not internally buffer
+/// TLS nor plaintext data. Instead those buffers are managed by the API user so they have
+/// control over when and how to allocate, resize and dispose of them.
+///
+/// This API is lower level than the `ConnectionCommon` API and is built around a state machine
+/// interface where the API user must handle each state to advance and complete the
+/// handshake process.
+///
+/// Like the `ConnectionCommon` API, no IO happens internally so all IO must be handled by the API
+/// user. Unlike the `ConnectionCommon` API, this API does not make use of the [`std::io::Read`] and
+/// [`std::io::Write`] traits so it's usable in no-std context.
+///
+/// The entry points into this API are [`crate::client::UnbufferedClientConnection::new`],
+/// [`crate::server::UnbufferedServerConnection::new`] and
+/// [`unbuffered::UnbufferedConnectionCommon::process_tls_records`]. The state machine API is
+/// documented in [`unbuffered::ConnectionState`].
+///
+/// # Examples
+///
+/// [`unbuffered-client`] and [`unbuffered-server`] are examples that fully exercise the API in
+/// std, non-async context.
+///
+/// [`unbuffered-client`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/unbuffererd-client.rs
+pub mod unbuffered {
+    pub use crate::conn::unbuffered::{
+        AppDataRecord, ConnectionState, EncodeError, EncodeTlsData, EncryptError,
+        InsufficientSizeError, ReadTraffic, TransmitTlsData, UnbufferedStatus, WriteTraffic,
+    };
+    pub use crate::conn::UnbufferedConnectionCommon;
+}
+
 // Have a (non-public) "test provider" mod which supplies
 // tests that need part of a *ring*-compatible provider module.
 #[cfg(all(any(test, bench), not(feature = "ring"), feature = "aws_lc_rs"))]
@@ -469,7 +502,8 @@ pub mod client {
     pub use builder::WantsClientCert;
     pub use client_conn::{
         ClientConfig, ClientConnection, ClientConnectionData, ClientSessionStore,
-        ResolvesClientCert, Resumption, Tls12Resumption, WriteEarlyData,
+        ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
+        WriteEarlyData,
     };
     pub use handy::ClientSessionMemoryCache;
 

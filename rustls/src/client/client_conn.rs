@@ -1,6 +1,6 @@
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
-use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -660,6 +660,37 @@ impl ConnectionCore<ClientConnectionData> {
 
     pub(crate) fn is_early_data_accepted(&self) -> bool {
         self.data.early_data.is_accepted()
+    }
+}
+
+/// Unbuffered version of `ClientConnection`
+///
+/// See the [`crate::unbuffered`] module docs for more details
+pub struct UnbufferedClientConnection {
+    inner: UnbufferedConnectionCommon<ClientConnectionData>,
+}
+
+impl UnbufferedClientConnection {
+    /// Make a new ClientConnection. `config` controls how we behave in the TLS protocol, `name` is
+    /// the name of the server we want to talk to.
+    pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
+        Ok(Self {
+            inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
+        })
+    }
+}
+
+impl Deref for UnbufferedClientConnection {
+    type Target = UnbufferedConnectionCommon<ClientConnectionData>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for UnbufferedClientConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 

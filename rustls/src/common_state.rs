@@ -15,6 +15,7 @@ use crate::suites::PartiallyExtractedSecrets;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
+use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
 
 use alloc::boxed::Box;
@@ -184,6 +185,49 @@ impl CommonState {
     pub(crate) fn send_some_plaintext(&mut self, data: &[u8]) -> usize {
         self.perhaps_write_key_update();
         self.send_plain(data, Limit::Yes)
+    }
+
+    pub(crate) fn eager_send_some_plaintext(
+        &mut self,
+        plaintext: &[u8],
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, EncryptError> {
+        if plaintext.is_empty() {
+            return Ok(0);
+        }
+
+        let fragments = self.message_fragmenter.fragment_slice(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2,
+            plaintext,
+        );
+
+        let remaining_encryptions = self
+            .record_layer
+            .remaining_write_seq()
+            .ok_or(EncryptError::EncryptExhausted)?;
+
+        if fragments.len() as u64 > remaining_encryptions.get() {
+            return Err(EncryptError::EncryptExhausted);
+        }
+
+        self.check_required_size(
+            outgoing_tls,
+            self.queued_key_update_message
+                .as_deref(),
+            fragments,
+        )?;
+
+        let fragments = self.message_fragmenter.fragment_slice(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_2,
+            plaintext,
+        );
+
+        let opt_msg = self.queued_key_update_message.take();
+        let written = self.write_fragments(outgoing_tls, opt_msg, fragments);
+
+        Ok(written)
     }
 
     pub(crate) fn send_early_plaintext(&mut self, data: &[u8]) -> usize {
@@ -493,9 +537,86 @@ impl CommonState {
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
     }
 
+    pub(crate) fn eager_send_close_notify(
+        &mut self,
+        outgoing_tls: &mut [u8],
+    ) -> Result<usize, EncryptError> {
+        debug_assert!(self.record_layer.is_encrypting());
+
+        let m = Message::build_alert(AlertLevel::Warning, AlertDescription::CloseNotify).into();
+
+        let iter = self
+            .message_fragmenter
+            .fragment_message(&m);
+
+        self.check_required_size(outgoing_tls, None, iter)?;
+
+        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
+
+        let iter = self
+            .message_fragmenter
+            .fragment_message(&m);
+
+        let written = self.write_fragments(outgoing_tls, None, iter);
+
+        Ok(written)
+    }
+
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {
         let m = Message::build_alert(AlertLevel::Warning, desc);
         self.send_msg(m, self.record_layer.is_encrypting());
+    }
+
+    fn check_required_size<'a>(
+        &self,
+        outgoing_tls: &mut [u8],
+        opt_msg: Option<&[u8]>,
+        fragments: impl Iterator<Item = BorrowedPlainMessage<'a>>,
+    ) -> Result<(), EncryptError> {
+        let mut required_size = 0;
+        if let Some(message) = opt_msg {
+            required_size += message.len();
+        }
+
+        for m in fragments {
+            required_size += m.encoded_len(&self.record_layer);
+        }
+
+        if required_size > outgoing_tls.len() {
+            return Err(EncryptError::InsufficientSize(InsufficientSizeError {
+                required_size,
+            }));
+        }
+
+        Ok(())
+    }
+
+    fn write_fragments<'a>(
+        &mut self,
+        outgoing_tls: &mut [u8],
+        opt_msg: Option<Vec<u8>>,
+        fragments: impl Iterator<Item = BorrowedPlainMessage<'a>>,
+    ) -> usize {
+        let mut written = 0;
+
+        if let Some(message) = opt_msg {
+            let len = message.len();
+            outgoing_tls[written..written + len].copy_from_slice(&message);
+            written += len;
+        }
+
+        for m in fragments {
+            let em = self
+                .record_layer
+                .encrypt_outgoing(m)
+                .encode();
+
+            let len = em.len();
+            outgoing_tls[written..written + len].copy_from_slice(&em);
+            written += len;
+        }
+
+        written
     }
 
     pub(crate) fn set_max_fragment_size(&mut self, new: Option<usize>) -> Result<(), Error> {

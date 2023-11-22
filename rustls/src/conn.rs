@@ -15,6 +15,8 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 use std::io;
 
+pub(crate) mod unbuffered;
+
 /// A client or server connection.
 #[derive(Debug)]
 pub enum Connection {
@@ -616,6 +618,21 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
+        }
+    }
+}
+
+/// Interface shared by unbuffered client and server connections.
+pub struct UnbufferedConnectionCommon<Data> {
+    pub(crate) core: ConnectionCore<Data>,
+    wants_write: bool,
+}
+
+impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
+    fn from(core: ConnectionCore<Data>) -> Self {
+        Self {
+            core,
+            wants_write: false,
         }
     }
 }
