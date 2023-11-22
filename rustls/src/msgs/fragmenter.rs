@@ -37,7 +37,7 @@ impl MessageFragmenter {
         typ: ContentType,
         version: ProtocolVersion,
         payload: &'a [u8],
-    ) -> impl Iterator<Item = BorrowedPlainMessage<'a>> + 'a {
+    ) -> impl Iterator<Item = BorrowedPlainMessage<'a>> + ExactSizeIterator + 'a {
         payload
             .chunks(self.max_frag)
             .map(move |c| BorrowedPlainMessage {

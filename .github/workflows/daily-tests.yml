@@ -84,6 +84,9 @@ jobs:
       - name: Check simple 0rtt client
         run: cargo run --locked --bin simple_0rtt_client
 
+      - name: Check unbuffered client 
+        run: cargo run --locked --bin unbuffered-client
+
       # Test the server_acceptor binary builds - we invoke with --help since it
       # will run a server process that doesn't exit when invoked with no args
       - name: Check server acceptor

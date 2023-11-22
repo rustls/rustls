@@ -1,6 +1,7 @@
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::internal::record_layer::RecordLayer;
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -348,6 +349,10 @@ impl<'a> BorrowedPlainMessage<'a> {
             typ: self.typ,
             payload: Payload(self.payload.to_vec()),
         }
+    }
+
+    pub fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
+        OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload.len())
     }
 }
 
