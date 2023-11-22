@@ -146,6 +146,21 @@ We prefer to use `impl ...` for arguments and return types when there's a single
 use of the type. Generic type argument bounds add a level of indirection that's
 harder to read in one pass.
 
+#### Avoid type elision for fully qualified function calls
+
+We prefer to write [fully qualified function calls] with types included, rather
+than elided. For example:
+
+```rust
+// Incorrect:
+<_>::default()
+
+// Correct:
+CertificateChain::default()
+```
+
+[fully qualified function calls]: https://doc.rust-lang.org/beta/reference/expressions/call-expr.html#disambiguating-function-calls
+
 #### Validation
 
 Where possible, avoid writing `validate` or `check` type functions that try to
