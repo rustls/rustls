@@ -8,6 +8,8 @@ use core::fmt;
 use pki_types::CertificateDer;
 use zeroize::Zeroize;
 
+use super::codec::ReaderMut;
+
 /// An externally length'd payload
 #[derive(Clone, Eq, PartialEq)]
 pub struct Payload(pub Vec<u8>);
@@ -33,6 +35,16 @@ impl Payload {
 
     pub fn read(r: &mut Reader) -> Self {
         Self(r.rest().to_vec())
+    }
+}
+
+/// Non-owning version of [`Payload`]
+pub struct BorrowedPayload<'a>(&'a mut [u8]);
+
+#[allow(dead_code)]
+impl<'a> BorrowedPayload<'a> {
+    pub(crate) fn read(r: &mut ReaderMut<'a>) -> Self {
+        Self(r.rest())
     }
 }
 
