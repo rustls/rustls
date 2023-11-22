@@ -320,11 +320,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --locked --package rustls --all-features --all-targets -- --deny warnings
+        # because examples enable rustls' features, `--workspace --no-default-features` is not
+        # the same as `--package rustls --no-default-features` so run it separately
       - run: cargo clippy --locked --package rustls --no-default-features --all-targets -- --deny warnings
-      - run: cargo clippy --locked --manifest-path=connect-tests/Cargo.toml --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --workspace --all-features --all-targets -- --deny warnings
+        # not part of the workspace
       - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- --deny warnings
-      - run: cargo clippy --locked --manifest-path=provider-example/Cargo.toml --all-features --all-targets -- --deny warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
@@ -338,11 +339,9 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
-      - run: cargo clippy --locked --package rustls --all-features --all-targets
       - run: cargo clippy --locked --package rustls --no-default-features --all-targets
-      - run: cargo clippy --locked --manifest-path=connect-tests/Cargo.toml --all-features --all-targets
+      - run: cargo clippy --locked --workspace --all-features --all-targets
       - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets
-      - run: cargo clippy --locked --manifest-path=provider-example/Cargo.toml --all-features --all-targets
 
   check-external-types:
     name: Validate external types appearing in public API
