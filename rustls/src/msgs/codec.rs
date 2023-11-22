@@ -1,7 +1,7 @@
 use crate::error::InvalidMessage;
 
 use alloc::vec::Vec;
-use core::fmt::Debug;
+use core::{fmt::Debug, mem};
 
 /// Wrapper over a slice of bytes that allows reading chunks from
 /// with the current position state held using a cursor.
@@ -82,6 +82,57 @@ impl<'a> Reader<'a> {
     /// read (The number of remaining takes)
     pub fn left(&self) -> usize {
         self.buffer.len() - self.cursor
+    }
+}
+
+/// A version of [`Reader`] that operates on mutable slices
+#[allow(dead_code)]
+pub(crate) struct ReaderMut<'a> {
+    /// The underlying buffer storing the readers content
+    buffer: &'a mut [u8],
+}
+
+#[allow(dead_code)]
+impl<'a> ReaderMut<'a> {
+    pub(crate) fn init(bytes: &'a mut [u8]) -> Self {
+        Self { buffer: bytes }
+    }
+
+    pub(crate) fn as_reader<T>(&mut self, f: impl FnOnce(&mut Reader) -> T) -> T {
+        let mut r = Reader {
+            buffer: self.buffer,
+            cursor: 0,
+        };
+        let ret = f(&mut r);
+        let cursor = r.cursor;
+        let (_used, rest) = mem::take(&mut self.buffer).split_at_mut(cursor);
+        self.buffer = rest;
+
+        ret
+    }
+
+    pub(crate) fn rest(&mut self) -> &'a mut [u8] {
+        mem::take(&mut self.buffer)
+    }
+
+    pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
+        match self.take(length) {
+            Some(bytes) => Ok(ReaderMut::init(bytes)),
+            None => Err(InvalidMessage::MessageTooShort),
+        }
+    }
+
+    fn left(&self) -> usize {
+        self.buffer.len()
+    }
+
+    fn take(&mut self, length: usize) -> Option<&'a mut [u8]> {
+        if self.left() < length {
+            return None;
+        }
+        let (taken, rest) = mem::take(&mut self.buffer).split_at_mut(length);
+        self.buffer = rest;
+        Some(taken)
     }
 }
 
