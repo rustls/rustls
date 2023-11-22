@@ -411,6 +411,7 @@ impl TryFrom<PlainMessage> for Message {
 ///
 /// This type also cannot decode its internals and
 /// cannot be read/encoded; only `OpaqueMessage` can do that.
+#[derive(Debug)]
 pub struct BorrowedPlainMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,

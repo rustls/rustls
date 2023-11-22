@@ -1,6 +1,6 @@
 use crate::crypto::cipher::{BorrowedOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage};
 
 #[cfg(feature = "logging")]
 use crate::log::trace;
@@ -58,14 +58,14 @@ impl RecordLayer {
     /// `encr` is a decoded message allegedly received from the peer.
     /// If it can be decrypted, its decryption is returned.  Otherwise,
     /// an error is returned.
-    pub(crate) fn decrypt_incoming(
+    pub(crate) fn decrypt_incoming<'a>(
         &mut self,
-        encr: BorrowedOpaqueMessage,
-    ) -> Result<Option<Decrypted>, Error> {
+        encr: BorrowedOpaqueMessage<'a>,
+    ) -> Result<Option<Decrypted<'a>>, Error> {
         if self.decrypt_state != DirectionState::Active {
             return Ok(Some(Decrypted {
                 want_close_before_decrypt: false,
-                plaintext: encr.into_plain_message().into_owned(),
+                plaintext: encr.into_plain_message(),
             }));
         }
 
@@ -91,7 +91,7 @@ impl RecordLayer {
                 }
                 Ok(Some(Decrypted {
                     want_close_before_decrypt,
-                    plaintext: plaintext.into_owned(),
+                    plaintext,
                 }))
             }
             Err(Error::DecryptError) if self.doing_trial_decryption(encrypted_len) => {
@@ -224,11 +224,11 @@ impl RecordLayer {
 
 /// Result of decryption.
 #[derive(Debug)]
-pub(crate) struct Decrypted {
+pub(crate) struct Decrypted<'a> {
     /// Whether the peer appears to be getting close to encrypting too many messages with this key.
     pub(crate) want_close_before_decrypt: bool,
     /// The decrypted message.
-    pub(crate) plaintext: PlainMessage,
+    pub(crate) plaintext: BorrowedPlainMessage<'a>,
 }
 
 #[cfg(test)]
