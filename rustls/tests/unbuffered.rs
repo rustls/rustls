@@ -1,10 +1,11 @@
 #![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
 use std::sync::Arc;
 
-use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
+use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
 use rustls::unbuffered::{
-    ConnectionState, UnbufferedConnectionCommon, UnbufferedStatus, WriteTraffic,
+    ConnectionState, EncodeError, EncryptError, InsufficientSizeError, UnbufferedConnectionCommon,
+    UnbufferedStatus, WriteTraffic,
 };
 use rustls::version::TLS13;
 
@@ -501,10 +502,18 @@ fn advance_client(
             let mut sent_early_data = false;
             if let Some(early_data) = actions.early_data_to_send {
                 if let Some(mut state) = state.may_encrypt_early_data() {
-                    let written = state
-                        .encrypt(early_data, buffers.outgoing.unfilled())
-                        .unwrap();
-                    buffers.outgoing.advance(written);
+                    write_with_buffer_size_checks(
+                        |out_buf| state.encrypt(early_data, out_buf),
+                        |e| {
+                            if let EarlyDataError::Encrypt(EncryptError::InsufficientSize(ise)) = e
+                            {
+                                ise
+                            } else {
+                                unreachable!()
+                            }
+                        },
+                        &mut buffers.outgoing,
+                    );
                     sent_early_data = true;
                 }
             }
@@ -557,10 +566,17 @@ fn handle_state<Data>(
 ) -> State {
     match state {
         ConnectionState::EncodeTlsData(mut state) => {
-            let written = state
-                .encode(outgoing.unfilled())
-                .unwrap();
-            outgoing.advance(written);
+            write_with_buffer_size_checks(
+                |out_buf| state.encode(out_buf),
+                |e| {
+                    if let EncodeError::InsufficientSize(ise) = e {
+                        ise
+                    } else {
+                        unreachable!()
+                    }
+                },
+                outgoing,
+            );
 
             State::EncodedTlsData
         }
@@ -630,16 +646,37 @@ fn handle_state<Data>(
 }
 
 fn queue_close_notify<Data>(state: &mut WriteTraffic<'_, Data>, outgoing: &mut Buffer) {
-    let written = state
-        .queue_close_notify(outgoing.unfilled())
-        .unwrap();
-    outgoing.advance(written);
+    write_with_buffer_size_checks(
+        |out_buf| state.queue_close_notify(out_buf),
+        map_encrypt_error,
+        outgoing,
+    );
 }
 
 fn encrypt<Data>(state: &mut WriteTraffic<'_, Data>, app_data: &[u8], outgoing: &mut Buffer) {
-    let written = state
-        .encrypt(app_data, outgoing.unfilled())
-        .unwrap();
+    write_with_buffer_size_checks(
+        |out_buf| state.encrypt(app_data, out_buf),
+        map_encrypt_error,
+        outgoing,
+    );
+}
+
+fn map_encrypt_error(e: EncryptError) -> InsufficientSizeError {
+    if let EncryptError::InsufficientSize(ise) = e {
+        ise
+    } else {
+        unreachable!()
+    }
+}
+
+fn write_with_buffer_size_checks<E: core::fmt::Debug>(
+    mut try_write: impl FnMut(&mut [u8]) -> Result<usize, E>,
+    map_err: impl FnOnce(E) -> InsufficientSizeError,
+    outgoing: &mut Buffer,
+) {
+    let required_size = map_err(try_write(&mut []).unwrap_err()).required_size;
+    let written = try_write(outgoing.unfilled()).unwrap();
+    assert_eq!(required_size, written);
     outgoing.advance(written);
 }
 
