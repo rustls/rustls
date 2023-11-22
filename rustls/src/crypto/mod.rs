@@ -28,9 +28,6 @@ pub mod hash;
 /// HMAC interfaces.
 pub mod hmac;
 
-/// Message signing interfaces.
-pub mod signer;
-
 /// Cryptography specific to TLS1.2.
 pub mod tls12;
 
@@ -40,6 +37,10 @@ pub mod tls13;
 /// Hybrid public key encryption (RFC 9180).
 #[doc(hidden)]
 pub mod hpke;
+
+// Message signing interfaces. Re-exported under rustls::sign. Kept crate-internal here to
+// avoid having two import paths to the same types.
+pub(crate) mod signer;
 
 pub use crate::rand::GetRandomFailed;
 
