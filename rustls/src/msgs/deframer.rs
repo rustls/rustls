@@ -6,7 +6,7 @@ use std::io;
 
 use super::base::Payload;
 use super::codec::Codec;
-use super::message::PlainMessage;
+use super::message::{BorrowedOpaqueMessage, PlainMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
@@ -67,9 +67,9 @@ impl MessageDeframer {
             // Does our `buf` contain a full message?  It does if it is big enough to
             // contain a header, and that header has a length which falls within `buf`.
             // If so, deframe it and place the message onto the frames output queue.
-            let mut rd = codec::Reader::init(buffer.filled_get(start..));
-            let m = match OpaqueMessage::read(&mut rd) {
-                Ok(m) => m,
+            let mut rd = codec::ReaderMut::init(buffer.filled_get_mut(start..));
+            let m = match BorrowedOpaqueMessage::read(&mut rd) {
+                Ok(m) => m.into_owned(),
                 Err(msg_err) => {
                     let err_kind = match msg_err {
                         MessageError::TooShortForHeader | MessageError::TooShortForLength => {
@@ -451,6 +451,15 @@ trait DeframerBuffer {
     }
 
     fn filled_mut(&mut self) -> &mut [u8];
+    fn filled_get_mut<I>(&mut self, index: I) -> &mut I::Output
+    where
+        I: SliceIndex<[u8]>,
+    {
+        self.filled_mut()
+            .get_mut(index)
+            .unwrap()
+    }
+
     fn len(&self) -> usize {
         self.filled().len()
     }

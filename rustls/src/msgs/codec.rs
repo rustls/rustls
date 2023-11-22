@@ -86,16 +86,18 @@ impl<'a> Reader<'a> {
 }
 
 /// A version of [`Reader`] that operates on mutable slices
-#[allow(dead_code)]
 pub(crate) struct ReaderMut<'a> {
     /// The underlying buffer storing the readers content
     buffer: &'a mut [u8],
+    used: usize,
 }
 
-#[allow(dead_code)]
 impl<'a> ReaderMut<'a> {
     pub(crate) fn init(bytes: &'a mut [u8]) -> Self {
-        Self { buffer: bytes }
+        Self {
+            buffer: bytes,
+            used: 0,
+        }
     }
 
     pub(crate) fn as_reader<T>(&mut self, f: impl FnOnce(&mut Reader) -> T) -> T {
@@ -105,6 +107,7 @@ impl<'a> ReaderMut<'a> {
         };
         let ret = f(&mut r);
         let cursor = r.cursor;
+        self.used += cursor;
         let (_used, rest) = mem::take(&mut self.buffer).split_at_mut(cursor);
         self.buffer = rest;
 
@@ -112,7 +115,9 @@ impl<'a> ReaderMut<'a> {
     }
 
     pub(crate) fn rest(&mut self) -> &'a mut [u8] {
-        mem::take(&mut self.buffer)
+        let rest = mem::take(&mut self.buffer);
+        self.used += rest.len();
+        rest
     }
 
     pub(crate) fn sub(&mut self, length: usize) -> Result<Self, InvalidMessage> {
@@ -120,6 +125,10 @@ impl<'a> ReaderMut<'a> {
             Some(bytes) => Ok(ReaderMut::init(bytes)),
             None => Err(InvalidMessage::MessageTooShort),
         }
+    }
+
+    pub(crate) fn used(&self) -> usize {
+        self.used
     }
 
     fn left(&self) -> usize {
@@ -131,6 +140,7 @@ impl<'a> ReaderMut<'a> {
             return None;
         }
         let (taken, rest) = mem::take(&mut self.buffer).split_at_mut(length);
+        self.used += taken.len();
         self.buffer = rest;
         Some(taken)
     }

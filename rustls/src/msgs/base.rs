@@ -4,6 +4,7 @@ use crate::msgs::codec::{Codec, Reader};
 
 use alloc::vec::Vec;
 use core::fmt;
+use core::ops::Deref;
 
 use pki_types::CertificateDer;
 use zeroize::Zeroize;
@@ -41,7 +42,14 @@ impl Payload {
 /// Non-owning version of [`Payload`]
 pub struct BorrowedPayload<'a>(&'a mut [u8]);
 
-#[allow(dead_code)]
+impl Deref for BorrowedPayload<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
 impl<'a> BorrowedPayload<'a> {
     pub(crate) fn read(r: &mut ReaderMut<'a>) -> Self {
         Self(r.rest())
