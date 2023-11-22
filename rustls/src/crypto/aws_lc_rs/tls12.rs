@@ -1,13 +1,13 @@
 use crate::crypto::cipher::{
-    make_tls12_aad, AeadKey, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
-    Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
+    make_tls12_aad, AeadKey, BorrowedOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter,
+    MessageEncrypter, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
 };
 use crate::crypto::tls12::Prf;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls12::Tls12CipherSuite;
 
@@ -252,8 +252,12 @@ const GCM_EXPLICIT_NONCE_LEN: usize = 8;
 const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 
 impl MessageDecrypter for GcmMessageDecrypter {
-    fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let payload = msg.payload();
+    fn decrypt<'a>(
+        &mut self,
+        mut msg: BorrowedOpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<BorrowedPlainMessage<'a>, Error> {
+        let payload = &msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
         }
@@ -272,7 +276,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
             payload.len() - GCM_OVERHEAD,
         ));
 
-        let payload = msg.payload_mut();
+        let payload = &mut msg.payload;
         let plain_len = self
             .dec_key
             .open_within(nonce, aad, payload, GCM_EXPLICIT_NONCE_LEN..)
@@ -330,8 +334,12 @@ struct ChaCha20Poly1305MessageDecrypter {
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
 
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
-    fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let payload = msg.payload();
+    fn decrypt<'a>(
+        &mut self,
+        mut msg: BorrowedOpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<BorrowedPlainMessage<'a>, Error> {
+        let payload = &msg.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
             return Err(Error::DecryptError);
@@ -345,7 +353,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             payload.len() - CHACHAPOLY1305_OVERHEAD,
         ));
 
-        let payload = msg.payload_mut();
+        let payload = &mut msg.payload;
         let plain_len = self
             .dec_key
             .open_in_place(nonce, aad, payload)

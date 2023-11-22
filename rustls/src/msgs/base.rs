@@ -4,7 +4,7 @@ use crate::msgs::codec::{Codec, Reader};
 
 use alloc::vec::Vec;
 use core::fmt;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 
 use pki_types::CertificateDer;
 use zeroize::Zeroize;
@@ -50,7 +50,43 @@ impl Deref for BorrowedPayload<'_> {
     }
 }
 
+impl<'a> DerefMut for BorrowedPayload<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
 impl<'a> BorrowedPayload<'a> {
+    pub fn truncate(&mut self, len: usize) {
+        if len >= self.len() {
+            return;
+        }
+
+        self.0 = core::mem::take(&mut self.0)
+            .split_at_mut(len)
+            .0;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new(bytes: &'a mut [u8]) -> Self {
+        Self(bytes)
+    }
+
+    pub(crate) fn into_inner(self) -> &'a mut [u8] {
+        self.0
+    }
+
+    pub(crate) fn pop(&mut self) -> Option<u8> {
+        if self.is_empty() {
+            None
+        } else {
+            let len = self.len();
+            let last = self[len - 1];
+            self.truncate(len - 1);
+            Some(last)
+        }
+    }
+
     pub(crate) fn read(r: &mut ReaderMut<'a>) -> Self {
         Self(r.rest())
     }

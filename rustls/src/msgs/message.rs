@@ -177,6 +177,15 @@ impl OpaqueMessage {
         Ok(self.into_plain_message())
     }
 
+    #[cfg(test)]
+    pub(crate) fn borrow(&mut self) -> BorrowedOpaqueMessage {
+        BorrowedOpaqueMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: BorrowedPayload::new(self.payload_mut()),
+        }
+    }
+
     /// This is the maximum on-the-wire size of a TLSCiphertext.
     /// That's 2^14 payload bytes, a header, and a 2KB allowance
     /// for ciphertext overheads.
@@ -195,8 +204,41 @@ pub struct BorrowedOpaqueMessage<'a> {
     pub payload: BorrowedPayload<'a>,
 }
 
-#[allow(dead_code)]
 impl<'a> BorrowedOpaqueMessage<'a> {
+    /// Force conversion into a plaintext message.
+    ///
+    /// See [`OpaqueMessage::into_plain_message`] for more information
+    pub fn into_plain_message(self) -> BorrowedPlainMessage<'a> {
+        BorrowedPlainMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: self.payload.into_inner(),
+        }
+    }
+
+    /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
+    ///
+    /// See [`OpaqueMessage::into_tls13_unpadded_message`] for more information
+    pub fn into_tls13_unpadded_message(mut self) -> Result<BorrowedPlainMessage<'a>, Error> {
+        let payload = &mut self.payload;
+
+        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.typ = unpad_tls13_payload(payload);
+        if self.typ == ContentType::Unknown(0) {
+            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
+        }
+
+        if payload.len() > MAX_FRAGMENT_LEN {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.version = ProtocolVersion::TLSv1_3;
+        Ok(self.into_plain_message())
+    }
+
     pub(crate) fn read(r: &mut ReaderMut<'a>) -> Result<Self, MessageError> {
         let (typ, version, len) = r.as_reader(read_opaque_message_minus_payload)?;
 
@@ -210,19 +252,6 @@ impl<'a> BorrowedOpaqueMessage<'a> {
             version,
             payload,
         })
-    }
-
-    pub(crate) fn into_owned(self) -> OpaqueMessage {
-        let Self {
-            typ,
-            version,
-            payload,
-        } = self;
-        OpaqueMessage {
-            typ,
-            version,
-            payload: Payload::new(&*payload),
-        }
     }
 }
 
@@ -258,6 +287,16 @@ fn read_opaque_message_minus_payload(
 fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
     loop {
         match v.pop() {
+            Some(0) => {}
+            Some(content_type) => return ContentType::from(content_type),
+            None => return ContentType::Unknown(0),
+        }
+    }
+}
+
+fn unpad_tls13_payload(p: &mut BorrowedPayload) -> ContentType {
+    loop {
+        match p.pop() {
             Some(0) => {}
             Some(content_type) => return ContentType::from(content_type),
             None => return ContentType::Unknown(0),
@@ -384,6 +423,19 @@ impl<'a> BorrowedPlainMessage<'a> {
             version: self.version,
             typ: self.typ,
             payload: Payload(self.payload.to_vec()),
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> PlainMessage {
+        let Self {
+            typ,
+            version,
+            payload,
+        } = self;
+        PlainMessage {
+            typ,
+            version,
+            payload: Payload::new(payload),
         }
     }
 }
