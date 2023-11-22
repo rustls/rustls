@@ -275,10 +275,9 @@ fn find_suite(
     all: &[rustls::SupportedCipherSuite],
     name: CipherSuite,
 ) -> rustls::SupportedCipherSuite {
-    all.iter()
+    *all.iter()
         .find(|suite| suite.suite() == name)
-        .expect(&format!("cannot find cipher suite {name:?}"))
-        .clone()
+        .unwrap_or_else(|| panic!("cannot find cipher suite {name:?}"))
 }
 
 fn ring_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
