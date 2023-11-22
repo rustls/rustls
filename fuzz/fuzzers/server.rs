@@ -16,7 +16,7 @@ impl ResolvesServerCert for Fail {
     fn resolve(
         &self,
         _client_hello: rustls::server::ClientHello,
-    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+    ) -> Option<Arc<rustls::crypto::signer::CertifiedKey>> {
         None
     }
 }

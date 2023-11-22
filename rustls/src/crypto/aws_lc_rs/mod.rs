@@ -1,7 +1,7 @@
+use crate::crypto::signer::SigningKey;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
-use crate::sign::SigningKey;
 use crate::suites::SupportedCipherSuite;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::Error;

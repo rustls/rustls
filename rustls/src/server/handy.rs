@@ -1,10 +1,10 @@
+use crate::crypto::signer;
 use crate::dns_name::DnsNameRef;
 use crate::error::Error;
 use crate::limited_cache;
 use crate::msgs::handshake::CertificateChain;
 use crate::server;
 use crate::server::ClientHello;
-use crate::sign;
 use crate::webpki::{verify_server_name, ParsedCertificate};
 use crate::ServerName;
 
@@ -106,19 +106,19 @@ impl server::ProducesTickets for NeverProducesTickets {
 
 /// Something which always resolves to the same cert chain.
 #[derive(Debug)]
-pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
+pub(super) struct AlwaysResolvesChain(Arc<signer::CertifiedKey>);
 
 impl AlwaysResolvesChain {
     /// Creates an `AlwaysResolvesChain`, using the supplied key and certificate chain.
-    pub(super) fn new(private_key: Arc<dyn sign::SigningKey>, chain: CertificateChain) -> Self {
-        Self(Arc::new(sign::CertifiedKey::new(chain.0, private_key)))
+    pub(super) fn new(private_key: Arc<dyn signer::SigningKey>, chain: CertificateChain) -> Self {
+        Self(Arc::new(signer::CertifiedKey::new(chain.0, private_key)))
     }
 
     /// Creates an `AlwaysResolvesChain`, using the supplied key, certificate chain and OCSP response.
     ///
     /// If non-empty, the given OCSP response is attached.
     pub(super) fn new_with_extras(
-        private_key: Arc<dyn sign::SigningKey>,
+        private_key: Arc<dyn signer::SigningKey>,
         chain: CertificateChain,
         ocsp: Vec<u8>,
     ) -> Self {
@@ -136,7 +136,7 @@ impl AlwaysResolvesChain {
 }
 
 impl server::ResolvesServerCert for AlwaysResolvesChain {
-    fn resolve(&self, _client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, _client_hello: ClientHello) -> Option<Arc<signer::CertifiedKey>> {
         Some(Arc::clone(&self.0))
     }
 }
@@ -145,7 +145,7 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
 /// on client-supplied server name (via SNI).
 #[derive(Debug)]
 pub struct ResolvesServerCertUsingSni {
-    by_name: HashMap<String, Arc<sign::CertifiedKey>>,
+    by_name: HashMap<String, Arc<signer::CertifiedKey>>,
 }
 
 impl ResolvesServerCertUsingSni {
@@ -156,12 +156,12 @@ impl ResolvesServerCertUsingSni {
         }
     }
 
-    /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
+    /// Add a new `signer::CertifiedKey` to be used for the given SNI `name`.
     ///
     /// This function fails if `name` is not a valid DNS name, or if
     /// it's not valid for the supplied certificate, or if the certificate
     /// chain is syntactically faulty.
-    pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
+    pub fn add(&mut self, name: &str, ck: signer::CertifiedKey) -> Result<(), Error> {
         let server_name = {
             let checked_name = DnsNameRef::try_from(name)
                 .map_err(|_| Error::General("Bad DNS name".into()))
@@ -191,7 +191,7 @@ impl ResolvesServerCertUsingSni {
 }
 
 impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<signer::CertifiedKey>> {
         if let Some(name) = client_hello.server_name() {
             self.by_name.get(name).map(Arc::clone)
         } else {

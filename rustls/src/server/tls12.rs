@@ -40,6 +40,7 @@ pub(super) use client_hello::CompleteClientHelloHandling;
 mod client_hello {
     use pki_types::CertificateDer;
 
+    use crate::crypto::signer;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
@@ -50,7 +51,6 @@ mod client_hello {
     use crate::msgs::handshake::{ClientExtension, SessionId};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
     use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
-    use crate::sign;
     use crate::verify::DigitallySignedStruct;
 
     use super::*;
@@ -413,7 +413,7 @@ mod client_hello {
         common: &mut CommonState,
         sigschemes: Vec<SignatureScheme>,
         selected_group: &'static dyn SupportedKxGroup,
-        signing_key: &dyn sign::SigningKey,
+        signing_key: &dyn signer::SigningKey,
         randoms: &ConnectionRandoms,
     ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         let kx = selected_group

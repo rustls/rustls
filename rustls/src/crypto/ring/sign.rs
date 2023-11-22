@@ -1,8 +1,8 @@
 #![allow(clippy::duplicate_mod)]
 
+use crate::crypto::signer::{Signer, SigningKey};
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
-use crate::sign::{Signer, SigningKey};
 use crate::x509::{asn1_wrap, wrap_in_sequence};
 
 use super::ring_like::io::der;

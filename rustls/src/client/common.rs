@@ -1,10 +1,11 @@
 use super::ResolvesClientCert;
+use crate::crypto::signer;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::ServerExtension;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName};
-use crate::{sign, SignatureScheme};
+use crate::SignatureScheme;
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -59,8 +60,8 @@ pub(super) enum ClientAuthDetails {
     Empty { auth_context_tls13: Option<Vec<u8>> },
     /// Send a non-empty `Certificate` and a `CertificateVerify`.
     Verify {
-        certkey: Arc<sign::CertifiedKey>,
-        signer: Box<dyn sign::Signer>,
+        certkey: Arc<signer::CertifiedKey>,
+        signer: Box<dyn signer::Signer>,
         auth_context_tls13: Option<Vec<u8>>,
     },
 }

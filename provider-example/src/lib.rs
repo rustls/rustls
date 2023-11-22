@@ -36,7 +36,7 @@ impl rustls::crypto::CryptoProvider for Provider {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
+    ) -> Result<Arc<dyn rustls::crypto::signer::SigningKey>, rustls::Error> {
         let key = sign::EcdsaSigningKeyP256::try_from(key_der)
             .map_err(|err| rustls::OtherError(Arc::new(err)))?;
         Ok(Arc::new(key))

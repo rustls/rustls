@@ -1,4 +1,4 @@
-use crate::sign::SigningKey;
+use crate::crypto::signer::SigningKey;
 use crate::suites;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, NamedGroup};
@@ -110,7 +110,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///         RING.signature_verification_algorithms()
 ///     }
 ///
-///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
+///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Arc<dyn rustls::crypto::signer::SigningKey>, rustls::Error> {
 ///         fictious_hsm_api::load_private_key(key_der)
 ///     }
 /// }
@@ -127,7 +127,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// - **Key exchange groups** - see [`crate::crypto::SupportedKxGroup`].
 /// - **Signature verification algorithms** - see [`crate::WebPkiSupportedAlgorithms`].
 /// - **Authentication key loading** - see [`crate::crypto::CryptoProvider::load_private_key()`] and
-///   [`crate::sign::SigningKey`].
+///   [`SigningKey`].
 ///
 /// # Example code
 ///

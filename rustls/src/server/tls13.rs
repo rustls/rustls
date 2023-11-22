@@ -41,6 +41,7 @@ use subtle::ConstantTimeEq;
 pub(super) use client_hello::CompleteClientHelloHandling;
 
 mod client_hello {
+    use crate::crypto::signer;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::base::{Payload, PayloadU8};
@@ -62,7 +63,6 @@ mod client_hello {
     use crate::msgs::handshake::ServerHelloPayload;
     use crate::msgs::handshake::SessionId;
     use crate::server::common::ActiveCertifiedKey;
-    use crate::sign;
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
@@ -777,7 +777,7 @@ mod client_hello {
     fn emit_certificate_verify_tls13(
         transcript: &mut HandshakeHash,
         common: &mut CommonState,
-        signing_key: &dyn sign::SigningKey,
+        signing_key: &dyn signer::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
         let message = construct_server_verify_message(&transcript.get_current_hash());

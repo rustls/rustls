@@ -6,13 +6,13 @@
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
-use rustls::crypto::SupportedKxGroup;
+use rustls::crypto::{signer, SupportedKxGroup};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
 use rustls::{
-    self, client, server, sign, version, AlertDescription, CertificateError, Connection,
+    self, client, server, version, AlertDescription, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
     PeerMisbehaved, ProtocolVersion, RootCertStore, ServerName, Side, SignatureAlgorithm,
     SignatureScheme, SupportedProtocolVersion,
@@ -320,12 +320,12 @@ impl ServerCertVerifier for DummyServerAuth {
 
 #[derive(Debug)]
 struct FixedSignatureSchemeSigningKey {
-    key: Arc<dyn sign::SigningKey>,
+    key: Arc<dyn signer::SigningKey>,
     scheme: SignatureScheme,
 }
 
-impl sign::SigningKey for FixedSignatureSchemeSigningKey {
-    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
+impl signer::SigningKey for FixedSignatureSchemeSigningKey {
+    fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn signer::Signer>> {
         if offered.contains(&self.scheme) {
             self.key.choose_scheme(&[self.scheme])
         } else {
@@ -344,7 +344,7 @@ struct FixedSignatureSchemeServerCertResolver {
 }
 
 impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<signer::CertifiedKey>> {
         let mut certkey = self.resolver.resolve(client_hello)?;
         Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
             key: certkey.key.clone(),
@@ -365,7 +365,7 @@ impl client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
         &self,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
+    ) -> Option<Arc<signer::CertifiedKey>> {
         if !sigschemes.contains(&self.scheme) {
             quit(":NO_COMMON_SIGNATURE_ALGORITHMS:");
         }

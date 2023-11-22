@@ -1,6 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Context, Protocol, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::crypto::signer;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -10,7 +11,6 @@ use crate::log::trace;
 use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
-use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
@@ -112,7 +112,7 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
     /// ClientHello information.
     ///
     /// Return `None` to abort the handshake.
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>>;
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<signer::CertifiedKey>>;
 }
 
 /// A struct representing the received Client Hello
@@ -679,7 +679,7 @@ impl Accepted {
     /// Convert the [`Accepted`] into a [`ServerConnection`].
     ///
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
-    /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
+    /// [`signer::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
     pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
         self.connection

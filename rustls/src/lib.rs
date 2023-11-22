@@ -540,11 +540,6 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
-/// Message signing interfaces.
-pub mod sign {
-    pub use crate::crypto::signer::{CertifiedKey, Signer, SigningKey};
-}
-
 /// APIs for implementing QUIC TLS
 pub mod quic;
 

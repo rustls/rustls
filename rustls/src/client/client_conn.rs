@@ -1,6 +1,7 @@
 use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::crypto::signer;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::dns_name::{DnsName, DnsNameRef, InvalidDnsNameError};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -10,7 +11,6 @@ use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
-use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::verify;
 use crate::versions;
@@ -109,7 +109,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         &self,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>>;
+    ) -> Option<Arc<signer::CertifiedKey>>;
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;

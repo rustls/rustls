@@ -3,6 +3,7 @@ use crate::common_state::Protocol;
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto;
+use crate::crypto::signer::{CertifiedKey, Signer};
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{
     AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -23,7 +24,6 @@ use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::sign::{CertifiedKey, Signer};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls13::construct_client_verify_message;
 use crate::tls13::construct_server_verify_message;

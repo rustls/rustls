@@ -16,6 +16,7 @@ use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
 use primary_provider::cipher_suite;
 use primary_provider::sign::RsaSigningKey;
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
+use rustls::crypto::signer;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
@@ -24,7 +25,7 @@ use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::SupportedCipherSuite;
 use rustls::{
-    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, KeyLog,
+    AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, KeyLog,
     PeerIncompatible, PeerMisbehaved, SideData,
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -781,7 +782,7 @@ struct ServerCheckCertResolve {
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<signer::CertifiedKey>> {
         if client_hello
             .signature_schemes()
             .is_empty()
@@ -960,7 +961,7 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
 struct ServerCheckNoSni {}
 
 impl ResolvesServerCert for ServerCheckNoSni {
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<signer::CertifiedKey>> {
         assert!(client_hello.server_name().is_none());
 
         None
@@ -1264,7 +1265,7 @@ impl ResolvesClientCert for ClientCheckCertResolve {
         &self,
         root_hint_subjects: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
+    ) -> Option<Arc<signer::CertifiedKey>> {
         self.query_count
             .fetch_add(1, Ordering::SeqCst);
 
@@ -2533,11 +2534,11 @@ fn sni_resolver_works() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
-    let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
+    let signing_key: Arc<dyn signer::SigningKey> = Arc::new(signing_key);
     resolver
         .add(
             "localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
+            signer::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
         )
         .unwrap();
 
@@ -2571,27 +2572,27 @@ fn sni_resolver_rejects_wrong_names() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
-    let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
+    let signing_key: Arc<dyn signer::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
         Ok(()),
         resolver.add(
             "localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            signer::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
     assert_eq!(
         Err(Error::InvalidCertificate(CertificateError::NotValidForName)),
         resolver.add(
             "not-localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            signer::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
     assert_eq!(
         Err(Error::General("Bad DNS name".into())),
         resolver.add(
             "not ascii 🦀",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            signer::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
 }
@@ -2601,13 +2602,13 @@ fn sni_resolver_lower_cases_configured_names() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
-    let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
+    let signing_key: Arc<dyn signer::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
         Ok(()),
         resolver.add(
             "LOCALHOST",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            signer::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
 
@@ -2628,13 +2629,13 @@ fn sni_resolver_lower_cases_queried_names() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
-    let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
+    let signing_key: Arc<dyn signer::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
         Ok(()),
         resolver.add(
             "localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
+            signer::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
 
@@ -2654,13 +2655,13 @@ fn sni_resolver_rejects_bad_certs() {
     let kt = KeyType::Rsa;
     let mut resolver = rustls::server::ResolvesServerCertUsingSni::new();
     let signing_key = RsaSigningKey::new(&kt.get_key()).unwrap();
-    let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
+    let signing_key: Arc<dyn signer::SigningKey> = Arc::new(signing_key);
 
     assert_eq!(
         Err(Error::NoCertificatesPresented),
         resolver.add(
             "localhost",
-            sign::CertifiedKey::new(vec![], signing_key.clone())
+            signer::CertifiedKey::new(vec![], signing_key.clone())
         )
     );
 
@@ -2669,7 +2670,7 @@ fn sni_resolver_rejects_bad_certs() {
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(
             "localhost",
-            sign::CertifiedKey::new(bad_chain, signing_key.clone())
+            signer::CertifiedKey::new(bad_chain, signing_key.clone())
         )
     );
 }
@@ -5542,7 +5543,7 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn rustls::sign::SigningKey>, Error> {
+    ) -> Result<Arc<dyn signer::SigningKey>, Error> {
         self.parent.load_private_key(key_der)
     }
 
