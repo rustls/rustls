@@ -101,7 +101,7 @@ impl Random {
         provider: &'static dyn CryptoProvider,
     ) -> Result<Self, rand::GetRandomFailed> {
         let mut data = [0u8; 32];
-        provider.fill_random(&mut data)?;
+        provider.fill(&mut data)?;
         Ok(Self(data))
     }
 }
@@ -167,7 +167,7 @@ impl Codec for SessionId {
 impl SessionId {
     pub fn random(provider: &'static dyn CryptoProvider) -> Result<Self, rand::GetRandomFailed> {
         let mut data = [0u8; 32];
-        provider.fill_random(&mut data)?;
+        provider.fill(&mut data)?;
         Ok(Self { data, len: 32 })
     }
 

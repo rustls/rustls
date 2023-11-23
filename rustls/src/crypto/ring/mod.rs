@@ -1,4 +1,4 @@
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -36,14 +36,6 @@ pub static RING: &dyn CryptoProvider = &Ring;
 struct Ring;
 
 impl CryptoProvider for Ring {
-    fn fill_random(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {
-        use ring_like::rand::SecureRandom;
-
-        ring_like::rand::SystemRandom::new()
-            .fill(buf)
-            .map_err(|_| GetRandomFailed)
-    }
-
     fn default_cipher_suites(&self) -> &'static [SupportedCipherSuite] {
         DEFAULT_CIPHER_SUITES
     }
@@ -62,6 +54,16 @@ impl CryptoProvider for Ring {
 
     fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
         SUPPORTED_SIG_ALGS
+    }
+}
+
+impl SecureRandom for Ring {
+    fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {
+        use ring_like::rand::SecureRandom;
+
+        ring_like::rand::SystemRandom::new()
+            .fill(buf)
+            .map_err(|_| GetRandomFailed)
     }
 }
 

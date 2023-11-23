@@ -11,14 +11,14 @@ pub(crate) fn random_vec(
     len: usize,
 ) -> Result<Vec<u8>, GetRandomFailed> {
     let mut v = vec![0; len];
-    provider.fill_random(&mut v)?;
+    provider.fill(&mut v)?;
     Ok(v)
 }
 
 /// Return a uniformly random [`u32`].
 pub(crate) fn random_u32(provider: &dyn CryptoProvider) -> Result<u32, GetRandomFailed> {
     let mut buf = [0u8; 4];
-    provider.fill_random(&mut buf)?;
+    provider.fill(&mut buf)?;
     Ok(u32::from_be_bytes(buf))
 }
 

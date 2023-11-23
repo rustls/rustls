@@ -4104,9 +4104,7 @@ mod test_quic {
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let mut random = [0; 32];
-        PROVIDER
-            .fill_random(&mut random)
-            .unwrap();
+        PROVIDER.fill(&mut random).unwrap();
         let random = Random::from(random);
 
         let rng = ring::rand::SystemRandom::new();
@@ -4160,9 +4158,7 @@ mod test_quic {
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let mut random = [0; 32];
-        PROVIDER
-            .fill_random(&mut random)
-            .unwrap();
+        PROVIDER.fill(&mut random).unwrap();
         let random = Random::from(random);
 
         let rng = ring::rand::SystemRandom::new();
@@ -5512,25 +5508,6 @@ struct FaultyRandomProvider {
 }
 
 impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
-    fn fill_random(&self, output: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
-        let mut queue = self.rand_queue.lock().unwrap();
-
-        println!(
-            "fill_random request for {} bytes (got {})",
-            output.len(),
-            queue.len()
-        );
-
-        if queue.len() < output.len() {
-            return Err(rustls::crypto::GetRandomFailed);
-        }
-
-        let fixed_output = &queue[..output.len()];
-        output.copy_from_slice(fixed_output);
-        *queue = &queue[output.len()..];
-        Ok(())
-    }
-
     fn default_cipher_suites(&self) -> &'static [SupportedCipherSuite] {
         self.parent.default_cipher_suites()
     }
@@ -5549,6 +5526,27 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
     fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
         self.parent
             .signature_verification_algorithms()
+    }
+}
+
+impl rustls::crypto::SecureRandom for FaultyRandomProvider {
+    fn fill(&self, output: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
+        let mut queue = self.rand_queue.lock().unwrap();
+
+        println!(
+            "fill_random request for {} bytes (got {})",
+            output.len(),
+            queue.len()
+        );
+
+        if queue.len() < output.len() {
+            return Err(rustls::crypto::GetRandomFailed);
+        }
+
+        let fixed_output = &queue[..output.len()];
+        output.copy_from_slice(fixed_output);
+        *queue = &queue[output.len()..];
+        Ok(())
     }
 }
 
