@@ -25,13 +25,11 @@ impl KeyType {
     }
 
     pub(crate) fn get_key(&self) -> PrivateKeyDer<'static> {
-        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+        rustls_pemfile::private_key(&mut io::BufReader::new(
             fs::File::open(self.path_for("end.key")).unwrap(),
         ))
-        .next()
         .unwrap()
         .unwrap()
-        .into()
     }
 }
 
