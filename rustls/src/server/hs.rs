@@ -297,6 +297,7 @@ impl ExpectClientHello {
         // intersection of ciphersuites.
         let client_suites = self
             .config
+            .provider
             .cipher_suites
             .iter()
             .copied()
@@ -335,8 +336,10 @@ impl ExpectClientHello {
 
         // Reduce our supported ciphersuites by the certificate.
         // (no-op for TLS1.3)
-        let suitable_suites =
-            suites::reduce_given_sigalg(&self.config.cipher_suites, certkey.get_key().algorithm());
+        let suitable_suites = suites::reduce_given_sigalg(
+            &self.config.provider.cipher_suites,
+            certkey.get_key().algorithm(),
+        );
 
         // And version
         let suitable_suites = suites::reduce_given_version_and_protocol(
@@ -386,7 +389,7 @@ impl ExpectClientHello {
         // Save their Random.
         let randoms = ConnectionRandoms::new(
             client_hello.random,
-            Random::new(self.config.provider.secure_random())?,
+            Random::new(self.config.provider.secure_random)?,
         );
         match suite {
             SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {

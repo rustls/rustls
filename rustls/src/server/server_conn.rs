@@ -1,7 +1,7 @@
-use crate::builder::{ConfigBuilder, WantsCipherSuites};
+use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Context, Protocol, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 #[cfg(feature = "logging")]
@@ -9,11 +9,11 @@ use crate::log::trace;
 use crate::msgs::base::Payload;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
-use crate::sign;
-use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
+use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
 use crate::KeyLog;
+use crate::{sign, WantsVersions};
 
 use super::hs;
 
@@ -212,17 +212,8 @@ impl<'a> ClientHello<'a> {
 /// [`RootCertStore`]: crate::RootCertStore
 #[derive(Debug)]
 pub struct ServerConfig {
-    /// List of ciphersuites, in preference order.
-    pub(super) cipher_suites: Vec<SupportedCipherSuite>,
-
-    /// List of supported key exchange groups.
-    ///
-    /// The first is the highest priority: they will be
-    /// offered to the client in this order.
-    pub(super) kx_groups: Vec<&'static dyn SupportedKxGroup>,
-
     /// Source of randomness and other crypto.
-    pub(super) provider: &'static dyn CryptoProvider,
+    pub(super) provider: Arc<CryptoProvider>,
 
     /// Ignore the client's ciphersuite order. Instead,
     /// choose the top ciphersuite in the server list
@@ -323,9 +314,7 @@ pub struct ServerConfig {
 impl Clone for ServerConfig {
     fn clone(&self) -> Self {
         Self {
-            cipher_suites: self.cipher_suites.clone(),
-            kx_groups: self.kx_groups.clone(),
-            provider: self.provider,
+            provider: Arc::<CryptoProvider>::clone(&self.provider),
             ignore_client_order: self.ignore_client_order,
             max_fragment_size: self.max_fragment_size,
             session_storage: Arc::clone(&self.session_storage),
@@ -346,21 +335,21 @@ impl Clone for ServerConfig {
 impl ServerConfig {
     #[cfg(feature = "ring")]
     /// Create a builder for a server configuration with the default
-    /// [`CryptoProvider`]: [`crate::crypto::ring::RING`].
+    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
-        Self::builder_with_provider(crate::crypto::ring::RING)
+    pub fn builder() -> ConfigBuilder<Self, WantsVersions> {
+        Self::builder_with_provider(crate::crypto::ring::default_provider().into())
     }
 
     /// Create a builder for a server configuration with a specific [`CryptoProvider`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_provider(
-        provider: &'static dyn CryptoProvider,
-    ) -> ConfigBuilder<Self, WantsCipherSuites> {
+        provider: Arc<CryptoProvider>,
+    ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsCipherSuites(provider),
+            state: WantsVersions { provider },
             side: PhantomData,
         }
     }
@@ -371,13 +360,15 @@ impl ServerConfig {
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(v)
             && self
+                .provider
                 .cipher_suites
                 .iter()
                 .any(|cs| cs.version().version == v)
     }
 
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
-        self.cipher_suites
+        self.provider
+            .cipher_suites
             .iter()
             .any(|cs| cs.usable_for_protocol(proto))
     }

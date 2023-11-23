@@ -19,13 +19,10 @@ use rustls::{ClientConfig, ClientConnection};
 use rustls::{ConnectionCommon, ServerConfig, ServerConnection, SideData};
 
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
-pub use rustls::crypto::aws_lc_rs as primary_provider;
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
-pub use rustls::crypto::aws_lc_rs::AWS_LC_RS as PROVIDER;
+pub use rustls::crypto::aws_lc_rs as provider;
 #[cfg(feature = "ring")]
-pub use rustls::crypto::ring as primary_provider;
-#[cfg(feature = "ring")]
-pub use rustls::crypto::ring::RING as PROVIDER;
+pub use rustls::crypto::ring as provider;
+use rustls::crypto::CryptoProvider;
 
 macro_rules! embed_files {
     (
@@ -270,22 +267,22 @@ impl KeyType {
     }
 }
 
-pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsCipherSuites> {
+pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVersions> {
     // ensure `ServerConfig::builder()` is covered, even though it is
-    // equivalent to `builder_with_provider(PROVIDER)`.
+    // equivalent to `builder_with_provider(provider::provider().into())`.
     #[cfg(feature = "ring")]
     {
         rustls::ServerConfig::builder()
     }
     #[cfg(not(feature = "ring"))]
     {
-        rustls::ServerConfig::builder_with_provider(PROVIDER)
+        rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
     }
 }
 
-pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsCipherSuites> {
+pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVersions> {
     // ensure `ClientConfig::builder()` is covered, even though it is
-    // equivalent to `builder_with_provider(PROVIDER)`.
+    // equivalent to `builder_with_provider(provider::provider().into())`.
     #[cfg(feature = "ring")]
     {
         rustls::ClientConfig::builder()
@@ -293,7 +290,7 @@ pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::Wa
 
     #[cfg(not(feature = "ring"))]
     {
-        rustls::ClientConfig::builder_with_provider(PROVIDER)
+        rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
     }
 }
 
@@ -307,7 +304,12 @@ pub fn finish_server_config(
 }
 
 pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    finish_server_config(kt, server_config_builder().with_safe_defaults())
+    finish_server_config(
+        kt,
+        server_config_builder()
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    )
 }
 
 pub fn make_server_config_with_versions(
@@ -317,8 +319,6 @@ pub fn make_server_config_with_versions(
     finish_server_config(
         kt,
         server_config_builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
             .with_protocol_versions(versions)
             .unwrap(),
     )
@@ -326,15 +326,19 @@ pub fn make_server_config_with_versions(
 
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: &[&'static dyn rustls::crypto::SupportedKxGroup],
+    kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
 ) -> ServerConfig {
     finish_server_config(
         kt,
-        server_config_builder()
-            .with_safe_default_cipher_suites()
-            .with_kx_groups(kx_groups)
-            .with_safe_default_protocol_versions()
-            .unwrap(),
+        ServerConfig::builder_with_provider(
+            CryptoProvider {
+                kx_groups,
+                ..provider::default_provider()
+            }
+            .into(),
+        )
+        .with_safe_default_protocol_versions()
+        .unwrap(),
     )
 }
 
@@ -386,7 +390,8 @@ pub fn make_server_config_with_client_verifier(
     verifier_builder: ClientCertVerifierBuilder,
 ) -> ServerConfig {
     server_config_builder()
-        .with_safe_defaults()
+        .with_safe_default_protocol_versions()
+        .unwrap()
         .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -425,18 +430,27 @@ pub fn finish_client_config_with_creds(
 }
 
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
-    finish_client_config(kt, client_config_builder().with_safe_defaults())
+    finish_client_config(
+        kt,
+        client_config_builder()
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    )
 }
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
-    kx_groups: &[&'static dyn rustls::crypto::SupportedKxGroup],
+    kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
 ) -> ClientConfig {
-    let builder = client_config_builder()
-        .with_safe_default_cipher_suites()
-        .with_kx_groups(kx_groups)
-        .with_safe_default_protocol_versions()
-        .unwrap();
+    let builder = ClientConfig::builder_with_provider(
+        CryptoProvider {
+            kx_groups,
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .with_safe_default_protocol_versions()
+    .unwrap();
     finish_client_config(kt, builder)
 }
 
@@ -445,15 +459,18 @@ pub fn make_client_config_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ClientConfig {
     let builder = client_config_builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
         .with_protocol_versions(versions)
         .unwrap();
     finish_client_config(kt, builder)
 }
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    finish_client_config_with_creds(kt, client_config_builder().with_safe_defaults())
+    finish_client_config_with_creds(
+        kt,
+        client_config_builder()
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    )
 }
 
 pub fn make_client_config_with_versions_with_auth(
@@ -461,8 +478,6 @@ pub fn make_client_config_with_versions_with_auth(
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ClientConfig {
     let builder = client_config_builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
         .with_protocol_versions(versions)
         .unwrap();
     finish_client_config_with_creds(kt, builder)
@@ -473,8 +488,6 @@ pub fn make_client_config_with_verifier(
     verifier_builder: ServerCertVerifierBuilder,
 ) -> ClientConfig {
     client_config_builder()
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
         .with_protocol_versions(versions)
         .unwrap()
         .dangerous()
@@ -490,7 +503,7 @@ pub fn webpki_client_verifier_builder(roots: Arc<RootCertStore>) -> ClientCertVe
 
     #[cfg(not(feature = "ring"))]
     {
-        WebPkiClientVerifier::builder_with_provider(roots, PROVIDER)
+        WebPkiClientVerifier::builder_with_provider(roots, provider::default_provider().into())
     }
 }
 
@@ -502,7 +515,7 @@ pub fn webpki_server_verifier_builder(roots: Arc<RootCertStore>) -> ServerCertVe
 
     #[cfg(not(feature = "ring"))]
     {
-        WebPkiServerVerifier::builder_with_provider(roots, PROVIDER)
+        WebPkiServerVerifier::builder_with_provider(roots, provider::default_provider().into())
     }
 }
 

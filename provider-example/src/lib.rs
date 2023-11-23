@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use pki_types::PrivateKeyDer;
+use rustls::crypto::CryptoProvider;
 
 mod aead;
 mod hash;
@@ -11,34 +12,19 @@ mod sign;
 mod verify;
 
 pub use hpke::HPKE_PROVIDER;
-use rustls::crypto::KeyProvider;
 
-pub static PROVIDER: &'static dyn rustls::crypto::CryptoProvider = &Provider;
+pub fn provider() -> CryptoProvider {
+    CryptoProvider {
+        cipher_suites: ALL_CIPHER_SUITES.to_vec(),
+        kx_groups: kx::ALL_KX_GROUPS.to_vec(),
+        signature_verification_algorithms: verify::ALGORITHMS,
+        secure_random: &Provider,
+        key_provider: &Provider,
+    }
+}
 
 #[derive(Debug)]
 struct Provider;
-
-impl rustls::crypto::CryptoProvider for Provider {
-    fn default_cipher_suites(&self) -> &'static [rustls::SupportedCipherSuite] {
-        ALL_CIPHER_SUITES
-    }
-
-    fn default_kx_groups(&self) -> &'static [&'static dyn rustls::crypto::SupportedKxGroup] {
-        kx::ALL_KX_GROUPS
-    }
-
-    fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
-        verify::ALGORITHMS
-    }
-
-    fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
-        &Self
-    }
-
-    fn key_provider(&self) -> &'static dyn KeyProvider {
-        &Self
-    }
-}
 
 impl rustls::crypto::SecureRandom for Provider {
     fn fill(&self, bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {

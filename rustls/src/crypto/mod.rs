@@ -52,17 +52,17 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// Controls core cryptography used by rustls.
 ///
 /// This crate comes with two built-in options, provided as
-/// `&dyn CryptoProvider` values:
+/// `CryptoProvider` structures:
 ///
-/// - [`crate::crypto::ring::RING`]: (behind the `ring` crate feature, which
+/// - [`crate::crypto::ring::default_provider`]: (behind the `ring` crate feature, which
 ///   is enabled by default).  This provider uses the [*ring*](https://github.com/briansmith/ring)
 ///   crate.
-/// - [`crate::crypto::aws_lc_rs::AWS_LC_RS`]: (behind the `aws_lc_rs` feature,
+/// - [`crate::crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` feature,
 ///   which is optional).  This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 ///   crate.
 ///
-/// This trait provides defaults. Everything in it, other than randomness, can be overridden at
-/// runtime by methods on [`ConfigBuilder`](crate::ConfigBuilder).
+/// This structure provides defaults. Everything in it can be overridden at
+/// runtime by replacing field values as needed.
 ///
 /// # Using a specific `CryptoProvider`
 ///
@@ -79,7 +79,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 /// # Making a custom `CryptoProvider`
 ///
-/// Naturally start with a type that implements [`crate::crypto::CryptoProvider`].
+/// Your goal will be to populate a [`crate::crypto::CryptoProvider`] struct instance.
 ///
 /// ## Which elements are required?
 ///
@@ -95,38 +95,17 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// # #[cfg(feature = "ring")] {
 /// # use std::sync::Arc;
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
-/// use rustls::crypto::ring::RING;
+/// use rustls::crypto::ring;
+///
+/// pub fn provider() -> rustls::crypto::CryptoProvider {
+///   rustls::crypto::CryptoProvider{
+///     key_provider: &HsmKeyLoader,
+///     ..ring::default_provider()
+///   }
+/// }
 ///
 /// #[derive(Debug)]
 /// struct HsmKeyLoader;
-///
-/// impl rustls::crypto::CryptoProvider for HsmKeyLoader {///
-///     fn default_cipher_suites(&self) -> &'static [rustls::SupportedCipherSuite] {
-///         RING.default_cipher_suites()
-///     }
-///
-///     fn default_kx_groups(&self) -> &'static [&'static dyn rustls::crypto::SupportedKxGroup] {
-///         RING.default_kx_groups()
-///     }
-///
-///     fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
-///         RING.signature_verification_algorithms()
-///     }
-///
-///     fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
-///        &HsmKeyLoader
-///     }
-///
-///     fn key_provider(&self) -> &'static dyn rustls::crypto::KeyProvider {
-///        &HsmKeyLoader
-///     }
-/// }
-///
-/// impl rustls::crypto::SecureRandom for HsmKeyLoader {
-///     fn fill(&self, buf: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
-///         RING.secure_random().fill(buf)
-///     }
-/// }
 ///
 /// impl rustls::crypto::KeyProvider for HsmKeyLoader {
 ///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
@@ -140,12 +119,12 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 /// The elements are documented separately:
 ///
-/// - **Random** - see [`crate::crypto::CryptoProvider::fill()`].
+/// - **Random** - see [`crate::crypto::SecureRandom::fill()`].
 /// - **Cipher suites** - see [`crate::SupportedCipherSuite`], [`crate::Tls12CipherSuite`], and
 ///   [`crate::Tls13CipherSuite`].
 /// - **Key exchange groups** - see [`crate::crypto::SupportedKxGroup`].
 /// - **Signature verification algorithms** - see [`crate::crypto::WebPkiSupportedAlgorithms`].
-/// - **Authentication key loading** - see [`crate::crypto::CryptoProvider::load_private_key()`] and
+/// - **Authentication key loading** - see [`crate::crypto::KeyProvider::load_private_key()`] and
 ///   [`crate::sign::SigningKey`].
 ///
 /// # Example code
@@ -164,45 +143,37 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// [provider-example/]: https://github.com/rustls/rustls/tree/main/provider-example/
 /// [rust-crypto]: https://github.com/rustcrypto
 /// [dalek-cryptography]: https://github.com/dalek-cryptography
-pub trait CryptoProvider: Send + Sync + Debug + 'static {
-    /// Provide a safe set of cipher suites that can be used as the defaults.
-    ///
-    /// This is used by [`crate::ConfigBuilder::with_safe_defaults()`] and
-    /// [`crate::ConfigBuilder::with_safe_default_cipher_suites()`].
-    ///
-    /// Other (non-default) cipher suites can be provided separately and configured
-    /// by passing them to [`crate::ConfigBuilder::with_cipher_suites()`]. That
-    /// includes cipher suites implemented by a different `CryptoProvider`.
+#[derive(Debug, Clone)]
+pub struct CryptoProvider {
+    /// List of supported ciphersuites, in preference order -- the first element
+    /// is the highest priority.
     ///
     /// The `SupportedCipherSuite` type carries both configuration and implementation.
-    fn default_cipher_suites(&self) -> &'static [suites::SupportedCipherSuite];
+    pub cipher_suites: Vec<suites::SupportedCipherSuite>,
 
-    /// Return a safe set of supported key exchange groups to be used as the defaults.
+    /// List of supported key exchange groups, in preference order -- the
+    /// first element is the highest priority.
     ///
-    /// This is used by [`crate::ConfigBuilder::with_safe_defaults()`] and
-    /// [`crate::ConfigBuilder::with_safe_default_kx_groups()`].
-    ///
-    /// Other (non-default) key exchange groups can be provided separately and configured
-    /// by passing them to [`crate::ConfigBuilder::with_kx_groups()`]. That includes
-    /// key exchange groups implemented by a different `CryptoProvider`.
+    /// The first element in this list is the _default key share algorithm_,
+    /// and in TLS1.3 a key share for it is sent in the client hello.
     ///
     /// The `SupportedKxGroup` type carries both configuration and implementation.
-    fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup];
+    pub kx_groups: Vec<&'static dyn SupportedKxGroup>,
 
-    /// Return the signature verification algorithms for use with webpki.
+    /// List of signature verification algorithms for use with webpki.
     ///
     /// These are used for both certificate chain verification and handshake signature verification.
     ///
     /// This is called by [`crate::ConfigBuilder::with_root_certificates()`],
     /// [`crate::server::WebPkiClientVerifier::builder_with_provider()`] and
     /// [`crate::client::WebPkiServerVerifier::builder_with_provider()`].
-    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms;
+    pub signature_verification_algorithms: WebPkiSupportedAlgorithms,
 
-    /// Return a source of cryptographically secure randomness.
-    fn secure_random(&self) -> &'static dyn SecureRandom;
+    /// Source of cryptographically secure random numbers.
+    pub secure_random: &'static dyn SecureRandom,
 
-    /// Return a mechanism for loading private [SigningKey]s from [PrivateKeyDer].
-    fn key_provider(&self) -> &'static dyn KeyProvider;
+    /// Provider for loading private [SigningKey]s from [PrivateKeyDer].
+    pub key_provider: &'static dyn KeyProvider,
 }
 
 /// A source of cryptographically secure randomness.

@@ -6,7 +6,7 @@
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
-use rustls::crypto::SupportedKxGroup;
+use rustls::crypto::{CryptoProvider, SupportedKxGroup};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
@@ -19,9 +19,9 @@ use rustls::{
 };
 
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
-use rustls::crypto::{aws_lc_rs as provider, aws_lc_rs::AWS_LC_RS as PROVIDER};
+use rustls::crypto::aws_lc_rs as provider;
 #[cfg(feature = "ring")]
-use rustls::crypto::{ring as provider, ring::RING as PROVIDER};
+use rustls::crypto::ring as provider;
 
 use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
@@ -212,9 +212,12 @@ impl DummyClientAuth {
     fn new(mandatory: bool) -> Self {
         Self {
             mandatory,
-            parent: WebPkiClientVerifier::builder_with_provider(load_root_certs(), PROVIDER)
-                .build()
-                .unwrap(),
+            parent: WebPkiClientVerifier::builder_with_provider(
+                load_root_certs(),
+                provider::default_provider().into(),
+            )
+            .build()
+            .unwrap(),
         }
     }
 }
@@ -274,9 +277,12 @@ struct DummyServerAuth {
 impl DummyServerAuth {
     fn new() -> Self {
         DummyServerAuth {
-            parent: WebPkiServerVerifier::builder_with_provider(load_root_certs(), PROVIDER)
-                .build()
-                .unwrap(),
+            parent: WebPkiServerVerifier::builder_with_provider(
+                load_root_certs(),
+                provider::default_provider().into(),
+            )
+            .build()
+            .unwrap(),
         }
     }
 }
@@ -495,14 +501,18 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
         provider::ALL_KX_GROUPS.to_vec()
     };
 
-    let mut cfg = ServerConfig::builder_with_provider(PROVIDER)
-        .with_safe_default_cipher_suites()
-        .with_kx_groups(&kx_groups)
-        .with_protocol_versions(&opts.supported_versions())
-        .unwrap()
-        .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone())
-        .unwrap();
+    let mut cfg = ServerConfig::builder_with_provider(
+        CryptoProvider {
+            kx_groups,
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .with_protocol_versions(&opts.supported_versions())
+    .unwrap()
+    .with_client_cert_verifier(client_auth)
+    .with_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone())
+    .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
     cfg.max_fragment_size = opts.max_fragment;
@@ -623,13 +633,17 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         provider::ALL_KX_GROUPS.to_vec()
     };
 
-    let cfg = ClientConfig::builder_with_provider(PROVIDER)
-        .with_safe_default_cipher_suites()
-        .with_kx_groups(&kx_groups)
-        .with_protocol_versions(&opts.supported_versions())
-        .expect("inconsistent settings")
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new()));
+    let cfg = ClientConfig::builder_with_provider(
+        CryptoProvider {
+            kx_groups,
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .with_protocol_versions(&opts.supported_versions())
+    .expect("inconsistent settings")
+    .dangerous()
+    .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new()));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);

@@ -1,4 +1,4 @@
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -35,32 +35,18 @@ pub(crate) mod tls12;
 pub(crate) mod tls13;
 
 /// A `CryptoProvider` backed by aws-lc-rs.
-pub static AWS_LC_RS: &dyn CryptoProvider = &AwsLcRs;
+pub fn default_provider() -> CryptoProvider {
+    CryptoProvider {
+        cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
+        kx_groups: ALL_KX_GROUPS.to_vec(),
+        signature_verification_algorithms: SUPPORTED_SIG_ALGS,
+        secure_random: &AwsLcRs,
+        key_provider: &AwsLcRs,
+    }
+}
 
 #[derive(Debug)]
 struct AwsLcRs;
-
-impl CryptoProvider for AwsLcRs {
-    fn default_cipher_suites(&self) -> &'static [SupportedCipherSuite] {
-        DEFAULT_CIPHER_SUITES
-    }
-
-    fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup] {
-        ALL_KX_GROUPS
-    }
-
-    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
-        SUPPORTED_SIG_ALGS
-    }
-
-    fn secure_random(&self) -> &'static dyn SecureRandom {
-        &Self
-    }
-
-    fn key_provider(&self) -> &'static dyn KeyProvider {
-        &Self
-    }
-}
 
 impl SecureRandom for AwsLcRs {
     fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {

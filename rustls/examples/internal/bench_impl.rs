@@ -15,9 +15,14 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 
 use rustls::client::Resumption;
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
-use rustls::crypto::aws_lc_rs::{cipher_suite, Ticketer, AWS_LC_RS as PROVIDER};
+use rustls::crypto::aws_lc_rs as provider;
+#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+use rustls::crypto::aws_lc_rs::{cipher_suite, Ticketer};
 #[cfg(feature = "ring")]
-use rustls::crypto::ring::{cipher_suite, Ticketer, RING as PROVIDER};
+use rustls::crypto::ring as provider;
+#[cfg(feature = "ring")]
+use rustls::crypto::ring::{cipher_suite, Ticketer};
+use rustls::crypto::CryptoProvider;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
 use rustls::{ClientConfig, ClientConnection};
@@ -306,6 +311,7 @@ fn make_server_config(
     resume: ResumptionParam,
     max_fragment_size: Option<usize>,
 ) -> ServerConfig {
+    let provider = Arc::new(provider::default_provider());
     let client_auth = match client_auth {
         ClientAuth::Yes => {
             let roots = params.key_type.get_chain();
@@ -313,16 +319,14 @@ fn make_server_config(
             for root in roots {
                 client_auth_roots.add(root).unwrap();
             }
-            WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), PROVIDER)
+            WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), provider.clone())
                 .build()
                 .unwrap()
         }
         ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
     };
 
-    let mut cfg = ServerConfig::builder_with_provider(PROVIDER)
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
+    let mut cfg = ServerConfig::builder_with_provider(provider)
         .with_protocol_versions(&[params.version])
         .unwrap()
         .with_client_cert_verifier(client_auth)
@@ -353,12 +357,16 @@ fn make_client_config(
         rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
     );
 
-    let cfg = ClientConfig::builder_with_provider(PROVIDER)
-        .with_cipher_suites(&[params.ciphersuite])
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(&[params.version])
-        .unwrap()
-        .with_root_certificates(root_store);
+    let cfg = ClientConfig::builder_with_provider(
+        CryptoProvider {
+            cipher_suites: vec![params.ciphersuite],
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .with_protocol_versions(&[params.version])
+    .unwrap()
+    .with_root_certificates(root_store);
 
     let mut cfg = if clientauth == ClientAuth::Yes {
         cfg.with_client_auth_cert(

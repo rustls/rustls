@@ -42,7 +42,8 @@ fn server_config_with_verifier(
     client_cert_verifier: MockClientVerifier,
 ) -> ServerConfig {
     server_config_builder()
-        .with_safe_defaults()
+        .with_safe_default_protocol_versions()
+        .unwrap()
         .with_client_cert_verifier(Arc::new(client_cert_verifier))
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()

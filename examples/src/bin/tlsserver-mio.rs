@@ -9,6 +9,7 @@ use mio::net::{TcpListener, TcpStream};
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use serde::Deserialize;
 
+use rustls::crypto::{ring, CryptoProvider};
 use rustls::server::WebPkiClientVerifier;
 use rustls::{self, RootCertStore};
 
@@ -604,14 +605,18 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
     );
     let ocsp = load_ocsp(&args.flag_ocsp);
 
-    let mut config = rustls::ServerConfig::builder()
-        .with_cipher_suites(&suites)
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(&versions)
-        .expect("inconsistent cipher-suites/versions specified")
-        .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(certs, privkey, ocsp)
-        .expect("bad certificates/private key");
+    let mut config = rustls::ServerConfig::builder_with_provider(
+        CryptoProvider {
+            cipher_suites: suites,
+            ..ring::default_provider()
+        }
+        .into(),
+    )
+    .with_protocol_versions(&versions)
+    .expect("inconsistent cipher-suites/versions specified")
+    .with_client_cert_verifier(client_auth)
+    .with_single_cert_with_ocsp(certs, privkey, ocsp)
+    .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 

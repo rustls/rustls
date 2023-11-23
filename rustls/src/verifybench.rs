@@ -211,7 +211,7 @@ impl Context {
     fn bench(&self, count: usize) {
         let verifier = WebPkiServerVerifier::new_without_revocation(
             self.roots.clone(),
-            ring::RING.signature_verification_algorithms(),
+            ring::default_provider().signature_verification_algorithms,
         );
         const OCSP_RESPONSE: &[u8] = &[];
         let mut times = Vec::new();
