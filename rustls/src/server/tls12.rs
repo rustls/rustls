@@ -588,7 +588,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
 }
 
 // --- Process client's KeyExchange ---
-struct ExpectClientKx {
+struct ExpectClientKx<'a> {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     randoms: ConnectionRandoms,
@@ -596,11 +596,11 @@ struct ExpectClientKx {
     suite: &'static Tls12CipherSuite,
     using_ems: bool,
     server_kx: Box<dyn ActiveKeyExchange>,
-    client_cert: Option<CertificateChain>,
+    client_cert: Option<CertificateChain<'a>>,
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectClientKx {
+impl State<ServerConnectionData> for ExpectClientKx<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -663,22 +663,27 @@ impl State<ServerConnectionData> for ExpectClientKx {
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
-        self
+        Box::new(ExpectClientKx {
+            client_cert: self
+                .client_cert
+                .map(|cert| cert.into_owned()),
+            ..*self
+        })
     }
 }
 
 // --- Process client's certificate proof ---
-struct ExpectCertificateVerify {
+struct ExpectCertificateVerify<'a> {
     config: Arc<ServerConfig>,
     secrets: ConnectionSecrets,
     transcript: HandshakeHash,
     session_id: SessionId,
     using_ems: bool,
-    client_cert: CertificateChain,
+    client_cert: CertificateChain<'a>,
     send_ticket: bool,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl State<ServerConnectionData> for ExpectCertificateVerify<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -722,7 +727,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_certificates = Some(self.client_cert);
+        cx.common.peer_certificates = Some(self.client_cert.into_owned());
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectCcs {
@@ -737,7 +742,10 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
-        self
+        Box::new(ExpectCertificateVerify {
+            client_cert: self.client_cert.into_owned(),
+            ..*self
+        })
     }
 }
 

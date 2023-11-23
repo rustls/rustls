@@ -83,7 +83,7 @@ impl Tls13ClientSessionValue {
         suite: &'static Tls13CipherSuite,
         ticket: Vec<u8>,
         secret: &[u8],
-        server_cert_chain: CertificateChain,
+        server_cert_chain: CertificateChain<'static>,
         time_now: UnixTime,
         lifetime_secs: u32,
         age_add: u32,
@@ -155,7 +155,7 @@ impl Tls12ClientSessionValue {
         session_id: SessionId,
         ticket: Vec<u8>,
         master_secret: &[u8],
-        server_cert_chain: CertificateChain,
+        server_cert_chain: CertificateChain<'static>,
         time_now: UnixTime,
         lifetime_secs: u32,
         extended_ms: bool,
@@ -208,7 +208,7 @@ pub struct ClientSessionCommon {
     secret: Zeroizing<PayloadU8>,
     epoch: u64,
     lifetime_secs: u32,
-    server_cert_chain: CertificateChain,
+    server_cert_chain: CertificateChain<'static>,
 }
 
 impl ClientSessionCommon {
@@ -217,7 +217,7 @@ impl ClientSessionCommon {
         secret: &[u8],
         time_now: UnixTime,
         lifetime_secs: u32,
-        server_cert_chain: CertificateChain,
+        server_cert_chain: CertificateChain<'static>,
     ) -> Self {
         Self {
             ticket: PayloadU16(ticket),
@@ -228,7 +228,7 @@ impl ClientSessionCommon {
         }
     }
 
-    pub(crate) fn server_cert_chain(&self) -> &CertificateChain {
+    pub(crate) fn server_cert_chain(&self) -> &CertificateChain<'static> {
         &self.server_cert_chain
     }
 
@@ -257,7 +257,7 @@ pub struct ServerSessionValue {
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) master_secret: Zeroizing<PayloadU8>,
     pub(crate) extended_ms: bool,
-    pub(crate) client_cert_chain: Option<CertificateChain>,
+    pub(crate) client_cert_chain: Option<CertificateChain<'static>>,
     pub(crate) alpn: Option<PayloadU8>,
     pub(crate) application_data: PayloadU16,
     pub creation_time_sec: u64,
@@ -316,7 +316,7 @@ impl<'a> Codec<'a> for ServerSessionValue {
         let ems = u8::read(r)?;
         let has_ccert = u8::read(r)? == 1;
         let ccert = if has_ccert {
-            Some(CertificateChain::read(r)?)
+            Some(CertificateChain::read(r)?.into_owned())
         } else {
             None
         };
@@ -352,7 +352,7 @@ impl ServerSessionValue {
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: &[u8],
-        client_cert_chain: Option<CertificateChain>,
+        client_cert_chain: Option<CertificateChain<'static>>,
         alpn: Option<Vec<u8>>,
         application_data: Vec<u8>,
         creation_time: UnixTime,

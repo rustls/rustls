@@ -191,7 +191,7 @@ pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
 impl AlwaysResolvesClientCert {
     pub(super) fn new(
         private_key: Arc<dyn sign::SigningKey>,
-        chain: CertificateChain,
+        chain: CertificateChain<'static>,
     ) -> Result<Self, Error> {
         Ok(Self(Arc::new(sign::CertifiedKey::new(
             chain.0,

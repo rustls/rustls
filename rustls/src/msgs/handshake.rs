@@ -1258,23 +1258,34 @@ impl ServerHelloPayload {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct CertificateChain(pub Vec<CertificateDer<'static>>);
+pub struct CertificateChain<'a>(pub Vec<CertificateDer<'a>>);
 
-impl<'a> Codec<'a> for CertificateChain {
+impl<'a> Codec<'a> for CertificateChain<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         Vec::encode(&self.0, bytes)
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Vec::read(r).map(Self)
     }
 }
 
-impl Deref for CertificateChain {
-    type Target = [CertificateDer<'static>];
+impl<'a> Deref for CertificateChain<'a> {
+    type Target = [CertificateDer<'a>];
 
-    fn deref(&self) -> &[CertificateDer<'static>] {
+    fn deref(&self) -> &[CertificateDer<'a>] {
         &self.0
+    }
+}
+
+impl CertificateChain<'_> {
+    pub(crate) fn into_owned(self) -> CertificateChain<'static> {
+        CertificateChain(
+            self.0
+                .into_iter()
+                .map(certificate_der_into_owned)
+                .collect(),
+        )
     }
 }
 
@@ -1353,12 +1364,17 @@ impl<'a> Codec<'a> for CertificateEntry {
         self.exts.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            cert: CertificateDer::read(r)?,
+            cert: certificate_der_into_owned(CertificateDer::read(r)?),
             exts: Vec::read(r)?,
         })
     }
+}
+
+// FIXME(perf) sub-optimal in the owned case; switch to `CertificateDer::into_owned` when available
+fn certificate_der_into_owned(cert: CertificateDer<'_>) -> CertificateDer<'static> {
+    CertificateDer::from(cert.to_vec())
 }
 
 impl CertificateEntry {
@@ -1468,7 +1484,7 @@ impl CertificatePayloadTls13 {
             .unwrap_or_default()
     }
 
-    pub(crate) fn convert(self) -> CertificateChain {
+    pub(crate) fn convert(self) -> CertificateChain<'static> {
         CertificateChain(
             self.entries
                 .into_iter()
@@ -2069,7 +2085,7 @@ pub enum HandshakePayload<'a> {
     ClientHello(ClientHelloPayload),
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
-    Certificate(CertificateChain),
+    Certificate(CertificateChain<'a>),
     CertificateTls13(CertificatePayloadTls13),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
@@ -2122,7 +2138,7 @@ impl HandshakePayload<'_> {
             ClientHello(x) => ClientHello(x),
             ServerHello(x) => ServerHello(x),
             HelloRetryRequest(x) => HelloRetryRequest(x),
-            Certificate(x) => Certificate(x),
+            Certificate(x) => Certificate(x.into_owned()),
             CertificateTls13(x) => CertificateTls13(x),
             ServerKeyExchange(x) => ServerKeyExchange(x),
             CertificateRequest(x) => CertificateRequest(x),

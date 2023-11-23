@@ -681,18 +681,18 @@ impl State<ClientConnectionData> for ExpectCertificate {
 }
 
 // --- TLS1.3 CertificateVerify ---
-struct ExpectCertificateVerify {
+struct ExpectCertificateVerify<'a> {
     config: Arc<ClientConfig>,
     server_name: ServerName,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
-    server_cert: ServerCertDetails,
+    server_cert: ServerCertDetails<'a>,
     client_auth: Option<ClientAuthDetails>,
 }
 
-impl State<ClientConnectionData> for ExpectCertificateVerify {
+impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -745,7 +745,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
                     .send_cert_verify_error_alert(err)
             })?;
 
-        cx.common.peer_certificates = Some(self.server_cert.cert_chain);
+        cx.common.peer_certificates = Some(self.server_cert.cert_chain.into_owned());
         self.transcript.add_message(&m);
 
         Ok(Box::new(ExpectFinished {
@@ -762,7 +762,10 @@ impl State<ClientConnectionData> for ExpectCertificateVerify {
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
-        self
+        Box::new(ExpectCertificateVerify {
+            server_cert: self.server_cert.into_owned(),
+            ..*self
+        })
     }
 }
 

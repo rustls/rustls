@@ -38,7 +38,7 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     pub(crate) has_seen_eof: bool,
     pub(crate) received_middlebox_ccs: u8,
-    pub(crate) peer_certificates: Option<CertificateChain>,
+    pub(crate) peer_certificates: Option<CertificateChain<'static>>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
