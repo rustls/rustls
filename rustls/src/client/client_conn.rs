@@ -1,4 +1,4 @@
-use crate::builder::{ConfigBuilder, WantsCipherSuites};
+use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
@@ -11,9 +11,9 @@ use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
 use crate::sign;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
-use crate::verify;
 use crate::versions;
 use crate::KeyLog;
+use crate::{verify, WantsVersions};
 
 use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 use super::hs;
@@ -143,18 +143,8 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// [`RootCertStore`]: crate::RootCertStore
 #[derive(Debug)]
 pub struct ClientConfig {
-    /// List of ciphersuites, in preference order.
-    pub(super) cipher_suites: Vec<SupportedCipherSuite>,
-
-    /// List of supported key exchange algorithms, in preference order -- the
-    /// first element is the highest priority.
-    ///
-    /// The first element in this list is the _default key share algorithm_,
-    /// and in TLS1.3 a key share for it is sent in the client hello.
-    pub(super) kx_groups: Vec<&'static dyn SupportedKxGroup>,
-
     /// Source of randomness and other crypto.
-    pub(super) provider: &'static dyn CryptoProvider,
+    pub(super) provider: Arc<CryptoProvider>,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
@@ -226,9 +216,7 @@ pub enum Tls12Resumption {
 impl Clone for ClientConfig {
     fn clone(&self) -> Self {
         Self {
-            cipher_suites: self.cipher_suites.clone(),
-            kx_groups: self.kx_groups.clone(),
-            provider: self.provider,
+            provider: Arc::<CryptoProvider>::clone(&self.provider),
             resumption: self.resumption.clone(),
             alpn_protocols: self.alpn_protocols.clone(),
             max_fragment_size: self.max_fragment_size,
@@ -246,21 +234,21 @@ impl Clone for ClientConfig {
 impl ClientConfig {
     #[cfg(feature = "ring")]
     /// Create a builder for a client configuration with the default
-    /// [`CryptoProvider`]: [`crate::crypto::ring::RING`].
+    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    pub fn builder() -> ConfigBuilder<Self, WantsCipherSuites> {
-        Self::builder_with_provider(crate::crypto::ring::RING)
+    pub fn builder() -> ConfigBuilder<Self, WantsVersions> {
+        Self::builder_with_provider(crate::crypto::ring::default_provider().into())
     }
 
     /// Create a builder for a client configuration with a specific [`CryptoProvider`].
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_provider(
-        provider: &'static dyn CryptoProvider,
-    ) -> ConfigBuilder<Self, WantsCipherSuites> {
+        provider: Arc<CryptoProvider>,
+    ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsCipherSuites(provider),
+            state: WantsVersions { provider },
             side: PhantomData,
         }
     }
@@ -271,13 +259,15 @@ impl ClientConfig {
     pub(crate) fn supports_version(&self, v: ProtocolVersion) -> bool {
         self.versions.contains(v)
             && self
+                .provider
                 .cipher_suites
                 .iter()
                 .any(|cs| cs.version().version == v)
     }
 
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
-        self.cipher_suites
+        self.provider
+            .cipher_suites
             .iter()
             .any(|cs| cs.usable_for_protocol(proto))
     }
@@ -289,14 +279,16 @@ impl ClientConfig {
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
-        self.cipher_suites
+        self.provider
+            .cipher_suites
             .iter()
             .copied()
             .find(|&scs| scs.suite() == suite)
     }
 
     pub(super) fn find_kx_group(&self, group: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {
-        self.kx_groups
+        self.provider
+            .kx_groups
             .iter()
             .copied()
             .find(|skxg| skxg.name() == group)

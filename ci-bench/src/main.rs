@@ -307,13 +307,13 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 
     for (provider, suites, ticketer, provider_name) in [
         (
-            ring::RING,
+            ring::default_provider(),
             ring::ALL_CIPHER_SUITES,
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
         ),
         (
-            aws_lc_rs::AWS_LC_RS,
+            aws_lc_rs::default_provider(),
             aws_lc_rs::ALL_CIPHER_SUITES,
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
@@ -352,7 +352,7 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
             ),
         ] {
             all.push(BenchmarkParams::new(
-                provider,
+                provider.clone(),
                 ticketer,
                 key_type,
                 find_suite(suites, suite_name),
@@ -500,13 +500,17 @@ impl ClientSideStepper<'_> {
             rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
         );
 
-        let mut cfg = ClientConfig::builder_with_provider(params.provider)
-            .with_cipher_suites(&[params.ciphersuite])
-            .with_safe_default_kx_groups()
-            .with_protocol_versions(&[params.version])
-            .unwrap()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+        let mut cfg = ClientConfig::builder_with_provider(
+            rustls::crypto::CryptoProvider {
+                cipher_suites: vec![params.ciphersuite],
+                ..params.provider.clone()
+            }
+            .into(),
+        )
+        .with_protocol_versions(&[params.version])
+        .unwrap()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
 
         if resume != ResumptionKind::No {
             cfg.resumption = Resumption::in_memory_sessions(128);
@@ -572,9 +576,7 @@ impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
 
-        let mut cfg = ServerConfig::builder_with_provider(params.provider)
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
+        let mut cfg = ServerConfig::builder_with_provider(params.provider.clone().into())
             .with_protocol_versions(&[params.version])
             .unwrap()
             .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())

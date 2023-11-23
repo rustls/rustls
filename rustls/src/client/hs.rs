@@ -121,7 +121,7 @@ pub(super) fn start_handshake(
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
             if !inner.ticket().is_empty() {
-                inner.session_id = SessionId::random(config.provider.secure_random())?;
+                inner.session_id = SessionId::random(config.provider.secure_random)?;
             }
             session_id = Some(inner.session_id);
         }
@@ -137,10 +137,10 @@ pub(super) fn start_handshake(
         Some(session_id) => session_id,
         None if cx.common.is_quic() => SessionId::empty(),
         None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-        None => SessionId::random(config.provider.secure_random())?,
+        None => SessionId::random(config.provider.secure_random)?,
     };
 
-    let random = Random::new(config.provider.secure_random())?;
+    let random = Random::new(config.provider.secure_random)?;
 
     Ok(emit_client_hello_for_retry(
         transcript_buffer,
@@ -218,6 +218,7 @@ fn emit_client_hello_for_retry(
         ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
         ClientExtension::NamedGroups(
             config
+                .provider
                 .kx_groups
                 .iter()
                 .map(|skxg| skxg.name())
@@ -277,6 +278,7 @@ fn emit_client_hello_for_retry(
         .collect();
 
     let mut cipher_suites: Vec<_> = config
+        .provider
         .cipher_suites
         .iter()
         .filter_map(|cs| match cs.usable_for_protocol(cx.common.protocol) {

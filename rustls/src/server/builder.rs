@@ -1,10 +1,9 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::msgs::handshake::CertificateChain;
 use crate::server::handy;
 use crate::server::{ResolvesServerCert, ServerConfig};
-use crate::suites::SupportedCipherSuite;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
 use crate::versions;
 use crate::NoKeyLog;
@@ -23,8 +22,6 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
     ) -> ConfigBuilder<ServerConfig, WantsServerCert> {
         ConfigBuilder {
             state: WantsServerCert {
-                cipher_suites: self.state.cipher_suites,
-                kx_groups: self.state.kx_groups,
                 provider: self.state.provider,
                 versions: self.state.versions,
                 verifier: client_cert_verifier,
@@ -45,9 +42,7 @@ impl ConfigBuilder<ServerConfig, WantsVerifier> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsServerCert {
-    cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static dyn SupportedKxGroup>,
-    provider: &'static dyn CryptoProvider,
+    provider: Arc<CryptoProvider>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn ClientCertVerifier>,
 }
@@ -76,7 +71,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let private_key = self
             .state
             .provider
-            .key_provider()
+            .key_provider
             .load_private_key(key_der)?;
         let resolver = handy::AlwaysResolvesChain::new(private_key, CertificateChain(cert_chain));
         Ok(self.with_cert_resolver(Arc::new(resolver)))
@@ -102,7 +97,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         let private_key = self
             .state
             .provider
-            .key_provider()
+            .key_provider
             .load_private_key(key_der)?;
         let resolver = handy::AlwaysResolvesChain::new_with_extras(
             private_key,
@@ -115,8 +110,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// Sets a custom [`ResolvesServerCert`].
     pub fn with_cert_resolver(self, cert_resolver: Arc<dyn ResolvesServerCert>) -> ServerConfig {
         ServerConfig {
-            cipher_suites: self.state.cipher_suites,
-            kx_groups: self.state.kx_groups,
             provider: self.state.provider,
             verifier: self.state.verifier,
             cert_resolver,

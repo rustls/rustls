@@ -19,8 +19,8 @@ use core::fmt::Debug;
 ///
 /// There are two main ways to get a signing key:
 ///
-///  - [`CryptoProvider::load_private_key()`], or
-///  - some other method outside of the `CryptoProvider` extension trait,
+///  - [`KeyProvider::load_private_key()`], or
+///  - some other method outside of the `KeyProvider` extension trait,
 ///    for instance:
 ///    - [`crypto::ring::sign::any_ecdsa_type()`]
 ///    - [`crypto::ring::sign::any_eddsa_type()`]
@@ -29,17 +29,17 @@ use core::fmt::Debug;
 ///    - [`crypto::aws_lc_rs::sign::any_eddsa_type()`]
 ///    - [`crypto::aws_lc_rs::sign::any_supported_type()`]
 ///
-/// The `CryptoProvider` method `load_private_key()` is called under the hood by
+/// The `KeyProvider` method `load_private_key()` is called under the hood by
 /// [`ConfigBuilder::with_single_cert()`],
 /// [`ConfigBuilder::with_client_auth_cert()`], and
 /// [`ConfigBuilder::with_single_cert_with_ocsp()`].
 ///
-/// A signing key created outside of the `CryptoProvider` extension trait can be used
+/// A signing key created outside of the `KeyProvider` extension trait can be used
 /// to create a [`CertifiedKey`], which in turn can be used to create a
 /// [`ResolvesServerCertUsingSni`]. Alternately, a `CertifiedKey` can be returned from a
 /// custom implementation of the [`ResolvesServerCert`] or [`ResolvesClientCert`] traits.
 ///
-/// [`CryptoProvider::load_private_key()`]: crate::crypto::CryptoProvider::load_private_key
+/// [`KeyProvider::load_private_key()`]: crate::crypto::KeyProvider::load_private_key
 /// [`ConfigBuilder::with_single_cert()`]: crate::ConfigBuilder::with_single_cert
 /// [`ConfigBuilder::with_single_cert_with_ocsp()`]: crate::ConfigBuilder::with_single_cert_with_ocsp
 /// [`ConfigBuilder::with_client_auth_cert()`]: crate::ConfigBuilder::with_client_auth_cert

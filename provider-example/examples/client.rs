@@ -2,8 +2,6 @@ use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use rustls_provider_example::PROVIDER;
-
 fn main() {
     env_logger::init();
 
@@ -14,10 +12,12 @@ fn main() {
             .cloned(),
     );
 
-    let config = rustls::ClientConfig::builder_with_provider(PROVIDER)
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
+    let config =
+        rustls::ClientConfig::builder_with_provider(rustls_provider_example::provider().into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
     let server_name = "www.rust-lang.org".try_into().unwrap();
     let mut conn = rustls::ClientConnection::new(Arc::new(config), server_name).unwrap();

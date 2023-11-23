@@ -1,54 +1,48 @@
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::CryptoProvider;
 use crate::error::Error;
-use crate::suites::SupportedCipherSuite;
 use crate::versions;
 
 use alloc::format;
-use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
+use std::sync::Arc;
 
 /// A [builder] for [`ServerConfig`] or [`ClientConfig`] values.
 ///
 /// To get one of these, call [`ServerConfig::builder()`] or [`ClientConfig::builder()`].
 ///
-/// To build a config, you must make at least three decisions (in order):
+/// To build a config, you must make at least two decisions (in order):
 ///
-/// - Which protocol primitives should be supported (cipher suites, key exchange groups, protocol versions)?
 /// - How should this client or server verify certificates provided by its peer?
 /// - What certificates should this client or server present to its peer?
 ///
 /// For settings besides these, see the fields of [`ServerConfig`] and [`ClientConfig`].
 ///
 /// The usual choice for protocol primitives is to call
-/// [`ConfigBuilder::with_safe_defaults`], which will choose rustls' defaults for cipher suites, key
-/// exchange groups and protocol versions:
+/// [`crate::ClientConfig::builder`]/[`ServerConfig::builder`] and [`ConfigBuilder::with_safe_default_protocol_versions`],
+/// which will use rustls' default cryptographic provider and default protocol versions.
 ///
 /// ```
 /// # #[cfg(feature = "ring")] {
 /// use rustls::{ClientConfig, ServerConfig};
 /// ClientConfig::builder()
-///     .with_safe_defaults()
+///     .with_safe_default_protocol_versions()
 /// //  ...
 /// # ;
 ///
 /// ServerConfig::builder()
-///     .with_safe_defaults()
+///     .with_safe_default_protocol_versions()
 /// //  ...
 /// # ;
 /// # }
 /// ```
 ///
-/// If you override the default for one protocol primitive (for instance supporting only TLS 1.3),
-/// you will need to explicitly specify configuration for all three. That configuration may simply
-/// be "use the default."
+/// You may also override the choice of protocol versions:
 ///
 /// ```no_run
 /// # #[cfg(feature = "ring")] {
 /// # use rustls::ServerConfig;
 /// ServerConfig::builder()
-///     .with_safe_default_cipher_suites()
-///     .with_safe_default_kx_groups()
 ///     .with_protocol_versions(&[&rustls::version::TLS13])
 ///     .unwrap()
 /// //  ...
@@ -87,7 +81,8 @@ use core::marker::PhantomData;
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::builder()
-///     .with_safe_defaults()
+///     .with_safe_default_protocol_versions()
+///     .unwrap()
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth();
 /// # }
@@ -114,7 +109,8 @@ use core::marker::PhantomData;
 /// #    pki_types::PrivatePkcs8KeyDer::from(vec![])
 /// # );
 /// ServerConfig::builder()
-///     .with_safe_defaults()
+///     .with_safe_default_protocol_versions()
+///     .unwrap()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
 ///     .expect("bad certificate/key");
@@ -127,8 +123,6 @@ use core::marker::PhantomData;
 /// configuration item is provided exactly once. This is tracked in the `State` type parameter,
 /// which can have these values:
 ///
-/// - [`WantsCipherSuites`]
-/// - [`WantsKxGroups`]
 /// - [`WantsVersions`]
 /// - [`WantsVerifier`]
 /// - [`WantsClientCert`]
@@ -144,9 +138,9 @@ use core::marker::PhantomData;
 /// mentioning some of these types.
 ///
 /// Additionally, ServerConfig and ClientConfig carry a private field containing a
-/// `&'static dyn `[`CryptoProvider`], from [`ClientConfig::builder_with_provider()`] or
+/// [`CryptoProvider`], from [`ClientConfig::builder_with_provider()`] or
 /// [`ServerConfig::builder_with_provider()`]. This determines which cryptographic backend
-/// is used. The default is [`RING`].
+/// is used. The default is [`ring::provider`].
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [typestate]: http://cliffle.com/blog/rust-typestate/
@@ -161,7 +155,7 @@ use core::marker::PhantomData;
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
 /// [`WantsClientCert`]: crate::client::WantsClientCert
 /// [`WantsServerCert`]: crate::server::WantsServerCert
-/// [`RING`]: crate::crypto::ring::RING
+/// [`ring::provider`]: crate::crypto::ring::default_provider
 /// [`DangerousClientConfigBuilder::with_custom_certificate_verifier`]: crate::client::danger::DangerousClientConfigBuilder::with_custom_certificate_verifier
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
@@ -183,118 +177,12 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
     }
 }
 
-/// Config builder state where the caller must supply cipher suites.
-///
-/// For more information, see the [`ConfigBuilder`] documentation.
-#[derive(Clone, Debug)]
-pub struct WantsCipherSuites(pub(crate) &'static dyn CryptoProvider);
-
-impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
-    /// Start side-specific config with defaults for underlying cryptography.
-    ///
-    /// If used, this will enable all safe supported cipher suites (`default_cipher_suites()` as specified by the
-    /// `CryptoProvider` type), all safe supported key exchange groups ([`CryptoProvider::default_kx_groups()`]) and all safe supported
-    /// protocol versions ([`DEFAULT_VERSIONS`]).
-    ///
-    /// These are safe defaults, useful for 99% of applications.
-    ///
-    /// [`DEFAULT_VERSIONS`]: versions::DEFAULT_VERSIONS
-    pub fn with_safe_defaults(self) -> ConfigBuilder<S, WantsVerifier> {
-        ConfigBuilder {
-            state: WantsVerifier {
-                cipher_suites: self
-                    .state
-                    .0
-                    .default_cipher_suites()
-                    .to_vec(),
-                kx_groups: self
-                    .state
-                    .0
-                    .default_kx_groups()
-                    .to_vec(),
-                provider: self.state.0,
-                versions: versions::EnabledVersions::new(versions::DEFAULT_VERSIONS),
-            },
-            side: self.side,
-        }
-    }
-
-    /// Choose a specific set of cipher suites.
-    ///
-    /// These can be different from the cipher suites implemented by the `CryptoProvider`.
-    /// Because the cipher suites provided by `ring` and `aws_lc_rs` have the same names,
-    /// make sure any `use` statements are importing from the provider that you want to use.
-    pub fn with_cipher_suites(
-        self,
-        cipher_suites: &[SupportedCipherSuite],
-    ) -> ConfigBuilder<S, WantsKxGroups> {
-        ConfigBuilder {
-            state: WantsKxGroups {
-                cipher_suites: cipher_suites.to_vec(),
-                provider: self.state.0,
-            },
-            side: self.side,
-        }
-    }
-
-    /// Choose the default set of cipher suites as specified by the `CryptoProvider`.
-    ///
-    /// The intention is that this default provides only high-quality suites: there is no need
-    /// to filter out low-, export- or NULL-strength cipher suites: rustls does not
-    /// implement these.  But the precise details are controlled by what is implemented by the
-    /// `CryptoProvider`.
-    pub fn with_safe_default_cipher_suites(self) -> ConfigBuilder<S, WantsKxGroups> {
-        let default = self.state.0.default_cipher_suites();
-        self.with_cipher_suites(default)
-    }
-}
-
-/// Config builder state where the caller must supply key exchange groups.
-///
-/// For more information, see the [`ConfigBuilder`] documentation.
-#[derive(Clone, Debug)]
-pub struct WantsKxGroups {
-    cipher_suites: Vec<SupportedCipherSuite>,
-    provider: &'static dyn CryptoProvider,
-}
-
-impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
-    /// Choose a specific set of key exchange groups.
-    ///
-    /// These can be different from the key exchange groups implemented by the `CryptoProvider`.
-    /// Because the cipher suites provided by `ring` and `aws_lc_rs` have the same names,
-    /// make sure any `use` statements are importing from the provider that you want to use.
-    pub fn with_kx_groups(
-        self,
-        kx_groups: &[&'static dyn SupportedKxGroup],
-    ) -> ConfigBuilder<S, WantsVersions> {
-        ConfigBuilder {
-            state: WantsVersions {
-                cipher_suites: self.state.cipher_suites,
-                kx_groups: kx_groups.to_vec(),
-                provider: self.state.provider,
-            },
-            side: self.side,
-        }
-    }
-
-    /// Choose the default set of key exchange groups ([`CryptoProvider::default_kx_groups`]).
-    ///
-    /// This is a safe default: rustls doesn't implement any poor-quality groups.
-    pub fn with_safe_default_kx_groups(self) -> ConfigBuilder<S, WantsVersions> {
-        let default = self.state.provider.default_kx_groups();
-        self.with_kx_groups(default)
-    }
-}
-
 /// Config builder state where the caller must supply TLS protocol versions.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsVersions {
-    cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static dyn SupportedKxGroup>,
-    provider: &'static dyn CryptoProvider,
+    pub(crate) provider: Arc<CryptoProvider>,
 }
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
@@ -311,7 +199,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
         versions: &[&'static versions::SupportedProtocolVersion],
     ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
         let mut any_usable_suite = false;
-        for suite in &self.state.cipher_suites {
+        for suite in &self.state.provider.cipher_suites {
             if versions.contains(&suite.version()) {
                 any_usable_suite = true;
                 break;
@@ -322,14 +210,12 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             return Err(Error::General("no usable cipher suites configured".into()));
         }
 
-        if self.state.kx_groups.is_empty() {
+        if self.state.provider.kx_groups.is_empty() {
             return Err(Error::General("no kx groups configured".into()));
         }
 
         Ok(ConfigBuilder {
             state: WantsVerifier {
-                cipher_suites: self.state.cipher_suites,
-                kx_groups: self.state.kx_groups,
                 provider: self.state.provider,
                 versions: versions::EnabledVersions::new(versions),
             },
@@ -343,9 +229,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsVerifier {
-    pub(crate) cipher_suites: Vec<SupportedCipherSuite>,
-    pub(crate) kx_groups: Vec<&'static dyn SupportedKxGroup>,
-    pub(crate) provider: &'static dyn CryptoProvider,
+    pub(crate) provider: Arc<CryptoProvider>,
     pub(crate) versions: versions::EnabledVersions,
 }
 

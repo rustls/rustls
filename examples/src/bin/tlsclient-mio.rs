@@ -8,6 +8,7 @@ use mio::net::TcpStream;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use serde::Deserialize;
 
+use rustls::crypto::CryptoProvider;
 use rustls::RootCertStore;
 
 const CLIENT: mio::Token = mio::Token(0);
@@ -340,7 +341,7 @@ mod danger {
                 message,
                 cert,
                 dss,
-                &rustls::crypto::ring::RING.signature_verification_algorithms(),
+                &rustls::crypto::ring::default_provider().signature_verification_algorithms,
             )
         }
 
@@ -354,13 +355,13 @@ mod danger {
                 message,
                 cert,
                 dss,
-                &rustls::crypto::ring::RING.signature_verification_algorithms(),
+                &rustls::crypto::ring::default_provider().signature_verification_algorithms,
             )
         }
 
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            rustls::crypto::ring::RING
-                .signature_verification_algorithms()
+            rustls::crypto::ring::default_provider()
+                .signature_verification_algorithms
                 .supported_schemes()
         }
     }
@@ -398,12 +399,16 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         rustls::DEFAULT_VERSIONS.to_vec()
     };
 
-    let config = rustls::ClientConfig::builder()
-        .with_cipher_suites(&suites)
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(&versions)
-        .expect("inconsistent cipher-suite/versions selected")
-        .with_root_certificates(root_store);
+    let config = rustls::ClientConfig::builder_with_provider(
+        CryptoProvider {
+            cipher_suites: suites,
+            ..rustls::crypto::ring::default_provider()
+        }
+        .into(),
+    )
+    .with_protocol_versions(&versions)
+    .expect("inconsistent cipher-suite/versions selected")
+    .with_root_certificates(root_store);
 
     let mut config = match (&args.flag_auth_key, &args.flag_auth_certs) {
         (Some(key_file), Some(certs_file)) => {

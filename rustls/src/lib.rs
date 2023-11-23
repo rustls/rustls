@@ -129,7 +129,8 @@
 //! # #[cfg(feature = "ring")] {
 //! # let root_store: rustls::RootCertStore = panic!();
 //! let config = rustls::ClientConfig::builder()
-//!     .with_safe_defaults()
+//!     .with_safe_default_protocol_versions()
+//!     .unwrap()
 //!     .with_root_certificates(root_store)
 //!     .with_no_client_auth();
 //! # }
@@ -150,7 +151,8 @@
 //! #      .cloned()
 //! # );
 //! # let config = rustls::ClientConfig::builder()
-//! #     .with_safe_defaults()
+//! #     .with_safe_default_protocol_versions()
+//! #     .unwrap()
 //! #     .with_root_certificates(root_store)
 //! #     .with_no_client_auth();
 //! let rc_config = Arc::new(config);
@@ -260,14 +262,8 @@
 //!
 //! - `aws_lc_rs`: this makes the rustls crate depend on the aws-lc-rs crate,
 //!   which can be used for cryptography as an alternative to *ring*.
-//!   Use `rustls::crypto::aws_lc_rs::AWS_LC_RS` as a `CryptoProvider` when making a
-//!   `ClientConfig` or `ServerConfig` to use aws-lc-rs -- eg:
-//!
-//!   ```
-//!   # #[cfg(feature = "aws_lc_rs")] {
-//!   rustls::ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::AWS_LC_RS);
-//!   # }
-//!   ```
+//!   Use `rustls::crypto::aws_lc_rs::default_provider()` as a `CryptoProvider`
+//!   when making a `ClientConfig` or `ServerConfig` to use aws-lc-rs
 //!
 //!   Note that aws-lc-rs has additional build-time dependencies like cmake.
 //!   See [the documentation](https://aws.github.io/aws-lc-rs/requirements/index.html) for details.
@@ -424,14 +420,12 @@ pub mod internal {
 // Have a (non-public) "test provider" mod which supplies
 // tests that need part of a *ring*-compatible provider module.
 #[cfg(all(any(test, bench), not(feature = "ring"), feature = "aws_lc_rs"))]
-use crate::crypto::{aws_lc_rs as test_provider, aws_lc_rs::AWS_LC_RS as TEST_PROVIDER};
+use crate::crypto::aws_lc_rs as test_provider;
 #[cfg(all(any(test, bench), feature = "ring"))]
-use crate::crypto::{ring as test_provider, ring::RING as TEST_PROVIDER};
+use crate::crypto::ring as test_provider;
 
 // The public interface is:
-pub use crate::builder::{
-    ConfigBuilder, ConfigSide, WantsCipherSuites, WantsKxGroups, WantsVerifier, WantsVersions,
-};
+pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier, WantsVersions};
 pub use crate::common_state::{CommonState, IoState, Side};
 pub use crate::conn::{Connection, ConnectionCommon, Reader, SideData, Writer};
 pub use crate::enums::{

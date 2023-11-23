@@ -1,4 +1,4 @@
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -29,33 +29,19 @@ pub(crate) mod tls13;
 /// A `CryptoProvider` backed by the [*ring*] crate.
 ///
 /// [*ring*]: https://github.com/briansmith/ring
-pub static RING: &dyn CryptoProvider = &Ring;
+pub fn default_provider() -> CryptoProvider {
+    CryptoProvider {
+        cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
+        kx_groups: ALL_KX_GROUPS.to_vec(),
+        signature_verification_algorithms: SUPPORTED_SIG_ALGS,
+        secure_random: &Ring,
+        key_provider: &Ring,
+    }
+}
 
 /// Default crypto provider.
 #[derive(Debug)]
 struct Ring;
-
-impl CryptoProvider for Ring {
-    fn default_cipher_suites(&self) -> &'static [SupportedCipherSuite] {
-        DEFAULT_CIPHER_SUITES
-    }
-
-    fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup] {
-        ALL_KX_GROUPS
-    }
-
-    fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
-        SUPPORTED_SIG_ALGS
-    }
-
-    fn secure_random(&self) -> &'static dyn SecureRandom {
-        &Self
-    }
-
-    fn key_provider(&self) -> &'static dyn KeyProvider {
-        &Self
-    }
-}
 
 impl SecureRandom for Ring {
     fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {

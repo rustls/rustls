@@ -242,13 +242,13 @@ impl WebPkiClientVerifier {
     /// will be verified using the trust anchors found in the provided `roots`. If you
     /// wish to disable client authentication use [WebPkiClientVerifier::no_client_auth()] instead.
     ///
-    /// The cryptography used comes from the default [`CryptoProvider`]: [`crate::crypto::ring::RING`].
+    /// The cryptography used comes from the default [`CryptoProvider`]: [`crate::crypto::ring::default_provider`].
     /// Use [`Self::builder_with_provider`] if you wish to customize this.
     ///
     /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
     #[cfg(feature = "ring")]
     pub fn builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
-        Self::builder_with_provider(roots, crate::crypto::ring::RING)
+        Self::builder_with_provider(roots, crate::crypto::ring::default_provider().into())
     }
 
     /// Create a builder for the `webpki` client certificate verifier configuration using
@@ -263,9 +263,9 @@ impl WebPkiClientVerifier {
     /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
     pub fn builder_with_provider(
         roots: Arc<RootCertStore>,
-        provider: &'static dyn CryptoProvider,
+        provider: Arc<CryptoProvider>,
     ) -> ClientCertVerifierBuilder {
-        ClientCertVerifierBuilder::new(roots, provider.signature_verification_algorithms())
+        ClientCertVerifierBuilder::new(roots, provider.signature_verification_algorithms)
     }
 
     /// Create a new `WebPkiClientVerifier` that disables client authentication. The server will

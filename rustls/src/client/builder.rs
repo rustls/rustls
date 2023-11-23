@@ -1,11 +1,10 @@
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::handy;
 use crate::client::{ClientConfig, ResolvesClientCert};
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
-use crate::suites::SupportedCipherSuite;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{verify, versions};
 
@@ -35,12 +34,12 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        let sig_algs = self
+        let algorithms = self
             .state
             .provider
-            .signature_verification_algorithms();
+            .signature_verification_algorithms;
         self.with_webpki_verifier(
-            WebPkiServerVerifier::new_without_revocation(root_store, sig_algs).into(),
+            WebPkiServerVerifier::new_without_revocation(root_store, algorithms).into(),
         )
     }
 
@@ -54,8 +53,6 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
-                cipher_suites: self.state.cipher_suites,
-                kx_groups: self.state.kx_groups,
                 provider: self.state.provider,
                 versions: self.state.versions,
                 verifier,
@@ -94,8 +91,6 @@ pub(super) mod danger {
         ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
             ConfigBuilder {
                 state: WantsClientCert {
-                    cipher_suites: self.cfg.state.cipher_suites,
-                    kx_groups: self.cfg.state.kx_groups,
                     provider: self.cfg.state.provider,
                     versions: self.cfg.state.versions,
                     verifier,
@@ -112,9 +107,7 @@ pub(super) mod danger {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
 pub struct WantsClientCert {
-    cipher_suites: Vec<SupportedCipherSuite>,
-    kx_groups: Vec<&'static dyn SupportedKxGroup>,
-    provider: &'static dyn CryptoProvider,
+    provider: Arc<CryptoProvider>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
 }
@@ -137,7 +130,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         let private_key = self
             .state
             .provider
-            .key_provider()
+            .key_provider
             .load_private_key(key_der)?;
         let resolver =
             handy::AlwaysResolvesClientCert::new(private_key, CertificateChain(cert_chain))?;
@@ -155,8 +148,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> ClientConfig {
         ClientConfig {
-            cipher_suites: self.state.cipher_suites,
-            kx_groups: self.state.kx_groups,
             provider: self.state.provider,
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),

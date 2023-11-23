@@ -213,6 +213,7 @@ pub(super) fn initial_key_share(
         .and_then(|group_name| config.find_kx_group(group_name))
         .unwrap_or_else(|| {
             config
+                .provider
                 .kx_groups
                 .iter()
                 .copied()

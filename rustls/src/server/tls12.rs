@@ -179,6 +179,7 @@ mod client_hello {
 
             let group = self
                 .config
+                .provider
                 .kx_groups
                 .iter()
                 .find(|skxg| groups_ext.contains(&skxg.name()))
@@ -209,7 +210,7 @@ mod client_hello {
             if !self.config.session_storage.can_cache() {
                 self.session_id = SessionId::empty();
             } else if self.session_id.is_empty() && !ticket_received {
-                self.session_id = SessionId::random(self.config.provider.secure_random())?;
+                self.session_id = SessionId::random(self.config.provider.secure_random)?;
             }
 
             self.send_ticket = emit_server_hello(

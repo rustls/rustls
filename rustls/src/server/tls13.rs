@@ -202,6 +202,7 @@ mod client_hello {
             // choose a share that we support
             let chosen_share_and_kxg = self
                 .config
+                .provider
                 .kx_groups
                 .iter()
                 .find_map(|group| {
@@ -218,6 +219,7 @@ mod client_hello {
                     // send a HelloRetryRequest.
                     let retry_group_maybe = self
                         .config
+                        .provider
                         .kx_groups
                         .iter()
                         .find(|group| groups_ext.contains(&group.name()))
@@ -1085,7 +1087,7 @@ impl ExpectFinished {
         key_schedule: &KeyScheduleTraffic,
         config: &ServerConfig,
     ) -> Result<(), Error> {
-        let secure_random = config.provider.secure_random();
+        let secure_random = config.provider.secure_random;
         let nonce = rand::random_vec(secure_random, 32)?;
         let age_add = rand::random_u32(secure_random)?;
         let plain = get_server_session_value(
