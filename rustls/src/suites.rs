@@ -42,6 +42,9 @@ pub struct CipherSuiteCommon {
 }
 
 /// A cipher suite supported by rustls.
+///
+/// This type carries both configuration and implementation. Compare with
+/// [`CipherSuite`], which carries solely a cipher suite identifier.
 #[derive(Clone, Copy, PartialEq)]
 pub enum SupportedCipherSuite {
     /// A TLS 1.2 cipher suite

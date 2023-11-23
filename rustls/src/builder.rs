@@ -220,6 +220,10 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsCipherSuites> {
     }
 
     /// Choose a specific set of cipher suites.
+    ///
+    /// These can be different from the cipher suites implemented by the `CryptoProvider`.
+    /// Because the cipher suites provided by `ring` and `aws_lc_rs` have the same names,
+    /// make sure any `use` statements are importing from the provider that you want to use.
     pub fn with_cipher_suites(
         self,
         cipher_suites: &[SupportedCipherSuite],
@@ -256,6 +260,10 @@ pub struct WantsKxGroups {
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsKxGroups> {
     /// Choose a specific set of key exchange groups.
+    ///
+    /// These can be different from the key exchange groups implemented by the `CryptoProvider`.
+    /// Because the cipher suites provided by `ring` and `aws_lc_rs` have the same names,
+    /// make sure any `use` statements are importing from the provider that you want to use.
     pub fn with_kx_groups(
         self,
         kx_groups: &[&'static dyn SupportedKxGroup],
