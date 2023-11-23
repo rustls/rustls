@@ -575,13 +575,14 @@ const READ_SIZE: usize = 4096;
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::cipher::PlainMessage;
     use crate::msgs::message::{Message, OpaqueMessage};
     use crate::record_layer::RecordLayer;
     use crate::{ContentType, Error, InvalidMessage, ProtocolVersion};
 
     use std::io;
 
-    use super::{Deframed, DeframerBuffer};
+    use super::DeframerBuffer;
 
     const FIRST_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.1.bin");
     const SECOND_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.2.bin");
@@ -626,19 +627,42 @@ mod tests {
             self.read(&mut rd)
         }
 
-        fn pop(
+        fn pop_error(
             &mut self,
             record_layer: &mut RecordLayer,
             negotiated_version: Option<ProtocolVersion>,
-        ) -> Result<Option<Deframed>, Error> {
+        ) -> Error {
             let mut to_discard = 0;
-            let res = self.inner.pop(
-                record_layer,
-                negotiated_version,
-                &mut self.buffer.borrow(&mut to_discard),
-            );
+            let err = self
+                .inner
+                .pop(
+                    record_layer,
+                    negotiated_version,
+                    &mut self.buffer.borrow(&mut to_discard),
+                )
+                .unwrap_err();
             self.buffer.discard(to_discard);
-            res
+            err
+        }
+
+        fn pop_message(
+            &mut self,
+            record_layer: &mut RecordLayer,
+            negotiated_version: Option<ProtocolVersion>,
+        ) -> PlainMessage {
+            let mut to_discard = 0;
+            let m = self
+                .inner
+                .pop(
+                    record_layer,
+                    negotiated_version,
+                    &mut self.buffer.borrow(&mut to_discard),
+                )
+                .unwrap()
+                .unwrap()
+                .message;
+            self.buffer.discard(to_discard);
+            m
         }
 
         fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
@@ -698,21 +722,13 @@ mod tests {
     }
 
     fn pop_first(d: &mut BufferedDeframer, rl: &mut RecordLayer) {
-        let m = d
-            .pop(rl, None)
-            .unwrap()
-            .unwrap()
-            .message;
+        let m = d.pop_message(rl, None);
         assert_eq!(m.typ, ContentType::Handshake);
         Message::try_from(m).unwrap();
     }
 
     fn pop_second(d: &mut BufferedDeframer, rl: &mut RecordLayer) {
-        let m = d
-            .pop(rl, None)
-            .unwrap()
-            .unwrap()
-            .message;
+        let m = d.pop_message(rl, None);
         assert_eq!(m.typ, ContentType::Alert);
         Message::try_from(m).unwrap();
     }
@@ -829,7 +845,7 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl, None).unwrap_err(),
+            d.pop_error(&mut rl, None),
             Error::InvalidMessage(InvalidMessage::InvalidContentType)
         );
     }
@@ -844,7 +860,7 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl, None).unwrap_err(),
+            d.pop_error(&mut rl, None),
             Error::InvalidMessage(InvalidMessage::UnknownProtocolVersion)
         );
     }
@@ -859,7 +875,7 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl, None).unwrap_err(),
+            d.pop_error(&mut rl, None),
             Error::InvalidMessage(InvalidMessage::MessageTooLarge)
         );
     }
@@ -873,11 +889,7 @@ mod tests {
         );
 
         let mut rl = RecordLayer::new();
-        let m = d
-            .pop(&mut rl, None)
-            .unwrap()
-            .unwrap()
-            .message;
+        let m = d.pop_message(&mut rl, None);
         assert_eq!(m.typ, ContentType::ApplicationData);
         assert_eq!(m.payload.0.len(), 0);
         assert!(!d.has_pending());
@@ -894,12 +906,12 @@ mod tests {
 
         let mut rl = RecordLayer::new();
         assert_eq!(
-            d.pop(&mut rl, None).unwrap_err(),
+            d.pop_error(&mut rl, None),
             Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
         );
         // CorruptMessage has been fused
         assert_eq!(
-            d.pop(&mut rl, None).unwrap_err(),
+            d.pop_error(&mut rl, None),
             Error::InvalidMessage(InvalidMessage::InvalidEmptyPayload)
         );
     }
