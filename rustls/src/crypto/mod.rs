@@ -57,6 +57,9 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///   which is optional).  This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 ///   crate.
 ///
+/// This trait provides defaults. Everything in it, other than randomness, can be overridden at
+/// runtime by methods on [`ConfigBuilder`](crate::ConfigBuilder).
+///
 /// # Using a specific `CryptoProvider`
 ///
 /// Supply the provider when constructing your [`crate::ClientConfig`] or [`crate::ServerConfig`]:
@@ -164,7 +167,10 @@ pub trait CryptoProvider: Send + Sync + Debug + 'static {
     /// [`crate::ConfigBuilder::with_safe_default_cipher_suites()`].
     ///
     /// Other (non-default) cipher suites can be provided separately and configured
-    /// by passing them to [`crate::ConfigBuilder::with_cipher_suites()`]
+    /// by passing them to [`crate::ConfigBuilder::with_cipher_suites()`]. That
+    /// includes cipher suites implemented by a different `CryptoProvider`.
+    ///
+    /// The `SupportedCipherSuite` type carries both configuration and implementation.
     fn default_cipher_suites(&self) -> &'static [suites::SupportedCipherSuite];
 
     /// Return a safe set of supported key exchange groups to be used as the defaults.
@@ -173,7 +179,10 @@ pub trait CryptoProvider: Send + Sync + Debug + 'static {
     /// [`crate::ConfigBuilder::with_safe_default_kx_groups()`].
     ///
     /// Other (non-default) key exchange groups can be provided separately and configured
-    /// by passing them to [`crate::ConfigBuilder::with_kx_groups()`].
+    /// by passing them to [`crate::ConfigBuilder::with_kx_groups()`]. That includes
+    /// key exchange groups implemented by a different `CryptoProvider`.
+    ///
+    /// The `SupportedKxGroup` type carries both configuration and implementation.
     fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup];
 
     /// Decode and validate a private signing key from `key_der`.
@@ -200,8 +209,11 @@ pub trait CryptoProvider: Send + Sync + Debug + 'static {
 
 /// A supported key exchange group.
 ///
-/// This has a TLS-level name expressed using the [`NamedGroup`] enum, and
+/// This type carries both configuration and implementation. Specifically,
+/// it has a TLS-level name expressed using the [`NamedGroup`] enum, and
 /// a function which produces a [`ActiveKeyExchange`].
+///
+/// Compare with [`NamedGroup`], which carries solely a protocol identifier.
 pub trait SupportedKxGroup: Send + Sync + Debug {
     /// Start a key exchange.
     ///
