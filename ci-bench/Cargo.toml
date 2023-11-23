@@ -16,4 +16,4 @@ itertools = "0.12"
 pki-types = { package = "rustls-pki-types", version = "0.2" }
 rayon = "1.7.0"
 rustls = { path = "../rustls", features = ["ring", "aws_lc_rs"] }
-rustls-pemfile = "2.0.0-alpha.1"
+rustls-pemfile = "=2.0.0-alpha.2"
