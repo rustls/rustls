@@ -402,18 +402,6 @@ impl fmt::Debug for ServerName {
     }
 }
 
-impl ServerName {
-    /// Return the name that should go in the SNI extension.
-    /// If [`None`] is returned, the SNI extension is not included
-    /// in the handshake.
-    pub(crate) fn for_sni(&self) -> Option<DnsNameRef> {
-        match self {
-            Self::DnsName(dns_name) => Some(dns_name.borrow()),
-            Self::IpAddress(_) => None,
-        }
-    }
-}
-
 /// Attempt to make a ServerName from a string by parsing
 /// it as a DNS name.
 impl TryFrom<&str> for ServerName {

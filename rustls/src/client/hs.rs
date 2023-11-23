@@ -232,8 +232,9 @@ fn emit_client_hello_for_retry(
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
 
-    if let (Some(sni_name), true) = (input.server_name.for_sni(), config.enable_sni) {
-        exts.push(ClientExtension::make_sni(sni_name));
+    if let (ServerName::DnsName(sni_name), true) = (&input.server_name, config.enable_sni) {
+        // We only want to send the SNI extension if the server name contains a DNS name.
+        exts.push(ClientExtension::make_sni(sni_name.borrow()));
     }
 
     if let Some(key_share) = &key_share {
