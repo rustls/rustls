@@ -126,7 +126,7 @@ impl OpaqueMessage {
         let mut sub = r
             .sub(len as usize)
             .map_err(|_| MessageError::TooShortForLength)?;
-        let payload = Payload::read(&mut sub);
+        let payload = Payload::read(&mut sub).into_owned();
 
         Ok(Self {
             typ,

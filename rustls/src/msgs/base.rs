@@ -18,7 +18,7 @@ pub enum Payload<'a> {
     Owned(Vec<u8>),
 }
 
-impl<'a> Codec<'a> for Payload<'static> {
+impl<'a> Codec<'a> for Payload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(self.bytes());
     }
@@ -36,21 +36,25 @@ impl<'a> Payload<'a> {
         }
     }
 
+    pub fn into_owned(self) -> Payload<'static> {
+        Payload::Owned(self.into_vec())
+    }
+
     pub fn into_vec(self) -> Vec<u8> {
         match self {
             Self::Borrowed(bytes) => bytes.to_vec(),
             Self::Owned(bytes) => bytes,
         }
     }
+
+    pub fn read(r: &mut Reader<'a>) -> Self {
+        Self::Borrowed(r.rest())
+    }
 }
 
 impl Payload<'static> {
     pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
         Self::Owned(bytes.into())
-    }
-
-    pub fn read(r: &mut Reader) -> Self {
-        Self::Owned(r.rest().to_vec())
     }
 
     pub fn empty() -> Self {
