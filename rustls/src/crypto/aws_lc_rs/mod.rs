@@ -1,4 +1,4 @@
-use crate::crypto::{CryptoProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -49,14 +49,6 @@ impl CryptoProvider for AwsLcRs {
         ALL_KX_GROUPS
     }
 
-    fn load_private_key(
-        &self,
-        key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn SigningKey>, Error> {
-        sign::any_supported_type(&key_der)
-            .map_err(|_| Error::General(String::from("invalid private key")))
-    }
-
     fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
         SUPPORTED_SIG_ALGS
     }
@@ -73,6 +65,16 @@ impl SecureRandom for AwsLcRs {
         ring_like::rand::SystemRandom::new()
             .fill(buf)
             .map_err(|_| GetRandomFailed)
+    }
+}
+
+impl KeyProvider for AwsLcRs {
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn SigningKey>, Error> {
+        sign::any_supported_type(&key_der)
+            .map_err(|_| Error::General(String::from("invalid private key")))
     }
 }
 

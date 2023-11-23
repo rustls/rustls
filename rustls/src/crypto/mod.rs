@@ -113,10 +113,6 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///         RING.signature_verification_algorithms()
 ///     }
 ///
-///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
-///         fictious_hsm_api::load_private_key(key_der)
-///     }
-///
 ///     fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
 ///        &HsmKeyLoader
 ///     }
@@ -125,6 +121,12 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// impl rustls::crypto::SecureRandom for HsmKeyLoader {
 ///     fn fill(&self, buf: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
 ///         RING.secure_random().fill(buf)
+///     }
+/// }
+///
+/// impl rustls::crypto::KeyProvider for HsmKeyLoader {
+///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
+///          fictious_hsm_api::load_private_key(key_der)
 ///     }
 /// }
 /// # }
@@ -158,7 +160,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// [provider-example/]: https://github.com/rustls/rustls/tree/main/provider-example/
 /// [rust-crypto]: https://github.com/rustcrypto
 /// [dalek-cryptography]: https://github.com/dalek-cryptography
-pub trait CryptoProvider: Send + Sync + Debug + 'static {
+pub trait CryptoProvider: KeyProvider + Send + Sync + Debug + 'static {
     /// Provide a safe set of cipher suites that can be used as the defaults.
     ///
     /// This is used by [`crate::ConfigBuilder::with_safe_defaults()`] and
@@ -182,18 +184,6 @@ pub trait CryptoProvider: Send + Sync + Debug + 'static {
     ///
     /// The `SupportedKxGroup` type carries both configuration and implementation.
     fn default_kx_groups(&self) -> &'static [&'static dyn SupportedKxGroup];
-
-    /// Decode and validate a private signing key from `key_der`.
-    ///
-    /// This is used by [`crate::ConfigBuilder::with_client_auth_cert()`], [`crate::ConfigBuilder::with_single_cert()`],
-    /// and [`crate::ConfigBuilder::with_single_cert_with_ocsp()`].  The key types and formats supported by this
-    /// function directly defines the key types and formats supported in those APIs.
-    ///
-    /// Return an error if the key type encoding is not supported, or if the key fails validation.
-    fn load_private_key(
-        &self,
-        key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn SigningKey>, Error>;
 
     /// Return the signature verification algorithms for use with webpki.
     ///
@@ -221,6 +211,21 @@ pub trait SecureRandom: Send + Sync + Debug {
     /// an ephemeral key exchange key, but this is not included in the interface with
     /// rustls: it is assumed that the cryptography library provides for this itself.
     fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed>;
+}
+
+/// A mechanism for loading private [SigningKey]s from [PrivateKeyDer].
+pub trait KeyProvider: Send + Sync + Debug {
+    /// Decode and validate a private signing key from `key_der`.
+    ///
+    /// This is used by [`crate::ConfigBuilder::with_client_auth_cert()`], [`crate::ConfigBuilder::with_single_cert()`],
+    /// and [`crate::ConfigBuilder::with_single_cert_with_ocsp()`].  The key types and formats supported by this
+    /// function directly defines the key types and formats supported in those APIs.
+    ///
+    /// Return an error if the key type encoding is not supported, or if the key fails validation.
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn SigningKey>, Error>;
 }
 
 /// A supported key exchange group.

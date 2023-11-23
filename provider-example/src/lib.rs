@@ -26,15 +26,6 @@ impl rustls::crypto::CryptoProvider for Provider {
         kx::ALL_KX_GROUPS
     }
 
-    fn load_private_key(
-        &self,
-        key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
-        let key = sign::EcdsaSigningKeyP256::try_from(key_der)
-            .map_err(|err| rustls::OtherError(Arc::new(err)))?;
-        Ok(Arc::new(key))
-    }
-
     fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
         verify::ALGORITHMS
     }
@@ -50,6 +41,17 @@ impl rustls::crypto::SecureRandom for Provider {
         rand_core::OsRng
             .try_fill_bytes(bytes)
             .map_err(|_| rustls::crypto::GetRandomFailed)
+    }
+}
+
+impl rustls::crypto::KeyProvider for Provider {
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
+        let key = sign::EcdsaSigningKeyP256::try_from(key_der)
+            .map_err(|err| rustls::OtherError(Arc::new(err)))?;
+        Ok(Arc::new(key))
     }
 }
 

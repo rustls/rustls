@@ -1,4 +1,4 @@
-use crate::crypto::{CryptoProvider, SecureRandom, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -44,14 +44,6 @@ impl CryptoProvider for Ring {
         ALL_KX_GROUPS
     }
 
-    fn load_private_key(
-        &self,
-        key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn SigningKey>, Error> {
-        sign::any_supported_type(&key_der)
-            .map_err(|_| Error::General("invalid private key".to_owned()))
-    }
-
     fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
         SUPPORTED_SIG_ALGS
     }
@@ -68,6 +60,16 @@ impl SecureRandom for Ring {
         ring_like::rand::SystemRandom::new()
             .fill(buf)
             .map_err(|_| GetRandomFailed)
+    }
+}
+
+impl KeyProvider for Ring {
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn SigningKey>, Error> {
+        sign::any_supported_type(&key_der)
+            .map_err(|_| Error::General("invalid private key".to_owned()))
     }
 }
 

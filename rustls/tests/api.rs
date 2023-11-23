@@ -5521,13 +5521,6 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
         self.parent.default_kx_groups()
     }
 
-    fn load_private_key(
-        &self,
-        key_der: PrivateKeyDer<'static>,
-    ) -> Result<Arc<dyn rustls::sign::SigningKey>, Error> {
-        self.parent.load_private_key(key_der)
-    }
-
     fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
         self.parent
             .signature_verification_algorithms()
@@ -5562,6 +5555,15 @@ impl rustls::crypto::SecureRandom for FaultyRandom {
         output.copy_from_slice(fixed_output);
         *queue = &queue[output.len()..];
         Ok(())
+    }
+}
+
+impl rustls::crypto::KeyProvider for FaultyRandomProvider {
+    fn load_private_key(
+        &self,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<Arc<dyn sign::SigningKey>, Error> {
+        self.parent.load_private_key(key_der)
     }
 }
 
