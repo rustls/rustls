@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use alloc::{fmt, format};
 
 use pki_types::{CertificateDer, TrustAnchor};
 use webpki::anchor_from_trusted_cert;
@@ -10,7 +11,7 @@ use crate::{DistinguishedName, Error};
 
 /// A container for root certificates able to provide a root-of-trust
 /// for connection authentication.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RootCertStore {
     /// The list of roots.
     pub roots: Vec<TrustAnchor<'static>>,
@@ -106,4 +107,31 @@ impl Extend<TrustAnchor<'static>> for RootCertStore {
     fn extend<T: IntoIterator<Item = TrustAnchor<'static>>>(&mut self, iter: T) {
         self.roots.extend(iter);
     }
+}
+
+impl fmt::Debug for RootCertStore {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RootCertStore")
+            .field("roots", &format!("({} roots)", &self.roots.len()))
+            .finish()
+    }
+}
+
+#[test]
+fn root_cert_store_debug() {
+    use core::iter;
+    use pki_types::Der;
+
+    let mut store = RootCertStore::empty();
+    let ta = TrustAnchor {
+        subject: Der::from_slice(&[]),
+        subject_public_key_info: Der::from_slice(&[]),
+        name_constraints: None,
+    };
+    store.extend(iter::repeat(ta).take(138));
+
+    assert_eq!(
+        format!("{:?}", store),
+        "RootCertStore { roots: \"(138 roots)\" }"
+    );
 }
