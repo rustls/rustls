@@ -22,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
     let mut rl = RecordLayer::new();
     let mut to_discard = 0;
     while let Ok(Some(decrypted)) = dfm.pop(&mut rl, None, &mut buf.borrow(&mut to_discard)) {
-        Message::try_from(decrypted.message).ok();
+        Message::try_from(decrypted.message.into_owned()).ok();
     }
     buf.discard(to_discard);
 });

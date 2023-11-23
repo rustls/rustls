@@ -427,7 +427,7 @@ impl<'a> BorrowedPlainMessage<'a> {
         }
     }
 
-    pub(crate) fn into_owned(self) -> PlainMessage {
+    pub fn into_owned(self) -> PlainMessage {
         let Self {
             typ,
             version,

@@ -684,7 +684,7 @@ impl<Data> ConnectionCore<Data> {
                 }
 
                 self.common_state.aligned_handshake = aligned;
-                Ok(Some(message))
+                Ok(Some(message.into_owned()))
             }
             Ok(None) => Ok(None),
             Err(err @ Error::InvalidMessage(_)) => {
