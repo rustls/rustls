@@ -660,7 +660,7 @@ impl Acceptor {
 /// Contains the state required to resume the connection through [`Accepted::into_connection()`].
 pub struct Accepted {
     connection: ConnectionCommon<ServerConnectionData>,
-    message: Message,
+    message: Message<'static>,
     sig_schemes: Vec<SignatureScheme>,
 }
 
@@ -703,7 +703,7 @@ impl Accepted {
         })
     }
 
-    fn client_hello_payload(message: &Message) -> &ClientHelloPayload {
+    fn client_hello_payload<'a>(message: &'a Message) -> &'a ClientHelloPayload {
         match &message.payload {
             crate::msgs::message::MessagePayload::Handshake { parsed, .. } => match &parsed.payload
             {
