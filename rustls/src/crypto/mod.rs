@@ -102,7 +102,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 /// impl rustls::crypto::CryptoProvider for HsmKeyLoader {
 ///     fn fill_random(&self, buf: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
-///         RING.fill_random(buf)
+///         RING.fill(buf)
 ///     }
 ///
 ///     fn default_cipher_suites(&self) -> &'static [rustls::SupportedCipherSuite] {
@@ -128,7 +128,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 /// The elements are documented separately:
 ///
-/// - **Random** - see [`crate::crypto::CryptoProvider::fill_random()`].
+/// - **Random** - see [`crate::crypto::CryptoProvider::fill()`].
 /// - **Cipher suites** - see [`crate::SupportedCipherSuite`], [`crate::Tls12CipherSuite`], and
 ///   [`crate::Tls13CipherSuite`].
 /// - **Key exchange groups** - see [`crate::crypto::SupportedKxGroup`].
@@ -152,19 +152,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// [provider-example/]: https://github.com/rustls/rustls/tree/main/provider-example/
 /// [rust-crypto]: https://github.com/rustcrypto
 /// [dalek-cryptography]: https://github.com/dalek-cryptography
-pub trait CryptoProvider: Send + Sync + Debug + 'static {
-    /// Fill the given buffer with random bytes.
-    ///
-    /// The bytes must be sourced from a cryptographically secure random number
-    /// generator seeded with good quality, secret entropy.
-    ///
-    /// This is used for all randomness required by rustls, but not necessarily
-    /// randomness required by the underlying cryptography library.  For example:
-    /// [`crate::crypto::SupportedKxGroup::start()`] requires random material to generate
-    /// an ephemeral key exchange key, but this is not included in the interface with
-    /// rustls: it is assumed that the cryptography library provides for this itself.
-    fn fill_random(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed>;
-
+pub trait CryptoProvider: SecureRandom + Send + Sync + Debug + 'static {
     /// Provide a safe set of cipher suites that can be used as the defaults.
     ///
     /// This is used by [`crate::ConfigBuilder::with_safe_defaults()`] and
@@ -209,6 +197,21 @@ pub trait CryptoProvider: Send + Sync + Debug + 'static {
     /// [`crate::server::WebPkiClientVerifier::builder_with_provider()`] and
     /// [`crate::client::WebPkiServerVerifier::builder_with_provider()`].
     fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms;
+}
+
+/// A source of cryptographically secure randomness.
+pub trait SecureRandom: Send + Sync + Debug {
+    /// Fill the given buffer with random bytes.
+    ///
+    /// The bytes must be sourced from a cryptographically secure random number
+    /// generator seeded with good quality, secret entropy.
+    ///
+    /// This is used for all randomness required by rustls, but not necessarily
+    /// randomness required by the underlying cryptography library.  For example:
+    /// [`SupportedKxGroup::start()`] requires random material to generate
+    /// an ephemeral key exchange key, but this is not included in the interface with
+    /// rustls: it is assumed that the cryptography library provides for this itself.
+    fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed>;
 }
 
 /// A supported key exchange group.

@@ -18,13 +18,6 @@ pub static PROVIDER: &'static dyn rustls::crypto::CryptoProvider = &Provider;
 struct Provider;
 
 impl rustls::crypto::CryptoProvider for Provider {
-    fn fill_random(&self, bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
-        use rand_core::RngCore;
-        rand_core::OsRng
-            .try_fill_bytes(bytes)
-            .map_err(|_| rustls::crypto::GetRandomFailed)
-    }
-
     fn default_cipher_suites(&self) -> &'static [rustls::SupportedCipherSuite] {
         ALL_CIPHER_SUITES
     }
@@ -44,6 +37,15 @@ impl rustls::crypto::CryptoProvider for Provider {
 
     fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
         verify::ALGORITHMS
+    }
+}
+
+impl rustls::crypto::SecureRandom for Provider {
+    fn fill(&self, bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
+        use rand_core::RngCore;
+        rand_core::OsRng
+            .try_fill_bytes(bytes)
+            .map_err(|_| rustls::crypto::GetRandomFailed)
     }
 }
 
