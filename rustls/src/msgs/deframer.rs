@@ -242,6 +242,7 @@ impl MessageDeframer {
     }
 
     /// Allow pushing handshake messages directly into the buffer.
+    #[cfg(feature = "std")]
     pub(crate) fn push(
         &mut self,
         version: ProtocolVersion,

@@ -337,6 +337,7 @@ impl ClientConfig {
                 .any(|cs| cs.version().version == v)
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
         self.provider
             .cipher_suites
@@ -525,6 +526,7 @@ impl EarlyData {
         matches!(self.state, EarlyDataState::Ready | EarlyDataState::Accepted)
     }
 
+    #[cfg(feature = "std")]
     fn is_accepted(&self) -> bool {
         matches!(
             self.state,
@@ -779,6 +781,7 @@ impl ConnectionCore<ClientConnectionData> {
         Ok(Self::new(state, data, common_state))
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn is_early_data_accepted(&self) -> bool {
         self.data.early_data.is_accepted()
     }
