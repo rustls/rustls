@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.22.0-alpha.4"
+version = "0.22.0-alpha.5"
 dependencies = [
  "log",
  "ring",
