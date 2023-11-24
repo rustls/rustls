@@ -1,4 +1,6 @@
+use std::error::Error as StdError;
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_crypto::HpkeCrypto;
@@ -6,7 +8,7 @@ use hpke_rs_rust_crypto::HpkeRustCrypto;
 use rustls::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkePrivateKey, HpkeProvider, HpkePublicKey, HpkeSuite,
 };
-use rustls::Error;
+use rustls::{Error, OtherError};
 
 pub static HPKE_PROVIDER: &'static dyn HpkeProvider = &HpkeRsProvider {};
 
@@ -18,9 +20,9 @@ impl HpkeProvider for HpkeRsProvider {
     fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke>, Error> {
         Ok(Box::new(HpkeRs(hpke_rs::Hpke::new(
             hpke_rs::Mode::Base,
-            KemAlgorithm::try_from(suite.kem.get_u16()).map_err(general_err)?,
-            KdfAlgorithm::try_from(suite.sym.kdf_id.get_u16()).map_err(general_err)?,
-            AeadAlgorithm::try_from(suite.sym.aead_id.get_u16()).map_err(general_err)?,
+            KemAlgorithm::try_from(suite.kem.get_u16()).map_err(other_err)?,
+            KdfAlgorithm::try_from(suite.sym.kdf_id.get_u16()).map_err(other_err)?,
+            AeadAlgorithm::try_from(suite.sym.aead_id.get_u16()).map_err(other_err)?,
         ))))
     }
 
@@ -59,7 +61,7 @@ impl Hpke for HpkeRs {
         let (enc, ciphertext) = self
             .0
             .seal(&pk_r, info, aad, plaintext, None, None, None)
-            .map_err(general_err)?;
+            .map_err(other_err)?;
         Ok((EncapsulatedSecret(enc.to_vec()), ciphertext))
     }
 
@@ -83,14 +85,10 @@ impl Hpke for HpkeRs {
                 None,
                 None,
             )
-            .map_err(general_err)
+            .map_err(other_err)
     }
 }
 
-// TODO(XXX): Switch to using `Error::Other(Error::OtherError(err))` once a hpke-rs release
-//   with https://github.com/franziskuskiefer/hpke-rs/pull/44 is available.
-fn general_err(err: impl Debug) -> Error {
-    // Presently hpke_rs::HpkeError does not implement std::error::Error, so we use Debug
-    // and create a general error.
-    Error::General(format!("{:?}", err))
+fn other_err(err: impl StdError + Send + Sync + 'static) -> Error {
+    Error::Other(OtherError(Arc::new(err)))
 }
