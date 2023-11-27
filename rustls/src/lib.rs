@@ -505,8 +505,9 @@ pub mod server {
     mod tls13;
 
     pub use crate::verify::NoClientAuth;
-    pub use crate::webpki::WebPkiClientVerifier;
-    pub use crate::webpki::{ClientCertVerifierBuilder, VerifierBuilderError};
+    pub use crate::webpki::{
+        ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
+    };
     pub use builder::WantsServerCert;
     pub use handy::ResolvesServerCertUsingSni;
     pub use handy::{NoServerSessionStorage, ServerSessionMemoryCache};
@@ -520,8 +521,6 @@ pub mod server {
     pub mod danger {
         pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
     }
-
-    pub use crate::webpki::ParsedCertificate;
 }
 
 pub use server::{ServerConfig, ServerConnection};
