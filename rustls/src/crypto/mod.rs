@@ -263,7 +263,7 @@ pub struct SharedSecret(Vec<u8>);
 
 impl SharedSecret {
     /// Returns the shared secret as a slice of bytes.
-    pub(crate) fn secret_bytes(&self) -> &[u8] {
+    pub fn secret_bytes(&self) -> &[u8] {
         &self.0
     }
 }
