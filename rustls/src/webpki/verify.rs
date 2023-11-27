@@ -126,6 +126,14 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
     }
 }
 
+/// Verify a message signature using the `cert` public key and any supported scheme.
+///
+/// This function verifies the `dss` signature over `message` using the subject public key from
+/// `cert`. Since TLS 1.2 doesn't provide enough information to map the `dss.scheme` into a single
+/// [`SignatureVerificationAlgorithm`], this function will map to several candidates and try each in
+/// succession until one succeeds or we exhaust all candidates.
+///
+/// See [WebPkiSupportedAlgorithms::mapping] for more information.
 pub(crate) fn verify_tls12_signature(
     message: &[u8],
     cert: &CertificateDer<'_>,
@@ -135,8 +143,6 @@ pub(crate) fn verify_tls12_signature(
     let possible_algs = supported_schemes.convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
 
-    // TLS doesn't itself give us enough info to map to a single pki_types::SignatureVerificationAlgorithm.
-    // Therefore, convert_algs maps to several and we try them all.
     for alg in possible_algs {
         match cert.verify_signature(*alg, message, dss.signature()) {
             Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
@@ -150,6 +156,12 @@ pub(crate) fn verify_tls12_signature(
     ))
 }
 
+/// Verify a message signature using the `cert` public key and the first TLS 1.3 compatible
+/// supported scheme.
+///
+/// This function verifies the `dss` signature over `message` using the subject public key from
+/// `cert`. Unlike [verify_tls12_signature], this function only tries the first matching scheme. See
+/// [WebPkiSupportedAlgorithms::mapping] for more information.
 pub(crate) fn verify_tls13_signature(
     msg: &[u8],
     cert: &CertificateDer<'_>,
