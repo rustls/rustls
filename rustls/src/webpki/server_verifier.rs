@@ -11,7 +11,7 @@ use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
 use crate::webpki::verify::{
-    verify_server_cert_signed_by_trust_anchor_impl, verify_signed_struct, verify_tls13,
+    verify_server_cert_signed_by_trust_anchor_impl, verify_tls12_signature, verify_tls13_signature,
     ParsedCertificate,
 };
 use crate::webpki::{parse_crls, verify_server_name, VerifierBuilderError};
@@ -203,7 +203,7 @@ impl WebPkiServerVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_signed_struct(
+        verify_tls12_signature(
             message,
             cert,
             dss,
@@ -219,7 +219,7 @@ impl WebPkiServerVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13(
+        verify_tls13_signature(
             message,
             cert,
             dss,
@@ -301,7 +301,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_signed_struct(message, cert, dss, &self.supported)
+        verify_tls12_signature(message, cert, dss, &self.supported)
     }
 
     fn verify_tls13_signature(
@@ -310,7 +310,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13(message, cert, dss, &self.supported)
+        verify_tls13_signature(message, cert, dss, &self.supported)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
