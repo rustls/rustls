@@ -11,7 +11,7 @@ use crate::verify::{
     NoClientAuth,
 };
 use crate::webpki::parse_crls;
-use crate::webpki::verify::{verify_signed_struct, verify_tls13, ParsedCertificate};
+use crate::webpki::verify::{verify_tls12_signature, verify_tls13_signature, ParsedCertificate};
 use crate::{DistinguishedName, Error, RootCertStore, SignatureScheme};
 
 /// A builder for configuring a `webpki` client certificate verifier.
@@ -372,7 +372,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_signed_struct(message, cert, dss, &self.supported_algs)
+        verify_tls12_signature(message, cert, dss, &self.supported_algs)
     }
 
     fn verify_tls13_signature(
@@ -381,7 +381,7 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13(message, cert, dss, &self.supported_algs)
+        verify_tls13_signature(message, cert, dss, &self.supported_algs)
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

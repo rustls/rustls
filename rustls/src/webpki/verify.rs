@@ -144,7 +144,7 @@ fn verify_sig_using_any_alg(
     Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey)
 }
 
-pub(crate) fn verify_signed_struct(
+pub(crate) fn verify_tls12_signature(
     message: &[u8],
     cert: &CertificateDer<'_>,
     dss: &DigitallySignedStruct,
@@ -158,7 +158,7 @@ pub(crate) fn verify_signed_struct(
         .map(|_| HandshakeSignatureValid::assertion())
 }
 
-pub(crate) fn verify_tls13(
+pub(crate) fn verify_tls13_signature(
     msg: &[u8],
     cert: &CertificateDer<'_>,
     dss: &DigitallySignedStruct,
