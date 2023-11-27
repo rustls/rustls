@@ -134,9 +134,9 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.5.1"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96971b015c9d66a3558687fe18505d0f5c17faf67d4aa08c5ab5542d6ebb09c6"
+checksum = "7bc2aa0a35a53d7cfda07a69f74d67a918ced3ec1a607f5bce5da7c3aff6bab7"
 dependencies = [
  "aws-lc-sys",
  "mirai-annotations",
@@ -146,9 +146,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa851b9955e1c4ab862c022a23b87b90237fd69ee715b91f9c13a20306d781e4"
+checksum = "c2c6f9497a1bd3bed0a28a01b8836dbe9c7a2c521e47a14b165c64c4df592331"
 dependencies = [
  "bindgen",
  "cmake",
@@ -938,9 +938,9 @@ dependencies = [
 
 [[package]]
 name = "hpke-rs"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be3c089364da994102385ce2bed54c7e86e190da41e0125e0213f2c061786395"
+checksum = "40d78d066f8d487fa69d5c3f92f98c11e2540796d213016d107fe86eabf9f26b"
 dependencies = [
  "hpke-rs-crypto",
  "log",
@@ -949,9 +949,9 @@ dependencies = [
 
 [[package]]
 name = "hpke-rs-crypto"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdc863a0678d194f682f20790336ea8ef4ddc748abab61a9533ac5aa1e9d27d9"
+checksum = "79df748353d9cee46d565f591d0039973a6554f8ef026b2647ab1ef2b64b91df"
 dependencies = [
  "getrandom",
  "rand",
@@ -962,9 +962,9 @@ dependencies = [
 
 [[package]]
 name = "hpke-rs-rust-crypto"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9c0b07cafc144f03466bf2692db1616134152a6f49afc42e86c929b756876dd"
+checksum = "a1d6fcfe6949aedbacad5aedb2f8ef9f054a142510e8f4f7355a4ccb3f5bd01f"
 dependencies = [
  "aes-gcm",
  "chacha20poly1305",
@@ -1657,9 +1657,9 @@ dependencies = [
 
 [[package]]
 name = "rsa"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86ef35bf3e7fe15a53c4ab08a998e42271eab13eb0db224126bc7bc4c4bad96d"
+checksum = "6a3211b01eea83d80687da9eef70e39d65144a3894866a5153a2723e425a157f"
 dependencies = [
  "const-oid",
  "digest 0.10.7",
@@ -1910,18 +1910,18 @@ checksum = "836fa6a3e1e547f9a2c4040802ec865b5d85f4014efe00555d7090a3dcaa1090"
 
 [[package]]
 name = "serde"
-version = "1.0.192"
+version = "1.0.193"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bca2a08484b285dcb282d0f67b26cadc0df8b19f8c12502c13d966bf9482f001"
+checksum = "25dd9975e68d0cb5aa1120c288333fc98731bd1dd12f561e468ea4728c042b89"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.192"
+version = "1.0.193"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6c7207fbec9faa48073f3e3074cbe553af6ea512d7c21ba46e434e70ea9fbc1"
+checksum = "43576ca501357b9b071ac53cdc7da8ef0cbd9493d8df094cd821777ea6e894d3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2106,9 +2106,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tls_codec"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aee1e621cbf57f36f5b51ebf366b57ba153be7fed133182a9513e443ecdf506e"
+checksum = "d38a1d5fcfa859f0ec2b5e111dc903890bd7dac7f34713232bf9aa4fd7cad7b2"
 dependencies = [
  "tls_codec_derive",
  "zeroize",
@@ -2116,9 +2116,9 @@ dependencies = [
 
 [[package]]
 name = "tls_codec_derive"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3226440488120aabe7e7cc80292634a68e541c407d97b66eceaae787454dae25"
+checksum = "d8e00e3e7a54e0f1c8834ce72ed49c8487fbd3f801d8cfe1a0ad0640382f8e15"
 dependencies = [
  "proc-macro2",
  "quote",
