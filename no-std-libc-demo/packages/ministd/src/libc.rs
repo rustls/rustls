@@ -10,10 +10,12 @@ pub const AF_INET: c_int = 2;
 pub const EINTR: c_int = 4;
 pub const GRND_RANDOM: c_uint = 0x0002;
 pub const MSG_NOSIGNAL: c_int = 0x4000;
+pub const O_CLOEXEC: c_int = 0x80000;
+pub const O_RDONLY: c_int = 0;
 pub const SOCK_CLOEXEC: c_int = O_CLOEXEC;
 pub const SOCK_STREAM: c_int = 1;
-
-const O_CLOEXEC: c_int = 0x80000;
+pub const SOL_SOCKET: c_int = 1;
+pub const SO_REUSEADDR: c_int = 2;
 
 type size_t = usize;
 type ssize_t = isize;
@@ -57,6 +59,16 @@ pub struct sockaddr_in {
 }
 
 #[repr(C)]
+pub struct sockaddr_storage {
+    pub ss_family: sa_family_t,
+    #[cfg(target_pointer_width = "32")]
+    __ss_pad2: [u8; 128 - 2 - 4],
+    #[cfg(target_pointer_width = "64")]
+    __ss_pad2: [u8; 128 - 2 - 8],
+    __ss_align: size_t,
+}
+
+#[repr(C)]
 pub struct timeval {
     pub tv_sec: time_t,
     pub tv_usec: suseconds_t,
@@ -68,6 +80,10 @@ extern "C" {
     #[must_use]
     pub fn __errno_location() -> *mut c_int;
     pub fn abort() -> !;
+    #[must_use]
+    pub fn accept4(fd: c_int, addr: *mut sockaddr, len: *mut socklen_t, flag: c_int) -> c_int;
+    #[must_use]
+    pub fn bind(socket: c_int, address: *const sockaddr, address_len: socklen_t) -> c_int;
     #[must_use]
     pub fn calloc(nmemb: size_t, size: size_t) -> *mut c_void;
     #[must_use]
@@ -87,15 +103,29 @@ extern "C" {
     #[must_use]
     pub fn gettimeofday(tp: *mut timeval, tzp: *mut timezone) -> c_int;
     #[must_use]
+    pub fn listen(socket: c_int, backlog: c_int) -> c_int;
+    #[must_use]
     pub fn malloc(size: size_t) -> *mut c_void;
     #[must_use]
+    pub fn open64(path: *const c_char, oflag: c_int) -> c_int;
+    #[must_use]
     pub fn posix_memalign(memptr: *mut *mut c_void, alignment: size_t, size: size_t) -> c_int;
+    #[must_use]
+    pub fn read(fd: c_int, buf: *mut c_void, count: size_t) -> ssize_t;
     #[must_use]
     pub fn realloc(ptr: *mut c_void, size: size_t) -> *mut c_void;
     #[must_use]
     pub fn recv(socket: c_int, buffer: *mut c_void, length: size_t, flags: c_int) -> ssize_t;
     #[must_use]
     pub fn send(socket: c_int, buffer: *const c_void, length: size_t, flags: c_int) -> ssize_t;
+    #[must_use]
+    pub fn setsockopt(
+        socket: c_int,
+        level: c_int,
+        name: c_int,
+        value: *const c_void,
+        option_len: socklen_t,
+    ) -> c_int;
     #[must_use]
     pub fn socket(domain: c_int, type_: c_int, protocol: c_int) -> c_int;
     #[must_use]

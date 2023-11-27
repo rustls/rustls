@@ -9,6 +9,54 @@ use crate::{io, libc, sys};
 #[allow(non_camel_case_types)]
 type wrlen_t = usize;
 
+pub struct TcpListener {
+    inner: Socket,
+}
+
+impl TcpListener {
+    pub fn bind(addr: &SocketAddr) -> io::Result<TcpListener> {
+        let sock = Socket::new(addr, libc::SOCK_STREAM)?;
+
+        setsockopt(&sock, libc::SOL_SOCKET, libc::SO_REUSEADDR, 1 as c_int)?;
+
+        let (addr, len) = addr.into_inner();
+        sys::cvt(unsafe { libc::bind(sock.as_raw(), addr.as_ptr(), len as _) })?;
+
+        let backlog = 128;
+
+        sys::cvt(unsafe { libc::listen(sock.as_raw(), backlog) })?;
+        Ok(TcpListener { inner: sock })
+    }
+
+    pub fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
+        let mut storage: libc::sockaddr_storage = unsafe { mem::zeroed() };
+        let mut len = mem::size_of_val(&storage) as libc::socklen_t;
+        let sock = self
+            .inner
+            .accept(&mut storage as *mut _ as *mut _, &mut len)?;
+        let addr = sockaddr_to_addr(&storage, len as usize, None)?;
+        Ok((TcpStream { inner: sock }, addr))
+    }
+}
+
+fn setsockopt<T>(
+    sock: &Socket,
+    level: c_int,
+    option_name: c_int,
+    option_value: T,
+) -> io::Result<()> {
+    unsafe {
+        sys::cvt(libc::setsockopt(
+            sock.as_raw(),
+            level,
+            option_name,
+            &option_value as *const T as *const _,
+            mem::size_of::<T>() as libc::socklen_t,
+        ))?;
+        Ok(())
+    }
+}
+
 pub struct TcpStream {
     inner: Socket,
 }
@@ -217,10 +265,30 @@ impl Socket {
         Ok(Socket(fd))
     }
 
+    fn as_raw_fd(&self) -> c_int {
+        self.0
+    }
+
+    fn as_raw(&self) -> c_int {
+        self.as_raw_fd()
+    }
+
     fn recv_with_flags(&self, buf: &mut [u8], flags: c_int) -> io::Result<usize> {
         let ret =
             sys::cvt(unsafe { libc::recv(self.0, buf.as_mut_ptr().cast(), buf.len(), flags) })?;
         Ok(ret as usize)
+    }
+
+    fn accept(
+        &self,
+        storage: *mut libc::sockaddr,
+        len: *mut libc::socklen_t,
+    ) -> io::Result<Socket> {
+        unsafe {
+            let fd =
+                sys::cvt_r(|| libc::accept4(self.as_raw_fd(), storage, len, libc::SOCK_CLOEXEC))?;
+            Ok(Socket(fd))
+        }
     }
 }
 
@@ -251,7 +319,11 @@ impl Iterator for LookupHost {
             unsafe {
                 let cur = self.cur.as_ref()?;
                 self.cur = cur.ai_next;
-                match sockaddr_to_addr(cur.ai_addr.as_ref()?, cur.ai_addrlen as usize, self.port) {
+                match sockaddr_to_addr(
+                    &*(cur.ai_addr as *const libc::sockaddr_storage),
+                    cur.ai_addrlen as usize,
+                    Some(self.port),
+                ) {
                     Ok(addr) => return Some(addr),
                     Err(_) => continue,
                 }
@@ -291,16 +363,22 @@ impl Drop for LookupHost {
     }
 }
 
-fn sockaddr_to_addr(sockaddr: &libc::sockaddr, len: usize, port: u16) -> io::Result<SocketAddr> {
-    match sockaddr.sa_family as c_int {
+fn sockaddr_to_addr(
+    sockaddr: &libc::sockaddr_storage,
+    len: usize,
+    port: Option<u16>,
+) -> io::Result<SocketAddr> {
+    match sockaddr.ss_family as c_int {
         libc::AF_INET => {
             assert!(len >= mem::size_of::<libc::sockaddr_in>());
             let mut sock_addr = SocketAddrV4::from_inner(unsafe {
-                (sockaddr as *const libc::sockaddr)
+                (sockaddr as *const _ as *const libc::sockaddr)
                     .cast::<libc::sockaddr_in>()
                     .read()
             });
-            sock_addr.port = port;
+            if let Some(port) = port {
+                sock_addr.port = port;
+            }
             Ok(SocketAddr::V4(sock_addr))
         }
         // libc::AF_INET6 => unimplemented!(),

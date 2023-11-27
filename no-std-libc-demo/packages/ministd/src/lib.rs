@@ -5,6 +5,7 @@ extern crate alloc;
 #[macro_use]
 mod macros;
 
+pub mod fs;
 pub mod io;
 pub mod net;
 pub mod process;
