@@ -19,19 +19,18 @@ use std::sync::Arc;
 /// For settings besides these, see the fields of [`ServerConfig`] and [`ClientConfig`].
 ///
 /// The usual choice for protocol primitives is to call
-/// [`crate::ClientConfig::builder`]/[`ServerConfig::builder`] and [`ConfigBuilder::with_safe_default_protocol_versions`],
-/// which will use rustls' default cryptographic provider and default protocol versions.
+/// [`crate::ClientConfig::builder`]/[`ServerConfig::builder`]
+/// which will use rustls' default cryptographic provider and safe defaults for ciphersuites and
+/// supported protocol versions.
 ///
 /// ```
 /// # #[cfg(feature = "ring")] {
 /// use rustls::{ClientConfig, ServerConfig};
 /// ClientConfig::builder()
-///     .with_safe_default_protocol_versions()
 /// //  ...
 /// # ;
 ///
 /// ServerConfig::builder()
-///     .with_safe_default_protocol_versions()
 /// //  ...
 /// # ;
 /// # }
@@ -42,15 +41,13 @@ use std::sync::Arc;
 /// ```no_run
 /// # #[cfg(feature = "ring")] {
 /// # use rustls::ServerConfig;
-/// ServerConfig::builder()
-///     .with_protocol_versions(&[&rustls::version::TLS13])
-///     .unwrap()
+/// ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
 /// //  ...
 /// # ;
 /// # }
 /// ```
 ///
-/// Overriding a default introduces a `Result` that must be unwrapped,
+/// Overriding the default cryptographic provider introduces a `Result` that must be unwrapped,
 /// because the config builder checks for consistency of the choices made. For instance, it's an error to
 /// configure only TLS 1.2 cipher suites while specifying that TLS 1.3 should be the only supported protocol
 /// version.
@@ -81,8 +78,6 @@ use std::sync::Arc;
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::builder()
-///     .with_safe_default_protocol_versions()
-///     .unwrap()
 ///     .with_root_certificates(root_certs)
 ///     .with_no_client_auth();
 /// # }
@@ -109,8 +104,6 @@ use std::sync::Arc;
 /// #    pki_types::PrivatePkcs8KeyDer::from(vec![])
 /// # );
 /// ServerConfig::builder()
-///     .with_safe_default_protocol_versions()
-///     .unwrap()
 ///     .with_no_client_auth()
 ///     .with_single_cert(certs, private_key)
 ///     .expect("bad certificate/key");

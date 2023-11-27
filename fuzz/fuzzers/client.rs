@@ -11,8 +11,6 @@ fuzz_target!(|data: &[u8]| {
     let root_store = RootCertStore::empty();
     let config = Arc::new(
         ClientConfig::builder()
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_root_certificates(root_store)
             .with_no_client_auth(),
     );
