@@ -24,8 +24,6 @@ impl ResolvesServerCert for Fail {
 fuzz_target!(|data: &[u8]| {
     let config = Arc::new(
         ServerConfig::builder()
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_no_client_auth()
             .with_cert_resolver(Arc::new(Fail)),
     );

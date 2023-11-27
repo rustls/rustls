@@ -22,8 +22,6 @@ fn main() {
             .cloned(),
     );
     let mut config = rustls::ClientConfig::builder()
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
 

@@ -484,15 +484,11 @@ fn test_config_builders_debug() {
         .into(),
     );
     assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsVersions { provider: CryptoProvider { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring } } }", format!("{:?}", b));
-    let b = server_config_builder();
+    let b = server_config_builder_with_versions(&[&rustls::version::TLS13]);
     assert_eq!(
-        "ConfigBuilder<ServerConfig, _> { state: WantsVersions { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring } } }",
+        "ConfigBuilder<ServerConfig, _> { state: WantsVerifier { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring }, versions: [TLSv1_3] } }",
         format!("{:?}", b)
     );
-    assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsVersions { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring } } }", format!("{:?}", b));
-    let b = b
-        .with_protocol_versions(&[&rustls::version::TLS13])
-        .unwrap();
     let b = b.with_no_client_auth();
     assert_eq!("ConfigBuilder<ServerConfig, _> { state: WantsServerCert { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring }, versions: [TLSv1_3], verifier: NoClientAuth } }", format!("{:?}", b));
 
@@ -505,16 +501,11 @@ fn test_config_builders_debug() {
         .into(),
     );
     assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsVersions { provider: CryptoProvider { cipher_suites: [TLS13_CHACHA20_POLY1305_SHA256], kx_groups: [X25519], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring } } }", format!("{:?}", b));
-    let b = client_config_builder();
+    let b = client_config_builder_with_versions(&[&rustls::version::TLS13]);
     assert_eq!(
-        "ConfigBuilder<ClientConfig, _> { state: WantsVersions { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring } } }",
+       "ConfigBuilder<ClientConfig, _> { state: WantsVerifier { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring }, versions: [TLSv1_3] } }",
         format!("{:?}", b)
     );
-    assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsVersions { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring } } }", format!("{:?}", b));
-    let b = b
-        .with_protocol_versions(&[&rustls::version::TLS13])
-        .unwrap();
-    assert_eq!("ConfigBuilder<ClientConfig, _> { state: WantsVerifier { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring }, versions: [TLSv1_3] } }", format!("{:?}", b));
 }
 
 /// Test that the server handles combination of `offer_client_auth()` returning true
@@ -532,8 +523,6 @@ fn server_allow_any_anonymous_or_authenticated_client() {
             .unwrap();
 
         let server_config = server_config_builder()
-            .with_safe_default_protocol_versions()
-            .unwrap()
             .with_client_cert_verifier(client_auth)
             .with_single_cert(kt.get_chain(), kt.get_key())
             .unwrap();
@@ -5081,16 +5070,12 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 
     let server_config_1 = Arc::new(common::finish_server_config(
         KeyType::Ed25519,
-        server_config_builder()
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .unwrap(),
+        server_config_builder_with_versions(&[&rustls::version::TLS13]),
     ));
 
     let mut server_config_2 = common::finish_server_config(
         KeyType::Ed25519,
-        server_config_builder()
-            .with_protocol_versions(&[&rustls::version::TLS12])
-            .unwrap(),
+        server_config_builder_with_versions(&[&rustls::version::TLS12]),
     );
     server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
 

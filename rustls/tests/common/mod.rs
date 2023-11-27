@@ -267,7 +267,7 @@ impl KeyType {
     }
 }
 
-pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVersions> {
+pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     // ensure `ServerConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
     #[cfg(feature = "ring")]
@@ -277,10 +277,27 @@ pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::Wa
     #[cfg(not(feature = "ring"))]
     {
         rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
     }
 }
 
-pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVersions> {
+pub fn server_config_builder_with_versions(
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
+    #[cfg(feature = "ring")]
+    {
+        rustls::ServerConfig::builder_with_protocol_versions(versions)
+    }
+    #[cfg(not(feature = "ring"))]
+    {
+        rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
+            .with_protocol_versions(versions)
+            .unwrap()
+    }
+}
+
+pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     // ensure `ClientConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
     #[cfg(feature = "ring")]
@@ -291,6 +308,23 @@ pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::Wa
     #[cfg(not(feature = "ring"))]
     {
         rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+    }
+}
+
+pub fn client_config_builder_with_versions(
+    versions: &[&'static rustls::SupportedProtocolVersion],
+) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
+    #[cfg(feature = "ring")]
+    {
+        rustls::ClientConfig::builder_with_protocol_versions(versions)
+    }
+    #[cfg(not(feature = "ring"))]
+    {
+        rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
+            .with_protocol_versions(versions)
+            .unwrap()
     }
 }
 
@@ -304,24 +338,14 @@ pub fn finish_server_config(
 }
 
 pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    finish_server_config(
-        kt,
-        server_config_builder()
-            .with_safe_default_protocol_versions()
-            .unwrap(),
-    )
+    finish_server_config(kt, server_config_builder())
 }
 
 pub fn make_server_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ServerConfig {
-    finish_server_config(
-        kt,
-        server_config_builder()
-            .with_protocol_versions(versions)
-            .unwrap(),
-    )
+    finish_server_config(kt, server_config_builder_with_versions(versions))
 }
 
 pub fn make_server_config_with_kx_groups(
@@ -390,8 +414,6 @@ pub fn make_server_config_with_client_verifier(
     verifier_builder: ClientCertVerifierBuilder,
 ) -> ServerConfig {
     server_config_builder()
-        .with_safe_default_protocol_versions()
-        .unwrap()
         .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -430,12 +452,7 @@ pub fn finish_client_config_with_creds(
 }
 
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
-    finish_client_config(
-        kt,
-        client_config_builder()
-            .with_safe_default_protocol_versions()
-            .unwrap(),
-    )
+    finish_client_config(kt, client_config_builder())
 }
 
 pub fn make_client_config_with_kx_groups(
@@ -458,38 +475,25 @@ pub fn make_client_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ClientConfig {
-    let builder = client_config_builder()
-        .with_protocol_versions(versions)
-        .unwrap();
-    finish_client_config(kt, builder)
+    finish_client_config(kt, client_config_builder_with_versions(versions))
 }
 
 pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    finish_client_config_with_creds(
-        kt,
-        client_config_builder()
-            .with_safe_default_protocol_versions()
-            .unwrap(),
-    )
+    finish_client_config_with_creds(kt, client_config_builder())
 }
 
 pub fn make_client_config_with_versions_with_auth(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ClientConfig {
-    let builder = client_config_builder()
-        .with_protocol_versions(versions)
-        .unwrap();
-    finish_client_config_with_creds(kt, builder)
+    finish_client_config_with_creds(kt, client_config_builder_with_versions(versions))
 }
 
 pub fn make_client_config_with_verifier(
     versions: &[&'static rustls::SupportedProtocolVersion],
     verifier_builder: ServerCertVerifierBuilder,
 ) -> ClientConfig {
-    client_config_builder()
-        .with_protocol_versions(versions)
-        .unwrap()
+    client_config_builder_with_versions(versions)
         .dangerous()
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()

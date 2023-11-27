@@ -12,7 +12,11 @@ use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
+#[cfg(feature = "ring")]
+use crate::versions;
 use crate::KeyLog;
+#[cfg(feature = "ring")]
+use crate::WantsVerifier;
 use crate::{sign, WantsVersions};
 
 use super::hs;
@@ -333,16 +337,42 @@ impl Clone for ServerConfig {
 }
 
 impl ServerConfig {
-    #[cfg(feature = "ring")]
     /// Create a builder for a server configuration with the default
-    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`].
+    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`] and safe ciphersuite and protocol
+    /// defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    pub fn builder() -> ConfigBuilder<Self, WantsVersions> {
+    #[cfg(feature = "ring")]
+    pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
+        // Safety: we know the *ring* provider's ciphersuites are compatible with the safe default protocol versions.
         Self::builder_with_provider(crate::crypto::ring::default_provider().into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+    }
+
+    /// Create a builder for a server configuration with the default
+    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`], safe ciphersuite defaults and
+    /// the provided protocol versions.
+    ///
+    /// Panics if provided an empty slice of supported versions.
+    ///
+    /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "ring")]
+    pub fn builder_with_protocol_versions(
+        versions: &[&'static versions::SupportedProtocolVersion],
+    ) -> ConfigBuilder<Self, WantsVerifier> {
+        // Safety: we know the *ring* provider's ciphersuites are compatible with all protocol version choices.
+        Self::builder_with_provider(crate::crypto::ring::default_provider().into())
+            .with_protocol_versions(versions)
+            .unwrap()
     }
 
     /// Create a builder for a server configuration with a specific [`CryptoProvider`].
+    ///
+    /// This will use the provider's configured ciphersuites. You must additionally choose
+    /// which protocol versions to enable, using `with_protocol_versions` or
+    /// `with_safe_default_protocol_versions` and handling the `Result` in case a protocol
+    /// version is not supported by the provider's ciphersuites.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder_with_provider(
