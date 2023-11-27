@@ -126,24 +126,6 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
     }
 }
 
-fn verify_sig_using_any_alg(
-    cert: &webpki::EndEntityCert,
-    algs: &[&'static dyn SignatureVerificationAlgorithm],
-    message: &[u8],
-    sig: &[u8],
-) -> Result<(), webpki::Error> {
-    // TLS doesn't itself give us enough info to map to a single pki_types::SignatureVerificationAlgorithm.
-    // Therefore, convert_algs maps to several and we try them all.
-    for alg in algs {
-        match cert.verify_signature(*alg, message, sig) {
-            Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
-            res => return res,
-        }
-    }
-
-    Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey)
-}
-
 pub(crate) fn verify_tls12_signature(
     message: &[u8],
     cert: &CertificateDer<'_>,
@@ -153,9 +135,19 @@ pub(crate) fn verify_tls12_signature(
     let possible_algs = supported_schemes.convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
 
-    verify_sig_using_any_alg(&cert, possible_algs, message, dss.signature())
-        .map_err(pki_error)
-        .map(|_| HandshakeSignatureValid::assertion())
+    // TLS doesn't itself give us enough info to map to a single pki_types::SignatureVerificationAlgorithm.
+    // Therefore, convert_algs maps to several and we try them all.
+    for alg in possible_algs {
+        match cert.verify_signature(*alg, message, dss.signature()) {
+            Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
+            Err(e) => return Err(pki_error(e)),
+            Ok(()) => return Ok(HandshakeSignatureValid::assertion()),
+        }
+    }
+
+    Err(pki_error(
+        webpki::Error::UnsupportedSignatureAlgorithmForPublicKey,
+    ))
 }
 
 pub(crate) fn verify_tls13_signature(
