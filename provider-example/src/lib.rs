@@ -1,6 +1,7 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(feature = "std")]
 extern crate std;
 
 use alloc::sync::Arc;
@@ -11,11 +12,13 @@ use rustls::crypto::CryptoProvider;
 mod aead;
 mod hash;
 mod hmac;
+#[cfg(feature = "std")]
 mod hpke;
 mod kx;
 mod sign;
 mod verify;
 
+#[cfg(feature = "std")]
 pub use hpke::HPKE_PROVIDER;
 
 pub fn provider() -> CryptoProvider {
@@ -45,8 +48,13 @@ impl rustls::crypto::KeyProvider for Provider {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
-        let key = sign::EcdsaSigningKeyP256::try_from(key_der)
-            .map_err(|err| rustls::OtherError(Arc::new(err)))?;
+        let key = sign::EcdsaSigningKeyP256::try_from(key_der).map_err(|err| {
+            #[cfg(feature = "std")]
+            let err = rustls::OtherError(Arc::new(err));
+            #[cfg(not(feature = "std"))]
+            let err = rustls::Error::General(alloc::format!("{}", err));
+            err
+        })?;
         Ok(Arc::new(key))
     }
 }
