@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use hmac::{Hmac, Mac};
 use rustls::crypto;
 use sha2::{Digest, Sha256};

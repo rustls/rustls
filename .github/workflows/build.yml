@@ -59,6 +59,11 @@ jobs:
       - name: cargo build (debug; rustls-provider-example)
         run: cargo build --locked -p rustls-provider-example
 
+      - name: cargo build (debug; no-std-libc-demo)
+        if: matrix.rust == 'nightly'
+        working-directory: ./no-std-libc-demo
+        run: cargo build --locked -p no-std-libc-demo --examples
+
   msrv:
     name: MSRV
     runs-on: ubuntu-20.04
@@ -326,6 +331,7 @@ jobs:
       - run: cargo clippy --locked --workspace --all-features --all-targets -- --deny warnings
         # not part of the workspace
       - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- --deny warnings
+        # no-std-libc-demo is not here because it requires a nightly toolchain
 
   clippy-nightly:
     name: Clippy (Nightly)
@@ -342,6 +348,8 @@ jobs:
       - run: cargo clippy --locked --package rustls --no-default-features --all-targets
       - run: cargo clippy --locked --workspace --all-features --all-targets
       - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets
+      - run: cargo clippy --locked --all-features --all-targets
+        working-directory: no-std-libc-demo
 
   check-external-types:
     name: Validate external types appearing in public API

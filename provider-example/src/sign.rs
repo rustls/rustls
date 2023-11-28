@@ -1,4 +1,6 @@
-use std::sync::Arc;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use pkcs8::DecodePrivateKey;
 use pki_types::PrivateKeyDer;

@@ -1,0 +1,20 @@
+[package]
+edition = "2021"
+name = "no-std-libc-demo"
+publish = false
+version = "0.0.0"
+
+[lib]
+test = false
+bench = false
+
+[dependencies]
+ministd = { path = "../ministd"  }
+pki-types = { package = "rustls-pki-types", version = "0.2.2" }
+# FIXME use `path = "../../../rustls"`; this is currently using a git dependency to keep the commit history (wrt to main) short
+rustls = { git = "https://github.com/japaric/rustls", branch = "no-std-support", default-features = false, features = ["tls12"] }
+
+[dev-dependencies]
+rustls-pemfile =  { version = "2.0.0-alpha.2", default-features = false }
+rustls-provider-example = { path = "../../../provider-example", default-features = false }
+webpki-roots = "0.26.0-alpha.2"

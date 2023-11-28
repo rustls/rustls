@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use rustls::crypto::hash;
 use sha2::Digest;
 

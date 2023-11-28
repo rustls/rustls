@@ -1,0 +1,20 @@
+{
+  "arch": "x86_64",
+  "cpu": "x86-64",
+  "data-layout": "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+  "llvm-target": "x86_64-unknown-none-elf",
+  "max-atomic-width": 64,
+  "panic-strategy": "abort",
+  "plt-by-default": false,
+  "position-independent-executables": true,
+  "pre-link-args": {
+    "gcc": ["-m64", "-lc"]
+  },
+  "relro-level": "full",
+  "stack-probes": {
+    "kind": "inline-or-call",
+    "min-llvm-version-for-inline": [16, 0, 0]
+  },
+  "static-position-independent-executables": true,
+  "target-pointer-width": "64"
+}

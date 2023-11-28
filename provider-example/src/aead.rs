@@ -1,3 +1,6 @@
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
 use rustls::crypto::cipher::{self, AeadKey, Iv, UnsupportedOperationError, NONCE_LEN};
 use rustls::{ConnectionTrafficSecrets, ContentType, ProtocolVersion};

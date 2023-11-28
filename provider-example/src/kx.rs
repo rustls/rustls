@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use crypto::SupportedKxGroup;
 use rustls::crypto;
 
