@@ -59,6 +59,9 @@ jobs:
       - name: cargo build (debug; rustls-provider-example)
         run: cargo build --locked -p rustls-provider-example
 
+      - name: cargo build (debug; rustls-provider-example lib in no-std mode)
+        run: cargo build --locked -p rustls-provider-example --no-default-features
+
   msrv:
     name: MSRV
     runs-on: ubuntu-20.04
