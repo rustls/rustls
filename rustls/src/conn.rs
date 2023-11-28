@@ -142,8 +142,8 @@ impl<'a> io::Read for Reader<'a> {
     /// connection, so the underlying TCP connection should be half-closed too.
     ///
     /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
-    /// `close_notify` alert) this function returns `Err(ErrorKind::UnexpectedEof.into())`
-    /// once any pending data has been read.
+    /// `close_notify` alert) this function returns a `std::io::Error` of type
+    /// `ErrorKind::UnexpectedEof` once any pending data has been read.
     ///
     /// Note that support for `close_notify` varies in peer TLS libraries: many do not
     /// support it and uncleanly close the TCP connection (this might be
@@ -164,8 +164,13 @@ impl<'a> io::Read for Reader<'a> {
                 // cleanly closed; don't care about TCP EOF: express this as Ok(0)
                 (true, _) => {}
                 // unclean closure
-                (false, true) => return Err(io::ErrorKind::UnexpectedEof.into()),
-                // connection still going, but need more data: signal `WouldBlock` so that
+                (false, true) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        UNEXPECTED_EOF_MESSAGE,
+                    ))
+                }
+                // connection still going, but needs more data: signal `WouldBlock` so that
                 // the caller knows this
                 (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
             }
@@ -182,8 +187,8 @@ impl<'a> io::Read for Reader<'a> {
     /// should be half-closed too.
     ///
     /// If the peer closes the TLS session uncleanly (a TCP EOF without sending a
-    /// `close_notify` alert) this function returns `Err(ErrorKind::UnexpectedEof.into())`
-    /// once any pending data has been read.
+    /// `close_notify` alert) this function returns a `std::io::Error` of type
+    /// `ErrorKind::UnexpectedEof` once any pending data has been read.
     ///
     /// Note that support for `close_notify` varies in peer TLS libraries: many do not
     /// support it and uncleanly close the TCP connection (this might be
@@ -208,7 +213,12 @@ impl<'a> io::Read for Reader<'a> {
                 // cleanly closed; don't care about TCP EOF: express this as Ok(0)
                 (true, _) => {}
                 // unclean closure
-                (false, true) => return Err(io::ErrorKind::UnexpectedEof.into()),
+                (false, true) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        UNEXPECTED_EOF_MESSAGE,
+                    ));
+                }
                 // connection still going, but need more data: signal `WouldBlock` so that
                 // the caller knows this
                 (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
@@ -759,3 +769,6 @@ impl<Data> ConnectionCore<Data> {
 
 /// Data specific to the peer's side (client or server).
 pub trait SideData: Debug {}
+
+const UNEXPECTED_EOF_MESSAGE: &str = "peer closed connection without sending TLS close_notify: \
+https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";

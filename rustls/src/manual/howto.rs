@@ -33,4 +33,21 @@ Once you have these two pieces, configuring a server to use them involves, brief
 [^1]: For PKCS#8 it does not support password encryption -- there's not a meaningful threat
       model addressed by this, and the encryption supported is typically extremely poor.
 
+# Unexpected EOF
+
+TLS has a `close_notify` mechanism to prevent truncation attacks[^2].
+According to the TLS RFCs, each party is required to send a `close_notify` message before
+closing the write side of the connection. However, some implementations don't send it.
+So long as the application layer protocol (for instance HTTP/2) has message length framing
+and can reject truncated messages, this is not a security problem.
+
+Rustls treats an EOF without `close_notify` as an error of type `std::io::Error` with
+`ErrorKind::UnexpectedEof`. In some situations it's appropriate for the application to handle
+this error the same way it would handle a normal EOF (a read returning `Ok(0)`). In particular
+if `UnexpectedEof` occurs on an idle connection it is appropriate to treat it the same way as a
+clean shutdown. And if an application always uses messages with length framing (in other words,
+messages are never delimited by the close of the TCP connection), it can unconditionally
+ignore `UnexpectedEof` errors from rustls.
+
+[^2]: <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
 */
