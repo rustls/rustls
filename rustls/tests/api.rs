@@ -4104,7 +4104,10 @@ mod test_quic {
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let mut random = [0; 32];
-        PROVIDER.fill(&mut random).unwrap();
+        PROVIDER
+            .secure_random()
+            .fill(&mut random)
+            .unwrap();
         let random = Random::from(random);
 
         let rng = ring::rand::SystemRandom::new();
@@ -4118,7 +4121,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_3,
                 random,
-                session_id: SessionId::random(PROVIDER).unwrap(),
+                session_id: SessionId::random(PROVIDER.secure_random()).unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![
@@ -4158,7 +4161,10 @@ mod test_quic {
         use rustls::{CipherSuite, HandshakeType, SignatureScheme};
 
         let mut random = [0; 32];
-        PROVIDER.fill(&mut random).unwrap();
+        PROVIDER
+            .secure_random()
+            .fill(&mut random)
+            .unwrap();
         let random = Random::from(random);
 
         let rng = ring::rand::SystemRandom::new();
@@ -4179,7 +4185,7 @@ mod test_quic {
             payload: HandshakePayload::ClientHello(ClientHelloPayload {
                 client_version: ProtocolVersion::TLSv1_2,
                 random,
-                session_id: SessionId::random(PROVIDER).unwrap(),
+                session_id: SessionId::random(PROVIDER.secure_random()).unwrap(),
                 cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
                 compression_methods: vec![Compression::Null],
                 extensions: vec![
@@ -4575,7 +4581,7 @@ fn test_client_sends_helloretryrequest() {
 #[test]
 fn test_client_rejects_hrr_with_varied_session_id() {
     use rustls::internal::msgs::handshake::SessionId;
-    let different_session_id = SessionId::random(PROVIDER).unwrap();
+    let different_session_id = SessionId::random(PROVIDER.secure_random()).unwrap();
 
     let assert_client_sends_hello_with_secp384 = |msg: &mut Message| -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
@@ -5503,8 +5509,7 @@ fn test_explicit_provider_selection() {
 struct FaultyRandomProvider {
     parent: &'static dyn rustls::crypto::CryptoProvider,
 
-    // when empty, `fill_random` requests return `GetRandomFailed`
-    rand_queue: Mutex<&'static [u8]>,
+    random: &'static dyn rustls::crypto::SecureRandom,
 }
 
 impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
@@ -5527,9 +5532,19 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
         self.parent
             .signature_verification_algorithms()
     }
+
+    fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
+        self.random
+    }
 }
 
-impl rustls::crypto::SecureRandom for FaultyRandomProvider {
+#[derive(Debug)]
+struct FaultyRandom {
+    // when empty, `fill_random` requests return `GetRandomFailed`
+    rand_queue: Mutex<&'static [u8]>,
+}
+
+impl rustls::crypto::SecureRandom for FaultyRandom {
     fn fill(&self, output: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
         let mut queue = self.rand_queue.lock().unwrap();
 
@@ -5552,9 +5567,12 @@ impl rustls::crypto::SecureRandom for FaultyRandomProvider {
 
 #[test]
 fn test_client_construction_fails_if_random_source_fails_in_first_request() {
+    static FAULTY_RANDOM: FaultyRandom = FaultyRandom {
+        rand_queue: Mutex::new(b""),
+    };
     static TEST_PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
         parent: PROVIDER,
-        rand_queue: Mutex::new(b""),
+        random: &FAULTY_RANDOM,
     };
 
     let client_config = finish_client_config(
@@ -5570,9 +5588,12 @@ fn test_client_construction_fails_if_random_source_fails_in_first_request() {
 
 #[test]
 fn test_client_construction_fails_if_random_source_fails_in_second_request() {
+    static FAULTY_RANDOM: FaultyRandom = FaultyRandom {
+        rand_queue: Mutex::new(b"nice random number generator huh"),
+    };
     static TEST_PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
         parent: PROVIDER,
-        rand_queue: Mutex::new(b"nice random number generator huh"),
+        random: &FAULTY_RANDOM,
     };
 
     let client_config = finish_client_config(
@@ -5588,12 +5609,15 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
 
 #[test]
 fn test_client_construction_requires_64_bytes_of_random_material() {
-    static TEST_PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
-        parent: PROVIDER,
+    static FAULTY_RANDOM: FaultyRandom = FaultyRandom {
         rand_queue: Mutex::new(
             b"nice random number generator !!!\
-              it's really not very good is it?",
+                                 it's really not very good is it?",
         ),
+    };
+    static TEST_PROVIDER: FaultyRandomProvider = FaultyRandomProvider {
+        parent: PROVIDER,
+        random: &FAULTY_RANDOM,
     };
 
     let client_config = finish_client_config(

@@ -55,6 +55,10 @@ impl CryptoProvider for Ring {
     fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms {
         SUPPORTED_SIG_ALGS
     }
+
+    fn secure_random(&self) -> &'static dyn SecureRandom {
+        &Self
+    }
 }
 
 impl SecureRandom for Ring {

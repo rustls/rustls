@@ -1085,8 +1085,9 @@ impl ExpectFinished {
         key_schedule: &KeyScheduleTraffic,
         config: &ServerConfig,
     ) -> Result<(), Error> {
-        let nonce = rand::random_vec(config.provider, 32)?;
-        let age_add = rand::random_u32(config.provider)?;
+        let secure_random = config.provider.secure_random();
+        let nonce = rand::random_vec(secure_random, 32)?;
+        let age_add = rand::random_u32(secure_random)?;
         let plain = get_server_session_value(
             transcript,
             suite,
@@ -1106,7 +1107,7 @@ impl ExpectFinished {
             };
             (ticket, config.ticketer.lifetime())
         } else {
-            let id = rand::random_vec(config.provider, 32)?;
+            let id = rand::random_vec(secure_random, 32)?;
             let stored = config
                 .session_storage
                 .put(id.clone(), plain);

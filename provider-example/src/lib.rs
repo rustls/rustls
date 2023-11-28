@@ -38,6 +38,10 @@ impl rustls::crypto::CryptoProvider for Provider {
     fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
         verify::ALGORITHMS
     }
+
+    fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
+        &Self
+    }
 }
 
 impl rustls::crypto::SecureRandom for Provider {

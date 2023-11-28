@@ -209,7 +209,7 @@ mod client_hello {
             if !self.config.session_storage.can_cache() {
                 self.session_id = SessionId::empty();
             } else if self.session_id.is_empty() && !ticket_received {
-                self.session_id = SessionId::random(self.config.provider)?;
+                self.session_id = SessionId::random(self.config.provider.secure_random())?;
             }
 
             self.send_ticket = emit_server_hello(

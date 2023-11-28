@@ -100,11 +100,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// #[derive(Debug)]
 /// struct HsmKeyLoader;
 ///
-/// impl rustls::crypto::CryptoProvider for HsmKeyLoader {
-///     fn fill_random(&self, buf: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
-///         RING.fill(buf)
-///     }
-///
+/// impl rustls::crypto::CryptoProvider for HsmKeyLoader {///
 ///     fn default_cipher_suites(&self) -> &'static [rustls::SupportedCipherSuite] {
 ///         RING.default_cipher_suites()
 ///     }
@@ -119,6 +115,16 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 ///     fn load_private_key(&self, key_der: pki_types::PrivateKeyDer<'static>) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
 ///         fictious_hsm_api::load_private_key(key_der)
+///     }
+///
+///     fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
+///        &HsmKeyLoader
+///     }
+/// }
+///
+/// impl rustls::crypto::SecureRandom for HsmKeyLoader {
+///     fn fill(&self, buf: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
+///         RING.secure_random().fill(buf)
 ///     }
 /// }
 /// # }
@@ -152,7 +158,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// [provider-example/]: https://github.com/rustls/rustls/tree/main/provider-example/
 /// [rust-crypto]: https://github.com/rustcrypto
 /// [dalek-cryptography]: https://github.com/dalek-cryptography
-pub trait CryptoProvider: SecureRandom + Send + Sync + Debug + 'static {
+pub trait CryptoProvider: Send + Sync + Debug + 'static {
     /// Provide a safe set of cipher suites that can be used as the defaults.
     ///
     /// This is used by [`crate::ConfigBuilder::with_safe_defaults()`] and
@@ -197,6 +203,9 @@ pub trait CryptoProvider: SecureRandom + Send + Sync + Debug + 'static {
     /// [`crate::server::WebPkiClientVerifier::builder_with_provider()`] and
     /// [`crate::client::WebPkiServerVerifier::builder_with_provider()`].
     fn signature_verification_algorithms(&self) -> WebPkiSupportedAlgorithms;
+
+    /// Return a source of cryptographically secure randomness.
+    fn secure_random(&self) -> &'static dyn SecureRandom;
 }
 
 /// A source of cryptographically secure randomness.
