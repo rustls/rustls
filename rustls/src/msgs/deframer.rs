@@ -455,103 +455,6 @@ mod tests {
 
     use std::io;
 
-    const FIRST_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.1.bin");
-    const SECOND_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.2.bin");
-
-    const EMPTY_APPLICATIONDATA_MESSAGE: &[u8] =
-        include_bytes!("../testdata/deframer-empty-applicationdata.bin");
-
-    const INVALID_EMPTY_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-empty.bin");
-    const INVALID_CONTENTTYPE_MESSAGE: &[u8] =
-        include_bytes!("../testdata/deframer-invalid-contenttype.bin");
-    const INVALID_VERSION_MESSAGE: &[u8] =
-        include_bytes!("../testdata/deframer-invalid-version.bin");
-    const INVALID_LENGTH_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-length.bin");
-
-    fn input_bytes(d: &mut MessageDeframer, bytes: &[u8]) -> io::Result<usize> {
-        let mut rd = io::Cursor::new(bytes);
-        d.read(&mut rd)
-    }
-
-    fn input_bytes_concat(
-        d: &mut MessageDeframer,
-        bytes1: &[u8],
-        bytes2: &[u8],
-    ) -> io::Result<usize> {
-        let mut bytes = vec![0u8; bytes1.len() + bytes2.len()];
-        bytes[..bytes1.len()].clone_from_slice(bytes1);
-        bytes[bytes1.len()..].clone_from_slice(bytes2);
-        let mut rd = io::Cursor::new(&bytes);
-        d.read(&mut rd)
-    }
-
-    struct ErrorRead {
-        error: Option<io::Error>,
-    }
-
-    impl ErrorRead {
-        fn new(error: io::Error) -> Self {
-            Self { error: Some(error) }
-        }
-    }
-
-    impl io::Read for ErrorRead {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            for (i, b) in buf.iter_mut().enumerate() {
-                *b = i as u8;
-            }
-
-            let error = self.error.take().unwrap();
-            Err(error)
-        }
-    }
-
-    fn input_error(d: &mut MessageDeframer) {
-        let error = io::Error::from(io::ErrorKind::TimedOut);
-        let mut rd = ErrorRead::new(error);
-        d.read(&mut rd)
-            .expect_err("error not propagated");
-    }
-
-    fn input_whole_incremental(d: &mut MessageDeframer, bytes: &[u8]) {
-        let before = d.used;
-
-        for i in 0..bytes.len() {
-            assert_len(1, input_bytes(d, &bytes[i..i + 1]));
-            assert!(d.has_pending());
-        }
-
-        assert_eq!(before + bytes.len(), d.used);
-    }
-
-    fn assert_len(want: usize, got: io::Result<usize>) {
-        if let Ok(gotval) = got {
-            assert_eq!(gotval, want);
-        } else {
-            panic!("read failed, expected {:?} bytes", want);
-        }
-    }
-
-    fn pop_first(d: &mut MessageDeframer, rl: &mut RecordLayer) {
-        let m = d
-            .pop(rl, None)
-            .unwrap()
-            .unwrap()
-            .message;
-        assert_eq!(m.typ, ContentType::Handshake);
-        Message::try_from(m).unwrap();
-    }
-
-    fn pop_second(d: &mut MessageDeframer, rl: &mut RecordLayer) {
-        let m = d
-            .pop(rl, None)
-            .unwrap()
-            .unwrap()
-            .message;
-        assert_eq!(m.typ, ContentType::Alert);
-        Message::try_from(m).unwrap();
-    }
-
     #[test]
     fn check_incremental() {
         let mut d = MessageDeframer::default();
@@ -762,4 +665,101 @@ mod tests {
         );
         assert!(input_bytes(&mut d, &message).is_err());
     }
+
+    fn input_bytes(d: &mut MessageDeframer, bytes: &[u8]) -> io::Result<usize> {
+        let mut rd = io::Cursor::new(bytes);
+        d.read(&mut rd)
+    }
+
+    fn input_bytes_concat(
+        d: &mut MessageDeframer,
+        bytes1: &[u8],
+        bytes2: &[u8],
+    ) -> io::Result<usize> {
+        let mut bytes = vec![0u8; bytes1.len() + bytes2.len()];
+        bytes[..bytes1.len()].clone_from_slice(bytes1);
+        bytes[bytes1.len()..].clone_from_slice(bytes2);
+        let mut rd = io::Cursor::new(&bytes);
+        d.read(&mut rd)
+    }
+
+    struct ErrorRead {
+        error: Option<io::Error>,
+    }
+
+    impl ErrorRead {
+        fn new(error: io::Error) -> Self {
+            Self { error: Some(error) }
+        }
+    }
+
+    impl io::Read for ErrorRead {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            for (i, b) in buf.iter_mut().enumerate() {
+                *b = i as u8;
+            }
+
+            let error = self.error.take().unwrap();
+            Err(error)
+        }
+    }
+
+    fn input_error(d: &mut MessageDeframer) {
+        let error = io::Error::from(io::ErrorKind::TimedOut);
+        let mut rd = ErrorRead::new(error);
+        d.read(&mut rd)
+            .expect_err("error not propagated");
+    }
+
+    fn input_whole_incremental(d: &mut MessageDeframer, bytes: &[u8]) {
+        let before = d.used;
+
+        for i in 0..bytes.len() {
+            assert_len(1, input_bytes(d, &bytes[i..i + 1]));
+            assert!(d.has_pending());
+        }
+
+        assert_eq!(before + bytes.len(), d.used);
+    }
+
+    fn assert_len(want: usize, got: io::Result<usize>) {
+        if let Ok(gotval) = got {
+            assert_eq!(gotval, want);
+        } else {
+            panic!("read failed, expected {:?} bytes", want);
+        }
+    }
+
+    fn pop_first(d: &mut MessageDeframer, rl: &mut RecordLayer) {
+        let m = d
+            .pop(rl, None)
+            .unwrap()
+            .unwrap()
+            .message;
+        assert_eq!(m.typ, ContentType::Handshake);
+        Message::try_from(m).unwrap();
+    }
+
+    fn pop_second(d: &mut MessageDeframer, rl: &mut RecordLayer) {
+        let m = d
+            .pop(rl, None)
+            .unwrap()
+            .unwrap()
+            .message;
+        assert_eq!(m.typ, ContentType::Alert);
+        Message::try_from(m).unwrap();
+    }
+
+    const FIRST_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.1.bin");
+    const SECOND_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.2.bin");
+
+    const EMPTY_APPLICATIONDATA_MESSAGE: &[u8] =
+        include_bytes!("../testdata/deframer-empty-applicationdata.bin");
+
+    const INVALID_EMPTY_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-empty.bin");
+    const INVALID_CONTENTTYPE_MESSAGE: &[u8] =
+        include_bytes!("../testdata/deframer-invalid-contenttype.bin");
+    const INVALID_VERSION_MESSAGE: &[u8] =
+        include_bytes!("../testdata/deframer-invalid-version.bin");
+    const INVALID_LENGTH_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-length.bin");
 }
