@@ -16,6 +16,7 @@ use pki_types::{CertificateDer, IpAddr, PrivateKeyDer, ServerName, UnixTime};
 use primary_provider::cipher_suite;
 use primary_provider::sign::RsaSigningKey;
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
+use rustls::crypto::KeyProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
@@ -5529,6 +5530,10 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
     fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
         self.random
     }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
+        self.parent.key_provider()
+    }
 }
 
 #[derive(Debug)]
@@ -5563,7 +5568,9 @@ impl rustls::crypto::KeyProvider for FaultyRandomProvider {
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn sign::SigningKey>, Error> {
-        self.parent.load_private_key(key_der)
+        self.parent
+            .key_provider()
+            .load_private_key(key_der)
     }
 }
 
