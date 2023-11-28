@@ -1,4 +1,9 @@
-use std::sync::Arc;
+#![no_std]
+
+extern crate alloc;
+extern crate std;
+
+use alloc::sync::Arc;
 
 use pki_types::PrivateKeyDer;
 use rustls::crypto::CryptoProvider;
