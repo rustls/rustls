@@ -137,6 +137,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         let private_key = self
             .state
             .provider
+            .key_provider()
             .load_private_key(key_der)?;
         let resolver =
             handy::AlwaysResolvesClientCert::new(private_key, CertificateChain(cert_chain))?;

@@ -56,6 +56,10 @@ impl CryptoProvider for AwsLcRs {
     fn secure_random(&self) -> &'static dyn SecureRandom {
         &Self
     }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
+        &Self
+    }
 }
 
 impl SecureRandom for AwsLcRs {

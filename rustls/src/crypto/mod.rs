@@ -116,6 +116,10 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///     fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
 ///        &HsmKeyLoader
 ///     }
+///
+///     fn key_provider(&self) -> &'static dyn rustls::crypto::KeyProvider {
+///        &HsmKeyLoader
+///     }
 /// }
 ///
 /// impl rustls::crypto::SecureRandom for HsmKeyLoader {
@@ -160,7 +164,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// [provider-example/]: https://github.com/rustls/rustls/tree/main/provider-example/
 /// [rust-crypto]: https://github.com/rustcrypto
 /// [dalek-cryptography]: https://github.com/dalek-cryptography
-pub trait CryptoProvider: KeyProvider + Send + Sync + Debug + 'static {
+pub trait CryptoProvider: Send + Sync + Debug + 'static {
     /// Provide a safe set of cipher suites that can be used as the defaults.
     ///
     /// This is used by [`crate::ConfigBuilder::with_safe_defaults()`] and
@@ -196,6 +200,9 @@ pub trait CryptoProvider: KeyProvider + Send + Sync + Debug + 'static {
 
     /// Return a source of cryptographically secure randomness.
     fn secure_random(&self) -> &'static dyn SecureRandom;
+
+    /// Return a mechanism for loading private [SigningKey]s from [PrivateKeyDer].
+    fn key_provider(&self) -> &'static dyn KeyProvider;
 }
 
 /// A source of cryptographically secure randomness.

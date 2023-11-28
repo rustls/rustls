@@ -11,6 +11,7 @@ mod sign;
 mod verify;
 
 pub use hpke::HPKE_PROVIDER;
+use rustls::crypto::KeyProvider;
 
 pub static PROVIDER: &'static dyn rustls::crypto::CryptoProvider = &Provider;
 
@@ -31,6 +32,10 @@ impl rustls::crypto::CryptoProvider for Provider {
     }
 
     fn secure_random(&self) -> &'static dyn rustls::crypto::SecureRandom {
+        &Self
+    }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
         &Self
     }
 }

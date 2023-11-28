@@ -51,6 +51,10 @@ impl CryptoProvider for Ring {
     fn secure_random(&self) -> &'static dyn SecureRandom {
         &Self
     }
+
+    fn key_provider(&self) -> &'static dyn KeyProvider {
+        &Self
+    }
 }
 
 impl SecureRandom for Ring {
