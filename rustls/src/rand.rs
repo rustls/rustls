@@ -1,24 +1,24 @@
 //! The single place where we generate random material for our own use.
 
-use crate::crypto::CryptoProvider;
+use crate::crypto::SecureRandom;
 
 use alloc::vec;
 use alloc::vec::Vec;
 
 /// Make a [`Vec<u8>`] of the given size containing random material.
 pub(crate) fn random_vec(
-    provider: &dyn CryptoProvider,
+    secure_random: &dyn SecureRandom,
     len: usize,
 ) -> Result<Vec<u8>, GetRandomFailed> {
     let mut v = vec![0; len];
-    provider.fill(&mut v)?;
+    secure_random.fill(&mut v)?;
     Ok(v)
 }
 
 /// Return a uniformly random [`u32`].
-pub(crate) fn random_u32(provider: &dyn CryptoProvider) -> Result<u32, GetRandomFailed> {
+pub(crate) fn random_u32(secure_random: &dyn SecureRandom) -> Result<u32, GetRandomFailed> {
     let mut buf = [0u8; 4];
-    provider.fill(&mut buf)?;
+    secure_random.fill(&mut buf)?;
     Ok(u32::from_be_bytes(buf))
 }
 

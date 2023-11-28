@@ -121,7 +121,7 @@ pub(super) fn start_handshake(
             // we're  doing an abbreviated handshake.  See section 3.4 in
             // RFC5077.
             if !inner.ticket().is_empty() {
-                inner.session_id = SessionId::random(config.provider)?;
+                inner.session_id = SessionId::random(config.provider.secure_random())?;
             }
             session_id = Some(inner.session_id);
         }
@@ -137,10 +137,10 @@ pub(super) fn start_handshake(
         Some(session_id) => session_id,
         None if cx.common.is_quic() => SessionId::empty(),
         None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-        None => SessionId::random(config.provider)?,
+        None => SessionId::random(config.provider.secure_random())?,
     };
 
-    let random = Random::new(config.provider)?;
+    let random = Random::new(config.provider.secure_random())?;
 
     Ok(emit_client_hello_for_retry(
         transcript_buffer,

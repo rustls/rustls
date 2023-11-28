@@ -2,7 +2,7 @@
 
 #[cfg(feature = "tls12")]
 use crate::crypto::ActiveKeyExchange;
-use crate::crypto::CryptoProvider;
+use crate::crypto::SecureRandom;
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::error::InvalidMessage;
 #[cfg(feature = "logging")]
@@ -97,11 +97,9 @@ impl Codec for Random {
 }
 
 impl Random {
-    pub(crate) fn new(
-        provider: &'static dyn CryptoProvider,
-    ) -> Result<Self, rand::GetRandomFailed> {
+    pub(crate) fn new(secure_random: &dyn SecureRandom) -> Result<Self, rand::GetRandomFailed> {
         let mut data = [0u8; 32];
-        provider.fill(&mut data)?;
+        secure_random.fill(&mut data)?;
         Ok(Self(data))
     }
 }
@@ -165,9 +163,9 @@ impl Codec for SessionId {
 }
 
 impl SessionId {
-    pub fn random(provider: &'static dyn CryptoProvider) -> Result<Self, rand::GetRandomFailed> {
+    pub fn random(secure_random: &dyn SecureRandom) -> Result<Self, rand::GetRandomFailed> {
         let mut data = [0u8; 32];
-        provider.fill(&mut data)?;
+        secure_random.fill(&mut data)?;
         Ok(Self { data, len: 32 })
     }
 
