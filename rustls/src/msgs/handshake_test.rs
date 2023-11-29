@@ -794,7 +794,7 @@ fn get_sample_helloretryrequest() -> HelloRetryRequest {
     }
 }
 
-fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
+fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13<'static> {
     CertificatePayloadTls13 {
         context: PayloadU8(vec![1, 2, 3]),
         entries: vec![CertificateEntry {

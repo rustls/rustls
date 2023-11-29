@@ -1352,12 +1352,12 @@ impl TlsListElement for CertificateExtension {
 }
 
 #[derive(Debug)]
-pub(crate) struct CertificateEntry {
-    pub(crate) cert: CertificateDer<'static>,
+pub(crate) struct CertificateEntry<'a> {
+    pub(crate) cert: CertificateDer<'a>,
     pub(crate) exts: Vec<CertificateExtension>,
 }
 
-impl<'a> Codec<'a> for CertificateEntry {
+impl<'a> Codec<'a> for CertificateEntry<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.cert.encode(bytes);
         self.exts.encode(bytes);
@@ -1376,8 +1376,8 @@ fn certificate_der_into_owned(cert: CertificateDer<'_>) -> CertificateDer<'stati
     CertificateDer::from(cert.to_vec())
 }
 
-impl CertificateEntry {
-    pub(crate) fn new(cert: CertificateDer<'static>) -> Self {
+impl<'a> CertificateEntry<'a> {
+    pub(crate) fn new(cert: CertificateDer<'a>) -> Self {
         Self {
             cert,
             exts: Vec::new(),
@@ -1411,25 +1411,32 @@ impl CertificateEntry {
             .find(|ext| ext.get_type() == ExtensionType::StatusRequest)
             .and_then(CertificateExtension::get_cert_status)
     }
+
+    fn into_owned(self) -> CertificateEntry<'static> {
+        CertificateEntry {
+            cert: certificate_der_into_owned(self.cert),
+            exts: self.exts,
+        }
+    }
 }
 
-impl TlsListElement for CertificateEntry {
+impl<'a> TlsListElement for CertificateEntry<'a> {
     const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
 }
 
 #[derive(Debug)]
-pub struct CertificatePayloadTls13 {
+pub struct CertificatePayloadTls13<'a> {
     pub(crate) context: PayloadU8,
-    pub(crate) entries: Vec<CertificateEntry>,
+    pub(crate) entries: Vec<CertificateEntry<'a>>,
 }
 
-impl<'a> Codec<'a> for CertificatePayloadTls13 {
+impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.entries.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             context: PayloadU8::read(r)?,
             entries: Vec::read(r)?,
@@ -1437,8 +1444,8 @@ impl<'a> Codec<'a> for CertificatePayloadTls13 {
     }
 }
 
-impl CertificatePayloadTls13 {
-    pub(crate) fn new(entries: Vec<CertificateEntry>) -> Self {
+impl<'a> CertificatePayloadTls13<'a> {
+    pub(crate) fn new(entries: Vec<CertificateEntry<'a>>) -> Self {
         Self {
             context: PayloadU8::empty(),
             entries,
@@ -1483,13 +1490,24 @@ impl CertificatePayloadTls13 {
             .unwrap_or_default()
     }
 
-    pub(crate) fn convert(self) -> CertificateChain<'static> {
+    pub(crate) fn convert(self) -> CertificateChain<'a> {
         CertificateChain(
             self.entries
                 .into_iter()
                 .map(|e| e.cert)
                 .collect(),
         )
+    }
+
+    fn into_owned(self) -> CertificatePayloadTls13<'static> {
+        CertificatePayloadTls13 {
+            context: self.context,
+            entries: self
+                .entries
+                .into_iter()
+                .map(|e| e.into_owned())
+                .collect(),
+        }
     }
 }
 
@@ -2085,7 +2103,7 @@ pub enum HandshakePayload<'a> {
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificateChain<'a>),
-    CertificateTls13(CertificatePayloadTls13),
+    CertificateTls13(CertificatePayloadTls13<'a>),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
     CertificateRequestTls13(CertificateRequestPayloadTls13),
@@ -2138,7 +2156,7 @@ impl HandshakePayload<'_> {
             ServerHello(x) => ServerHello(x),
             HelloRetryRequest(x) => HelloRetryRequest(x),
             Certificate(x) => Certificate(x.into_owned()),
-            CertificateTls13(x) => CertificateTls13(x),
+            CertificateTls13(x) => CertificateTls13(x.into_owned()),
             ServerKeyExchange(x) => ServerKeyExchange(x),
             CertificateRequest(x) => CertificateRequest(x),
             CertificateRequestTls13(x) => CertificateRequestTls13(x),
