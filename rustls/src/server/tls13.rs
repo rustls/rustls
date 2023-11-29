@@ -960,16 +960,16 @@ impl State<ServerConnectionData> for ExpectCertificate {
     }
 }
 
-struct ExpectCertificateVerify {
+struct ExpectCertificateVerify<'a> {
     config: Arc<ServerConfig>,
     transcript: HandshakeHash,
     suite: &'static Tls13CipherSuite,
     key_schedule: KeyScheduleTrafficWithClientFinishedPending,
-    client_cert: CertificateChain<'static>,
+    client_cert: CertificateChain<'a>,
     send_tickets: usize,
 }
 
-impl State<ServerConnectionData> for ExpectCertificateVerify {
+impl<'a> State<ServerConnectionData> for ExpectCertificateVerify<'a> {
     fn handle<'m>(
         mut self: Box<Self>,
         cx: &mut ServerContext<'_>,
@@ -1001,7 +1001,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         }
 
         trace!("client CertificateVerify OK");
-        cx.common.peer_certificates = Some(self.client_cert);
+        cx.common.peer_certificates = Some(self.client_cert.into_owned());
 
         self.transcript.add_message(&m);
         Ok(Box::new(ExpectFinished {
@@ -1014,7 +1014,14 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
-        self
+        Box::new(ExpectCertificateVerify {
+            config: self.config,
+            transcript: self.transcript,
+            suite: self.suite,
+            key_schedule: self.key_schedule,
+            client_cert: self.client_cert.into_owned(),
+            send_tickets: self.send_tickets,
+        })
     }
 }
 
