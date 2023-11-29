@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn certificate_debug() {
         assert_eq!(
-            "CertificateDer(Der([97, 98]))",
+            "CertificateDer(0x6162)",
             format!("{:?}", CertificateDer::from(b"ab".to_vec()))
         );
     }

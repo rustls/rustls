@@ -16,6 +16,7 @@ pub static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
 static RSA_PSS_SHA256: &dyn SignatureVerificationAlgorithm = &RsaPssSha256Verify;
 static RSA_PKCS1_SHA256: &dyn SignatureVerificationAlgorithm = &RsaPkcs1Sha256Verify;
 
+#[derive(Debug)]
 struct RsaPssSha256Verify;
 
 impl SignatureVerificationAlgorithm for RsaPssSha256Verify {
@@ -43,6 +44,7 @@ impl SignatureVerificationAlgorithm for RsaPssSha256Verify {
     }
 }
 
+#[derive(Debug)]
 struct RsaPkcs1Sha256Verify;
 
 impl SignatureVerificationAlgorithm for RsaPkcs1Sha256Verify {
