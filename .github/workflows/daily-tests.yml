@@ -87,6 +87,12 @@ jobs:
       - name: Check unbuffered client 
         run: cargo run --locked --bin unbuffered-client
 
+      - name: Check unbuffered tokio client 
+        run: cargo run --locked --bin unbuffered-async-client
+
+      - name: Check unbuffered async-std client 
+        run: cargo run --locked --bin unbuffered-async-client --features=async-std
+
       # Test the server_acceptor binary builds - we invoke with --help since it
       # will run a server process that doesn't exit when invoked with no args
       - name: Check server acceptor
