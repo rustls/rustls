@@ -28,9 +28,9 @@ use super::tls12;
 use super::Tls12Resumption;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
-use crate::client::{tls13, ClientConfig, ServerName};
+use crate::client::{tls13, ClientConfig};
 
-use pki_types::UnixTime;
+use pki_types::{ServerName, UnixTime};
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -44,7 +44,7 @@ pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 fn find_session(
-    server_name: &ServerName,
+    server_name: &ServerName<'static>,
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
@@ -91,7 +91,7 @@ fn find_session(
 }
 
 pub(super) fn start_handshake(
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -185,7 +185,7 @@ struct ClientHelloInput {
     sent_tls13_fake_ccs: bool,
     hello: ClientHelloDetails,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
 }
 
 fn emit_client_hello_for_retry(
@@ -232,8 +232,9 @@ fn emit_client_hello_for_retry(
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
 
-    if let (Some(sni_name), true) = (input.server_name.for_sni(), config.enable_sni) {
-        exts.push(ClientExtension::make_sni(sni_name));
+    if let (ServerName::DnsName(dns), true) = (&input.server_name, config.enable_sni) {
+        // We only want to send the SNI extension if the server name contains a DNS name.
+        exts.push(ClientExtension::make_sni(dns));
     }
 
     if let Some(key_share) = &key_share {

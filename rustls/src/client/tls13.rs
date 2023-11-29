@@ -38,9 +38,9 @@ use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::client::common::ServerCertDetails;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::{hs, ClientConfig, ClientSessionStore, ServerName};
+use crate::client::{hs, ClientConfig, ClientSessionStore};
 
-use pki_types::UnixTime;
+use pki_types::{ServerName, UnixTime};
 use subtle::ConstantTimeEq;
 
 use alloc::boxed::Box;
@@ -69,7 +69,7 @@ pub(super) fn handle_server_hello(
     cx: &mut ClientContext,
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::Tls13ClientSessionValue>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -156,7 +156,7 @@ pub(super) fn handle_server_hello(
     config
         .resumption
         .store
-        .set_kx_hint(&server_name, their_key_share.group);
+        .set_kx_hint(server_name.clone(), their_key_share.group);
 
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
@@ -204,7 +204,7 @@ fn validate_server_hello(
 
 pub(super) fn initial_key_share(
     config: &ClientConfig,
-    server_name: &ServerName,
+    server_name: &ServerName<'_>,
 ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
     let group = config
         .resumption
@@ -370,7 +370,7 @@ fn validate_encrypted_extensions(
 struct ExpectEncryptedExtensions {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls13ClientSessionValue>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -470,7 +470,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
 struct ExpectCertificateOrCertReq {
     config: Arc<ClientConfig>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -541,7 +541,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
 // in TLS1.3.
 struct ExpectCertificateRequest {
     config: Arc<ClientConfig>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -620,7 +620,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
 
 struct ExpectCertificate {
     config: Arc<ClientConfig>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -683,7 +683,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
 // --- TLS1.3 CertificateVerify ---
 struct ExpectCertificateVerify<'a> {
     config: Arc<ClientConfig>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -863,7 +863,7 @@ fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut Com
 
 struct ExpectFinished {
     config: Arc<ClientConfig>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
@@ -989,7 +989,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 // and application data.
 struct ExpectTraffic {
     session_storage: Arc<dyn ClientSessionStore>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleTraffic,
@@ -1045,7 +1045,7 @@ impl ExpectTraffic {
         }
 
         self.session_storage
-            .insert_tls13_ticket(&self.server_name, value);
+            .insert_tls13_ticket(self.server_name.clone(), value);
         Ok(())
     }
 

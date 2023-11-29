@@ -1,5 +1,5 @@
 /// This module contains optional APIs for implementing QUIC TLS.
-use crate::client::{ClientConfig, ClientConnectionData, ServerName};
+use crate::client::{ClientConfig, ClientConnectionData};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
 use crate::crypto::cipher::{AeadKey, Iv};
@@ -13,6 +13,8 @@ use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
 use crate::tls13::Tls13CipherSuite;
+
+use pki_types::ServerName;
 
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
@@ -146,7 +148,7 @@ impl ClientConnection {
     pub fn new(
         config: Arc<ClientConfig>,
         quic_version: Version,
-        name: ServerName,
+        name: ServerName<'static>,
         params: Vec<u8>,
     ) -> Result<Self, Error> {
         if !config.supports_version(ProtocolVersion::TLSv1_3) {

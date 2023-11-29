@@ -2,7 +2,6 @@ use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Context, Protocol, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
-use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 #[cfg(feature = "logging")]
@@ -17,6 +16,8 @@ use crate::verify;
 use crate::KeyLog;
 
 use super::hs;
+
+use pki_types::DnsName;
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -117,7 +118,7 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
 
 /// A struct representing the received Client Hello
 pub struct ClientHello<'a> {
-    server_name: &'a Option<DnsName>,
+    server_name: &'a Option<DnsName<'a>>,
     signature_schemes: &'a [SignatureScheme],
     alpn: Option<&'a Vec<ProtocolName>>,
     cipher_suites: &'a [CipherSuite],
@@ -831,7 +832,7 @@ impl ConnectionCore<ServerConnectionData> {
 /// State associated with a server connection.
 #[derive(Default, Debug)]
 pub struct ServerConnectionData {
-    pub(super) sni: Option<DnsName>,
+    pub(super) sni: Option<DnsName<'static>>,
     pub(super) received_resumption_data: Option<Vec<u8>>,
     pub(super) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,

@@ -1,4 +1,3 @@
-use crate::dns_name::DnsName;
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{PayloadU16, PayloadU8};
@@ -10,7 +9,7 @@ use crate::msgs::handshake::SessionId;
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 
-use pki_types::UnixTime;
+use pki_types::{DnsName, UnixTime};
 use zeroize::Zeroizing;
 
 use alloc::vec::Vec;
@@ -252,7 +251,7 @@ static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
 // --- Server types ---
 #[derive(Debug)]
 pub struct ServerSessionValue {
-    pub(crate) sni: Option<DnsName>,
+    pub(crate) sni: Option<DnsName<'static>>,
     pub(crate) version: ProtocolVersion,
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) master_secret: Zeroizing<PayloadU8>,
@@ -300,8 +299,8 @@ impl<'a> Codec<'a> for ServerSessionValue {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;
-            let dns_name = match DnsName::try_from_ascii(&dns_name.0) {
-                Ok(dns_name) => dns_name,
+            let dns_name = match DnsName::try_from(dns_name.0.as_slice()) {
+                Ok(dns_name) => dns_name.to_owned(),
                 Err(_) => return Err(InvalidMessage::InvalidServerName),
             };
 
@@ -348,7 +347,7 @@ impl<'a> Codec<'a> for ServerSessionValue {
 
 impl ServerSessionValue {
     pub(crate) fn new(
-        sni: Option<&DnsName>,
+        sni: Option<&DnsName<'_>>,
         v: ProtocolVersion,
         cs: CipherSuite,
         ms: &[u8],
@@ -359,7 +358,7 @@ impl ServerSessionValue {
         age_obfuscation_offset: u32,
     ) -> Self {
         Self {
-            sni: sni.cloned(),
+            sni: sni.map(|dns| dns.to_owned()),
             version: v,
             cipher_suite: cs,
             master_secret: Zeroizing::new(PayloadU8::new(ms.to_vec())),

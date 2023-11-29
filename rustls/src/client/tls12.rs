@@ -25,9 +25,9 @@ use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::client::common::ClientAuthDetails;
 use crate::client::common::ServerCertDetails;
-use crate::client::{hs, ClientConfig, ServerName};
+use crate::client::{hs, ClientConfig};
 
-use pki_types::UnixTime;
+use pki_types::{ServerName, UnixTime};
 use subtle::ConstantTimeEq;
 
 use alloc::borrow::ToOwned;
@@ -48,7 +48,7 @@ mod server_hello {
     pub(in crate::client) struct CompleteServerHelloHandling {
         pub(in crate::client) config: Arc<ClientConfig>,
         pub(in crate::client) resuming_session: Option<persist::Tls12ClientSessionValue>,
-        pub(in crate::client) server_name: ServerName,
+        pub(in crate::client) server_name: ServerName<'static>,
         pub(in crate::client) randoms: ConnectionRandoms,
         pub(in crate::client) using_ems: bool,
         pub(in crate::client) transcript: HandshakeHash,
@@ -189,7 +189,7 @@ struct ExpectCertificate {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -254,7 +254,7 @@ struct ExpectCertificateStatusOrServerKx<'m> {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -336,7 +336,7 @@ struct ExpectCertificateStatus<'a> {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -395,7 +395,7 @@ struct ExpectServerKx<'a> {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -574,7 +574,7 @@ struct ExpectServerDoneOrCertReq<'a> {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -650,7 +650,7 @@ struct ExpectCertificateRequest<'a> {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -721,7 +721,7 @@ struct ExpectServerDone<'a> {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     randoms: ConnectionRandoms,
     using_ems: bool,
     transcript: HandshakeHash,
@@ -938,7 +938,7 @@ struct ExpectNewTicket {
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
     resuming: bool,
@@ -989,7 +989,7 @@ struct ExpectCcs {
     secrets: ConnectionSecrets,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
@@ -1049,7 +1049,7 @@ struct ExpectFinished {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     using_ems: bool,
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
@@ -1097,7 +1097,7 @@ impl ExpectFinished {
         self.config
             .resumption
             .store
-            .set_tls12_session(&self.server_name, session_value);
+            .set_tls12_session(self.server_name.clone(), session_value);
     }
 }
 

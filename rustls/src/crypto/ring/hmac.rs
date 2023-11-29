@@ -5,7 +5,9 @@ use crate::crypto;
 
 use alloc::boxed::Box;
 
+#[cfg(feature = "tls12")]
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring_like::hmac::HMAC_SHA256);
+#[cfg(feature = "tls12")]
 pub(crate) static HMAC_SHA384: Hmac = Hmac(&ring_like::hmac::HMAC_SHA384);
 #[cfg(test)]
 #[allow(dead_code)] // only for TLS1.2 prf test

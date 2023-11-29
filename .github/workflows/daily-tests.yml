@@ -110,3 +110,5 @@ jobs:
 
       - name: Check feature powerset
         run: cargo hack check --feature-powerset --no-dev-deps
+        env:
+          RUSTFLAGS: --deny warnings

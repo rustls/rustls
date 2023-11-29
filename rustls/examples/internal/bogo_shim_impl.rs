@@ -14,8 +14,8 @@ use rustls::server::{ClientHello, ServerConfig, ServerConnection, WebPkiClientVe
 use rustls::{
     self, client, server, sign, version, AlertDescription, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, RootCertStore, ServerName, Side, SignatureAlgorithm,
-    SignatureScheme, SupportedProtocolVersion,
+    PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm, SignatureScheme,
+    SupportedProtocolVersion,
 };
 
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
@@ -24,7 +24,7 @@ use rustls::crypto::{aws_lc_rs as provider, aws_lc_rs::AWS_LC_RS as PROVIDER};
 use rustls::crypto::{ring as provider, ring::RING as PROVIDER};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use pki_types::{CertificateDer, PrivateKeyDer, UnixTime};
+use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 
 use std::fmt::{Debug, Formatter};
 use std::io::{self, BufReader, Read, Write};
@@ -286,7 +286,7 @@ impl ServerCertVerifier for DummyServerAuth {
         &self,
         _end_entity: &CertificateDer<'_>,
         _certs: &[CertificateDer<'_>],
-        _hostname: &ServerName,
+        _hostname: &ServerName<'_>,
         _ocsp: &[u8],
         _now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
@@ -558,14 +558,14 @@ impl ClientCacheWithoutKxHints {
 }
 
 impl client::ClientSessionStore for ClientCacheWithoutKxHints {
-    fn set_kx_hint(&self, _: &ServerName, _: NamedGroup) {}
-    fn kx_hint(&self, _: &ServerName) -> Option<NamedGroup> {
+    fn set_kx_hint(&self, _: ServerName<'static>, _: NamedGroup) {}
+    fn kx_hint(&self, _: &ServerName<'_>) -> Option<NamedGroup> {
         None
     }
 
     fn set_tls12_session(
         &self,
-        server_name: &ServerName,
+        server_name: ServerName<'static>,
         mut value: client::Tls12ClientSessionValue,
     ) {
         value.rewind_epoch(self.delay);
@@ -573,18 +573,21 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
             .set_tls12_session(server_name, value);
     }
 
-    fn tls12_session(&self, server_name: &ServerName) -> Option<client::Tls12ClientSessionValue> {
+    fn tls12_session(
+        &self,
+        server_name: &ServerName<'_>,
+    ) -> Option<client::Tls12ClientSessionValue> {
         self.storage.tls12_session(server_name)
     }
 
-    fn remove_tls12_session(&self, server_name: &ServerName) {
+    fn remove_tls12_session(&self, server_name: &ServerName<'static>) {
         self.storage
             .remove_tls12_session(server_name);
     }
 
     fn insert_tls13_ticket(
         &self,
-        server_name: &ServerName,
+        server_name: ServerName<'static>,
         mut value: client::Tls13ClientSessionValue,
     ) {
         value.rewind_epoch(self.delay);
@@ -594,7 +597,7 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
 
     fn take_tls13_ticket(
         &self,
-        server_name: &ServerName,
+        server_name: &ServerName<'static>,
     ) -> Option<client::Tls13ClientSessionValue> {
         self.storage
             .take_tls13_ticket(server_name)
@@ -1307,11 +1310,9 @@ pub fn main() {
                 .unwrap()
                 .into()
         } else {
-            let server_name = opts
-                .host_name
-                .as_str()
-                .try_into()
-                .unwrap();
+            let server_name = ServerName::try_from(opts.host_name.as_str())
+                .unwrap()
+                .to_owned();
             let ccfg = Arc::clone(ccfg.as_ref().unwrap());
 
             ClientConnection::new(ccfg, server_name)

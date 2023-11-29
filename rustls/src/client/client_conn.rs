@@ -2,7 +2,6 @@ use crate::builder::{ConfigBuilder, WantsCipherSuites};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
-use crate::dns_name::{DnsName, DnsNameRef, InvalidDnsNameError};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 #[cfg(feature = "logging")]
@@ -19,6 +18,8 @@ use crate::KeyLog;
 use super::handy::{ClientSessionMemoryCache, NoClientSessionStorage};
 use super::hs;
 
+use pki_types::ServerName;
+
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
@@ -26,7 +27,6 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 use std::io;
-use std::net::IpAddr;
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -40,7 +40,7 @@ use std::net::IpAddr;
 /// how to achieve interior mutability.  `Mutex` is a common choice.
 pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Remember what `NamedGroup` the given server chose.
-    fn set_kx_hint(&self, server_name: &ServerName, group: NamedGroup);
+    fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup);
 
     /// This should return the value most recently passed to `set_kx_hint`
     /// for the given `server_name`.
@@ -48,18 +48,25 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// If `None` is returned, the caller chooses the first configured group,
     /// and an extra round trip might happen if that choice is unsatisfactory
     /// to the server.
-    fn kx_hint(&self, server_name: &ServerName) -> Option<NamedGroup>;
+    fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup>;
 
     /// Remember a TLS1.2 session.
     ///
     /// At most one of these can be remembered at a time, per `server_name`.
-    fn set_tls12_session(&self, server_name: &ServerName, value: persist::Tls12ClientSessionValue);
+    fn set_tls12_session(
+        &self,
+        server_name: ServerName<'static>,
+        value: persist::Tls12ClientSessionValue,
+    );
 
     /// Get the most recently saved TLS1.2 session for `server_name` provided to `set_tls12_session`.
-    fn tls12_session(&self, server_name: &ServerName) -> Option<persist::Tls12ClientSessionValue>;
+    fn tls12_session(
+        &self,
+        server_name: &ServerName<'_>,
+    ) -> Option<persist::Tls12ClientSessionValue>;
 
     /// Remove and forget any saved TLS1.2 session for `server_name`.
-    fn remove_tls12_session(&self, server_name: &ServerName);
+    fn remove_tls12_session(&self, server_name: &ServerName<'static>);
 
     /// Remember a TLS1.3 ticket that might be retrieved later from `take_tls13_ticket`, allowing
     /// resumption of this session.
@@ -70,7 +77,7 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// simultaneously.
     fn insert_tls13_ticket(
         &self,
-        server_name: &ServerName,
+        server_name: ServerName<'static>,
         value: persist::Tls13ClientSessionValue,
     );
 
@@ -79,7 +86,7 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// Implementations of this trait must return each value provided to `add_tls13_ticket` _at most once_.
     fn take_tls13_ticket(
         &self,
-        server_name: &ServerName,
+        server_name: &ServerName<'static>,
     ) -> Option<persist::Tls13ClientSessionValue>;
 }
 
@@ -354,81 +361,6 @@ impl Default for Resumption {
     }
 }
 
-/// Encodes ways a client can know the expected name of the server.
-///
-/// This currently covers knowing the DNS name of the server, but
-/// will be extended in the future to supporting privacy-preserving names
-/// for the server ("ECH").  For this reason this enum is `non_exhaustive`.
-///
-/// # Making one
-///
-/// If you have a DNS name as a `&str`, this type implements `TryFrom<&str>`,
-/// so you can do:
-///
-/// ```
-/// # use rustls::ServerName;
-/// ServerName::try_from("example.com").expect("invalid DNS name");
-///
-/// // or, alternatively...
-///
-/// let x = "example.com".try_into().expect("invalid DNS name");
-/// # let _: ServerName = x;
-/// ```
-#[non_exhaustive]
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub enum ServerName {
-    /// The server is identified by a DNS name.  The name
-    /// is sent in the TLS Server Name Indication (SNI)
-    /// extension.
-    DnsName(DnsName),
-
-    /// The server is identified by an IP address. SNI is not
-    /// done.
-    IpAddress(IpAddr),
-}
-
-impl fmt::Debug for ServerName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::DnsName(d) => f
-                .debug_tuple("DnsName")
-                .field(&d.as_ref())
-                .finish(),
-            Self::IpAddress(i) => f
-                .debug_tuple("IpAddress")
-                .field(i)
-                .finish(),
-        }
-    }
-}
-
-impl ServerName {
-    /// Return the name that should go in the SNI extension.
-    /// If [`None`] is returned, the SNI extension is not included
-    /// in the handshake.
-    pub(crate) fn for_sni(&self) -> Option<DnsNameRef> {
-        match self {
-            Self::DnsName(dns_name) => Some(dns_name.borrow()),
-            Self::IpAddress(_) => None,
-        }
-    }
-}
-
-/// Attempt to make a ServerName from a string by parsing
-/// it as a DNS name.
-impl TryFrom<&str> for ServerName {
-    type Error = InvalidDnsNameError;
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match DnsNameRef::try_from(s) {
-            Ok(dns) => Ok(Self::DnsName(dns.to_owned())),
-            Err(InvalidDnsNameError) => match s.parse() {
-                Ok(ip) => Ok(Self::IpAddress(ip)),
-                Err(_) => Err(InvalidDnsNameError),
-            },
-        }
-    }
-}
-
 /// Container for unsafe APIs
 pub(super) mod danger {
     use alloc::sync::Arc;
@@ -582,7 +514,7 @@ impl ClientConnection {
     /// Make a new ClientConnection.  `config` controls how
     /// we behave in the TLS protocol, `name` is the
     /// name of the server we want to talk to.
-    pub fn new(config: Arc<ClientConfig>, name: ServerName) -> Result<Self, Error> {
+    pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
         Ok(Self {
             inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
         })
@@ -684,7 +616,7 @@ impl From<ClientConnection> for crate::Connection {
 impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
-        name: ServerName,
+        name: ServerName<'static>,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
     ) -> Result<Self, Error> {

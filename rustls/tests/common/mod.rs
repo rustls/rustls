@@ -5,8 +5,8 @@ use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
-use webpki::extract_trust_anchor;
+use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName};
+use webpki::anchor_from_trusted_cert;
 
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::internal::msgs::codec::Reader;
@@ -344,7 +344,7 @@ pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
     let chain = kt.get_chain();
     let trust_anchor = chain.last().unwrap();
     RootCertStore {
-        roots: vec![extract_trust_anchor(trust_anchor)
+        roots: vec![anchor_from_trusted_cert(trust_anchor)
             .unwrap()
             .to_owned()],
     }
@@ -596,7 +596,7 @@ pub fn do_handshake_until_both_error(
     }
 }
 
-pub fn server_name(name: &'static str) -> rustls::ServerName {
+pub fn server_name(name: &'static str) -> ServerName<'static> {
     name.try_into().unwrap()
 }
 
