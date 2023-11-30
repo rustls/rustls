@@ -10,7 +10,9 @@ use core::fmt::Debug;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
-pub use crate::webpki::WebPkiSupportedAlgorithms;
+pub use crate::webpki::{
+    verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms,
+};
 
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]
