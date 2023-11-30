@@ -18,7 +18,7 @@ pub use anchors::RootCertStore;
 pub use client_verifier::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 pub use server_verifier::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 
-pub use verify::WebPkiSupportedAlgorithms;
+pub use verify::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]

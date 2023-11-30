@@ -134,7 +134,7 @@ impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
 /// succession until one succeeds or we exhaust all candidates.
 ///
 /// See [WebPkiSupportedAlgorithms::mapping] for more information.
-pub(crate) fn verify_tls12_signature(
+pub fn verify_tls12_signature(
     message: &[u8],
     cert: &CertificateDer<'_>,
     dss: &DigitallySignedStruct,
@@ -162,7 +162,7 @@ pub(crate) fn verify_tls12_signature(
 /// This function verifies the `dss` signature over `message` using the subject public key from
 /// `cert`. Unlike [verify_tls12_signature], this function only tries the first matching scheme. See
 /// [WebPkiSupportedAlgorithms::mapping] for more information.
-pub(crate) fn verify_tls13_signature(
+pub fn verify_tls13_signature(
     msg: &[u8],
     cert: &CertificateDer<'_>,
     dss: &DigitallySignedStruct,
