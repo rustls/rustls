@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "async",
   # CI benchmarks
   "ci-bench",
   # Network-based tests
