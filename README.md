@@ -245,11 +245,18 @@ These are included as LICENSE-APACHE, LICENSE-MIT and LICENSE-ISC
 respectively.  You may use this software under the terms of any
 of these licenses, at your option.
 
-# Project Leadership
+# Project Membership
 
-- Joe Birr-Pixton (GitHub: @ctz)
-- Dirkjan Ochtman (GitHub: @djc)
-- Daniel McCarney (GitHub: @cpu)
+- Joe Birr-Pixton ([@ctz], Project Founder - full-time funded by [Prossimo])
+- Dirkjan Ochtman ([@djc], Co-maintainer)
+- Daniel McCarney ([@cpu], Co-maintainer - full-time funded by [Prossimo])
+- Josh Aas ([@bdaehlie], Project Management)
+
+[@ctz]: https://github.com/ctz
+[@djc]: https://github.com/djc
+[@cpu]: https://github.com/cpu
+[@bdaehlie]: https://github.com/bdaehlie
+[Prossimo]: https://www.memorysafety.org/initiative/rustls/
 
 # Code of conduct
 
