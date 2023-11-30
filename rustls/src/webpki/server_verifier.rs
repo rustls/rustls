@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTime};
 use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
@@ -15,7 +15,7 @@ use crate::webpki::verify::{
     ParsedCertificate,
 };
 use crate::webpki::{parse_crls, verify_server_name, VerifierBuilderError};
-use crate::{Error, RootCertStore, SignatureScheme, WebPkiSupportedAlgorithms};
+use crate::{Error, RootCertStore, SignatureScheme};
 
 /// A builder for configuring a `webpki` server certificate verifier.
 ///

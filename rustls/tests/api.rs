@@ -5546,7 +5546,7 @@ impl rustls::crypto::CryptoProvider for FaultyRandomProvider {
         self.parent.load_private_key(key_der)
     }
 
-    fn signature_verification_algorithms(&self) -> rustls::WebPkiSupportedAlgorithms {
+    fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
         self.parent
             .signature_verification_algorithms()
     }
