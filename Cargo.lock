@@ -1732,12 +1732,12 @@ dependencies = [
  "env_logger",
  "log",
  "ring 0.17.5",
- "rustls-pemfile 2.0.0-alpha.2",
+ "rustls-pemfile 2.0.0",
  "rustls-pki-types",
- "rustls-webpki 0.102.0-alpha.8",
+ "rustls-webpki 0.102.0",
  "rustversion",
  "subtle",
- "webpki-roots 0.26.0-alpha.2",
+ "webpki-roots 0.26.0",
  "zeroize",
 ]
 
@@ -1753,7 +1753,7 @@ dependencies = [
  "itertools",
  "rayon",
  "rustls 0.22.0-alpha.6",
- "rustls-pemfile 2.0.0-alpha.2",
+ "rustls-pemfile 2.0.0",
  "rustls-pki-types",
 ]
 
@@ -1777,11 +1777,11 @@ dependencies = [
  "mio",
  "rcgen",
  "rustls 0.22.0-alpha.6",
- "rustls-pemfile 2.0.0-alpha.2",
+ "rustls-pemfile 2.0.0",
  "rustls-pki-types",
  "serde",
  "serde_derive",
- "webpki-roots 0.26.0-alpha.2",
+ "webpki-roots 0.26.0",
 ]
 
 [[package]]
@@ -1795,9 +1795,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pemfile"
-version = "2.0.0-alpha.2"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e9975e1f0807681e097d288d545dc40c98a4d3a6ef95a40b18d00e5e4daa9a4"
+checksum = "35e4980fa29e4c4b212ffb3db068a564cbf560e51d3944b7c88bd8bf5bec64f4"
 dependencies = [
  "base64",
  "rustls-pki-types",
@@ -1805,9 +1805,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "0.2.3"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0d3edd6cdcdf26eda538757038343986e666d0b8ba4b5ac1de663b78475550d"
+checksum = "eb0a1f9b9efec70d32e6d6aa3e58ebd88c3754ec98dfe9145c63cf54cc829b83"
 
 [[package]]
 name = "rustls-provider-example"
@@ -1829,12 +1829,12 @@ dependencies = [
  "rsa",
  "rustls 0.22.0-alpha.6",
  "rustls-pki-types",
- "rustls-webpki 0.102.0-alpha.8",
+ "rustls-webpki 0.102.0",
  "serde",
  "serde_json",
  "sha2",
  "signature",
- "webpki-roots 0.26.0-alpha.2",
+ "webpki-roots 0.26.0",
  "x25519-dalek",
 ]
 
@@ -1850,9 +1850,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.0-alpha.8"
+version = "0.102.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "139cdfd1d8b96f927fbe0a0c98785afe94b63e95a7ef815ebae9263d20e10a0d"
+checksum = "de2635c8bc2b88d367767c5de8ea1d8db9af3f6219eba28442242d9ab81d1b89"
 dependencies = [
  "aws-lc-rs",
  "ring 0.17.5",
@@ -2346,9 +2346,9 @@ checksum = "1778a42e8b3b90bff8d0f5032bf22250792889a5cdc752aa0020c84abe3aaf10"
 
 [[package]]
 name = "webpki-roots"
-version = "0.26.0-alpha.2"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87e3d99d80231fabcc72d887ed09f843b7f3942c75907285e51112a46c8f6f81"
+checksum = "0de2cfda980f21be5a7ed2eadb3e6fe074d56022bea2cdeb1a62eb220fc04188"
 dependencies = [
  "rustls-pki-types",
 ]

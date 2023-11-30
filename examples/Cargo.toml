@@ -11,10 +11,10 @@ docopt = "~1.1"
 env_logger = "0.10"
 log = { version = "0.4.4" }
 mio = { version = "0.8", features = ["net", "os-poll"] }
-pki-types = { package = "rustls-pki-types", version = "0.2.2", features = ["std"] }
+pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
 rcgen = { version = "0.11.3", features = ["pem"], default-features = false }
 rustls = { path = "../rustls", features = [ "logging" ]}
-rustls-pemfile = "=2.0.0-alpha.2"
+rustls-pemfile = "2"
 serde = "1.0"
 serde_derive = "1.0"
-webpki-roots = "=0.26.0-alpha.2"
+webpki-roots = "0.26"
