@@ -113,6 +113,10 @@ impl ConnectionSecrets {
             ),
         };
 
+        // The API contract for for_key_exchange is that the caller guarantees `label` and `seed`
+        // slice parameters are non-empty.
+        // `label` is guaranteed non-empty because it's assigned from a `&str` above.
+        // `seed.as_ref()` is guaranteed non-empty by documentation on the AsRef impl.
         ret.suite
             .prf_provider
             .for_key_exchange(
@@ -289,9 +293,12 @@ enum Seed {
 }
 
 impl AsRef<[u8]> for Seed {
+    /// This is guaranteed to return a non-empty slice.
     fn as_ref(&self) -> &[u8] {
         match self {
+            // seed is a hash::Output, which is a fixed, non-zero length array.
             Self::Ems(seed) => seed.as_ref(),
+            // randoms is a fixed, non-zero length array.
             Self::Randoms(randoms) => randoms.as_ref(),
         }
     }

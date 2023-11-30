@@ -10,7 +10,7 @@ pub struct PrfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
 impl<'a> Prf for PrfUsingHmac<'a> {
     fn for_key_exchange(
         &self,
-        output: &mut [u8],
+        output: &mut [u8; 48],
         kx: Box<dyn ActiveKeyExchange>,
         peer_pub_key: &[u8],
         label: &[u8],
@@ -47,10 +47,12 @@ pub trait Prf: Send + Sync {
     /// Completes the given key exchange, and then uses the resulting shared secret
     /// to compute the PRF, writing the result into `output`.
     ///
-    /// This can fail only if the key exchange fails.
+    /// The caller guarantees that `label`, `seed` are non-empty. The caller makes no
+    /// guarantees about the contents of `peer_pub_key`. It must be validated by
+    /// [`ActiveKeyExchange::complete`].
     fn for_key_exchange(
         &self,
-        output: &mut [u8],
+        output: &mut [u8; 48],
         kx: Box<dyn ActiveKeyExchange>,
         peer_pub_key: &[u8],
         label: &[u8],
@@ -58,6 +60,8 @@ pub trait Prf: Send + Sync {
     ) -> Result<(), Error>;
 
     /// Computes `PRF(secret, label, seed)`, writing the result into `output`.
+    ///
+    /// The caller guarantees that `secret`, `label`, and `seed` are non-empty.
     fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]);
 }
 
