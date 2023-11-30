@@ -375,7 +375,6 @@ mod enums;
 mod key_log;
 mod key_log_file;
 mod suites;
-mod ticketer;
 mod versions;
 mod webpki;
 
@@ -451,7 +450,6 @@ pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };
-pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
@@ -544,6 +542,9 @@ pub mod sign {
 
 /// APIs for implementing QUIC TLS
 pub mod quic;
+
+/// APIs for implementing TLS tickets
+pub mod ticketer;
 
 /// This is the rustls manual.
 pub mod manual;
