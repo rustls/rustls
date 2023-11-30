@@ -9,7 +9,6 @@ use crate::Error;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
-use alloc::string::String;
 use alloc::sync::Arc;
 
 // aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
@@ -64,7 +63,6 @@ impl KeyProvider for AwsLcRs {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn SigningKey>, Error> {
         sign::any_supported_type(&key_der)
-            .map_err(|_| Error::General(String::from("invalid private key")))
     }
 }
 
