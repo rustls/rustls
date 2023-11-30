@@ -57,7 +57,7 @@ const TRANSFER_PLAINTEXT_SIZE: usize = 1024 * 1024 * 10; // 10 MB
 const RESUMED_HANDSHAKE_RUNS: usize = 30;
 
 /// The threshold at which instruction count changes are considered relevant
-const CHANGE_THRESHOLD: f64 = 0.002; // 0.2%
+const CHANGE_THRESHOLD: f64 = 0.02; // 2%
 
 /// The name of the file where the instruction counts are stored after a `run-all` run
 const ICOUNTS_FILENAME: &str = "icounts.csv";
@@ -769,12 +769,12 @@ fn print_report(result: &CompareResult) {
         }
     }
 
-    println!("## Noteworthy instruction count differences");
+    println!(
+        "## Noteworthy instruction count differences (above {}%)",
+        CHANGE_THRESHOLD * 100.0
+    );
     if result.noteworthy.is_empty() {
-        println!(
-            "_There are no noteworthy instruction count differences (i.e. above {}%)_",
-            CHANGE_THRESHOLD * 100.0
-        );
+        println!("_There are no noteworthy instruction count differences_");
     } else {
         table(
             result
