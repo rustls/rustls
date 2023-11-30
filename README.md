@@ -19,9 +19,10 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 [![Documentation](https://docs.rs/rustls/badge.svg)](https://docs.rs/rustls/)
 [![Chat](https://img.shields.io/discord/976380008299917365?logo=discord)](https://discord.gg/MCSB76RU96)
 
-## Release history
+## Changelog
 
-Release history can be found [on GitHub](https://github.com/rustls/rustls/releases).
+The detailed list of changes in each release can be found at
+https://github.com/rustls/rustls/releases.
 
 # Documentation
 
