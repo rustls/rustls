@@ -20,8 +20,8 @@ aws-lc-rs = { version = "1.5", optional = true }
 log = { version = "0.4.4", optional = true }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
-webpki = { package = "rustls-webpki", version = "=0.102.0-alpha.8", features = ["std"], default-features = false }
-pki-types = { package = "rustls-pki-types", version = "0.2.2", features = ["std"] }
+webpki = { package = "rustls-webpki", version = "0.102", features = ["std"], default-features = false }
+pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
 zeroize = "1.6.0"
 
 [features]
@@ -37,8 +37,8 @@ base64 = "0.21"
 bencher = "0.1.5"
 env_logger = "0.10"
 log = "0.4.4"
-rustls-pemfile = "=2.0.0-alpha.2"
-webpki-roots = "=0.26.0-alpha.2"
+rustls-pemfile = "2"
+webpki-roots = "0.26"
 
 [[example]]
 name = "bogo_shim"
