@@ -312,7 +312,7 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 mod danger {
     use pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::client::danger::HandshakeSignatureValid;
-    use rustls::client::WebPkiServerVerifier;
+    use rustls::crypto::{verify_tls12_signature, verify_tls13_signature};
     use rustls::DigitallySignedStruct;
 
     #[derive(Debug)]
@@ -336,7 +336,12 @@ mod danger {
             cert: &CertificateDer<'_>,
             dss: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+            verify_tls12_signature(
+                message,
+                cert,
+                dss,
+                &rustls::crypto::ring::RING.signature_verification_algorithms(),
+            )
         }
 
         fn verify_tls13_signature(
@@ -345,11 +350,18 @@ mod danger {
             cert: &CertificateDer<'_>,
             dss: &DigitallySignedStruct,
         ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+            verify_tls13_signature(
+                message,
+                cert,
+                dss,
+                &rustls::crypto::ring::RING.signature_verification_algorithms(),
+            )
         }
 
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            WebPkiServerVerifier::default_supported_verify_schemes()
+            rustls::crypto::ring::RING
+                .signature_verification_algorithms()
+                .supported_schemes()
         }
     }
 }

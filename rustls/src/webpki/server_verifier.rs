@@ -194,47 +194,6 @@ impl WebPkiServerVerifier {
             supported,
         }
     }
-
-    /// A full implementation of `ServerCertVerifier::verify_tls12_signature` or
-    /// `ClientCertVerifier::verify_tls12_signature`.
-    #[cfg(feature = "ring")]
-    pub fn default_verify_tls12_signature(
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls12_signature(
-            message,
-            cert,
-            dss,
-            &crate::crypto::ring::RING.signature_verification_algorithms(),
-        )
-    }
-
-    /// A full implementation of `ServerCertVerifier::verify_tls13_signature` or
-    /// `ClientCertVerifier::verify_tls13_signature`.
-    #[cfg(feature = "ring")]
-    pub fn default_verify_tls13_signature(
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13_signature(
-            message,
-            cert,
-            dss,
-            &crate::crypto::ring::RING.signature_verification_algorithms(),
-        )
-    }
-
-    /// A full implementation of `ServerCertVerifier::supported_verify_schemes()` or
-    /// `ClientCertVerifier::supported_verify_schemes()`.
-    #[cfg(feature = "ring")]
-    pub fn default_supported_verify_schemes() -> Vec<SignatureScheme> {
-        crate::crypto::ring::RING
-            .signature_verification_algorithms()
-            .supported_schemes()
-    }
 }
 
 impl ServerCertVerifier for WebPkiServerVerifier {
