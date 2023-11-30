@@ -1,0 +1,17 @@
+[package]
+name = "rustls-async"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+futures = { version = "0.3.29", default-features = false, features = ["std"] }
+log = "0.4.20"
+pki-types = { package = "rustls-pki-types", version = "0.2.2" }
+# FIXME use a path dependency
+rustls = { git = "https://github.com/japaric/rustls", branch = "rfc1420-impl-take2" }
+
+[dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
+env_logger = "0.10.1"
+rustls-pemfile = "=2.0.0-alpha.2"
+webpki-roots = "=0.26.0-alpha.2"
