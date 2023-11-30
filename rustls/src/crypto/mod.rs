@@ -1,6 +1,5 @@
 use crate::sign::SigningKey;
 use crate::suites;
-use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, NamedGroup};
 
 use alloc::boxed::Box;
@@ -10,6 +9,8 @@ use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
+
+pub use crate::webpki::WebPkiSupportedAlgorithms;
 
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]
@@ -110,7 +111,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///         RING.default_kx_groups()
 ///     }
 ///
-///     fn signature_verification_algorithms(&self) -> rustls::WebPkiSupportedAlgorithms {
+///     fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
 ///         RING.signature_verification_algorithms()
 ///     }
 ///
@@ -129,7 +130,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// - **Cipher suites** - see [`crate::SupportedCipherSuite`], [`crate::Tls12CipherSuite`], and
 ///   [`crate::Tls13CipherSuite`].
 /// - **Key exchange groups** - see [`crate::crypto::SupportedKxGroup`].
-/// - **Signature verification algorithms** - see [`crate::WebPkiSupportedAlgorithms`].
+/// - **Signature verification algorithms** - see [`crate::crypto::WebPkiSupportedAlgorithms`].
 /// - **Authentication key loading** - see [`crate::crypto::CryptoProvider::load_private_key()`] and
 ///   [`crate::sign::SigningKey`].
 ///

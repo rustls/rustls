@@ -5,14 +5,14 @@ use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
 use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
 use super::{pki_error, VerifierBuilderError};
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::verify::{
     ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
     NoClientAuth,
 };
 use crate::webpki::parse_crls;
 use crate::webpki::verify::{verify_signed_struct, verify_tls13, ParsedCertificate};
-use crate::{DistinguishedName, Error, RootCertStore, SignatureScheme, WebPkiSupportedAlgorithms};
+use crate::{DistinguishedName, Error, RootCertStore, SignatureScheme};
 
 /// A builder for configuring a `webpki` client certificate verifier.
 ///

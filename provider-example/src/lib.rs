@@ -42,7 +42,7 @@ impl rustls::crypto::CryptoProvider for Provider {
         Ok(Arc::new(key))
     }
 
-    fn signature_verification_algorithms(&self) -> rustls::WebPkiSupportedAlgorithms {
+    fn signature_verification_algorithms(&self) -> rustls::crypto::WebPkiSupportedAlgorithms {
         verify::ALGORITHMS
     }
 }
