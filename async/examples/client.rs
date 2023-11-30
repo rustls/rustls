@@ -2,12 +2,21 @@ use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 
-use async_std::net::TcpStream;
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 #[allow(unused_imports)]
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, RootCertStore};
 use rustls_async::{Error, TcpConnector};
+
+// runtime selection:
+// - adjust the dependencies in `Cargo.toml`
+// - adjust the imports in this file
+// - uppdate the attribute on the `main` function
+// - comment / uncomment the `compat_write` call in `main` if using `async_std` / `tokio`
+use async_std::net::TcpStream;
+
+// use tokio::net::TcpStream;
+// use tokio_util::compat::TokioAsyncWriteCompatExt;
 
 // remote server
 const CERTFILE: Option<&str> = None;
@@ -15,6 +24,7 @@ const SERVER_NAME: &str = "example.com";
 const PORT: u16 = 443;
 
 #[async_std::main]
+// #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
     env_logger::init();
 
@@ -31,6 +41,9 @@ async fn main() -> Result<(), Error> {
     let config = Arc::new(config);
 
     let sock = TcpStream::connect(format!("{SERVER_NAME}:{PORT}")).await?;
+
+    // tokio only
+    // let sock = sock.compat_write();
 
     let connector = TcpConnector::from(config);
     let domain = SERVER_NAME.try_into().unwrap();

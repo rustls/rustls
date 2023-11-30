@@ -11,7 +11,12 @@ pki-types = { package = "rustls-pki-types", version = "0.2.2" }
 rustls = { git = "https://github.com/japaric/rustls", branch = "rfc1420-impl-take2" }
 
 [dev-dependencies]
-async-std = { version = "1.12.0", features = ["attributes"] }
 env_logger = "0.10.1"
 rustls-pemfile = "=2.0.0-alpha.2"
 webpki-roots = "=0.26.0-alpha.2"
+
+# async runtime selection
+async-std = { version = "1.12.0", features = ["attributes"] }
+
+# tokio = { version = "1.34.0", features = ["macros", "net", "rt"] }
+# tokio-util = { version = "0.7.10", features = ["compat"] }
