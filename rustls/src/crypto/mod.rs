@@ -47,6 +47,8 @@ pub(crate) mod signer;
 
 pub use crate::rand::GetRandomFailed;
 
+pub use crate::suites::CipherSuiteCommon;
+
 pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 
 /// Controls core cryptography used by rustls.
