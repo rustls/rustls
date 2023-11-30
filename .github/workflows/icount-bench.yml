@@ -15,14 +15,6 @@ jobs:
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Run icount benchmarks for PR
-        run: cd ci-bench && cargo run --locked --release -- run-all --output-dir ${{ runner.temp }}/pr
-
       - name: Checkout ${{ github.base_ref }}
         uses: actions/checkout@v4
         with:
@@ -32,6 +24,14 @@ jobs:
 
       - name: Run icount benchmarks for ${{ github.base_ref }}
         run: cd ci-bench && cargo run --locked --release -- run-all --output-dir ${{ runner.temp }}/base
+
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run icount benchmarks for PR
+        run: cd ci-bench && cargo run --locked --release -- run-all --output-dir ${{ runner.temp }}/pr
 
       - name: Compare results
         run: cd ci-bench && cargo run --locked --release -- compare ${{ runner.temp }}/base ${{ runner.temp }}/pr > $GITHUB_STEP_SUMMARY
