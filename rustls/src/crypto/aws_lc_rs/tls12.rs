@@ -418,7 +418,7 @@ impl Prf for Tls12Prf {
 
     fn for_key_exchange(
         &self,
-        output: &mut [u8],
+        output: &mut [u8; 48],
         kx: Box<dyn ActiveKeyExchange>,
         peer_pub_key: &[u8],
         label: &[u8],
