@@ -9,7 +9,6 @@ use crate::Error;
 use pki_types::PrivateKeyDer;
 use webpki::ring as webpki_algs;
 
-use alloc::borrow::ToOwned;
 use alloc::sync::Arc;
 
 pub(crate) use ring as ring_like;
@@ -59,7 +58,6 @@ impl KeyProvider for Ring {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn SigningKey>, Error> {
         sign::any_supported_type(&key_der)
-            .map_err(|_| Error::General("invalid private key".to_owned()))
     }
 }
 

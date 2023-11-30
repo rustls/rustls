@@ -11,16 +11,16 @@ use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
-use std::error::Error as StdError;
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
-pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, InvalidKeyError> {
+pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, Error> {
     if let Ok(rsa) = RsaSigningKey::new(der) {
         Ok(Arc::new(rsa))
     } else if let Ok(ecdsa) = any_ecdsa_type(der) {
@@ -28,7 +28,9 @@ pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>
     } else if let PrivateKeyDer::Pkcs8(pkcs8) = der {
         any_eddsa_type(pkcs8)
     } else {
-        Err(InvalidKeyError(()))
+        Err(Error::General(
+            "failed to parse private key as RSA, ECDSA, or EdDSA".into(),
+        ))
     }
 }
 
@@ -36,7 +38,7 @@ pub fn any_supported_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>
 ///
 /// Both SEC1 (PEM section starting with 'BEGIN EC PRIVATE KEY') and PKCS8
 /// (PEM section starting with 'BEGIN PRIVATE KEY') encodings are supported.
-pub fn any_ecdsa_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, InvalidKeyError> {
+pub fn any_ecdsa_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, Error> {
     if let Ok(ecdsa_p256) = EcdsaSigningKey::new(
         der,
         SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -53,20 +55,16 @@ pub fn any_ecdsa_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, In
         return Ok(Arc::new(ecdsa_p384));
     }
 
-    Err(InvalidKeyError(()))
+    Err(Error::General(
+        "failed to parse ECDSA private key as PKCS#8 or SEC1".into(),
+    ))
 }
 
 /// Parse `der` as any EdDSA key type, returning the first which works.
-pub fn any_eddsa_type(
-    der: &PrivatePkcs8KeyDer<'_>,
-) -> Result<Arc<dyn SigningKey>, InvalidKeyError> {
-    if let Ok(ed25519) = Ed25519SigningKey::new(der, SignatureScheme::ED25519) {
-        return Ok(Arc::new(ed25519));
-    }
-
+pub fn any_eddsa_type(der: &PrivatePkcs8KeyDer<'_>) -> Result<Arc<dyn SigningKey>, Error> {
     // TODO: Add support for Ed448
-
-    Err(InvalidKeyError(()))
+    let ed25519 = Ed25519SigningKey::new(der, SignatureScheme::ED25519)?;
+    Ok(Arc::new(ed25519))
 }
 
 /// A `SigningKey` for RSA-PKCS1 or RSA-PSS.
@@ -90,13 +88,19 @@ static ALL_RSA_SCHEMES: &[SignatureScheme] = &[
 impl RsaSigningKey {
     /// Make a new `RsaSigningKey` from a DER encoding, in either
     /// PKCS#1 or PKCS#8 format.
-    pub fn new(der: &PrivateKeyDer<'_>) -> Result<Self, InvalidKeyError> {
+    pub fn new(der: &PrivateKeyDer<'_>) -> Result<Self, Error> {
         let key_pair = match der {
             PrivateKeyDer::Pkcs1(pkcs1) => RsaKeyPair::from_der(pkcs1.secret_pkcs1_der()),
             PrivateKeyDer::Pkcs8(pkcs8) => RsaKeyPair::from_pkcs8(pkcs8.secret_pkcs8_der()),
-            _ => return Err(InvalidKeyError(())),
+            _ => {
+                return Err(Error::General(
+                    "failed to parse RSA private key as either PKCS#1 or PKCS#8".into(),
+                ));
+            }
         }
-        .map_err(|_| InvalidKeyError(()))?;
+        .map_err(|key_rejected| {
+            Error::General(format!("failed to parse RSA private key: {}", key_rejected))
+        })?;
 
         Ok(Self {
             key: Arc::new(key_pair),
@@ -333,13 +337,15 @@ struct Ed25519SigningKey {
 impl Ed25519SigningKey {
     /// Make a new `Ed25519SigningKey` from a DER encoding in PKCS#8 format,
     /// expecting a key usable with precisely the given signature scheme.
-    fn new(der: &PrivatePkcs8KeyDer<'_>, scheme: SignatureScheme) -> Result<Self, InvalidKeyError> {
+    fn new(der: &PrivatePkcs8KeyDer<'_>, scheme: SignatureScheme) -> Result<Self, Error> {
         match Ed25519KeyPair::from_pkcs8_maybe_unchecked(der.secret_pkcs8_der()) {
             Ok(key_pair) => Ok(Self {
                 key: Arc::new(key_pair),
                 scheme,
             }),
-            Err(_) => Err(InvalidKeyError(())),
+            Err(e) => Err(Error::General(format!(
+                "failed to parse Ed25519 private key: {e}"
+            ))),
         }
     }
 }
@@ -391,18 +397,6 @@ impl Debug for Ed25519Signer {
             .finish()
     }
 }
-
-/// Error produced when constructing a [`SigningKey`].
-#[derive(Debug)]
-pub struct InvalidKeyError(());
-
-impl fmt::Display for InvalidKeyError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("error constructing key")
-    }
-}
-
-impl StdError for InvalidKeyError {}
 
 #[cfg(test)]
 mod tests {
