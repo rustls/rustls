@@ -340,7 +340,7 @@ pub enum CertificateError {
     /// not covered by the above common cases.
     ///
     /// Enums holding this variant will never compare equal to each other.
-    Other(Arc<dyn StdError + Send + Sync>),
+    Other(OtherError),
 }
 
 impl PartialEq<Self> for CertificateError {
@@ -417,7 +417,7 @@ pub enum CertRevocationListError {
     /// The CRL is invalid for some other reason.
     ///
     /// Enums holding this variant will never compare equal to each other.
-    Other(Arc<dyn StdError + Send + Sync>),
+    Other(OtherError),
 
     /// The CRL is not correctly encoded.
     ParseError,
@@ -523,7 +523,7 @@ impl fmt::Display for Error {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
             Self::General(ref err) => write!(f, "unexpected error: {}", err),
-            Self::Other(ref err) => write!(f, "other error: {:?}", err),
+            Self::Other(ref err) => write!(f, "other error: {}", err),
         }
     }
 }
@@ -564,6 +564,18 @@ impl From<OtherError> for Error {
     }
 }
 
+impl fmt::Display for OtherError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl StdError for OtherError {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        Some(self.0.as_ref())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Error, InvalidMessage};
@@ -585,7 +597,7 @@ mod tests {
             ApplicationVerificationFailure,
             ApplicationVerificationFailure
         );
-        let other = Other(alloc::sync::Arc::from(Box::from("")));
+        let other = Other(OtherError(alloc::sync::Arc::from(Box::from(""))));
         assert_ne!(other, other);
         assert_ne!(BadEncoding, Expired);
     }
@@ -606,7 +618,7 @@ mod tests {
         assert_eq!(UnsupportedDeltaCrl, UnsupportedDeltaCrl);
         assert_eq!(UnsupportedIndirectCrl, UnsupportedIndirectCrl);
         assert_eq!(UnsupportedRevocationReason, UnsupportedRevocationReason);
-        let other = Other(alloc::sync::Arc::from(Box::from("")));
+        let other = Other(OtherError(alloc::sync::Arc::from(Box::from(""))));
         assert_ne!(other, other);
         assert_ne!(BadSignature, InvalidCrlNumber);
     }

@@ -6,7 +6,7 @@ use pki_types::CertificateRevocationListDer;
 use std::error::Error as StdError;
 use webpki::{CertRevocationList, OwnedCertRevocationList};
 
-use crate::error::{CertRevocationListError, CertificateError, Error};
+use crate::error::{CertRevocationListError, CertificateError, Error, OtherError};
 
 mod anchors;
 mod client_verifier;
@@ -75,7 +75,7 @@ fn pki_error(error: webpki::Error) -> Error {
             CertRevocationListError::BadSignature.into()
         }
 
-        _ => CertificateError::Other(Arc::new(error)).into(),
+        _ => CertificateError::Other(OtherError(Arc::new(error))).into(),
     }
 }
 
@@ -95,7 +95,7 @@ fn crl_error(e: webpki::Error) -> CertRevocationListError {
         UnsupportedIndirectCrl => CertRevocationListError::UnsupportedIndirectCrl,
         UnsupportedRevocationReason => CertRevocationListError::UnsupportedRevocationReason,
 
-        _ => CertRevocationListError::Other(Arc::new(e)),
+        _ => CertRevocationListError::Other(OtherError(Arc::new(e))),
     }
 }
 
