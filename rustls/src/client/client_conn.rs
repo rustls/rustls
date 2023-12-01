@@ -30,6 +30,9 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 use std::io;
 
+#[cfg(doc)]
+use crate::{crypto, DistinguishedName};
+
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
 ///
@@ -103,7 +106,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
     /// decide on a client certificate the server is likely to accept. If
     /// the list is empty, the client should send whatever certificate it
     /// has. The hints are expected to be DER-encoded X.500 distinguished names,
-    /// per [RFC 5280 A.1]. See [`crate::DistinguishedName`] for more information
+    /// per [RFC 5280 A.1]. See [`DistinguishedName`] for more information
     /// on decoding with external crates like `x509-parser`.
     ///
     /// `sigschemes` is the list of the [`SignatureScheme`]s the server
@@ -235,7 +238,7 @@ impl Clone for ClientConfig {
 
 impl ClientConfig {
     /// Create a builder for a client configuration with the default
-    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`] and safe ciphersuite and
+    /// [`CryptoProvider`]: [`crypto::ring::default_provider`] and safe ciphersuite and
     /// protocol defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
@@ -248,7 +251,7 @@ impl ClientConfig {
     }
 
     /// Create a builder for a client configuration with the default
-    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`], safe ciphersuite defaults and
+    /// [`CryptoProvider`]: [`crypto::ring::default_provider`], safe ciphersuite defaults and
     /// the provided protocol versions.
     ///
     /// Panics if provided an empty slice of supported versions.

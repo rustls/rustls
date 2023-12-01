@@ -32,6 +32,9 @@ use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use std::io;
 
+#[cfg(doc)]
+use crate::crypto;
+
 /// A trait for the ability to store server session data.
 ///
 /// The keys and values are opaque.
@@ -338,7 +341,7 @@ impl Clone for ServerConfig {
 
 impl ServerConfig {
     /// Create a builder for a server configuration with the default
-    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`] and safe ciphersuite and protocol
+    /// [`CryptoProvider`]: [`crypto::ring::default_provider`] and safe ciphersuite and protocol
     /// defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
@@ -351,7 +354,7 @@ impl ServerConfig {
     }
 
     /// Create a builder for a server configuration with the default
-    /// [`CryptoProvider`]: [`crate::crypto::ring::default_provider`], safe ciphersuite defaults and
+    /// [`CryptoProvider`]: [`crypto::ring::default_provider`], safe ciphersuite defaults and
     /// the provided protocol versions.
     ///
     /// Panics if provided an empty slice of supported versions.

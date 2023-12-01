@@ -93,10 +93,10 @@ x86, x86-64, LoongArch64, 32-bit & 64-bit Little Endian MIPS, 32-bit PowerPC (Bi
 support WebAssembly.
 For more information, see [the supported `ring` target platforms][ring-target-platforms].
 
-By providing a custom instance of the [`crate::crypto::CryptoProvider`] struct, you
+By providing a custom instance of the [`crypto::CryptoProvider`] struct, you
 can replace all cryptography dependencies of rustls.  This is a route to being portable
 to a wider set of architectures and environments, or compliance requirements.  See the
-[`crate::crypto::CryptoProvider`] documentation for more details.
+[`crypto::CryptoProvider`] documentation for more details.
 
 Specifying `default-features = false` when depending on rustls will remove the
 dependency on *ring*.
@@ -104,6 +104,7 @@ dependency on *ring*.
 Rustls requires Rust 1.61 or later.
 
 [ring-target-platforms]: https://github.com/briansmith/ring/blob/2e8363b433fa3b3962c877d9ed2e9145612f3160/include/ring-core/target.h#L18-L64
+[crypto::CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/trait.CryptoProvider.html
 
 # Example code
 There are two example programs which use

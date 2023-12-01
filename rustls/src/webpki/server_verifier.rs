@@ -17,6 +17,9 @@ use crate::webpki::verify::{
 use crate::webpki::{parse_crls, verify_server_name, VerifierBuilderError};
 use crate::{Error, RootCertStore, SignatureScheme};
 
+#[cfg(doc)]
+use crate::{crypto, ConfigBuilder, ServerConfig};
+
 /// A builder for configuring a `webpki` server certificate verifier.
 ///
 /// For more information, see the [`WebPkiServerVerifier`] documentation.
@@ -85,11 +88,11 @@ impl ServerCertVerifierBuilder {
     /// trust anchors, and to control how server certificate revocation checking is performed.
     ///
     /// If `with_signature_verification_algorithms` was not called on the builder, a default set of
-    /// signature verification algorithms is used, controlled by the selected [`crate::crypto::CryptoProvider`].
+    /// signature verification algorithms is used, controlled by the selected [`crypto::CryptoProvider`].
     ///
     /// Once built, the provided `Arc<dyn ServerCertVerifier>` can be used with a Rustls
-    /// [crate::server::ServerConfig] to configure client certificate validation using
-    /// [`with_client_cert_verifier`][crate::ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
+    /// [`ServerConfig`] to configure client certificate validation using
+    /// [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
     ///
     /// # Errors
     /// This function will return a `CertVerifierBuilderError` if:
@@ -129,7 +132,7 @@ impl WebPkiServerVerifier {
     ///
     /// Server certificates will be verified using the trust anchors found in the provided `roots`.
     ///
-    /// The cryptography used comes from the default [`CryptoProvider`]: [`crate::crypto::ring::default_provider`].
+    /// The cryptography used comes from the default [`CryptoProvider`]: [`crypto::ring::default_provider`].
     /// Use [`Self::builder_with_provider`] if you wish to customize this.
     ///
     /// For more information, see the [`ServerCertVerifierBuilder`] documentation.

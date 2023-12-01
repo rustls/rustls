@@ -1,5 +1,8 @@
 use core::fmt::Debug;
 
+#[cfg(doc)]
+use crate::KeyLogFile;
+
 /// This trait represents the ability to do something useful
 /// with key material, such as logging it to a file for debugging.
 ///
@@ -10,7 +13,7 @@ use core::fmt::Debug;
 /// You'll likely want some interior mutability in your
 /// implementation to make this useful.
 ///
-/// See [`KeyLogFile`](crate::KeyLogFile) that implements the standard
+/// See [`KeyLogFile`] that implements the standard
 /// `SSLKEYLOGFILE` environment variable behaviour.
 pub trait KeyLog: Debug + Send + Sync {
     /// Log the given `secret`.  `client_random` is provided for
