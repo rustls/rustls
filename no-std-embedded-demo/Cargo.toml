@@ -44,6 +44,7 @@ linked_list_allocator = "0.10.5"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 spin = { version =  "0.9.8", default-features = false, features = ["spin_mutex", "once"] }
 static_cell = { version = "2", features = ["nightly"] }
+webpki-roots = "=0.26.0-alpha.2"
 
 # crypto-provider
 chacha20poly1305 = { version = "0.10.0", default-features = false, features = ["alloc"] }

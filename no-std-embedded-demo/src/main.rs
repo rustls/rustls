@@ -4,6 +4,8 @@
 
 extern crate alloc;
 
+use alloc::sync::Arc;
+
 use defmt::*;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
@@ -16,22 +18,31 @@ use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
 use embassy_time::Duration;
 use embassy_time::Timer;
-use embedded_io_async::Write;
-use rand_core::{OsRng, RngCore};
+use no_std_embedded_demo as lib;
+use pki_types::{DnsName, InvalidDnsNameError, ServerName};
+use rustls::client::UnbufferedClientConnection;
+#[allow(unused_imports)]
+use rustls::version::{TLS12, TLS13};
+use rustls::{ClientConfig, RootCertStore, UnbufferedStatus};
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
+
+use crate::buffer::TlsBuffer;
 
 bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler;
     HASH_RNG => rng::InterruptHandler<peripherals::RNG>;
 });
 
+const KB: usize = 1024;
+const HEAP_SIZE: usize = 8 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-const TCP_BUFSIZ: usize = 4 * 1024;
-const HEAP_SIZE: usize = 4 * 1024;
+const TCP_BUFSIZ: usize = 4 * KB;
+const INCOMING_TLS_BUFSIZ: usize = 4 * KB;
 
-const SERVER_ADDR: Ipv4Address = Ipv4Address([192, 168, 1, 166]);
-const SERVER_PORT: u16 = 1234;
+const SERVER_NAME: &str = "rust-lang.org";
+const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 84, 174, 90]); // `dig rust-lang.org`
+const SERVER_PORT: u16 = 443;
 
 #[embassy_executor::main]
 async fn start(spawner: Spawner) -> ! {
@@ -40,6 +51,8 @@ async fn start(spawner: Spawner) -> ! {
     if let Err(e) = main(&spawner).await {
         match e {
             Error::Connect(e) => error!("{}", e),
+            Error::InvalidDnsName(e) => error!("{}", Debug2Format(&e)),
+            Error::Rustls(e) => error!("{}", Debug2Format(&e)),
             Error::Spawn(e) => error!("{}", e),
             Error::Tcp(e) => error!("{}", e),
         }
@@ -68,15 +81,68 @@ async fn main(spawner: &Spawner) -> Result<()> {
 
     info!("Connected to {}", socket.remote_endpoint());
 
-    let random = OsRng.next_u32();
-    let message = alloc::format!("the answer is {random}\n\r");
-    info!("allocated {}B", message.capacity());
-    socket
-        .write_all(message.as_bytes())
-        .await?;
-    socket.flush().await?;
+    let mut root_store = RootCertStore::empty();
+    root_store.extend(
+        webpki_roots::TLS_SERVER_ROOTS
+            .iter()
+            .cloned(),
+    );
 
-    Ok(())
+    let tls_config = ClientConfig::builder_with_provider(lib::PROVIDER)
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        // toggle between TLS versions
+        // .with_protocol_versions(&[&TLS12])
+        .with_protocol_versions(&[&TLS13])
+        .unwrap()
+        .with_root_certificates(root_store)
+        .with_no_client_auth();
+    let tls_config = Arc::new(tls_config);
+
+    let server_name = ServerName::DnsName(DnsName::try_from(SERVER_NAME)?);
+    let mut conn = UnbufferedClientConnection::new(tls_config, server_name)?;
+
+    let mut incoming_tls = [0; INCOMING_TLS_BUFSIZ];
+    let mut incoming_tls = TlsBuffer::fixed(&mut incoming_tls);
+
+    loop {
+        let UnbufferedStatus { discard: _, state } =
+            conn.process_tls_records(incoming_tls.filled_mut())?;
+
+        defmt::todo!("unhandled {:?}", Debug2Format(&state));
+    }
+}
+
+mod buffer {
+    pub struct TlsBuffer<'a> {
+        inner: Inner<'a>,
+        used: usize,
+    }
+
+    impl<'a> TlsBuffer<'a> {
+        pub fn fixed(buf: &'a mut [u8]) -> Self {
+            Self {
+                inner: Inner::Fixed(buf),
+                used: 0,
+            }
+        }
+
+        pub fn filled_mut(&mut self) -> &mut [u8] {
+            &mut self.inner.bytes()[..self.used]
+        }
+    }
+
+    enum Inner<'a> {
+        Fixed(&'a mut [u8]),
+    }
+
+    impl Inner<'_> {
+        fn bytes(&mut self) -> &mut [u8] {
+            match self {
+                Inner::Fixed(slice) => slice,
+            }
+        }
+    }
 }
 
 async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
@@ -171,8 +237,22 @@ type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug)]
 enum Error {
     Connect(ConnectError),
+    InvalidDnsName(InvalidDnsNameError),
+    Rustls(rustls::Error),
     Spawn(SpawnError),
     Tcp(tcp::Error),
+}
+
+impl From<InvalidDnsNameError> for Error {
+    fn from(v: InvalidDnsNameError) -> Self {
+        Self::InvalidDnsName(v)
+    }
+}
+
+impl From<rustls::Error> for Error {
+    fn from(v: rustls::Error) -> Self {
+        Self::Rustls(v)
+    }
 }
 
 impl From<tcp::Error> for Error {

@@ -1115,6 +1115,7 @@ dependencies = [
  "signature",
  "spin 0.9.8",
  "static_cell",
+ "webpki-roots",
  "x25519-dalek",
 ]
 
@@ -1856,6 +1857,15 @@ name = "wasm-bindgen-shared"
 version = "0.2.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ab9b36309365056cd639da3134bf87fa8f3d86008abf99e612384a6eecd459f"
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87e3d99d80231fabcc72d887ed09f843b7f3942c75907285e51112a46c8f6f81"
+dependencies = [
+ "rustls-pki-types",
+]
 
 [[package]]
 name = "windows-sys"
