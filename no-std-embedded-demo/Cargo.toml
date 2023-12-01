@@ -42,7 +42,7 @@ cortex-m-rt = "0.7.0"
 getrandom = { version = "0.2.11", features = ["custom"] }
 linked_list_allocator = "0.10.5"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
-spin = { version =  "0.9.8", default-features = false, features = ["once"] }
+spin = { version =  "0.9.8", default-features = false, features = ["spin_mutex", "once"] }
 static_cell = { version = "2", features = ["nightly"] }
 
 # crypto-provider

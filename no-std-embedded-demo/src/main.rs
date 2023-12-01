@@ -17,6 +17,7 @@ use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
 use embassy_time::Duration;
 use embassy_time::Timer;
 use embedded_io_async::Write;
+use rand_core::{OsRng, RngCore};
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -67,9 +68,12 @@ async fn main(spawner: &Spawner) -> Result<()> {
 
     info!("Connected to {}", socket.remote_endpoint());
 
-    let message = b"hello\n\r".to_vec();
+    let random = OsRng.next_u32();
+    let message = alloc::format!("the answer is {random}\n\r");
     info!("allocated {}B", message.capacity());
-    socket.write_all(&message).await?;
+    socket
+        .write_all(message.as_bytes())
+        .await?;
     socket.flush().await?;
 
     Ok(())
@@ -102,6 +106,7 @@ async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
     let mut rng = Rng::new(p.RNG, Irqs);
     let mut seed = [0; 8];
     let _ = rng.async_fill_bytes(&mut seed).await;
+    getrandom::init(rng);
     let seed = u64::from_le_bytes(seed);
 
     let device = Ethernet::new(
@@ -186,6 +191,34 @@ impl From<SpawnError> for Error {
     fn from(v: SpawnError) -> Self {
         Self::Spawn(v)
     }
+}
+
+mod getrandom {
+    use embassy_stm32::peripherals::RNG;
+    use embassy_stm32::rng::Rng;
+    use getrandom::{register_custom_getrandom, Error};
+    use spin::mutex::SpinMutex;
+
+    type MyRng = Rng<'static, RNG>;
+    static MY_RNG: SpinMutex<Option<MyRng>> = SpinMutex::new(None);
+
+    pub fn init(rng: MyRng) {
+        *MY_RNG.lock() = Some(rng);
+    }
+
+    fn my_getrandom(dest: &mut [u8]) -> Result<(), Error> {
+        let error = Error::UNSUPPORTED; // value is unimportant
+        embassy_futures::block_on(
+            MY_RNG
+                .lock()
+                .as_mut()
+                .ok_or(error)?
+                .async_fill_bytes(dest),
+        )
+        .map_err(|_| error)
+    }
+
+    register_custom_getrandom!(my_getrandom);
 }
 
 mod heap {
