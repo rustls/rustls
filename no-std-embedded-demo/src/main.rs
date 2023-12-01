@@ -6,6 +6,7 @@ extern crate alloc;
 
 use alloc::sync::Arc;
 use core::result::Result as CoreResult;
+use embedded_io_async::Write;
 
 use defmt::*;
 use embassy_executor::{SpawnError, Spawner};
@@ -130,6 +131,15 @@ async fn main(spawner: &Spawner) -> Result<()> {
                 )?;
             }
 
+            ConnectionState::MustTransmitTlsData(state) => {
+                socket
+                    .write_all(outgoing_tls.filled())
+                    .await?;
+                trace!("sent {}B of TLS data", outgoing_tls.used());
+                outgoing_tls.clear();
+                state.done();
+            }
+
             state => {
                 defmt::todo!("unhandled state: {:?}", Debug2Format(&state))
             }
@@ -197,12 +207,20 @@ mod buffer {
             self.inner.capacity()
         }
 
-        pub fn filled_mut(&mut self) -> &mut [u8] {
+        pub fn clear(&mut self) {
+            self.used = 0;
+        }
+
+        pub fn filled(&mut self) -> &[u8] {
             self.bytes(..self.used)
         }
 
+        pub fn filled_mut(&mut self) -> &mut [u8] {
+            self.bytes_mut(..self.used)
+        }
+
         pub fn unfilled(&mut self) -> &mut [u8] {
-            self.bytes(self.used..)
+            self.bytes_mut(self.used..)
         }
 
         pub fn used(&self) -> usize {
@@ -214,14 +232,21 @@ mod buffer {
             self.inner.resize(new_len)
         }
 
-        fn bytes<I>(&mut self, index: I) -> &mut I::Output
+        fn bytes_mut<I>(&mut self, index: I) -> &mut I::Output
         where
             I: SliceIndex<[u8]>,
         {
             self.inner
-                .bytes()
+                .bytes_mut()
                 .get_mut(index)
                 .unwrap()
+        }
+
+        fn bytes<I>(&self, index: I) -> &I::Output
+        where
+            I: SliceIndex<[u8]>,
+        {
+            self.inner.bytes().get(index).unwrap()
         }
     }
 
@@ -231,7 +256,14 @@ mod buffer {
     }
 
     impl Inner<'_> {
-        fn bytes(&mut self) -> &mut [u8] {
+        fn bytes_mut(&mut self) -> &mut [u8] {
+            match self {
+                Inner::Fixed(slice) => slice,
+                Inner::Growable(vec) => vec,
+            }
+        }
+
+        fn bytes(&self) -> &[u8] {
             match self {
                 Inner::Fixed(slice) => slice,
                 Inner::Growable(vec) => vec,
