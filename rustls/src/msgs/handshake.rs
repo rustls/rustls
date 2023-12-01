@@ -1475,9 +1475,11 @@ impl CertificatePayloadTls13 {
     }
 }
 
+/// Describes supported key exchange mechanisms.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum KeyExchangeAlgorithm {
+    /// Key exchange performed via elliptic curve Diffie-Hellman.
     ECDHE,
 }
 
