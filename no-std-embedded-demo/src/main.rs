@@ -33,6 +33,7 @@ use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
 
 use crate::buffer::TlsBuffer;
+use crate::buffers::Buffers;
 
 bind_interrupts!(struct Irqs {
     ETH => eth::InterruptHandler;
@@ -41,10 +42,12 @@ bind_interrupts!(struct Irqs {
 
 const KB: usize = 1024;
 const HEAP_SIZE: usize = 24 * KB;
-const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-const TCP_BUFSIZ: usize = KB;
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
+const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 const MAX_ITERATIONS: usize = 25;
+const OUTGOING_TLS_BUFSIZ: usize = KB / 2;
+const TCP_RX_BUFSIZ: usize = KB;
+const TCP_TX_BUFSIZ: usize = KB / 2;
 const UNIX_TIME: u64 = 1701460379; // `date +%s`
 
 const SERVER_NAME: &str = "rust-lang.org";
@@ -55,7 +58,7 @@ const SERVER_PORT: u16 = 443;
 async fn start(spawner: Spawner) -> ! {
     heap::init();
 
-    if let Err(e) = main(&spawner).await {
+    if let Err(e) = main(&spawner, buffers::get().unwrap()).await {
         match e {
             Error::Connect(e) => error!("{}", e),
             Error::Encode(e) => error!("{}", Debug2Format(&e)),
@@ -72,12 +75,18 @@ async fn start(spawner: Spawner) -> ! {
     }
 }
 
-async fn main(spawner: &Spawner) -> Result<()> {
+async fn main(
+    spawner: &Spawner,
+    Buffers {
+        incoming_tls,
+        outgoing_tls,
+        tcp_rx,
+        tcp_tx,
+    }: Buffers,
+) -> Result<()> {
     let stack = set_up_network_stack(spawner).await?;
 
-    let mut rx_buffer = [0; TCP_BUFSIZ];
-    let mut tx_buffer = [0; TCP_BUFSIZ];
-    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+    let mut socket = TcpSocket::new(stack, tcp_rx, tcp_tx);
 
     socket.set_timeout(Some(Duration::from_secs(5)));
 
@@ -111,9 +120,8 @@ async fn main(spawner: &Spawner) -> Result<()> {
     let server_name = ServerName::DnsName(DnsName::try_from(SERVER_NAME)?);
     let mut conn = UnbufferedClientConnection::new(tls_config, server_name)?;
 
-    let mut incoming_tls = [0; INCOMING_TLS_BUFSIZ];
-    let mut incoming_tls = TlsBuffer::fixed(&mut incoming_tls);
-    let mut outgoing_tls = TlsBuffer::growable(0);
+    let mut incoming_tls = TlsBuffer::fixed(incoming_tls);
+    let mut outgoing_tls = TlsBuffer::fixed(outgoing_tls);
 
     let mut iter_count = 0;
     loop {
@@ -213,6 +221,7 @@ mod buffer {
             }
         }
 
+        #[allow(dead_code)]
         pub fn growable(initial_capacity: usize) -> TlsBuffer<'static> {
             TlsBuffer {
                 inner: Inner::Growable(vec![0; initial_capacity]),
@@ -523,5 +532,51 @@ mod time_provider {
                 super::UNIX_TIME,
             )))
         }
+    }
+}
+
+mod buffers {
+    use core::sync::atomic::{self, AtomicBool};
+
+    use super::{INCOMING_TLS_BUFSIZ, OUTGOING_TLS_BUFSIZ, TCP_RX_BUFSIZ, TCP_TX_BUFSIZ};
+
+    pub fn get() -> Option<Buffers> {
+        static ONCE: AtomicBool = AtomicBool::new(false);
+
+        let ord = atomic::Ordering::SeqCst;
+        if ONCE
+            .compare_exchange(false, true, ord, ord)
+            .is_ok()
+        {
+            unsafe {
+                Some(Buffers {
+                    incoming_tls: {
+                        static mut BUF: [u8; INCOMING_TLS_BUFSIZ] = [0; INCOMING_TLS_BUFSIZ];
+                        &mut BUF
+                    },
+                    outgoing_tls: {
+                        static mut BUF: [u8; OUTGOING_TLS_BUFSIZ] = [0; OUTGOING_TLS_BUFSIZ];
+                        &mut BUF
+                    },
+                    tcp_tx: {
+                        static mut BUF: [u8; TCP_TX_BUFSIZ] = [0; TCP_TX_BUFSIZ];
+                        &mut BUF
+                    },
+                    tcp_rx: {
+                        static mut BUF: [u8; TCP_RX_BUFSIZ] = [0; TCP_RX_BUFSIZ];
+                        &mut BUF
+                    },
+                })
+            }
+        } else {
+            None
+        }
+    }
+
+    pub struct Buffers {
+        pub incoming_tls: &'static mut [u8],
+        pub outgoing_tls: &'static mut [u8],
+        pub tcp_rx: &'static mut [u8],
+        pub tcp_tx: &'static mut [u8],
     }
 }
