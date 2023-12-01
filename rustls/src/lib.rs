@@ -242,21 +242,6 @@
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
 //!
-//! - `logging` (enabled by default): make the rustls crate depend on the `log` crate.
-//!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
-//!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
-//!   contain secret key data, and so are safe to archive without affecting session security.
-//!
-//! - `tls12` (enabled by default): enable support for TLS version 1.2. Note that, due to the
-//!   additive nature of Cargo features and because it is enabled by default, other crates
-//!   in your dependency graph could re-enable it for your application. If you want to disable
-//!   TLS 1.2 for security reasons, consider explicitly enabling TLS 1.3 only in the config
-//!   builder API.
-//!
-//! - `read_buf`: when building with Rust Nightly, adds support for the unstable
-//!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
-//!   buffers. Will do nothing on non-Nightly releases.
-//!
 //! - `ring` (enabled by default): makes the rustls crate depend on the *ring* crate, which is
 //!    used for cryptography by default. Without this feature, these items must be provided
 //!    externally to the core rustls crate: see [`crate::crypto::CryptoProvider`].
@@ -268,6 +253,22 @@
 //!
 //!   Note that aws-lc-rs has additional build-time dependencies like cmake.
 //!   See [the documentation](https://aws.github.io/aws-lc-rs/requirements/index.html) for details.
+//!
+//! - `tls12` (enabled by default): enable support for TLS version 1.2. Note that, due to the
+//!   additive nature of Cargo features and because it is enabled by default, other crates
+//!   in your dependency graph could re-enable it for your application. If you want to disable
+//!   TLS 1.2 for security reasons, consider explicitly enabling TLS 1.3 only in the config
+//!   builder API.
+//!
+//! - `logging` (enabled by default): make the rustls crate depend on the `log` crate.
+//!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
+//!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
+//!   contain secret key data, and so are safe to archive without affecting session security.
+//!
+//! - `read_buf`: when building with Rust Nightly, adds support for the unstable
+//!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
+//!   buffers. Will do nothing on non-Nightly releases.
+//!
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
