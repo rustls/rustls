@@ -63,9 +63,11 @@
 //! support WebAssembly.
 //! For more information, see [the supported `ring` target platforms][ring-target-platforms].
 //!
-//! By providing a custom implementation of the [`crate::crypto::CryptoProvider`] trait, you
+//! By providing a custom instance of the [`crate::crypto::CryptoProvider`] struct, you
 //! can replace all cryptography dependencies of rustls.  This is a route to being portable
-//! to a wider set of architectures and environments, or compliance requirements.
+//! to a wider set of architectures and environments, or compliance requirements.  See the
+//! [`crate::crypto::CryptoProvider`] documentation for more details.
+//!
 //! Specifying `default-features = false` when depending on rustls will remove the
 //! dependency on *ring*.
 //!
