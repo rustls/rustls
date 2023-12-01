@@ -231,9 +231,12 @@
 //! ```
 //!
 //! # Examples
-//! [`tlsserver`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsserver-mio.rs)
-//! and [`tlsclient`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsclient-mio.rs)
-//! are full worked examples.  These both use mio.
+//!
+//! [`tlsserver-mio`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsserver-mio.rs)
+//! and [`tlsclient-mio`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsclient-mio.rs)
+//! are full worked examples using [`mio`].
+//!
+//! [`mio`]: https://docs.rs/mio/latest/mio/
 //!
 //! # Crate features
 //! Here's a list of what features are exposed by the rustls crate and what
