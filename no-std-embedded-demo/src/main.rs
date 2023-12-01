@@ -4,14 +4,17 @@
 
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::{Stack, StackResources};
+use embassy_net::tcp::TcpSocket;
+use embassy_net::{Ipv4Address, Stack, StackResources};
 use embassy_stm32::eth::generic_smi::GenericSMI;
 use embassy_stm32::eth::{Ethernet, PacketQueue};
 use embassy_stm32::peripherals::ETH;
 use embassy_stm32::rng::Rng;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
+use embassy_time::Duration;
 use embassy_time::Timer;
+use embedded_io_async::Write;
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -21,6 +24,10 @@ bind_interrupts!(struct Irqs {
 });
 
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+const TCP_BUFSIZ: usize = 4 * 1024;
+
+const SERVER_ADDR: Ipv4Address = Ipv4Address([192, 168, 1, 166]);
+const SERVER_PORT: u16 = 1234;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
@@ -84,13 +91,33 @@ async fn main(spawner: Spawner) -> ! {
     // Launch network task
     unwrap!(spawner.spawn(net_task(stack)));
 
-    // Ensure DHCP configuration is up before trying connect
+    info!("Waiting for DHCP...");
     let static_cfg = wait_for_config(stack).await;
-
-    info!("Network task initialized");
 
     let local_addr = static_cfg.address.address();
     info!("IP address: {:?}", local_addr);
+
+    let mut rx_buffer = [0; TCP_BUFSIZ];
+    let mut tx_buffer = [0; TCP_BUFSIZ];
+    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+
+    socket.set_timeout(Some(Duration::from_secs(5)));
+
+    info!("Connecting...");
+
+    socket
+        .connect((SERVER_ADDR, SERVER_PORT))
+        .await
+        .unwrap();
+
+    info!("Connected to {}", socket.remote_endpoint());
+
+    socket
+        .write_all(b"hello\n\r")
+        .await
+        .unwrap();
+
+    socket.flush().await.unwrap();
 
     loop {
         Timer::after_secs(1).await;

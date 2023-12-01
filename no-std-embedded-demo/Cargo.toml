@@ -32,6 +32,7 @@ embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", 
     "medium-ethernet",
 ] }
 embassy-futures = {  git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b" }
+embedded-io-async = "0.6.1" # `TcpSocket::write_all`
 
 defmt = "0.3"
 defmt-rtt = "0.4"

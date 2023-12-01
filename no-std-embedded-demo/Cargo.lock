@@ -651,6 +651,7 @@ dependencies = [
  "embassy-stm32",
  "embassy-sync",
  "embassy-time",
+ "embedded-io-async",
  "panic-probe",
  "static_cell",
 ]
