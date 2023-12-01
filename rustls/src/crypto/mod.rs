@@ -258,7 +258,7 @@ pub trait ActiveKeyExchange: Send + Sync {
     fn group(&self) -> NamedGroup;
 }
 
-/// The result from `ActiveKeyExchange::complete` as a value.
+/// The result from [`ActiveKeyExchange::complete`].
 pub struct SharedSecret(Vec<u8>);
 
 impl SharedSecret {
