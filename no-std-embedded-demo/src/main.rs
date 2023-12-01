@@ -45,6 +45,7 @@ const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 const TCP_BUFSIZ: usize = 4 * KB;
 const INCOMING_TLS_BUFSIZ: usize = 8 * KB;
 const MAX_ITERATIONS: usize = 25;
+const UNIX_TIME: u64 = 1701460379; // `date +%s`
 
 const SERVER_NAME: &str = "rust-lang.org";
 const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 84, 174, 90]); // `dig rust-lang.org`
@@ -95,7 +96,7 @@ async fn main(spawner: &Spawner) -> Result<()> {
             .cloned(),
     );
 
-    let tls_config = ClientConfig::builder_with_provider(lib::PROVIDER)
+    let mut tls_config = ClientConfig::builder_with_provider(lib::PROVIDER)
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         // toggle between TLS versions
@@ -104,6 +105,7 @@ async fn main(spawner: &Spawner) -> Result<()> {
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
+    tls_config.time_provider = time_provider::stub();
     let tls_config = Arc::new(tls_config);
 
     let server_name = ServerName::DnsName(DnsName::try_from(SERVER_NAME)?);
@@ -499,4 +501,26 @@ mod heap {
 
     #[global_allocator]
     static HEAP: LockedHeap = LockedHeap::empty();
+}
+
+mod time_provider {
+    use core::time::Duration;
+
+    use pki_types::UnixTime;
+    use rustls::time_provider::{GetCurrentTime, TimeProvider};
+
+    pub fn stub() -> TimeProvider {
+        TimeProvider::new(StubTimeProvider)
+    }
+
+    #[derive(Debug)]
+    struct StubTimeProvider;
+
+    impl GetCurrentTime for StubTimeProvider {
+        fn get_current_time(&self) -> Option<UnixTime> {
+            Some(UnixTime::since_unix_epoch(Duration::from_secs(
+                super::UNIX_TIME,
+            )))
+        }
+    }
 }
