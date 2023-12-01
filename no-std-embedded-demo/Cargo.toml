@@ -1,0 +1,35 @@
+[package]
+name = "no-std-embedded-demo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Change stm32f429zi to your chip name, if necessary.
+embassy-stm32 = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", features = [ "defmt", "stm32f429zi", "unstable-pac", "memory-x", "time-driver-any", "exti", "embedded-sdmmc", "chrono"]  }
+embassy-sync = {  git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", features = ["defmt"] }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", features = ["nightly", "arch-cortex-m", "executor-thread", "executor-interrupt", "defmt", "integrated-timers"] }
+embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
+embassy-usb = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", features = ["defmt" ] }
+embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", features = ["defmt", "tcp", "dhcpv4", "medium-ethernet", ] }
+
+defmt = "0.3"
+defmt-rtt = "0.4"
+
+cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = "0.7.0"
+embedded-hal = "0.2.6"
+embedded-io = { version = "0.6.0" }
+embedded-io-async = { version = "0.6.1" }
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
+heapless = { version = "0.8", default-features = false }
+nb = "1.0.0"
+embedded-storage = "0.3.0"
+micromath = "2.0.0"
+static_cell = { version = "2", features = ["nightly"]}
+chrono = { version = "^0.4", default-features = false}
+
+[profile.release]
+debug = 2
+
+[workspace]
