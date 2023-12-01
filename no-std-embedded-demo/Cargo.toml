@@ -39,9 +39,11 @@ defmt-rtt = "0.4"
 
 cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.0"
-panic-probe = { version = "0.3", features = ["print-defmt"] }
-static_cell = { version = "2", features = ["nightly"] }
 getrandom = { version = "0.2.11", features = ["custom"] }
+linked_list_allocator = "0.10.5"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+spin = { version =  "0.9.8", default-features = false, features = ["once"] }
+static_cell = { version = "2", features = ["nightly"] }
 
 # crypto-provider
 chacha20poly1305 = { version = "0.10.0", default-features = false, features = ["alloc"] }

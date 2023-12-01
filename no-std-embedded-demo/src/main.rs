@@ -2,6 +2,8 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
+extern crate alloc;
+
 use defmt::*;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
@@ -25,12 +27,15 @@ bind_interrupts!(struct Irqs {
 
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 const TCP_BUFSIZ: usize = 4 * 1024;
+const HEAP_SIZE: usize = 4 * 1024;
 
 const SERVER_ADDR: Ipv4Address = Ipv4Address([192, 168, 1, 166]);
 const SERVER_PORT: u16 = 1234;
 
 #[embassy_executor::main]
 async fn start(spawner: Spawner) -> ! {
+    heap::init();
+
     if let Err(e) = main(&spawner).await {
         match e {
             Error::Connect(e) => error!("{}", e),
@@ -62,7 +67,9 @@ async fn main(spawner: &Spawner) -> Result<()> {
 
     info!("Connected to {}", socket.remote_endpoint());
 
-    socket.write_all(b"hello\n\r").await?;
+    let message = b"hello\n\r".to_vec();
+    info!("allocated {}B", message.capacity());
+    socket.write_all(&message).await?;
     socket.flush().await?;
 
     Ok(())
@@ -179,4 +186,23 @@ impl From<SpawnError> for Error {
     fn from(v: SpawnError) -> Self {
         Self::Spawn(v)
     }
+}
+
+mod heap {
+    use linked_list_allocator::LockedHeap;
+    use spin::Once;
+
+    pub fn init() {
+        static ONCE: Once = Once::new();
+
+        ONCE.call_once(|| unsafe {
+            static mut MEMORY: [u8; super::HEAP_SIZE] = [0; super::HEAP_SIZE];
+
+            HEAP.lock()
+                .init(MEMORY.as_mut_ptr(), MEMORY.len())
+        });
+    }
+
+    #[global_allocator]
+    static HEAP: LockedHeap = LockedHeap::empty();
 }
