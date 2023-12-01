@@ -3,8 +3,8 @@
 #![feature(type_alias_impl_trait)]
 
 use defmt::*;
-use embassy_executor::Spawner;
-use embassy_net::tcp::TcpSocket;
+use embassy_executor::{SpawnError, Spawner};
+use embassy_net::tcp::{self, ConnectError, TcpSocket};
 use embassy_net::{Ipv4Address, Stack, StackResources};
 use embassy_stm32::eth::generic_smi::GenericSMI;
 use embassy_stm32::eth::{Ethernet, PacketQueue};
@@ -30,7 +30,45 @@ const SERVER_ADDR: Ipv4Address = Ipv4Address([192, 168, 1, 166]);
 const SERVER_PORT: u16 = 1234;
 
 #[embassy_executor::main]
-async fn main(spawner: Spawner) -> ! {
+async fn start(spawner: Spawner) -> ! {
+    if let Err(e) = main(&spawner).await {
+        match e {
+            Error::Connect(e) => error!("{}", e),
+            Error::Spawn(e) => error!("{}", e),
+            Error::Tcp(e) => error!("{}", e),
+        }
+    }
+
+    info!("Sleeping...");
+    loop {
+        Timer::after_secs(1).await;
+    }
+}
+
+async fn main(spawner: &Spawner) -> Result<()> {
+    let stack = set_up_network_stack(spawner).await?;
+
+    let mut rx_buffer = [0; TCP_BUFSIZ];
+    let mut tx_buffer = [0; TCP_BUFSIZ];
+    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+
+    socket.set_timeout(Some(Duration::from_secs(5)));
+
+    info!("Connecting...");
+
+    socket
+        .connect((SERVER_ADDR, SERVER_PORT))
+        .await?;
+
+    info!("Connected to {}", socket.remote_endpoint());
+
+    socket.write_all(b"hello\n\r").await?;
+    socket.flush().await?;
+
+    Ok(())
+}
+
+async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
     let mut config = Config::default();
     {
         use embassy_stm32::rcc::*;
@@ -52,8 +90,6 @@ async fn main(spawner: Spawner) -> ! {
         config.rcc.sys = Sysclk::PLL1_P;
     }
     let p = embassy_stm32::init(config);
-
-    info!("Hello World!");
 
     // Generate random seed.
     let mut rng = Rng::new(p.RNG, Irqs);
@@ -89,7 +125,7 @@ async fn main(spawner: Spawner) -> ! {
     ));
 
     // Launch network task
-    unwrap!(spawner.spawn(net_task(stack)));
+    spawner.spawn(net_task(stack))?;
 
     info!("Waiting for DHCP...");
     let static_cfg = wait_for_config(stack).await;
@@ -97,32 +133,10 @@ async fn main(spawner: Spawner) -> ! {
     let local_addr = static_cfg.address.address();
     info!("IP address: {:?}", local_addr);
 
-    let mut rx_buffer = [0; TCP_BUFSIZ];
-    let mut tx_buffer = [0; TCP_BUFSIZ];
-    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-
-    socket.set_timeout(Some(Duration::from_secs(5)));
-
-    info!("Connecting...");
-
-    socket
-        .connect((SERVER_ADDR, SERVER_PORT))
-        .await
-        .unwrap();
-
-    info!("Connected to {}", socket.remote_endpoint());
-
-    socket
-        .write_all(b"hello\n\r")
-        .await
-        .unwrap();
-
-    socket.flush().await.unwrap();
-
-    loop {
-        Timer::after_secs(1).await;
-    }
+    Ok(stack)
 }
+
+type MyStack = Stack<Ethernet<'static, ETH, GenericSMI>>;
 
 async fn wait_for_config(stack: &'static Stack<Device>) -> embassy_net::StaticConfigV4 {
     loop {
@@ -139,3 +153,30 @@ async fn net_task(stack: &'static Stack<Device>) -> ! {
 }
 
 type Device = Ethernet<'static, ETH, GenericSMI>;
+
+type Result<T> = core::result::Result<T, Error>;
+
+#[derive(Debug)]
+enum Error {
+    Connect(ConnectError),
+    Spawn(SpawnError),
+    Tcp(tcp::Error),
+}
+
+impl From<tcp::Error> for Error {
+    fn from(v: tcp::Error) -> Self {
+        Self::Tcp(v)
+    }
+}
+
+impl From<ConnectError> for Error {
+    fn from(v: ConnectError) -> Self {
+        Self::Connect(v)
+    }
+}
+
+impl From<SpawnError> for Error {
+    fn from(v: SpawnError) -> Self {
+        Self::Spawn(v)
+    }
+}
