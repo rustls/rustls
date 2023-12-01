@@ -42,8 +42,8 @@ bind_interrupts!(struct Irqs {
 const KB: usize = 1024;
 const HEAP_SIZE: usize = 24 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-const TCP_BUFSIZ: usize = 4 * KB;
-const INCOMING_TLS_BUFSIZ: usize = 8 * KB;
+const TCP_BUFSIZ: usize = KB;
+const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAX_ITERATIONS: usize = 25;
 const UNIX_TIME: u64 = 1701460379; // `date +%s`
 
@@ -120,6 +120,7 @@ async fn main(spawner: &Spawner) -> Result<()> {
         iter_count += 1;
         defmt::assert!(iter_count <= MAX_ITERATIONS);
 
+        trace!("{}B in incoming TLS buffer", incoming_tls.used());
         let UnbufferedStatus { discard, state } =
             conn.process_tls_records(incoming_tls.filled_mut())?;
 
