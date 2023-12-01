@@ -38,6 +38,7 @@ defmt-rtt = "0.4"
 cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.0"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
+static_cell = { version = "2", features = ["nightly"] }
 
 [profile.dev]
 opt-level = 'z'
