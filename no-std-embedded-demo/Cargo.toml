@@ -29,6 +29,9 @@ micromath = "2.0.0"
 static_cell = { version = "2", features = ["nightly"]}
 chrono = { version = "^0.4", default-features = false}
 
+[profile.dev]
+opt-level = 'z'
+
 [profile.release]
 debug = 2
 
