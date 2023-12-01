@@ -110,7 +110,7 @@
 //! This is the minimum you need to do to make a TLS client connection.
 //!
 //! First we load some root certificates.  These are used to authenticate the server.
-//! The recommended way is to depend on the `webpki_roots` crate which contains
+//! The simplest way is to depend on the [`webpki_roots`] crate which contains
 //! the Mozilla set of root certificates.
 //!
 //! ```rust,no_run
@@ -123,6 +123,8 @@
 //! );
 //! # }
 //! ```
+//!
+//! [`webpki_roots`]: https://crates.io/crates/webpki-roots
 //!
 //! Next, we make a `ClientConfig`.  You're likely to make one of these per process,
 //! and use it for all connections made by that process.
