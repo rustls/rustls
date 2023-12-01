@@ -31,6 +31,7 @@ embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", 
     "dhcpv4",
     "medium-ethernet",
 ] }
+embassy-futures = {  git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b" }
 
 defmt = "0.3"
 defmt-rtt = "0.4"

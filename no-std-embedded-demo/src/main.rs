@@ -20,6 +20,8 @@ bind_interrupts!(struct Irqs {
     HASH_RNG => rng::InterruptHandler<peripherals::RNG>;
 });
 
+const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) -> ! {
     let mut config = Config::default();
@@ -52,8 +54,6 @@ async fn main(spawner: Spawner) -> ! {
     let _ = rng.async_fill_bytes(&mut seed).await;
     let seed = u64::from_le_bytes(seed);
 
-    let mac_addr = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-
     let device = Ethernet::new(
         make_static!(PacketQueue::<16, 16>::new()),
         p.ETH,
@@ -68,7 +68,7 @@ async fn main(spawner: Spawner) -> ! {
         p.PB13,
         p.PG11,
         GenericSMI::new(0),
-        mac_addr,
+        MAC_ADDR,
     );
 
     let net_config = embassy_net::Config::dhcpv4(Default::default());
@@ -85,12 +85,24 @@ async fn main(spawner: Spawner) -> ! {
     unwrap!(spawner.spawn(net_task(stack)));
 
     // Ensure DHCP configuration is up before trying connect
-    stack.wait_config_up().await;
+    let static_cfg = wait_for_config(stack).await;
 
     info!("Network task initialized");
 
+    let local_addr = static_cfg.address.address();
+    info!("IP address: {:?}", local_addr);
+
     loop {
         Timer::after_secs(1).await;
+    }
+}
+
+async fn wait_for_config(stack: &'static Stack<Device>) -> embassy_net::StaticConfigV4 {
+    loop {
+        if let Some(config) = stack.config_v4() {
+            return config.clone();
+        }
+        embassy_futures::yield_now().await;
     }
 }
 
