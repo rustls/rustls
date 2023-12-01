@@ -40,10 +40,11 @@ bind_interrupts!(struct Irqs {
 });
 
 const KB: usize = 1024;
-const HEAP_SIZE: usize = 8 * KB;
+const HEAP_SIZE: usize = 24 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 const TCP_BUFSIZ: usize = 4 * KB;
-const INCOMING_TLS_BUFSIZ: usize = 4 * KB;
+const INCOMING_TLS_BUFSIZ: usize = 8 * KB;
+const MAX_ITERATIONS: usize = 25;
 
 const SERVER_NAME: &str = "rust-lang.org";
 const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 84, 174, 90]); // `dig rust-lang.org`
@@ -98,8 +99,8 @@ async fn main(spawner: &Spawner) -> Result<()> {
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         // toggle between TLS versions
-        // .with_protocol_versions(&[&TLS12])
-        .with_protocol_versions(&[&TLS13])
+        .with_protocol_versions(&[&TLS12])
+        // .with_protocol_versions(&[&TLS13])
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
@@ -112,8 +113,12 @@ async fn main(spawner: &Spawner) -> Result<()> {
     let mut incoming_tls = TlsBuffer::fixed(&mut incoming_tls);
     let mut outgoing_tls = TlsBuffer::growable(0);
 
+    let mut iter_count = 0;
     loop {
-        let UnbufferedStatus { discard: _, state } =
+        iter_count += 1;
+        defmt::assert!(iter_count <= MAX_ITERATIONS);
+
+        let UnbufferedStatus { discard, state } =
             conn.process_tls_records(incoming_tls.filled_mut())?;
 
         match state {
@@ -131,7 +136,9 @@ async fn main(spawner: &Spawner) -> Result<()> {
                 )?;
             }
 
-            ConnectionState::MustTransmitTlsData(state) => {
+            ConnectionState::MustTransmitTlsData(mut state) => {
+                defmt::assert!(state.may_encrypt_app_data().is_none(), "TODO");
+
                 socket
                     .write_all(outgoing_tls.filled())
                     .await?;
@@ -140,10 +147,20 @@ async fn main(spawner: &Spawner) -> Result<()> {
                 state.done();
             }
 
+            ConnectionState::NeedsMoreTlsData { .. } => {
+                let read = socket
+                    .read(incoming_tls.unfilled())
+                    .await?;
+                trace!("read {}B of TLS data", read);
+                incoming_tls.advance(read);
+            }
+
             state => {
                 defmt::todo!("unhandled state: {:?}", Debug2Format(&state))
             }
         }
+
+        incoming_tls.discard(discard);
     }
 }
 
@@ -178,6 +195,8 @@ mod buffer {
     use alloc::vec::Vec;
     use core::slice::SliceIndex;
 
+    use defmt::trace;
+
     pub struct TlsBuffer<'a> {
         inner: Inner<'a>,
         used: usize,
@@ -209,6 +228,20 @@ mod buffer {
 
         pub fn clear(&mut self) {
             self.used = 0;
+        }
+
+        /// discards `num_bytes` from the front of the buffer
+        pub fn discard(&mut self, num_bytes: usize) {
+            if num_bytes == 0 {
+                return;
+            }
+
+            let used = self.used;
+            self.bytes_mut(..)
+                .copy_within(num_bytes..used, 0);
+            self.used -= num_bytes;
+
+            trace!("discarded {}B", num_bytes);
         }
 
         pub fn filled(&mut self) -> &[u8] {
