@@ -5,6 +5,7 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
+use core::result::Result as CoreResult;
 
 use defmt::*;
 use embassy_executor::{SpawnError, Spawner};
@@ -23,7 +24,10 @@ use pki_types::{DnsName, InvalidDnsNameError, ServerName};
 use rustls::client::UnbufferedClientConnection;
 #[allow(unused_imports)]
 use rustls::version::{TLS12, TLS13};
-use rustls::{ClientConfig, RootCertStore, UnbufferedStatus};
+use rustls::{
+    ClientConfig, ConnectionState, EncodeError, InsufficientSizeError, RootCertStore,
+    UnbufferedStatus,
+};
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -51,6 +55,7 @@ async fn start(spawner: Spawner) -> ! {
     if let Err(e) = main(&spawner).await {
         match e {
             Error::Connect(e) => error!("{}", e),
+            Error::Encode(e) => error!("{}", Debug2Format(&e)),
             Error::InvalidDnsName(e) => error!("{}", Debug2Format(&e)),
             Error::Rustls(e) => error!("{}", Debug2Format(&e)),
             Error::Spawn(e) => error!("{}", e),
@@ -104,16 +109,65 @@ async fn main(spawner: &Spawner) -> Result<()> {
 
     let mut incoming_tls = [0; INCOMING_TLS_BUFSIZ];
     let mut incoming_tls = TlsBuffer::fixed(&mut incoming_tls);
+    let mut outgoing_tls = TlsBuffer::growable(0);
 
     loop {
         let UnbufferedStatus { discard: _, state } =
             conn.process_tls_records(incoming_tls.filled_mut())?;
 
-        defmt::todo!("unhandled {:?}", Debug2Format(&state));
+        match state {
+            ConnectionState::MustEncodeTlsData(mut state) => {
+                try_or_resize_and_retry(
+                    |dest| state.encode(dest),
+                    |e| {
+                        if let EncodeError::InsufficientSize(is) = &e {
+                            Ok(*is)
+                        } else {
+                            Err(e)
+                        }
+                    },
+                    &mut outgoing_tls,
+                )?;
+            }
+
+            state => {
+                defmt::todo!("unhandled state: {:?}", Debug2Format(&state))
+            }
+        }
     }
 }
 
+fn try_or_resize_and_retry<E>(
+    mut f: impl FnMut(&mut [u8]) -> CoreResult<usize, E>,
+    map_err: impl FnOnce(E) -> CoreResult<InsufficientSizeError, E>,
+    outgoing: &mut TlsBuffer,
+) -> Result<usize>
+where
+    Error: From<E>,
+{
+    let written = match f(outgoing.unfilled()) {
+        Ok(written) => written,
+
+        Err(e) => {
+            let InsufficientSizeError { required_size } = map_err(e)?;
+            let new_len = outgoing.used() + required_size;
+            outgoing.reserve(new_len - outgoing.capacity());
+            trace!("resized `outgoing_tls` buffer to {}B", new_len);
+
+            f(outgoing.unfilled())?
+        }
+    };
+
+    outgoing.advance(written);
+
+    Ok(written)
+}
+
 mod buffer {
+    use alloc::vec;
+    use alloc::vec::Vec;
+    use core::slice::SliceIndex;
+
     pub struct TlsBuffer<'a> {
         inner: Inner<'a>,
         used: usize,
@@ -127,19 +181,74 @@ mod buffer {
             }
         }
 
+        pub fn growable(initial_capacity: usize) -> TlsBuffer<'static> {
+            TlsBuffer {
+                inner: Inner::Growable(vec![0; initial_capacity]),
+                used: 0,
+            }
+        }
+
+        /// Mark `num_bytes` as being filled with data
+        pub fn advance(&mut self, num_bytes: usize) {
+            self.used += num_bytes;
+        }
+
+        pub fn capacity(&self) -> usize {
+            self.inner.capacity()
+        }
+
         pub fn filled_mut(&mut self) -> &mut [u8] {
-            &mut self.inner.bytes()[..self.used]
+            self.bytes(..self.used)
+        }
+
+        pub fn unfilled(&mut self) -> &mut [u8] {
+            self.bytes(self.used..)
+        }
+
+        pub fn used(&self) -> usize {
+            self.used
+        }
+
+        pub fn reserve(&mut self, additional_bytes: usize) {
+            let new_len = self.inner.capacity() + additional_bytes;
+            self.inner.resize(new_len)
+        }
+
+        fn bytes<I>(&mut self, index: I) -> &mut I::Output
+        where
+            I: SliceIndex<[u8]>,
+        {
+            self.inner
+                .bytes()
+                .get_mut(index)
+                .unwrap()
         }
     }
 
     enum Inner<'a> {
         Fixed(&'a mut [u8]),
+        Growable(Vec<u8>),
     }
 
     impl Inner<'_> {
         fn bytes(&mut self) -> &mut [u8] {
             match self {
                 Inner::Fixed(slice) => slice,
+                Inner::Growable(vec) => vec,
+            }
+        }
+
+        fn capacity(&self) -> usize {
+            match self {
+                Inner::Fixed(slice) => slice.len(),
+                Inner::Growable(vec) => vec.len(),
+            }
+        }
+
+        fn resize(&mut self, new_len: usize) {
+            match self {
+                Inner::Fixed(_) => panic!("not supported by fixed variant"),
+                Inner::Growable(vec) => vec.resize(new_len, 0),
             }
         }
     }
@@ -237,10 +346,17 @@ type Result<T> = core::result::Result<T, Error>;
 #[derive(Debug)]
 enum Error {
     Connect(ConnectError),
+    Encode(EncodeError),
     InvalidDnsName(InvalidDnsNameError),
     Rustls(rustls::Error),
     Spawn(SpawnError),
     Tcp(tcp::Error),
+}
+
+impl From<EncodeError> for Error {
+    fn from(v: EncodeError) -> Self {
+        Self::Encode(v)
+    }
 }
 
 impl From<InvalidDnsNameError> for Error {
