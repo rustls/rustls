@@ -234,7 +234,7 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     fn name(&self) -> NamedGroup;
 }
 
-/// An in-progress key exchange originating from a `SupportedKxGroup`.
+/// An in-progress key exchange originating from a [`SupportedKxGroup`].
 pub trait ActiveKeyExchange: Send + Sync {
     /// Completes the key exchange, given the peer's public key.
     ///
