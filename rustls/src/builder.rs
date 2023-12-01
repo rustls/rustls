@@ -7,6 +7,9 @@ use core::fmt;
 use core::marker::PhantomData;
 use std::sync::Arc;
 
+#[cfg(doc)]
+use crate::{ClientConfig, ServerConfig};
+
 /// A [builder] for [`ServerConfig`] or [`ClientConfig`] values.
 ///
 /// To get one of these, call [`ServerConfig::builder()`] or [`ClientConfig::builder()`].
@@ -19,7 +22,7 @@ use std::sync::Arc;
 /// For settings besides these, see the fields of [`ServerConfig`] and [`ClientConfig`].
 ///
 /// The usual choice for protocol primitives is to call
-/// [`crate::ClientConfig::builder`]/[`ServerConfig::builder`]
+/// [`ClientConfig::builder`]/[`ServerConfig::builder`]
 /// which will use rustls' default cryptographic provider and safe defaults for ciphersuites and
 /// supported protocol versions.
 ///

@@ -10,6 +10,14 @@ use core::fmt::Debug;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+#[cfg(all(doc, feature = "tls12"))]
+use crate::Tls12CipherSuite;
+#[cfg(doc)]
+use crate::{
+    client, crypto, server, sign, ClientConfig, ConfigBuilder, ServerConfig, SupportedCipherSuite,
+    Tls13CipherSuite,
+};
+
 pub use crate::webpki::{
     verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms,
 };
@@ -56,10 +64,10 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// This crate comes with two built-in options, provided as
 /// `CryptoProvider` structures:
 ///
-/// - [`crate::crypto::ring::default_provider`]: (behind the `ring` crate feature, which
+/// - [`crypto::ring::default_provider`]: (behind the `ring` crate feature, which
 ///   is enabled by default).  This provider uses the [*ring*](https://github.com/briansmith/ring)
 ///   crate.
-/// - [`crate::crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` feature,
+/// - [`crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` feature,
 ///   which is optional).  This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 ///   crate.
 ///
@@ -68,20 +76,20 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 /// # Using a specific `CryptoProvider`
 ///
-/// Supply the provider when constructing your [`crate::ClientConfig`] or [`crate::ServerConfig`]:
+/// Supply the provider when constructing your [`ClientConfig`] or [`ServerConfig`]:
 ///
-/// - [`crate::ClientConfig::builder_with_provider()`]
-/// - [`crate::ServerConfig::builder_with_provider()`]
+/// - [`ClientConfig::builder_with_provider()`]
+/// - [`ServerConfig::builder_with_provider()`]
 ///
 /// When creating and configuring a webpki-backed client or server certificate verifier, a choice of
 /// provider is also needed to start the configuration process:
 ///
-/// - [`crate::client::WebPkiServerVerifier::builder_with_provider()`]
-/// - [`crate::server::WebPkiClientVerifier::builder_with_provider()`]
+/// - [`client::WebPkiServerVerifier::builder_with_provider()`]
+/// - [`server::WebPkiClientVerifier::builder_with_provider()`]
 ///
 /// # Making a custom `CryptoProvider`
 ///
-/// Your goal will be to populate a [`crate::crypto::CryptoProvider`] struct instance.
+/// Your goal will be to populate a [`crypto::CryptoProvider`] struct instance.
 ///
 /// ## Which elements are required?
 ///
@@ -91,7 +99,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// provider (dynamically).
 ///
 /// For example, if we want to make a provider that just overrides key loading in the config builder
-/// API ([`crate::ConfigBuilder::with_single_cert`] etc.), it might look like this:
+/// API ([`ConfigBuilder::with_single_cert`] etc.), it might look like this:
 ///
 /// ```
 /// # #[cfg(feature = "ring")] {
@@ -121,13 +129,13 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 /// The elements are documented separately:
 ///
-/// - **Random** - see [`crate::crypto::SecureRandom::fill()`].
-/// - **Cipher suites** - see [`crate::SupportedCipherSuite`], [`crate::Tls12CipherSuite`], and
-///   [`crate::Tls13CipherSuite`].
-/// - **Key exchange groups** - see [`crate::crypto::SupportedKxGroup`].
-/// - **Signature verification algorithms** - see [`crate::crypto::WebPkiSupportedAlgorithms`].
-/// - **Authentication key loading** - see [`crate::crypto::KeyProvider::load_private_key()`] and
-///   [`crate::sign::SigningKey`].
+/// - **Random** - see [`crypto::SecureRandom::fill()`].
+/// - **Cipher suites** - see [`SupportedCipherSuite`], [`Tls12CipherSuite`], and
+///   [`Tls13CipherSuite`].
+/// - **Key exchange groups** - see [`crypto::SupportedKxGroup`].
+/// - **Signature verification algorithms** - see [`crypto::WebPkiSupportedAlgorithms`].
+/// - **Authentication key loading** - see [`crypto::KeyProvider::load_private_key()`] and
+///   [`sign::SigningKey`].
 ///
 /// # Example code
 ///
@@ -166,9 +174,9 @@ pub struct CryptoProvider {
     ///
     /// These are used for both certificate chain verification and handshake signature verification.
     ///
-    /// This is called by [`crate::ConfigBuilder::with_root_certificates()`],
-    /// [`crate::server::WebPkiClientVerifier::builder_with_provider()`] and
-    /// [`crate::client::WebPkiServerVerifier::builder_with_provider()`].
+    /// This is called by [`ConfigBuilder::with_root_certificates()`],
+    /// [`server::WebPkiClientVerifier::builder_with_provider()`] and
+    /// [`client::WebPkiServerVerifier::builder_with_provider()`].
     pub signature_verification_algorithms: WebPkiSupportedAlgorithms,
 
     /// Source of cryptographically secure random numbers.
@@ -197,8 +205,8 @@ pub trait SecureRandom: Send + Sync + Debug {
 pub trait KeyProvider: Send + Sync + Debug {
     /// Decode and validate a private signing key from `key_der`.
     ///
-    /// This is used by [`crate::ConfigBuilder::with_client_auth_cert()`], [`crate::ConfigBuilder::with_single_cert()`],
-    /// and [`crate::ConfigBuilder::with_single_cert_with_ocsp()`].  The key types and formats supported by this
+    /// This is used by [`ConfigBuilder::with_client_auth_cert()`], [`ConfigBuilder::with_single_cert()`],
+    /// and [`ConfigBuilder::with_single_cert_with_ocsp()`].  The key types and formats supported by this
     /// function directly defines the key types and formats supported in those APIs.
     ///
     /// Return an error if the key type encoding is not supported, or if the key fails validation.
