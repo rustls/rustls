@@ -37,7 +37,7 @@ impl MessageDeframer {
         &mut self,
         record_layer: &mut RecordLayer,
         negotiated_version: Option<ProtocolVersion>,
-        buffer: &mut DeframerVecBuffer,
+        buffer: &mut DeframerSliceBuffer,
     ) -> Result<Option<Deframed>, Error> {
         if let Some(last_err) = self.last_error.clone() {
             return Err(last_err);
@@ -110,7 +110,7 @@ impl MessageDeframer {
             };
             if self.joining_hs.is_none() && allowed_plaintext {
                 // This is unencrypted. We check the contents later.
-                buffer.discard(end);
+                buffer.queue_discard(end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -137,7 +137,7 @@ impl MessageDeframer {
                     ));
                 }
                 Ok(None) => {
-                    buffer.discard(end);
+                    buffer.queue_discard(end);
                     continue;
                 }
                 Err(e) => return Err(e),
@@ -154,7 +154,7 @@ impl MessageDeframer {
             // If it's not a handshake message, just return it -- no joining necessary.
             if msg.typ != ContentType::Handshake {
                 let end = start + rd.used();
-                buffer.discard(end);
+                buffer.queue_discard(end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -196,7 +196,7 @@ impl MessageDeframer {
             // discard all of the bytes that we're previously buffered as handshake data.
             let end = meta.message.end;
             self.joining_hs = None;
-            buffer.discard(end);
+            buffer.queue_discard(end);
         }
 
         Ok(Some(Deframed {
@@ -373,7 +373,7 @@ impl DeframerVecBuffer {
     }
 
     /// Discard `taken` bytes from the start of our buffer.
-    fn discard(&mut self, taken: usize) {
+    pub fn discard(&mut self, taken: usize) {
         #[allow(clippy::comparison_chain)]
         if taken < self.used {
             /* Before:
@@ -855,8 +855,13 @@ mod tests {
             record_layer: &mut RecordLayer,
             negotiated_version: Option<ProtocolVersion>,
         ) -> Result<Option<Deframed>, Error> {
-            self.inner
-                .pop(record_layer, negotiated_version, &mut self.buffer)
+            let mut deframer_buffer = self.buffer.borrow();
+            let res = self
+                .inner
+                .pop(record_layer, negotiated_version, &mut deframer_buffer);
+            let discard = deframer_buffer.pending_discard();
+            self.buffer.discard(discard);
+            res
         }
 
         fn read(&mut self, rd: &mut dyn io::Read) -> io::Result<usize> {
