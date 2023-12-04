@@ -723,11 +723,7 @@ mod tests {
     }
 
     fn assert_len(want: usize, got: io::Result<usize>) {
-        if let Ok(gotval) = got {
-            assert_eq!(gotval, want);
-        } else {
-            panic!("read failed, expected {:?} bytes", want);
-        }
+        assert_eq!(Some(want), got.ok())
     }
 
     fn pop_first(d: &mut MessageDeframer, rl: &mut RecordLayer) {
