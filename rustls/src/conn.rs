@@ -3,7 +3,7 @@ use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
 use crate::log::trace;
-use crate::msgs::deframer::{Deframed, DeframerVecBuffer, MessageDeframer};
+use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer};
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{Message, MessagePayload, PlainMessage};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
@@ -452,11 +452,14 @@ impl<Data> ConnectionCommon<Data> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
-        match self
+        let mut deframer_buffer = self.deframer_buffer.borrow();
+        let res = self
             .core
-            .deframe(None, &mut self.deframer_buffer)?
-            .map(Message::try_from)
-        {
+            .deframe(None, &mut deframer_buffer);
+        let discard = deframer_buffer.pending_discard();
+        self.deframer_buffer.discard(discard);
+
+        match res?.map(Message::try_from) {
             Some(Ok(msg)) => Ok(Some(msg)),
             Some(Err(err)) => Err(self.send_fatal_alert(AlertDescription::DecodeError, err)),
             None => Ok(None),
@@ -646,16 +649,21 @@ impl<Data> ConnectionCore<Data> {
             }
         };
 
-        while let Some(msg) = self.deframe(Some(&*state), deframer_buffer)? {
+        let mut borrowed_buffer = deframer_buffer.borrow();
+        while let Some(msg) = self.deframe(Some(&*state), &mut borrowed_buffer)? {
             match self.process_msg(msg, state) {
                 Ok(new) => state = new,
                 Err(e) => {
                     self.state = Err(e.clone());
+                    let discard = borrowed_buffer.pending_discard();
+                    deframer_buffer.discard(discard);
                     return Err(e);
                 }
             }
         }
 
+        let discard = borrowed_buffer.pending_discard();
+        deframer_buffer.discard(discard);
         self.state = Ok(state);
         Ok(self.common_state.current_io_state())
     }
@@ -664,7 +672,7 @@ impl<Data> ConnectionCore<Data> {
     fn deframe(
         &mut self,
         state: Option<&dyn State<Data>>,
-        deframer_buffer: &mut DeframerVecBuffer,
+        deframer_buffer: &mut DeframerSliceBuffer,
     ) -> Result<Option<PlainMessage>, Error> {
         match self.message_deframer.pop(
             &mut self.common_state.record_layer,
