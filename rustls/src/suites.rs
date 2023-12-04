@@ -54,12 +54,6 @@ pub enum SupportedCipherSuite {
     Tls13(&'static Tls13CipherSuite),
 }
 
-impl fmt::Debug for SupportedCipherSuite {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.suite().fmt(f)
-    }
-}
-
 impl SupportedCipherSuite {
     /// The cipher suite's identifier
     pub fn suite(&self) -> CipherSuite {
@@ -122,6 +116,12 @@ impl SupportedCipherSuite {
                 .and_then(|cs| cs.quic)
                 .is_some(),
         }
+    }
+}
+
+impl fmt::Debug for SupportedCipherSuite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.suite().fmt(f)
     }
 }
 
