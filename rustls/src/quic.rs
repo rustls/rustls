@@ -579,7 +579,7 @@ pub trait Algorithm: Send + Sync {
 }
 
 /// A QUIC header protection key
-pub trait HeaderProtectionKey {
+pub trait HeaderProtectionKey: Send + Sync {
     /// Adds QUIC Header Protection.
     ///
     /// `sample` must contain the sample of encrypted payload; see
@@ -640,7 +640,7 @@ pub trait HeaderProtectionKey {
 }
 
 /// Keys to encrypt or decrypt the payload of a packet
-pub trait PacketKey {
+pub trait PacketKey: Send + Sync {
     /// Encrypt a QUIC packet
     ///
     /// Takes a `packet_number`, used to derive the nonce; the packet `header`, which is used as
@@ -884,5 +884,19 @@ impl Version {
 impl Default for Version {
     fn default() -> Self {
         Self::V1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::quic::HeaderProtectionKey;
+
+    use super::PacketKey;
+
+    #[test]
+    fn auto_traits() {
+        fn assert_auto<T: Send + Sync>() {}
+        assert_auto::<Box<dyn PacketKey>>();
+        assert_auto::<Box<dyn HeaderProtectionKey>>();
     }
 }
