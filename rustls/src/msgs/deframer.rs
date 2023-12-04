@@ -327,6 +327,12 @@ pub struct DeframerVecBuffer {
 }
 
 impl DeframerVecBuffer {
+    /// Borrows the initialized contents of this buffer and tracks pending discard operations via
+    /// the `discard` reference
+    pub fn borrow(&mut self) -> DeframerSliceBuffer {
+        DeframerSliceBuffer::new(&mut self.buf[..self.used])
+    }
+
     /// Returns true if there are messages for the caller to process
     pub fn has_pending(&self) -> bool {
         !self.is_empty()
@@ -422,6 +428,50 @@ impl DeframerBuffer<true> for DeframerVecBuffer {
 }
 
 impl DeframerBuffer<false> for DeframerVecBuffer {
+    fn copy(&mut self, src: &[u8], at: usize) {
+        self.borrow().copy(src, at)
+    }
+}
+
+/// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
+pub struct DeframerSliceBuffer<'a> {
+    // a fully initialized buffer that will be deframed
+    buf: &'a mut [u8],
+    // number of bytes to discard from the front of `buf` at a later time
+    discard: usize,
+}
+
+impl<'a> DeframerSliceBuffer<'a> {
+    pub fn new(buf: &'a mut [u8]) -> Self {
+        Self { buf, discard: 0 }
+    }
+
+    /// Tracks a pending discard operation of `num_bytes`
+    pub fn queue_discard(&mut self, num_bytes: usize) {
+        self.discard += num_bytes;
+    }
+
+    /// Returns the number of bytes that need to be discarded
+    pub fn pending_discard(&self) -> usize {
+        self.discard
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl FilledDeframerBuffer for DeframerSliceBuffer<'_> {
+    fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[self.discard..]
+    }
+
+    fn filled(&self) -> &[u8] {
+        &self.buf[self.discard..]
+    }
+}
+
+impl DeframerBuffer<false> for DeframerSliceBuffer<'_> {
     fn copy(&mut self, src: &[u8], at: usize) {
         copy_into_buffer(self.filled_mut(), src, at)
     }
