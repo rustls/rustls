@@ -453,7 +453,7 @@ impl<Data> ConnectionCommon<Data> {
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
         match self
             .core
-            .deframe()?
+            .deframe(None)?
             .map(Message::try_from)
         {
             Some(Ok(msg)) => Ok(Some(msg)),
@@ -635,7 +635,7 @@ impl<Data> ConnectionCore<Data> {
             }
         };
 
-        while let Some(msg) = self.deframe()? {
+        while let Some(msg) = self.deframe(Some(&*state))? {
             match self.process_msg(msg, state) {
                 Ok(new) => state = new,
                 Err(e) => {
@@ -650,7 +650,7 @@ impl<Data> ConnectionCore<Data> {
     }
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
-    fn deframe(&mut self) -> Result<Option<PlainMessage>, Error> {
+    fn deframe(&mut self, state: Option<&dyn State<Data>>) -> Result<Option<PlainMessage>, Error> {
         match self.message_deframer.pop(
             &mut self.common_state.record_layer,
             self.common_state.negotiated_version,
@@ -690,9 +690,14 @@ impl<Data> ConnectionCore<Data> {
             Err(err @ Error::PeerSentOversizedRecord) => Err(self
                 .common_state
                 .send_fatal_alert(AlertDescription::RecordOverflow, err)),
-            Err(err @ Error::DecryptError) => Err(self
-                .common_state
-                .send_fatal_alert(AlertDescription::BadRecordMac, err)),
+            Err(err @ Error::DecryptError) => {
+                if let Some(state) = state {
+                    state.handle_decrypt_error();
+                }
+                Err(self
+                    .common_state
+                    .send_fatal_alert(AlertDescription::BadRecordMac, err))
+            }
             Err(e) => Err(e),
         }
     }
