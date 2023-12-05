@@ -1,6 +1,6 @@
 //! This is the simplest possible client using rustls that does something useful:
 //! it accepts the default configuration, loads some root certs, and then connects
-//! to google.com and issues a basic HTTP request.  The response is printed to stdout.
+//! to rust-lang.org and issues a basic HTTP request.  The response is printed to stdout.
 //!
 //! It makes use of rustls::Stream to treat the underlying TLS connection as a basic
 //! bi-directional stream -- the underlying IO is performed transparently.
