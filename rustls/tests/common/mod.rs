@@ -176,12 +176,21 @@ where
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
             let message = OpaqueMessage::read(&mut reader).unwrap();
-            let mut message = Message::try_from(message.into_plain_message()).unwrap();
-            let message_enc = match filter(&mut message) {
-                Altered::InPlace => PlainMessage::from(message)
-                    .into_unencrypted_opaque()
-                    .encode(),
-                Altered::Raw(data) => data,
+
+            // this is a bit of a falsehood: we don't know whether message
+            // is encrypted.  it is quite unlikely that a genuine encrypted
+            // message can be decoded by `Message::try_from`.
+            let plain = message.into_plain_message();
+
+            let message_enc = match Message::try_from(plain.clone()) {
+                Ok(mut message) => match filter(&mut message) {
+                    Altered::InPlace => PlainMessage::from(message)
+                        .into_unencrypted_opaque()
+                        .encode(),
+                    Altered::Raw(data) => data,
+                },
+                // pass through encrypted/undecodable messages
+                Err(_) => plain.into_unencrypted_opaque().encode(),
             };
 
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];

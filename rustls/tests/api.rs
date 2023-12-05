@@ -5649,3 +5649,61 @@ fn test_client_construction_requires_64_bytes_of_random_material() {
     ClientConnection::new(Arc::new(client_config), server_name("localhost"))
         .expect("check how much random material ClientConnection::new consumes");
 }
+
+#[cfg(feature = "tls12")]
+#[test]
+fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message() {
+    fn inject_corrupt_finished_message(msg: &mut Message) -> Altered {
+        if let MessagePayload::ChangeCipherSpec(_) = msg.payload {
+            // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
+            let mut raw_change_cipher_spec = [0x14u8, 0x03, 0x03, 0x00, 0x01, 0x01].to_vec();
+            let mut corrupt_finished = [0x16, 0x03, 0x03, 0x00, 0x28].to_vec();
+            corrupt_finished.extend([0u8; 0x28]);
+
+            let mut both = vec![];
+            both.append(&mut raw_change_cipher_spec);
+            both.append(&mut corrupt_finished);
+
+            Altered::Raw(both)
+        } else {
+            Altered::InPlace
+        }
+    }
+
+    let mut client_config =
+        make_client_config_with_versions(KeyType::Rsa, &[&rustls::version::TLS12]);
+    let storage = Arc::new(ClientStorage::new());
+    client_config.resumption = Resumption::store(storage.clone());
+    let client_config = Arc::new(client_config);
+    let server_config = Arc::new(make_server_config(KeyType::Rsa));
+
+    // successful handshake to allow resumption
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    // resumption
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    let mut client = client.into();
+    transfer_altered(
+        &mut server.into(),
+        inject_corrupt_finished_message,
+        &mut client,
+    );
+
+    // discard storage operations up to this point, to observe the one we want to test for.
+    storage.ops_and_reset();
+
+    // client cannot decrypt faulty Finished, and deletes saved session in case
+    // server resumption is buggy.
+    assert_eq!(
+        Some(Error::DecryptError),
+        client.process_new_packets().err()
+    );
+
+    assert!(matches!(
+        storage.ops()[0],
+        ClientStorageOp::RemoveTls12Session(_)
+    ));
+}
