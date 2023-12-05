@@ -149,7 +149,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
 
     /// Return `true` to require a client certificate and `false` to make
     /// client authentication optional.
-    /// Defaults to `Some(self.offer_client_auth())`.
+    /// Defaults to `self.offer_client_auth()`.
     fn client_auth_mandatory(&self) -> bool {
         self.offer_client_auth()
     }
