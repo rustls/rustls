@@ -630,6 +630,8 @@ pub(crate) trait State<Data>: Send + Sync {
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
         Err(Error::HandshakeNotComplete)
     }
+
+    fn handle_decrypt_error(&self) {}
 }
 
 pub(crate) struct Context<'a, Data> {
