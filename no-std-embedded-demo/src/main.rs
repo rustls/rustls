@@ -3,11 +3,12 @@
 #![feature(type_alias_impl_trait)]
 
 extern crate alloc;
-
+use alloc::format;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::result::Result as CoreResult;
-use embedded_io_async::Write;
-
+use core::str::Utf8Error;
+use defmt::assert;
 use defmt::*;
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
@@ -20,14 +21,15 @@ use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
 use embassy_time::Duration;
 use embassy_time::Timer;
+use embedded_io_async::Write;
 use no_std_embedded_demo as lib;
 use pki_types::{DnsName, InvalidDnsNameError, ServerName};
-use rustls::client::UnbufferedClientConnection;
+use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
 #[allow(unused_imports)]
 use rustls::version::{TLS12, TLS13};
 use rustls::{
-    ClientConfig, ConnectionState, EncodeError, InsufficientSizeError, RootCertStore,
-    UnbufferedStatus,
+    AppDataRecord, ClientConfig, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
+    MayEncryptAppData, RootCertStore, UnbufferedStatus,
 };
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
@@ -44,14 +46,14 @@ const KB: usize = 1024;
 const HEAP_SIZE: usize = 25 * KB;
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-const MAX_ITERATIONS: usize = 25;
+const MAX_ITERATIONS: usize = 2 * 25;
 const OUTGOING_TLS_BUFSIZ: usize = KB / 2;
 const TCP_RX_BUFSIZ: usize = KB;
 const TCP_TX_BUFSIZ: usize = KB / 2;
 const UNIX_TIME: u64 = 1701460379; // `date +%s`
 
 const SERVER_NAME: &str = "rust-lang.org";
-const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 84, 174, 90]); // `dig rust-lang.org`
+const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 85, 242, 98]); // `dig rust-lang.org`
 const SERVER_PORT: u16 = 443;
 
 #[embassy_executor::main]
@@ -66,6 +68,8 @@ async fn start(spawner: Spawner) -> ! {
             Error::Rustls(e) => error!("{}", Debug2Format(&e)),
             Error::Spawn(e) => error!("{}", e),
             Error::Tcp(e) => error!("{}", e),
+            Error::EncryptError(e) => error!("{}", Debug2Format(&e)),
+            Error::Utf8Error(e) => error!("{}", Debug2Format(&e)),
         }
     }
 
@@ -110,7 +114,7 @@ async fn main(
         .with_safe_default_kx_groups()
         // toggle between TLS versions
         .with_protocol_versions(&[&TLS12])
-        // .with_protocol_versions(&[&TLS13])
+        //.with_protocol_versions(&[&TLS13])
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
@@ -122,18 +126,45 @@ async fn main(
 
     let mut incoming_tls = TlsBuffer::fixed(incoming_tls);
     let mut outgoing_tls = TlsBuffer::fixed(outgoing_tls);
+    let mut sent_request = false;
+    let mut received_response = false;
 
     let mut iter_count = 0;
-    loop {
+    let mut open_connection = true;
+
+    while open_connection {
         iter_count += 1;
         defmt::assert!(iter_count <= MAX_ITERATIONS);
 
         trace!("{}B in incoming TLS buffer", incoming_tls.used());
-        let UnbufferedStatus { discard, state } =
+        let UnbufferedStatus { mut discard, state } =
             conn.process_tls_records(incoming_tls.filled_mut())?;
 
         trace!("state: {}", Debug2Format(&state));
         match state {
+            ConnectionState::AppDataAvailable(mut state) => {
+                while let Some(res) = state.next_record() {
+                    let AppDataRecord {
+                        discard: new_discard,
+                        payload,
+                    } = res?;
+                    discard += new_discard;
+
+                    if payload.starts_with(b"HTTP") {
+                        let response = core::str::from_utf8(payload)?;
+                        let header = response
+                            .lines()
+                            .next()
+                            .unwrap_or(response);
+
+                        info!("Payload: {}", header);
+                    } else {
+                        info!("(.. continued HTTP response ..)");
+                    }
+
+                    received_response = true;
+                }
+            }
             ConnectionState::MustEncodeTlsData(mut state) => {
                 try_or_resize_and_retry(
                     |dest| state.encode(dest),
@@ -149,30 +180,100 @@ async fn main(
             }
 
             ConnectionState::MustTransmitTlsData(mut state) => {
-                defmt::assert!(state.may_encrypt_app_data().is_none(), "TODO");
+                if let Some(mut may_encrypt) = state.may_encrypt_app_data() {
+                    encrypt_http_request(&mut sent_request, &mut may_encrypt, &mut outgoing_tls);
+                }
 
-                socket
-                    .write_all(outgoing_tls.filled())
-                    .await?;
-                trace!("sent {}B of TLS data", outgoing_tls.used());
-                outgoing_tls.clear();
+                send_tls(&mut socket, &mut outgoing_tls).await?;
                 state.done();
             }
 
             ConnectionState::NeedsMoreTlsData { .. } => {
-                let read = socket
-                    .read(incoming_tls.unfilled())
-                    .await?;
-                trace!("read {}B of TLS data", read);
-                incoming_tls.advance(read);
+                recv_tls(&mut socket, &mut incoming_tls).await?;
             }
 
+            ConnectionState::TrafficTransit(mut may_encrypt_data) => {
+                if encrypt_http_request(&mut sent_request, &mut may_encrypt_data, &mut outgoing_tls)
+                {
+                    send_tls(&mut socket, &mut outgoing_tls).await?;
+
+                    recv_tls(&mut socket, &mut incoming_tls).await?;
+                } else if !received_response {
+                    // this happens in the TLS 1.3 case. the app-data was sent in the preceding
+                    // `MustTransmitTlsData` state. the server should have already a response which
+                    // we can read out from the socket
+                    recv_tls(&mut socket, &mut incoming_tls).await?;
+                } else {
+                    try_or_resize_and_retry(
+                        |out_buffer| may_encrypt_data.queue_close_notify(out_buffer),
+                        |e| {
+                            if let EncryptError::InsufficientSize(is) = &e {
+                                Ok(*is)
+                            } else {
+                                Err(e.into())
+                            }
+                        },
+                        &mut outgoing_tls,
+                    )?;
+                    send_tls(&mut socket, &mut outgoing_tls).await?;
+                    open_connection = false;
+                }
+            }
+            ConnectionState::ConnectionClosed => {
+                open_connection = false;
+            }
             state => {
                 defmt::todo!("unhandled state: {:?}", Debug2Format(&state))
             }
         }
 
         incoming_tls.discard(discard);
+        iter_count += 1;
+    }
+    assert!(sent_request);
+    assert!(received_response);
+
+    Ok(())
+}
+
+async fn send_tls<'a>(
+    socket: &'a mut TcpSocket<'_>,
+    outgoing_tls: &'a mut TlsBuffer<'_>,
+) -> Result<()> {
+    socket
+        .write_all(&outgoing_tls.filled())
+        .await?;
+    trace!("sent {}B of TLS data", outgoing_tls.used());
+    outgoing_tls.clear();
+    Ok(())
+}
+
+async fn recv_tls<'a>(
+    socket: &'a mut TcpSocket<'_>,
+    incoming_tls: &'a mut TlsBuffer<'_>,
+) -> Result<()> {
+    let read = socket
+        .read(incoming_tls.unfilled())
+        .await?;
+    trace!("read {}B of TLS data", read);
+    incoming_tls.advance(read);
+    Ok(())
+}
+fn encrypt_http_request(
+    sent_request: &mut bool,
+    may_encrypt: &mut MayEncryptAppData<'_, ClientConnectionData>,
+    outgoing_tls: &mut TlsBuffer,
+) -> bool {
+    if !*sent_request {
+        let written = may_encrypt
+            .encrypt(&build_http_request(), &mut outgoing_tls.unfilled())
+            .expect("encrypted request does not fit in `outgoing_tls`");
+        outgoing_tls.advance(written);
+        *sent_request = true;
+        warn!("queued HTTP request");
+        true
+    } else {
+        false
     }
 }
 
@@ -429,6 +530,8 @@ enum Error {
     Rustls(rustls::Error),
     Spawn(SpawnError),
     Tcp(tcp::Error),
+    EncryptError(rustls::EncryptError),
+    Utf8Error(Utf8Error),
 }
 
 impl From<EncodeError> for Error {
@@ -448,6 +551,11 @@ impl From<rustls::Error> for Error {
         Self::Rustls(v)
     }
 }
+impl From<Utf8Error> for Error {
+    fn from(v: Utf8Error) -> Self {
+        Self::Utf8Error(v)
+    }
+}
 
 impl From<tcp::Error> for Error {
     fn from(v: tcp::Error) -> Self {
@@ -464,6 +572,12 @@ impl From<ConnectError> for Error {
 impl From<SpawnError> for Error {
     fn from(v: SpawnError) -> Self {
         Self::Spawn(v)
+    }
+}
+
+impl From<rustls::EncryptError> for Error {
+    fn from(v: rustls::EncryptError) -> Self {
+        Self::EncryptError(v)
     }
 }
 
@@ -580,4 +694,8 @@ mod buffers {
         pub tcp_rx: &'static mut [u8],
         pub tcp_tx: &'static mut [u8],
     }
+}
+
+fn build_http_request() -> Vec<u8> {
+    format!("GET / HTTP/1.1\r\nHost: {SERVER_NAME}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n").into_bytes()
 }
