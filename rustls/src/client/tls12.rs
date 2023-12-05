@@ -1072,6 +1072,18 @@ impl State<ClientConnectionData> for ExpectFinished {
             _fin_verified,
         }))
     }
+
+    // we could not decrypt the encrypted handshake message with session resumption
+    // this might mean that the ticket was invalid for some reason, so we remove it
+    // from the store to restart a session from scratch
+    fn handle_decrypt_error(&self) {
+        if self.resuming {
+            self.config
+                .resumption
+                .store
+                .remove_tls12_session(&self.server_name);
+        }
+    }
 }
 
 // -- Traffic transit state --
