@@ -3,10 +3,10 @@ use crate::versions;
 use crate::{crypto::CryptoProvider, msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS};
 
 use alloc::format;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
-use std::sync::Arc;
 
 #[cfg(doc)]
 use crate::{ClientConfig, ServerConfig};
