@@ -1681,7 +1681,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.22.0"
+version = "0.23.0-alpha.0"
 dependencies = [
  "aws-lc-rs",
  "base64",
@@ -1709,7 +1709,7 @@ dependencies = [
  "fxhash",
  "itertools",
  "rayon",
- "rustls 0.22.0",
+ "rustls 0.23.0-alpha.0",
  "rustls-pemfile 2.0.0",
  "rustls-pki-types",
 ]
@@ -1721,7 +1721,7 @@ dependencies = [
  "hickory-resolver",
  "regex",
  "ring 0.17.6",
- "rustls 0.22.0",
+ "rustls 0.23.0-alpha.0",
 ]
 
 [[package]]
@@ -1733,7 +1733,7 @@ dependencies = [
  "log",
  "mio",
  "rcgen",
- "rustls 0.22.0",
+ "rustls 0.23.0-alpha.0",
  "rustls-pemfile 2.0.0",
  "rustls-pki-types",
  "serde",
@@ -1784,7 +1784,7 @@ dependencies = [
  "rand_core",
  "rcgen",
  "rsa",
- "rustls 0.22.0",
+ "rustls 0.23.0-alpha.0",
  "rustls-pki-types",
  "rustls-webpki 0.102.0",
  "serde",
