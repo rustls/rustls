@@ -8,12 +8,12 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::result::Result as CoreResult;
 use core::str::Utf8Error;
+use defmt::assert;
 use defmt::*;
-use defmt::{assert, assert_eq};
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::dns::{self, DnsQueryType};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
-use embassy_net::{Ipv4Address, Stack, StackResources};
+use embassy_net::{Stack, StackResources};
 use embassy_stm32::eth::generic_smi::GenericSMI;
 use embassy_stm32::eth::{Ethernet, PacketQueue};
 use embassy_stm32::peripherals::ETH;
@@ -56,10 +56,7 @@ const TCP_TX_BUFSIZ: usize = KB / 2;
 const UNIX_TIME: u64 = 1701460379; // `date +%s`
 
 const SERVER_NAME: &str = "github.com";
-const SERVER_ADDR: Ipv4Address = Ipv4Address([140, 82, 121, 4]); // `dig github.com`
 
-// const SERVER_NAME: &str = "www.rust-lang.org";
-// const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 85, 242, 10]); // `dig github.com`
 const SERVER_PORT: u16 = 443;
 
 #[embassy_executor::main]
@@ -77,6 +74,7 @@ async fn start(spawner: Spawner) -> ! {
             Error::EncryptError(e) => error!("{}", Debug2Format(&e)),
             Error::Utf8Error(e) => error!("{}", Debug2Format(&e)),
             Error::DnsError(e) => error!("{}", Debug2Format(&e)),
+            Error::NoDnsResolution => error!("{}", Debug2Format(&Error::NoDnsResolution)),
         }
     }
 
@@ -98,11 +96,13 @@ async fn main(
     let stack = set_up_network_stack(spawner).await?;
 
     info!("querying host {:?}...", SERVER_NAME);
-    let dns_addr = stack
+    let dns_results = stack
         .dns_query(SERVER_NAME, DnsQueryType::A)
-        .await?
+        .await?;
+
+    let dns_addr = dns_results
         .first()
-        .unwrap()
+        .ok_or(Error::NoDnsResolution)?
         .clone();
 
     let mut socket = TcpSocket::new(stack, tcp_rx, tcp_tx);
@@ -547,6 +547,7 @@ enum Error {
     EncryptError(rustls::EncryptError),
     Utf8Error(Utf8Error),
     DnsError(dns::Error),
+    NoDnsResolution,
 }
 
 impl From<EncodeError> for Error {
