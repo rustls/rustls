@@ -222,6 +222,8 @@ impl MessageEncrypter for AeadMessageEncrypter {
 
         Ok(OpaqueMessage::new(
             ContentType::ApplicationData,
+            // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
+            // protocol version, see https://www.rfc-editor.org/rfc/rfc8446#section-5.1
             ProtocolVersion::TLSv1_2,
             payload,
         ))
