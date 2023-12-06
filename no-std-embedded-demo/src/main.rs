@@ -11,6 +11,7 @@ use core::str::Utf8Error;
 use defmt::*;
 use defmt::{assert, assert_eq};
 use embassy_executor::{SpawnError, Spawner};
+use embassy_net::dns::{self, DnsQueryType};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
 use embassy_net::{Ipv4Address, Stack, StackResources};
 use embassy_stm32::eth::generic_smi::GenericSMI;
@@ -75,6 +76,7 @@ async fn start(spawner: Spawner) -> ! {
             Error::Tcp(e) => error!("{}", e),
             Error::EncryptError(e) => error!("{}", Debug2Format(&e)),
             Error::Utf8Error(e) => error!("{}", Debug2Format(&e)),
+            Error::DnsError(e) => error!("{}", Debug2Format(&e)),
         }
     }
 
@@ -95,6 +97,14 @@ async fn main(
 ) -> Result<()> {
     let stack = set_up_network_stack(spawner).await?;
 
+    info!("querying host {:?}...", SERVER_NAME);
+    let dns_addr = stack
+        .dns_query(SERVER_NAME, DnsQueryType::A)
+        .await?
+        .first()
+        .unwrap()
+        .clone();
+
     let mut socket = TcpSocket::new(stack, tcp_rx, tcp_tx);
 
     socket.set_timeout(Some(Duration::from_secs(5)));
@@ -102,9 +112,8 @@ async fn main(
     info!("Connecting...");
 
     socket
-        .connect((SERVER_ADDR, SERVER_PORT))
+        .connect((dns_addr, SERVER_PORT))
         .await?;
-    // socket.set_keep_alive(Some(Duration::from_millis(500)));
     info!("Connected to {}", socket.remote_endpoint());
 
     let mut root_store = RootCertStore::empty();
@@ -491,7 +500,7 @@ async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
     let stack = &*make_static!(Stack::new(
         device,
         net_config,
-        make_static!(StackResources::<2>::new()),
+        make_static!(StackResources::<3>::new()),
         seed
     ));
 
@@ -537,6 +546,7 @@ enum Error {
     Tcp(tcp::Error),
     EncryptError(rustls::EncryptError),
     Utf8Error(Utf8Error),
+    DnsError(dns::Error),
 }
 
 impl From<EncodeError> for Error {
@@ -571,6 +581,12 @@ impl From<tcp::Error> for Error {
 impl From<ConnectError> for Error {
     fn from(v: ConnectError) -> Self {
         Self::Connect(v)
+    }
+}
+
+impl From<dns::Error> for Error {
+    fn from(v: dns::Error) -> Self {
+        Self::DnsError(v)
     }
 }
 
