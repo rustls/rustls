@@ -8,8 +8,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::result::Result as CoreResult;
 use core::str::Utf8Error;
-use defmt::assert;
 use defmt::*;
+use defmt::{assert, assert_eq};
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
 use embassy_net::{Ipv4Address, Stack, StackResources};
@@ -43,17 +43,22 @@ bind_interrupts!(struct Irqs {
 });
 
 const KB: usize = 1024;
+// Note that some sites like www.rust-lang.org will need extra heap allocation here!
 const HEAP_SIZE: usize = 25 * KB;
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
-const MAX_ITERATIONS: usize = 2 * 25;
+const MAX_ITERATIONS: usize = 5 * 20;
+
 const OUTGOING_TLS_BUFSIZ: usize = KB / 2;
 const TCP_RX_BUFSIZ: usize = KB;
 const TCP_TX_BUFSIZ: usize = KB / 2;
 const UNIX_TIME: u64 = 1701460379; // `date +%s`
 
-const SERVER_NAME: &str = "rust-lang.org";
-const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 85, 242, 98]); // `dig rust-lang.org`
+const SERVER_NAME: &str = "github.com";
+const SERVER_ADDR: Ipv4Address = Ipv4Address([140, 82, 121, 4]); // `dig github.com`
+
+// const SERVER_NAME: &str = "www.rust-lang.org";
+// const SERVER_ADDR: Ipv4Address = Ipv4Address([52, 85, 242, 10]); // `dig github.com`
 const SERVER_PORT: u16 = 443;
 
 #[embassy_executor::main]
@@ -99,7 +104,7 @@ async fn main(
     socket
         .connect((SERVER_ADDR, SERVER_PORT))
         .await?;
-
+    // socket.set_keep_alive(Some(Duration::from_millis(500)));
     info!("Connected to {}", socket.remote_endpoint());
 
     let mut root_store = RootCertStore::empty();
@@ -113,8 +118,8 @@ async fn main(
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         // toggle between TLS versions
-        .with_protocol_versions(&[&TLS12])
-        //.with_protocol_versions(&[&TLS13])
+        //.with_protocol_versions(&[&TLS12])
+        .with_protocol_versions(&[&TLS13])
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
@@ -135,7 +140,7 @@ async fn main(
     while open_connection {
         iter_count += 1;
         defmt::assert!(iter_count <= MAX_ITERATIONS);
-
+        info!("Iter count: {}", iter_count);
         trace!("{}B in incoming TLS buffer", incoming_tls.used());
         let UnbufferedStatus { mut discard, state } =
             conn.process_tls_records(incoming_tls.filled_mut())?;
@@ -192,11 +197,9 @@ async fn main(
                 recv_tls(&mut socket, &mut incoming_tls).await?;
             }
 
-            ConnectionState::TrafficTransit(mut may_encrypt_data) => {
-                if encrypt_http_request(&mut sent_request, &mut may_encrypt_data, &mut outgoing_tls)
-                {
+            ConnectionState::TrafficTransit(mut may_encrypt) => {
+                if encrypt_http_request(&mut sent_request, &mut may_encrypt, &mut outgoing_tls) {
                     send_tls(&mut socket, &mut outgoing_tls).await?;
-
                     recv_tls(&mut socket, &mut incoming_tls).await?;
                 } else if !received_response {
                     // this happens in the TLS 1.3 case. the app-data was sent in the preceding
@@ -205,7 +208,7 @@ async fn main(
                     recv_tls(&mut socket, &mut incoming_tls).await?;
                 } else {
                     try_or_resize_and_retry(
-                        |out_buffer| may_encrypt_data.queue_close_notify(out_buffer),
+                        |out_buffer| may_encrypt.queue_close_notify(out_buffer),
                         |e| {
                             if let EncryptError::InsufficientSize(is) = &e {
                                 Ok(*is)
@@ -230,9 +233,22 @@ async fn main(
         incoming_tls.discard(discard);
         iter_count += 1;
     }
+
     assert!(sent_request);
     assert!(received_response);
 
+    Ok(())
+}
+
+async fn recv_tls<'a>(
+    socket: &'a mut TcpSocket<'_>,
+    incoming_tls: &'a mut TlsBuffer<'_>,
+) -> Result<()> {
+    let read = socket
+        .read(incoming_tls.unfilled())
+        .await?;
+    trace!("read {}B of TLS data", read);
+    incoming_tls.advance(read);
     Ok(())
 }
 
@@ -248,17 +264,6 @@ async fn send_tls<'a>(
     Ok(())
 }
 
-async fn recv_tls<'a>(
-    socket: &'a mut TcpSocket<'_>,
-    incoming_tls: &'a mut TlsBuffer<'_>,
-) -> Result<()> {
-    let read = socket
-        .read(incoming_tls.unfilled())
-        .await?;
-    trace!("read {}B of TLS data", read);
-    incoming_tls.advance(read);
-    Ok(())
-}
 fn encrypt_http_request(
     sent_request: &mut bool,
     may_encrypt: &mut MayEncryptAppData<'_, ClientConnectionData>,
