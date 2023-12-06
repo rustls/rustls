@@ -95,6 +95,7 @@ impl Hpke for HpkeRs {
 fn other_err(err: impl StdError + Send + Sync + 'static) -> Error {
     Error::Other(OtherError(Arc::new(err)))
 }
+
 #[cfg(not(feature = "std"))]
 fn other_err(err: impl Send + Sync + 'static) -> Error {
     Error::General(alloc::format!("{}", err));
