@@ -12,6 +12,8 @@ Rustls is used in production at many organizations and projects. We aim to maint
 reasonable API surface stability but the API may evolve as we make changes to accomodate
 new features or performance improvements.
 
+We have a [roadmap](ROADMAP.md) for our future plans.
+
 If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [![Build Status](https://github.com/rustls/rustls/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/rustls/rustls/actions/workflows/build.yml?query=branch%3Amain)
