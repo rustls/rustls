@@ -4,9 +4,12 @@ use crate::msgs::codec::{Codec, Reader};
 
 use alloc::vec::Vec;
 use core::fmt;
+use core::ops::{Deref, DerefMut};
 
 use pki_types::CertificateDer;
 use zeroize::Zeroize;
+
+use super::codec::ReaderMut;
 
 /// An externally length'd payload
 #[derive(Clone, Eq, PartialEq)]
@@ -33,6 +36,30 @@ impl Payload {
 
     pub fn read(r: &mut Reader) -> Self {
         Self(r.rest().to_vec())
+    }
+}
+
+/// Non-owning version of [`Payload`]
+pub struct BorrowedPayload<'a>(&'a mut [u8]);
+
+impl Deref for BorrowedPayload<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl<'a> DerefMut for BorrowedPayload<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+impl<'a> BorrowedPayload<'a> {
+    #[allow(dead_code)] // TODO(@cpu): remove in "introduce and expose BorrowedOpaqueMessage"
+    pub(crate) fn read(r: &mut ReaderMut<'a>) -> Self {
+        Self(r.rest())
     }
 }
 
