@@ -4,10 +4,6 @@
 
 In rough order of priority:
 
-* **Enable Pluggable Cryptographic Back-ends**.
-  Allow plugging in different cryptographic back-ends.
-  rustls/rustls#1184
-
 * **FIPS Certification for Default Cryptographic Library**.
   Change the default cryptographic library to something with FIPS certification.
   rustls/rustls#1540
@@ -67,6 +63,12 @@ In rough order of priority:
   rustls/rustls#755
 
 ## Past priorities
+
+Delivered in 0.22:
+
+* **Enable Pluggable Cryptographic Back-ends**.
+  Allow plugging in different cryptographic back-ends.
+  rustls/rustls#1184
 
 Delivered in 0.21:
 
