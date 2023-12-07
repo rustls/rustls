@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::sync::Arc;
 
-use pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::Acceptor;
 use rustls::ServerConfig;
 

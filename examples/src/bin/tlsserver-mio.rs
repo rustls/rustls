@@ -6,10 +6,10 @@ use std::{fs, net};
 use docopt::Docopt;
 use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
-use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use serde::Deserialize;
 
 use rustls::crypto::{ring, CryptoProvider};
+use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
 use rustls::{self, RootCertStore};
 
