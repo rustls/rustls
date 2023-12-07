@@ -6,8 +6,8 @@ extern crate std;
 
 use alloc::sync::Arc;
 
-use pki_types::PrivateKeyDer;
 use rustls::crypto::CryptoProvider;
+use rustls::pki_types::PrivateKeyDer;
 
 mod aead;
 mod hash;

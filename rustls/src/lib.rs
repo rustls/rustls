@@ -532,7 +532,7 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
-/// Re-exports the contents of rustls-pki-types crate for easy access
+/// Re-exports the contents of the [rustls-pki-types](https://docs.rs/rustls-pki-types) crate for easy access
 pub mod pki_types {
     pub use pki_types::*;
 }
