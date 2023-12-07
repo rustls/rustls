@@ -205,12 +205,6 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::Rsa,
-        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS12,
-    ),
-    #[cfg(feature = "tls12")]
-    BenchmarkParam::new(
-        KeyType::Rsa,
         cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
