@@ -8,6 +8,7 @@ use crate::enums::ProtocolVersion;
 /// the [`ALL_VERSIONS`] array, as well as individually as [`TLS12`]
 /// and [`TLS13`].
 #[derive(Eq, PartialEq)]
+#[allow(clippy::manual_non_exhaustive)] // Fixed in main
 pub struct SupportedProtocolVersion {
     /// The TLS enumeration naming this version.
     pub version: ProtocolVersion,
