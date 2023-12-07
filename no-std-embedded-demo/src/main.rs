@@ -8,12 +8,12 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::result::Result as CoreResult;
 use core::str::Utf8Error;
-use defmt::assert;
 use defmt::*;
+use defmt::{assert, assert_eq};
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::dns::{self, DnsQueryType};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
-use embassy_net::{Stack, StackResources};
+use embassy_net::{IpAddress, Stack, StackResources};
 use embassy_stm32::eth::generic_smi::GenericSMI;
 use embassy_stm32::eth::{Ethernet, PacketQueue};
 use embassy_stm32::peripherals::ETH;
@@ -25,7 +25,7 @@ use embassy_time::Timer;
 use embedded_io_async::Write;
 use no_std_embedded_demo as lib;
 use pki_types::{DnsName, InvalidDnsNameError, ServerName};
-use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
+use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 #[allow(unused_imports)]
 use rustls::version::{TLS12, TLS13};
 use rustls::{
@@ -48,7 +48,10 @@ const KB: usize = 1024;
 const HEAP_SIZE: usize = 25 * KB;
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
+
 const MAX_ITERATIONS: usize = 5 * 20;
+const SEND_EARLY_DATA: bool = false;
+const EARLY_DATA: &[u8] = b"hello";
 
 const OUTGOING_TLS_BUFSIZ: usize = KB / 2;
 const TCP_RX_BUFSIZ: usize = KB;
@@ -75,6 +78,7 @@ async fn start(spawner: Spawner) -> ! {
             Error::Utf8Error(e) => error!("{}", Debug2Format(&e)),
             Error::DnsError(e) => error!("{}", Debug2Format(&e)),
             Error::NoDnsResolution => error!("{}", Debug2Format(&Error::NoDnsResolution)),
+            Error::EarlyDataError(e) => error!("{}", Debug2Format(&e)),
         }
     }
 
@@ -100,7 +104,7 @@ async fn main(
         .dns_query(SERVER_NAME, DnsQueryType::A)
         .await?;
 
-    let dns_addr = dns_results
+    let dns_addr: IpAddress = dns_results
         .first()
         .ok_or(Error::NoDnsResolution)?
         .clone();
@@ -132,19 +136,54 @@ async fn main(
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
+    tls_config.enable_early_data = SEND_EARLY_DATA;
+    // Should be enabled by default!
+    tls_config.enable_sni = true;
     tls_config.time_provider = time_provider::stub();
     let tls_config = Arc::new(tls_config);
 
-    let server_name = ServerName::DnsName(DnsName::try_from(SERVER_NAME)?);
-    let mut conn = UnbufferedClientConnection::new(tls_config, server_name)?;
-
     let mut incoming_tls = TlsBuffer::fixed(incoming_tls);
     let mut outgoing_tls = TlsBuffer::fixed(outgoing_tls);
+    converse(
+        &mut incoming_tls,
+        false,
+        tls_config.clone(),
+        &mut outgoing_tls,
+        &mut socket,
+    )
+    .await?;
+
+    if SEND_EARLY_DATA {
+        warn!("--- second connection ---");
+        converse(
+            &mut incoming_tls,
+            true,
+            tls_config,
+            &mut outgoing_tls,
+            &mut socket,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn converse(
+    mut incoming_tls: &mut TlsBuffer<'_>,
+    send_early_data: bool,
+    tls_config: Arc<ClientConfig>,
+    mut outgoing_tls: &mut TlsBuffer<'_>,
+    mut socket: &mut TcpSocket<'_>,
+) -> CoreResult<(), Error> {
+    let server_name = ServerName::DnsName(DnsName::try_from(SERVER_NAME)?);
+
+    let mut conn = UnbufferedClientConnection::new(tls_config, server_name)?;
+
     let mut sent_request = false;
     let mut received_response = false;
 
     let mut iter_count = 0;
     let mut open_connection = true;
+    let mut sent_early_data = false;
 
     while open_connection {
         iter_count += 1;
@@ -194,6 +233,24 @@ async fn main(
             }
 
             ConnectionState::MustTransmitTlsData(mut state) => {
+                if let Some(mut may_encrypt_early_data) = state.may_encrypt_early_data() {
+                    let written = try_or_resize_and_retry(
+                        |out_buffer| may_encrypt_early_data.encrypt(EARLY_DATA, out_buffer),
+                        |e| {
+                            if let EarlyDataError::Encrypt(EncryptError::InsufficientSize(is)) = &e
+                            {
+                                Ok(*is)
+                            } else {
+                                Err(e.into())
+                            }
+                        },
+                        &mut outgoing_tls,
+                    )?;
+
+                    warn!("queued {}B of early data", written);
+                    sent_early_data = true;
+                }
+
                 if let Some(mut may_encrypt) = state.may_encrypt_app_data() {
                     encrypt_http_request(&mut sent_request, &mut may_encrypt, &mut outgoing_tls);
                 }
@@ -245,6 +302,7 @@ async fn main(
 
     assert!(sent_request);
     assert!(received_response);
+    assert_eq!(send_early_data, sent_early_data);
 
     Ok(())
 }
@@ -548,6 +606,7 @@ enum Error {
     Utf8Error(Utf8Error),
     DnsError(dns::Error),
     NoDnsResolution,
+    EarlyDataError(EarlyDataError),
 }
 
 impl From<EncodeError> for Error {
@@ -600,6 +659,12 @@ impl From<SpawnError> for Error {
 impl From<rustls::EncryptError> for Error {
     fn from(v: rustls::EncryptError) -> Self {
         Self::EncryptError(v)
+    }
+}
+
+impl From<EarlyDataError> for Error {
+    fn from(v: EarlyDataError) -> Self {
+        Self::EarlyDataError(v)
     }
 }
 
