@@ -92,7 +92,6 @@ pub(crate) struct ReaderMut<'a> {
     used: usize,
 }
 
-#[allow(dead_code)] // TODO(@cpu): remove in "introduce and expose BorrowedOpaqueMessage"
 impl<'a> ReaderMut<'a> {
     pub(crate) fn init(bytes: &'a mut [u8]) -> Self {
         Self {
@@ -124,6 +123,7 @@ impl<'a> ReaderMut<'a> {
         Some(taken)
     }
 
+    #[allow(dead_code)] // TODO(@cpu): Remove in "use BorrowedOpaqueMessage in MessageDeframer".
     pub(crate) fn used(&self) -> usize {
         self.used
     }

@@ -7,7 +7,9 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 pub use crate::msgs::base::BorrowedPayload;
 use crate::msgs::codec;
-pub use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+pub use crate::msgs::message::{
+    BorrowedOpaqueMessage, BorrowedPlainMessage, OpaqueMessage, PlainMessage,
+};
 use crate::suites::ConnectionTrafficSecrets;
 
 use zeroize::Zeroize;
