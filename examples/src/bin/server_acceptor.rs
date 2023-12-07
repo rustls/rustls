@@ -13,9 +13,11 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use docopt::Docopt;
-use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use serde_derive::Deserialize;
 
+use rustls::pki_types::{
+    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer,
+};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
 use rustls::RootCertStore;
 
