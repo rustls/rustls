@@ -65,3 +65,25 @@ In rough order of priority:
   do not require this, the same kinds of issues can apply here, and we should
   consider implementing limits for TLS over TCP as well.
   rustls/rustls#755
+
+## Past priorities
+
+Delivered in 0.21:
+
+* **Support IP Address Certificates**.
+  There are some popular use cases where applications want TLS certificates for
+  services that don’t have their own host name, relying on the IP address directly
+  instead. I've heard from one customer that this is common in Kubernetes deployments.
+  rustls/rustls#184
+
+* **Implement RFC 8446 Appendix C.4 in session cache**.
+  TLS clients should use session tickets at most once for resumption. Without this,
+  TLS clients may be tracked across connections through reuse of session tickets.
+  Requires changes of the internal APIs to the session caching infrastructure.
+  rustls/rustls#466
+
+* **Improve Client Certificate Authentication Support**.
+  Rustls and webpki currently do not provide access to client information supplied
+  as part of the certificate, and there’s no infrastructure to deal with revocation
+  checks.
+  rustls/rustls-ffi#87
