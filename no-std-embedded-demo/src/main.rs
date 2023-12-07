@@ -13,7 +13,7 @@ use defmt::{assert, assert_eq};
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::dns::{self, DnsQueryType};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
-use embassy_net::{IpAddress, Stack, StackResources};
+use embassy_net::{IpAddress, Ipv4Address, Ipv4Cidr, Stack, StackResources};
 use embassy_stm32::eth::generic_smi::GenericSMI;
 use embassy_stm32::eth::{Ethernet, PacketQueue};
 use embassy_stm32::peripherals::ETH;
@@ -23,6 +23,7 @@ use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
 use embassy_time::Duration;
 use embassy_time::Timer;
 use embedded_io_async::Write;
+use heapless;
 use no_std_embedded_demo as lib;
 use pki_types::{DnsName, InvalidDnsNameError, ServerName};
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
@@ -59,6 +60,7 @@ const TCP_TX_BUFSIZ: usize = KB / 2;
 const UNIX_TIME: u64 = 1701460379; // `date +%s`
 
 const SERVER_NAME: &str = "github.com";
+//const SERVER_ADDR: Ipv4Address = Ipv4Address([93, 184, 216, 34]); // example.com
 
 const SERVER_PORT: u16 = 443;
 
@@ -67,19 +69,20 @@ async fn start(spawner: Spawner) -> ! {
     heap::init();
 
     if let Err(e) = main(&spawner, buffers::get().unwrap()).await {
-        match e {
-            Error::Connect(e) => error!("{}", e),
-            Error::Encode(e) => error!("{}", Debug2Format(&e)),
-            Error::InvalidDnsName(e) => error!("{}", Debug2Format(&e)),
-            Error::Rustls(e) => error!("{}", Debug2Format(&e)),
-            Error::Spawn(e) => error!("{}", e),
-            Error::Tcp(e) => error!("{}", e),
-            Error::EncryptError(e) => error!("{}", Debug2Format(&e)),
-            Error::Utf8Error(e) => error!("{}", Debug2Format(&e)),
-            Error::DnsError(e) => error!("{}", Debug2Format(&e)),
-            Error::NoDnsResolution => error!("{}", Debug2Format(&Error::NoDnsResolution)),
-            Error::EarlyDataError(e) => error!("{}", Debug2Format(&e)),
-        }
+        error!("{}", Debug2Format(&e));
+        //match e {
+        // Error::Connect(e) => error!("{}", e),
+        // Error::Encode(e) => error!("{}", Debug2Format(&e)),
+        // Error::InvalidDnsName(e) => error!("{}", Debug2Format(&e)),
+        // Error::Rustls(e) => error!("{}", Debug2Format(&e)),
+        // Error::Spawn(e) => error!("{}", e),
+        // Error::Tcp(e) => error!("{}", e),
+        // Error::EncryptError(e) => error!("{}", Debug2Format(&e)),
+        // Error::Utf8Error(e) => error!("{}", Debug2Format(&e)),
+        // Error::DnsError(e) => error!("{}", Debug2Format(&e)),
+        // Error::NoDnsResolution => error!("{}", Debug2Format(&Error::NoDnsResolution)),
+        // Error::EarlyDataError(e) => error!("{}", Debug2Format(&e)),
+        //}
     }
 
     info!("Sleeping...");
@@ -131,8 +134,8 @@ async fn main(
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         // toggle between TLS versions
-        //.with_protocol_versions(&[&TLS12])
-        .with_protocol_versions(&[&TLS13])
+        .with_protocol_versions(&[&TLS12])
+        //.with_protocol_versions(&[&TLS13])
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
@@ -552,9 +555,17 @@ async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
         MAC_ADDR,
     );
 
-    let net_config = embassy_net::Config::dhcpv4(Default::default());
+    //let net_config = embassy_net::Config::dhcpv4(Default::default());
 
-    // Init network stack
+    let mut dns_servers = heapless::Vec::new();
+    let _ = dns_servers.push(Ipv4Address::new(1, 1, 1, 1).into());
+
+    let net_config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
+        address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 50, 204), 24),
+        dns_servers,
+        gateway: Some(Ipv4Address::new(192, 168, 50, 1)),
+    });
+    //Init network stack
     let stack = &*make_static!(Stack::new(
         device,
         net_config,
