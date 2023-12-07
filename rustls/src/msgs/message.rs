@@ -12,6 +12,9 @@ use crate::msgs::handshake::HandshakeMessagePayload;
 
 use alloc::vec::Vec;
 
+use super::base::BorrowedPayload;
+use super::codec::ReaderMut;
+
 #[derive(Debug)]
 pub enum MessagePayload {
     Alert(AlertMessagePayload),
@@ -116,34 +119,7 @@ impl OpaqueMessage {
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
     pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
-        let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-        // Don't accept any new content-types.
-        if let ContentType::Unknown(_) = typ {
-            return Err(MessageError::InvalidContentType);
-        }
-
-        let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-        // Accept only versions 0x03XX for any XX.
-        match version {
-            ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
-                return Err(MessageError::UnknownProtocolVersion);
-            }
-            _ => {}
-        };
-
-        let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
-
-        // Reject undersize messages
-        //  implemented per section 5.1 of RFC8446 (TLSv1.3)
-        //              per section 6.2.1 of RFC5246 (TLSv1.2)
-        if typ != ContentType::ApplicationData && len == 0 {
-            return Err(MessageError::InvalidEmptyPayload);
-        }
-
-        // Reject oversize messages
-        if len >= Self::MAX_PAYLOAD {
-            return Err(MessageError::MessageTooLarge);
-        }
+        let (typ, version, len) = read_opaque_message_header(r)?;
 
         let mut sub = r
             .sub(len as usize)
@@ -212,6 +188,66 @@ impl OpaqueMessage {
 
     /// Maximum on-wire message size.
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
+}
+
+/// A borrowed version of [`OpaqueMessage`].
+pub struct BorrowedOpaqueMessage<'a> {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: BorrowedPayload<'a>,
+}
+
+#[allow(dead_code)]
+impl<'a> BorrowedOpaqueMessage<'a> {
+    pub(crate) fn read(r: &mut ReaderMut<'a>) -> Result<Self, MessageError> {
+        let (typ, version, len) = r.as_reader(read_opaque_message_header)?;
+
+        let mut sub = r
+            .sub(len as usize)
+            .map_err(|_| MessageError::TooShortForLength)?;
+        let payload = BorrowedPayload::read(&mut sub);
+
+        Ok(Self {
+            typ,
+            version,
+            payload,
+        })
+    }
+}
+
+fn read_opaque_message_header(
+    r: &mut Reader<'_>,
+) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
+    let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    // Don't accept any new content-types.
+    if let ContentType::Unknown(_) = typ {
+        return Err(MessageError::InvalidContentType);
+    }
+
+    let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+    // Accept only versions 0x03XX for any XX.
+    match version {
+        ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
+            return Err(MessageError::UnknownProtocolVersion);
+        }
+        _ => {}
+    };
+
+    let len = u16::read(r).map_err(|_| MessageError::TooShortForHeader)?;
+
+    // Reject undersize messages
+    //  implemented per section 5.1 of RFC8446 (TLSv1.3)
+    //              per section 6.2.1 of RFC5246 (TLSv1.2)
+    if typ != ContentType::ApplicationData && len == 0 {
+        return Err(MessageError::InvalidEmptyPayload);
+    }
+
+    // Reject oversize messages
+    if len >= OpaqueMessage::MAX_PAYLOAD {
+        return Err(MessageError::MessageTooLarge);
+    }
+
+    Ok((typ, version, len))
 }
 
 /// `v` is a message payload, immediately post-decryption.  This function

@@ -57,7 +57,6 @@ impl<'a> DerefMut for BorrowedPayload<'a> {
 }
 
 impl<'a> BorrowedPayload<'a> {
-    #[allow(dead_code)] // TODO(@cpu): remove in "introduce and expose BorrowedOpaqueMessage"
     pub(crate) fn read(r: &mut ReaderMut<'a>) -> Self {
         Self(r.rest())
     }
