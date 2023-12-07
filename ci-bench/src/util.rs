@@ -1,6 +1,6 @@
 use std::{fs, io};
 
-use pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum KeyType {

@@ -5,10 +5,10 @@ use std::{fs, process, str};
 
 use docopt::Docopt;
 use mio::net::TcpStream;
-use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use serde::Deserialize;
 
 use rustls::crypto::CryptoProvider;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::RootCertStore;
 
 const CLIENT: mio::Token = mio::Token(0);

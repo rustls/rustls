@@ -2,8 +2,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-use pki_types::ServerName;
-
+use rustls::pki_types::ServerName;
 use rustls::RootCertStore;
 
 fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
