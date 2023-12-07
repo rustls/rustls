@@ -532,6 +532,11 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
+/// Re-exports the contents of rustls-pki-types crate for easy access
+pub mod pki_types {
+    pub use pki_types::*;
+}
+
 /// Message signing interfaces.
 pub mod sign {
     pub use crate::crypto::signer::{CertifiedKey, Signer, SigningKey};
