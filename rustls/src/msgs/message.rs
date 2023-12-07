@@ -410,7 +410,7 @@ impl<'a> BorrowedPlainMessage<'a> {
         OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload.len())
     }
 
-    pub(crate) fn into_owned(self) -> PlainMessage {
+    pub fn into_owned(self) -> PlainMessage {
         let Self {
             typ,
             version,

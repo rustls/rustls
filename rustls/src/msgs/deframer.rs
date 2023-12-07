@@ -3,9 +3,8 @@ use core::ops::Range;
 use core::slice::SliceIndex;
 use std::io;
 
-use super::base::Payload;
 use super::codec::Codec;
-use super::message::{BorrowedOpaqueMessage, PlainMessage};
+use super::message::{BorrowedOpaqueMessage, BorrowedPlainMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
@@ -33,12 +32,12 @@ impl MessageDeframer {
     /// Returns an `Error` if the deframer failed to parse some message contents or if decryption
     /// failed, `Ok(None)` if no full message is buffered or if trial decryption failed, and
     /// `Ok(Some(_))` if a valid message was found and decrypted successfully.
-    pub fn pop(
+    pub fn pop<'b>(
         &mut self,
         record_layer: &mut RecordLayer,
         negotiated_version: Option<ProtocolVersion>,
-        buffer: &mut DeframerSliceBuffer,
-    ) -> Result<Option<Deframed>, Error> {
+        buffer: &mut DeframerSliceBuffer<'b>,
+    ) -> Result<Option<Deframed<'b>>, Error> {
         if let Some(last_err) = self.last_error.clone() {
             return Err(last_err);
         } else if buffer.is_empty() {
@@ -109,9 +108,19 @@ impl MessageDeframer {
                 _ => false,
             };
             if self.joining_hs.is_none() && allowed_plaintext {
-                let message = m.into_plain_message().into_owned();
+                let BorrowedOpaqueMessage {
+                    typ,
+                    version,
+                    payload,
+                } = m;
+                let raw_payload = RawSlice::from(&*payload);
                 // This is unencrypted. We check the contents later.
                 buffer.queue_discard(end);
+                let message = BorrowedPlainMessage {
+                    typ,
+                    version,
+                    payload: buffer.take(raw_payload),
+                };
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -154,9 +163,19 @@ impl MessageDeframer {
 
             // If it's not a handshake message, just return it -- no joining necessary.
             if msg.typ != ContentType::Handshake {
-                let message = msg.into_owned();
+                let BorrowedPlainMessage {
+                    typ,
+                    version,
+                    payload,
+                } = msg;
+                let raw_payload = RawSlice::from(payload);
                 let end = start + rd.used();
                 buffer.queue_discard(end);
+                let message = BorrowedPlainMessage {
+                    typ,
+                    version,
+                    payload: buffer.take(raw_payload),
+                };
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -178,13 +197,11 @@ impl MessageDeframer {
         let meta = self.joining_hs.as_mut().unwrap(); // safe after calling `append_hs()`
 
         // We can now wrap the complete handshake payload in a `PlainMessage`, to be returned.
-        let message = PlainMessage {
-            typ: ContentType::Handshake,
-            version: meta.version,
-            payload: Payload::new(
-                buffer.filled_get(meta.payload.start..meta.payload.start + expected_len),
-            ),
-        };
+        let typ = ContentType::Handshake;
+        let version = meta.version;
+        let raw_payload = RawSlice::from(
+            buffer.filled_get(meta.payload.start..meta.payload.start + expected_len),
+        );
 
         // But before we return, update the `joining_hs` state to skip past this payload.
         if meta.payload.len() > expected_len {
@@ -201,6 +218,12 @@ impl MessageDeframer {
             self.joining_hs = None;
             buffer.queue_discard(end);
         }
+
+        let message = BorrowedPlainMessage {
+            typ,
+            version,
+            payload: buffer.take(raw_payload),
+        };
 
         Ok(Some(Deframed {
             want_close_before_decrypt: false,
@@ -437,16 +460,22 @@ impl DeframerBuffer<false> for DeframerVecBuffer {
 }
 
 /// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
+#[derive(Debug)]
 pub struct DeframerSliceBuffer<'a> {
     // a fully initialized buffer that will be deframed
     buf: &'a mut [u8],
     // number of bytes to discard from the front of `buf` at a later time
     discard: usize,
+    taken: usize,
 }
 
 impl<'a> DeframerSliceBuffer<'a> {
     pub fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, discard: 0 }
+        Self {
+            buf,
+            discard: 0,
+            taken: 0,
+        }
     }
 
     /// Tracks a pending discard operation of `num_bytes`
@@ -462,21 +491,53 @@ impl<'a> DeframerSliceBuffer<'a> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Remove a `RawSlice` range from the deframer buffer, returning a mutable reference to the
+    /// removed portion.
+    ///
+    /// Safety: the caller *must* ensure that the `RawSlice` refers to a range from the same
+    /// allocation as the deframer's buffer.
+    fn take(&mut self, raw: RawSlice) -> &'a mut [u8] {
+        let start = (raw.ptr as usize)
+            .checked_sub(self.buf.as_ptr() as usize)
+            .unwrap();
+        let end = start + raw.len;
+
+        let (taken, rest) = core::mem::take(&mut self.buf).split_at_mut(end);
+        self.buf = rest;
+        self.taken += end;
+
+        &mut taken[start..]
+    }
 }
 
 impl FilledDeframerBuffer for DeframerSliceBuffer<'_> {
     fn filled_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[self.discard..]
+        &mut self.buf[self.discard - self.taken..]
     }
 
     fn filled(&self) -> &[u8] {
-        &self.buf[self.discard..]
+        &self.buf[self.discard - self.taken..]
     }
 }
 
 impl DeframerBuffer<false> for DeframerSliceBuffer<'_> {
     fn copy(&mut self, src: &[u8], at: usize) {
         copy_into_buffer(self.filled_mut(), src, at)
+    }
+}
+
+pub(crate) struct RawSlice {
+    ptr: *const u8,
+    len: usize,
+}
+
+impl From<&'_ [u8]> for RawSlice {
+    fn from(value: &'_ [u8]) -> Self {
+        Self {
+            ptr: value.as_ptr(),
+            len: value.len(),
+        }
     }
 }
 
@@ -568,11 +629,11 @@ fn payload_size(buf: &[u8]) -> Result<Option<usize>, Error> {
 }
 
 #[derive(Debug)]
-pub struct Deframed {
+pub struct Deframed<'a> {
     pub(crate) want_close_before_decrypt: bool,
     pub(crate) aligned: bool,
     pub(crate) trial_decryption_finished: bool,
-    pub message: PlainMessage,
+    pub message: BorrowedPlainMessage<'a>,
 }
 
 const HEADER_SIZE: usize = 1 + 3;
@@ -874,7 +935,8 @@ mod tests {
                 .pop(record_layer, negotiated_version, &mut deframer_buffer)
                 .unwrap()
                 .unwrap()
-                .message;
+                .message
+                .into_owned();
             let discard = deframer_buffer.pending_discard();
             self.buffer.discard(discard);
             m
