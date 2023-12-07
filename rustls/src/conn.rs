@@ -734,20 +734,38 @@ impl<Data> ConnectionCore<Data> {
             }
         };
 
-        let mut borrowed_buffer = deframer_buffer.borrow();
-        while let Some(msg) = self.deframe(Some(&*state), &mut borrowed_buffer)? {
+        let mut discard = 0;
+        loop {
+            let mut borrowed_buffer = deframer_buffer.borrow();
+            borrowed_buffer.queue_discard(discard);
+
+            let res = self.deframe(Some(&*state), &mut borrowed_buffer);
+            discard = borrowed_buffer.pending_discard();
+
+            let opt_msg = match res {
+                Ok(opt_msg) => opt_msg,
+                Err(e) => {
+                    self.state = Err(e.clone());
+                    deframer_buffer.discard(discard);
+                    return Err(e);
+                }
+            };
+
+            let msg = match opt_msg {
+                Some(msg) => msg,
+                None => break,
+            };
+
             match self.process_msg(msg, state, Some(sendable_plaintext)) {
                 Ok(new) => state = new,
                 Err(e) => {
                     self.state = Err(e.clone());
-                    let discard = borrowed_buffer.pending_discard();
                     deframer_buffer.discard(discard);
                     return Err(e);
                 }
             }
         }
 
-        let discard = borrowed_buffer.pending_discard();
         deframer_buffer.discard(discard);
         self.state = Ok(state);
         Ok(self.common_state.current_io_state())
@@ -781,7 +799,7 @@ impl<Data> ConnectionCore<Data> {
                 }
 
                 self.common_state.aligned_handshake = aligned;
-                Ok(Some(message))
+                Ok(Some(message.into_owned()))
             }
             Ok(None) => Ok(None),
             Err(err @ Error::InvalidMessage(_)) => {
