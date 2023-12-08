@@ -183,12 +183,23 @@ pub async fn get_time_from_ntp_server(
     const TX_SECONDS: Range<usize> = 40..44;
 
     // Cloudflare ntp server
-    // TODO: dns resolution
-    let ntp_server = IpEndpoint {
-        addr: IpAddress::Ipv4(Ipv4Address::new(162, 159, 200, 123)),
-        port: 123,
+    let ntp_server_addr = stack
+        .dns_query("time.cloudflare.com", DnsQueryType::A)
+        .await;
+
+    let ntp_sever = if let Ok(net_server_addr) = ntp_server_addr {
+        let adr = net_server_addr.first().unwrap().clone();
+        IpAddress::from(adr)
+    } else {
+        // Cloudflare server
+        IpAddress::from(Ipv4Address::new(162, 159, 200, 123))
     };
 
+    // TODO: dns resolution
+    let ntp_server = IpEndpoint {
+        addr: ntp_sever,
+        port: 123,
+    };
     let mut rx_meta = [PacketMetadata::EMPTY; 16];
     let mut rx_buffer = [0; 6400];
     let mut tx_meta = [PacketMetadata::EMPTY; 16];
@@ -215,7 +226,7 @@ pub async fn get_time_from_ntp_server(
 
     let mut response = buf;
 
-    let (read, _ntc_peer) = sock
+    let (_read, _ntc_peer) = sock
         .recv_from(&mut response)
         .await
         .unwrap();
@@ -782,8 +793,6 @@ mod heap {
 
 mod time_provider {
     use core::time::Duration;
-
-    use defmt::warn;
     use pki_types::UnixTime;
     use rustls::time_provider::{GetCurrentTime, TimeProvider};
 
