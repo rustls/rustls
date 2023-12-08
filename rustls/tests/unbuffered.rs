@@ -929,3 +929,38 @@ fn server_receives_handshake_byte_by_byte() {
     assert!(matches!(state, ConnectionState::EncodeTlsData(_)));
     assert_eq!(client_hello_buffer.len(), discard);
 }
+
+#[test]
+fn server_receives_incorrect_first_handshake_message() {
+    let (_, mut server) = make_connection_pair(&TLS13);
+
+    let mut junk_buffer = [0x16, 0x3, 0x1, 0x0, 0x4, 0xff, 0x0, 0x0, 0x0];
+
+    let err = server
+        .process_tls_records(&mut junk_buffer[..])
+        .unwrap_err();
+
+    assert_eq!(
+        format!("{err:?}"),
+        "InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: Unknown(255) }"
+    );
+
+    let UnbufferedStatus { discard, state } = server
+        .process_tls_records(&mut junk_buffer[..])
+        .unwrap();
+
+    match state {
+        ConnectionState::EncodeTlsData(mut inner) => {
+            let mut alert_buffer = [0u8; 7];
+            let wr = inner.encode(&mut alert_buffer).unwrap();
+            assert_eq!(wr, 7);
+            assert_eq!(alert_buffer, &[0x15, 0x3, 0x3, 0x0, 0x2, 0x2, 0xa][..]);
+        }
+        _ => panic!("unexpected alert sending state"),
+    };
+
+    // XXX: error should be fused here.
+    let err = server
+        .process_tls_records(&mut junk_buffer[..])
+        .unwrap_err();
+}
