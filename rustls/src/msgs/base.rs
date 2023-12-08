@@ -13,29 +13,47 @@ use super::codec::ReaderMut;
 
 /// An externally length'd payload
 #[derive(Clone, Eq, PartialEq)]
-pub struct Payload(pub Vec<u8>);
+pub enum Payload<'a> {
+    Borrowed(&'a [u8]),
+    Owned(Vec<u8>),
+}
 
-impl Codec<'_> for Payload {
+impl<'a> Codec<'a> for Payload<'static> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        bytes.extend_from_slice(&self.0);
+        bytes.extend_from_slice(self.bytes());
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self::read(r))
     }
 }
 
-impl Payload {
+impl<'a> Payload<'a> {
+    pub fn bytes(&self) -> &[u8] {
+        match self {
+            Self::Borrowed(bytes) => bytes,
+            Self::Owned(bytes) => bytes,
+        }
+    }
+    pub fn into_vec(self) -> Vec<u8> {
+        match self {
+            Self::Borrowed(bytes) => bytes.to_vec(),
+            Self::Owned(bytes) => bytes,
+        }
+    }
+}
+
+impl Payload<'static> {
     pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
-        Self(bytes.into())
+        Self::Owned(bytes.into())
     }
 
     pub fn empty() -> Self {
-        Self::new(Vec::new())
+        Self::Borrowed(&[])
     }
 
     pub fn read(r: &mut Reader) -> Self {
-        Self(r.rest().to_vec())
+        Self::Owned(r.rest().to_vec())
     }
 }
 
@@ -106,9 +124,9 @@ impl<'a> Codec<'_> for CertificateDer<'a> {
     }
 }
 
-impl fmt::Debug for Payload {
+impl fmt::Debug for Payload<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
+        hex(f, self.bytes())
     }
 }
 

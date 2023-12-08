@@ -856,8 +856,8 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
          *  up to the configured max_early_data_size."
          * (RFC8446, 14.2.10) */
         if let MessagePayload::ApplicationData(ref skip_data) = m.payload {
-            if skip_data.0.len() <= self.skip_data_left {
-                self.skip_data_left -= skip_data.0.len();
+            if skip_data.bytes().len() <= self.skip_data_left {
+                self.skip_data_left -= skip_data.bytes().len();
                 return Ok(self);
             }
         }
@@ -1158,7 +1158,8 @@ impl State<ServerConnectionData> for ExpectFinished {
             .key_schedule
             .sign_client_finish(&handshake_hash, cx.common);
 
-        let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), &finished.0[..]).into() {
+        let fin = match ConstantTimeEq::ct_eq(expect_verify_data.as_ref(), finished.bytes()).into()
+        {
             true => verify::FinishedMessageVerified::assertion(),
             false => {
                 return Err(cx

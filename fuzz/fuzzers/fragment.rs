@@ -27,7 +27,7 @@ fuzz_target!(|data: &[u8]| {
         Message::try_from(PlainMessage {
             typ: msg.typ,
             version: msg.version,
-            payload: Payload(msg.payload.to_vec()),
+            payload: Payload::Owned(msg.payload.to_vec()),
         })
         .ok();
     }
