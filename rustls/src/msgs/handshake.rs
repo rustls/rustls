@@ -194,7 +194,7 @@ impl UnknownExtension {
     }
 
     fn read(typ: ExtensionType, r: &mut Reader) -> Self {
-        let payload = Payload::read(r);
+        let payload = Payload::read(r).into_owned();
         Self { typ, payload }
     }
 }
@@ -265,7 +265,7 @@ impl Codec<'_> for ServerName {
 
         let payload = match typ {
             ServerNameType::HostName => ServerNamePayload::read_hostname(r)?,
-            _ => ServerNamePayload::Unknown(Payload::read(r)),
+            _ => ServerNamePayload::Unknown(Payload::read(r).into_owned()),
         };
 
         Ok(Self { typ, payload })
@@ -506,7 +506,7 @@ impl Codec<'_> for CertificateStatusRequest {
                 Ok(Self::Ocsp(ocsp_req))
             }
             _ => {
-                let data = Payload::read(r);
+                let data = Payload::read(r).into_owned();
                 Ok(Self::Unknown((typ, data)))
             }
         }
@@ -622,7 +622,7 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
-                    let contents = Payload::read(&mut sub);
+                    let contents = Payload::read(&mut sub).into_owned();
                     Self::SessionTicket(ClientSessionTicket::Offer(contents))
                 } else {
                     Self::SessionTicket(ClientSessionTicket::Request)
@@ -1602,7 +1602,7 @@ impl Codec<'_> for ServerKeyExchangePayload {
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         // read as Unknown, fully parse when we know the
         // KeyExchangeAlgorithm
-        Ok(Self::Unknown(Payload::read(r)))
+        Ok(Self::Unknown(Payload::read(r).into_owned()))
     }
 }
 
@@ -2184,7 +2184,7 @@ impl HandshakeMessagePayload {
                 HandshakePayload::ServerHelloDone
             }
             HandshakeType::ClientKeyExchange => {
-                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub))
+                HandshakePayload::ClientKeyExchange(Payload::read(&mut sub).into_owned())
             }
             HandshakeType::CertificateRequest if vers == ProtocolVersion::TLSv1_3 => {
                 let p = CertificateRequestPayloadTls13::read(&mut sub)?;
@@ -2215,7 +2215,9 @@ impl HandshakeMessagePayload {
                 sub.expect_empty("EndOfEarlyData")?;
                 HandshakePayload::EndOfEarlyData
             }
-            HandshakeType::Finished => HandshakePayload::Finished(Payload::read(&mut sub)),
+            HandshakeType::Finished => {
+                HandshakePayload::Finished(Payload::read(&mut sub).into_owned())
+            }
             HandshakeType::CertificateStatus => {
                 HandshakePayload::CertificateStatus(CertificateStatus::read(&mut sub)?)
             }
@@ -2227,7 +2229,7 @@ impl HandshakeMessagePayload {
                 // not legal on wire
                 return Err(InvalidMessage::UnexpectedMessage("HelloRetryRequest"));
             }
-            _ => HandshakePayload::Unknown(Payload::read(&mut sub)),
+            _ => HandshakePayload::Unknown(Payload::read(&mut sub).into_owned()),
         };
 
         sub.expect_empty("HandshakeMessagePayload")
