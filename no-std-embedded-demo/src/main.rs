@@ -182,7 +182,6 @@ pub async fn get_time_from_ntp_server(
     const NTP_PACKET_SIZE: usize = 48;
     const TX_SECONDS: Range<usize> = 40..44;
 
-    // Cloudflare ntp server
     let ntp_server_addr = stack
         .dns_query("time.cloudflare.com", DnsQueryType::A)
         .await;
@@ -191,11 +190,10 @@ pub async fn get_time_from_ntp_server(
         let adr = net_server_addr.first().unwrap().clone();
         IpAddress::from(adr)
     } else {
-        // Cloudflare server
-        IpAddress::from(Ipv4Address::new(162, 159, 200, 123))
+        // Cloudflare server we know works!
+        IpAddress::from(Ipv4Address::new(162, 159, 200, 1))
     };
 
-    // TODO: dns resolution
     let ntp_server = IpEndpoint {
         addr: ntp_sever,
         port: 123,
