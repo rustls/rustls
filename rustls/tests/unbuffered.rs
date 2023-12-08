@@ -891,3 +891,41 @@ fn make_connection_pair(
     let server = UnbufferedServerConnection::new(Arc::new(server_config)).unwrap();
     (client, server)
 }
+
+#[test]
+fn server_receives_handshake_byte_by_byte() {
+    let (mut client, mut server) = make_connection_pair(&TLS13);
+
+    let mut client_hello_buffer = vec![0u8; 1024];
+    let UnbufferedStatus { discard, state } = client
+        .process_tls_records(&mut [])
+        .unwrap();
+
+    assert_eq!(discard, 0);
+    match state {
+        ConnectionState::EncodeTlsData(mut inner) => {
+            let wr = inner
+                .encode(&mut client_hello_buffer)
+                .expect("client hello too big");
+            client_hello_buffer.truncate(wr);
+        }
+        _ => panic!("unexpected first client event"),
+    };
+
+    println!("client hello: {:?}", client_hello_buffer);
+
+    for prefix in 0..client_hello_buffer.len() - 1 {
+        let UnbufferedStatus { discard, state } = server
+            .process_tls_records(&mut client_hello_buffer[..prefix])
+            .unwrap();
+        println!("prefix {prefix:?}: ({discard:?}, {state:?}");
+        assert!(matches!(state, ConnectionState::BlockedHandshake));
+    }
+
+    let UnbufferedStatus { discard, state } = server
+        .process_tls_records(&mut client_hello_buffer[..])
+        .unwrap();
+
+    assert!(matches!(state, ConnectionState::EncodeTlsData(_)));
+    assert_eq!(client_hello_buffer.len(), discard);
+}
