@@ -877,7 +877,7 @@ fn get_sample_certificatestatus() -> CertificateStatus {
     }
 }
 
-fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload> {
+fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
     vec![
         HandshakeMessagePayload {
             typ: HandshakeType::HelloRequest,
@@ -1007,7 +1007,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
     }
 }
 
-fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload> {
+fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
     vec![
         HandshakeMessagePayload {
             typ: HandshakeType::HelloRequest,
