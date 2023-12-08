@@ -148,7 +148,7 @@ impl<'a> ReaderMut<'a> {
 
 /// Trait for implementing encoding and decoding functionality
 /// on something.
-pub trait Codec: Debug + Sized {
+pub trait Codec<'a>: Debug + Sized {
     /// Function for encoding itself by appending itself to
     /// the provided vec of bytes.
     fn encode(&self, bytes: &mut Vec<u8>);
@@ -156,7 +156,7 @@ pub trait Codec: Debug + Sized {
     /// Function for decoding itself from the provided reader
     /// will return Some if the decoding was successful or
     /// None if it was not.
-    fn read(_: &mut Reader) -> Result<Self, InvalidMessage>;
+    fn read(_: &mut Reader<'a>) -> Result<Self, InvalidMessage>;
 
     /// Convenience function for encoding the implementation
     /// into a vec and returning it
@@ -168,13 +168,13 @@ pub trait Codec: Debug + Sized {
 
     /// Function for wrapping a call to the read function in
     /// a Reader for the slice of bytes provided
-    fn read_bytes(bytes: &[u8]) -> Result<Self, InvalidMessage> {
+    fn read_bytes(bytes: &'a [u8]) -> Result<Self, InvalidMessage> {
         let mut reader = Reader::init(bytes);
         Self::read(&mut reader)
     }
 }
 
-impl Codec for u8 {
+impl Codec<'_> for u8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.push(*self);
     }
@@ -192,7 +192,7 @@ pub(crate) fn put_u16(v: u16, out: &mut [u8]) {
     *out = u16::to_be_bytes(v);
 }
 
-impl Codec for u16 {
+impl Codec<'_> for u16 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let mut b16 = [0u8; 2];
         put_u16(*self, &mut b16);
@@ -220,7 +220,7 @@ impl From<u24> for usize {
     }
 }
 
-impl Codec for u24 {
+impl Codec<'_> for u24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let be_bytes = u32::to_be_bytes(self.0);
         bytes.extend_from_slice(&be_bytes[1..]);
@@ -234,7 +234,7 @@ impl Codec for u24 {
     }
 }
 
-impl Codec for u32 {
+impl Codec<'_> for u32 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend(Self::to_be_bytes(*self));
     }
@@ -252,7 +252,7 @@ pub(crate) fn put_u64(v: u64, bytes: &mut [u8]) {
     *bytes = u64::to_be_bytes(v);
 }
 
-impl Codec for u64 {
+impl Codec<'_> for u64 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let mut b64 = [0u8; 8];
         put_u64(*self, &mut b64);
@@ -270,7 +270,7 @@ impl Codec for u64 {
 /// Implement `Codec` for lists of elements that implement `TlsListElement`.
 ///
 /// `TlsListElement` provides the size of the length prefix for the list.
-impl<T: Codec + TlsListElement + Debug> Codec for Vec<T> {
+impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         let nest = LengthPrefixedBuffer::new(T::SIZE_LEN, bytes);
 
@@ -279,7 +279,7 @@ impl<T: Codec + TlsListElement + Debug> Codec for Vec<T> {
         }
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = match T::SIZE_LEN {
             ListLength::U8 => usize::from(u8::read(r)?),
             ListLength::U16 => usize::from(u16::read(r)?),
