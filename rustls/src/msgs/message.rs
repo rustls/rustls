@@ -19,7 +19,7 @@ use super::codec::ReaderMut;
 pub enum MessagePayload<'a> {
     Alert(AlertMessagePayload),
     Handshake {
-        parsed: HandshakeMessagePayload,
+        parsed: HandshakeMessagePayload<'a>,
         encoded: Payload<'a>,
     },
     ChangeCipherSpec(ChangeCipherSpecPayload),
@@ -36,7 +36,7 @@ impl<'a> MessagePayload<'a> {
         }
     }
 
-    pub fn handshake(parsed: HandshakeMessagePayload) -> Self {
+    pub fn handshake(parsed: HandshakeMessagePayload<'a>) -> Self {
         Self::Handshake {
             encoded: Payload::new(parsed.get_encoding()),
             parsed,
@@ -79,7 +79,7 @@ impl<'a> MessagePayload<'a> {
         match self {
             Alert(x) => Alert(x),
             Handshake { parsed, encoded } => Handshake {
-                parsed,
+                parsed: parsed.into_owned(),
                 encoded: encoded.into_owned(),
             },
             ChangeCipherSpec(x) => ChangeCipherSpec(x),
