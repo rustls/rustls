@@ -115,16 +115,16 @@ impl<'a> BorrowedPayload<'a> {
     }
 }
 
-impl<'a> Codec<'_> for CertificateDer<'a> {
+impl<'a> Codec<'a> for CertificateDer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::u24(self.as_ref().len() as u32).encode(bytes);
         bytes.extend(self.as_ref());
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
-        let body = sub.rest().to_vec();
+        let body = sub.rest();
         Ok(Self::from(body))
     }
 }
