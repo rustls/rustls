@@ -313,9 +313,9 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
-pub(crate) fn decode_ecdh_params<T: Codec>(
+pub(crate) fn decode_ecdh_params<'a, T: Codec<'a>>(
     common: &mut CommonState,
-    kx_params: &[u8],
+    kx_params: &'a [u8],
 ) -> Result<T, Error> {
     let mut rd = Reader::init(kx_params);
     let ecdh_params = T::read(&mut rd)?;

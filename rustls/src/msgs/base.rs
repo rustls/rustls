@@ -15,7 +15,7 @@ use super::codec::ReaderMut;
 #[derive(Clone, Eq, PartialEq)]
 pub struct Payload(pub Vec<u8>);
 
-impl Codec for Payload {
+impl Codec<'_> for Payload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.0);
     }
@@ -92,7 +92,7 @@ impl<'a> BorrowedPayload<'a> {
     }
 }
 
-impl<'a> Codec for CertificateDer<'a> {
+impl<'a> Codec<'_> for CertificateDer<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::u24(self.as_ref().len() as u32).encode(bytes);
         bytes.extend(self.as_ref());
@@ -122,7 +122,7 @@ impl PayloadU24 {
     }
 }
 
-impl Codec for PayloadU24 {
+impl Codec<'_> for PayloadU24 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         codec::u24(self.0.len() as u32).encode(bytes);
         bytes.extend_from_slice(&self.0);
@@ -161,7 +161,7 @@ impl PayloadU16 {
     }
 }
 
-impl Codec for PayloadU16 {
+impl Codec<'_> for PayloadU16 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         Self::encode_slice(&self.0, bytes);
     }
@@ -199,7 +199,7 @@ impl PayloadU8 {
     }
 }
 
-impl Codec for PayloadU8 {
+impl Codec<'_> for PayloadU8 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         (self.0.len() as u8).encode(bytes);
         bytes.extend_from_slice(&self.0);
