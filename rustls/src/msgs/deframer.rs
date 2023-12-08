@@ -186,8 +186,10 @@ impl MessageDeframer {
 
             // If we don't know the payload size yet or if the payload size is larger
             // than the currently buffered payload, we need to wait for more data.
-            let payload = msg.payload.to_vec();
-            match self.append_hs::<_, false>(msg.version, &payload, end, buffer)? {
+            let raw = RawSlice::from(msg.payload);
+            let version = msg.version;
+            let src = buffer.raw_slice_to_filled_range(raw);
+            match self.append_hs(version, InternalPayload(src), end, buffer)? {
                 HandshakePayloadState::Blocked => return Ok(None),
                 HandshakePayloadState::Complete(len) => break len,
                 HandshakePayloadState::Continue => continue,
@@ -258,28 +260,28 @@ impl MessageDeframer {
         }
 
         let end = buffer.len() + payload.len();
-        self.append_hs::<_, true>(version, payload, end, buffer)?;
+        self.append_hs(version, ExternalPayload(payload), end, buffer)?;
         Ok(())
     }
 
     /// Write the handshake message contents into the buffer and update the metadata.
     ///
     /// Returns true if a complete message is found.
-    fn append_hs<T: DeframerBuffer<QUIC>, const QUIC: bool>(
+    fn append_hs<'a, P: AppendPayload<'a>, B: DeframerBuffer<'a, P>>(
         &mut self,
         version: ProtocolVersion,
-        payload: &[u8],
+        payload: P,
         end: usize,
-        buffer: &mut T,
+        buffer: &mut B,
     ) -> Result<HandshakePayloadState, Error> {
         let meta = match &mut self.joining_hs {
             Some(meta) => {
-                debug_assert_eq!(meta.quic, QUIC);
+                debug_assert_eq!(meta.quic, P::QUIC);
 
                 // We're joining a handshake message to the previous one here.
                 // Write it into the buffer and update the metadata.
 
-                DeframerBuffer::<QUIC>::copy(buffer, payload, meta.payload.end);
+                buffer.copy(&payload, meta.payload.end);
                 meta.message.end = end;
                 meta.payload.end += payload.len();
 
@@ -295,8 +297,8 @@ impl MessageDeframer {
                 // We've found a new handshake message here.
                 // Write it into the buffer and create the metadata.
 
-                let expected_len = payload_size(payload)?;
-                DeframerBuffer::<QUIC>::copy(buffer, payload, 0);
+                let expected_len = payload.size(buffer)?;
+                buffer.copy(&payload, 0);
                 self.joining_hs
                     .insert(HandshakePayloadMeta {
                         message: Range { start: 0, end },
@@ -306,7 +308,7 @@ impl MessageDeframer {
                         },
                         version,
                         expected_len,
-                        quic: QUIC,
+                        quic: P::QUIC,
                     })
             }
         };
@@ -338,6 +340,48 @@ impl MessageDeframer {
         let new_bytes = rd.read(buffer.unfilled())?;
         buffer.advance(new_bytes);
         Ok(new_bytes)
+    }
+}
+
+trait AppendPayload<'a>: Sized {
+    const QUIC: bool;
+
+    fn len(&self) -> usize;
+
+    fn size<B: DeframerBuffer<'a, Self>>(
+        &self,
+        internal_buffer: &B,
+    ) -> Result<Option<usize>, Error>;
+}
+
+struct ExternalPayload<'a>(&'a [u8]);
+
+impl<'a> AppendPayload<'a> for ExternalPayload<'a> {
+    const QUIC: bool = true;
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn size<B: DeframerBuffer<'a, Self>>(&self, _: &B) -> Result<Option<usize>, Error> {
+        payload_size(self.0)
+    }
+}
+
+struct InternalPayload(Range<usize>);
+
+impl<'a> AppendPayload<'a> for InternalPayload {
+    const QUIC: bool = false;
+
+    fn len(&self) -> usize {
+        self.0.end - self.0.start
+    }
+
+    fn size<B: DeframerBuffer<'a, Self>>(
+        &self,
+        internal_buffer: &B,
+    ) -> Result<Option<usize>, Error> {
+        payload_size(internal_buffer.filled_get(self.0.clone()))
     }
 }
 
@@ -446,16 +490,17 @@ impl FilledDeframerBuffer for DeframerVecBuffer {
     }
 }
 
-impl DeframerBuffer<true> for DeframerVecBuffer {
-    fn copy(&mut self, src: &[u8], at: usize) {
-        copy_into_buffer(self.unfilled(), src, at);
-        self.advance(src.len());
+impl DeframerBuffer<'_, InternalPayload> for DeframerVecBuffer {
+    fn copy(&mut self, payload: &InternalPayload, at: usize) {
+        self.borrow().copy(payload, at)
     }
 }
 
-impl DeframerBuffer<false> for DeframerVecBuffer {
-    fn copy(&mut self, src: &[u8], at: usize) {
-        self.borrow().copy(src, at)
+impl<'a> DeframerBuffer<'a, ExternalPayload<'a>> for DeframerVecBuffer {
+    fn copy(&mut self, payload: &ExternalPayload<'a>, at: usize) {
+        let len = payload.len();
+        self.unfilled()[at..at + len].copy_from_slice(payload.0);
+        self.advance(len);
     }
 }
 
@@ -509,6 +554,17 @@ impl<'a> DeframerSliceBuffer<'a> {
 
         &mut taken[start..]
     }
+
+    /// Converts a raw slice to a filled range based on the offset and length.
+    ///
+    /// Safety: the caller *must* ensure that the `RawSlice` refers to a range from the same
+    /// allocation as the deframer's buffer.
+    fn raw_slice_to_filled_range(&self, raw: RawSlice) -> Range<usize> {
+        let adjust = self.discard - self.taken;
+        let start = ((raw.ptr as usize).checked_sub(self.buf.as_ptr() as usize)).unwrap() - adjust;
+        let end = start + raw.len;
+        start..end
+    }
 }
 
 impl FilledDeframerBuffer for DeframerSliceBuffer<'_> {
@@ -521,9 +577,10 @@ impl FilledDeframerBuffer for DeframerSliceBuffer<'_> {
     }
 }
 
-impl DeframerBuffer<false> for DeframerSliceBuffer<'_> {
-    fn copy(&mut self, src: &[u8], at: usize) {
-        copy_into_buffer(self.filled_mut(), src, at)
+impl DeframerBuffer<'_, InternalPayload> for DeframerSliceBuffer<'_> {
+    fn copy(&mut self, payload: &InternalPayload, at: usize) {
+        let buf = self.filled_mut();
+        buf.copy_within(payload.0.clone(), at)
     }
 }
 
@@ -541,17 +598,13 @@ impl From<&'_ [u8]> for RawSlice {
     }
 }
 
-trait DeframerBuffer<const QUIC: bool>: FilledDeframerBuffer {
+trait DeframerBuffer<'a, P: AppendPayload<'a>>: FilledDeframerBuffer {
     /// Copies from the `src` buffer into this buffer at the requested index
     ///
     /// If `QUIC` is true the data will be copied into the *un*filled section of the buffer
     ///
     /// If `QUIC` is false the data will be copied into the filled section of the buffer
-    fn copy(&mut self, src: &[u8], at: usize);
-}
-
-fn copy_into_buffer(buf: &mut [u8], src: &[u8], at: usize) {
-    buf[at..at + src.len()].copy_from_slice(src);
+    fn copy(&mut self, payload: &P, at: usize);
 }
 
 trait FilledDeframerBuffer {
