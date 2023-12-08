@@ -150,7 +150,7 @@ mod client_hello {
             chm: &Message,
             client_hello: &ClientHelloPayload,
             mut sigschemes_ext: Vec<SignatureScheme>,
-        ) -> hs::NextStateOrError {
+        ) -> hs::NextStateOrError<'static> {
             if client_hello.compression_methods.len() != 1 {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
@@ -850,7 +850,14 @@ struct ExpectAndSkipRejectedEarlyData {
 }
 
 impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle<'m>(
+        mut self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> hs::NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         /* "The server then ignores early data by skipping all records with an external
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
@@ -864,6 +871,10 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
 
         self.next.handle(cx, m)
     }
+
+    fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
+        self
+    }
 }
 
 struct ExpectCertificate {
@@ -875,7 +886,14 @@ struct ExpectCertificate {
 }
 
 impl State<ServerConnectionData> for ExpectCertificate {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle<'m>(
+        mut self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> hs::NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         self.transcript.add_message(&m);
         let certp = require_handshake_msg_move!(
             m,
@@ -935,6 +953,10 @@ impl State<ServerConnectionData> for ExpectCertificate {
             send_tickets: self.send_tickets,
         }))
     }
+
+    fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
+        self
+    }
 }
 
 struct ExpectCertificateVerify {
@@ -947,7 +969,14 @@ struct ExpectCertificateVerify {
 }
 
 impl State<ServerConnectionData> for ExpectCertificateVerify {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle<'m>(
+        mut self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> hs::NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         let rc = {
             let sig = require_handshake_msg!(
                 m,
@@ -982,6 +1011,10 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
             send_tickets: self.send_tickets,
         }))
     }
+
+    fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
+        self
+    }
 }
 
 // --- Process (any number of) early ApplicationData messages,
@@ -996,7 +1029,14 @@ struct ExpectEarlyData {
 }
 
 impl State<ServerConnectionData> for ExpectEarlyData {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle<'m>(
+        mut self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> hs::NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         match m.payload {
             MessagePayload::ApplicationData(payload) => {
                 match cx
@@ -1036,6 +1076,10 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 &[HandshakeType::EndOfEarlyData],
             )),
         }
+    }
+
+    fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
+        self
     }
 }
 
@@ -1149,7 +1193,14 @@ impl ExpectFinished {
 }
 
 impl State<ServerConnectionData> for ExpectFinished {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle<'m>(
+        mut self: Box<Self>,
+        cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> hs::NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
@@ -1199,6 +1250,10 @@ impl State<ServerConnectionData> for ExpectFinished {
             }),
         })
     }
+
+    fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
+        self
+    }
 }
 
 // --- Process traffic ---
@@ -1235,7 +1290,14 @@ impl ExpectTraffic {
 }
 
 impl State<ServerConnectionData> for ExpectTraffic {
-    fn handle(mut self: Box<Self>, cx: &mut ServerContext, m: Message) -> hs::NextStateOrError {
+    fn handle<'m>(
+        mut self: Box<Self>,
+        cx: &mut ServerContext,
+        m: Message<'m>,
+    ) -> hs::NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         match m.payload {
             MessagePayload::ApplicationData(payload) => cx
                 .common
@@ -1274,6 +1336,10 @@ impl State<ServerConnectionData> for ExpectTraffic {
         self.key_schedule
             .extract_secrets(Side::Server)
     }
+
+    fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
+        self
+    }
 }
 
 struct ExpectQuicTraffic {
@@ -1282,7 +1348,14 @@ struct ExpectQuicTraffic {
 }
 
 impl State<ServerConnectionData> for ExpectQuicTraffic {
-    fn handle(self: Box<Self>, _cx: &mut ServerContext<'_>, m: Message) -> hs::NextStateOrError {
+    fn handle<'m>(
+        self: Box<Self>,
+        _cx: &mut ServerContext<'_>,
+        m: Message<'m>,
+    ) -> hs::NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         // reject all messages
         Err(inappropriate_message(&m.payload, &[]))
     }
@@ -1295,5 +1368,9 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
     ) -> Result<(), Error> {
         self.key_schedule
             .export_keying_material(output, label, context)
+    }
+
+    fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
+        self
     }
 }
