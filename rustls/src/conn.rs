@@ -471,16 +471,16 @@ impl<Data> ConnectionCommon<Data> {
     ///
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
-    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message>, Error> {
+    pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message<'static>>, Error> {
         let mut deframer_buffer = self.deframer_buffer.borrow();
         let res = self
             .core
             .deframe(None, &mut deframer_buffer)
-            .map(|opt| opt.map(|m| m.into_owned()));
+            .map(|opt| opt.map(|pm| Message::try_from(pm).map(|m| m.into_owned())));
         let discard = deframer_buffer.pending_discard();
         self.deframer_buffer.discard(discard);
 
-        match res?.map(Message::try_from) {
+        match res? {
             Some(Ok(msg)) => Ok(Some(msg)),
             Some(Err(err)) => Err(self.send_fatal_alert(AlertDescription::DecodeError, err)),
             None => Ok(None),
@@ -862,7 +862,7 @@ impl<Data> ConnectionCore<Data> {
         }
 
         // Now we can fully parse the message payload.
-        let msg = match Message::try_from(msg.into_owned()) {
+        let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
             Err(err) => {
                 return Err(self

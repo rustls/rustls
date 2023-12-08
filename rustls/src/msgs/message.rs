@@ -16,17 +16,17 @@ use super::base::BorrowedPayload;
 use super::codec::ReaderMut;
 
 #[derive(Debug)]
-pub enum MessagePayload {
+pub enum MessagePayload<'a> {
     Alert(AlertMessagePayload),
     Handshake {
         parsed: HandshakeMessagePayload,
-        encoded: Payload<'static>,
+        encoded: Payload<'a>,
     },
     ChangeCipherSpec(ChangeCipherSpecPayload),
-    ApplicationData(Payload<'static>),
+    ApplicationData(Payload<'a>),
 }
 
-impl MessagePayload {
+impl<'a> MessagePayload<'a> {
     pub fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Self::Alert(x) => x.encode(bytes),
@@ -46,16 +46,16 @@ impl MessagePayload {
     pub fn new(
         typ: ContentType,
         vers: ProtocolVersion,
-        payload: Payload<'static>,
+        payload: &'a [u8],
     ) -> Result<Self, InvalidMessage> {
-        let mut r = Reader::init(payload.bytes());
+        let mut r = Reader::init(payload);
         match typ {
-            ContentType::ApplicationData => Ok(Self::ApplicationData(payload)),
+            ContentType::ApplicationData => Ok(Self::ApplicationData(Payload::Borrowed(payload))),
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
             ContentType::Handshake => {
                 HandshakeMessagePayload::read_version(&mut r, vers).map(|parsed| Self::Handshake {
                     parsed,
-                    encoded: payload,
+                    encoded: Payload::Borrowed(payload),
                 })
             }
             ContentType::ChangeCipherSpec => {
@@ -71,6 +71,19 @@ impl MessagePayload {
             Self::Handshake { .. } => ContentType::Handshake,
             Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             Self::ApplicationData(_) => ContentType::ApplicationData,
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> MessagePayload<'static> {
+        use MessagePayload::*;
+        match self {
+            Alert(x) => Alert(x),
+            Handshake { parsed, encoded } => Handshake {
+                parsed,
+                encoded: encoded.into_owned(),
+            },
+            ChangeCipherSpec(x) => ChangeCipherSpec(x),
+            ApplicationData(x) => ApplicationData(x.into_owned()),
         }
     }
 }
@@ -286,11 +299,11 @@ fn unpad_tls13_payload(p: &mut BorrowedPayload) -> ContentType {
     }
 }
 
-impl From<Message> for PlainMessage {
+impl From<Message<'_>> for PlainMessage {
     fn from(msg: Message) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
-            MessagePayload::ApplicationData(payload) => payload,
+            MessagePayload::ApplicationData(payload) => payload.into_owned(),
             _ => {
                 let mut buf = Vec::new();
                 msg.payload.encode(&mut buf);
@@ -337,12 +350,12 @@ impl PlainMessage {
 
 /// A message with decoded payload
 #[derive(Debug)]
-pub struct Message {
+pub struct Message<'a> {
     pub version: ProtocolVersion,
-    pub payload: MessagePayload,
+    pub payload: MessagePayload<'a>,
 }
 
-impl Message {
+impl Message<'_> {
     pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
         // Bit of a layering violation, but OK.
         if let MessagePayload::Handshake { parsed, .. } = &self.payload {
@@ -368,16 +381,36 @@ impl Message {
             payload: MessagePayload::handshake(HandshakeMessagePayload::build_key_update_notify()),
         }
     }
+
+    pub(crate) fn into_owned(self) -> Message<'static> {
+        let Self { version, payload } = self;
+        Message {
+            version,
+            payload: payload.into_owned(),
+        }
+    }
+}
+
+impl TryFrom<PlainMessage> for Message<'static> {
+    type Error = Error;
+
+    fn try_from(plain: PlainMessage) -> Result<Self, Self::Error> {
+        Ok(Self {
+            version: plain.version,
+            payload: MessagePayload::new(plain.typ, plain.version, plain.payload.bytes())?
+                .into_owned(),
+        })
+    }
 }
 
 /// Parses a plaintext message into a well-typed [`Message`].
 ///
 /// A [`PlainMessage`] must contain plaintext content. Encrypted content should be stored in an
 /// [`OpaqueMessage`] and decrypted before being stored into a [`PlainMessage`].
-impl TryFrom<PlainMessage> for Message {
+impl<'a> TryFrom<BorrowedPlainMessage<'a>> for Message<'a> {
     type Error = Error;
 
-    fn try_from(plain: PlainMessage) -> Result<Self, Self::Error> {
+    fn try_from(plain: BorrowedPlainMessage<'a>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
             payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
