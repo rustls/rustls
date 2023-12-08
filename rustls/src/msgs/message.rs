@@ -20,17 +20,17 @@ pub enum MessagePayload {
     Alert(AlertMessagePayload),
     Handshake {
         parsed: HandshakeMessagePayload,
-        encoded: Payload,
+        encoded: Payload<'static>,
     },
     ChangeCipherSpec(ChangeCipherSpecPayload),
-    ApplicationData(Payload),
+    ApplicationData(Payload<'static>),
 }
 
 impl MessagePayload {
     pub fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Self::Alert(x) => x.encode(bytes),
-            Self::Handshake { encoded, .. } => bytes.extend(&encoded.0),
+            Self::Handshake { encoded, .. } => bytes.extend(encoded.bytes()),
             Self::ChangeCipherSpec(x) => x.encode(bytes),
             Self::ApplicationData(x) => x.encode(bytes),
         }
@@ -46,9 +46,9 @@ impl MessagePayload {
     pub fn new(
         typ: ContentType,
         vers: ProtocolVersion,
-        payload: Payload,
+        payload: Payload<'static>,
     ) -> Result<Self, InvalidMessage> {
-        let mut r = Reader::init(&payload.0);
+        let mut r = Reader::init(payload.bytes());
         match typ {
             ContentType::ApplicationData => Ok(Self::ApplicationData(payload)),
             ContentType::Alert => AlertMessagePayload::read(&mut r).map(MessagePayload::Alert),
@@ -90,7 +90,7 @@ impl MessagePayload {
 pub struct OpaqueMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    payload: Payload,
+    payload: Payload<'static>,
 }
 
 impl OpaqueMessage {
@@ -107,12 +107,15 @@ impl OpaqueMessage {
 
     /// Access the message payload as a slice.
     pub fn payload(&self) -> &[u8] {
-        &self.payload.0
+        self.payload.bytes()
     }
 
     /// Access the message payload as a mutable `Vec<u8>`.
     pub fn payload_mut(&mut self) -> &mut Vec<u8> {
-        &mut self.payload.0
+        match &mut self.payload {
+            Payload::Borrowed(_) => unreachable!("due to how constructor works"),
+            Payload::Owned(bytes) => bytes,
+        }
     }
 
     /// `MessageError` allows callers to distinguish between valid prefixes (might
@@ -136,7 +139,7 @@ impl OpaqueMessage {
         let mut buf = Vec::new();
         self.typ.encode(&mut buf);
         self.version.encode(&mut buf);
-        (self.payload.0.len() as u16).encode(&mut buf);
+        (self.payload.bytes().len() as u16).encode(&mut buf);
         self.payload.encode(&mut buf);
         buf
     }
@@ -291,7 +294,7 @@ impl From<Message> for PlainMessage {
             _ => {
                 let mut buf = Vec::new();
                 msg.payload.encode(&mut buf);
-                Payload(buf)
+                Payload::Owned(buf)
             }
         };
 
@@ -311,7 +314,7 @@ impl From<Message> for PlainMessage {
 pub struct PlainMessage {
     pub typ: ContentType,
     pub version: ProtocolVersion,
-    pub payload: Payload,
+    pub payload: Payload<'static>,
 }
 
 impl PlainMessage {
@@ -327,7 +330,7 @@ impl PlainMessage {
         BorrowedPlainMessage {
             version: self.version,
             typ: self.typ,
-            payload: &self.payload.0,
+            payload: self.payload.bytes(),
         }
     }
 }
@@ -402,7 +405,7 @@ impl<'a> BorrowedPlainMessage<'a> {
         OpaqueMessage {
             version: self.version,
             typ: self.typ,
-            payload: Payload(self.payload.to_vec()),
+            payload: Payload::Owned(self.payload.to_vec()),
         }
     }
 

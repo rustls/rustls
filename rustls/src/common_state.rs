@@ -428,7 +428,8 @@ impl CommonState {
     }
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
-        self.received_plaintext.append(bytes.0);
+        self.received_plaintext
+            .append(bytes.into_vec());
     }
 
     #[cfg(feature = "tls12")]

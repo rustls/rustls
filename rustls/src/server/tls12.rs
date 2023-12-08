@@ -139,7 +139,10 @@ mod client_hello {
                 .and_then(|ticket| {
                     ticket_received = true;
                     debug!("Ticket received");
-                    let data = self.config.ticketer.decrypt(&ticket.0);
+                    let data = self
+                        .config
+                        .ticketer
+                        .decrypt(ticket.bytes());
                     if data.is_none() {
                         debug!("Ticket didn't decrypt");
                     }
@@ -602,7 +605,7 @@ impl State<ServerConnectionData> for ExpectClientKx {
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let peer_kx_params =
-            tls12::decode_ecdh_params::<ClientEcdhParams>(cx.common, &client_kx.0)?;
+            tls12::decode_ecdh_params::<ClientEcdhParams>(cx.common, client_kx.bytes())?;
         let secrets = ConnectionSecrets::from_key_exchange(
             self.server_kx,
             &peer_kx_params.public.0,
@@ -859,15 +862,15 @@ impl State<ServerConnectionData> for ExpectFinished {
         let vh = self.transcript.get_current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
-        let _fin_verified = match ConstantTimeEq::ct_eq(&expect_verify_data[..], &finished.0).into()
-        {
-            true => verify::FinishedMessageVerified::assertion(),
-            false => {
-                return Err(cx
-                    .common
-                    .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError));
-            }
-        };
+        let _fin_verified =
+            match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
+                true => verify::FinishedMessageVerified::assertion(),
+                false => {
+                    return Err(cx
+                        .common
+                        .send_fatal_alert(AlertDescription::DecryptError, Error::DecryptError));
+                }
+            };
 
         // Save connection, perhaps
         if !self.resuming && !self.session_id.is_empty() {
