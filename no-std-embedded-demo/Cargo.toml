@@ -30,6 +30,7 @@ embassy-time = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b",
 embassy-net = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46b", features = [
     "defmt",
     "tcp",
+    "udp",
     "dns",
     "dhcpv4",
     "medium-ethernet",
