@@ -169,7 +169,7 @@ impl CommonState {
         };
         match state.handle(&mut cx, msg) {
             Ok(next) => {
-                state = next;
+                state = next.into_owned();
                 Ok(state)
             }
             Err(e @ Error::InappropriateMessage { .. })
@@ -710,11 +710,13 @@ impl IoState {
 }
 
 pub(crate) trait State<Data>: Send + Sync {
-    fn handle(
+    fn handle<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
-        message: Message,
-    ) -> Result<Box<dyn State<Data>>, Error>;
+        message: Message<'m>,
+    ) -> Result<Box<dyn State<Data> + 'm>, Error>
+    where
+        Self: 'm;
 
     fn export_keying_material(
         &self,
@@ -730,6 +732,8 @@ pub(crate) trait State<Data>: Send + Sync {
     }
 
     fn handle_decrypt_error(&self) {}
+
+    fn into_owned(self: Box<Self>) -> Box<dyn State<Data> + 'static>;
 }
 
 pub(crate) struct Context<'a, Data> {

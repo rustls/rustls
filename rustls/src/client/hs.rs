@@ -39,8 +39,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
-pub(super) type NextState = Box<dyn State<ClientConnectionData>>;
-pub(super) type NextStateOrError = Result<NextState, Error>;
+pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
+pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 fn find_session(
@@ -95,7 +95,7 @@ pub(super) fn start_handshake(
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
-) -> NextStateOrError {
+) -> NextStateOrError<'static> {
     let mut transcript_buffer = HandshakeHashBuffer::new();
     if config
         .client_auth_cert_resolver
@@ -196,7 +196,7 @@ fn emit_client_hello_for_retry(
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
-) -> NextState {
+) -> NextState<'static> {
     let config = &input.config;
     let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
@@ -481,7 +481,14 @@ pub(super) fn process_alpn_protocol(
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
-    fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
+    fn handle<'m>(
+        mut self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        m: Message<'m>,
+    ) -> NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
         trace!("We got ServerHello {:#?}", server_hello);
@@ -671,10 +678,14 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
         }
     }
+
+    fn into_owned(self: Box<Self>) -> NextState<'static> {
+        self
+    }
 }
 
 impl ExpectServerHelloOrHelloRetryRequest {
-    fn into_expect_server_hello(self) -> NextState {
+    fn into_expect_server_hello(self) -> NextState<'static> {
         Box::new(self.next)
     }
 
@@ -682,7 +693,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         self,
         cx: &mut ClientContext<'_>,
         m: Message,
-    ) -> NextStateOrError {
+    ) -> NextStateOrError<'static> {
         let hrr = require_handshake_msg!(
             m,
             HandshakeType::HelloRetryRequest,
@@ -847,7 +858,14 @@ impl ExpectServerHelloOrHelloRetryRequest {
 }
 
 impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
-    fn handle(self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> NextStateOrError {
+    fn handle<'m>(
+        self: Box<Self>,
+        cx: &mut ClientContext<'_>,
+        m: Message<'m>,
+    ) -> NextStateOrError<'m>
+    where
+        Self: 'm,
+    {
         match m.payload {
             MessagePayload::Handshake {
                 parsed:
@@ -873,6 +891,10 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
                 &[HandshakeType::ServerHello, HandshakeType::HelloRetryRequest],
             )),
         }
+    }
+
+    fn into_owned(self: Box<Self>) -> NextState<'static> {
+        self
     }
 }
 
