@@ -126,6 +126,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
 
 /// The current status of the `UnbufferedConnection*`
 #[must_use]
+#[derive(Debug)]
 pub struct UnbufferedStatus<'c, 'i, Data> {
     /// Number of bytes to discard
     ///
