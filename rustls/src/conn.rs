@@ -1,11 +1,12 @@
 use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
+use crate::crypto::cipher::BorrowedPlainMessage;
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer};
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{Message, MessagePayload, PlainMessage};
+use crate::msgs::message::{Message, MessagePayload};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -336,11 +337,11 @@ impl ConnectionRandoms {
 
 // --- Common (to client and server) connection functions ---
 
-fn is_valid_ccs(msg: &PlainMessage) -> bool {
+fn is_valid_ccs(msg: &BorrowedPlainMessage) -> bool {
     // We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
     // Note: this is prior to the record layer, so is unencrypted. See
     // third paragraph of section 5 in RFC8446.
-    msg.typ == ContentType::ChangeCipherSpec && msg.payload.bytes() == [0x01]
+    msg.typ == ContentType::ChangeCipherSpec && msg.payload == [0x01]
 }
 
 /// Interface shared by client and server connections.
@@ -474,7 +475,8 @@ impl<Data> ConnectionCommon<Data> {
         let mut deframer_buffer = self.deframer_buffer.borrow();
         let res = self
             .core
-            .deframe(None, &mut deframer_buffer);
+            .deframe(None, &mut deframer_buffer)
+            .map(|opt| opt.map(|m| m.into_owned()));
         let discard = deframer_buffer.pending_discard();
         self.deframer_buffer.discard(discard);
 
@@ -772,11 +774,11 @@ impl<Data> ConnectionCore<Data> {
     }
 
     /// Pull a message out of the deframer and send any messages that need to be sent as a result.
-    fn deframe(
+    fn deframe<'b>(
         &mut self,
         state: Option<&dyn State<Data>>,
-        deframer_buffer: &mut DeframerSliceBuffer,
-    ) -> Result<Option<PlainMessage>, Error> {
+        deframer_buffer: &mut DeframerSliceBuffer<'b>,
+    ) -> Result<Option<BorrowedPlainMessage<'b>>, Error> {
         match self.message_deframer.pop(
             &mut self.common_state.record_layer,
             self.common_state.negotiated_version,
@@ -799,7 +801,7 @@ impl<Data> ConnectionCore<Data> {
                 }
 
                 self.common_state.aligned_handshake = aligned;
-                Ok(Some(message.into_owned()))
+                Ok(Some(message))
             }
             Ok(None) => Ok(None),
             Err(err @ Error::InvalidMessage(_)) => {
@@ -831,7 +833,7 @@ impl<Data> ConnectionCore<Data> {
 
     fn process_msg(
         &mut self,
-        msg: PlainMessage,
+        msg: BorrowedPlainMessage,
         state: Box<dyn State<Data>>,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {
@@ -860,7 +862,7 @@ impl<Data> ConnectionCore<Data> {
         }
 
         // Now we can fully parse the message payload.
-        let msg = match Message::try_from(msg) {
+        let msg = match Message::try_from(msg.into_owned()) {
             Ok(msg) => msg,
             Err(err) => {
                 return Err(self
