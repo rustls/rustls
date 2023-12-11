@@ -43,24 +43,6 @@ fn duration_nanos(d: Duration) -> f64 {
     (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
 }
 
-fn _bench<Fsetup, Ftest, S>(count: usize, name: &'static str, f_setup: Fsetup, f_test: Ftest)
-where
-    Fsetup: Fn() -> S,
-    Ftest: Fn(S),
-{
-    let mut times = Vec::new();
-
-    for _ in 0..count {
-        let state = f_setup();
-        let start = Instant::now();
-        f_test(state);
-        times.push(duration_nanos(Instant::now().duration_since(start)));
-    }
-
-    println!("{}", name);
-    println!("{:?}", times);
-}
-
 fn time<F>(mut f: F) -> f64
 where
     F: FnMut(),
