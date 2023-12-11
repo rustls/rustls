@@ -21,38 +21,38 @@ fn tls12_handshake() {
     assert_eq!(
         client_transcript,
         vec![
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "WriteTraffic"
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(WriteTraffic)"
         ],
         "client transcript mismatch"
     );
     assert_eq!(
         server_transcript,
         vec![
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic"
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)"
         ],
         "server transcript mismatch"
     );
@@ -64,42 +64,42 @@ fn tls13_handshake() {
     assert_eq!(
         client_transcript,
         vec![
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic",
-            "WriteTraffic",
-            "WriteTraffic",
-            "WriteTraffic",
-            "WriteTraffic"
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)"
         ],
         "client transcript mismatch"
     );
     assert_eq!(
         server_transcript,
         vec![
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic"
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)"
         ],
         "server transcript mismatch"
     );
@@ -600,15 +600,13 @@ fn advance_client(
     actions: Actions,
     transcript: Option<&mut Vec<String>>,
 ) -> State {
-    let UnbufferedStatus { discard, state } = conn
-        .process_tls_records(buffers.incoming.filled())
-        .unwrap();
+    let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
 
     if let Some(transcript) = transcript {
         transcript.push(format!("{:?}", state));
     }
 
-    let state = match state {
+    let state = match state.unwrap() {
         ConnectionState::TransmitTlsData(mut state) => {
             let mut sent_early_data = false;
             if let Some(early_data) = actions.early_data_to_send {
@@ -649,15 +647,13 @@ fn advance_server(
     actions: Actions,
     transcript: Option<&mut Vec<String>>,
 ) -> State {
-    let UnbufferedStatus { discard, state } = conn
-        .process_tls_records(buffers.incoming.filled())
-        .unwrap();
+    let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
 
     if let Some(transcript) = transcript {
         transcript.push(format!("{:?}", state));
     }
 
-    let state = match state {
+    let state = match state.unwrap() {
         ConnectionState::ReadEarlyData(mut state) => {
             let mut records = vec![];
 
@@ -897,12 +893,10 @@ fn server_receives_handshake_byte_by_byte() {
     let (mut client, mut server) = make_connection_pair(&TLS13);
 
     let mut client_hello_buffer = vec![0u8; 1024];
-    let UnbufferedStatus { discard, state } = client
-        .process_tls_records(&mut [])
-        .unwrap();
+    let UnbufferedStatus { discard, state } = client.process_tls_records(&mut []);
 
     assert_eq!(discard, 0);
-    match state {
+    match state.unwrap() {
         ConnectionState::EncodeTlsData(mut inner) => {
             let wr = inner
                 .encode(&mut client_hello_buffer)
@@ -915,18 +909,16 @@ fn server_receives_handshake_byte_by_byte() {
     println!("client hello: {:?}", client_hello_buffer);
 
     for prefix in 0..client_hello_buffer.len() - 1 {
-        let UnbufferedStatus { discard, state } = server
-            .process_tls_records(&mut client_hello_buffer[..prefix])
-            .unwrap();
+        let UnbufferedStatus { discard, state } =
+            server.process_tls_records(&mut client_hello_buffer[..prefix]);
         println!("prefix {prefix:?}: ({discard:?}, {state:?}");
-        assert!(matches!(state, ConnectionState::BlockedHandshake));
+        assert!(matches!(state.unwrap(), ConnectionState::BlockedHandshake));
     }
 
-    let UnbufferedStatus { discard, state } = server
-        .process_tls_records(&mut client_hello_buffer[..])
-        .unwrap();
+    let UnbufferedStatus { discard, state } =
+        server.process_tls_records(&mut client_hello_buffer[..]);
 
-    assert!(matches!(state, ConnectionState::EncodeTlsData(_)));
+    assert!(matches!(state.unwrap(), ConnectionState::EncodeTlsData(_)));
     assert_eq!(client_hello_buffer.len(), discard);
 }
 
@@ -935,21 +927,20 @@ fn server_receives_incorrect_first_handshake_message() {
     let (_, mut server) = make_connection_pair(&TLS13);
 
     let mut junk_buffer = [0x16, 0x3, 0x1, 0x0, 0x4, 0xff, 0x0, 0x0, 0x0];
+    let junk_buffer_len = junk_buffer.len();
 
-    let err = server
-        .process_tls_records(&mut junk_buffer[..])
-        .unwrap_err();
+    let UnbufferedStatus { discard, state } = server.process_tls_records(&mut junk_buffer[..]);
 
+    assert_eq!(discard, junk_buffer_len);
     assert_eq!(
-        format!("{err:?}"),
-        "InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: Unknown(255) }"
+        format!("{state:?}"),
+        "Err(InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: Unknown(255) })"
     );
 
-    let UnbufferedStatus { discard, state } = server
-        .process_tls_records(&mut junk_buffer[..])
-        .unwrap();
+    let UnbufferedStatus { discard, state } = server.process_tls_records(&mut []);
+    assert_eq!(discard, 0);
 
-    match state {
+    match state.unwrap() {
         ConnectionState::EncodeTlsData(mut inner) => {
             let mut alert_buffer = [0u8; 7];
             let wr = inner.encode(&mut alert_buffer).unwrap();
@@ -958,9 +949,4 @@ fn server_receives_incorrect_first_handshake_message() {
         }
         _ => panic!("unexpected alert sending state"),
     };
-
-    // XXX: error should be fused here.
-    let err = server
-        .process_tls_records(&mut junk_buffer[..])
-        .unwrap_err();
 }
