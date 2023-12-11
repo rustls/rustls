@@ -182,12 +182,12 @@ impl CommonState {
     ///
     /// If internal buffers are too small, this function will not accept
     /// all the data.
-    pub(crate) fn send_some_plaintext(&mut self, data: &[u8]) -> usize {
+    pub(crate) fn buffer_plaintext(&mut self, data: &[u8]) -> usize {
         self.perhaps_write_key_update();
         self.send_plain(data, Limit::Yes)
     }
 
-    pub(crate) fn eager_send_some_plaintext(
+    pub(crate) fn write_plaintext(
         &mut self,
         plaintext: &[u8],
         outgoing_tls: &mut [u8],
