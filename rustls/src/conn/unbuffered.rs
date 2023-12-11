@@ -17,7 +17,7 @@ impl UnbufferedConnectionCommon<ClientConnectionData> {
     pub fn process_tls_records<'c, 'i>(
         &'c mut self,
         incoming_tls: &'i mut [u8],
-    ) -> Result<UnbufferedStatus<'c, 'i, ClientConnectionData>, Error> {
+    ) -> UnbufferedStatus<'c, 'i, ClientConnectionData> {
         self.process_tls_records_common(incoming_tls, |_| None, |_, _, ()| unreachable!())
     }
 }
@@ -28,7 +28,7 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
     pub fn process_tls_records<'c, 'i>(
         &'c mut self,
         incoming_tls: &'i mut [u8],
-    ) -> Result<UnbufferedStatus<'c, 'i, ServerConnectionData>, Error> {
+    ) -> UnbufferedStatus<'c, 'i, ServerConnectionData> {
         self.process_tls_records_common(
             incoming_tls,
             |conn| conn.pop_early_data(),
@@ -43,7 +43,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
         incoming_tls: &'i mut [u8],
         mut check: impl FnMut(&mut Self) -> Option<T>,
         execute: impl FnOnce(&'c mut Self, &'i mut [u8], T) -> ConnectionState<'c, 'i, Data>,
-    ) -> Result<UnbufferedStatus<'c, 'i, Data>, Error> {
+    ) -> UnbufferedStatus<'c, 'i, Data> {
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
 
         let (discard, state) = loop {
@@ -75,13 +75,26 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 );
             }
 
-            if let Some(msg) = self.core.deframe(None, &mut buffer)? {
+            let deframer_output = match self.core.deframe(None, &mut buffer) {
+                Err(err) => {
+                    return UnbufferedStatus {
+                        discard: buffer.pending_discard(),
+                        state: Err(err),
+                    };
+                }
+                Ok(r) => r,
+            };
+
+            if let Some(msg) = deframer_output {
                 let mut state =
                     match mem::replace(&mut self.core.state, Err(Error::HandshakeNotComplete)) {
                         Ok(state) => state,
                         Err(e) => {
                             self.core.state = Err(e.clone());
-                            return Err(e);
+                            return UnbufferedStatus {
+                                discard: buffer.pending_discard(),
+                                state: Err(e),
+                            };
                         }
                     };
 
@@ -90,7 +103,10 @@ impl<Data> UnbufferedConnectionCommon<Data> {
 
                     Err(e) => {
                         self.core.state = Err(e.clone());
-                        return Err(e);
+                        return UnbufferedStatus {
+                            discard: buffer.pending_discard(),
+                            state: Err(e),
+                        };
                     }
                 }
 
@@ -120,7 +136,10 @@ impl<Data> UnbufferedConnectionCommon<Data> {
             }
         };
 
-        Ok(UnbufferedStatus { discard, state })
+        UnbufferedStatus {
+            discard,
+            state: Ok(state),
+        }
     }
 }
 
@@ -143,7 +162,7 @@ pub struct UnbufferedStatus<'c, 'i, Data> {
     /// This value MUST be handled prior to calling
     /// [`UnbufferedConnectionCommon::process_tls_records`] again. See the documentation on the
     /// variants of [`ConnectionState`] for more details.
-    pub state: ConnectionState<'c, 'i, Data>,
+    pub state: Result<ConnectionState<'c, 'i, Data>, Error>,
 }
 
 /// The state of the [`UnbufferedConnectionCommon`] object
