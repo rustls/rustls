@@ -26,15 +26,15 @@ In rough order of priority:
 
 * **Support Encrypted Client Hello**.
   Encrypted Client Hello is an upcoming standard from the TLS WG providing better
-  production for some of the data sent by a client in the initial ClientHello
+  protection for some of the data sent by a client in the initial Client Hello
   message.
   rustls/rustls#508
 
 * **Improve OS Trust Verifier Support**.
   While we currently have a way to trust certificates stored in the platform trust
   store, platform trust stores can have other ways of restricting how/when roots
-  that they expose are trusted. In order to rely on these (on Darwin and Windows)
-  we should rely on the platform verifier directly.
+  that they expose are trusted. In order to rely on these (on Windows, Android,
+  and Apple platforms) we should rely on the platform verifier directly.
 
   Given that platform verifiers may require blocking I/O, some API changes are
   required.
@@ -69,7 +69,7 @@ Delivered in 0.21:
 * **Support IP Address Certificates**.
   There are some popular use cases where applications want TLS certificates for
   services that don’t have their own host name, relying on the IP address directly
-  instead. I've heard from one customer that this is common in Kubernetes deployments.
+  instead. This is common in Kubernetes deployments and service meshes.
   rustls/rustls#184
 
 * **Implement RFC 8446 Appendix C.4 in session cache**.
