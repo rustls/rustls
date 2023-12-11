@@ -331,9 +331,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.4.10"
+version = "4.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41fffed7514f420abec6d183b1d3acfd9099c79c3a10a06ade4f8203f1411272"
+checksum = "bfaff671f6b22ca62406885ece523383b9b64022e341e53e009a62ebc47a45f2"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -341,9 +341,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.4.9"
+version = "4.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63361bae7eef3771745f02d8d892bec2fee5f6e34af316ba556e7f97a7069ff1"
+checksum = "a216b506622bb1d316cd51328dce24e07bdff4a6128a47c7e7fad11878d5adbb"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1168,9 +1168,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.9"
+version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dce281c5e46beae905d4de1870d8b1509a9142b62eedf18b443b011ca8343d0"
+checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
 dependencies = [
  "libc",
  "log",
@@ -1600,9 +1600,9 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.17.6"
+version = "0.17.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "684d5e6e18f669ccebf64a92236bb7db9a34f07be010e3627368182027180866"
+checksum = "688c63d65483050968b2a8937f7995f443e27041a0f7700aa59b0822aedebb74"
 dependencies = [
  "cc",
  "getrandom",
@@ -1674,7 +1674,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "629648aced5775d558af50b2b4c7b02983a04b312126d45eeead26e7caa498b9"
 dependencies = [
  "log",
- "ring 0.17.6",
+ "ring 0.17.7",
  "rustls-webpki 0.101.7",
  "sct",
 ]
@@ -1688,7 +1688,7 @@ dependencies = [
  "bencher",
  "env_logger",
  "log",
- "ring 0.17.6",
+ "ring 0.17.7",
  "rustls-pemfile 2.0.0",
  "rustls-pki-types",
  "rustls-webpki 0.102.0",
@@ -1720,7 +1720,7 @@ version = "0.0.1"
 dependencies = [
  "hickory-resolver",
  "regex",
- "ring 0.17.6",
+ "ring 0.17.7",
  "rustls 0.23.0-alpha.0",
 ]
 
@@ -1801,7 +1801,7 @@ version = "0.101.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
 dependencies = [
- "ring 0.17.6",
+ "ring 0.17.7",
  "untrusted 0.9.0",
 ]
 
@@ -1812,7 +1812,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de2635c8bc2b88d367767c5de8ea1d8db9af3f6219eba28442242d9ab81d1b89"
 dependencies = [
  "aws-lc-rs",
- "ring 0.17.6",
+ "ring 0.17.7",
  "rustls-pki-types",
  "untrusted 0.9.0",
 ]
@@ -1841,7 +1841,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da046153aa2352493d6cb7da4b6e5c0c057d8a1d0a9aa8560baffdd945acd414"
 dependencies = [
- "ring 0.17.6",
+ "ring 0.17.7",
  "untrusted 0.9.0",
 ]
 

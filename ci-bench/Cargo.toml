@@ -10,7 +10,7 @@ publish = false
 anyhow = "1.0.73"
 async-trait = "0.1.74"
 byteorder = "1.4.3"
-clap = { version = "4.3.21", features = ["derive"] }
+clap = { version = "4.4.11", features = ["derive"] }
 fxhash = "0.2.1"
 itertools = "0.12"
 pki-types = { package = "rustls-pki-types", version = "1" }
