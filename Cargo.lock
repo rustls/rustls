@@ -2246,6 +2246,7 @@ checksum = "5ede67b28608b4c60685c7d54122d4400d90f62b40caee7700e700380a390fa8"
 name = "rustls-post-quantum"
 version = "0.1.0"
 dependencies = [
+ "aws-lc-rs",
  "rustls 0.23.1",
 ]
 
