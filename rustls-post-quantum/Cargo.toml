@@ -1,0 +1,8 @@
+[package]
+name = "rustls-post-quantum"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rustls = { path = "../rustls", features = ["aws_lc_rs"] }
