@@ -8,11 +8,6 @@ In rough order of priority:
   Change the default cryptographic library to something with FIPS certification.
   rustls/rustls#1540
 
-* **Comprehensive Performance Benchmarking**.
-  Performance should be a headline feature of Rustls. We need to develop a more
-  comprehensive benchmarking system so that we can assess and improve performance
-  from multiple angles, including CPU usage, latency, and memory usage.
-
 * **Add No-Allocation / Write-Through API**.
   Would make handshakes faster and give the caller more control over allocations.
   RFC: rustls/rustls#1420
@@ -68,6 +63,11 @@ Delivered in 0.22:
 * **Enable Pluggable Cryptographic Back-ends**.
   Allow plugging in different cryptographic back-ends.
   rustls/rustls#1184
+
+* **Comprehensive Performance Benchmarking**.
+  Performance should be a headline feature of Rustls. We need to develop a more
+  comprehensive benchmarking system so that we can assess and improve performance
+  from multiple angles, including CPU usage, latency, and memory usage.
 
 Delivered in 0.21:
 
