@@ -6,7 +6,7 @@ extern crate alloc;
 use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ops::Range;
+
 use core::result::Result as CoreResult;
 use core::str::Utf8Error;
 use defmt::*;
@@ -14,8 +14,8 @@ use defmt::{assert, assert_eq};
 use embassy_executor::{SpawnError, Spawner};
 use embassy_net::dns::{self, DnsQueryType};
 use embassy_net::tcp::{self, ConnectError, TcpSocket};
-use embassy_net::udp::{PacketMetadata, UdpSocket};
-use embassy_net::{IpAddress, IpEndpoint, Ipv4Address, Ipv4Cidr, Stack, StackResources};
+
+use embassy_net::{IpAddress, Ipv4Address, Ipv4Cidr, Stack, StackResources};
 use embassy_stm32::eth::generic_smi::GenericSMI;
 use embassy_stm32::eth::{Ethernet, PacketQueue};
 use embassy_stm32::peripherals::ETH;
@@ -23,14 +23,14 @@ use embassy_stm32::rng::Rng;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
 
-use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, mutex::Mutex};
-
 use embassy_time::Timer;
 use embassy_time::{Duration, Instant};
 use embedded_io_async::Write;
 use no_std_embedded_demo as lib;
 use pki_types::{DnsName, InvalidDnsNameError, ServerName};
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
+
+use crate::lib::{init_call_to_ntp_server, time_provider, TIME_FROM_START};
 #[allow(unused_imports)]
 use rustls::version::{TLS12, TLS13};
 use rustls::{
@@ -61,9 +61,6 @@ const EARLY_DATA: &[u8] = b"hello";
 const OUTGOING_TLS_BUFSIZ: usize = KB / 2;
 const TCP_RX_BUFSIZ: usize = KB;
 const TCP_TX_BUFSIZ: usize = KB / 2;
-const UNIX_TIME: u64 = 1702453769; // `date +%s`
-static NTP_TIME: Mutex<ThreadModeRawMutex, Option<u64>> = Mutex::new(None);
-static TIME_FROM_START: Mutex<ThreadModeRawMutex, Option<Instant>> = Mutex::new(None);
 
 const SERVER_NAME: &str = "github.com";
 
@@ -167,68 +164,6 @@ async fn main(
         .await?;
     }
     Ok(())
-}
-pub async fn init_call_to_ntp_server(stack: &'static Stack<Ethernet<'static, ETH, GenericSMI>>) {
-    // TODO: SPIN once
-    let ntp_time = get_time_from_ntp_server(stack).await;
-    NTP_TIME.lock().await.replace(ntp_time);
-}
-
-pub async fn get_time_from_ntp_server(
-    stack: &'static Stack<Ethernet<'static, ETH, GenericSMI>>,
-) -> u64 {
-    const NTP_PACKET_SIZE: usize = 48;
-    const TX_SECONDS: Range<usize> = 40..44;
-
-    let ntp_server_addr = stack
-        .dns_query("time.cloudflare.com", DnsQueryType::A)
-        .await;
-
-    let ntp_sever = if let Ok(net_server_addr) = ntp_server_addr {
-        let adr = net_server_addr.first().unwrap().clone();
-        IpAddress::from(adr)
-    } else {
-        // Cloudflare server we know works!
-        IpAddress::from(Ipv4Address::new(162, 159, 200, 1))
-    };
-
-    let ntp_server = IpEndpoint {
-        addr: ntp_sever,
-        port: 123,
-    };
-    let mut rx_meta = [PacketMetadata::EMPTY; 16];
-    let mut rx_buffer = [0; 6400];
-    let mut tx_meta = [PacketMetadata::EMPTY; 16];
-    let mut tx_buffer = [0; 6400];
-    let mut buf = [0u8; NTP_PACKET_SIZE];
-
-    let mut sock = UdpSocket::new(
-        stack,
-        &mut rx_meta,
-        &mut rx_buffer,
-        &mut tx_meta,
-        &mut tx_buffer,
-    );
-
-    sock.bind(45698).unwrap();
-
-    // this magic number means
-    // - use NTPv3
-    // - we are a client
-    buf[0] = 0x1b;
-    sock.send_to(&buf, ntp_server)
-        .await
-        .unwrap();
-
-    let mut response = buf;
-
-    let (_read, _ntc_peer) = sock
-        .recv_from(&mut response)
-        .await
-        .unwrap();
-
-    let transmit_seconds = u32::from_be_bytes(response[TX_SECONDS].try_into().unwrap());
-    transmit_seconds.into()
 }
 
 async fn converse(
@@ -713,54 +648,6 @@ mod heap {
 
     #[global_allocator]
     static HEAP: LockedHeap = LockedHeap::empty();
-}
-
-mod time_provider {
-    use core::time::Duration;
-    use pki_types::UnixTime;
-    use rustls::time_provider::{GetCurrentTime, TimeProvider};
-
-    use crate::{NTP_TIME, TIME_FROM_START};
-    const TIME_BETWEEN_1900_1970: u64 = 2_208_988_800;
-
-    pub fn stub() -> TimeProvider {
-        TimeProvider::new(StubTimeProvider)
-    }
-
-    #[derive(Debug)]
-    struct StubTimeProvider;
-
-    impl GetCurrentTime for StubTimeProvider {
-        fn get_current_time(&self) -> Option<UnixTime> {
-            let ntp_time = embassy_futures::block_on(async {
-                let provisory = NTP_TIME.lock().await;
-                provisory.as_ref().map(|v| *v)
-            });
-
-            let time_from_start =
-                embassy_futures::block_on(async { *TIME_FROM_START.lock().await });
-
-            let now_from_start = if let Some(now) = time_from_start {
-                now
-            } else {
-                unreachable!();
-            };
-
-            // Either the call to NTP server was successful and we can use NTP time ...
-            if let Some(now) = ntp_time {
-                let now_in_unix = now - TIME_BETWEEN_1900_1970;
-
-                Some(UnixTime::since_unix_epoch(Duration::from_secs(
-                    now_in_unix + now_from_start.elapsed().as_secs(),
-                )))
-            } else {
-                // .. or we can use the hardcoded UNIX time
-                Some(UnixTime::since_unix_epoch(Duration::from_secs(
-                    super::UNIX_TIME,
-                )))
-            }
-        }
-    }
 }
 
 mod buffers {

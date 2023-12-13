@@ -1098,6 +1098,7 @@ dependencies = [
  "embassy-time",
  "embedded-io-async",
  "getrandom",
+ "heapless",
  "hmac",
  "hpke-rs",
  "hpke-rs-crypto",
