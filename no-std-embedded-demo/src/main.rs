@@ -144,8 +144,8 @@ async fn main(
     tls_config.time_provider = time_provider::stub();
     let tls_config = Arc::new(tls_config);
 
-    let mut incoming_tls = TlsBuffer::fixed(incoming_tls);
-    let mut outgoing_tls = TlsBuffer::fixed(outgoing_tls);
+    let mut incoming_tls = TlsBuffer::init(incoming_tls);
+    let mut outgoing_tls = TlsBuffer::init(outgoing_tls);
     converse(
         &mut incoming_tls,
         false,
@@ -425,11 +425,13 @@ where
         Ok(written) => written,
 
         Err(e) => {
+            #[allow(unused_variables)]
             let InsufficientSizeError { required_size } = map_err(e)?;
-            let new_len = outgoing.used() + required_size;
-            outgoing.reserve(new_len - outgoing.capacity());
-            trace!("resized `outgoing_tls` buffer to {}B", new_len);
+            // This should not happen as the buffers are now static:
 
+            // let new_len = outgoing.used() + required_size;
+            // outgoing.reserve(new_len - outgoing.capacity());
+            // trace!("resized `outgoing_tls` buffer to {}B", new_len);
             f(outgoing.unfilled())?
         }
     };
@@ -440,29 +442,17 @@ where
 }
 
 mod buffer {
-    use alloc::vec;
-    use alloc::vec::Vec;
-    use core::slice::SliceIndex;
-
     use defmt::trace;
 
     pub struct TlsBuffer<'a> {
-        inner: Inner<'a>,
+        inner: &'a mut [u8],
         used: usize,
     }
 
     impl<'a> TlsBuffer<'a> {
-        pub fn fixed(buf: &'a mut [u8]) -> Self {
+        pub fn init(buf: &'a mut [u8]) -> Self {
             Self {
-                inner: Inner::Fixed(buf),
-                used: 0,
-            }
-        }
-
-        #[allow(dead_code)]
-        pub fn growable(initial_capacity: usize) -> TlsBuffer<'static> {
-            TlsBuffer {
-                inner: Inner::Growable(vec![0; initial_capacity]),
+                inner: buf,
                 used: 0,
             }
         }
@@ -470,10 +460,6 @@ mod buffer {
         /// Mark `num_bytes` as being filled with data
         pub fn advance(&mut self, num_bytes: usize) {
             self.used += num_bytes;
-        }
-
-        pub fn capacity(&self) -> usize {
-            self.inner.capacity()
         }
 
         pub fn clear(&mut self) {
@@ -487,7 +473,7 @@ mod buffer {
             }
 
             let used = self.used;
-            self.bytes_mut(..)
+            self.inner
                 .copy_within(num_bytes..used, 0);
             self.used -= num_bytes;
 
@@ -495,76 +481,19 @@ mod buffer {
         }
 
         pub fn filled(&mut self) -> &[u8] {
-            self.bytes(..self.used)
+            &self.inner[..self.used]
         }
 
         pub fn filled_mut(&mut self) -> &mut [u8] {
-            self.bytes_mut(..self.used)
+            &mut self.inner[..self.used]
         }
 
         pub fn unfilled(&mut self) -> &mut [u8] {
-            self.bytes_mut(self.used..)
+            &mut self.inner[self.used..]
         }
 
         pub fn used(&self) -> usize {
             self.used
-        }
-
-        pub fn reserve(&mut self, additional_bytes: usize) {
-            let new_len = self.inner.capacity() + additional_bytes;
-            self.inner.resize(new_len)
-        }
-
-        fn bytes_mut<I>(&mut self, index: I) -> &mut I::Output
-        where
-            I: SliceIndex<[u8]>,
-        {
-            self.inner
-                .bytes_mut()
-                .get_mut(index)
-                .unwrap()
-        }
-
-        fn bytes<I>(&self, index: I) -> &I::Output
-        where
-            I: SliceIndex<[u8]>,
-        {
-            self.inner.bytes().get(index).unwrap()
-        }
-    }
-
-    enum Inner<'a> {
-        Fixed(&'a mut [u8]),
-        Growable(Vec<u8>),
-    }
-
-    impl Inner<'_> {
-        fn bytes_mut(&mut self) -> &mut [u8] {
-            match self {
-                Inner::Fixed(slice) => slice,
-                Inner::Growable(vec) => vec,
-            }
-        }
-
-        fn bytes(&self) -> &[u8] {
-            match self {
-                Inner::Fixed(slice) => slice,
-                Inner::Growable(vec) => vec,
-            }
-        }
-
-        fn capacity(&self) -> usize {
-            match self {
-                Inner::Fixed(slice) => slice.len(),
-                Inner::Growable(vec) => vec.len(),
-            }
-        }
-
-        fn resize(&mut self, new_len: usize) {
-            match self {
-                Inner::Fixed(_) => panic!("not supported by fixed variant"),
-                Inner::Growable(vec) => vec.resize(new_len, 0),
-            }
         }
     }
 }
@@ -616,8 +545,15 @@ async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
         MAC_ADDR,
     );
 
-    let net_config = embassy_net::Config::dhcpv4(Default::default());
+    //let net_config = embassy_net::Config::dhcpv4(Default::default());
+    let mut dns_servers = heapless::Vec::new();
+    let _ = dns_servers.push(Ipv4Address::new(1, 1, 1, 1).into());
 
+    let net_config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
+        address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 50, 204), 24),
+        dns_servers,
+        gateway: Some(Ipv4Address::new(192, 168, 50, 1)),
+    });
     //Init network stack
     let stack = &*make_static!(Stack::new(
         device,
