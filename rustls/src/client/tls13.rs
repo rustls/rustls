@@ -221,9 +221,7 @@ pub(super) fn initial_key_share(
                 .expect("No kx groups configured")
         });
 
-    group
-        .start()
-        .map_err(|_| Error::FailedToGetRandomBytes)
+    group.start()
 }
 
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
