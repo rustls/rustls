@@ -491,9 +491,7 @@ mod client_hello {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
-        let kx = kxgroup
-            .start()
-            .map_err(|_| Error::FailedToGetRandomBytes)?;
+        let kx = kxgroup.start()?;
 
         let kse = KeyShareEntry::new(share.group, kx.pub_key());
         extensions.push(ServerExtension::KeyShare(kse));

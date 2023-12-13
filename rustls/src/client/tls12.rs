@@ -927,9 +927,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                 return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());
             }
         };
-        let kx = skxg
-            .start()
-            .map_err(|_| Error::FailedToGetRandomBytes)?;
+        let kx = skxg.start()?;
 
         // 5b.
         let mut transcript = st.transcript;
