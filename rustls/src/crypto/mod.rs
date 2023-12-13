@@ -379,6 +379,25 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// This can fail if the random source fails during ephemeral key generation.
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error>;
 
+    /// Start and complete a key exchange, in one operation.
+    ///
+    /// The default implementation for this calls `start()` and then calls
+    /// `complete()` on the result.  This is suitable for Diffie-Hellman-like
+    /// key exchange algorithms, where there is not a data dependency between
+    /// our key share (named "pub_key" in this API) and the peer's (`peer_pub_key`).
+    ///
+    /// If there is such a data dependency (like key encapsulation mechanisms), this
+    /// function should be implemented.
+    fn start_and_complete(&self, peer_pub_key: &[u8]) -> Result<CompletedKeyExchange, Error> {
+        let kx = self.start()?;
+
+        Ok(CompletedKeyExchange {
+            group: kx.group(),
+            pub_key: kx.pub_key().to_vec(),
+            secret: kx.complete(peer_pub_key)?,
+        })
+    }
+
     /// Named group the SupportedKxGroup operates in.
     ///
     /// If the `NamedGroup` enum does not have a name for the algorithm you are implementing,
@@ -461,6 +480,18 @@ pub trait ActiveKeyExchange: Send + Sync {
 
     /// Return the group being used.
     fn group(&self) -> NamedGroup;
+}
+
+/// The result from [`SupportedKxGroup::start_and_complete()`].
+pub struct CompletedKeyExchange {
+    /// Which group was used.
+    pub group: NamedGroup,
+
+    /// Our key share (sometimes a public key).
+    pub pub_key: Vec<u8>,
+
+    /// The computed shared secret.
+    pub secret: SharedSecret,
 }
 
 /// The result from [`ActiveKeyExchange::complete`].
