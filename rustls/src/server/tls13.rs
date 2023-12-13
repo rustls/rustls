@@ -447,10 +447,12 @@ mod client_hello {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
-        let kx = kxgroup.start()?;
+        let ckx = kxgroup.start_and_complete(&share.payload.0)?;
 
-        let kse = KeyShareEntry::new(share.group, kx.pub_key());
-        extensions.push(ServerExtension::KeyShare(kse));
+        extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(
+            ckx.group,
+            ckx.pub_key,
+        )));
         extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
 
         if let Some(psk_idx) = chosen_psk_idx {
@@ -496,7 +498,7 @@ mod client_hello {
         };
 
         // Do key exchange
-        let key_schedule = key_schedule_pre_handshake.into_handshake(kx, &share.payload.0)?;
+        let key_schedule = key_schedule_pre_handshake.into_handshake(ckx.secret);
 
         let handshake_hash = transcript.current_hash();
         let key_schedule = key_schedule.derive_server_handshake_secrets(
