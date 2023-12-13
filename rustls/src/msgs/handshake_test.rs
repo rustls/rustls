@@ -376,7 +376,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload::Borrowed(&[]))),
             ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
             ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
-            ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3])]),
+            ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
             ClientExtension::PresharedKeyModes(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
             ClientExtension::PresharedKey(PresharedKeyOffer {
                 identities: vec![
@@ -752,7 +752,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
             ServerExtension::SessionTicketAck,
             ServerExtension::RenegotiationInfo(PayloadU8(vec![0])),
             ServerExtension::Protocols(vec![ProtocolName::from(vec![0])]),
-            ServerExtension::KeyShare(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3])),
+            ServerExtension::KeyShare(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             ServerExtension::PresharedKey(3),
             ServerExtension::ExtendedMasterSecretAck,
             ServerExtension::CertificateStatusAck,

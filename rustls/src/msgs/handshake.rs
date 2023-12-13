@@ -350,10 +350,10 @@ pub struct KeyShareEntry {
 }
 
 impl KeyShareEntry {
-    pub fn new(group: NamedGroup, payload: &[u8]) -> Self {
+    pub fn new(group: NamedGroup, payload: impl Into<Vec<u8>>) -> Self {
         Self {
             group,
-            payload: PayloadU16::new(payload.to_vec()),
+            payload: PayloadU16::new(payload.into()),
         }
     }
 
