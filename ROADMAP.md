@@ -50,12 +50,6 @@ In rough order of priority:
   bandwidth used.
   rustls/rustls#534
 
-* **Add/extend support for TLS 1.3 Early Data**.
-  Early data allows clients to submit data before the TLS handshake is complete
-  in some cases (idempotent requests, data where replay is not a risk), improving
-  latency in the cases of, for example, HTTP requests by submitting the request
-  in parallel with the TLS handshake.
-
 * **Enforce Confidentiality / Integrity Limits**.
   The QUIC use of TLS mandates limited usage of AEAD keys. While TLS 1.3 and 1.2
   do not require this, the same kinds of issues can apply here, and we should
@@ -89,3 +83,11 @@ Delivered in 0.21:
   as part of the certificate, and there’s no infrastructure to deal with revocation
   checks.
   rustls/rustls-ffi#87
+
+Delivered in 0.20:
+
+* **Add/extend support for TLS 1.3 Early Data**.
+  Early data allows clients to submit data before the TLS handshake is complete
+  in some cases (idempotent requests, data where replay is not a risk), improving
+  latency in the cases of, for example, HTTP requests by submitting the request
+  in parallel with the TLS handshake.
