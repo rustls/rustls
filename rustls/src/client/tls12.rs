@@ -1,18 +1,19 @@
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
+use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::ProtocolVersion;
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
-use crate::msgs::base::{Payload, PayloadU8};
+use crate::msgs::base::{Payload, PayloadU16, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
-    CertificateChain, HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload,
-    ServerEcdhParams, SessionId,
+    CertificateChain, ClientDhParams, ClientEcdhParams, ClientKeyExchangeParams,
+    HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload, ServerKeyExchangeParams,
+    SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -460,8 +461,14 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
-            let crate::msgs::handshake::ServerKeyExchangeParams::Ecdh(ecdh) = kx.params;
-            debug!("ECDHE curve is {:?}", ecdh.curve_params);
+            match &kx.params {
+                ServerKeyExchangeParams::Ecdh(ecdhe) => {
+                    debug!("ECDHE curve is {:?}", ecdhe.curve_params)
+                }
+                ServerKeyExchangeParams::Dh(dhe) => {
+                    debug!("DHE params are p = {:?}, g = {:?}", dhe.dh_p, dhe.dh_g)
+                }
+            }
         }
 
         Ok(Box::new(ExpectServerDoneOrCertReq {
@@ -512,10 +519,22 @@ fn emit_certificate(
     common.send_msg(cert, false);
 }
 
-fn emit_client_kx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
+fn emit_client_kx(
+    transcript: &mut HandshakeHash,
+    kxa: KeyExchangeAlgorithm,
+    common: &mut CommonState,
+    pub_key: &[u8],
+) {
     let mut buf = Vec::new();
-    let ecpoint = PayloadU8::new(Vec::from(pub_key));
-    ecpoint.encode(&mut buf);
+    match kxa {
+        KeyExchangeAlgorithm::ECDHE => ClientKeyExchangeParams::Ecdh(ClientEcdhParams {
+            public: PayloadU8::new(pub_key.to_vec()),
+        }),
+        KeyExchangeAlgorithm::DHE => ClientKeyExchangeParams::Dh(ClientDhParams {
+            public: PayloadU16::new(pub_key.to_vec()),
+        }),
+    }
+    .encode(&mut buf);
     let pubkey = Payload::new(buf);
 
     let ckx = Message {
@@ -894,9 +913,14 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         }
 
         // 5a.
-        let ecdh_params =
-            tls12::decode_kx_params::<ServerEcdhParams>(cx.common, &st.server_kx.kx_params)?;
-        let named_group = ecdh_params.curve_params.named_group;
+        let kx_params = tls12::decode_kx_params::<ServerKeyExchangeParams>(
+            st.suite.kx,
+            cx.common,
+            &st.server_kx.kx_params,
+        )?;
+        let named_group = kx_params
+            .named_group()
+            .ok_or(PeerMisbehaved::SelectedUnofferedKxGroup)?;
         let skxg = match st.config.find_kx_group(named_group) {
             Some(skxg) => skxg,
             None => {
@@ -909,7 +933,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
         // 5b.
         let mut transcript = st.transcript;
-        emit_client_kx(&mut transcript, cx.common, kx.pub_key());
+        emit_client_kx(&mut transcript, st.suite.kx, cx.common, kx.pub_key());
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = st
             .using_ems
@@ -926,7 +950,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         // 5e. Now commit secrets.
         let secrets = ConnectionSecrets::from_key_exchange(
             kx,
-            &ecdh_params.public.0,
+            kx_params.pub_key(),
             ems_seed,
             st.randoms,
             suite,

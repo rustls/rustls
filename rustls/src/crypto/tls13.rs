@@ -1,6 +1,7 @@
 use super::hmac;
 use super::ActiveKeyExchange;
 use crate::error::Error;
+use crate::version::TLS13;
 
 use alloc::boxed::Box;
 use zeroize::Zeroize;
@@ -160,7 +161,7 @@ pub trait Hkdf: Send + Sync {
     ) -> Result<Box<dyn HkdfExpander>, Error> {
         Ok(self.extract_from_secret(
             salt,
-            kx.complete(peer_pub_key)?
+            kx.complete_for_tls_version(peer_pub_key, &TLS13)?
                 .secret_bytes(),
         ))
     }
