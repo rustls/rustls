@@ -6,7 +6,7 @@ use crate::crypto::hash;
 use crate::enums::{AlertDescription, SignatureScheme};
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::KeyExchangeAlgorithm;
+use crate::msgs::handshake::{KeyExchangeAlgorithm, KxDecode};
 use crate::suites::{CipherSuiteCommon, PartiallyExtractedSecrets, SupportedCipherSuite};
 
 use alloc::boxed::Box;
@@ -320,14 +320,15 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
-pub(crate) fn decode_kx_params<'a, T: Codec<'a>>(
+pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
+    kx_algorithm: KeyExchangeAlgorithm,
     common: &mut CommonState,
     kx_params: &'a [u8],
 ) -> Result<T, Error> {
     let mut rd = Reader::init(kx_params);
-    let ecdh_params = T::read(&mut rd)?;
+    let kx_params = T::decode(&mut rd, kx_algorithm)?;
     match rd.any_left() {
-        false => Ok(ecdh_params),
+        false => Ok(kx_params),
         true => Err(common.send_fatal_alert(
             AlertDescription::DecodeError,
             InvalidMessage::InvalidDhParams,
@@ -341,8 +342,8 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 mod tests {
     use super::*;
     use crate::common_state::{CommonState, Side};
-    use crate::msgs::handshake::{ClientEcdhParams, ServerEcdhParams};
-    use crate::test_provider::kx_group::X25519;
+    use crate::msgs::handshake::ServerEcdhParams;
+    use crate::{msgs::handshake::ServerKeyExchangeParams, test_provider::kx_group::X25519};
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
@@ -353,12 +354,22 @@ mod tests {
         server_buf.push(34);
 
         let mut common = CommonState::new(Side::Client);
-        assert!(decode_kx_params::<ServerEcdhParams>(&mut common, &server_buf).is_err());
+        assert!(decode_kx_params::<ServerKeyExchangeParams>(
+            KeyExchangeAlgorithm::ECDHE,
+            &mut common,
+            &server_buf
+        )
+        .is_err());
     }
 
     #[test]
     fn client_ecdhe_invalid() {
         let mut common = CommonState::new(Side::Server);
-        assert!(decode_kx_params::<ClientEcdhParams>(&mut common, &[34]).is_err());
+        assert!(decode_kx_params::<ServerKeyExchangeParams>(
+            KeyExchangeAlgorithm::ECDHE,
+            &mut common,
+            &[34],
+        )
+        .is_err());
     }
 }

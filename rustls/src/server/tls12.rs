@@ -12,7 +12,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
-    CertificateChain, ClientEcdhParams, HandshakeMessagePayload, HandshakePayload,
+    CertificateChain, ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload,
 };
 use crate::msgs::handshake::{NewSessionTicketPayload, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
@@ -40,14 +40,12 @@ pub(super) use client_hello::CompleteClientHelloHandling;
 mod client_hello {
     use pki_types::CertificateDer;
 
-    use crate::crypto::SupportedKxGroup;
+    use crate::crypto::{KeyExchangeAlgorithm, SupportedKxGroup};
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::CertificateStatus;
-    use crate::msgs::handshake::{
-        CertificateChain, ServerEcdhParams, ServerKeyExchange, ServerKeyExchangeParams,
-    };
+    use crate::msgs::handshake::{CertificateChain, ServerKeyExchange, ServerKeyExchangeParams};
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
     use crate::msgs::handshake::{ClientExtension, SessionId};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
@@ -260,29 +258,52 @@ mod client_hello {
             client_hello: &ClientHelloPayload,
             cx: &mut ServerContext<'_>,
         ) -> Result<&'static dyn SupportedKxGroup, Error> {
-            let peer_groups_ext = client_hello
-                .namedgroups_extension()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NamedGroupsExtensionRequired,
-                    )
-                })?;
+            let peer_groups_ext = client_hello.namedgroups_extension();
+
+            if peer_groups_ext.is_none() && self.suite.kx == KeyExchangeAlgorithm::ECDHE {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::NamedGroupsExtensionRequired,
+                ));
+            }
 
             trace!("namedgroups {:?}", peer_groups_ext);
 
-            self.config
-                .provider
-                .kx_groups
+            let peer_kx_groups = peer_groups_ext.unwrap_or(&[]);
+            let our_kx_groups = &self.config.provider.kx_groups;
+
+            let matching_kx_group = our_kx_groups.iter().find(|skxg| {
+                skxg.name().key_exchange_algorithm() == self.suite.kx
+                    && peer_kx_groups.contains(&skxg.name())
+            });
+            if let Some(&kx_group) = matching_kx_group {
+                return Ok(kx_group);
+            }
+
+            let mut send_err = || {
+                cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::NoKxGroupsInCommon,
+                )
+            };
+
+            // If kx for the selected cipher suite is DHE and no DHE groups are specified in the extension,
+            // the server is free to choose DHE params, we choose the first DHE kx group of the provider.
+            use KeyExchangeAlgorithm::DHE;
+            let we_get_to_choose_dhe_group = self.suite.kx == DHE
+                && !peer_kx_groups
+                    .iter()
+                    .any(|g| g.key_exchange_algorithm() == DHE);
+
+            if !we_get_to_choose_dhe_group {
+                return Err(send_err());
+            }
+            trace!("No DHE groups specified in ClientHello groups extension, server choosing DHE parameters");
+            our_kx_groups
                 .iter()
-                .find(|skxg| peer_groups_ext.contains(&skxg.name()))
+                .find(|skxg| skxg.name().key_exchange_algorithm() == DHE)
                 .cloned()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NoKxGroupsInCommon,
-                    )
-                })
+                .ok_or_else(send_err)
         }
 
         fn start_resumption(
@@ -438,7 +459,7 @@ mod client_hello {
         let kx = selected_group
             .start()
             .map_err(|_| Error::FailedToGetRandomBytes)?;
-        let kx_params = ServerEcdhParams::new(&*kx);
+        let kx_params = ServerKeyExchangeParams::new(&*kx);
 
         let mut msg = Vec::new();
         msg.extend(randoms.client);
@@ -451,8 +472,8 @@ mod client_hello {
         let sigscheme = signer.scheme();
         let sig = signer.sign(&msg)?;
 
-        let skx = ServerKeyExchangePayload::Known(ServerKeyExchange {
-            params: ServerKeyExchangeParams::Ecdh(kx_params),
+        let skx = ServerKeyExchangePayload::from(ServerKeyExchange {
+            params: kx_params,
             dss: DigitallySignedStruct::new(sigscheme, sig),
         });
 
@@ -637,11 +658,14 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
-        let peer_kx_params =
-            tls12::decode_kx_params::<ClientEcdhParams>(cx.common, client_kx.bytes())?;
+        let peer_kx_params = tls12::decode_kx_params::<ClientKeyExchangeParams>(
+            self.suite.kx,
+            cx.common,
+            client_kx.bytes(),
+        )?;
         let secrets = ConnectionSecrets::from_key_exchange(
             self.server_kx,
-            &peer_kx_params.public.0,
+            peer_kx_params.pub_key(),
             ems_seed,
             self.randoms,
             self.suite,

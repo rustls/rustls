@@ -10,6 +10,7 @@ use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls12::Tls12CipherSuite;
+use crate::version::TLS12;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -442,7 +443,7 @@ impl Prf for Tls12Prf {
     ) -> Result<(), Error> {
         self.for_secret(
             output,
-            kx.complete(peer_pub_key)?
+            kx.complete_for_tls_version(peer_pub_key, &TLS12)?
                 .secret_bytes(),
             label,
             seed,

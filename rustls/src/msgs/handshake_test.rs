@@ -20,7 +20,7 @@ use crate::verify::DigitallySignedStruct;
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::handshake::{ServerKeyExchange, ServerKeyExchangeParams};
+use super::handshake::{ServerDhParams, ServerKeyExchange, ServerKeyExchangeParams};
 
 #[test]
 fn rejects_short_random() {
@@ -822,6 +822,17 @@ fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
     })
 }
 
+fn get_sample_serverkeyexchangepayload_dhe() -> ServerKeyExchangePayload {
+    ServerKeyExchangePayload::Known(ServerKeyExchange {
+        params: ServerKeyExchangeParams::Dh(ServerDhParams {
+            dh_p: PayloadU16(vec![1, 2, 3]),
+            dh_g: PayloadU16(vec![2]),
+            dh_Ys: PayloadU16(vec![1, 2]),
+        }),
+        dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
+    })
+}
+
 fn get_sample_serverkeyexchangepayload_unknown() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Unknown(Payload::Borrowed(&[1, 2, 3]))
 }
@@ -907,6 +918,10 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             payload: HandshakePayload::ServerKeyExchange(
                 get_sample_serverkeyexchangepayload_ecdhe(),
             ),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(get_sample_serverkeyexchangepayload_dhe()),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
@@ -1035,6 +1050,10 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             payload: HandshakePayload::ServerKeyExchange(
                 get_sample_serverkeyexchangepayload_ecdhe(),
             ),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(get_sample_serverkeyexchangepayload_dhe()),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,

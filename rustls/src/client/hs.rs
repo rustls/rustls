@@ -3,7 +3,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::ActiveKeyExchange;
+use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -216,7 +216,6 @@ fn emit_client_hello_for_retry(
 
     let mut exts = vec![
         ClientExtension::SupportedVersions(supported_versions),
-        ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
         ClientExtension::NamedGroups(
             config
                 .provider
@@ -233,6 +232,18 @@ fn emit_client_hello_for_retry(
         ClientExtension::ExtendedMasterSecretRequest,
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
+
+    // Send the ECPointFormat extension only if we are proposing ECDHE
+    if config
+        .provider
+        .kx_groups
+        .iter()
+        .any(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::ECDHE)
+    {
+        exts.push(ClientExtension::EcPointFormats(
+            ECPointFormat::SUPPORTED.to_vec(),
+        ));
+    }
 
     if let (ServerName::DnsName(dns), true) = (&input.server_name, config.enable_sni) {
         // We only want to send the SNI extension if the server name contains a DNS name.

@@ -1,5 +1,5 @@
 use crate::sign::SigningKey;
-use crate::suites;
+use crate::{suites, ProtocolVersion, SupportedProtocolVersion};
 use crate::{Error, NamedGroup};
 
 use alloc::boxed::Box;
@@ -39,6 +39,7 @@ pub mod hash;
 /// HMAC interfaces.
 pub mod hmac;
 
+#[cfg(feature = "tls12")]
 /// Cryptography specific to TLS1.2.
 pub mod tls12;
 
@@ -165,6 +166,9 @@ pub struct CryptoProvider {
     /// is the highest priority.
     ///
     /// The `SupportedCipherSuite` type carries both configuration and implementation.
+    ///
+    /// A valid `CryptoProvider` must ensure that all cipher suites are accompanied by at least
+    /// one matching key exchange group in [`CryptoProvider::kx_groups`].
     pub cipher_suites: Vec<suites::SupportedCipherSuite>,
 
     /// List of supported key exchange groups, in preference order -- the
@@ -212,6 +216,12 @@ impl CryptoProvider {
             && signature_verification_algorithms.fips()
             && secure_random.fips()
             && key_provider.fips()
+    }
+
+    pub(crate) fn supported_kx_group_names(&self) -> impl Iterator<Item = NamedGroup> + '_ {
+        self.kx_groups
+            .iter()
+            .map(|skxg| skxg.name())
     }
 }
 
@@ -304,16 +314,64 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// mis-encoded, or an invalid public key (such as, but not limited to, being
     /// in a small order subgroup).
     ///
+    /// If the key exchange algorithm is FFDHE, the result must be left-padded with zeros,
+    /// as required by [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446#section-7.4.1)
+    /// (see [`complete_for_tls_version()`](Self::complete_for_tls_version) for more details).
+    ///
     /// The shared secret is returned as a [`SharedSecret`] which can be constructed
     /// from a `&[u8]`.
     ///
     /// This consumes and so terminates the [`ActiveKeyExchange`].
     fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error>;
 
+    /// Completes the key exchange for the given TLS version, given the peer's public key.
+    ///
+    /// Note that finite-field Diffie–Hellman key exchange has different requirements for the derived
+    /// shared secret in TLS 1.2 and TLS 1.3 (ECDHE key exchange is the same in TLS 1.2 and TLS 1.3):
+    ///
+    /// In TLS 1.2, the calculated secret is required to be stripped of leading zeros
+    /// [(RFC 5246)](https://www.rfc-editor.org/rfc/rfc5246#section-8.1.2).
+    ///
+    /// In TLS 1.3, the calculated secret is required to be padded with leading zeros to be the same
+    /// byte-length as the group modulus [(RFC 8446)](https://www.rfc-editor.org/rfc/rfc8446#section-7.4.1).
+    ///
+    /// The default implementation of this method delegates to [`complete()`](Self::complete) assuming it is
+    /// implemented for TLS 1.3 (i.e., for FFDHE KX, removes padding as needed). Implementers of this trait
+    /// are encouraged to just implement [`complete()`](Self::complete) assuming TLS 1.3, and let the default
+    /// implementation of this method handle TLS 1.2-specific requirements.
+    ///
+    /// This method must return an error if `peer_pub_key` is invalid: either
+    /// mis-encoded, or an invalid public key (such as, but not limited to, being
+    /// in a small order subgroup).
+    ///
+    /// The shared secret is returned as a [`SharedSecret`] which can be constructed
+    /// from a `&[u8]`.
+    ///
+    /// This consumes and so terminates the [`ActiveKeyExchange`].
+    fn complete_for_tls_version(
+        self: Box<Self>,
+        peer_pub_key: &[u8],
+        tls_version: &SupportedProtocolVersion,
+    ) -> Result<SharedSecret, Error> {
+        if tls_version.version != ProtocolVersion::TLSv1_2 {
+            return self.complete(peer_pub_key);
+        }
+
+        let group = self.group();
+        let mut complete_res = self.complete(peer_pub_key)?;
+        if group.key_exchange_algorithm() == KeyExchangeAlgorithm::DHE {
+            complete_res.strip_leading_zeros();
+        }
+        Ok(complete_res)
+    }
+
     /// Return the public key being used.
     ///
-    /// The encoding required is defined in
+    /// For ECDHE, the encoding required is defined in
     /// [RFC8446 section 4.2.8.2](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.2).
+    ///
+    /// For FFDHE, the encoding required is defined in
+    /// [RFC8446 section 4.2.8.1](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.1).
     fn pub_key(&self) -> &[u8];
 
     /// Return the group being used.
@@ -323,12 +381,27 @@ pub trait ActiveKeyExchange: Send + Sync {
 /// The result from [`ActiveKeyExchange::complete`].
 pub struct SharedSecret {
     buf: Vec<u8>,
+    offset: usize,
 }
 
 impl SharedSecret {
     /// Returns the shared secret as a slice of bytes.
     pub fn secret_bytes(&self) -> &[u8] {
-        &self.buf
+        &self.buf[self.offset..]
+    }
+
+    /// Removes leading zeros from `secret_bytes()` by adjusting the `offset`.
+    ///
+    /// This function does not re-allocate.
+    fn strip_leading_zeros(&mut self) {
+        let start = self
+            .secret_bytes()
+            .iter()
+            .enumerate()
+            .find(|(_i, x)| **x != 0)
+            .map(|(i, _x)| i)
+            .unwrap_or(self.secret_bytes().len());
+        self.offset += start;
     }
 }
 
@@ -340,7 +413,10 @@ impl Drop for SharedSecret {
 
 impl From<&[u8]> for SharedSecret {
     fn from(source: &[u8]) -> Self {
-        Self { buf: source.to_vec() }
+        Self {
+            buf: source.to_vec(),
+            offset: 0,
+        }
     }
 }
 
@@ -380,4 +456,27 @@ pub(crate) fn default_provider() -> CryptoProvider {
 #[cfg(feature = "fips")]
 pub fn default_fips_provider() -> CryptoProvider {
     crate::crypto::aws_lc_rs::default_provider()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SharedSecret;
+
+    #[test]
+    fn test_shared_secret_strip_leading_zeros() {
+        let test_cases = [
+            (vec![0, 1], vec![1]),
+            (vec![1], vec![1]),
+            (vec![1, 0, 2], vec![1, 0, 2]),
+            (vec![0, 0, 1, 2], vec![1, 2]),
+            (vec![0, 0, 0], vec![]),
+            (vec![], vec![]),
+        ];
+        for (buf, expected) in test_cases {
+            let mut secret = SharedSecret::from(&buf[..]);
+            assert_eq!(secret.secret_bytes(), buf);
+            secret.strip_leading_zeros();
+            assert_eq!(secret.secret_bytes(), expected);
+        }
+    }
 }
