@@ -118,6 +118,10 @@ jobs:
       - name: Check provider-example client
         run: cargo run --locked -p rustls-provider-example --example client
 
+      - name: Check rustls-post-quantum client
+        run: cargo run --locked -p rustls-post-quantum --example client
+        #| grep 'You are using <em>X25519Kyber768Draft00</em>'
+
 
   feature-powerset:
     name: Feature Powerset
