@@ -1,3 +1,24 @@
+//! This is an example server that uses rustls for TLS, and [mio] for I/O.
+//!
+//! It uses command line flags to demonstrate configuring a TLS server that may:
+//!  * Specify supported TLS protocol versions
+//!  * Customize ciper suite selection
+//!  * Perform optional or mandatory client certificate authentication
+//!  * Check client certificates for revocation status with CRLs
+//!  * Support session tickets
+//!  * Staple an OCSP response
+//!
+//! See [`USAGE`] for more details.
+//!
+//! You may set the `SSLKEYLOGFILE` env var when using this example to write a
+//! log file with key material (insecure) for debugging purposes. See [`rustls::KeyLog`]
+//! for more information.
+//!
+//! Note that `unwrap()` is used to deal with networking errors; this is not something
+//! that is sensible outside of example code.
+//!
+//! [mio]: https://docs.rs/mio/latest/mio/
+
 use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
