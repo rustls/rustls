@@ -68,7 +68,7 @@ impl MessageDeframer {
             // If so, deframe it and place the message onto the frames output queue.
             let mut rd = codec::ReaderMut::init(buffer.filled_get_mut(start..));
             let m = match BorrowedOpaqueMessage::read(&mut rd) {
-                Ok(m) => m.into_owned(),
+                Ok(m) => m,
                 Err(msg_err) => {
                     let err_kind = match msg_err {
                         MessageError::TooShortForHeader | MessageError::TooShortForLength => {
@@ -101,7 +101,7 @@ impl MessageDeframer {
                 ContentType::Alert
                     if version_is_tls13
                         && !record_layer.has_decrypted()
-                        && m.payload().len() <= 2 =>
+                        && m.payload.len() <= 2 =>
                 {
                     true
                 }
@@ -109,13 +109,14 @@ impl MessageDeframer {
                 _ => false,
             };
             if self.joining_hs.is_none() && allowed_plaintext {
+                let message = m.into_plain_message().into_owned();
                 // This is unencrypted. We check the contents later.
                 buffer.queue_discard(end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
                     trial_decryption_finished: false,
-                    message: m.into_plain_message(),
+                    message,
                 }));
             }
 

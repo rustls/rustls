@@ -84,9 +84,8 @@ impl MessagePayload {
 /// # Decryption
 /// Internally the message payload is stored as a `Vec<u8>`; this can by mutably borrowed with
 /// [`OpaqueMessage::payload_mut()`].  This is useful for decrypting a message in-place.
-/// After the message is decrypted, call [`OpaqueMessage::into_plain_message()`] or
-/// [`OpaqueMessage::into_tls13_unpadded_message()`] (depending on the
-/// protocol version).
+/// After the message is decrypted, call [`OpaqueMessage::into_plain_message()`] or borrow this
+/// message and call [`BorrowedOpaqueMessage::into_tls13_unpadded_message`].
 #[derive(Clone, Debug)]
 pub struct OpaqueMessage {
     pub typ: ContentType,
@@ -154,28 +153,13 @@ impl OpaqueMessage {
         }
     }
 
-    /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
-    ///
-    /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
-    /// or the message (post-unpadding) is too long.
-    pub fn into_tls13_unpadded_message(mut self) -> Result<PlainMessage, Error> {
-        let payload = &mut self.payload.0;
-
-        if payload.len() > MAX_FRAGMENT_LEN + 1 {
-            return Err(Error::PeerSentOversizedRecord);
+    #[cfg(test)]
+    pub(crate) fn borrow(&mut self) -> BorrowedOpaqueMessage {
+        BorrowedOpaqueMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: BorrowedPayload::new(self.payload_mut()),
         }
-
-        self.typ = unpad_tls13(payload);
-        if self.typ == ContentType::Unknown(0) {
-            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
-        }
-
-        if payload.len() > MAX_FRAGMENT_LEN {
-            return Err(Error::PeerSentOversizedRecord);
-        }
-
-        self.version = ProtocolVersion::TLSv1_3;
-        Ok(self.into_plain_message())
     }
 
     /// This is the maximum on-the-wire size of a TLSCiphertext.
@@ -197,8 +181,42 @@ pub struct BorrowedOpaqueMessage<'a> {
     pub payload: BorrowedPayload<'a>,
 }
 
-#[allow(dead_code)]
 impl<'a> BorrowedOpaqueMessage<'a> {
+    /// Force conversion into a plaintext message.
+    ///
+    /// See [`OpaqueMessage::into_plain_message`] for more information
+    pub fn into_plain_message(self) -> BorrowedPlainMessage<'a> {
+        BorrowedPlainMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: self.payload.into_inner(),
+        }
+    }
+
+    /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
+    ///
+    /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
+    /// or the message (post-unpadding) is too long.
+    pub fn into_tls13_unpadded_message(mut self) -> Result<BorrowedPlainMessage<'a>, Error> {
+        let payload = &mut self.payload;
+
+        if payload.len() > MAX_FRAGMENT_LEN + 1 {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.typ = unpad_tls13_payload(payload);
+        if self.typ == ContentType::Unknown(0) {
+            return Err(PeerMisbehaved::IllegalTlsInnerPlaintext.into());
+        }
+
+        if payload.len() > MAX_FRAGMENT_LEN {
+            return Err(Error::PeerSentOversizedRecord);
+        }
+
+        self.version = ProtocolVersion::TLSv1_3;
+        Ok(self.into_plain_message())
+    }
+
     pub(crate) fn read(r: &mut ReaderMut<'a>) -> Result<Self, MessageError> {
         let (typ, version, len) = r.as_reader(read_opaque_message_header)?;
 
@@ -212,19 +230,6 @@ impl<'a> BorrowedOpaqueMessage<'a> {
             version,
             payload,
         })
-    }
-
-    pub(crate) fn into_owned(self) -> OpaqueMessage {
-        let Self {
-            typ,
-            version,
-            payload,
-        } = self;
-        OpaqueMessage {
-            typ,
-            version,
-            payload: Payload::new(&*payload),
-        }
     }
 }
 
@@ -268,9 +273,9 @@ fn read_opaque_message_header(
 /// the content type, which is returned.  See RFC8446 s5.2.
 ///
 /// ContentType(0) is returned if the message payload is empty or all zeroes.
-fn unpad_tls13(v: &mut Vec<u8>) -> ContentType {
+fn unpad_tls13_payload(p: &mut BorrowedPayload) -> ContentType {
     loop {
-        match v.pop() {
+        match p.pop() {
             Some(0) => {}
             Some(content_type) => return ContentType::from(content_type),
             None => return ContentType::Unknown(0),
@@ -385,6 +390,7 @@ impl TryFrom<PlainMessage> for Message {
 ///
 /// This type also cannot decode its internals and
 /// cannot be read/encoded; only `OpaqueMessage` can do that.
+#[derive(Debug)]
 pub struct BorrowedPlainMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
@@ -402,6 +408,19 @@ impl<'a> BorrowedPlainMessage<'a> {
 
     pub fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
         OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload.len())
+    }
+
+    pub(crate) fn into_owned(self) -> PlainMessage {
+        let Self {
+            typ,
+            version,
+            payload,
+        } = self;
+        PlainMessage {
+            typ,
+            version,
+            payload: Payload::new(payload),
+        }
     }
 }
 
