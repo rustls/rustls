@@ -127,7 +127,11 @@ pub struct KeyBlockShape {
 pub trait MessageDecrypter: Send + Sync {
     /// Decrypt the given TLS message `msg`, using the sequence number
     /// `seq` which can be used to derive a unique [`Nonce`].
-    fn decrypt(&mut self, msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error>;
+    fn decrypt<'a>(
+        &mut self,
+        msg: BorrowedOpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<BorrowedPlainMessage<'a>, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
@@ -317,7 +321,11 @@ impl MessageEncrypter for InvalidMessageEncrypter {
 struct InvalidMessageDecrypter {}
 
 impl MessageDecrypter for InvalidMessageDecrypter {
-    fn decrypt(&mut self, _m: OpaqueMessage, _seq: u64) -> Result<PlainMessage, Error> {
+    fn decrypt<'a>(
+        &mut self,
+        _m: BorrowedOpaqueMessage<'a>,
+        _seq: u64,
+    ) -> Result<BorrowedPlainMessage<'a>, Error> {
         Err(Error::DecryptError)
     }
 }

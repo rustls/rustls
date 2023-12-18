@@ -3,14 +3,14 @@ use alloc::vec::Vec;
 
 use crate::crypto;
 use crate::crypto::cipher::{
-    make_tls13_aad, AeadKey, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm,
-    UnsupportedOperationError,
+    make_tls13_aad, AeadKey, BorrowedOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,
+    Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec::Codec;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage, PlainMessage};
+use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls13::Tls13CipherSuite;
 
@@ -207,8 +207,12 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 }
 
 impl MessageDecrypter for Tls13MessageDecrypter {
-    fn decrypt(&mut self, mut msg: OpaqueMessage, seq: u64) -> Result<PlainMessage, Error> {
-        let payload = msg.payload_mut();
+    fn decrypt<'a>(
+        &mut self,
+        mut msg: BorrowedOpaqueMessage<'a>,
+        seq: u64,
+    ) -> Result<BorrowedPlainMessage<'a>, Error> {
+        let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
         }
