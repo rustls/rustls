@@ -60,8 +60,9 @@ handshake_no_resume_ring_1.3_rsa_aes,1010150,1400602,936029
 ### Comparing results from an instruction count benchmark run
 
 Use `cargo run --release -- compare foo bar`. It will output a report using GitHub-flavored markdown
-(used by the CI itself to give feedback about PRs). We currently consider differences of 0.2% to be
-significant, but might tweak it in the future after we gain experience with the benchmarking setup.
+for local use. Note that not all reported differences are significant. When you need to know if a
+result is significant you should rely on the CI benchmark report, which automatically categorizes
+results into significant / negligible based on historic data.
 
 ### Supported scenarios
 
