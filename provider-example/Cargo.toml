@@ -28,7 +28,7 @@ x25519-dalek = "2"
 [dev-dependencies]
 env_logger = "0.10"
 hex = "0.4.3"
-rcgen = "0.11.1"
+rcgen = { version = "0.12", features = ["ring"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 webpki-roots = "0.26"
