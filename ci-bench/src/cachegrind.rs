@@ -284,19 +284,8 @@ pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result
         )
     }
 
-    let annotated =
+    let diff =
         String::from_utf8(cg_annotate.stdout).context("cg_annotate produced invalid UTF8")?;
-
-    // Discard lines before the first `Ir` header
-    let mut diff = String::new();
-    for line in annotated
-        .trim()
-        .lines()
-        .skip_while(|l| l.trim() != "Ir")
-    {
-        diff.push_str(line);
-        diff.push('\n');
-    }
 
     fs::remove_file(tmp_path).ok();
 
