@@ -56,9 +56,6 @@ const TRANSFER_PLAINTEXT_SIZE: usize = 1024 * 1024 * 10; // 10 MB
 /// `HashMap` by a `FxHashMap`, which brings the noise down to acceptable levels in a single run).
 const RESUMED_HANDSHAKE_RUNS: usize = 30;
 
-/// The threshold at which instruction count changes are considered relevant
-const CHANGE_THRESHOLD: f64 = 0.002; // 0.2%
-
 /// The name of the file where the instruction counts are stored after a `run-all` run
 const ICOUNTS_FILENAME: &str = "icounts.csv";
 
@@ -277,13 +274,6 @@ fn main() -> anyhow::Result<()> {
             let candidate = read_results(&candidate_dir.join(ICOUNTS_FILENAME))?;
             let result = compare_results(&baseline_dir, &candidate_dir, &baseline, &candidate)?;
             print_report(&result);
-
-            if !result.noteworthy.is_empty() {
-                // Signal to the parent process that there are noteworthy instruction count
-                // differences (exit code 1 is already used when main returns an error)
-                eprintln!("Noteworthy instruction count differences found. Check the job summary for details.");
-                std::process::exit(2);
-            }
         }
     }
 
@@ -660,16 +650,14 @@ async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyh
 
 /// The results of a comparison between two `run-all` executions
 struct CompareResult {
-    /// Results that probably indicate a real change in performance and should be highlighted.
+    /// Results for benchmark scenarios we know are fairly deterministic.
     ///
     /// The string is a detailed diff between the instruction counts obtained from cachegrind.
-    noteworthy: Vec<(Diff, String)>,
-    /// Results within the noise threshold
-    negligible: Vec<Diff>,
+    diffs: Vec<(Diff, String)>,
+    /// Results for benchmark scenarios we know are extremely non-deterministic
+    known_noisy: Vec<Diff>,
     /// Benchmark scenarios present in the candidate but missing in the baseline
     missing_in_baseline: Vec<String>,
-    /// Benchmark scenarios we know are extremely non-deterministic.
-    known_noisy: Vec<Diff>,
 }
 
 /// Contains information about instruction counts and their difference for a specific scenario
@@ -751,17 +739,14 @@ fn compare_results(
             .total_cmp(&diff1.diff_ratio.abs())
     });
 
-    let (noteworthy, negligible) = split_on_threshold(&diffs);
-
-    let mut noteworthy_with_details = Vec::new();
-    for diff in noteworthy {
+    let mut diffs_with_cachegrind_diff = Vec::new();
+    for diff in diffs {
         let detailed_diff = cachegrind::diff(baseline_dir, candidate_dir, &diff.scenario)?;
-        noteworthy_with_details.push((diff, detailed_diff));
+        diffs_with_cachegrind_diff.push((diff, detailed_diff));
     }
 
     Ok(CompareResult {
-        noteworthy: noteworthy_with_details,
-        negligible,
+        diffs: diffs_with_cachegrind_diff,
         missing_in_baseline: missing,
         known_noisy,
     })
@@ -797,38 +782,25 @@ fn print_report(result: &CompareResult) {
         }
     }
 
-    println!("## Noteworthy instruction count differences");
-    if result.noteworthy.is_empty() {
-        println!(
-            "_There are no noteworthy instruction count differences (i.e. above {}%)_",
-            CHANGE_THRESHOLD * 100.0
-        );
+    println!("## Instruction count differences");
+    if result.diffs.is_empty() {
+        println!("_There are no instruction count differences_");
     } else {
         table(
             result
-                .noteworthy
+                .diffs
                 .iter()
                 .map(|(diff, _)| diff),
             true,
         );
         println!("<details>");
         println!("<summary>Details per scenario</summary>\n");
-        for (diff, detailed_diff) in &result.noteworthy {
+        for (diff, detailed_diff) in &result.diffs {
             println!("#### {}", diff.scenario);
             println!("```");
             println!("{detailed_diff}");
             println!("```");
         }
-        println!("</details>\n")
-    }
-
-    println!("## Other instruction count differences");
-    if result.negligible.is_empty() {
-        println!("_There are no other instruction count differences_");
-    } else {
-        println!("<details>");
-        println!("<summary>Click to expand</summary>\n");
-        table(result.negligible.iter(), false);
         println!("</details>\n")
     }
 
@@ -838,23 +810,6 @@ fn print_report(result: &CompareResult) {
         println!("<summary>Click to expand</summary>\n");
         table(result.known_noisy.iter(), false);
         println!("</details>\n")
-    }
-}
-
-/// Splits the diffs into two `Vec`s, the first one containing the diffs that exceed the threshold,
-/// the second one containing the rest.
-///
-/// Assumes that the diff slice is sorted by `diff_ratio` in descending order.
-fn split_on_threshold(diffs: &[Diff]) -> (Vec<Diff>, Vec<Diff>) {
-    match diffs
-        .iter()
-        .position(|diff| diff.diff_ratio.abs() < CHANGE_THRESHOLD)
-    {
-        None => (diffs.to_vec(), Vec::new()),
-        Some(first_below_threshold) => (
-            diffs[..first_below_threshold].to_vec(),
-            diffs[first_below_threshold..].to_vec(),
-        ),
     }
 }
 
