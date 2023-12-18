@@ -154,19 +154,21 @@ impl MessageDeframer {
 
             // If it's not a handshake message, just return it -- no joining necessary.
             if msg.typ != ContentType::Handshake {
+                let message = msg.into_owned();
                 let end = start + rd.used();
                 buffer.queue_discard(end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
                     trial_decryption_finished: false,
-                    message: msg,
+                    message,
                 }));
             }
 
             // If we don't know the payload size yet or if the payload size is larger
             // than the currently buffered payload, we need to wait for more data.
-            match self.append_hs::<_, false>(msg.version, &msg.payload.0, end, buffer)? {
+            let payload = msg.payload.to_vec();
+            match self.append_hs::<_, false>(msg.version, &payload, end, buffer)? {
                 HandshakePayloadState::Blocked => return Ok(None),
                 HandshakePayloadState::Complete(len) => break len,
                 HandshakePayloadState::Continue => continue,
