@@ -213,6 +213,19 @@ impl<'a> BorrowedOpaqueMessage<'a> {
             payload,
         })
     }
+
+    pub(crate) fn into_owned(self) -> OpaqueMessage {
+        let Self {
+            typ,
+            version,
+            payload,
+        } = self;
+        OpaqueMessage {
+            typ,
+            version,
+            payload: Payload::new(&*payload),
+        }
+    }
 }
 
 fn read_opaque_message_header(

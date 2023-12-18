@@ -123,7 +123,6 @@ impl<'a> ReaderMut<'a> {
         Some(taken)
     }
 
-    #[allow(dead_code)] // TODO(@cpu): Remove in "use BorrowedOpaqueMessage in MessageDeframer".
     pub(crate) fn used(&self) -> usize {
         self.used
     }
