@@ -39,7 +39,7 @@ pub fn verify_server_cert_signed_by_trust_anchor(
     )
 }
 
-/// Verify that the `end_entity` has a name or alternative name matching the `server_name`
+/// Verify that the `end_entity` has an alternative name matching the `server_name`
 /// note: this only verifies the name and should be used in conjuction with more verification
 /// like [verify_server_cert_signed_by_trust_anchor]
 pub fn verify_server_name(
