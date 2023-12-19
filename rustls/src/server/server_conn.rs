@@ -639,6 +639,7 @@ impl DerefMut for ServerConnection {
     }
 }
 
+#[cfg(feature = "std")]
 impl From<ServerConnection> for crate::Connection {
     fn from(conn: ServerConnection) -> Self {
         Self::Server(conn)
