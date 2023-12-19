@@ -204,22 +204,6 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
 }
 
-/// What mechanisms to support for resuming a TLS 1.2 session.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Tls12Resumption {
-    /// Disable 1.2 resumption.
-    Disabled,
-    /// Support 1.2 resumption using session ids only.
-    SessionIdOnly,
-    /// Support 1.2 resumption using session ids or RFC 5077 tickets.
-    ///
-    /// See[^1] for why you might like to disable RFC 5077 by instead choosing the `SessionIdOnly`
-    /// option. Note that TLS 1.3 tickets do not have those issues.
-    ///
-    /// [^1]: <https://words.filippo.io/we-need-to-talk-about-session-tickets/>
-    SessionIdOrTickets,
-}
-
 impl Clone for ClientConfig {
     fn clone(&self) -> Self {
         Self {
@@ -384,6 +368,22 @@ impl Default for Resumption {
     fn default() -> Self {
         Self::in_memory_sessions(256)
     }
+}
+
+/// What mechanisms to support for resuming a TLS 1.2 session.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Tls12Resumption {
+    /// Disable 1.2 resumption.
+    Disabled,
+    /// Support 1.2 resumption using session ids only.
+    SessionIdOnly,
+    /// Support 1.2 resumption using session ids or RFC 5077 tickets.
+    ///
+    /// See[^1] for why you might like to disable RFC 5077 by instead choosing the `SessionIdOnly`
+    /// option. Note that TLS 1.3 tickets do not have those issues.
+    ///
+    /// [^1]: <https://words.filippo.io/we-need-to-talk-about-session-tickets/>
+    SessionIdOrTickets,
 }
 
 /// Container for unsafe APIs
