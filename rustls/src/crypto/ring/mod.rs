@@ -20,6 +20,7 @@ pub(crate) mod hash;
 pub(crate) mod hmac;
 pub(crate) mod kx;
 pub(crate) mod quic;
+#[cfg(feature = "std")]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
 pub(crate) mod tls12;
@@ -172,6 +173,7 @@ pub mod kx_group {
 }
 
 pub use kx::ALL_KX_GROUPS;
+#[cfg(feature = "std")]
 pub use ticketer::Ticketer;
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
