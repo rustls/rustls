@@ -679,6 +679,20 @@ pub trait PacketKey: Send + Sync {
 
     /// Tag length for the underlying AEAD algorithm
     fn tag_len(&self) -> usize;
+
+    /// Number of messages that can be safely encrypted with a single key of this type.
+    ///
+    /// See [`CipherSuiteCommon::confidentiality_limit`][csc-limit].
+    ///
+    /// [csc-limit]: crate::crypto::CipherSuiteCommon::confidentiality_limit
+    fn confidentiality_limit(&self) -> u64;
+
+    /// Number of messages that can be safely authenticated with a single key of this type.
+    ///
+    /// See [`CipherSuiteCommon::integrity_limit`][csc-limit].
+    ///
+    /// [csc-limit]: crate::crypto::CipherSuiteCommon::integrity_limit
+    fn integrity_limit(&self) -> u64;
 }
 
 /// Packet protection keys for bidirectional 1-RTT communication
