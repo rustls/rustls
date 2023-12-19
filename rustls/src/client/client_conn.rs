@@ -150,9 +150,6 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// [`RootCertStore`]: crate::RootCertStore
 #[derive(Debug)]
 pub struct ClientConfig {
-    /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
-
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
     pub alpn_protocols: Vec<Vec<u8>>,
@@ -176,18 +173,11 @@ pub struct ClientConfig {
     /// How to decide what client auth certificate/keys to use.
     pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
 
-    /// Supported versions, in no particular order.  The default
-    /// is all supported versions.
-    pub(super) versions: versions::EnabledVersions,
-
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.
     ///
     /// The default is true.
     pub enable_sni: bool,
-
-    /// How to verify the server certificate chain.
-    pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.
@@ -202,6 +192,16 @@ pub struct ClientConfig {
     ///
     /// The default is false.
     pub enable_early_data: bool,
+
+    /// Source of randomness and other crypto.
+    pub(super) provider: Arc<CryptoProvider>,
+
+    /// Supported versions, in no particular order.  The default
+    /// is all supported versions.
+    pub(super) versions: versions::EnabledVersions,
+
+    /// How to verify the server certificate chain.
+    pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
 }
 
 impl ClientConfig {
