@@ -160,22 +160,22 @@ impl quic::PacketKey for PacketKey {
     }
 }
 
-pub(crate) struct KeyBuilder(
-    pub(crate) &'static aead::Algorithm,
-    pub(crate) &'static aead::quic::Algorithm,
-);
+pub(crate) struct KeyBuilder {
+    pub(crate) packet_alg: &'static aead::Algorithm,
+    pub(crate) header_alg: &'static aead::quic::Algorithm,
+}
 
 impl crate::quic::Algorithm for KeyBuilder {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
-        Box::new(super::quic::PacketKey::new(key, iv, self.0))
+        Box::new(super::quic::PacketKey::new(key, iv, self.packet_alg))
     }
 
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn quic::HeaderProtectionKey> {
-        Box::new(super::quic::HeaderProtectionKey::new(key, self.1))
+        Box::new(super::quic::HeaderProtectionKey::new(key, self.header_alg))
     }
 
     fn aead_key_len(&self) -> usize {
-        self.0.key_len()
+        self.packet_alg.key_len()
     }
 
     fn fips(&self) -> bool {
