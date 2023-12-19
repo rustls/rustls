@@ -154,3 +154,15 @@ when reviewing a PR.
 
 For more information, including the alternatives we considered, check out [this comment]
 (https://github.com/rustls/rustls/issues/1385#issuecomment-1668023152) in the issue tracker.
+
+### Why measure wall-time
+
+While instruction counts are a useful proxy to detect changes in runtime performance, they do not
+account for important factors such as cache misses and branch mispredictions. As an example,
+consider two equivalent functions that calculate an aggregate value based on a `Vec<u64>`: if they
+use roughly the same code, yet a different memory access pattern, that could result in a similar
+instruction count, yet significantly different runtime.
+
+The bigger the change in code, the higher the chance that memory layout and access patterns are
+significantly affected. For that reason, having wall-time measurements is important as a complement
+to instruction counts.
