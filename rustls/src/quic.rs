@@ -1,6 +1,6 @@
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::client::{ClientConfig, ClientConnectionData};
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, Protocol, Side, DEFAULT_BUFFER_LIMIT};
 use crate::conn::{ConnectionCore, SideData};
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
@@ -13,6 +13,7 @@ use crate::tls13::key_schedule::{
     hkdf_expand_label, hkdf_expand_label_aead_key, hkdf_expand_label_block,
 };
 use crate::tls13::Tls13CipherSuite;
+use crate::vecbuf::ChunkVecBuffer;
 
 use pki_types::ServerName;
 
@@ -316,6 +317,7 @@ impl From<ServerConnection> for Connection {
 pub struct ConnectionCommon<Data> {
     core: ConnectionCore<Data>,
     deframer_buffer: DeframerVecBuffer,
+    sendable_plaintext: ChunkVecBuffer,
 }
 
 impl<Data: SideData> ConnectionCommon<Data> {
@@ -364,7 +366,7 @@ impl<Data: SideData> ConnectionCommon<Data> {
             &mut self.deframer_buffer,
         )?;
         self.core
-            .process_new_packets(&mut self.deframer_buffer)?;
+            .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)?;
         Ok(())
     }
 
@@ -405,6 +407,7 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
+            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
         }
     }
 }

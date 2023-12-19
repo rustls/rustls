@@ -42,7 +42,6 @@ pub struct CommonState {
     pub(crate) peer_certificates: Option<CertificateChain>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
-    pub(crate) sendable_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
     queued_key_update_message: Option<Vec<u8>>,
 
@@ -71,7 +70,6 @@ impl CommonState {
             peer_certificates: None,
             message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
-            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             queued_key_update_message: None,
             protocol: Protocol::Tcp,
@@ -149,6 +147,7 @@ impl CommonState {
         msg: Message,
         mut state: Box<dyn State<Data>>,
         data: &mut Data,
+        sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
@@ -163,7 +162,11 @@ impl CommonState {
             }
         }
 
-        let mut cx = Context { common: self, data };
+        let mut cx = Context {
+            common: self,
+            data,
+            sendable_plaintext,
+        };
         match state.handle(&mut cx, msg) {
             Ok(next) => {
                 state = next;
@@ -182,9 +185,13 @@ impl CommonState {
     ///
     /// If internal buffers are too small, this function will not accept
     /// all the data.
-    pub(crate) fn buffer_plaintext(&mut self, data: &[u8]) -> usize {
+    pub(crate) fn buffer_plaintext(
+        &mut self,
+        data: &[u8],
+        sendable_plaintext: &mut ChunkVecBuffer,
+    ) -> usize {
         self.perhaps_write_key_update();
-        self.send_plain(data, Limit::Yes)
+        self.send_plain(data, Limit::Yes, sendable_plaintext)
     }
 
     pub(crate) fn write_plaintext(
@@ -318,17 +325,18 @@ impl CommonState {
     ///
     /// Returns the number of bytes written from `data`: this might
     /// be less than `data.len()` if buffer limits were exceeded.
-    fn send_plain(&mut self, data: &[u8], limit: Limit) -> usize {
+    fn send_plain(
+        &mut self,
+        data: &[u8],
+        limit: Limit,
+        sendable_plaintext: &mut ChunkVecBuffer,
+    ) -> usize {
         if !self.may_send_application_data {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
             let len = match limit {
-                Limit::Yes => self
-                    .sendable_plaintext
-                    .append_limited_copy(data),
-                Limit::No => self
-                    .sendable_plaintext
-                    .append(data.to_vec()),
+                Limit::Yes => sendable_plaintext.append_limited_copy(data),
+                Limit::No => sendable_plaintext.append(data.to_vec()),
             };
             return len;
         }
@@ -348,24 +356,35 @@ impl CommonState {
         self.send_appdata_encrypt(data, limit)
     }
 
-    pub(crate) fn start_outgoing_traffic(&mut self) {
+    /// Mark the connection as ready to send application data.
+    ///
+    /// Also flush `sendable_plaintext` if it is `Some`.  
+    pub(crate) fn start_outgoing_traffic(
+        &mut self,
+        sendable_plaintext: &mut Option<&mut ChunkVecBuffer>,
+    ) {
         self.may_send_application_data = true;
-        self.flush_plaintext();
+        if let Some(sendable_plaintext) = sendable_plaintext {
+            self.flush_plaintext(sendable_plaintext);
+        }
     }
 
-    pub(crate) fn start_traffic(&mut self) {
+    /// Mark the connection as ready to send and receive application data.
+    ///
+    /// Also flush `sendable_plaintext` if it is `Some`.  
+    pub(crate) fn start_traffic(&mut self, sendable_plaintext: &mut Option<&mut ChunkVecBuffer>) {
         self.may_receive_application_data = true;
-        self.start_outgoing_traffic();
+        self.start_outgoing_traffic(sendable_plaintext);
     }
 
     /// Send any buffered plaintext.  Plaintext is buffered if
     /// written during handshake.
-    fn flush_plaintext(&mut self) {
+    fn flush_plaintext(&mut self, sendable_plaintext: &mut ChunkVecBuffer) {
         if !self.may_send_application_data {
             return;
         }
 
-        while let Some(buf) = self.sendable_plaintext.pop() {
+        while let Some(buf) = sendable_plaintext.pop() {
             self.send_plain_non_buffering(&buf, Limit::No);
         }
     }
@@ -715,6 +734,9 @@ pub(crate) trait State<Data>: Send + Sync {
 pub(crate) struct Context<'a, Data> {
     pub(crate) common: &'a mut CommonState,
     pub(crate) data: &'a mut Data,
+    /// Buffered plaintext. This is `Some` if any plaintext was written during handshake and `None`
+    /// otherwise.
+    pub(crate) sendable_plaintext: Option<&'a mut ChunkVecBuffer>,
 }
 
 /// Side of the connection.
@@ -747,4 +769,4 @@ enum Limit {
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
-const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
+pub(crate) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
