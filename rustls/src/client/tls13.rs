@@ -895,7 +895,8 @@ impl State<ClientConnectionData> for ExpectFinished {
         /* Now move to our application traffic keys. */
         cx.common.check_aligned_handshake()?;
         let key_schedule_traffic = key_schedule_pre_finished.into_traffic(cx.common);
-        cx.common.start_traffic();
+        cx.common
+            .start_traffic(&mut cx.sendable_plaintext);
 
         let st = ExpectTraffic {
             session_storage: Arc::clone(&st.config.resumption.store),

@@ -98,7 +98,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                         }
                     };
 
-                match self.core.process_msg(msg, state) {
+                match self.core.process_msg(msg, state, None) {
                     Ok(new) => state = new,
 
                     Err(e) => {

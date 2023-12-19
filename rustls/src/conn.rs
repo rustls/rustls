@@ -1,4 +1,4 @@
-use crate::common_state::{CommonState, Context, IoState, State};
+use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
@@ -254,13 +254,19 @@ pub(crate) trait PlaintextSink {
 
 impl<T> PlaintextSink for ConnectionCommon<T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        Ok(self.buffer_plaintext(buf))
+        Ok(self
+            .core
+            .common_state
+            .buffer_plaintext(buf, &mut self.sendable_plaintext))
     }
 
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
         let mut sz = 0;
         for buf in bufs {
-            sz += self.buffer_plaintext(buf);
+            sz += self
+                .core
+                .common_state
+                .buffer_plaintext(buf, &mut self.sendable_plaintext);
         }
         Ok(sz)
     }
@@ -341,6 +347,7 @@ fn is_valid_ccs(msg: &PlainMessage) -> bool {
 pub struct ConnectionCommon<Data> {
     pub(crate) core: ConnectionCore<Data>,
     deframer_buffer: DeframerVecBuffer,
+    sendable_plaintext: ChunkVecBuffer,
 }
 
 impl<Data> ConnectionCommon<Data> {
@@ -503,7 +510,7 @@ impl<Data> ConnectionCommon<Data> {
     #[inline]
     pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
         self.core
-            .process_new_packets(&mut self.deframer_buffer)
+            .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)
     }
 
     /// Read TLS content from `rd` into the internal buffer.
@@ -653,6 +660,7 @@ impl<'a, Data> From<&'a mut ConnectionCommon<Data>> for Context<'a, Data> {
         Self {
             common: &mut conn.core.common_state,
             data: &mut conn.core.data,
+            sendable_plaintext: Some(&mut conn.sendable_plaintext),
         }
     }
 }
@@ -676,6 +684,7 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
+            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
         }
     }
 }
@@ -715,6 +724,7 @@ impl<Data> ConnectionCore<Data> {
     pub(crate) fn process_new_packets(
         &mut self,
         deframer_buffer: &mut DeframerVecBuffer,
+        sendable_plaintext: &mut ChunkVecBuffer,
     ) -> Result<IoState, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -726,7 +736,7 @@ impl<Data> ConnectionCore<Data> {
 
         let mut borrowed_buffer = deframer_buffer.borrow();
         while let Some(msg) = self.deframe(Some(&*state), &mut borrowed_buffer)? {
-            match self.process_msg(msg, state) {
+            match self.process_msg(msg, state, Some(sendable_plaintext)) {
                 Ok(new) => state = new,
                 Err(e) => {
                     self.state = Err(e.clone());
@@ -805,6 +815,7 @@ impl<Data> ConnectionCore<Data> {
         &mut self,
         msg: PlainMessage,
         state: Box<dyn State<Data>>,
+        sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
@@ -847,7 +858,7 @@ impl<Data> ConnectionCore<Data> {
         }
 
         self.common_state
-            .process_main_protocol(msg, state, &mut self.data)
+            .process_main_protocol(msg, state, &mut self.data, sendable_plaintext)
     }
 
     pub(crate) fn export_keying_material<T: AsMut<[u8]>>(

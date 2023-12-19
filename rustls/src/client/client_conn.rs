@@ -657,6 +657,8 @@ impl ConnectionCore<ClientConnectionData> {
         let mut cx = hs::ClientContext {
             common: &mut common_state,
             data: &mut data,
+            // `start_handshake` won't produce plaintext
+            sendable_plaintext: None,
         };
 
         let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
