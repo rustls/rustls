@@ -100,15 +100,31 @@ pub(crate) struct PacketKey {
     key: aead::LessSafeKey,
     /// Computes unique nonces for each packet
     iv: Iv,
+    /// Confidentiality limit (see [`CipherSuiteCommon::confidentiality_limit`][csc-limit])
+    ///
+    /// [csc-limit]: crate::crypto::CipherSuiteCommon::confidentiality_limit
+    confidentiality_limit: u64,
+    /// Integrity limit (see [`CipherSuiteCommon::integrity_limit`][csc-limit])
+    ///
+    /// [csc-limit]: crate::crypto::CipherSuiteCommon::integrity_limit
+    integrity_limit: u64,
 }
 
 impl PacketKey {
-    pub(crate) fn new(key: AeadKey, iv: Iv, aead_algorithm: &'static aead::Algorithm) -> Self {
+    pub(crate) fn new(
+        key: AeadKey,
+        iv: Iv,
+        confidentiality_limit: u64,
+        integrity_limit: u64,
+        aead_algorithm: &'static aead::Algorithm,
+    ) -> Self {
         Self {
             key: aead::LessSafeKey::new(
                 aead::UnboundKey::new(aead_algorithm, key.as_ref()).unwrap(),
             ),
             iv,
+            confidentiality_limit,
+            integrity_limit,
         }
     }
 }
@@ -158,16 +174,38 @@ impl quic::PacketKey for PacketKey {
     fn tag_len(&self) -> usize {
         self.key.algorithm().tag_len()
     }
+
+    /// Confidentiality limit (see [`CipherSuiteCommon::confidentiality_limit`][csc-limit])
+    ///
+    /// [csc-limit]: crate::crypto::CipherSuiteCommon::confidentiality_limit
+    fn confidentiality_limit(&self) -> u64 {
+        self.confidentiality_limit
+    }
+
+    /// Integrity limit (see [`CipherSuiteCommon::integrity_limit`][csc-limit])
+    ///
+    /// [csc-limit]: crate::crypto::CipherSuiteCommon::integrity_limit
+    fn integrity_limit(&self) -> u64 {
+        self.integrity_limit
+    }
 }
 
 pub(crate) struct KeyBuilder {
     pub(crate) packet_alg: &'static aead::Algorithm,
     pub(crate) header_alg: &'static aead::quic::Algorithm,
+    pub(crate) confidentiality_limit: u64,
+    pub(crate) integrity_limit: u64,
 }
 
 impl crate::quic::Algorithm for KeyBuilder {
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn quic::PacketKey> {
-        Box::new(super::quic::PacketKey::new(key, iv, self.packet_alg))
+        Box::new(super::quic::PacketKey::new(
+            key,
+            iv,
+            self.confidentiality_limit,
+            self.integrity_limit,
+            self.packet_alg,
+        ))
     }
 
     fn header_protection_key(&self, key: AeadKey) -> Box<dyn quic::HeaderProtectionKey> {

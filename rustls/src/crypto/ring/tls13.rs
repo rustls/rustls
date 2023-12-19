@@ -33,6 +33,8 @@ pub(crate) static TLS13_CHACHA20_POLY1305_SHA256_INTERNAL: &Tls13CipherSuite = &
     quic: Some(&super::quic::KeyBuilder {
         packet_alg: &aead::CHACHA20_POLY1305,
         header_alg: &aead::quic::CHACHA20,
+        confidentiality_limit: u64::MAX,
+        integrity_limit: 1 << 36,
     }),
 };
 
@@ -50,6 +52,8 @@ pub static TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
         quic: Some(&super::quic::KeyBuilder {
             packet_alg: &aead::AES_256_GCM,
             header_alg: &aead::quic::AES_256,
+            confidentiality_limit: 1 << 23,
+            integrity_limit: 1 << 52,
         }),
     });
 
@@ -69,6 +73,8 @@ pub(crate) static TLS13_AES_128_GCM_SHA256_INTERNAL: &Tls13CipherSuite = &Tls13C
     quic: Some(&super::quic::KeyBuilder {
         packet_alg: &aead::AES_128_GCM,
         header_alg: &aead::quic::AES_128,
+        confidentiality_limit: 1 << 23,
+        integrity_limit: 1 << 52,
     }),
 };
 
