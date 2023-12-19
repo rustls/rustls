@@ -18,127 +18,145 @@ use std::io;
 
 pub(crate) mod unbuffered;
 
-/// A client or server connection.
-#[derive(Debug)]
-pub enum Connection {
-    /// A client connection
-    Client(crate::client::ClientConnection),
-    /// A server connection
-    Server(crate::server::ServerConnection),
+#[cfg(feature = "std")]
+mod connection {
+    use crate::common_state::{CommonState, IoState};
+    use crate::error::Error;
+    use crate::suites::ExtractedSecrets;
+
+    use core::fmt::Debug;
+    use core::ops::{Deref, DerefMut};
+    use std::io;
+
+    #[cfg(doc)]
+    use super::ConnectionCommon;
+    use super::{Reader, Writer};
+
+    /// A client or server connection.
+    #[derive(Debug)]
+    pub enum Connection {
+        /// A client connection
+        Client(crate::client::ClientConnection),
+        /// A server connection
+        Server(crate::server::ServerConnection),
+    }
+
+    impl Connection {
+        /// Read TLS content from `rd`.
+        ///
+        /// See [`ConnectionCommon::read_tls()`] for more information.
+        pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+            match self {
+                Self::Client(conn) => conn.read_tls(rd),
+                Self::Server(conn) => conn.read_tls(rd),
+            }
+        }
+
+        /// Writes TLS messages to `wr`.
+        ///
+        /// See [`ConnectionCommon::write_tls()`] for more information.
+        pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+            self.sendable_tls.write_to(wr)
+        }
+
+        /// Returns an object that allows reading plaintext.
+        pub fn reader(&mut self) -> Reader {
+            match self {
+                Self::Client(conn) => conn.reader(),
+                Self::Server(conn) => conn.reader(),
+            }
+        }
+
+        /// Returns an object that allows writing plaintext.
+        pub fn writer(&mut self) -> Writer {
+            match self {
+                Self::Client(conn) => Writer::new(&mut **conn),
+                Self::Server(conn) => Writer::new(&mut **conn),
+            }
+        }
+
+        /// Processes any new packets read by a previous call to [`Connection::read_tls`].
+        ///
+        /// See [`ConnectionCommon::process_new_packets()`] for more information.
+        pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
+            match self {
+                Self::Client(conn) => conn.process_new_packets(),
+                Self::Server(conn) => conn.process_new_packets(),
+            }
+        }
+
+        /// Derives key material from the agreed connection secrets.
+        ///
+        /// See [`ConnectionCommon::export_keying_material()`] for more information.
+        pub fn export_keying_material<T: AsMut<[u8]>>(
+            &self,
+            output: T,
+            label: &[u8],
+            context: Option<&[u8]>,
+        ) -> Result<T, Error> {
+            match self {
+                Self::Client(conn) => conn.export_keying_material(output, label, context),
+                Self::Server(conn) => conn.export_keying_material(output, label, context),
+            }
+        }
+
+        /// This function uses `io` to complete any outstanding IO for this connection.
+        ///
+        /// See [`ConnectionCommon::complete_io()`] for more information.
+        pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
+        where
+            Self: Sized,
+            T: io::Read + io::Write,
+        {
+            match self {
+                Self::Client(conn) => conn.complete_io(io),
+                Self::Server(conn) => conn.complete_io(io),
+            }
+        }
+
+        /// Extract secrets, so they can be used when configuring kTLS, for example.
+        /// Should be used with care as it exposes secret key material.
+        pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+            match self {
+                Self::Client(client) => client.dangerous_extract_secrets(),
+                Self::Server(server) => server.dangerous_extract_secrets(),
+            }
+        }
+
+        /// Sets a limit on the internal buffers
+        ///
+        /// See [`ConnectionCommon::set_buffer_limit()`] for more information.
+        pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
+            match self {
+                Self::Client(client) => client.set_buffer_limit(limit),
+                Self::Server(server) => server.set_buffer_limit(limit),
+            }
+        }
+    }
+
+    impl Deref for Connection {
+        type Target = CommonState;
+
+        fn deref(&self) -> &Self::Target {
+            match self {
+                Self::Client(conn) => &conn.core.common_state,
+                Self::Server(conn) => &conn.core.common_state,
+            }
+        }
+    }
+
+    impl DerefMut for Connection {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            match self {
+                Self::Client(conn) => &mut conn.core.common_state,
+                Self::Server(conn) => &mut conn.core.common_state,
+            }
+        }
+    }
 }
 
-impl Connection {
-    /// Read TLS content from `rd`.
-    ///
-    /// See [`ConnectionCommon::read_tls()`] for more information.
-    pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
-        match self {
-            Self::Client(conn) => conn.read_tls(rd),
-            Self::Server(conn) => conn.read_tls(rd),
-        }
-    }
-
-    /// Writes TLS messages to `wr`.
-    ///
-    /// See [`ConnectionCommon::write_tls()`] for more information.
-    pub fn write_tls(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
-        self.sendable_tls.write_to(wr)
-    }
-
-    /// Returns an object that allows reading plaintext.
-    pub fn reader(&mut self) -> Reader {
-        match self {
-            Self::Client(conn) => conn.reader(),
-            Self::Server(conn) => conn.reader(),
-        }
-    }
-
-    /// Returns an object that allows writing plaintext.
-    pub fn writer(&mut self) -> Writer {
-        match self {
-            Self::Client(conn) => Writer::new(&mut **conn),
-            Self::Server(conn) => Writer::new(&mut **conn),
-        }
-    }
-
-    /// Processes any new packets read by a previous call to [`Connection::read_tls`].
-    ///
-    /// See [`ConnectionCommon::process_new_packets()`] for more information.
-    pub fn process_new_packets(&mut self) -> Result<IoState, Error> {
-        match self {
-            Self::Client(conn) => conn.process_new_packets(),
-            Self::Server(conn) => conn.process_new_packets(),
-        }
-    }
-
-    /// Derives key material from the agreed connection secrets.
-    ///
-    /// See [`ConnectionCommon::export_keying_material()`] for more information.
-    pub fn export_keying_material<T: AsMut<[u8]>>(
-        &self,
-        output: T,
-        label: &[u8],
-        context: Option<&[u8]>,
-    ) -> Result<T, Error> {
-        match self {
-            Self::Client(conn) => conn.export_keying_material(output, label, context),
-            Self::Server(conn) => conn.export_keying_material(output, label, context),
-        }
-    }
-
-    /// This function uses `io` to complete any outstanding IO for this connection.
-    ///
-    /// See [`ConnectionCommon::complete_io()`] for more information.
-    pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
-    where
-        Self: Sized,
-        T: io::Read + io::Write,
-    {
-        match self {
-            Self::Client(conn) => conn.complete_io(io),
-            Self::Server(conn) => conn.complete_io(io),
-        }
-    }
-
-    /// Extract secrets, so they can be used when configuring kTLS, for example.
-    /// Should be used with care as it exposes secret key material.
-    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        match self {
-            Self::Client(client) => client.dangerous_extract_secrets(),
-            Self::Server(server) => server.dangerous_extract_secrets(),
-        }
-    }
-
-    /// Sets a limit on the internal buffers
-    ///
-    /// See [`ConnectionCommon::set_buffer_limit()`] for more information.
-    pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        match self {
-            Self::Client(client) => client.set_buffer_limit(limit),
-            Self::Server(server) => server.set_buffer_limit(limit),
-        }
-    }
-}
-
-impl Deref for Connection {
-    type Target = CommonState;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Client(conn) => &conn.core.common_state,
-            Self::Server(conn) => &conn.core.common_state,
-        }
-    }
-}
-
-impl DerefMut for Connection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Self::Client(conn) => &mut conn.core.common_state,
-            Self::Server(conn) => &mut conn.core.common_state,
-        }
-    }
-}
+#[cfg(feature = "std")]
+pub use connection::Connection;
 
 /// A structure that implements [`std::io::Read`] for reading plaintext.
 pub struct Reader<'a> {
