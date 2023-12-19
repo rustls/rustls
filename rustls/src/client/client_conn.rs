@@ -204,24 +204,6 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
 }
 
-impl Clone for ClientConfig {
-    fn clone(&self) -> Self {
-        Self {
-            provider: Arc::<CryptoProvider>::clone(&self.provider),
-            resumption: self.resumption.clone(),
-            alpn_protocols: self.alpn_protocols.clone(),
-            max_fragment_size: self.max_fragment_size,
-            client_auth_cert_resolver: Arc::clone(&self.client_auth_cert_resolver),
-            versions: self.versions,
-            enable_sni: self.enable_sni,
-            verifier: Arc::clone(&self.verifier),
-            key_log: Arc::clone(&self.key_log),
-            enable_secret_extraction: self.enable_secret_extraction,
-            enable_early_data: self.enable_early_data,
-        }
-    }
-}
-
 impl ClientConfig {
     /// Create a builder for a client configuration with the default
     /// [`CryptoProvider`]: [`crypto::ring::default_provider`] and safe ciphersuite and
@@ -309,6 +291,24 @@ impl ClientConfig {
             .iter()
             .copied()
             .find(|skxg| skxg.name() == group)
+    }
+}
+
+impl Clone for ClientConfig {
+    fn clone(&self) -> Self {
+        Self {
+            provider: Arc::<CryptoProvider>::clone(&self.provider),
+            resumption: self.resumption.clone(),
+            alpn_protocols: self.alpn_protocols.clone(),
+            max_fragment_size: self.max_fragment_size,
+            client_auth_cert_resolver: Arc::clone(&self.client_auth_cert_resolver),
+            versions: self.versions,
+            enable_sni: self.enable_sni,
+            verifier: Arc::clone(&self.verifier),
+            key_log: Arc::clone(&self.key_log),
+            enable_secret_extraction: self.enable_secret_extraction,
+            enable_early_data: self.enable_early_data,
+        }
     }
 }
 
