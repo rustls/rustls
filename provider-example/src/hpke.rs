@@ -8,7 +8,8 @@ use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_crypto::HpkeCrypto;
 use hpke_rs_rust_crypto::HpkeRustCrypto;
 use rustls::crypto::hpke::{
-    EncapsulatedSecret, Hpke, HpkePrivateKey, HpkeProvider, HpkePublicKey, HpkeSuite,
+    EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkeProvider, HpkePublicKey, HpkeSealer,
+    HpkeSuite,
 };
 use rustls::{Error, OtherError};
 
@@ -19,7 +20,7 @@ pub static HPKE_PROVIDER: &'static dyn HpkeProvider = &HpkeRsProvider {};
 struct HpkeRsProvider {}
 
 impl HpkeProvider for HpkeRsProvider {
-    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke>, Error> {
+    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + '_>, Error> {
         Ok(Box::new(HpkeRs(hpke_rs::Hpke::new(
             hpke_rs::Mode::Base,
             KemAlgorithm::try_from(suite.kem.get_u16()).map_err(other_err)?,
@@ -67,6 +68,22 @@ impl Hpke for HpkeRs {
         Ok((EncapsulatedSecret(enc.to_vec()), ciphertext))
     }
 
+    fn setup_sealer(
+        &mut self,
+        info: &[u8],
+        pub_key: &HpkePublicKey,
+    ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + '_>), Error> {
+        let pk_r = hpke_rs::HpkePublicKey::new(pub_key.0.clone());
+        let (enc, context) = self
+            .0
+            .setup_sender(&pk_r, info, None, None, None)
+            .map_err(other_err)?;
+        Ok((
+            EncapsulatedSecret(enc.to_vec()),
+            Box::new(HpkeRsSender { context }),
+        ))
+    }
+
     fn open(
         &mut self,
         enc: &EncapsulatedSecret,
@@ -87,6 +104,47 @@ impl Hpke for HpkeRs {
                 None,
                 None,
             )
+            .map_err(other_err)
+    }
+
+    fn setup_opener(
+        &mut self,
+        enc: &EncapsulatedSecret,
+        info: &[u8],
+        secret_key: &HpkePrivateKey,
+    ) -> Result<Box<dyn HpkeOpener + '_>, Error> {
+        let sk_r = hpke_rs::HpkePrivateKey::new(secret_key.secret_bytes().to_vec());
+        Ok(Box::new(HpkeRsReceiver {
+            context: self
+                .0
+                .setup_receiver(enc.0.as_slice(), &sk_r, info, None, None, None)
+                .map_err(other_err)?,
+        }))
+    }
+}
+
+#[derive(Debug)]
+struct HpkeRsSender {
+    context: hpke_rs::Context<HpkeRustCrypto>,
+}
+
+impl HpkeSealer for HpkeRsSender {
+    fn seal(&mut self, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Error> {
+        self.context
+            .seal(aad, plaintext)
+            .map_err(other_err)
+    }
+}
+
+#[derive(Debug)]
+struct HpkeRsReceiver {
+    context: hpke_rs::Context<HpkeRustCrypto>,
+}
+
+impl HpkeOpener for HpkeRsReceiver {
+    fn open(&mut self, aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
+        self.context
+            .open(aad, ciphertext)
             .map_err(other_err)
     }
 }
