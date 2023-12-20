@@ -209,7 +209,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install stable toolchain
+      - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Smoke-test benchmark program (ring)
