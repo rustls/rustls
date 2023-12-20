@@ -19,7 +19,7 @@ pub trait HpkeProvider: Debug + Send + Sync + 'static {
     /// Start setting up to use HPKE in base mode with the chosen suite.
     ///
     /// May return an error if the suite is unsupported by the provider.
-    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke>, Error>;
+    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + '_>, Error>;
 
     /// Does the provider support the given [HpkeSuite]?
     fn supports_suite(&self, suite: &HpkeSuite) -> bool;
@@ -53,6 +53,16 @@ pub trait Hpke: Debug + Send + Sync {
         pub_key: &HpkePublicKey,
     ) -> Result<(EncapsulatedSecret, Vec<u8>), Error>;
 
+    /// Set up a sealer context for the receiver public key `pub_key` with application supplied `info`.
+    ///
+    /// Returns both an encapsulated ciphertext and a sealer context that can be used to seal
+    /// messages to the recipient. RFC 9180 refers to `pub_key` as `pkR`.
+    fn setup_sealer(
+        &mut self,
+        info: &[u8],
+        pub_key: &HpkePublicKey,
+    ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + '_>), Error>;
+
     /// Open the provided `ciphertext` using the encapsulated secret `enc`, with application
     /// supplied `info`, and additional data `aad`.
     ///
@@ -66,6 +76,36 @@ pub trait Hpke: Debug + Send + Sync {
         ciphertext: &[u8],
         secret_key: &HpkePrivateKey,
     ) -> Result<Vec<u8>, Error>;
+
+    /// Set up an opener context for the secret key `secret_key` with application supplied `info`.
+    ///
+    /// Returns an opener context that can be used to open sealed messages encrypted to the
+    /// public key corresponding to `secret_key`. RFC 9180 refers to `secret_key` as `skR`.
+    fn setup_opener(
+        &mut self,
+        enc: &EncapsulatedSecret,
+        info: &[u8],
+        secret_key: &HpkePrivateKey,
+    ) -> Result<Box<dyn HpkeOpener + '_>, Error>;
+}
+
+/// An HPKE sealer context.
+///
+/// This is a stateful object that can be used to seal messages for receipt by
+/// a receiver.
+pub trait HpkeSealer: Debug + Send + Sync {
+    /// Seal the provided `plaintext` with additional data `aad`, returning
+    /// ciphertext.
+    fn seal(&mut self, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Error>;
+}
+
+/// An HPKE opener context.
+///
+/// This is a stateful object that can be used to open sealed messages sealed
+/// by a sender.
+pub trait HpkeOpener: Debug + Send + Sync {
+    /// Open the provided `ciphertext` with additional data `aad`, returning plaintext.
+    fn open(&mut self, aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Error>;
 }
 
 /// An HPKE public key.
