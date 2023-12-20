@@ -136,4 +136,5 @@ pub struct HpkeKeyPair {
 }
 
 /// An encapsulated secret returned from setting up a sender or receiver context.
+#[derive(Debug)]
 pub struct EncapsulatedSecret(pub Vec<u8>);
