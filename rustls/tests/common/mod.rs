@@ -47,27 +47,65 @@ macro_rules! embed_files {
 }
 
 embed_files! {
-    (ECDSA_CA_CERT, "ecdsa", "ca.cert");
-    (ECDSA_CA_DER, "ecdsa", "ca.der");
-    (ECDSA_CA_KEY, "ecdsa", "ca.key");
-    (ECDSA_CLIENT_CERT, "ecdsa", "client.cert");
-    (ECDSA_CLIENT_CHAIN, "ecdsa", "client.chain");
-    (ECDSA_CLIENT_FULLCHAIN, "ecdsa", "client.fullchain");
-    (ECDSA_CLIENT_KEY, "ecdsa", "client.key");
-    (ECDSA_CLIENT_REQ, "ecdsa", "client.req");
-    (ECDSA_END_CRL_PEM, "ecdsa", "end.revoked.crl.pem");
-    (ECDSA_CLIENT_CRL_PEM, "ecdsa", "client.revoked.crl.pem");
-    (ECDSA_INTERMEDIATE_CRL_PEM, "ecdsa", "inter.revoked.crl.pem");
-    (ECDSA_END_CERT, "ecdsa", "end.cert");
-    (ECDSA_END_CHAIN, "ecdsa", "end.chain");
-    (ECDSA_END_FULLCHAIN, "ecdsa", "end.fullchain");
-    (ECDSA_END_KEY, "ecdsa", "end.key");
-    (ECDSA_END_REQ, "ecdsa", "end.req");
-    (ECDSA_INTER_CERT, "ecdsa", "inter.cert");
-    (ECDSA_INTER_KEY, "ecdsa", "inter.key");
-    (ECDSA_INTER_REQ, "ecdsa", "inter.req");
-    (ECDSA_NISTP256_PEM, "ecdsa", "nistp256.pem");
-    (ECDSA_NISTP384_PEM, "ecdsa", "nistp384.pem");
+    (ECDSA_P256_CA_CERT, "ecdsa-p256", "ca.cert");
+    (ECDSA_P256_CA_DER, "ecdsa-p256", "ca.der");
+    (ECDSA_P256_CA_KEY, "ecdsa-p256", "ca.key");
+    (ECDSA_P256_CLIENT_CERT, "ecdsa-p256", "client.cert");
+    (ECDSA_P256_CLIENT_CHAIN, "ecdsa-p256", "client.chain");
+    (ECDSA_P256_CLIENT_FULLCHAIN, "ecdsa-p256", "client.fullchain");
+    (ECDSA_P256_CLIENT_KEY, "ecdsa-p256", "client.key");
+    (ECDSA_P256_CLIENT_REQ, "ecdsa-p256", "client.req");
+    (ECDSA_P256_END_CRL_PEM, "ecdsa-p256", "end.revoked.crl.pem");
+    (ECDSA_P256_CLIENT_CRL_PEM, "ecdsa-p256", "client.revoked.crl.pem");
+    (ECDSA_P256_INTERMEDIATE_CRL_PEM, "ecdsa-p256", "inter.revoked.crl.pem");
+    (ECDSA_P256_END_CERT, "ecdsa-p256", "end.cert");
+    (ECDSA_P256_END_CHAIN, "ecdsa-p256", "end.chain");
+    (ECDSA_P256_END_FULLCHAIN, "ecdsa-p256", "end.fullchain");
+    (ECDSA_P256_END_KEY, "ecdsa-p256", "end.key");
+    (ECDSA_P256_END_REQ, "ecdsa-p256", "end.req");
+    (ECDSA_P256_INTER_CERT, "ecdsa-p256", "inter.cert");
+    (ECDSA_P256_INTER_KEY, "ecdsa-p256", "inter.key");
+    (ECDSA_P256_INTER_REQ, "ecdsa-p256", "inter.req");
+
+    (ECDSA_P384_CA_CERT, "ecdsa-p384", "ca.cert");
+    (ECDSA_P384_CA_DER, "ecdsa-p384", "ca.der");
+    (ECDSA_P384_CA_KEY, "ecdsa-p384", "ca.key");
+    (ECDSA_P384_CLIENT_CERT, "ecdsa-p384", "client.cert");
+    (ECDSA_P384_CLIENT_CHAIN, "ecdsa-p384", "client.chain");
+    (ECDSA_P384_CLIENT_FULLCHAIN, "ecdsa-p384", "client.fullchain");
+    (ECDSA_P384_CLIENT_KEY, "ecdsa-p384", "client.key");
+    (ECDSA_P384_CLIENT_REQ, "ecdsa-p384", "client.req");
+    (ECDSA_P384_END_CRL_PEM, "ecdsa-p384", "end.revoked.crl.pem");
+    (ECDSA_P384_CLIENT_CRL_PEM, "ecdsa-p384", "client.revoked.crl.pem");
+    (ECDSA_P384_INTERMEDIATE_CRL_PEM, "ecdsa-p384", "inter.revoked.crl.pem");
+    (ECDSA_P384_END_CERT, "ecdsa-p384", "end.cert");
+    (ECDSA_P384_END_CHAIN, "ecdsa-p384", "end.chain");
+    (ECDSA_P384_END_FULLCHAIN, "ecdsa-p384", "end.fullchain");
+    (ECDSA_P384_END_KEY, "ecdsa-p384", "end.key");
+    (ECDSA_P384_END_REQ, "ecdsa-p384", "end.req");
+    (ECDSA_P384_INTER_CERT, "ecdsa-p384", "inter.cert");
+    (ECDSA_P384_INTER_KEY, "ecdsa-p384", "inter.key");
+    (ECDSA_P384_INTER_REQ, "ecdsa-p384", "inter.req");
+
+    (ECDSA_P521_CA_CERT, "ecdsa-p521", "ca.cert");
+    (ECDSA_P521_CA_DER, "ecdsa-p521", "ca.der");
+    (ECDSA_P521_CA_KEY, "ecdsa-p521", "ca.key");
+    (ECDSA_P521_CLIENT_CERT, "ecdsa-p521", "client.cert");
+    (ECDSA_P521_CLIENT_CHAIN, "ecdsa-p521", "client.chain");
+    (ECDSA_P521_CLIENT_FULLCHAIN, "ecdsa-p521", "client.fullchain");
+    (ECDSA_P521_CLIENT_KEY, "ecdsa-p521", "client.key");
+    (ECDSA_P521_CLIENT_REQ, "ecdsa-p521", "client.req");
+    (ECDSA_P521_END_CRL_PEM, "ecdsa-p521", "end.revoked.crl.pem");
+    (ECDSA_P521_CLIENT_CRL_PEM, "ecdsa-p521", "client.revoked.crl.pem");
+    (ECDSA_P521_INTERMEDIATE_CRL_PEM, "ecdsa-p521", "inter.revoked.crl.pem");
+    (ECDSA_P521_END_CERT, "ecdsa-p521", "end.cert");
+    (ECDSA_P521_END_CHAIN, "ecdsa-p521", "end.chain");
+    (ECDSA_P521_END_FULLCHAIN, "ecdsa-p521", "end.fullchain");
+    (ECDSA_P521_END_KEY, "ecdsa-p521", "end.key");
+    (ECDSA_P521_END_REQ, "ecdsa-p521", "end.req");
+    (ECDSA_P521_INTER_CERT, "ecdsa-p521", "inter.cert");
+    (ECDSA_P521_INTER_KEY, "ecdsa-p521", "inter.key");
+    (ECDSA_P521_INTER_REQ, "ecdsa-p521", "inter.req");
 
     (EDDSA_CA_CERT, "eddsa", "ca.cert");
     (EDDSA_CA_DER, "eddsa", "ca.der");
@@ -207,17 +245,28 @@ where
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum KeyType {
     Rsa,
-    Ecdsa,
+    EcdsaP256,
+    EcdsaP384,
+    EcdsaP521,
     Ed25519,
 }
 
-pub static ALL_KEY_TYPES: [KeyType; 3] = [KeyType::Rsa, KeyType::Ecdsa, KeyType::Ed25519];
+pub static ALL_KEY_TYPES: &[KeyType] = &[
+    KeyType::Rsa,
+    KeyType::EcdsaP256,
+    KeyType::EcdsaP384,
+    #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+    KeyType::EcdsaP521,
+    KeyType::Ed25519,
+];
 
 impl KeyType {
     fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
             Self::Rsa => bytes_for("rsa", part),
-            Self::Ecdsa => bytes_for("ecdsa", part),
+            Self::EcdsaP256 => bytes_for("ecdsa-p256", part),
+            Self::EcdsaP384 => bytes_for("ecdsa-p384", part),
+            Self::EcdsaP521 => bytes_for("ecdsa-p521", part),
             Self::Ed25519 => bytes_for("eddsa", part),
         }
     }
