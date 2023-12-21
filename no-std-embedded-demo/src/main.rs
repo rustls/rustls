@@ -49,12 +49,13 @@ bind_interrupts!(struct Irqs {
 });
 
 const KB: usize = 1024;
-// Note that some sites like www.rust-lang.org will need extra heap allocation here!
-const HEAP_SIZE: usize = 25 * KB;
+// Note that some sites like www.rust-lang.org/www.cloudflare.com need 
+// extra heap allocation here, this is the reason for 
+const HEAP_SIZE: usize = 25 * KB + 11*1024;
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 
-const MAX_ITERATIONS: usize = 5 * 20;
+const MAX_ITERATIONS: usize = 50 * 20;
 const SEND_EARLY_DATA: bool = false;
 const EARLY_DATA: &[u8] = b"hello";
 
@@ -62,7 +63,7 @@ const OUTGOING_TLS_BUFSIZ: usize = KB / 2;
 const TCP_RX_BUFSIZ: usize = KB;
 const TCP_TX_BUFSIZ: usize = KB / 2;
 
-const SERVER_NAME: &str = "github.com";
+const SERVER_NAME: &str = "www.google.com";
 
 const SERVER_PORT: u16 = 443;
 
@@ -129,15 +130,11 @@ async fn main(
     let mut tls_config = ClientConfig::builder_with_provider(lib::PROVIDER)
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
-        // toggle between TLS versions
-        //.with_protocol_versions(&[&TLS12])
         .with_protocol_versions(&[&TLS13])
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
     tls_config.enable_early_data = SEND_EARLY_DATA;
-    // Should be enabled by default!
-    tls_config.enable_sni = true;
     tls_config.time_provider = time_provider::stub();
     let tls_config = Arc::new(tls_config);
 
@@ -267,7 +264,7 @@ async fn converse(
                     send_tls(&mut socket, &mut outgoing_tls).await?;
                     recv_tls(&mut socket, &mut incoming_tls).await?;
                 } else if !received_response {
-                    // this happens in the TLS 1.3 case. the app-data was sent in the preceding
+                    // The app-data was sent in the preceding
                     // `MustTransmitTlsData` state. the server should have already a response which
                     // we can read out from the socket
                     recv_tls(&mut socket, &mut incoming_tls).await?;
@@ -362,11 +359,6 @@ where
         Err(e) => {
             #[allow(unused_variables)]
             let InsufficientSizeError { required_size } = map_err(e)?;
-            // This should not happen as the buffers are now static:
-
-            // let new_len = outgoing.used() + required_size;
-            // outgoing.reserve(new_len - outgoing.capacity());
-            // trace!("resized `outgoing_tls` buffer to {}B", new_len);
             f(outgoing.unfilled())?
         }
     };
@@ -480,6 +472,8 @@ async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
         MAC_ADDR,
     );
 
+    // Dynamic resolution sometimes provokes a stack overflow down the line.
+    // If it doesn't work, choose your router address as a `gateway`
     //let net_config = embassy_net::Config::dhcpv4(Default::default());
     let mut dns_servers = heapless::Vec::new();
     let _ = dns_servers.push(Ipv4Address::new(1, 1, 1, 1).into());
@@ -487,6 +481,7 @@ async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
     let net_config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
         address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 50, 204), 24),
         dns_servers,
+        // your router IP address here    vvvvvvvvvvvvvvvvvvvvvvvvvv
         gateway: Some(Ipv4Address::new(192, 168, 50, 1)),
     });
     //Init network stack
