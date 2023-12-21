@@ -63,8 +63,10 @@
     "*-VerifyDefault-RSA_PKCS1_SHA1-*": "no sha1",
     "*_P224_*": "no p224",
     "*-P-224-*": "",
-    "*_P521_*": "no p521",
-    "CurveTest-Client-P-521-TLS12": "",
+#ifdef RING
+    "*-ECDSA_P521_SHA512-*": "no p521 signatures/verification",
+#endif
+    "CurveTest-Client-P-521-TLS12": "no p521 key exchange",
     "CurveTest-Server-P-521-TLS12": "",
     "CurveTest-Client-Compressed-P-521-TLS12": "",
     "CurveTest-Server-Compressed-P-521-TLS12": "",
@@ -121,6 +123,10 @@
     "Server-VerifyDefault-Ed25519-TLS12": "",
     "Client-VerifyDefault-Ed25519-TLS13": "",
     "Client-VerifyDefault-Ed25519-TLS12": "",
+    "Server-VerifyDefault-ECDSA_P521_SHA512-TLS13": "p521-sha512 accepted by default (where supported)",
+    "Server-VerifyDefault-ECDSA_P521_SHA512-TLS12": "",
+    "Client-VerifyDefault-ECDSA_P521_SHA512-TLS13": "",
+    "Client-VerifyDefault-ECDSA_P521_SHA512-TLS12": "",
     "*-HintMismatch-*": "hints are a boringssl-specific feature",
     "*-QUIC-*" :"",
     "QUIC-*": "",
