@@ -61,6 +61,14 @@ pub fn any_ecdsa_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, Er
         return Ok(Arc::new(ecdsa_p384));
     }
 
+    if let Ok(ecdsa_p521) = EcdsaSigningKey::new(
+        der,
+        SignatureScheme::ECDSA_NISTP521_SHA512,
+        &signature::ECDSA_P521_SHA512_ASN1_SIGNING,
+    ) {
+        return Ok(Arc::new(ecdsa_p521));
+    }
+
     Err(Error::General(
         "failed to parse ECDSA private key as PKCS#8 or SEC1".into(),
     ))
@@ -241,6 +249,7 @@ impl EcdsaSigningKey {
         let pkcs8_prefix = match scheme {
             SignatureScheme::ECDSA_NISTP256_SHA256 => &PKCS8_PREFIX_ECDSA_NISTP256,
             SignatureScheme::ECDSA_NISTP384_SHA384 => &PKCS8_PREFIX_ECDSA_NISTP384,
+            SignatureScheme::ECDSA_NISTP521_SHA512 => &PKCS8_PREFIX_ECDSA_NISTP521,
             _ => unreachable!(), // all callers are in this file
         };
 
@@ -273,6 +282,16 @@ const PKCS8_PREFIX_ECDSA_NISTP384: &[u8] = b"\x02\x01\x00\
      \x30\x10\
      \x06\x07\x2a\x86\x48\xce\x3d\x02\x01\
      \x06\x05\x2b\x81\x04\x00\x22";
+
+// This is (line-by-line):
+// - INTEGER Version = 0
+// - SEQUENCE (privateKeyAlgorithm)
+//   - id-ecPublicKey OID
+//   - secp521r1 OID
+const PKCS8_PREFIX_ECDSA_NISTP521: &[u8] = b"\x02\x01\x00\
+     \x30\x10\
+     \x06\x07\x2a\x86\x48\xce\x3d\x02\x01\
+     \x06\x05\x2b\x81\x04\x00\x23";
 
 impl SigningKey for EcdsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
@@ -513,6 +532,59 @@ mod tests {
     }
 
     #[test]
+    fn can_load_ecdsa_nistp521_pkcs8() {
+        let key =
+            PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/nistp521key.pkcs8.der")[..]);
+        assert!(any_eddsa_type(&key).is_err());
+        let key = PrivateKeyDer::Pkcs8(key);
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_ok());
+    }
+
+    #[test]
+    fn can_load_ecdsa_nistp521_sec1() {
+        let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
+            &include_bytes!("../../testdata/nistp521key.der")[..],
+        ));
+        assert!(any_supported_type(&key).is_ok());
+        assert!(any_ecdsa_type(&key).is_ok());
+    }
+
+    #[test]
+    fn can_sign_ecdsa_nistp521() {
+        let key = PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(
+            &include_bytes!("../../testdata/nistp521key.der")[..],
+        ));
+
+        let k = any_supported_type(&key).unwrap();
+        assert_eq!(format!("{:?}", k), "EcdsaSigningKey { algorithm: ECDSA }");
+        assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
+
+        assert!(k
+            .choose_scheme(&[SignatureScheme::RSA_PKCS1_SHA256])
+            .is_none());
+        assert!(k
+            .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
+            .is_none());
+        assert!(k
+            .choose_scheme(&[SignatureScheme::ECDSA_NISTP384_SHA384])
+            .is_none());
+        let s = k
+            .choose_scheme(&[SignatureScheme::ECDSA_NISTP521_SHA512])
+            .unwrap();
+        assert_eq!(
+            format!("{:?}", s),
+            "EcdsaSigner { scheme: ECDSA_NISTP521_SHA512 }"
+        );
+        assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP521_SHA512);
+        // nb. signature is variable length and asn.1-encoded
+        assert!(s
+            .sign(b"hello")
+            .unwrap()
+            .starts_with(&[0x30]));
+    }
+
+    #[test]
     fn can_load_eddsa_pkcs8() {
         let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
         assert!(any_eddsa_type(&key).is_ok());
@@ -725,6 +797,25 @@ mod benchmarks {
     }
 
     #[bench]
+    fn bench_ecdsa_p521_sha512(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/nistp521key.pkcs8.der")[..],
+        ));
+        let sk = super::any_supported_type(&key).unwrap();
+        let signer = sk
+            .choose_scheme(&[SignatureScheme::ECDSA_NISTP521_SHA512])
+            .unwrap();
+
+        b.iter(|| {
+            test::black_box(
+                signer
+                    .sign(SAMPLE_TLS13_MESSAGE)
+                    .unwrap(),
+            );
+        });
+    }
+
+    #[bench]
     fn bench_load_and_validate_rsa2048(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/rsa2048key.pkcs8.der")[..],
@@ -761,6 +852,17 @@ mod benchmarks {
     fn bench_load_and_validate_p384(b: &mut test::Bencher) {
         let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
             &include_bytes!("../../testdata/nistp384key.pkcs8.der")[..],
+        ));
+
+        b.iter(|| {
+            test::black_box(super::any_ecdsa_type(&key).unwrap());
+        });
+    }
+
+    #[bench]
+    fn bench_load_and_validate_p521(b: &mut test::Bencher) {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            &include_bytes!("../../testdata/nistp521key.pkcs8.der")[..],
         ));
 
         b.iter(|| {
