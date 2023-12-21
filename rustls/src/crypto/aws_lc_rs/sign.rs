@@ -214,6 +214,8 @@ impl EcdsaSigningKey {
     ) -> Result<Self, ()> {
         let key_pair = match der {
             PrivateKeyDer::Sec1(sec1) => {
+                // TODO: once https://github.com/aws/aws-lc-rs/pull/259 is released, we
+                // can delete `convert_sec1_to_pkcs8` and use `EcdsaKeyPair::from_private_key_der`
                 Self::convert_sec1_to_pkcs8(scheme, sigalg, sec1.secret_sec1_der())?
             }
             PrivateKeyDer::Pkcs8(pkcs8) => {
