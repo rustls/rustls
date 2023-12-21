@@ -188,16 +188,4 @@ mod ring_shim {
         })
         .map_err(|_| ())
     }
-
-    pub(super) fn rsa_key_pair_public_modulus_len(kp: &ring_like::signature::RsaKeyPair) -> usize {
-        kp.public().modulus_len()
-    }
-
-    pub(super) fn ecdsa_key_pair_from_pkcs8(
-        alg: &'static ring_like::signature::EcdsaSigningAlgorithm,
-        data: &[u8],
-        rng: &dyn ring_like::rand::SecureRandom,
-    ) -> Result<ring_like::signature::EcdsaKeyPair, ()> {
-        ring_like::signature::EcdsaKeyPair::from_pkcs8(alg, data, rng).map_err(|_| ())
-    }
 }
