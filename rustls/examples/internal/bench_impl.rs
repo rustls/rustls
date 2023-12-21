@@ -147,7 +147,8 @@ impl ResumptionParam {
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum KeyType {
     Rsa,
-    Ecdsa,
+    EcdsaP256,
+    EcdsaP384,
     Ed25519,
 }
 
@@ -180,7 +181,7 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::Ecdsa,
+        KeyType::EcdsaP256,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
@@ -198,13 +199,13 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::Ecdsa,
+        KeyType::EcdsaP256,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::Ecdsa,
+        KeyType::EcdsaP384,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
@@ -224,7 +225,7 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
-        KeyType::Ecdsa,
+        KeyType::EcdsaP256,
         cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
@@ -239,7 +240,8 @@ impl KeyType {
     fn path_for(&self, part: &str) -> String {
         match self {
             Self::Rsa => format!("test-ca/rsa/{}", part),
-            Self::Ecdsa => format!("test-ca/ecdsa/{}", part),
+            Self::EcdsaP256 => format!("test-ca/ecdsa-p256/{}", part),
+            Self::EcdsaP384 => format!("test-ca/ecdsa-p384/{}", part),
             Self::Ed25519 => format!("test-ca/eddsa/{}", part),
         }
     }

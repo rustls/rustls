@@ -977,7 +977,7 @@ fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
 #[test]
 fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
     check_sigalgs_reduced_by_ciphersuite(
-        KeyType::Ecdsa,
+        KeyType::EcdsaP256,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         vec![
             #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
@@ -1233,7 +1233,7 @@ fn client_check_server_certificate_helper_api() {
         let chain = kt.get_chain();
         let correct_roots = get_client_root_store(*kt);
         let incorrect_roots = get_client_root_store(match kt {
-            KeyType::Rsa => KeyType::Ecdsa,
+            KeyType::Rsa => KeyType::EcdsaP256,
             _ => KeyType::Rsa,
         });
         // Using the correct trust anchors, we should verify without error.
@@ -1373,18 +1373,26 @@ fn client_cert_resolve_default() {
     // Test that in the default configuration that a client cert resolver gets the expected
     // CA subject hints, and supported signature algorithms.
     for key_type in ALL_KEY_TYPES.into_iter() {
-        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(key_type));
+        let server_config = Arc::new(make_server_config_with_mandatory_client_auth(*key_type));
 
         // In a default configuration we expect that the verifier's trust anchors are used
         // for the hint subjects.
-        let expected_root_hint_subjects = vec![match key_type {
+        let expected_root_hint_subjects = vec![match *key_type {
             KeyType::Rsa => &b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA"[..],
-            KeyType::Ecdsa => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA"[..],
+            KeyType::EcdsaP256 => {
+                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA"[..]
+            }
+            KeyType::EcdsaP384 => {
+                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p384 CA"[..]
+            }
+            KeyType::EcdsaP521 => {
+                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA"[..]
+            }
             KeyType::Ed25519 => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA"[..],
         }
         .to_vec()];
 
-        test_client_cert_resolve(key_type, server_config, expected_root_hint_subjects);
+        test_client_cert_resolve(*key_type, server_config, expected_root_hint_subjects);
     }
 }
 
@@ -1394,11 +1402,11 @@ fn client_cert_resolve_server_no_hints() {
     // arguments.
     for key_type in ALL_KEY_TYPES.into_iter() {
         // Build a verifier with no hint subjects.
-        let verifier = webpki_client_verifier_builder(get_client_root_store(key_type))
+        let verifier = webpki_client_verifier_builder(get_client_root_store(*key_type))
             .clear_root_hint_subjects();
-        let server_config = make_server_config_with_client_verifier(key_type, verifier);
+        let server_config = make_server_config_with_client_verifier(*key_type, verifier);
         let expected_root_hint_subjects = Vec::default(); // no hints expected.
-        test_client_cert_resolve(key_type, server_config.into(), expected_root_hint_subjects);
+        test_client_cert_resolve(*key_type, server_config.into(), expected_root_hint_subjects);
     }
 }
 
@@ -1411,7 +1419,15 @@ fn client_cert_resolve_server_added_hint() {
         let expected_hint_subjects = vec![
             match key_type {
                 KeyType::Rsa => &b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA"[..],
-                KeyType::Ecdsa => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown ECDSA CA"[..],
+                KeyType::EcdsaP256 => {
+                    &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA"[..]
+                }
+                KeyType::EcdsaP384 => {
+                    &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p384 CA"[..]
+                }
+                KeyType::EcdsaP521 => {
+                    &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA"[..]
+                }
                 KeyType::Ed25519 => {
                     &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA"[..]
                 }
@@ -1421,10 +1437,10 @@ fn client_cert_resolve_server_added_hint() {
         ];
         // Create a verifier that adds the extra_name as a hint subject in addition to the ones
         // from the root cert store.
-        let verifier = webpki_client_verifier_builder(get_client_root_store(key_type))
+        let verifier = webpki_client_verifier_builder(get_client_root_store(*key_type))
             .add_root_hint_subjects([DistinguishedName::from(extra_name.clone())].into_iter());
-        let server_config = make_server_config_with_client_verifier(key_type, verifier);
-        test_client_cert_resolve(key_type, server_config.into(), expected_hint_subjects);
+        let server_config = make_server_config_with_client_verifier(*key_type, verifier);
+        test_client_cert_resolve(*key_type, server_config.into(), expected_hint_subjects);
     }
 }
 
@@ -2791,8 +2807,8 @@ fn test_tls13_exporter() {
 #[test]
 fn test_tls13_exporter_maximum_output_length() {
     let client_config =
-        make_client_config_with_versions(KeyType::Ecdsa, &[&rustls::version::TLS13]);
-    let server_config = make_server_config(KeyType::Ecdsa);
+        make_client_config_with_versions(KeyType::EcdsaP256, &[&rustls::version::TLS13]);
+    let server_config = make_server_config(KeyType::EcdsaP256);
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
@@ -2917,7 +2933,7 @@ static TEST_CIPHERSUITES: &[(&rustls::SupportedProtocolVersion, KeyType, CipherS
     #[cfg(feature = "tls12")]
     (
         &rustls::version::TLS12,
-        KeyType::Ecdsa,
+        KeyType::EcdsaP256,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
     ),
     #[cfg(feature = "tls12")]
@@ -2929,13 +2945,13 @@ static TEST_CIPHERSUITES: &[(&rustls::SupportedProtocolVersion, KeyType, CipherS
     #[cfg(feature = "tls12")]
     (
         &rustls::version::TLS12,
-        KeyType::Ecdsa,
+        KeyType::EcdsaP384,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
     ),
     #[cfg(feature = "tls12")]
     (
         &rustls::version::TLS12,
-        KeyType::Ecdsa,
+        KeyType::EcdsaP384,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     ),
     #[cfg(feature = "tls12")]
