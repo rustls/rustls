@@ -50,7 +50,7 @@ let net_config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
     // your devide IP, on the same network vvvvvvvvvvvvvvvvvvv
     address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 50, 204), 24),
     dns_servers,
-    // your router IP address here    vvvvvvvvvvvvvvvvvvvvvvvvvv
+    // your router IP address here vvvvvvvvvvvvvvv
     gateway: Some(Ipv4Address::new(192, 168, 50, 1)),
 });
 ```
