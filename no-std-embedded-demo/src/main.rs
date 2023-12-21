@@ -63,7 +63,7 @@ const OUTGOING_TLS_BUFSIZ: usize = KB / 2;
 const TCP_RX_BUFSIZ: usize = KB;
 const TCP_TX_BUFSIZ: usize = KB / 2;
 
-const SERVER_NAME: &str = "www.google.com";
+const SERVER_NAME: &str = "github.com";
 
 const SERVER_PORT: u16 = 443;
 
@@ -474,11 +474,12 @@ async fn set_up_network_stack(spawner: &Spawner) -> Result<&'static MyStack> {
 
     // Dynamic resolution sometimes provokes a stack overflow down the line.
     // If it doesn't work, choose your router address as a `gateway`
-    //let net_config = embassy_net::Config::dhcpv4(Default::default());
+    // let net_config = embassy_net::Config::dhcpv4(Default::default());
     let mut dns_servers = heapless::Vec::new();
     let _ = dns_servers.push(Ipv4Address::new(1, 1, 1, 1).into());
 
     let net_config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
+        // your devide IP, on the same network vvvvvvvvvvvvvvvvvvv
         address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 50, 204), 24),
         dns_servers,
         // your router IP address here    vvvvvvvvvvvvvvvvvvvvvvvvvv
