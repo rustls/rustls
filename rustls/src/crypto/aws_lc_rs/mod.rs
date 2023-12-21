@@ -114,6 +114,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
         webpki_algs::ECDSA_P256_SHA384,
         webpki_algs::ECDSA_P384_SHA256,
         webpki_algs::ECDSA_P384_SHA384,
+        webpki_algs::ECDSA_P521_SHA512,
         webpki_algs::ED25519,
         webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
         webpki_algs::RSA_PSS_2048_8192_SHA384_LEGACY_KEY,
@@ -125,6 +126,10 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
     ],
     mapping: &[
         // Note: for TLS1.2 the curve is not fixed by SignatureScheme. For TLS1.3 it is.
+        (
+            SignatureScheme::ECDSA_NISTP521_SHA512,
+            &[webpki_algs::ECDSA_P521_SHA512],
+        ),
         (
             SignatureScheme::ECDSA_NISTP384_SHA384,
             &[
