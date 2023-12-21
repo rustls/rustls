@@ -270,6 +270,7 @@ impl Default for MockServerVerifier {
                 SignatureScheme::ED25519,
                 SignatureScheme::ECDSA_NISTP256_SHA256,
                 SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP521_SHA512,
             ],
         }
     }
