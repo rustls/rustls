@@ -323,6 +323,22 @@ impl KeyType {
         .next() // We only expect one CRL.
         .unwrap()
     }
+
+    pub fn ca_distinguished_name(&self) -> &'static [u8] {
+        match self {
+            KeyType::Rsa => &b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA"[..],
+            KeyType::EcdsaP256 => {
+                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA"[..]
+            }
+            KeyType::EcdsaP384 => {
+                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p384 CA"[..]
+            }
+            KeyType::EcdsaP521 => {
+                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA"[..]
+            }
+            KeyType::Ed25519 => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA"[..],
+        }
+    }
 }
 
 pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
