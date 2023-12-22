@@ -49,13 +49,13 @@ bind_interrupts!(struct Irqs {
 });
 
 const KB: usize = 1024;
-// Note that some sites like www.rust-lang.org/www.cloudflare.com need 
+// Note that some sites like www.google.com/www.cloudflare.com need 
 // extra heap allocation here, this is the reason for 
 const HEAP_SIZE: usize = 25 * KB + 11*1024;
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 
-const MAX_ITERATIONS: usize = 50 * 20;
+const MAX_ITERATIONS: usize = 5 * 20;
 const SEND_EARLY_DATA: bool = false;
 const EARLY_DATA: &[u8] = b"hello";
 
