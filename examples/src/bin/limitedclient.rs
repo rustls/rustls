@@ -8,8 +8,7 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 fn main() {
-    let mut root_store = rustls::RootCertStore::empty();
-    root_store.extend(
+    let root_store = rustls::RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
             .cloned(),
