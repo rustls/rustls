@@ -105,9 +105,9 @@ impl RootCertStore {
 
 impl FromIterator<TrustAnchor<'static>> for RootCertStore {
     fn from_iter<T: IntoIterator<Item = TrustAnchor<'static>>>(iter: T) -> Self {
-        let mut store = Self::empty();
-        store.extend(iter);
-        store
+        Self {
+            roots: iter.into_iter().collect(),
+        }
     }
 }
 
