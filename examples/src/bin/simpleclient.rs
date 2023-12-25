@@ -15,8 +15,7 @@ use std::sync::Arc;
 use rustls::RootCertStore;
 
 fn main() {
-    let mut root_store = RootCertStore::empty();
-    root_store.extend(
+    let root_store = RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
             .cloned(),

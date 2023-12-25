@@ -66,8 +66,7 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str) {
 fn main() {
     env_logger::init();
 
-    let mut root_store = RootCertStore::empty();
-    root_store.extend(
+    let root_store = RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
             .cloned(),

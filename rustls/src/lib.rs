@@ -116,11 +116,10 @@
 //!
 //! ```rust,no_run
 //! # #[cfg(feature = "ring")] {
-//! let mut root_store = rustls::RootCertStore::empty();
-//! root_store.extend(
+//! let root_store = rustls::RootCertStore::from_iter(
 //!     webpki_roots::TLS_SERVER_ROOTS
 //!         .iter()
-//!         .cloned()
+//!         .cloned(),
 //! );
 //! # }
 //! ```
@@ -147,11 +146,10 @@
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # let mut root_store = rustls::RootCertStore::empty();
-//! # root_store.extend(
+//! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
 //! #      .iter()
-//! #      .cloned()
+//! #      .cloned(),
 //! # );
 //! # let config = rustls::ClientConfig::builder()
 //! #     .with_root_certificates(root_store)

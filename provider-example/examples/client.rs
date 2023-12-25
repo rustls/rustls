@@ -5,8 +5,7 @@ use std::sync::Arc;
 fn main() {
     env_logger::init();
 
-    let mut root_store = rustls::RootCertStore::empty();
-    root_store.extend(
+    let root_store = rustls::RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS
             .iter()
             .cloned(),
