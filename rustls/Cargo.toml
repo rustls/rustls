@@ -31,6 +31,7 @@ aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 ring = ["dep:ring", "webpki/ring"]
 tls12 = []
 read_buf = ["rustversion"]
+wasm = ["ring/wasm32_unknown_unknown_js"]
 
 [dev-dependencies]
 base64 = "0.21"
