@@ -15,7 +15,7 @@ use rustls::{Error, OtherError};
 
 pub static HPKE_PROVIDER: &'static dyn HpkeProvider = &HpkeRsProvider {};
 
-/// A Rustls HPKE provider backed by hpke-rs.
+/// A Rustls HPKE provider backed by hpke-rs and the RustCrypto backend.
 #[derive(Debug)]
 struct HpkeRsProvider {}
 
