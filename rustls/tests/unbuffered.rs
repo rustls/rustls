@@ -8,6 +8,7 @@ use rustls::unbuffered::{
     UnbufferedStatus, WriteTraffic,
 };
 use rustls::version::TLS13;
+use rustls::{ClientConfig, ServerConfig};
 
 use crate::common::*;
 
@@ -17,9 +18,9 @@ const MAX_ITERATIONS: usize = 100;
 
 #[test]
 fn tls12_handshake() {
-    let (client_transcript, server_transcript) = handshake(&rustls::version::TLS12);
+    let outcome = handshake(&rustls::version::TLS12);
     assert_eq!(
-        client_transcript,
+        outcome.client_transcript,
         vec![
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
@@ -38,7 +39,7 @@ fn tls12_handshake() {
         "client transcript mismatch"
     );
     assert_eq!(
-        server_transcript,
+        outcome.server_transcript,
         vec![
             "Ok(BlockedHandshake)",
             "Ok(EncodeTlsData)",
@@ -60,9 +61,9 @@ fn tls12_handshake() {
 
 #[test]
 fn tls13_handshake() {
-    let (client_transcript, server_transcript) = handshake(&rustls::version::TLS13);
+    let outcome = handshake(&rustls::version::TLS13);
     assert_eq!(
-        client_transcript,
+        outcome.client_transcript,
         vec![
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
@@ -83,7 +84,7 @@ fn tls13_handshake() {
         "client transcript mismatch"
     );
     assert_eq!(
-        server_transcript,
+        outcome.server_transcript,
         vec![
             "Ok(BlockedHandshake)",
             "Ok(EncodeTlsData)",
@@ -105,70 +106,16 @@ fn tls13_handshake() {
     );
 }
 
-fn handshake(version: &'static rustls::SupportedProtocolVersion) -> (Vec<String>, Vec<String>) {
-    let mut client_transcript = Vec::new();
-    let mut server_transcript = Vec::new();
+fn handshake(version: &'static rustls::SupportedProtocolVersion) -> Outcome {
+    let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
+    let client_config = make_client_config(KeyType::Rsa);
 
-    let (mut client, mut server) = make_connection_pair(version);
-    let mut buffers = BothBuffers::default();
-
-    let mut count = 0;
-    let mut client_handshake_done = false;
-    let mut server_handshake_done = false;
-    while !client_handshake_done || !server_handshake_done {
-        let client_state = advance_client(
-            &mut client,
-            &mut buffers.client,
-            NO_ACTIONS,
-            Some(&mut client_transcript),
-        );
-
-        match client_state {
-            State::EncodedTlsData => {}
-            State::TransmitTlsData {
-                sent_app_data: false,
-                sent_close_notify: false,
-                sent_early_data: false,
-            } => buffers.client_send(),
-            State::BlockedHandshake => buffers.server_send(),
-            State::WriteTraffic {
-                sent_app_data: false,
-                sent_close_notify: false,
-            } => client_handshake_done = true,
-            state => unreachable!("{state:?}"),
-        }
-
-        let server_state = advance_server(
-            &mut server,
-            &mut buffers.server,
-            NO_ACTIONS,
-            Some(&mut server_transcript),
-        );
-
-        match server_state {
-            State::EncodedTlsData => {}
-            State::TransmitTlsData {
-                sent_app_data: false,
-                sent_close_notify: false,
-                sent_early_data: false,
-            } => buffers.server_send(),
-            State::BlockedHandshake => buffers.client_send(),
-            State::WriteTraffic {
-                sent_app_data: false,
-                sent_close_notify: false,
-            } => server_handshake_done = true,
-            state => unreachable!("{state:?}"),
-        }
-
-        count += 1;
-
-        assert!(
-            count <= MAX_ITERATIONS,
-            "handshake {version:?} was not completed"
-        );
-    }
-
-    (client_transcript, server_transcript)
+    run(
+        Arc::new(client_config),
+        &mut NO_ACTIONS.clone(),
+        Arc::new(server_config),
+        &mut NO_ACTIONS.clone(),
+    )
 }
 
 #[test]
@@ -176,80 +123,30 @@ fn app_data_client_to_server() {
     let expected: &[_] = b"hello";
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-
-        let (mut client, mut server) = make_connection_pair(version);
-        let mut buffers = BothBuffers::default();
+        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
+        let client_config = make_client_config(KeyType::Rsa);
 
         let mut client_actions = Actions {
             app_data_to_send: Some(expected),
             ..NO_ACTIONS
         };
-        let mut received_app_data = vec![];
-        let mut count = 0;
-        let mut client_handshake_done = false;
-        let mut server_handshake_done = false;
-        while !client_handshake_done || !server_handshake_done {
-            match advance_client(&mut client, &mut buffers.client, client_actions, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data,
-                    sent_close_notify: false,
-                    sent_early_data: false,
-                } => {
-                    buffers.client_send();
 
-                    if sent_app_data {
-                        client_actions.app_data_to_send = None;
-                    }
-                }
-                State::BlockedHandshake => buffers.server_send(),
-                State::WriteTraffic {
-                    sent_app_data,
-                    sent_close_notify: false,
-                } => {
-                    if sent_app_data {
-                        buffers.client_send();
-                        client_actions.app_data_to_send = None;
-                    }
-
-                    client_handshake_done = true
-                }
-                state => unreachable!("{state:?}"),
-            }
-
-            match advance_server(&mut server, &mut buffers.server, NO_ACTIONS, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                    sent_early_data: false,
-                } => buffers.server_send(),
-                State::BlockedHandshake => buffers.client_send(),
-                State::ReceivedAppData { records } => {
-                    received_app_data.extend(records);
-                }
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                } => server_handshake_done = true,
-                state => unreachable!("{state:?}"),
-            }
-
-            count += 1;
-
-            assert!(
-                count <= MAX_ITERATIONS,
-                "handshake {version:?} was not completed"
-            );
-        }
-
-        assert!(client_handshake_done);
-        assert!(server_handshake_done);
+        let outcome = run(
+            Arc::new(client_config),
+            &mut client_actions,
+            Arc::new(server_config),
+            &mut NO_ACTIONS.clone(),
+        );
 
         assert!(client_actions
             .app_data_to_send
             .is_none());
-        assert_eq!([expected], received_app_data.as_slice());
+        assert_eq!(
+            [expected],
+            outcome
+                .server_received_app_data
+                .as_slice()
+        );
     }
 }
 
@@ -258,76 +155,30 @@ fn app_data_server_to_client() {
     let expected: &[_] = b"hello";
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-
-        let (mut client, mut server) = make_connection_pair(version);
-        let mut buffers = BothBuffers::default();
+        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
+        let client_config = make_client_config(KeyType::Rsa);
 
         let mut server_actions = Actions {
             app_data_to_send: Some(expected),
             ..NO_ACTIONS
         };
-        let mut received_app_data = vec![];
-        let mut count = 0;
-        let mut client_handshake_done = false;
-        let mut server_handshake_done = false;
-        while !client_handshake_done || !server_handshake_done {
-            match advance_client(&mut client, &mut buffers.client, NO_ACTIONS, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                    sent_early_data: false,
-                } => buffers.client_send(),
-                State::BlockedHandshake => buffers.server_send(),
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                } => client_handshake_done = true,
-                State::ReceivedAppData { records } => {
-                    received_app_data.extend(records);
-                }
-                state => unreachable!("{state:?}"),
-            }
 
-            match advance_server(&mut server, &mut buffers.server, server_actions, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data,
-                    sent_close_notify: false,
-                    sent_early_data: false,
-                } => {
-                    buffers.server_send();
-                    if sent_app_data {
-                        server_actions.app_data_to_send = None;
-                    }
-                }
-                State::BlockedHandshake => buffers.client_send(),
-                State::ReceivedAppData { records } => {
-                    received_app_data.extend(records);
-                }
-                // server does not need to reach this state to send data to the client
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                } => server_handshake_done = true,
-                state => unreachable!("{state:?}"),
-            }
-
-            count += 1;
-
-            assert!(
-                count <= MAX_ITERATIONS,
-                "handshake {version:?} was not completed"
-            );
-        }
-
-        assert!(client_handshake_done);
-        assert!(server_handshake_done);
+        let outcome = run(
+            Arc::new(client_config),
+            &mut NO_ACTIONS.clone(),
+            Arc::new(server_config),
+            &mut server_actions,
+        );
 
         assert!(server_actions
             .app_data_to_send
             .is_none());
-        assert_eq!([expected], received_app_data.as_slice());
+        assert_eq!(
+            [expected],
+            outcome
+                .client_received_app_data
+                .as_slice()
+        );
     }
 }
 
@@ -343,149 +194,234 @@ fn early_data() {
     client_config.enable_early_data = true;
     let client_config = Arc::new(client_config);
 
-    for conn_count in 0..2 {
-        eprintln!("----");
-        let mut client =
-            UnbufferedClientConnection::new(client_config.clone(), server_name("localhost"))
-                .unwrap();
-        let mut server = UnbufferedServerConnection::new(server_config.clone()).unwrap();
-        let mut buffers = BothBuffers::default();
+    // first handshake allows the second to be a resumption and use 0-RTT
+    run(
+        client_config.clone(),
+        &mut NO_ACTIONS.clone(),
+        server_config.clone(),
+        &mut NO_ACTIONS.clone(),
+    );
 
-        let mut client_actions = Actions {
-            early_data_to_send: Some(expected),
-            ..NO_ACTIONS
-        };
-        let mut received_early_data = vec![];
-        let mut count = 0;
-        let mut client_handshake_done = false;
-        let mut server_handshake_done = false;
-        while !client_handshake_done || !server_handshake_done {
-            match advance_client(&mut client, &mut buffers.client, client_actions, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                    sent_early_data,
-                } => {
-                    buffers.client_send();
+    let mut client_actions = Actions {
+        early_data_to_send: Some(expected),
+        ..NO_ACTIONS
+    };
 
-                    if sent_early_data {
-                        client_actions.early_data_to_send = None;
-                    }
+    let outcome = run(
+        client_config.clone(),
+        &mut client_actions,
+        server_config.clone(),
+        &mut NO_ACTIONS.clone(),
+    );
+
+    assert_eq!(
+        outcome.client_transcript,
+        vec![
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)"
+        ]
+    );
+    assert_eq!(
+        outcome.server_transcript,
+        vec![
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(ReadEarlyData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)"
+        ]
+    );
+    assert!(client_actions
+        .early_data_to_send
+        .is_none());
+    assert_eq!(
+        [expected],
+        outcome
+            .server_received_early_data
+            .as_slice()
+    );
+}
+
+fn run(
+    client_config: Arc<ClientConfig>,
+    client_actions: &mut Actions,
+    server_config: Arc<ServerConfig>,
+    server_actions: &mut Actions,
+) -> Outcome {
+    let mut outcome = Outcome::default();
+    let mut count = 0;
+    let mut client_handshake_done = false;
+    let mut server_handshake_done = false;
+
+    let mut client =
+        UnbufferedClientConnection::new(client_config.clone(), server_name("localhost")).unwrap();
+    let mut server = UnbufferedServerConnection::new(server_config.clone()).unwrap();
+    let mut buffers = BothBuffers::default();
+
+    while !(client_handshake_done
+        && server_handshake_done
+        && client_actions.finished()
+        && server_actions.finished())
+    {
+        match advance_client(
+            &mut client,
+            &mut buffers.client,
+            *client_actions,
+            &mut outcome.client_transcript,
+        ) {
+            State::EncodedTlsData => {}
+            State::TransmitTlsData {
+                sent_early_data,
+                sent_app_data,
+                sent_close_notify,
+            } => {
+                buffers.client_send();
+                if sent_app_data {
+                    client_actions.app_data_to_send = None;
                 }
-                State::BlockedHandshake => buffers.server_send(),
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                } => client_handshake_done = true,
-                state => unreachable!("{state:?}"),
-            }
 
-            match advance_server(&mut server, &mut buffers.server, NO_ACTIONS, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                    sent_early_data: false,
-                } => buffers.server_send(),
-                State::BlockedHandshake => buffers.client_send(),
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                } => server_handshake_done = true,
-                State::ReceivedEarlyData { records } => {
-                    received_early_data.extend(records);
+                if sent_early_data {
+                    client_actions.early_data_to_send = None;
                 }
-                state => unreachable!("{state:?}"),
+
+                if sent_close_notify {
+                    client_actions.send_close_notify = false;
+                }
             }
+            State::BlockedHandshake => buffers.server_send(),
+            State::WriteTraffic {
+                sent_app_data,
+                sent_close_notify,
+            } => {
+                buffers.client_send();
 
-            count += 1;
+                if sent_app_data {
+                    client_actions.app_data_to_send = None;
+                }
 
-            assert!(count <= MAX_ITERATIONS, "handshake was not completed");
+                if sent_close_notify {
+                    client_actions.send_close_notify = false;
+                }
+
+                client_handshake_done = true;
+            }
+            State::ReceivedAppData { records } => {
+                outcome
+                    .client_received_app_data
+                    .extend(records);
+            }
+            State::Closed => {
+                client_handshake_done = true;
+                outcome.client_reached_connection_closed_state = true
+            }
+            state => unreachable!("{state:?}"),
         }
 
-        // early data is not exchanged on the first server interaction
-        if conn_count == 1 {
-            assert!(client_actions
-                .early_data_to_send
-                .is_none());
-            assert_eq!([expected], received_early_data.as_slice());
+        match advance_server(
+            &mut server,
+            &mut buffers.server,
+            *server_actions,
+            &mut outcome.server_transcript,
+        ) {
+            State::EncodedTlsData => {}
+            State::TransmitTlsData {
+                sent_app_data,
+                sent_close_notify,
+                ..
+            } => {
+                buffers.server_send();
+
+                if sent_app_data {
+                    server_actions.app_data_to_send = None;
+                }
+
+                if sent_close_notify {
+                    server_actions.send_close_notify = false;
+                }
+            }
+            State::BlockedHandshake => buffers.client_send(),
+            State::WriteTraffic {
+                sent_app_data,
+                sent_close_notify,
+            } => {
+                buffers.server_send();
+
+                if sent_app_data {
+                    server_actions.app_data_to_send = None;
+                }
+
+                if sent_close_notify {
+                    server_actions.send_close_notify = false;
+                }
+
+                server_handshake_done = true;
+            }
+            State::ReceivedEarlyData { records } => {
+                outcome
+                    .server_received_early_data
+                    .extend(records);
+            }
+            State::ReceivedAppData { records } => {
+                outcome
+                    .server_received_app_data
+                    .extend(records);
+            }
+            State::Closed => {
+                server_handshake_done = true;
+                outcome.server_reached_connection_closed_state = true
+            }
         }
+
+        count += 1;
+
+        assert!(count <= MAX_ITERATIONS, "handshake was not completed");
     }
+
+    outcome
 }
 
 #[test]
 fn close_notify_client_to_server() {
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-
-        let (mut client, mut server) = make_connection_pair(version);
-        let mut buffers = BothBuffers::default();
+        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
+        let client_config = make_client_config(KeyType::Rsa);
 
         let mut client_actions = Actions {
             send_close_notify: true,
             ..NO_ACTIONS
         };
-        let mut count = 0;
-        let mut client_handshake_done = false;
-        let mut server_handshake_done = false;
-        let mut reached_connection_closed_state = false;
-        while !client_handshake_done || !server_handshake_done {
-            match advance_client(&mut client, &mut buffers.client, client_actions, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify,
-                    sent_early_data: false,
-                } => {
-                    buffers.client_send();
-                    if sent_close_notify {
-                        client_actions.send_close_notify = false;
-                    }
-                }
-                State::BlockedHandshake => buffers.server_send(),
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify,
-                } => {
-                    if sent_close_notify {
-                        buffers.client_send();
-                        client_actions.send_close_notify = false;
-                    }
-                    client_handshake_done = true;
-                }
-                state => unreachable!("{state:?}"),
-            }
 
-            match advance_server(&mut server, &mut buffers.server, NO_ACTIONS, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                    sent_early_data: false,
-                } => buffers.server_send(),
-                State::BlockedHandshake => buffers.client_send(),
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                } => server_handshake_done = true,
-                State::Closed => {
-                    server_handshake_done = true;
-                    reached_connection_closed_state = true
-                }
-                state => unreachable!("{state:?}"),
-            }
-
-            count += 1;
-
-            assert!(
-                count <= MAX_ITERATIONS,
-                "handshake {version:?} was not completed"
-            );
-        }
+        let outcome = run(
+            Arc::new(client_config),
+            &mut client_actions,
+            Arc::new(server_config),
+            &mut NO_ACTIONS.clone(),
+        );
 
         assert!(!client_actions.send_close_notify);
-        assert!(reached_connection_closed_state);
+        assert!(outcome.server_reached_connection_closed_state);
     }
 }
 
@@ -493,69 +429,23 @@ fn close_notify_client_to_server() {
 fn close_notify_server_to_client() {
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-
-        let (mut client, mut server) = make_connection_pair(version);
-        let mut buffers = BothBuffers::default();
+        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
+        let client_config = make_client_config(KeyType::Rsa);
 
         let mut server_actions = Actions {
             send_close_notify: true,
             ..NO_ACTIONS
         };
-        let mut count = 0;
-        let mut client_handshake_done = false;
-        let mut server_handshake_done = false;
-        let mut reached_connection_closed_state = false;
-        while !client_handshake_done || !server_handshake_done {
-            match advance_client(&mut client, &mut buffers.client, NO_ACTIONS, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                    sent_early_data: false,
-                } => buffers.client_send(),
-                State::BlockedHandshake => buffers.server_send(),
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    sent_close_notify: false,
-                } => client_handshake_done = true,
-                State::Closed => {
-                    client_handshake_done = true;
-                    reached_connection_closed_state = true
-                }
-                state => unreachable!("{state:?}"),
-            }
 
-            match advance_server(&mut server, &mut buffers.server, server_actions, None) {
-                State::EncodedTlsData => {}
-                State::TransmitTlsData {
-                    sent_app_data: false,
-                    sent_close_notify,
-                    sent_early_data: false,
-                } => {
-                    buffers.server_send();
-                    if sent_close_notify {
-                        server_actions.send_close_notify = false;
-                    }
-                }
-                State::BlockedHandshake => buffers.client_send(),
-                State::WriteTraffic {
-                    sent_app_data: false,
-                    // servers don't need to reach this state to send a close_notify alert
-                    sent_close_notify: false,
-                } => server_handshake_done = true,
-                state => unreachable!("{state:?}"),
-            }
-
-            count += 1;
-
-            assert!(
-                count <= MAX_ITERATIONS,
-                "handshake {version:?} was not completed"
-            );
-        }
+        let outcome = run(
+            Arc::new(client_config),
+            &mut NO_ACTIONS.clone(),
+            Arc::new(server_config),
+            &mut server_actions,
+        );
 
         assert!(!server_actions.send_close_notify);
-        assert!(reached_connection_closed_state);
+        assert!(outcome.client_reached_connection_closed_state);
     }
 }
 
@@ -594,17 +484,34 @@ struct Actions<'a> {
     send_close_notify: bool,
 }
 
+impl Actions<'_> {
+    fn finished(&self) -> bool {
+        self.app_data_to_send.is_none()
+            && self.early_data_to_send.is_none()
+            && !self.send_close_notify
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct Outcome {
+    server_transcript: Vec<String>,
+    server_received_early_data: Vec<Vec<u8>>,
+    server_received_app_data: Vec<Vec<u8>>,
+    server_reached_connection_closed_state: bool,
+    client_transcript: Vec<String>,
+    client_received_app_data: Vec<Vec<u8>>,
+    client_reached_connection_closed_state: bool,
+}
+
 fn advance_client(
     conn: &mut UnbufferedConnectionCommon<ClientConnectionData>,
     buffers: &mut Buffers,
     actions: Actions,
-    transcript: Option<&mut Vec<String>>,
+    transcript: &mut Vec<String>,
 ) -> State {
     let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
 
-    if let Some(transcript) = transcript {
-        transcript.push(format!("{:?}", state));
-    }
+    transcript.push(format!("{:?}", state));
 
     let state = match state.unwrap() {
         ConnectionState::TransmitTlsData(mut state) => {
@@ -614,6 +521,7 @@ fn advance_client(
                     write_with_buffer_size_checks(
                         |out_buf| state.encrypt(early_data, out_buf),
                         |e| {
+                            println!("encrypt error: {e}");
                             if let EarlyDataError::Encrypt(EncryptError::InsufficientSize(ise)) = e
                             {
                                 ise
@@ -645,13 +553,11 @@ fn advance_server(
     conn: &mut UnbufferedConnectionCommon<ServerConnectionData>,
     buffers: &mut Buffers,
     actions: Actions,
-    transcript: Option<&mut Vec<String>>,
+    transcript: &mut Vec<String>,
 ) -> State {
     let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
 
-    if let Some(transcript) = transcript {
-        transcript.push(format!("{:?}", state));
-    }
+    transcript.push(format!("{:?}", state));
 
     let state = match state.unwrap() {
         ConnectionState::ReadEarlyData(mut state) => {
@@ -676,11 +582,12 @@ fn handle_state<Data>(
     outgoing: &mut Buffer,
     actions: Actions,
 ) -> State {
-    match state {
+    match dbg!(state) {
         ConnectionState::EncodeTlsData(mut state) => {
             write_with_buffer_size_checks(
                 |out_buf| state.encode(out_buf),
                 |e| {
+                    println!("encode error: {e}");
                     if let EncodeError::InsufficientSize(ise) = e {
                         ise
                     } else {
