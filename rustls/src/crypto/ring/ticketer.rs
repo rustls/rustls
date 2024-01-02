@@ -194,4 +194,19 @@ mod tests {
         assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
         assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
     }
+
+    #[test]
+    fn aeadticketer_is_debug_and_producestickets() {
+        use super::*;
+        use alloc::format;
+
+        let t = make_ticket_generator().unwrap();
+
+        assert_eq!(
+            format!("{:?}", t),
+            "AeadTicketer { alg: CHACHA20_POLY1305, lifetime: 43200 }"
+        );
+        assert!(t.enabled());
+        assert_eq!(t.lifetime(), 43200);
+    }
 }
