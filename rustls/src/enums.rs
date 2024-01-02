@@ -525,6 +525,8 @@ impl SignatureScheme {
             Self::ECDSA_NISTP256_SHA256
             | Self::ECDSA_NISTP384_SHA384
             | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
+            Self::ED25519 => SignatureAlgorithm::ED25519,
+            Self::ED448 => SignatureAlgorithm::ED448,
             _ => SignatureAlgorithm::Unknown(0),
         }
     }
