@@ -110,11 +110,23 @@ Rustls requires Rust 1.61 or later.
 [crypto::CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/trait.CryptoProvider.html
 
 # Example code
-There are two example programs which use
-[mio](https://github.com/carllerche/mio) to do asynchronous IO.
+
+Our [examples] directory contains demos that show how to handle I/O using the
+[`stream::Stream`] helper, as well as more complex asynchronous I/O using [`mio`].
+If you're already using Tokio for an async runtime you may prefer to use
+[`tokio-rustls`] instead of interacting with rustls directly.
+
+The [`mio`] based examples are the most complete, and discussed below. Users
+new to Rustls may prefer to look at the simple client/server examples before
+diving in to the more complex MIO examples.
+
+[examples]: examples/
+[`stream::Stream`]: https://docs.rs/rustls/latest/rustls/struct.Stream.html
+[`mio`]: https://docs.rs/mio/latest/mio/
+[`tokio-rustls`]: https://docs.rs/tokio-rustls/latest/tokio_rustls/
 
 ## Client example program
-The client example program is named `tlsclient-mio`.  The interface looks like:
+The MIO client example program is named `tlsclient-mio`.  The interface looks like:
 
 ```tlsclient-mio
 Connects to the TLS server at hostname:PORT.  The default PORT
@@ -173,7 +185,7 @@ Connection closed
 ```
 
 ## Server example program
-The server example program is named `tlsserver-mio`.  The interface looks like:
+The MIO server example program is named `tlsserver-mio`.  The interface looks like:
 
 ```tlsserver-mio
 Runs a TLS server on :PORT.  The default PORT is 443.
