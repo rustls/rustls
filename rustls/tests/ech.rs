@@ -13,7 +13,7 @@ fn test_decode_config_list() {
             config.contents.public_name,
             DnsName::try_from(public_name.as_ref()).unwrap()
         );
-        assert!(config.contents.extensions.0.is_empty());
+        assert!(config.contents.extensions.is_empty());
     }
 
     fn assert_key_config(

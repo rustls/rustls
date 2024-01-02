@@ -2596,7 +2596,33 @@ pub struct EchConfigContents {
     pub key_config: HpkeKeyConfig,
     pub maximum_name_length: u8,
     pub public_name: DnsName<'static>,
-    pub extensions: PayloadU16,
+    pub extensions: Vec<EchConfigExtension>,
+}
+
+#[allow(dead_code)] // TODO(@cpu): Remove in subsequent commits.
+impl EchConfigContents {
+    /// Returns true if there is more than one extension of a given
+    /// type.
+    pub(crate) fn has_duplicate_extension(&self) -> bool {
+        let mut seen = BTreeSet::new();
+
+        for ext in &self.extensions {
+            let typ = u16::from(ext.ext_type());
+
+            if seen.contains(&typ) {
+                return true;
+            }
+            seen.insert(typ);
+        }
+
+        false
+    }
+
+    pub(crate) fn has_unknown_extension(&self) -> bool {
+        // At present, we do not recognize any EchConfigExtension instances,
+        // so if there are extensions present, by definition they are unknown.
+        !self.extensions.is_empty()
+    }
 }
 
 impl Codec<'_> for EchConfigContents {
@@ -2617,9 +2643,51 @@ impl Codec<'_> for EchConfigContents {
                     .map_err(|_| InvalidMessage::InvalidServerName)?
                     .to_owned()
             },
-            extensions: PayloadU16::read(r)?,
+            extensions: Vec::read(r)?,
         })
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum EchConfigExtension {
+    Unknown(UnknownExtension),
+}
+
+impl EchConfigExtension {
+    pub(crate) fn ext_type(&self) -> ExtensionType {
+        match *self {
+            Self::Unknown(ref r) => r.typ,
+        }
+    }
+}
+
+impl Codec<'_> for EchConfigExtension {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.ext_type().encode(bytes);
+
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        match *self {
+            Self::Unknown(ref r) => r.encode(nested.buf),
+        }
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        let typ = ExtensionType::read(r)?;
+        let len = u16::read(r)? as usize;
+        let mut sub = r.sub(len)?;
+
+        #[allow(clippy::match_single_binding)] // Future-proofing.
+        let ext = match typ {
+            _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
+        };
+
+        sub.expect_empty("EchConfigExtension")
+            .map(|_| ext)
+    }
+}
+
+impl TlsListElement for EchConfigExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Clone, Debug, PartialEq)]
