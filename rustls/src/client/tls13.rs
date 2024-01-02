@@ -10,7 +10,8 @@ use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
-use crate::client::{hs, ClientConfig, ClientSessionStore};
+use crate::client::ech::EchState;
+use crate::client::{ech, hs, ClientConfig, ClientSessionStore};
 use crate::common_state::{CommonState, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
@@ -64,13 +65,15 @@ pub(super) fn handle_server_hello(
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName<'static>,
-    randoms: ConnectionRandoms,
+    mut randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    transcript: HandshakeHash,
+    mut transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     our_key_share: Box<dyn ActiveKeyExchange>,
     mut sent_tls13_fake_ccs: bool,
+    ech_context: Option<EchState>,
+    server_hello_msg: &Message,
 ) -> hs::NextStateOrError<'static> {
     validate_server_hello(cx.common, server_hello)?;
 
@@ -145,7 +148,7 @@ pub(super) fn handle_server_hello(
 
     let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
 
-    let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+    let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
     // Remember what KX group the server liked for next time.
     config
@@ -156,6 +159,30 @@ pub(super) fn handle_server_hello(
     // If we change keying when a subsequent handshake message is being joined,
     // the two halves will have different record layer protections.  Disallow this.
     cx.common.check_aligned_handshake()?;
+
+    let ech_status = match ech_context {
+        // ECH wasn't offered.
+        None => ech::Status::NotOffered,
+        Some(ech_context) => {
+            match ech_context.confirm_acceptance(
+                &mut key_schedule,
+                server_hello,
+                suite.common.hash_provider,
+            )? {
+                // The server accepted our ECH offer, so complete the inner transcript with the
+                // server hello message, and switch the handshake transcript and random to the
+                // inner copies.
+                Some((mut inner_transcript, inner_random)) => {
+                    inner_transcript.add_message(server_hello_msg);
+                    transcript = inner_transcript;
+                    randoms.client = inner_random.0;
+                    ech::Status::Accepted
+                }
+                // The server rejected our ECH offer.
+                None => ech::Status::Rejected,
+            }
+        }
+    };
 
     let hash_at_client_recvd_server_hello = transcript.current_hash();
     let key_schedule = key_schedule.derive_client_handshake_secrets(
@@ -178,6 +205,7 @@ pub(super) fn handle_server_hello(
         transcript,
         key_schedule,
         hello,
+        ech_status,
     }))
 }
 
@@ -369,6 +397,7 @@ struct ExpectEncryptedExtensions {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     hello: ClientHelloDetails,
+    ech_status: ech::Status,
 }
 
 impl State<ClientConnectionData> for ExpectEncryptedExtensions {
@@ -390,6 +419,19 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
         hs::process_alpn_protocol(cx.common, &self.config, exts.alpn_protocol())?;
+
+        // Now that we have the server extensions we need to check if our ECH offer was rejected.
+        // If this is the case we abort with the ECH required alert. However, we do this at
+        // this stage rather than in the ExpectServerHello state because we want to be able to
+        // include retry configs that may be present in the server's encrypted extensions. This
+        // also allows us to send the alert in encrypted form.
+        if matches!(self.ech_status, ech::Status::Rejected) {
+            return Err(ech::fatal_alert_required(
+                exts.server_ech_extension()
+                    .map(|ext| ext.retry_configs),
+                cx.common,
+            ));
+        }
 
         // QUIC transport parameters
         if cx.common.is_quic() {
