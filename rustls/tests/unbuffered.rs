@@ -1,4 +1,5 @@
 #![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
@@ -562,10 +563,16 @@ fn advance_server(
     let state = match state.unwrap() {
         ConnectionState::ReadEarlyData(mut state) => {
             let mut records = vec![];
+            let mut peeked_len = state.peek_len();
 
             while let Some(res) = state.next_record() {
-                records.push(res.unwrap().payload.to_vec());
+                let payload = res.unwrap().payload.to_vec();
+                assert_eq!(NonZeroUsize::new(payload.len()), peeked_len);
+                records.push(payload);
+                peeked_len = state.peek_len();
             }
+
+            assert_eq!(None, peeked_len);
 
             State::ReceivedEarlyData { records }
         }
@@ -650,10 +657,16 @@ fn handle_state<Data>(
 
         ConnectionState::ReadTraffic(mut state) => {
             let mut records = vec![];
+            let mut peeked_len = state.peek_len();
 
             while let Some(res) = state.next_record() {
-                records.push(res.unwrap().payload.to_vec());
+                let payload = res.unwrap().payload.to_vec();
+                assert_eq!(NonZeroUsize::new(payload.len()), peeked_len);
+                records.push(payload);
+                peeked_len = state.peek_len();
             }
+
+            assert_eq!(None, peeked_len);
 
             State::ReceivedAppData { records }
         }
