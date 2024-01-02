@@ -1079,12 +1079,7 @@ pub struct HelloRetryRequest {
 
 impl Codec<'_> for HelloRetryRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.legacy_version.encode(bytes);
-        HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
-        self.session_id.encode(bytes);
-        self.cipher_suite.encode(bytes);
-        Compression::Null.encode(bytes);
-        self.extensions.encode(bytes);
+        self.payload_encode(bytes, Encoding::Standard)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -1163,6 +1158,54 @@ impl HelloRetryRequest {
             _ => None,
         }
     }
+
+    fn payload_encode(&self, bytes: &mut Vec<u8>, purpose: Encoding) {
+        self.legacy_version.encode(bytes);
+        HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
+        self.session_id.encode(bytes);
+        self.cipher_suite.encode(bytes);
+        Compression::Null.encode(bytes);
+
+        match purpose {
+            // Standard encoding encodes extensions as they appear.
+            Encoding::Standard => {
+                self.extensions.encode(bytes);
+            }
+            // For the purpose of ECH confirmation, the Encrypted Client Hello extension
+            // must have its payload replaced by 8 zero bytes.
+            //
+            // See draft-ietf-tls-esni-17 7.2.1:
+            // <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#name-sending-helloretryrequest-2>
+            // TODO(XXX): Replace with RFC reference once published.
+            Encoding::EchConfirmation => {
+                let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+                for ext in &self.extensions {
+                    match ext.ext_type() {
+                        ExtensionType::EncryptedClientHello => {
+                            HelloRetryExtension::EchHelloRetryRequest(vec![0u8; 8])
+                                .encode(extensions.buf);
+                        }
+                        _ => {
+                            ext.encode(extensions.buf);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The method of encoding to use for a handshake message.
+///
+/// In some cases a handshake message may be encoded differently depending on the purpose
+/// the encoded message is being used for. For example, a [ServerHelloPayload] may be encoded
+/// with the last 8 bytes of the random zeroed out when being encoded for ECH confirmation.
+pub(crate) enum Encoding {
+    /// Standard RFC 8446 encoding.
+    Standard,
+    /// Encoding for ECH confirmation.
+    #[allow(dead_code)] // TODO(@cpu): Remove in subsequent commits.
+    EchConfirmation,
 }
 
 #[derive(Clone, Debug)]
@@ -1177,16 +1220,7 @@ pub struct ServerHelloPayload {
 
 impl Codec<'_> for ServerHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.legacy_version.encode(bytes);
-        self.random.encode(bytes);
-
-        self.session_id.encode(bytes);
-        self.cipher_suite.encode(bytes);
-        self.compression_method.encode(bytes);
-
-        if !self.extensions.is_empty() {
-            self.extensions.encode(bytes);
-        }
+        self.payload_encode(bytes, Encoding::Standard)
     }
 
     // minus version and random, which have already been read.
@@ -1257,6 +1291,31 @@ impl ServerHelloPayload {
         match *ext {
             ServerExtension::SupportedVersions(vers) => Some(vers),
             _ => None,
+        }
+    }
+
+    fn payload_encode(&self, bytes: &mut Vec<u8>, encoding: Encoding) {
+        self.legacy_version.encode(bytes);
+
+        match encoding {
+            // Standard encoding encodes the random value as is.
+            Encoding::Standard => self.random.encode(bytes),
+            // When encoding a ServerHello for ECH confirmation, the random value
+            // has the last 8 bytes zeroed out.
+            Encoding::EchConfirmation => {
+                // Indexing safety: self.random is 32 bytes long by definition.
+                let rand_vec = self.random.get_encoding();
+                bytes.extend_from_slice(&rand_vec.as_slice()[..24]);
+                bytes.extend_from_slice(&[0u8; 8]);
+            }
+        }
+
+        self.session_id.encode(bytes);
+        self.cipher_suite.encode(bytes);
+        self.compression_method.encode(bytes);
+
+        if !self.extensions.is_empty() {
+            self.extensions.encode(bytes);
         }
     }
 }
@@ -2310,15 +2369,7 @@ pub struct HandshakeMessagePayload<'a> {
 
 impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        // output type, length, and encoded payload
-        match self.typ {
-            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
-            _ => self.typ,
-        }
-        .encode(bytes);
-
-        let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes);
-        self.payload.encode(nested.buf);
+        self.payload_encode(bytes, Encoding::Standard);
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
@@ -2449,6 +2500,28 @@ impl<'a> HandshakeMessagePayload<'a> {
         let ret_len = ret.len() - binder_len;
         ret.truncate(ret_len);
         ret
+    }
+
+    pub(crate) fn payload_encode(&self, bytes: &mut Vec<u8>, encoding: Encoding) {
+        // output type, length, and encoded payload
+        match self.typ {
+            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
+            _ => self.typ,
+        }
+        .encode(bytes);
+
+        let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes);
+
+        match &self.payload {
+            // for Server Hello and HelloRetryRequest payloads we need to encode the payload differently
+            // based on the purpose of the encoding.
+            HandshakePayload::ServerHello(payload) => payload.payload_encode(nested.buf, encoding),
+            HandshakePayload::HelloRetryRequest(payload) => {
+                payload.payload_encode(nested.buf, encoding)
+            }
+            // All other payload types are encoded the same regardless of purpose.
+            _ => self.payload.encode(nested.buf),
+        }
     }
 
     pub(crate) fn build_handshake_hash(hash: &[u8]) -> Self {
