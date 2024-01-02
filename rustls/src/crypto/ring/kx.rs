@@ -75,7 +75,6 @@ pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP38
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
-#[derive(Debug)]
 struct KeyExchange {
     name: NamedGroup,
     agreement_algorithm: &'static agreement::Algorithm,
@@ -99,6 +98,14 @@ impl ActiveKeyExchange for KeyExchange {
     /// Return the public key being used.
     fn pub_key(&self) -> &[u8] {
         self.pub_key.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn kxgroup_fmt_yields_name() {
+        assert_eq!("X25519", format!("{:?}", super::X25519));
     }
 }
 
