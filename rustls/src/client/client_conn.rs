@@ -208,6 +208,9 @@ pub struct ClientConfig {
 
     /// Provides the current system time
     pub time_provider: Arc<dyn TimeProvider>,
+    /// When an HPKE provider is configured and no `ech_config` is provided, a GREASE
+    /// ECH extension will be offered when negotiating TLS 1.3.
+    pub grease_ech_hpke_provider: Option<&'static dyn HpkeProvider>,
 
     /// Source of randomness and other crypto.
     pub(super) provider: Arc<CryptoProvider>,
@@ -218,6 +221,9 @@ pub struct ClientConfig {
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
+
+    /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
+    pub(super) ech_config: Option<EchConfig>,
 }
 
 impl ClientConfig {
@@ -333,6 +339,24 @@ impl ClientConfig {
         danger::DangerousClientConfig { cfg: self }
     }
 
+    /// Enable Encrypted Client Hello (ECH) support with the given config.
+    ///
+    /// If the client configuration has enabled TLS 1.2, this function will return an error. ECH
+    /// may only be used with TLS 1.3+.
+    pub fn enable_ech(&mut self, config: EchConfig) -> Result<(), Error> {
+        if self
+            .versions
+            .contains(ProtocolVersion::TLSv1_2)
+        {
+            return Err(Error::General(
+                "configurations that enable TLS 1.2 do not support ECH".into(),
+            ));
+        }
+
+        self.ech_config = Some(config);
+        Ok(())
+    }
+
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
@@ -393,6 +417,8 @@ impl Clone for ClientConfig {
             #[cfg(feature = "tls12")]
             require_ems: self.require_ems,
             time_provider: Arc::clone(&self.time_provider),
+            grease_ech_hpke_provider: self.grease_ech_hpke_provider,
+            ech_config: self.ech_config.clone(),
         }
     }
 }
