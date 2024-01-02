@@ -604,6 +604,11 @@ fn handle_state<Data>(
                 outgoing,
             );
 
+            assert!(matches!(
+                state.encode(&mut []).unwrap_err(),
+                EncodeError::AlreadyEncoded
+            ));
+
             State::EncodedTlsData
         }
 
