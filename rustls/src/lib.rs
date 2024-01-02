@@ -77,11 +77,23 @@
 //! [crypto::CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/trait.CryptoProvider.html
 //!
 //! ## Design Overview
+//!
+//! Rustls is a low-level library. If your goal is to make HTTPS connections you may prefer
+//! to use a library built on top of Rustls like [hyper] or [ureq].
+//!
+//! [hyper]: https://crates.io/crates/hyper
+//! [ureq]: https://crates.io/crates/ureq
+//!
 //! ### Rustls does not take care of network IO
 //! It doesn't make or accept TCP connections, or do DNS, or read or write files.
 //!
-//! There's example client and server code which uses mio to do all needed network
-//! IO.
+//! Our [examples] directory contains demos that show how to handle I/O using the
+//! [`stream::Stream`] helper, as well as more complex asynchronous I/O using [`mio`].
+//! If you're already using Tokio for an async runtime you may prefer to use [`tokio-rustls`] instead
+//! of interacting with rustls directly.
+//!
+//! [examples]: examples/README.md
+//! [`tokio-rustls`]: https://github.com/rustls/tokio-rustls
 //!
 //! ### Rustls provides encrypted pipes
 //! These are the [`ServerConnection`] and [`ClientConnection`] types.  You supply raw TLS traffic
@@ -231,9 +243,10 @@
 //!
 //! # Examples
 //!
-//! [`tlsserver-mio`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsserver-mio.rs)
+//! You can find several client and server examples of varying complexity in the [examples]
+//! directory, including [`tlsserver-mio`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsserver-mio.rs)
 //! and [`tlsclient-mio`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsclient-mio.rs)
-//! are full worked examples using [`mio`].
+//! - full worked examples using [`mio`].
 //!
 //! [`mio`]: https://docs.rs/mio/latest/mio/
 //!
