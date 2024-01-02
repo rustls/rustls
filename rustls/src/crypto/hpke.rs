@@ -26,6 +26,7 @@ pub trait HpkeProvider: Debug + Send + Sync + 'static {
 }
 
 /// An HPKE suite, specifying a key encapsulation mechanism and a symmetric cipher suite.
+#[derive(Clone, Debug)]
 pub struct HpkeSuite {
     /// The choice of HPKE key encapsulation mechanism.
     pub kem: HpkeKem,

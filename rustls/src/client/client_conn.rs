@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -11,13 +12,15 @@ use super::hs;
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
+use crate::crypto::hpke::{HpkeProvider, HpkeSuite};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::trace;
-use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::enums::{EchVersion, NamedGroup};
+use crate::msgs::handshake::{ClientExtension, EchConfig as EchConfigMsg};
 use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "std")]
@@ -474,6 +477,98 @@ pub enum Tls12Resumption {
     ///
     /// [^1]: <https://words.filippo.io/we-need-to-talk-about-session-tickets/>
     SessionIdOrTickets,
+}
+
+/// Configuration for performing encrypted client hello.
+///
+/// Note: differs from the protocol-encoded EchConfig (`EchConfigMsg`).
+#[derive(Clone, Debug)]
+#[allow(dead_code)] // TODO(@cpu): remove in subsequent commit.
+pub struct EchConfig {
+    /// The provider to use for HPKE operations.
+    pub(crate) hpke_provider: &'static dyn HpkeProvider,
+
+    /// The selected EchConfig.
+    pub(crate) config: EchConfigMsg,
+
+    /// An HPKE suite from the `config` we have selected as compatible with the `hpke_provider`.
+    pub(crate) suite: HpkeSuite,
+}
+
+impl EchConfig {
+    /// Construct an EchConfig by selecting a ECH config from the provided bytes that is compatible
+    /// with the given HPKE provider.
+    ///
+    /// The config bytes should be sourced from a DNS-over-HTTPS lookup resolving the `HTTPS` resource
+    /// record for the host name of the server you wish to connect to using ECH, and extracting the ECH
+    /// configuration from the `echconfig` parameter.
+    ///
+    /// One of the provided configurations must be compatible with the HPKE provider's supported
+    /// suites or an error will be returned.
+    // TODO(@cpu): replace generic `impl AsRef<[u8]>` param with a pki-types type.
+    // TODO(@cpu): update docstring with a pointer to the example program using hickory-dns.
+    // TODO(@cpu): consider dedicated HpkeError type(s).
+    pub fn new(
+        ech_configs: impl AsRef<[u8]>,
+        hpke_provider: &'static dyn HpkeProvider,
+    ) -> Result<Self, Error> {
+        // Try to unmarshal the ECH config bytes as a list of EchConfig structs, or a single EchConfig
+        // TODO(@cpu): verify if this is needed or if we should always assume a Vec...
+        let ech_configs = match Vec::read(&mut Reader::init(ech_configs.as_ref())) {
+            Ok(configs) => configs,
+            Err(_) => {
+                vec![EchConfigMsg::read(&mut Reader::init(ech_configs.as_ref()))?]
+            }
+        };
+
+        let (config, suite) = Self::select_config_and_suite(ech_configs, hpke_provider)?;
+
+        Ok(Self {
+            hpke_provider,
+            config,
+            suite,
+        })
+    }
+
+    #[allow(dead_code)] // TODO(@cpu): remove in subsequent commit.
+    pub(crate) fn hpke_info(&self) -> Vec<u8> {
+        // "tls ech" || 0x00 || ECHConfig
+        // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-6.1
+        let mut info = Vec::with_capacity(128);
+        info.extend_from_slice(b"tls ech\0");
+        self.config.encode(&mut info);
+        info
+    }
+
+    fn select_config_and_suite(
+        configs: Vec<EchConfigMsg>,
+        hpke_provider: &'static dyn HpkeProvider,
+    ) -> Result<(EchConfigMsg, HpkeSuite), Error> {
+        for config in configs {
+            if config.version != EchVersion::V14 {
+                continue; // Unsupported version.
+            }
+
+            let contents = &config.contents;
+            if contents.has_unknown_extension() || contents.has_duplicate_extension() {
+                continue; // Unsupported, or malformed extensions.
+            }
+
+            let key_config = &contents.key_config;
+            for cipher_suite in &key_config.symmetric_cipher_suites {
+                // TODO(@cpu): Confirm we known the tag length for the chosen AEAD ID.
+                let suite = HpkeSuite {
+                    kem: key_config.kem_id,
+                    sym: *cipher_suite,
+                };
+                if hpke_provider.supports_suite(&suite) {
+                    return Ok((config.clone(), suite));
+                }
+            }
+        }
+
+        Err(Error::General("No compatible ECH config".into()))
+    }
 }
 
 /// Container for unsafe APIs
