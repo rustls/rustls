@@ -502,8 +502,8 @@ pub use crate::common_state::{CommonState, IoState, Side};
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, SideData};
 pub use crate::enums::{
-    AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
-    SignatureScheme,
+    AlertDescription, CipherSuite, ContentType, EchClientHelloType, HandshakeType, ProtocolVersion,
+    SignatureAlgorithm, SignatureScheme,
 };
 pub use crate::error::{
     CertRevocationListError, CertificateError, Error, InvalidMessage, OtherError, PeerIncompatible,

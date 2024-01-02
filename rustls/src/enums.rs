@@ -567,6 +567,20 @@ enum_builder! {
     }
 }
 
+enum_builder! {
+    /// The type of Encrypted Client Hello (`EchClientHelloType`).
+    ///
+    /// Specified in [draft-ietf-tls-esni Section 5].
+    /// TODO(XXX): Update reference once RFC is published.
+    ///
+    /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-5>
+    @U8
+    pub enum EchClientHelloType {
+        ClientHelloOuter => 0,
+        ClientHelloInner => 1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

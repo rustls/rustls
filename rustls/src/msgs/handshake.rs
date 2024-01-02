@@ -13,7 +13,9 @@ use pki_types::{CertificateDer, DnsName};
 #[cfg(feature = "tls12")]
 use crate::crypto::ActiveKeyExchange;
 use crate::crypto::SecureRandom;
-use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::enums::{
+    CipherSuite, EchClientHelloType, HandshakeType, ProtocolVersion, SignatureScheme,
+};
 use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
@@ -549,6 +551,7 @@ pub enum ClientExtension {
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
+    EncryptedClientHello(EncryptedClientHello),
     Unknown(UnknownExtension),
 }
 
@@ -571,6 +574,7 @@ impl ClientExtension {
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
+            Self::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -600,6 +604,7 @@ impl Codec<'_> for ClientExtension {
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
                 nested.buf.extend_from_slice(r);
             }
+            Self::EncryptedClientHello(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -696,6 +701,7 @@ pub enum ServerExtension {
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
+    EncryptedClientHello(ServerEncryptedClientHello),
     Unknown(UnknownExtension),
 }
 
@@ -715,6 +721,7 @@ impl ServerExtension {
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
+            Self::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -740,6 +747,7 @@ impl Codec<'_> for ServerExtension {
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
                 nested.buf.extend_from_slice(r);
             }
+            Self::EncryptedClientHello(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -767,6 +775,9 @@ impl Codec<'_> for ServerExtension {
                 Self::TransportParametersDraft(sub.rest().to_vec())
             }
             ExtensionType::EarlyData => Self::EarlyData,
+            ExtensionType::EncryptedClientHello => {
+                Self::EncryptedClientHello(ServerEncryptedClientHello::read(&mut sub)?)
+            }
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -1002,6 +1013,7 @@ pub(crate) enum HelloRetryExtension {
     KeyShare(NamedGroup),
     Cookie(PayloadU16),
     SupportedVersions(ProtocolVersion),
+    EchHelloRetryRequest(Vec<u8>),
     Unknown(UnknownExtension),
 }
 
@@ -1011,6 +1023,7 @@ impl HelloRetryExtension {
             Self::KeyShare(_) => ExtensionType::KeyShare,
             Self::Cookie(_) => ExtensionType::Cookie,
             Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
+            Self::EchHelloRetryRequest(_) => ExtensionType::EncryptedClientHello,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -1025,6 +1038,9 @@ impl Codec<'_> for HelloRetryExtension {
             Self::KeyShare(ref r) => r.encode(nested.buf),
             Self::Cookie(ref r) => r.encode(nested.buf),
             Self::SupportedVersions(ref r) => r.encode(nested.buf),
+            Self::EchHelloRetryRequest(ref r) => {
+                nested.buf.extend_from_slice(r);
+            }
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -1040,6 +1056,7 @@ impl Codec<'_> for HelloRetryExtension {
             ExtensionType::SupportedVersions => {
                 Self::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
+            ExtensionType::EncryptedClientHello => Self::EchHelloRetryRequest(sub.rest().to_vec()),
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -1104,6 +1121,7 @@ impl HelloRetryRequest {
             ext.ext_type() != ExtensionType::KeyShare
                 && ext.ext_type() != ExtensionType::SupportedVersions
                 && ext.ext_type() != ExtensionType::Cookie
+                && ext.ext_type() != ExtensionType::EncryptedClientHello
         })
     }
 
@@ -1133,6 +1151,15 @@ impl HelloRetryRequest {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             HelloRetryExtension::SupportedVersions(ver) => Some(ver),
+            _ => None,
+        }
+    }
+
+    #[allow(dead_code)] // TODO(@cpu): remove in subsequent commits.
+    pub(crate) fn ech_retry_request(&self) -> Option<&Vec<u8>> {
+        let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
+        match *ext {
+            HelloRetryExtension::EchHelloRetryRequest(ref ech) => Some(ech),
             _ => None,
         }
     }
@@ -1806,6 +1833,15 @@ pub(crate) trait HasServerExtensions {
         match *ext {
             ServerExtension::TransportParameters(ref bytes)
             | ServerExtension::TransportParametersDraft(ref bytes) => Some(bytes.to_vec()),
+            _ => None,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn server_ech_extension(&self) -> Option<ServerEncryptedClientHello> {
+        let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
+        match ext {
+            ServerExtension::EncryptedClientHello(ech) => Some(ech.clone()),
             _ => None,
         }
     }
@@ -2554,4 +2590,103 @@ fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>(iter: I) -
     }
 
     false
+}
+
+/// Representation of the `ECHClientHello` client extension specified in
+/// [draft-ietf-tls-esni Section 5].
+///
+/// TODO(XXX): Update reference once RFC is published.
+/// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-5>
+#[derive(Clone, Debug)]
+pub enum EncryptedClientHello {
+    /// A `ECHClientHello` with type [EchClientHelloType::ClientHelloOuter].
+    Outer(EncryptedClientHelloOuter),
+    /// An empty `ECHClientHello` with type [EchClientHelloType::ClientHelloInner].
+    ///
+    /// This variant has no payload.
+    Inner,
+}
+
+impl Codec<'_> for EncryptedClientHello {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::Outer(payload) => {
+                EchClientHelloType::ClientHelloOuter.encode(bytes);
+                payload.encode(bytes);
+            }
+            Self::Inner => {
+                EchClientHelloType::ClientHelloInner.encode(bytes);
+                // Empty payload.
+            }
+        }
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        match EchClientHelloType::read(r)? {
+            EchClientHelloType::ClientHelloOuter => {
+                Ok(Self::Outer(EncryptedClientHelloOuter::read(r)?))
+            }
+            EchClientHelloType::ClientHelloInner => Ok(Self::Inner),
+            _ => Err(InvalidMessage::InvalidContentType),
+        }
+    }
+}
+
+/// Representation of the ECHClientHello extension with type outer specified in
+/// [draft-ietf-tls-esni Section 5].
+///
+/// TODO(XXX): Update reference once RFC is published.
+/// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-5>
+#[derive(Clone, Debug)]
+pub struct EncryptedClientHelloOuter {
+    /// The cipher suite used to encrypt ClientHelloInner. Must match a value from
+    /// ECHConfigContents.cipher_suites list.
+    pub cipher_suite: HpkeSymmetricCipherSuite,
+    /// The ECHConfigContents.key_config.config_id for the chosen ECHConfig.
+    pub config_id: u8,
+    /// The HPKE encapsulated key, used by servers to decrypt the corresponding payload field.
+    /// This field is empty in a ClientHelloOuter sent in response to a HelloRetryRequest.
+    pub enc: PayloadU16,
+    /// The serialized and encrypted ClientHelloInner structure, encrypted using HPKE.
+    pub payload: PayloadU16,
+}
+
+impl Codec<'_> for EncryptedClientHelloOuter {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.cipher_suite.encode(bytes);
+        self.config_id.encode(bytes);
+        self.enc.encode(bytes);
+        self.payload.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            cipher_suite: HpkeSymmetricCipherSuite::read(r)?,
+            config_id: u8::read(r)?,
+            enc: PayloadU16::read(r)?,
+            payload: PayloadU16::read(r)?,
+        })
+    }
+}
+
+/// Representation of the ECHEncryptedExtensions extension specified in
+/// [draft-ietf-tls-esni Section 5].
+///
+/// TODO(XXX): Update reference once RFC is published.
+/// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-5>
+#[derive(Clone, Debug)]
+pub struct ServerEncryptedClientHello {
+    pub(crate) retry_configs: Vec<EchConfig>,
+}
+
+impl Codec<'_> for ServerEncryptedClientHello {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.retry_configs.encode(bytes);
+    }
+
+    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            retry_configs: Vec::<EchConfig>::read(r)?,
+        })
+    }
 }
