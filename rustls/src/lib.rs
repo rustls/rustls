@@ -534,6 +534,7 @@ pub mod client {
     pub(super) mod builder;
     mod client_conn;
     mod common;
+    mod ech;
     pub(super) mod handy;
     mod hs;
     #[cfg(feature = "tls12")]

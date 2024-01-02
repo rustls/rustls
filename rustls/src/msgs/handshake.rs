@@ -1069,7 +1069,7 @@ impl TlsListElement for HelloRetryExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HelloRetryRequest {
     pub(crate) legacy_version: ProtocolVersion,
     pub session_id: SessionId,

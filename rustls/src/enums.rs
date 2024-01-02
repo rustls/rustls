@@ -42,6 +42,7 @@ enum_builder! {
         UnknownPSKIdentity => 0x73,
         CertificateRequired => 0x74,
         NoApplicationProtocol => 0x78,
+        EncryptedClientHelloRequired => 0x79,
     }
 }
 
