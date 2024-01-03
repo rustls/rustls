@@ -6,6 +6,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 pub enum KeyType {
     Rsa,
     EcdsaP256,
+    EcdsaP384,
 }
 
 impl KeyType {
@@ -13,6 +14,7 @@ impl KeyType {
         match self {
             Self::Rsa => format!("../test-ca/rsa/{}", part),
             Self::EcdsaP256 => format!("../test-ca/ecdsa-p256/{}", part),
+            Self::EcdsaP384 => format!("../test-ca/ecdsa-p384/{}", part),
         }
     }
 
