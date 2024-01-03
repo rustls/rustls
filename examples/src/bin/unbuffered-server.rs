@@ -16,23 +16,6 @@ use rustls::unbuffered::{
 use rustls::ServerConfig;
 use rustls_pemfile::Item;
 
-const KB: usize = 1024;
-const INCOMING_TLS_BUFSIZE: usize = 16 * KB;
-const OUTGOING_TLS_INITIAL_BUFSIZE: usize = 0;
-const MAX_EARLY_DATA_SIZE: Option<u32> = Some(128);
-const MAX_FRAGMENT_SIZE: Option<usize> = None;
-
-const PORT: u16 = 1443;
-const MAX_ITERATIONS: usize = 30;
-const CERTFILE: &str = match option_env!("CERTFILE") {
-    Some(certfile) => certfile,
-    None => "localhost.pem",
-};
-const PRIV_KEY_FILE: &str = match option_env!("PRIV_KEY_FILE") {
-    Some(priv_key_file) => priv_key_file,
-    None => "localhost-key.pem",
-};
-
 fn main() -> Result<(), Box<dyn Error>> {
     let mut config = ServerConfig::builder()
         .with_no_client_auth()
@@ -273,3 +256,20 @@ fn load_private_key() -> Result<PrivateKeyDer<'static>, io::Error> {
 
     panic!("no keys found in {PRIV_KEY_FILE}")
 }
+
+const KB: usize = 1024;
+const INCOMING_TLS_BUFSIZE: usize = 16 * KB;
+const OUTGOING_TLS_INITIAL_BUFSIZE: usize = 0;
+const MAX_EARLY_DATA_SIZE: Option<u32> = Some(128);
+const MAX_FRAGMENT_SIZE: Option<usize> = None;
+
+const PORT: u16 = 1443;
+const MAX_ITERATIONS: usize = 30;
+const CERTFILE: &str = match option_env!("CERTFILE") {
+    Some(certfile) => certfile,
+    None => "localhost.pem",
+};
+const PRIV_KEY_FILE: &str = match option_env!("PRIV_KEY_FILE") {
+    Some(priv_key_file) => priv_key_file,
+    None => "localhost-key.pem",
+};
