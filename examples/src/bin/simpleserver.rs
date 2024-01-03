@@ -9,27 +9,27 @@
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
 
+use std::env;
 use std::error::Error as StdError;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
 
-const CERTFILE: &str = match option_env!("CERTFILE") {
-    Some(certfile) => certfile,
-    None => "localhost.pem",
-};
-
-const PRIV_KEY_FILE: &str = match option_env!("PRIV_KEY_FILE") {
-    Some(priv_key_file) => priv_key_file,
-    None => "localhost-key.pem",
-};
-
 fn main() -> Result<(), Box<dyn StdError>> {
-    let certs = rustls_pemfile::certs(&mut BufReader::new(&mut File::open(CERTFILE)?))
+    let mut args = env::args();
+    let cert_file = args
+        .next()
+        .expect("missing certificate file argument");
+    let private_key_file = args
+        .next()
+        .expect("missing private key file argument");
+
+    let certs = rustls_pemfile::certs(&mut BufReader::new(&mut File::open(cert_file)?))
         .collect::<Result<Vec<_>, _>>()?;
     let private_key =
-        rustls_pemfile::private_key(&mut BufReader::new(&mut File::open(PRIV_KEY_FILE)?))?.unwrap();
+        rustls_pemfile::private_key(&mut BufReader::new(&mut File::open(private_key_file)?))?
+            .unwrap();
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, private_key)?;
