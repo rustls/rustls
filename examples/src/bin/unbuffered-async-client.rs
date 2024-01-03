@@ -22,15 +22,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(feature = "async-std"))]
 use tokio::net::TcpStream;
 
-const SERVER_NAME: &str = "example.com";
-const PORT: u16 = 443;
-
-const KB: usize = 1024;
-const INCOMING_TLS_BUFSIZE: usize = 16 * KB;
-const OUTGOING_TLS_INITIAL_BUFSIZE: usize = KB;
-
-const MAX_ITERATIONS: usize = 20;
-
 #[cfg_attr(not(feature = "async-std"), tokio::main(flavor = "current_thread"))]
 #[cfg_attr(feature = "async-std", async_std::main)]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -265,3 +256,12 @@ fn encrypt_http_request(
         false
     }
 }
+
+const SERVER_NAME: &str = "example.com";
+const PORT: u16 = 443;
+
+const KB: usize = 1024;
+const INCOMING_TLS_BUFSIZE: usize = 16 * KB;
+const OUTGOING_TLS_INITIAL_BUFSIZE: usize = KB;
+
+const MAX_ITERATIONS: usize = 20;
