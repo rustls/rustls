@@ -1,3 +1,7 @@
+//! This is a simple client using rustls' unbuffered API. Meaning that the application layer must
+//! handle the buffers required to receive, process and send TLS data. Additionally it demonstrates
+//! using asynchronous I/O using either async-std or tokio.
+
 use std::error::Error;
 use std::sync::Arc;
 
