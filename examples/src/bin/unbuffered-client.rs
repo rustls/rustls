@@ -15,17 +15,6 @@ use rustls::unbuffered::{
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, RootCertStore};
 
-const SERVER_NAME: &str = "example.com";
-const PORT: u16 = 443;
-
-const KB: usize = 1024;
-const INCOMING_TLS_BUFSIZE: usize = 16 * KB;
-const OUTGOING_TLS_INITIAL_BUFSIZE: usize = KB;
-
-const MAX_ITERATIONS: usize = 20;
-const SEND_EARLY_DATA: bool = false;
-const EARLY_DATA: &[u8] = b"hello";
-
 fn main() -> Result<(), Box<dyn Error>> {
     let root_store = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
@@ -278,3 +267,14 @@ fn encrypt_http_request(
         false
     }
 }
+
+const SERVER_NAME: &str = "example.com";
+const PORT: u16 = 443;
+
+const KB: usize = 1024;
+const INCOMING_TLS_BUFSIZE: usize = 16 * KB;
+const OUTGOING_TLS_INITIAL_BUFSIZE: usize = KB;
+
+const MAX_ITERATIONS: usize = 20;
+const SEND_EARLY_DATA: bool = false;
+const EARLY_DATA: &[u8] = b"hello";
