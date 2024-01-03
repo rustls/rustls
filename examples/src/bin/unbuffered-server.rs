@@ -1,10 +1,12 @@
 //! This is a simple server using rustls' unbuffered API. Meaning that the application layer must
 //! handle the buffers required to receive, process and send TLS data.
 
+use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::Path;
 use std::sync::Arc;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
@@ -17,9 +19,17 @@ use rustls::ServerConfig;
 use rustls_pemfile::Item;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let mut args = env::args();
+    let cert_file = args
+        .next()
+        .expect("missing certificate file argument");
+    let private_key_file = args
+        .next()
+        .expect("missing private key file argument");
+
     let mut config = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(load_certs()?, load_private_key()?)?;
+        .with_single_cert(load_certs(cert_file)?, load_private_key(private_key_file)?)?;
 
     if let Some(max_early_data_size) = MAX_EARLY_DATA_SIZE {
         config.max_early_data_size = max_early_data_size;
@@ -236,13 +246,13 @@ fn send_tls(
     Ok(())
 }
 
-fn load_certs() -> Result<Vec<CertificateDer<'static>>, io::Error> {
-    let mut reader = BufReader::new(File::open(CERTFILE)?);
+fn load_certs(path: impl AsRef<Path>) -> Result<Vec<CertificateDer<'static>>, io::Error> {
+    let mut reader = BufReader::new(File::open(path)?);
     rustls_pemfile::certs(&mut reader).collect()
 }
 
-fn load_private_key() -> Result<PrivateKeyDer<'static>, io::Error> {
-    let mut reader = BufReader::new(File::open(PRIV_KEY_FILE)?);
+fn load_private_key(path: impl AsRef<Path>) -> Result<PrivateKeyDer<'static>, io::Error> {
+    let mut reader = BufReader::new(File::open(&path)?);
 
     loop {
         match rustls_pemfile::read_one(&mut reader)? {
@@ -254,7 +264,7 @@ fn load_private_key() -> Result<PrivateKeyDer<'static>, io::Error> {
         }
     }
 
-    panic!("no keys found in {PRIV_KEY_FILE}")
+    panic!("no keys found in {}", path.as_ref().display())
 }
 
 const KB: usize = 1024;
@@ -265,11 +275,3 @@ const MAX_FRAGMENT_SIZE: Option<usize> = None;
 
 const PORT: u16 = 1443;
 const MAX_ITERATIONS: usize = 30;
-const CERTFILE: &str = match option_env!("CERTFILE") {
-    Some(certfile) => certfile,
-    None => "localhost.pem",
-};
-const PRIV_KEY_FILE: &str = match option_env!("PRIV_KEY_FILE") {
-    Some(priv_key_file) => priv_key_file,
-    None => "localhost-key.pem",
-};
