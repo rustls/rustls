@@ -1,3 +1,6 @@
+//! This is a simple server using rustls' unbuffered API. Meaning that the application layer must
+//! handle the buffers required to receive, process and send TLS data.
+
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
