@@ -1850,7 +1850,7 @@ impl CertificateRequestPayloadTls13 {
             .find(|x| x.ext_type() == ext)
     }
 
-    pub(crate) fn get_sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
+    pub(crate) fn sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
         let ext = self.find_extension(ExtensionType::SignatureAlgorithms)?;
         match *ext {
             CertReqExtension::SignatureAlgorithms(ref sa) => Some(sa),
