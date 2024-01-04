@@ -15,7 +15,7 @@ enum_builder! {
         SHA224 => 0x03,
         SHA256 => 0x04,
         SHA384 => 0x05,
-        SHA512 => 0x06
+        SHA512 => 0x06,
     }
 }
 
@@ -34,7 +34,7 @@ enum_builder! {
         FortezzaDMS => 0x14,
         ECDSASign => 0x40,
         RSAFixedECDH => 0x41,
-        ECDSAFixedECDH => 0x42
+        ECDSAFixedECDH => 0x42,
     }
 }
 
@@ -46,7 +46,7 @@ enum_builder! {
     pub enum Compression {
         Null => 0x00,
         Deflate => 0x01,
-        LSZ => 0x40
+        LSZ => 0x40,
     }
 }
 
@@ -57,7 +57,7 @@ enum_builder! {
     @U8
     pub enum AlertLevel {
         Warning => 0x01,
-        Fatal => 0x02
+        Fatal => 0x02,
     }
 }
 
@@ -68,7 +68,7 @@ enum_builder! {
     @U8
     pub(crate) enum HeartbeatMessageType {
         Request => 0x01,
-        Response => 0x02
+        Response => 0x02,
     }
 }
 
@@ -114,7 +114,7 @@ enum_builder! {
         NextProtocolNegotiation => 0x3374,
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,
-        TransportParametersDraft => 0xffa5
+        TransportParametersDraft => 0xffa5,
     }
 }
 
@@ -124,7 +124,7 @@ enum_builder! {
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
     pub(crate) enum ServerNameType {
-        HostName => 0x00
+        HostName => 0x00,
     }
 }
 
@@ -170,7 +170,7 @@ enum_builder! {
         X25519 => 0x001d,
         X448 => 0x001e,
         arbitrary_explicit_prime_curves => 0xff01,
-        arbitrary_explicit_char2_curves => 0xff02
+        arbitrary_explicit_char2_curves => 0xff02,
     }
 }
 
@@ -189,7 +189,7 @@ enum_builder! {
         FFDHE3072 => 0x0101,
         FFDHE4096 => 0x0102,
         FFDHE6144 => 0x0103,
-        FFDHE8192 => 0x0104
+        FFDHE8192 => 0x0104,
     }
 }
 
@@ -201,7 +201,7 @@ enum_builder! {
     pub enum ECPointFormat {
         Uncompressed => 0x00,
         ANSIX962CompressedPrime => 0x01,
-        ANSIX962CompressedChar2 => 0x02
+        ANSIX962CompressedChar2 => 0x02,
     }
 }
 
@@ -216,7 +216,7 @@ enum_builder! {
     @U8
     pub(crate) enum HeartbeatMode {
         PeerAllowedToSend => 0x01,
-        PeerNotAllowedToSend => 0x02
+        PeerNotAllowedToSend => 0x02,
     }
 }
 
@@ -228,7 +228,7 @@ enum_builder! {
     pub(crate) enum ECCurveType {
         ExplicitPrime => 0x01,
         ExplicitChar2 => 0x02,
-        NamedCurve => 0x03
+        NamedCurve => 0x03,
     }
 }
 
@@ -239,7 +239,7 @@ enum_builder! {
     @U8
     pub enum PSKKeyExchangeMode {
         PSK_KE => 0x00,
-        PSK_DHE_KE => 0x01
+        PSK_DHE_KE => 0x01,
     }
 }
 
@@ -250,7 +250,7 @@ enum_builder! {
     @U8
     pub enum KeyUpdateRequest {
         UpdateNotRequested => 0x00,
-        UpdateRequested => 0x01
+        UpdateRequested => 0x01,
     }
 }
 
@@ -260,7 +260,7 @@ enum_builder! {
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U8
     pub enum CertificateStatusType {
-        OCSP => 0x01
+        OCSP => 0x01,
     }
 }
 
@@ -275,7 +275,7 @@ enum_builder! {
         DHKEM_P384_HKDF_SHA384 => 0x0011,
         DHKEM_P521_HKDF_SHA512 => 0x0012,
         DHKEM_X25519_HKDF_SHA256 => 0x0020,
-        DHKEM_X448_HKDF_SHA512 => 0x0021
+        DHKEM_X448_HKDF_SHA512 => 0x0021,
     }
 }
 
@@ -288,7 +288,7 @@ enum_builder! {
     pub enum HpkeKdf {
         HKDF_SHA256 => 0x0001,
         HKDF_SHA384 => 0x0002,
-        HKDF_SHA512 => 0x0003
+        HKDF_SHA512 => 0x0003,
     }
 }
 
@@ -309,7 +309,7 @@ enum_builder! {
         AES_128_GCM => 0x0001,
         AES_256_GCM => 0x0002,
         CHACHA20_POLY_1305 => 0x0003,
-        EXPORT_ONLY => 0xFFFF
+        EXPORT_ONLY => 0xFFFF,
     }
 }
 
@@ -329,7 +329,7 @@ enum_builder! {
     /// [draft-ietf-tls-esni Section 4]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-4>
     @U16
     pub enum EchVersion {
-        V14 => 0xfe0d
+        V14 => 0xfe0d,
     }
 }
 
