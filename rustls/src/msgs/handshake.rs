@@ -1988,7 +1988,7 @@ impl NewSessionTicketPayloadTls13 {
             .find(|x| x.ext_type() == ext)
     }
 
-    pub(crate) fn get_max_early_data_size(&self) -> Option<u32> {
+    pub(crate) fn max_early_data_size(&self) -> Option<u32> {
         let ext = self.find_extension(ExtensionType::EarlyData)?;
         match *ext {
             NewSessionTicketExtension::EarlyData(ref sz) => Some(*sz),

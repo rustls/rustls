@@ -960,12 +960,12 @@ impl ExpectTraffic {
             UnixTime::now(),
             nst.lifetime,
             nst.age_add,
-            nst.get_max_early_data_size()
+            nst.max_early_data_size()
                 .unwrap_or_default(),
         );
 
         if cx.common.is_quic() {
-            if let Some(sz) = nst.get_max_early_data_size() {
+            if let Some(sz) = nst.max_early_data_size() {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
                 }
