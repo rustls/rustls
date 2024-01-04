@@ -706,7 +706,7 @@ fn server_get_ecpoints_extension() {
 #[test]
 fn server_get_supported_versions() {
     test_server_extension_getter(ExtensionType::SupportedVersions, |shp| {
-        shp.get_supported_versions().is_some()
+        shp.supported_versions().is_some()
     });
 }
 
