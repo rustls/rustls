@@ -620,7 +620,7 @@ fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRe
 #[test]
 fn helloretry_get_requested_key_share_group() {
     test_helloretry_extension_getter(ExtensionType::KeyShare, |hrr| {
-        hrr.get_requested_key_share_group()
+        hrr.requested_key_share_group()
             .is_some()
     });
 }

@@ -1133,7 +1133,7 @@ impl HelloRetryRequest {
             .find(|x| x.ext_type() == ext)
     }
 
-    pub fn get_requested_key_share_group(&self) -> Option<NamedGroup> {
+    pub fn requested_key_share_group(&self) -> Option<NamedGroup> {
         let ext = self.find_extension(ExtensionType::KeyShare)?;
         match *ext {
             HelloRetryExtension::KeyShare(grp) => Some(grp),
