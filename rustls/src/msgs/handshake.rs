@@ -1231,7 +1231,7 @@ impl ServerHelloPayload {
         }
     }
 
-    pub(crate) fn get_ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
+    pub(crate) fn ecpoints_extension(&self) -> Option<&[ECPointFormat]> {
         let ext = self.find_extension(ExtensionType::ECPointFormats)?;
         match *ext {
             ServerExtension::EcPointFormats(ref fmts) => Some(fmts),

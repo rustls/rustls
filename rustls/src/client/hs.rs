@@ -569,7 +569,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
-        if let Some(point_fmts) = server_hello.get_ecpoints_extension() {
+        if let Some(point_fmts) = server_hello.ecpoints_extension() {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
