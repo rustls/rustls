@@ -278,7 +278,7 @@ mod client_hello {
             let mut chosen_psk_index = None;
             let mut resumedata = None;
 
-            if let Some(psk_offer) = client_hello.get_psk() {
+            if let Some(psk_offer) = client_hello.psk() {
                 if !client_hello.check_psk_ext_is_last() {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
