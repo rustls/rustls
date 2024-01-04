@@ -114,7 +114,7 @@ fn can_roundtrip_unknown_client_ext() {
     let ext = ClientExtension::read(&mut rd).unwrap();
 
     println!("{:?}", ext);
-    assert_eq!(ext.get_type(), ExtensionType::Unknown(0x1234));
+    assert_eq!(ext.ext_type(), ExtensionType::Unknown(0x1234));
     assert_eq!(bytes.to_vec(), ext.get_encoding());
 }
 
@@ -167,7 +167,7 @@ fn can_roundtrip_single_sni() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
     assert_eq!(bytes.to_vec(), ext.get_encoding());
 }
 
@@ -178,7 +178,7 @@ fn can_round_trip_mixed_case_sni() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
     assert_eq!(bytes.to_vec(), ext.get_encoding());
 }
 
@@ -189,7 +189,7 @@ fn can_roundtrip_other_sni_name_types() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
     assert_eq!(bytes.to_vec(), ext.get_encoding());
 }
 
@@ -200,7 +200,7 @@ fn get_single_hostname_returns_none_for_other_sni_name_types() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
     if let ClientExtension::ServerName(snr) = ext {
         assert!(!snr.has_duplicate_names_for_type());
         assert!(snr.single_hostname().is_none());
@@ -216,7 +216,7 @@ fn can_roundtrip_multiname_sni() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-    assert_eq!(ext.get_type(), ExtensionType::ServerName);
+    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
     assert_eq!(bytes.to_vec(), ext.get_encoding());
     match ext {
         ClientExtension::ServerName(req) => {
@@ -326,7 +326,7 @@ fn can_roundtrip_multi_proto() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-    assert_eq!(ext.get_type(), ExtensionType::ALProtocolNegotiation);
+    assert_eq!(ext.ext_type(), ExtensionType::ALProtocolNegotiation);
     assert_eq!(ext.get_encoding(), bytes.to_vec());
     match ext {
         ClientExtension::Protocols(prot) => {
@@ -345,7 +345,7 @@ fn can_roundtrip_single_proto() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-    assert_eq!(ext.get_type(), ExtensionType::ALProtocolNegotiation);
+    assert_eq!(ext.ext_type(), ExtensionType::ALProtocolNegotiation);
     assert_eq!(bytes.to_vec(), ext.get_encoding());
     match ext {
         ClientExtension::Protocols(prot) => {
@@ -468,7 +468,7 @@ fn test_truncated_client_extension_is_detected() {
         }
 
         // these extension types don't have any internal encoding that rustls validates:
-        match ext.get_type() {
+        match ext.ext_type() {
             ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
                 continue;
             }
