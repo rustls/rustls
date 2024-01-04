@@ -1215,7 +1215,7 @@ impl HasServerExtensions for ServerHelloPayload {
 }
 
 impl ServerHelloPayload {
-    pub(crate) fn get_key_share(&self) -> Option<&KeyShareEntry> {
+    pub(crate) fn key_share(&self) -> Option<&KeyShareEntry> {
         let ext = self.find_extension(ExtensionType::KeyShare)?;
         match *ext {
             ServerExtension::KeyShare(ref share) => Some(share),
