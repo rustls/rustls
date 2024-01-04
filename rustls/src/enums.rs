@@ -41,7 +41,7 @@ enum_builder! {
         BadCertificateHashValue => 0x72,
         UnknownPSKIdentity => 0x73,
         CertificateRequired => 0x74,
-        NoApplicationProtocol => 0x78
+        NoApplicationProtocol => 0x78,
     }
 }
 
@@ -69,7 +69,7 @@ enum_builder! {
         CertificateURL => 0x15,
         CertificateStatus => 0x16,
         KeyUpdate => 0x18,
-        MessageHash => 0xfe
+        MessageHash => 0xfe,
     }
 }
 
@@ -83,7 +83,7 @@ enum_builder! {
         Alert => 0x15,
         Handshake => 0x16,
         ApplicationData => 0x17,
-        Heartbeat => 0x18
+        Heartbeat => 0x18,
     }
 }
 
@@ -101,7 +101,7 @@ enum_builder! {
         TLSv1_3 => 0x0304,
         DTLSv1_0 => 0xFEFF,
         DTLSv1_2 => 0xFEFD,
-        DTLSv1_3 => 0xFEFC
+        DTLSv1_3 => 0xFEFC,
     }
 }
 
@@ -486,7 +486,7 @@ enum_builder! {
         TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccad,
         TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccae,
         SSL_RSA_FIPS_WITH_DES_CBC_SHA => 0xfefe,
-        SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA => 0xfeff
+        SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA => 0xfeff,
     }
 }
 
@@ -508,7 +508,7 @@ enum_builder! {
         RSA_PSS_SHA384 => 0x0805,
         RSA_PSS_SHA512 => 0x0806,
         ED25519 => 0x0807,
-        ED448 => 0x0808
+        ED448 => 0x0808,
     }
 }
 
@@ -563,7 +563,7 @@ enum_builder! {
         DSA => 0x02,
         ECDSA => 0x03,
         ED25519 => 0x07,
-        ED448 => 0x08
+        ED448 => 0x08,
     }
 }
 
