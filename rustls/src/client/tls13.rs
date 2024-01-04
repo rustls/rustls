@@ -390,7 +390,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         self.transcript.add_message(&m);
 
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
-        hs::process_alpn_protocol(cx.common, &self.config, exts.get_alpn_protocol())?;
+        hs::process_alpn_protocol(cx.common, &self.config, exts.alpn_protocol())?;
 
         // QUIC transport parameters
         if cx.common.is_quic() {
