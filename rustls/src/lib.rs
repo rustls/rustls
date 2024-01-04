@@ -311,6 +311,10 @@
 //!   Note that aws-lc-rs has additional build-time dependencies like cmake.
 //!   See [the documentation](https://aws.github.io/aws-lc-rs/requirements/index.html) for details.
 //!
+//! - `fips`: enable support for FIPS140-3-approved cryptography, via the aws-lc-rs crate.
+//!   This feature enables the `aws_lc_rs` feature, which makes the rustls crate depend
+//!   on [aws-lc-rs](https://github.com/aws/aws-lc-rs).
+//!
 //! - `tls12` (enabled by default): enable support for TLS version 1.2. Note that, due to the
 //!   additive nature of Cargo features and because it is enabled by default, other crates
 //!   in your dependency graph could re-enable it for your application. If you want to disable

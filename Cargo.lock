@@ -294,11 +294,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "aws-lc-fips-sys"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07fcdffa26123df7f3cf4215be038e3836734f31154abd602195a7ca5ef9623b"
+dependencies = [
+ "bindgen",
+ "cmake",
+ "dunce",
+ "fs_extra",
+ "libc",
+ "paste",
+]
+
+[[package]]
 name = "aws-lc-rs"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb94ba389c4c48d9dc1983f8653cb92f7d9fc50b261e0501be2b7a636cbcbc4a"
 dependencies = [
+ "aws-lc-fips-sys",
  "aws-lc-sys",
  "mirai-annotations",
  "paste",

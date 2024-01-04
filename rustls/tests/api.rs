@@ -473,7 +473,7 @@ fn server_can_get_client_cert_after_resumption() {
 }
 
 #[test]
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", not(feature = "fips")))]
 fn test_config_builders_debug() {
     let b = ServerConfig::builder_with_provider(
         CryptoProvider {
@@ -961,7 +961,7 @@ fn check_sigalgs_reduced_by_ciphersuite(
 fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
     check_sigalgs_reduced_by_ciphersuite(
         KeyType::Rsa,
-        CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         vec![
             SignatureScheme::RSA_PSS_SHA512,
             SignatureScheme::RSA_PSS_SHA384,
@@ -978,9 +978,9 @@ fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
 fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
     check_sigalgs_reduced_by_ciphersuite(
         KeyType::EcdsaP256,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         vec![
-            #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+            #[cfg(any(feature = "fips", all(not(feature = "ring"), feature = "aws_lc_rs")))]
             SignatureScheme::ECDSA_NISTP521_SHA512,
             SignatureScheme::ECDSA_NISTP384_SHA384,
             SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -2891,6 +2891,7 @@ fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
 }
 
 static TEST_CIPHERSUITES: &[(&rustls::SupportedProtocolVersion, KeyType, CipherSuite)] = &[
+    #[cfg(not(feature = "fips"))]
     (
         &rustls::version::TLS13,
         KeyType::Rsa,
@@ -2906,13 +2907,13 @@ static TEST_CIPHERSUITES: &[(&rustls::SupportedProtocolVersion, KeyType, CipherS
         KeyType::Rsa,
         CipherSuite::TLS13_AES_128_GCM_SHA256,
     ),
-    #[cfg(feature = "tls12")]
+    #[cfg(all(feature = "tls12", not(feature = "fips")))]
     (
         &rustls::version::TLS12,
         KeyType::EcdsaP256,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
     ),
-    #[cfg(feature = "tls12")]
+    #[cfg(all(feature = "tls12", not(feature = "fips")))]
     (
         &rustls::version::TLS12,
         KeyType::Rsa,
@@ -2958,7 +2959,10 @@ fn negotiated_ciphersuite_default() {
 
 #[test]
 fn all_suites_covered() {
-    assert_eq!(provider::ALL_CIPHER_SUITES.len(), TEST_CIPHERSUITES.len());
+    assert_eq!(
+        provider::DEFAULT_CIPHER_SUITES.len(),
+        TEST_CIPHERSUITES.len()
+    );
 }
 
 #[test]
@@ -5357,9 +5361,11 @@ fn test_secret_extraction_enabled() {
     for suite in [
         cipher_suite::TLS13_AES_128_GCM_SHA256,
         cipher_suite::TLS13_AES_256_GCM_SHA384,
+        #[cfg(not(feature = "fips"))]
         cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
         cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        #[cfg(not(feature = "fips"))]
         cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
     ] {
         let version = suite.version();
@@ -5764,26 +5770,38 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
     ));
 }
 
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", not(feature = "fips")))]
 #[test]
 fn test_client_fips_service_indicator() {
     assert!(!make_client_config(KeyType::Rsa).fips());
 }
 
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", not(feature = "fips")))]
 #[test]
 fn test_server_fips_service_indicator() {
     assert!(!make_server_config(KeyType::Rsa).fips());
 }
 
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+#[cfg(feature = "fips")]
 #[test]
 fn test_client_fips_service_indicator() {
     assert!(make_client_config(KeyType::Rsa).fips());
 }
 
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+#[cfg(feature = "fips")]
 #[test]
 fn test_server_fips_service_indicator() {
     assert!(make_server_config(KeyType::Rsa).fips());
+}
+
+#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs", not(feature = "fips")))]
+#[test]
+fn test_client_fips_service_indicator() {
+    assert!(!make_client_config(KeyType::Rsa).fips());
+}
+
+#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs", not(feature = "fips")))]
+#[test]
+fn test_server_fips_service_indicator() {
+    assert!(!make_server_config(KeyType::Rsa).fips());
 }
