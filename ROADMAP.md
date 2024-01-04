@@ -25,16 +25,6 @@ In rough order of priority:
   message.
   rustls/rustls#508
 
-* **Improve OS Trust Verifier Support**.
-  While we currently have a way to trust certificates stored in the platform trust
-  store, platform trust stores can have other ways of restricting how/when roots
-  that they expose are trusted. In order to rely on these (on Windows, Android,
-  and Apple platforms) we should rely on the platform verifier directly.
-
-  Given that platform verifiers may require blocking I/O, some API changes are
-  required.
-  rustls/rustls-native-certs#25
-
 * **Additional Performance Optimization**.
   Additional performance optimization including CPU usage, latency, and memory
   usage. The goal is to outperform OpenSSL across the board if we are not already.
@@ -57,6 +47,14 @@ In rough order of priority:
   rustls/rustls#1687
 
 ## Past priorities
+
+Delivered in [rustls-platform-verifier](https://github.com/rustls/rustls-platform-verifier) 0.1.0:
+
+* **Improve OS Trust Verifier Support**.
+  While we currently have a way to trust certificates stored in the platform trust
+  store, platform trust stores can have other ways of restricting how/when roots
+  that they expose are trusted. In order to rely on these (on Windows, Android,
+  and Apple platforms) we should rely on the platform verifier directly.
 
 Delivered in 0.22:
 
