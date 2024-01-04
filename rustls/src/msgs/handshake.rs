@@ -1209,7 +1209,7 @@ impl Codec for ServerHelloPayload {
 }
 
 impl HasServerExtensions for ServerHelloPayload {
-    fn get_extensions(&self) -> &[ServerExtension] {
+    fn extensions(&self) -> &[ServerExtension] {
         &self.extensions
     }
 }
@@ -1635,14 +1635,14 @@ impl TlsListElement for ServerExtension {
 }
 
 pub(crate) trait HasServerExtensions {
-    fn get_extensions(&self) -> &[ServerExtension];
+    fn extensions(&self) -> &[ServerExtension];
 
     /// Returns true if there is more than one extension of a given
     /// type.
     fn has_duplicate_extension(&self) -> bool {
         let mut seen = BTreeSet::new();
 
-        for ext in self.get_extensions() {
+        for ext in self.extensions() {
             let typ = ext.ext_type().get_u16();
 
             if seen.contains(&typ) {
@@ -1655,7 +1655,7 @@ pub(crate) trait HasServerExtensions {
     }
 
     fn find_extension(&self, ext: ExtensionType) -> Option<&ServerExtension> {
-        self.get_extensions()
+        self.extensions()
             .iter()
             .find(|x| x.ext_type() == ext)
     }
@@ -1686,7 +1686,7 @@ pub(crate) trait HasServerExtensions {
 }
 
 impl HasServerExtensions for Vec<ServerExtension> {
-    fn get_extensions(&self) -> &[ServerExtension] {
+    fn extensions(&self) -> &[ServerExtension] {
         self
     }
 }
