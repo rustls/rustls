@@ -732,7 +732,7 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
 #[test]
 fn certentry_get_ocsp_response() {
     test_cert_extension_getter(ExtensionType::StatusRequest, |ce| {
-        ce.get_ocsp_response().is_some()
+        ce.ocsp_response().is_some()
     });
 }
 
