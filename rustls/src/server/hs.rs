@@ -77,7 +77,7 @@ impl ExtensionProcessing {
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
-        let maybe_their_protocols = hello.get_alpn_extension();
+        let maybe_their_protocols = hello.alpn_extension();
         if let Some(their_protocols) = maybe_their_protocols {
             let their_protocols = their_protocols.to_slices();
 
@@ -316,7 +316,7 @@ impl ExpectClientHello {
             let client_hello = ClientHello::new(
                 &cx.data.sni,
                 &sig_schemes,
-                client_hello.get_alpn_extension(),
+                client_hello.alpn_extension(),
                 &client_hello.cipher_suites,
             );
 
