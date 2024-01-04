@@ -133,7 +133,7 @@ impl ExtensionProcessing {
 
         let for_resume = resumedata.is_some();
         // SNI
-        if !for_resume && hello.get_sni_extension().is_some() {
+        if !for_resume && hello.sni_extension().is_some() {
             self.exts
                 .push(ServerExtension::ServerNameAck);
         }
@@ -475,7 +475,7 @@ pub(super) fn process_client_hello<'a>(
     // send an Illegal Parameter alert instead of the Internal Error alert
     // (or whatever) that we'd send if this were checked later or in a
     // different way.
-    let sni: Option<DnsName> = match client_hello.get_sni_extension() {
+    let sni: Option<DnsName> = match client_hello.sni_extension() {
         Some(sni) => {
             if sni.has_duplicate_names_for_type() {
                 return Err(cx.common.send_fatal_alert(

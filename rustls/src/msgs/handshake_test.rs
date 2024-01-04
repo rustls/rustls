@@ -505,7 +505,7 @@ fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPaylo
 #[test]
 fn client_get_sni_extension() {
     test_client_extension_getter(ExtensionType::ServerName, |chp| {
-        chp.get_sni_extension().is_some()
+        chp.sni_extension().is_some()
     });
 }
 
