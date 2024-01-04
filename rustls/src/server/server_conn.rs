@@ -738,7 +738,7 @@ impl Accepted {
         ClientHello::new(
             &self.connection.core.data.sni,
             &self.sig_schemes,
-            payload.get_alpn_extension(),
+            payload.alpn_extension(),
             &payload.cipher_suites,
         )
     }

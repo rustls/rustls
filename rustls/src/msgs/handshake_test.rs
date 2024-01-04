@@ -534,7 +534,7 @@ fn client_get_ecpoints_extension() {
 #[test]
 fn client_get_alpn_extension() {
     test_client_extension_getter(ExtensionType::ALProtocolNegotiation, |chp| {
-        chp.get_alpn_extension().is_some()
+        chp.alpn_extension().is_some()
     });
 }
 

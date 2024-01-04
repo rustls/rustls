@@ -907,7 +907,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn get_alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
+    pub(crate) fn alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
             ClientExtension::Protocols(ref req) => Some(req),
