@@ -42,7 +42,7 @@ impl ClientHelloDetails {
         allowed_unsolicited: &[ExtensionType],
     ) -> bool {
         for ext in received_exts {
-            let ext_type = ext.get_type();
+            let ext_type = ext.ext_type();
             if !self.sent_extensions.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type)
             {
                 trace!("Unsolicited extension {:?}", ext_type);

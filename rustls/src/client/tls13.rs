@@ -191,7 +191,7 @@ fn validate_server_hello(
     server_hello: &ServerHelloPayload,
 ) -> Result<(), Error> {
     for ext in &server_hello.extensions {
-        if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type()) {
+        if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.ext_type()) {
             return Err(common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
                 PeerMisbehaved::UnexpectedCleartextExtension,
@@ -355,8 +355,8 @@ fn validate_encrypted_extensions(
     }
 
     for ext in exts {
-        if ALLOWED_PLAINTEXT_EXTS.contains(&ext.get_type())
-            || DISALLOWED_TLS13_EXTS.contains(&ext.get_type())
+        if ALLOWED_PLAINTEXT_EXTS.contains(&ext.ext_type())
+            || DISALLOWED_TLS13_EXTS.contains(&ext.ext_type())
         {
             return Err(common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
