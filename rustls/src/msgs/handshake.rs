@@ -1223,7 +1223,7 @@ impl ServerHelloPayload {
         }
     }
 
-    pub(crate) fn get_psk_index(&self) -> Option<u16> {
+    pub(crate) fn psk_index(&self) -> Option<u16> {
         let ext = self.find_extension(ExtensionType::PreSharedKey)?;
         match *ext {
             ServerExtension::PresharedKey(ref index) => Some(*index),
