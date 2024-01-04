@@ -252,7 +252,7 @@ impl ExpectClientHello {
             .supports_version(ProtocolVersion::TLSv1_2);
 
         // Are we doing TLS1.3?
-        let maybe_versions_ext = client_hello.get_versions_extension();
+        let maybe_versions_ext = client_hello.versions_extension();
         let version = if let Some(versions) = maybe_versions_ext {
             if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
                 ProtocolVersion::TLSv1_3

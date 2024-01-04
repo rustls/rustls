@@ -548,7 +548,7 @@ fn client_get_quic_params_extension() {
 #[test]
 fn client_get_versions_extension() {
     test_client_extension_getter(ExtensionType::SupportedVersions, |chp| {
-        chp.get_versions_extension().is_some()
+        chp.versions_extension().is_some()
     });
 }
 

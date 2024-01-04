@@ -931,7 +931,7 @@ impl ClientHelloPayload {
         self.find_extension(ExtensionType::SessionTicket)
     }
 
-    pub(crate) fn get_versions_extension(&self) -> Option<&[ProtocolVersion]> {
+    pub(crate) fn versions_extension(&self) -> Option<&[ProtocolVersion]> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             ClientExtension::SupportedVersions(ref vers) => Some(vers),
