@@ -239,7 +239,7 @@ pub(super) fn fill_in_psk_binder(
 
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
-    let binder_plaintext = hmp.get_encoding_for_binder_signing();
+    let binder_plaintext = hmp.encoding_for_binder_signing();
     let handshake_hash = transcript.get_hash_given(suite_hash, &binder_plaintext);
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
