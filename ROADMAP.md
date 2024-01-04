@@ -19,11 +19,11 @@ In rough order of priority:
 * **OpenSSL API Compatibility Layer**.
   Add an OpenSSL C API compatibility layer for adoption purposes.
 
-* **Support Encrypted Client Hello**.
+* **Support Encrypted Client Hello (Client Side)**.
   Encrypted Client Hello is an upcoming standard from the TLS WG providing better
   protection for some of the data sent by a client in the initial Client Hello
   message.
-  rustls/rustls#508
+  rustls/rustls#1718
 
 * **Additional Performance Optimization**.
   Additional performance optimization including CPU usage, latency, and memory
