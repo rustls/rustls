@@ -92,7 +92,7 @@ mod client_hello {
                     )
                 })?;
             let ecpoints_ext = client_hello
-                .get_ecpoints_extension()
+                .ecpoints_extension()
                 .ok_or_else(|| {
                     cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,

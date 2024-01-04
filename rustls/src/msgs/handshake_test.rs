@@ -527,7 +527,7 @@ fn client_get_namedgroups_extension() {
 #[test]
 fn client_get_ecpoints_extension() {
     test_client_extension_getter(ExtensionType::ECPointFormats, |chp| {
-        chp.get_ecpoints_extension().is_some()
+        chp.ecpoints_extension().is_some()
     });
 }
 
