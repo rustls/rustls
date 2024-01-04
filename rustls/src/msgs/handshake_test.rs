@@ -567,7 +567,7 @@ fn client_get_psk() {
 #[test]
 fn client_get_psk_modes() {
     test_client_extension_getter(ExtensionType::PSKKeyExchangeModes, |chp| {
-        chp.get_psk_modes().is_some()
+        chp.psk_modes().is_some()
     });
 }
 

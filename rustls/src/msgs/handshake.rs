@@ -977,7 +977,7 @@ impl ClientHelloPayload {
             .map_or(false, |ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
-    pub(crate) fn get_psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
+    pub(crate) fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
         let ext = self.find_extension(ExtensionType::PSKKeyExchangeModes)?;
         match *ext {
             ClientExtension::PresharedKeyModes(ref psk_modes) => Some(psk_modes),
@@ -986,7 +986,7 @@ impl ClientHelloPayload {
     }
 
     pub(crate) fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
-        self.get_psk_modes()
+        self.psk_modes()
             .map(|modes| modes.contains(&mode))
             .unwrap_or(false)
     }
