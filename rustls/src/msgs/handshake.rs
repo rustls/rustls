@@ -1141,7 +1141,7 @@ impl HelloRetryRequest {
         }
     }
 
-    pub(crate) fn get_cookie(&self) -> Option<&PayloadU16> {
+    pub(crate) fn cookie(&self) -> Option<&PayloadU16> {
         let ext = self.find_extension(ExtensionType::Cookie)?;
         match *ext {
             HelloRetryExtension::Cookie(ref ck) => Some(ck),

@@ -627,7 +627,7 @@ fn helloretry_get_requested_key_share_group() {
 
 #[test]
 fn helloretry_get_cookie() {
-    test_helloretry_extension_getter(ExtensionType::Cookie, |hrr| hrr.get_cookie().is_some());
+    test_helloretry_extension_getter(ExtensionType::Cookie, |hrr| hrr.cookie().is_some());
 }
 
 #[test]
