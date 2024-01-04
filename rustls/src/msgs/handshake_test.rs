@@ -203,7 +203,7 @@ fn get_single_hostname_returns_none_for_other_sni_name_types() {
     assert_eq!(ext.get_type(), ExtensionType::ServerName);
     if let ClientExtension::ServerName(snr) = ext {
         assert!(!snr.has_duplicate_names_for_type());
-        assert!(snr.get_single_hostname().is_none());
+        assert!(snr.single_hostname().is_none());
     } else {
         unreachable!();
     }
@@ -224,7 +224,7 @@ fn can_roundtrip_multiname_sni() {
 
             assert!(req.has_duplicate_names_for_type());
 
-            let dns_name = req.get_single_hostname().unwrap();
+            let dns_name = req.single_hostname().unwrap();
             assert_eq!(dns_name.as_ref(), "hi");
 
             assert_eq!(req[0].typ, ServerNameType::HostName);
