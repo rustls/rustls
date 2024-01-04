@@ -874,7 +874,7 @@ impl ClientHelloPayload {
             .find(|x| x.ext_type() == ext)
     }
 
-    pub(crate) fn get_sni_extension(&self) -> Option<&[ServerName]> {
+    pub(crate) fn sni_extension(&self) -> Option<&[ServerName]> {
         let ext = self.find_extension(ExtensionType::ServerName)?;
         match *ext {
             ClientExtension::ServerName(ref req) => Some(req),
