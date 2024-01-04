@@ -121,7 +121,7 @@ impl ExtensionProcessing {
                 ));
             }
 
-            match hello.get_quic_params_extension() {
+            match hello.quic_params_extension() {
                 Some(params) => cx.common.quic.params = Some(params),
                 None => {
                     return Err(cx
