@@ -4,7 +4,7 @@ macro_rules! enum_builder {
     $(#[$comment:meta])*
     @U8
         $enum_vis:vis enum $enum_name:ident
-        { $( $enum_var: ident => $enum_val: expr ),* }
+        { $( $enum_var: ident => $enum_val: expr ),* $(,)? }
     ) => {
         $(#[$comment])*
         #[non_exhaustive]
@@ -49,7 +49,7 @@ macro_rules! enum_builder {
     $(#[$comment:meta])*
     @U16
         $enum_vis:vis enum $enum_name:ident
-        { $( $enum_var: ident => $enum_val: expr ),* }
+        { $( $enum_var: ident => $enum_val: expr ),* $(,)?}
     ) => {
         $(#[$comment])*
         #[non_exhaustive]
