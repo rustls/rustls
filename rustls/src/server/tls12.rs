@@ -84,7 +84,7 @@ mod client_hello {
             }
 
             let groups_ext = client_hello
-                .get_namedgroups_extension()
+                .namedgroups_extension()
                 .ok_or_else(|| {
                     cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,

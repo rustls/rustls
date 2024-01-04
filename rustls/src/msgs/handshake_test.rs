@@ -519,8 +519,7 @@ fn client_get_sigalgs_extension() {
 #[test]
 fn client_get_namedgroups_extension() {
     test_client_extension_getter(ExtensionType::EllipticCurves, |chp| {
-        chp.get_namedgroups_extension()
-            .is_some()
+        chp.namedgroups_extension().is_some()
     });
 }
 
