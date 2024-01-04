@@ -564,7 +564,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
-            process_alpn_protocol(cx.common, config, server_hello.get_alpn_protocol())?;
+            process_alpn_protocol(cx.common, config, server_hello.alpn_protocol())?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain

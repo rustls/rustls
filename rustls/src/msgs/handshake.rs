@@ -1660,7 +1660,7 @@ pub(crate) trait HasServerExtensions {
             .find(|x| x.ext_type() == ext)
     }
 
-    fn get_alpn_protocol(&self) -> Option<&[u8]> {
+    fn alpn_protocol(&self) -> Option<&[u8]> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
             ServerExtension::Protocols(ref protos) => protos.as_single_slice(),
