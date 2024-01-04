@@ -890,7 +890,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn get_namedgroups_extension(&self) -> Option<&[NamedGroup]> {
+    pub(crate) fn namedgroups_extension(&self) -> Option<&[NamedGroup]> {
         let ext = self.find_extension(ExtensionType::EllipticCurves)?;
         match *ext {
             ClientExtension::NamedGroups(ref req) => Some(req),
