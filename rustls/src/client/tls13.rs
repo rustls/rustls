@@ -569,7 +569,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             self.config
                 .client_auth_cert_resolver
                 .as_ref(),
-            certreq.get_authorities_extension(),
+            certreq.authorities_extension(),
             &compat_sigschemes,
             Some(certreq.context.0.clone()),
         );
