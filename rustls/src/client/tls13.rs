@@ -551,7 +551,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
 
         let no_sigschemes = Vec::new();
         let compat_sigschemes = certreq
-            .get_sigalgs_extension()
+            .sigalgs_extension()
             .unwrap_or(&no_sigschemes)
             .iter()
             .cloned()
