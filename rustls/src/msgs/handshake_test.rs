@@ -715,7 +715,7 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
         .entries
         .remove(0);
     let mut exts = core::mem::take(&mut ce.exts);
-    exts.retain(|ext| ext.get_type() == typ);
+    exts.retain(|ext| ext.ext_type() == typ);
 
     assert!(!getter(&ce));
 

@@ -1290,7 +1290,7 @@ pub(crate) enum CertificateExtension {
 }
 
 impl CertificateExtension {
-    pub(crate) fn get_type(&self) -> ExtensionType {
+    pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::CertificateStatus(_) => ExtensionType::StatusRequest,
             Self::Unknown(ref r) => r.typ,
@@ -1307,7 +1307,7 @@ impl CertificateExtension {
 
 impl Codec for CertificateExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+        self.ext_type().encode(bytes);
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
@@ -1370,7 +1370,7 @@ impl CertificateEntry {
         let mut seen = BTreeSet::new();
 
         for ext in &self.exts {
-            let typ = ext.get_type().get_u16();
+            let typ = ext.ext_type().get_u16();
 
             if seen.contains(&typ) {
                 return true;
@@ -1384,13 +1384,13 @@ impl CertificateEntry {
     pub(crate) fn has_unknown_extension(&self) -> bool {
         self.exts
             .iter()
-            .any(|ext| ext.get_type() != ExtensionType::StatusRequest)
+            .any(|ext| ext.ext_type() != ExtensionType::StatusRequest)
     }
 
     pub(crate) fn get_ocsp_response(&self) -> Option<&Vec<u8>> {
         self.exts
             .iter()
-            .find(|ext| ext.get_type() == ExtensionType::StatusRequest)
+            .find(|ext| ext.ext_type() == ExtensionType::StatusRequest)
             .and_then(CertificateExtension::get_cert_status)
     }
 }
