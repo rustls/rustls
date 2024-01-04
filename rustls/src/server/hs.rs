@@ -484,7 +484,7 @@ pub(super) fn process_client_hello<'a>(
                 ));
             }
 
-            if let Some(hostname) = sni.get_single_hostname() {
+            if let Some(hostname) = sni.single_hostname() {
                 Some(hostname.to_lowercase_owned())
             } else {
                 return Err(cx.common.send_fatal_alert(

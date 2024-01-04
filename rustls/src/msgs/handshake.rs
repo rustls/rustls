@@ -278,7 +278,7 @@ impl TlsListElement for ServerName {
 
 pub(crate) trait ConvertServerNameList {
     fn has_duplicate_names_for_type(&self) -> bool;
-    fn get_single_hostname(&self) -> Option<DnsName<'_>>;
+    fn single_hostname(&self) -> Option<DnsName<'_>>;
 }
 
 impl ConvertServerNameList for [ServerName] {
@@ -295,7 +295,7 @@ impl ConvertServerNameList for [ServerName] {
         false
     }
 
-    fn get_single_hostname(&self) -> Option<DnsName<'_>> {
+    fn single_hostname(&self) -> Option<DnsName<'_>> {
         fn only_dns_hostnames(name: &ServerName) -> Option<DnsName<'_>> {
             if let ServerNamePayload::HostName(ref dns) = name.payload {
                 Some(dns.borrow())
