@@ -1245,7 +1245,7 @@ impl ServerHelloPayload {
             .is_some()
     }
 
-    pub(crate) fn get_supported_versions(&self) -> Option<ProtocolVersion> {
+    pub(crate) fn supported_versions(&self) -> Option<ProtocolVersion> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             ServerExtension::SupportedVersions(vers) => Some(vers),

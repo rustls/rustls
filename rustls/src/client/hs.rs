@@ -492,7 +492,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello
-                .get_supported_versions()
+                .supported_versions()
                 .unwrap_or(server_hello.legacy_version)
         } else {
             server_hello.legacy_version
@@ -508,7 +508,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 }
 
                 if server_hello
-                    .get_supported_versions()
+                    .supported_versions()
                     .is_some()
                 {
                     return Err({
