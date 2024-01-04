@@ -693,9 +693,7 @@ fn server_get_key_share() {
 
 #[test]
 fn server_get_psk_index() {
-    test_server_extension_getter(ExtensionType::PreSharedKey, |shp| {
-        shp.get_psk_index().is_some()
-    });
+    test_server_extension_getter(ExtensionType::PreSharedKey, |shp| shp.psk_index().is_some());
 }
 
 #[test]

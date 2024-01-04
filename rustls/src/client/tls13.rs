@@ -99,7 +99,7 @@ pub(super) fn handle_server_hello(
     }
 
     let key_schedule_pre_handshake = if let (Some(selected_psk), Some(early_key_schedule)) =
-        (server_hello.get_psk_index(), early_key_schedule)
+        (server_hello.psk_index(), early_key_schedule)
     {
         if let Some(ref resuming) = resuming_session {
             let resuming_suite = match suite.can_resume_from(resuming.suite()) {
