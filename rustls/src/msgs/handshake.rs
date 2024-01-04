@@ -1858,7 +1858,7 @@ impl CertificateRequestPayloadTls13 {
         }
     }
 
-    pub(crate) fn get_authorities_extension(&self) -> Option<&[DistinguishedName]> {
+    pub(crate) fn authorities_extension(&self) -> Option<&[DistinguishedName]> {
         let ext = self.find_extension(ExtensionType::CertificateAuthorities)?;
         match *ext {
             CertReqExtension::AuthorityNames(ref an) => Some(an),
