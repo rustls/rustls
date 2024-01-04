@@ -512,7 +512,7 @@ fn client_get_sni_extension() {
 #[test]
 fn client_get_sigalgs_extension() {
     test_client_extension_getter(ExtensionType::SignatureAlgorithms, |chp| {
-        chp.get_sigalgs_extension().is_some()
+        chp.sigalgs_extension().is_some()
     });
 }
 

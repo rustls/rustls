@@ -882,7 +882,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
+    pub fn sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
         let ext = self.find_extension(ExtensionType::SignatureAlgorithms)?;
         match *ext {
             ClientExtension::SignatureAlgorithms(ref req) => Some(req),
