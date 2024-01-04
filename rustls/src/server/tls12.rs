@@ -129,7 +129,7 @@ mod client_hello {
             //
             let mut ticket_received = false;
             let resume_data = client_hello
-                .get_ticket_extension()
+                .ticket_extension()
                 .and_then(|ticket_ext| match ticket_ext {
                     ClientExtension::SessionTicket(ClientSessionTicket::Offer(ticket)) => {
                         Some(ticket)
