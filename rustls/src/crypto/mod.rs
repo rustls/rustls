@@ -202,6 +202,13 @@ pub trait SecureRandom: Send + Sync + Debug {
 }
 
 /// A mechanism for loading private [SigningKey]s from [PrivateKeyDer].
+///
+/// This trait is intended to be used with private key material that is sourced from DER,
+/// such as a private-key that may be present on-disk. It is not intended to be used with
+/// keys held in hardware security modules (HSMs) or physical tokens. For these use-cases
+/// see the Rustls manual section on [customizing private key usage].
+///
+/// [customizing private key usage]: <https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#customising-private-key-usage>
 pub trait KeyProvider: Send + Sync + Debug {
     /// Decode and validate a private signing key from `key_der`.
     ///
