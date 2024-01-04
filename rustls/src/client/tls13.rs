@@ -394,7 +394,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         // QUIC transport parameters
         if cx.common.is_quic() {
-            match exts.get_quic_params_extension() {
+            match exts.quic_params_extension() {
                 Some(params) => cx.common.quic.params = Some(params),
                 None => {
                     return Err(cx
