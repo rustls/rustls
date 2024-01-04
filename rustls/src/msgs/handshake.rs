@@ -927,7 +927,7 @@ impl ClientHelloPayload {
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn get_ticket_extension(&self) -> Option<&ClientExtension> {
+    pub(crate) fn ticket_extension(&self) -> Option<&ClientExtension> {
         self.find_extension(ExtensionType::SessionTicket)
     }
 
