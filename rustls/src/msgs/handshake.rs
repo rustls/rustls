@@ -1770,7 +1770,7 @@ pub(crate) enum CertReqExtension {
 }
 
 impl CertReqExtension {
-    pub(crate) fn get_type(&self) -> ExtensionType {
+    pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             Self::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
@@ -1781,7 +1781,7 @@ impl CertReqExtension {
 
 impl Codec for CertReqExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+        self.ext_type().encode(bytes);
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
@@ -1847,7 +1847,7 @@ impl CertificateRequestPayloadTls13 {
     pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&CertReqExtension> {
         self.extensions
             .iter()
-            .find(|x| x.get_type() == ext)
+            .find(|x| x.ext_type() == ext)
     }
 
     pub(crate) fn get_sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
