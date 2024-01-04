@@ -1457,7 +1457,7 @@ impl CertificatePayloadTls13 {
         false
     }
 
-    pub(crate) fn get_end_entity_ocsp(&self) -> Vec<u8> {
+    pub(crate) fn end_entity_ocsp(&self) -> Vec<u8> {
         self.entries
             .first()
             .and_then(CertificateEntry::ocsp_response)

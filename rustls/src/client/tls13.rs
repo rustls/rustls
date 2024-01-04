@@ -621,7 +621,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 PeerMisbehaved::BadCertChainExtensions,
             ));
         }
-        let end_entity_ocsp = cert_chain.get_end_entity_ocsp();
+        let end_entity_ocsp = cert_chain.end_entity_ocsp();
         let server_cert = ServerCertDetails::new(cert_chain.convert(), end_entity_ocsp);
 
         Ok(Box::new(ExpectCertificateVerify {
