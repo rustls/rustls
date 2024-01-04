@@ -1149,7 +1149,7 @@ impl HelloRetryRequest {
         }
     }
 
-    pub(crate) fn get_supported_versions(&self) -> Option<ProtocolVersion> {
+    pub(crate) fn supported_versions(&self) -> Option<ProtocolVersion> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match *ext {
             HelloRetryExtension::SupportedVersions(ver) => Some(ver),

@@ -633,7 +633,7 @@ fn helloretry_get_cookie() {
 #[test]
 fn helloretry_get_supported_versions() {
     test_helloretry_extension_getter(ExtensionType::SupportedVersions, |hrr| {
-        hrr.get_supported_versions().is_some()
+        hrr.supported_versions().is_some()
     });
 }
 
