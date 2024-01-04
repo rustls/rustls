@@ -693,7 +693,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         cx.common.check_aligned_handshake()?;
 
         let cookie = hrr.get_cookie();
-        let req_group = hrr.get_requested_key_share_group();
+        let req_group = hrr.requested_key_share_group();
 
         // We always send a key share when TLS 1.3 is enabled.
         let offered_key_share = self.next.offered_key_share.unwrap();

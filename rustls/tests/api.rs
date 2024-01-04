@@ -4639,7 +4639,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
     let assert_server_requests_retry_and_echoes_session_id = |msg: &mut Message| -> Altered {
         if let MessagePayload::Handshake { parsed, .. } = &mut msg.payload {
             if let HandshakePayload::HelloRetryRequest(hrr) = &mut parsed.payload {
-                let group = hrr.get_requested_key_share_group();
+                let group = hrr.requested_key_share_group();
                 assert_eq!(group, Some(rustls::NamedGroup::X25519));
 
                 assert_eq!(hrr.session_id, different_session_id);
