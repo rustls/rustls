@@ -559,7 +559,7 @@ pub enum ClientExtension {
 }
 
 impl ClientExtension {
-    pub(crate) fn get_type(&self) -> ExtensionType {
+    pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
@@ -584,7 +584,7 @@ impl ClientExtension {
 
 impl Codec for ClientExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+        self.ext_type().encode(bytes);
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
@@ -857,7 +857,7 @@ impl ClientHelloPayload {
         let mut seen = BTreeSet::new();
 
         for ext in &self.extensions {
-            let typ = ext.get_type().get_u16();
+            let typ = ext.ext_type().get_u16();
 
             if seen.contains(&typ) {
                 return true;
@@ -871,7 +871,7 @@ impl ClientHelloPayload {
     pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
         self.extensions
             .iter()
-            .find(|x| x.get_type() == ext)
+            .find(|x| x.ext_type() == ext)
     }
 
     pub(crate) fn get_sni_extension(&self) -> Option<&[ServerName]> {
@@ -974,7 +974,7 @@ impl ClientHelloPayload {
     pub(crate) fn check_psk_ext_is_last(&self) -> bool {
         self.extensions
             .last()
-            .map_or(false, |ext| ext.get_type() == ExtensionType::PreSharedKey)
+            .map_or(false, |ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
     pub(crate) fn get_psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {

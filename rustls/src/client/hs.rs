@@ -274,7 +274,7 @@ fn emit_client_hello_for_retry(
     // Note what extensions we sent.
     input.hello.sent_extensions = exts
         .iter()
-        .map(ClientExtension::get_type)
+        .map(ClientExtension::ext_type)
         .collect();
 
     let mut cipher_suites: Vec<_> = config
