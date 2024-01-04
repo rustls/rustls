@@ -561,7 +561,7 @@ fn client_get_keyshare_extension() {
 
 #[test]
 fn client_get_psk() {
-    test_client_extension_getter(ExtensionType::PreSharedKey, |chp| chp.get_psk().is_some());
+    test_client_extension_getter(ExtensionType::PreSharedKey, |chp| chp.psk().is_some());
 }
 
 #[test]

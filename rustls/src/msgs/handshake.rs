@@ -963,7 +963,7 @@ impl ClientHelloPayload {
         false
     }
 
-    pub(crate) fn get_psk(&self) -> Option<&PresharedKeyOffer> {
+    pub(crate) fn psk(&self) -> Option<&PresharedKeyOffer> {
         let ext = self.find_extension(ExtensionType::PreSharedKey)?;
         match *ext {
             ClientExtension::PresharedKey(ref psk) => Some(psk),
