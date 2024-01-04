@@ -654,7 +654,7 @@ fn test_truncated_server_extension_is_detected() {
         }
 
         // these extension types don't have any internal encoding that rustls validates:
-        match ext.get_type() {
+        match ext.ext_type() {
             ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
                 continue;
             }
