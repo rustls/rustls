@@ -772,7 +772,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
-        match hrr.get_supported_versions() {
+        match hrr.supported_versions() {
             Some(ProtocolVersion::TLSv1_3) => {
                 cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
