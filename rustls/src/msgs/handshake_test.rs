@@ -699,7 +699,7 @@ fn server_get_psk_index() {
 #[test]
 fn server_get_ecpoints_extension() {
     test_server_extension_getter(ExtensionType::ECPointFormats, |shp| {
-        shp.get_ecpoints_extension().is_some()
+        shp.ecpoints_extension().is_some()
     });
 }
 
