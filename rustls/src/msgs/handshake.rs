@@ -1297,7 +1297,7 @@ impl CertificateExtension {
         }
     }
 
-    pub(crate) fn get_cert_status(&self) -> Option<&Vec<u8>> {
+    pub(crate) fn cert_status(&self) -> Option<&Vec<u8>> {
         match *self {
             Self::CertificateStatus(ref cs) => Some(&cs.ocsp_response.0),
             _ => None,
@@ -1391,7 +1391,7 @@ impl CertificateEntry {
         self.exts
             .iter()
             .find(|ext| ext.ext_type() == ExtensionType::StatusRequest)
-            .and_then(CertificateExtension::get_cert_status)
+            .and_then(CertificateExtension::cert_status)
     }
 }
 
