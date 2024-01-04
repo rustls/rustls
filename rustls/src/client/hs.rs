@@ -244,7 +244,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::KeyShare(vec![key_share]));
     }
 
-    if let Some(cookie) = retryreq.and_then(HelloRetryRequest::get_cookie) {
+    if let Some(cookie) = retryreq.and_then(HelloRetryRequest::cookie) {
         exts.push(ClientExtension::Cookie(cookie.clone()));
     }
 
@@ -692,7 +692,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         cx.common.check_aligned_handshake()?;
 
-        let cookie = hrr.get_cookie();
+        let cookie = hrr.cookie();
         let req_group = hrr.requested_key_share_group();
 
         // We always send a key share when TLS 1.3 is enabled.
