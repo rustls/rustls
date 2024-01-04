@@ -939,7 +939,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub fn get_keyshare_extension(&self) -> Option<&[KeyShareEntry]> {
+    pub fn keyshare_extension(&self) -> Option<&[KeyShareEntry]> {
         let ext = self.find_extension(ExtensionType::KeyShare)?;
         match *ext {
             ClientExtension::KeyShare(ref shares) => Some(shares),
@@ -948,7 +948,7 @@ impl ClientHelloPayload {
     }
 
     pub(crate) fn has_keyshare_extension_with_duplicates(&self) -> bool {
-        if let Some(entries) = self.get_keyshare_extension() {
+        if let Some(entries) = self.keyshare_extension() {
             let mut seen = BTreeSet::new();
 
             for kse in entries {

@@ -4624,7 +4624,7 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
                 let keyshares = ch
-                    .get_keyshare_extension()
+                    .keyshare_extension()
                     .expect("missing key share extension");
                 assert_eq!(keyshares.len(), 1);
                 assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);

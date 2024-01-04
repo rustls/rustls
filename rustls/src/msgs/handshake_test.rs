@@ -555,7 +555,7 @@ fn client_get_versions_extension() {
 #[test]
 fn client_get_keyshare_extension() {
     test_client_extension_getter(ExtensionType::KeyShare, |chp| {
-        chp.get_keyshare_extension().is_some()
+        chp.keyshare_extension().is_some()
     });
 }
 
