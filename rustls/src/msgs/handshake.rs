@@ -2241,7 +2241,7 @@ impl HandshakeMessagePayload {
         }
     }
 
-    pub(crate) fn get_encoding_for_binder_signing(&self) -> Vec<u8> {
+    pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
 
         let binder_len = match self.payload {
