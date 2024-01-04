@@ -18,9 +18,9 @@ use rustls::RootCertStore;
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ConnectionCommon, ServerConfig, ServerConnection, SideData};
 
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+#[cfg(all(any(not(feature = "ring"), feature = "fips"), feature = "aws_lc_rs"))]
 pub use rustls::crypto::aws_lc_rs as provider;
-#[cfg(feature = "ring")]
+#[cfg(all(feature = "ring", not(feature = "fips")))]
 pub use rustls::crypto::ring as provider;
 use rustls::crypto::CryptoProvider;
 
@@ -344,11 +344,11 @@ impl KeyType {
 pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     // ensure `ServerConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
-    #[cfg(feature = "ring")]
+    #[cfg(any(feature = "ring", feature = "fips"))]
     {
         rustls::ServerConfig::builder()
     }
-    #[cfg(not(feature = "ring"))]
+    #[cfg(all(not(feature = "ring"), not(feature = "fips")))]
     {
         rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
             .with_safe_default_protocol_versions()
@@ -374,12 +374,11 @@ pub fn server_config_builder_with_versions(
 pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     // ensure `ClientConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
-    #[cfg(feature = "ring")]
+    #[cfg(any(feature = "ring", feature = "fips"))]
     {
         rustls::ClientConfig::builder()
     }
-
-    #[cfg(not(feature = "ring"))]
+    #[cfg(all(not(feature = "ring"), not(feature = "fips")))]
     {
         rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
             .with_safe_default_protocol_versions()

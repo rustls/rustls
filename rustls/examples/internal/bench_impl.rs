@@ -173,13 +173,13 @@ impl BenchmarkParam {
 }
 
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
-    #[cfg(feature = "tls12")]
+    #[cfg(all(feature = "tls12", not(feature = "fips")))]
     BenchmarkParam::new(
         KeyType::Rsa,
         cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
-    #[cfg(feature = "tls12")]
+    #[cfg(all(feature = "tls12", not(feature = "fips")))]
     BenchmarkParam::new(
         KeyType::EcdsaP256,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -209,6 +209,7 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
         cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
+    #[cfg(not(feature = "fips"))]
     BenchmarkParam::new(
         KeyType::Rsa,
         cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,

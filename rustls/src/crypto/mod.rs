@@ -69,7 +69,7 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///   crate.
 /// - [`crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` feature,
 ///   which is optional).  This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
-///   crate.
+///   crate.  The `fips` crate feature makes this option use FIPS140-3-approved cryptography.
 ///
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.
@@ -153,6 +153,12 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// [provider-example/]: https://github.com/rustls/rustls/tree/main/provider-example/
 /// [rust-crypto]: https://github.com/rustcrypto
 /// [dalek-cryptography]: https://github.com/dalek-cryptography
+///
+/// # FIPS-approved cryptography
+/// The `fips` crate feature enables use of the `aws-lc-rs` crate in FIPS mode.
+///
+/// You can verify the configuration at runtime by checking
+/// [`ServerConfig::fips()`]/[`ClientConfig::fips()`] return `true`.
 #[derive(Debug, Clone)]
 pub struct CryptoProvider {
     /// List of supported ciphersuites, in preference order -- the first element
@@ -329,4 +335,42 @@ impl From<&[u8]> for SharedSecret {
     fn from(source: &[u8]) -> Self {
         Self(source.to_vec())
     }
+}
+
+#[cfg(any(feature = "ring", feature = "fips"))]
+pub(crate) fn default_provider() -> CryptoProvider {
+    #[cfg(all(feature = "ring", not(feature = "fips")))]
+    {
+        crate::crypto::ring::default_provider()
+    }
+    #[cfg(feature = "fips")]
+    {
+        crate::crypto::aws_lc_rs::default_provider()
+    }
+}
+
+/// This function returns a [`CryptoProvider`] that uses
+/// FIPS140-3-approved cryptography.
+///
+/// You can use this like:
+///
+/// ```rust
+/// # #[cfg(feature = "fips")] {
+/// # let root_store = rustls::RootCertStore::empty();
+/// let config = rustls::ClientConfig::builder_with_provider(
+///         rustls::crypto::default_fips_provider().into()
+///     )
+///     .with_safe_default_protocol_versions()
+///     .unwrap()
+///     .with_root_certificates(root_store)
+///     .with_no_client_auth();
+/// # }
+/// ```
+///
+/// This expresses in your code that you require FIPS-approved
+/// cryptography, and will not compile if you make a mistake
+/// with cargo features.
+#[cfg(feature = "fips")]
+pub fn default_fips_provider() -> CryptoProvider {
+    crate::crypto::aws_lc_rs::default_provider()
 }

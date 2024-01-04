@@ -43,16 +43,27 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/setup-nasm@v1
 
+      - name: Install ninja-build tool for aws-lc-fips-sys on Windows
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
       - name: cargo build (debug; default features)
         run: cargo build --locked
 
-      - name: cargo test (debug; all features)
-        run: cargo test --locked --all-features
+      # nb. feature sets that include "fips" should be --release --
+      # this is required for fips on windows.
+      - name: cargo test (release; all features)
+        run: cargo test --release --locked --all-features
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; aws-lc-rs)
         run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: cargo test (release; fips)
+        run: cargo test --release --no-default-features --features fips,tls12,read_buf,logging
         env:
           RUST_BACKTRACE: 1
 
@@ -109,6 +120,10 @@ jobs:
 
       - name: cargo test (debug; no default features; aws-lc-rs,tls12)
         run: cargo test --no-default-features --features aws_lc_rs,tls12
+        working-directory: rustls
+
+      - name: cargo test (debug; no default features; fips,tls12)
+        run: cargo test --no-default-features --features fips,tls12
         working-directory: rustls
 
       - name: cargo test (release; no run)
@@ -185,6 +200,9 @@ jobs:
 
       - name: Smoke-test benchmark program (aws-lc-rs)
         run: cargo run -p rustls --release --locked --example bench --no-default-features --features aws_lc_rs,tls12
+
+      - name: Smoke-test benchmark program (fips)
+        run: cargo run -p rustls --release --locked --example bench --no-default-features --features fips,tls12
 
       - name: Run micro-benchmarks
         run: cargo bench --locked --all-features

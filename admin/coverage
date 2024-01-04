@@ -7,6 +7,8 @@ cargo llvm-cov clean --workspace
 
 cargo build --locked --all-targets --all-features
 cargo test --locked --all-features
+cargo test --locked --no-default-features --features tls12,logging,aws_lc_rs,fips
+cargo test --locked --no-default-features --features tls12,logging,ring
 
 ## bogo
 cargo test --locked --all-features run_bogo_tests_ring -- --ignored

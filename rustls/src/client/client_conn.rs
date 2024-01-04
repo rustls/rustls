@@ -1,6 +1,8 @@
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
+#[cfg(any(feature = "ring", feature = "fips"))]
+use crate::crypto::default_provider;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -14,7 +16,7 @@ use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 use crate::versions;
 use crate::KeyLog;
-#[cfg(feature = "ring")]
+#[cfg(any(feature = "ring", feature = "fips"))]
 use crate::WantsVerifier;
 use crate::{verify, WantsVersions};
 
@@ -220,31 +222,40 @@ pub struct ClientConfig {
 
 impl ClientConfig {
     /// Create a builder for a client configuration with the default
-    /// [`CryptoProvider`]: [`crypto::ring::default_provider`] and safe ciphersuite and
-    /// protocol defaults.
+    /// [`CryptoProvider`].
+    ///
+    /// This is:
+    ///
+    /// - [`crypto::aws_lc_rs::default_provider`] if the `fips` crate feature is
+    ///   enabled.
+    /// - [`crypto::ring::default_provider`] if the `ring` crate feature is
+    ///   enabled and the `fips` crate feature is not enabled.
+    ///
+    /// If neither of these are true, this function is not available and you
+    /// must use [`ClientConfig::builder_with_provider()`] instead.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(feature = "ring")]
+    #[cfg(any(feature = "ring", feature = "fips"))]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
-        // Safety: we know the *ring* provider's ciphersuites are compatible with the safe default protocol versions.
-        Self::builder_with_provider(crate::crypto::ring::default_provider().into())
+        // Safety: we know the *ring* and aws-lc-rs providers' ciphersuites are compatible with the safe default protocol versions.
+        Self::builder_with_provider(default_provider().into())
             .with_safe_default_protocol_versions()
             .unwrap()
     }
 
     /// Create a builder for a client configuration with the default
-    /// [`CryptoProvider`]: [`crypto::ring::default_provider`], safe ciphersuite defaults and
-    /// the provided protocol versions.
+    /// [`CryptoProvider`] (see [`ClientConfig::builder()`] for details), safe
+    /// ciphersuite defaults and the provided protocol versions.
     ///
     /// Panics if provided an empty slice of supported versions.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(feature = "ring")]
+    #[cfg(any(feature = "ring", feature = "fips"))]
     pub fn builder_with_protocol_versions(
         versions: &[&'static versions::SupportedProtocolVersion],
     ) -> ConfigBuilder<Self, WantsVerifier> {
-        // Safety: we know the *ring* provider's ciphersuites are compatible with all protocol version choices.
-        Self::builder_with_provider(crate::crypto::ring::default_provider().into())
+        // Safety: we know the *ring* and aws-lc-rs providers' ciphersuites are compatible with all protocol version choices.
+        Self::builder_with_provider(default_provider().into())
             .with_protocol_versions(versions)
             .unwrap()
     }
