@@ -4487,7 +4487,7 @@ fn test_client_does_not_offer_sha1() {
             };
 
             let sigalgs = client_hello
-                .get_sigalgs_extension()
+                .sigalgs_extension()
                 .unwrap();
             assert!(
                 !sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1),

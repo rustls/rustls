@@ -507,7 +507,7 @@ pub(super) fn process_client_hello<'a>(
     }
 
     let sig_schemes = client_hello
-        .get_sigalgs_extension()
+        .sigalgs_extension()
         .ok_or_else(|| {
             cx.common.send_fatal_alert(
                 AlertDescription::HandshakeFailure,
