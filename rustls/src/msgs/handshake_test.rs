@@ -688,7 +688,7 @@ fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPaylo
 
 #[test]
 fn server_get_key_share() {
-    test_server_extension_getter(ExtensionType::KeyShare, |shp| shp.get_key_share().is_some());
+    test_server_extension_getter(ExtensionType::KeyShare, |shp| shp.key_share().is_some());
 }
 
 #[test]

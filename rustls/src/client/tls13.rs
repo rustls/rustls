@@ -81,7 +81,7 @@ pub(super) fn handle_server_hello(
     validate_server_hello(cx.common, server_hello)?;
 
     let their_key_share = server_hello
-        .get_key_share()
+        .key_share()
         .ok_or_else(|| {
             cx.common.send_fatal_alert(
                 AlertDescription::MissingExtension,
