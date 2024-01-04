@@ -1909,7 +1909,7 @@ pub(crate) enum NewSessionTicketExtension {
 }
 
 impl NewSessionTicketExtension {
-    pub(crate) fn get_type(&self) -> ExtensionType {
+    pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::EarlyData(_) => ExtensionType::EarlyData,
             Self::Unknown(ref r) => r.typ,
@@ -1919,7 +1919,7 @@ impl NewSessionTicketExtension {
 
 impl Codec for NewSessionTicketExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.get_type().encode(bytes);
+        self.ext_type().encode(bytes);
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
@@ -1971,7 +1971,7 @@ impl NewSessionTicketPayloadTls13 {
         let mut seen = BTreeSet::new();
 
         for ext in &self.exts {
-            let typ = ext.get_type().get_u16();
+            let typ = ext.ext_type().get_u16();
 
             if seen.contains(&typ) {
                 return true;
@@ -1985,7 +1985,7 @@ impl NewSessionTicketPayloadTls13 {
     pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&NewSessionTicketExtension> {
         self.exts
             .iter()
-            .find(|x| x.get_type() == ext)
+            .find(|x| x.ext_type() == ext)
     }
 
     pub(crate) fn get_max_early_data_size(&self) -> Option<u32> {
