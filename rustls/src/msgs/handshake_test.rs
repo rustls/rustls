@@ -586,7 +586,7 @@ fn test_truncated_helloretry_extension_is_detected() {
         }
 
         // these extension types don't have any internal encoding that rustls validates:
-        if let ExtensionType::Unknown(_) = ext.get_type() {
+        if let ExtensionType::Unknown(_) = ext.ext_type() {
             continue;
         }
 
@@ -603,7 +603,7 @@ fn test_truncated_helloretry_extension_is_detected() {
 fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
     let mut hrr = get_sample_helloretryrequest();
     let mut exts = core::mem::take(&mut hrr.extensions);
-    exts.retain(|ext| ext.get_type() == typ);
+    exts.retain(|ext| ext.ext_type() == typ);
 
     assert!(!getter(&hrr));
 
