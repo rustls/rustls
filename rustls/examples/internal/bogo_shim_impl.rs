@@ -48,6 +48,7 @@ struct Options {
     resumes: usize,
     verify_peer: bool,
     require_any_client_cert: bool,
+    root_hint_subjects: Vec<DistinguishedName>,
     offer_no_client_cas: bool,
     tickets: bool,
     resume_with_tickets_disabled: bool,
@@ -105,6 +106,7 @@ impl Options {
             shut_down_after_handshake: false,
             check_close_notify: false,
             require_any_client_cert: false,
+            root_hint_subjects: vec![],
             offer_no_client_cas: false,
             key_file: "".to_string(),
             cert_file: "".to_string(),
@@ -202,16 +204,26 @@ fn split_protocols(protos: &str) -> Vec<String> {
     ret
 }
 
+fn decode_hex(hex: &str) -> Vec<u8> {
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+        .inspect(|x| println!("item {:?}", x))
+        .collect()
+}
+
 #[derive(Debug)]
 struct DummyClientAuth {
     mandatory: bool,
+    root_hint_subjects: Vec<DistinguishedName>,
     parent: Arc<dyn ClientCertVerifier>,
 }
 
 impl DummyClientAuth {
-    fn new(mandatory: bool) -> Self {
+    fn new(mandatory: bool, root_hint_subjects: Vec<DistinguishedName>) -> Self {
         Self {
             mandatory,
+            root_hint_subjects,
             parent: WebPkiClientVerifier::builder_with_provider(
                 load_root_certs(),
                 provider::default_provider().into(),
@@ -232,7 +244,7 @@ impl ClientCertVerifier for DummyClientAuth {
     }
 
     fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        &[]
+        &self.root_hint_subjects
     }
 
     fn verify_client_cert(
@@ -485,7 +497,10 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
 fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
-            Arc::new(DummyClientAuth::new(opts.require_any_client_cert))
+            Arc::new(DummyClientAuth::new(
+                opts.require_any_client_cert,
+                opts.root_hint_subjects.clone(),
+            ))
         } else {
             server::WebPkiClientVerifier::no_client_auth()
         };
@@ -1056,6 +1071,18 @@ pub fn main() {
                 let alg = args.remove(0).parse::<u16>().unwrap();
                 opts.use_signing_scheme = alg;
             }
+            "-use-client-ca-list" => {
+                match args.remove(0).as_ref() {
+                    "<EMPTY>" | "<NULL>" => {
+                        opts.root_hint_subjects = vec![];
+                    }
+                    list => {
+                        opts.root_hint_subjects = list.split(',')
+                            .map(|entry| DistinguishedName::from(decode_hex(entry)))
+                            .collect();
+                    }
+                }
+            }
             "-max-cert-list" |
             "-expect-curve-id" |
             "-expect-resume-curve-id" |
@@ -1268,7 +1295,6 @@ pub fn main() {
             "-expect-early-data-info" |
             "-expect-cipher-aes" |
             "-retain-only-sha256-client-cert-initial" |
-            "-use-client-ca-list" |
             "-expect-draft-downgrade" |
             "-allow-unknown-alpn-protos" |
             "-on-initial-tls13-variant" |
