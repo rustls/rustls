@@ -2,9 +2,7 @@
 //! it accepts the default configuration, loads a server certificate and private key,
 //! and then accepts a single client connection.
 //!
-//! You must either set the CERTFILE and PRIV_KEY_FILE env vars to point to a server
-//! certificate and private key, or place 'localhost.pem' and 'localhost-key.pem' in
-//! the directory you run this example from.
+//! Usage: cargo r --bin simpleserver <path/to/cert.pem> <path/to/privatekey.pem>
 //!
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
@@ -18,6 +16,7 @@ use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
+    args.next();
     let cert_file = args
         .next()
         .expect("missing certificate file argument");
