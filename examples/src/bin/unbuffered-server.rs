@@ -20,6 +20,7 @@ use rustls_pemfile::Item;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
+    args.next();
     let cert_file = args
         .next()
         .expect("missing certificate file argument");
