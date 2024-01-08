@@ -38,12 +38,14 @@ impl<'a> ServerCertDetails<'a> {
 
 pub(super) struct ClientHelloDetails {
     pub(super) sent_extensions: Vec<ExtensionType>,
+    pub(super) extension_order_seed: u16,
 }
 
 impl ClientHelloDetails {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(extension_order_seed: u16) -> Self {
         Self {
             sent_extensions: Vec::new(),
+            extension_order_seed,
         }
     }
 

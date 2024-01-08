@@ -5623,10 +5623,10 @@ fn test_client_construction_fails_if_random_source_fails_in_second_request() {
 }
 
 #[test]
-fn test_client_construction_requires_64_bytes_of_random_material() {
+fn test_client_construction_requires_66_bytes_of_random_material() {
     static FAULTY_RANDOM: FaultyRandom = FaultyRandom {
         rand_queue: Mutex::new(
-            b"nice random number generator !!!\
+            b"nice random number generator !!!!!\
                                  it's really not very good is it?",
         ),
     };
