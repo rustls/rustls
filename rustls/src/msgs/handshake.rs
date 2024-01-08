@@ -182,7 +182,7 @@ impl SessionId {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UnknownExtension {
     pub(crate) typ: ExtensionType,
     pub(crate) payload: Payload,
@@ -2295,7 +2295,7 @@ impl TlsListElement for HpkeSymmetricCipherSuite {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HpkeKeyConfig {
     pub config_id: u8,
     pub kem_id: HpkeKem,
@@ -2322,7 +2322,7 @@ impl Codec for HpkeKeyConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EchConfigContents {
     pub key_config: HpkeKeyConfig,
     pub maximum_name_length: u8,
@@ -2353,7 +2353,7 @@ impl Codec for EchConfigContents {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct EchConfig {
     pub version: EchVersion,
     pub contents: EchConfigContents,
