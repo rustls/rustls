@@ -47,7 +47,7 @@ impl HandshakeHashBuffer {
     }
 
     /// Get the hash value if we were to hash `extra` too.
-    pub(crate) fn get_hash_given(
+    pub(crate) fn hash_given(
         &self,
         provider: &'static dyn hash::Hash,
         extra: &[u8],
@@ -116,7 +116,7 @@ impl HandshakeHash {
 
     /// Get the hash value if we were to hash `extra` too,
     /// using hash function `hash`.
-    pub(crate) fn get_hash_given(&self, extra: &[u8]) -> hash::Output {
+    pub(crate) fn hash_given(&self, extra: &[u8]) -> hash::Output {
         let mut ctx = self.ctx.fork();
         ctx.update(extra);
         ctx.finish()
@@ -148,7 +148,7 @@ impl HandshakeHash {
     }
 
     /// Get the current hash value.
-    pub(crate) fn get_current_hash(&self) -> hash::Output {
+    pub(crate) fn current_hash(&self) -> hash::Output {
         self.ctx.fork_finish()
     }
 
@@ -179,7 +179,7 @@ mod tests {
         let mut hh = hhb.start_hash(&SHA256);
         assert!(hh.client_auth.is_none());
         hh.update_raw(b"world");
-        let h = hh.get_current_hash();
+        let h = hh.current_hash();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);
@@ -208,7 +208,7 @@ mod tests {
                 .map(|buf| buf.len()),
             Some(10)
         );
-        let h = hh.get_current_hash();
+        let h = hh.current_hash();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);
@@ -235,7 +235,7 @@ mod tests {
         assert_eq!(hh.client_auth, None);
         hh.update_raw(b"world");
         assert_eq!(hh.client_auth, None);
-        let h = hh.get_current_hash();
+        let h = hh.current_hash();
         let h = h.as_ref();
         assert_eq!(h[0], 0x93);
         assert_eq!(h[1], 0x6a);

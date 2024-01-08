@@ -487,7 +487,7 @@ fn emit_finished(
     transcript: &mut HandshakeHash,
     common: &mut CommonState,
 ) {
-    let vh = transcript.get_current_hash();
+    let vh = transcript.current_hash();
     let verify_data = secrets.client_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
@@ -781,7 +781,7 @@ impl State<ClientConnectionData> for ExpectServerDone {
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = st
             .using_ems
-            .then(|| transcript.get_current_hash());
+            .then(|| transcript.current_hash());
 
         // 5c.
         if let Some(ClientAuthDetails::Verify { signer, .. }) = &st.client_auth {
@@ -1004,7 +1004,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         cx.common.check_aligned_handshake()?;
 
         // Work out what verify_data we expect.
-        let vh = st.transcript.get_current_hash();
+        let vh = st.transcript.current_hash();
         let expect_verify_data = st.secrets.server_verify_data(&vh);
 
         // Constant-time verification of this is relatively unimportant: they only
