@@ -13,6 +13,7 @@ use core::mem;
 /// Before we know the hash algorithm to use to verify the handshake, we just buffer the messages.
 /// During the handshake, we may restart the transcript due to a HelloRetryRequest, reverting
 /// from the `HandshakeHash` to a `HandshakeHashBuffer` again.
+#[derive(Clone)]
 pub(crate) struct HandshakeHashBuffer {
     buffer: Vec<u8>,
     client_auth_enabled: bool,
@@ -166,6 +167,16 @@ impl HandshakeHash {
     }
 }
 
+impl Clone for HandshakeHash {
+    fn clone(&self) -> Self {
+        Self {
+            provider: self.provider,
+            ctx: self.ctx.fork(),
+            client_auth: self.client_auth.clone(),
+        }
+    }
+}
+
 #[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use super::HandshakeHashBuffer;
@@ -241,5 +252,38 @@ mod tests {
         assert_eq!(h[1], 0x6a);
         assert_eq!(h[2], 0x18);
         assert_eq!(h[3], 0x5c);
+    }
+
+    #[test]
+    fn clones_correctly() {
+        let mut hhb = HandshakeHashBuffer::new();
+        hhb.set_client_auth_enabled();
+        hhb.update_raw(b"hello");
+        assert_eq!(hhb.buffer.len(), 5);
+
+        // Cloning the HHB should result in the same buffer and client auth state.
+        let mut hhb_prime = hhb.clone();
+        assert_eq!(hhb_prime.buffer, hhb.buffer);
+        assert!(hhb_prime.client_auth_enabled);
+
+        // Updating the HHB clone shouldn't affect the original.
+        hhb_prime.update_raw(b"world");
+        assert_eq!(hhb_prime.buffer.len(), 10);
+        assert_ne!(hhb.buffer, hhb_prime.buffer);
+
+        let hh = hhb.start_hash(&SHA256);
+        let hh_hash = hh.current_hash();
+        let hh_hash = hh_hash.as_ref();
+
+        // Cloning the HH should result in the same current hash.
+        let mut hh_prime = hh.clone();
+        let hh_prime_hash = hh_prime.current_hash();
+        let hh_prime_hash = hh_prime_hash.as_ref();
+        assert_eq!(hh_hash, hh_prime_hash);
+
+        // Updating the HH clone shouldn't affect the original.
+        hh_prime.update_raw(b"goodbye");
+        assert_eq!(hh.current_hash().as_ref(), hh_hash);
+        assert_ne!(hh_prime.current_hash().as_ref(), hh_hash);
     }
 }
