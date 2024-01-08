@@ -22,6 +22,13 @@ pub(crate) fn random_u32(secure_random: &dyn SecureRandom) -> Result<u32, GetRan
     Ok(u32::from_be_bytes(buf))
 }
 
+/// Return a uniformly random [`u16`].
+pub(crate) fn random_u16(secure_random: &dyn SecureRandom) -> Result<u16, GetRandomFailed> {
+    let mut buf = [0u8; 2];
+    secure_random.fill(&mut buf)?;
+    Ok(u16::from_be_bytes(buf))
+}
+
 /// Random material generation failed.
 #[derive(Debug)]
 pub struct GetRandomFailed;

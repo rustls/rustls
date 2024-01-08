@@ -141,6 +141,7 @@ pub(super) fn start_handshake(
     };
 
     let random = Random::new(config.provider.secure_random)?;
+    let extension_order_seed = crate::rand::random_u16(config.provider.secure_random)?;
 
     Ok(emit_client_hello_for_retry(
         transcript_buffer,
@@ -155,7 +156,7 @@ pub(super) fn start_handshake(
             #[cfg(feature = "tls12")]
             using_ems: false,
             sent_tls13_fake_ccs: false,
-            hello: ClientHelloDetails::new(),
+            hello: ClientHelloDetails::new(extension_order_seed),
             session_id,
             server_name,
         },
@@ -270,6 +271,22 @@ fn emit_client_hello_for_retry(
 
     // Do we have a SessionID or ticket cached for this host?
     let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
+
+    // Extensions MAY be randomized
+    // but they also need to keep the same order as the the previous ClientHello
+    exts.sort_by_cached_key(|new_ext| {
+        // PSK extension is always last
+        if let ClientExtension::PresharedKey(..) = new_ext {
+            return u32::MAX;
+        }
+
+        let seed =
+            (input.hello.extension_order_seed as u32) << 16 | (new_ext.ext_type().get_u16() as u32);
+        match low_quality_integer_hash(seed) {
+            u32::MAX => 0,
+            key => key,
+        }
+    });
 
     // Note what extensions we sent.
     input.hello.sent_extensions = exts
@@ -928,4 +945,20 @@ impl Deref for ClientSessionValue {
     fn deref(&self) -> &Self::Target {
         self.common()
     }
+}
+
+fn low_quality_integer_hash(mut x: u32) -> u32 {
+    x = x
+        .wrapping_add(0x7ed55d16)
+        .wrapping_add(x << 12);
+    x = (x ^ 0xc761c23c) ^ (x >> 19);
+    x = x
+        .wrapping_add(0x165667b1)
+        .wrapping_add(x << 5);
+    x = x.wrapping_add(0xd3a2646c) ^ (x << 9);
+    x = x
+        .wrapping_add(0xfd7046c5)
+        .wrapping_add(x << 3);
+    x = (x ^ 0xb55a4f09) ^ (x >> 16);
+    x
 }
