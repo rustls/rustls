@@ -162,7 +162,7 @@ pub(super) fn handle_server_hello(
     // the two halves will have different record layer protections.  Disallow this.
     cx.common.check_aligned_handshake()?;
 
-    let hash_at_client_recvd_server_hello = transcript.get_current_hash();
+    let hash_at_client_recvd_server_hello = transcript.current_hash();
     let key_schedule = key_schedule.derive_client_handshake_secrets(
         cx.data.early_data.is_enabled(),
         hash_at_client_recvd_server_hello,
@@ -240,7 +240,7 @@ pub(super) fn fill_in_psk_binder(
     // The binder is calculated over the clienthello, but doesn't include itself or its
     // length, or the length of its container.
     let binder_plaintext = hmp.encoding_for_binder_signing();
-    let handshake_hash = transcript.get_hash_given(suite_hash, &binder_plaintext);
+    let handshake_hash = transcript.hash_given(suite_hash, &binder_plaintext);
 
     // Run a fake key_schedule to simulate what the server will do if it chooses
     // to resume.
@@ -305,8 +305,7 @@ pub(super) fn derive_early_traffic_secret(
     // For middlebox compatibility
     emit_fake_ccs(sent_tls13_fake_ccs, cx.common);
 
-    let client_hello_hash =
-        transcript_buffer.get_hash_given(resuming_suite.common.hash_provider, &[]);
+    let client_hello_hash = transcript_buffer.hash_given(resuming_suite.common.hash_provider, &[]);
     early_key_schedule.client_early_traffic_secret(
         &client_hello_hash,
         key_log,
@@ -732,7 +731,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             })?;
 
         // 2. Verify their signature on the handshake.
-        let handshake_hash = self.transcript.get_current_hash();
+        let handshake_hash = self.transcript.current_hash();
         let sig_verified = self
             .config
             .verifier
@@ -813,7 +812,7 @@ fn emit_certverify_tls13(
     signer: &dyn Signer,
     common: &mut CommonState,
 ) -> Result<(), Error> {
-    let message = construct_client_verify_message(&transcript.get_current_hash());
+    let message = construct_client_verify_message(&transcript.current_hash());
 
     let scheme = signer.scheme();
     let sig = signer.sign(&message)?;
@@ -893,7 +892,7 @@ impl State<ClientConnectionData> for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        let handshake_hash = st.transcript.get_current_hash();
+        let handshake_hash = st.transcript.current_hash();
         let expect_verify_data = st
             .key_schedule
             .sign_server_finish(&handshake_hash);
@@ -910,7 +909,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         st.transcript.add_message(&m);
 
-        let hash_after_handshake = st.transcript.get_current_hash();
+        let hash_after_handshake = st.transcript.current_hash();
         /* The EndOfEarlyData message to server is still encrypted with early data keys,
          * but appears in the transcript after the server Finished. */
         if cx.common.early_traffic {
@@ -950,7 +949,7 @@ impl State<ClientConnectionData> for ExpectFinished {
             .key_schedule
             .into_pre_finished_client_traffic(
                 hash_after_handshake,
-                st.transcript.get_current_hash(),
+                st.transcript.current_hash(),
                 &*st.config.key_log,
                 &st.randoms.client,
             );
@@ -1019,7 +1018,7 @@ impl ExpectTraffic {
             ));
         }
 
-        let handshake_hash = self.transcript.get_current_hash();
+        let handshake_hash = self.transcript.current_hash();
         let secret = self
             .key_schedule
             .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);

@@ -618,7 +618,7 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
         self.transcript.add_message(&m);
         let ems_seed = self
             .using_ems
-            .then(|| self.transcript.get_current_hash());
+            .then(|| self.transcript.current_hash());
 
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
@@ -890,7 +890,7 @@ fn emit_finished(
     transcript: &mut HandshakeHash,
     common: &mut CommonState,
 ) {
-    let vh = transcript.get_current_hash();
+    let vh = transcript.current_hash();
     let verify_data = secrets.server_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
 
@@ -930,7 +930,7 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         cx.common.check_aligned_handshake()?;
 
-        let vh = self.transcript.get_current_hash();
+        let vh = self.transcript.current_hash();
         let expect_verify_data = self.secrets.client_verify_data(&vh);
 
         let _fin_verified =

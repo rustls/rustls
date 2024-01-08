@@ -117,7 +117,7 @@ mod client_hello {
 
             let handshake_hash = self
                 .transcript
-                .get_hash_given(&binder_plaintext);
+                .hash_given(&binder_plaintext);
 
             let key_schedule = KeyScheduleEarly::new(suite, psk);
             let real_binder =
@@ -520,7 +520,7 @@ mod client_hello {
 
         cx.common.check_aligned_handshake()?;
 
-        let client_hello_hash = transcript.get_hash_given(&[]);
+        let client_hello_hash = transcript.hash_given(&[]);
 
         trace!("sending server hello {:?}", sh);
         transcript.add_message(&sh);
@@ -544,7 +544,7 @@ mod client_hello {
         // Do key exchange
         let key_schedule = key_schedule_pre_handshake.into_handshake(kx, &share.payload.0)?;
 
-        let handshake_hash = transcript.get_current_hash();
+        let handshake_hash = transcript.current_hash();
         let key_schedule = key_schedule.derive_server_handshake_secrets(
             handshake_hash,
             &*config.key_log,
@@ -779,7 +779,7 @@ mod client_hello {
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
-        let message = construct_server_verify_message(&transcript.get_current_hash());
+        let message = construct_server_verify_message(&transcript.current_hash());
 
         let signer = signing_key
             .choose_scheme(schemes)
@@ -816,7 +816,7 @@ mod client_hello {
         key_schedule: KeyScheduleHandshake,
         config: &ServerConfig,
     ) -> KeyScheduleTrafficWithClientFinishedPending {
-        let handshake_hash = transcript.get_current_hash();
+        let handshake_hash = transcript.current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
@@ -830,7 +830,7 @@ mod client_hello {
 
         trace!("sending finished {:?}", m);
         transcript.add_message(&m);
-        let hash_at_server_fin = transcript.get_current_hash();
+        let hash_at_server_fin = transcript.current_hash();
         cx.common.send_msg(m, true);
 
         // Now move to application data keys.  Read key change is deferred until
@@ -983,7 +983,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
                 HandshakeType::CertificateVerify,
                 HandshakePayload::CertificateVerify
             )?;
-            let handshake_hash = self.transcript.get_current_hash();
+            let handshake_hash = self.transcript.current_hash();
             self.transcript.abandon_client_auth();
             let certs = &self.client_cert;
             let msg = construct_client_verify_message(&handshake_hash);
@@ -1095,7 +1095,7 @@ fn get_server_session_value(
 ) -> persist::ServerSessionValue {
     let version = ProtocolVersion::TLSv1_3;
 
-    let handshake_hash = transcript.get_current_hash();
+    let handshake_hash = transcript.current_hash();
     let secret =
         key_schedule.resumption_master_secret_and_derive_ticket_psk(&handshake_hash, nonce);
 
@@ -1204,7 +1204,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
 
-        let handshake_hash = self.transcript.get_current_hash();
+        let handshake_hash = self.transcript.current_hash();
         let (key_schedule_traffic, expect_verify_data) = self
             .key_schedule
             .sign_client_finish(&handshake_hash, cx.common);
