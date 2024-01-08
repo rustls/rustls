@@ -793,7 +793,7 @@ impl ServerExtension {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ClientHelloPayload {
     pub client_version: ProtocolVersion,
     pub random: Random,
@@ -1010,7 +1010,7 @@ impl ClientHelloPayload {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum HelloRetryExtension {
     KeyShare(NamedGroup),
     Cookie(PayloadU16),
@@ -1158,7 +1158,7 @@ impl HelloRetryRequest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ServerHelloPayload {
     pub(crate) legacy_version: ProtocolVersion,
     pub(crate) random: Random,
