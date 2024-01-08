@@ -39,31 +39,32 @@ pub struct HpkeSuite {
 
 /// An HPKE instance that can be used for base-mode single-shot encryption and decryption.
 pub trait Hpke: Debug + Send + Sync {
-    /// Seal the provided `plaintext` to the recipient public key `pk_r` with application supplied
+    /// Seal the provided `plaintext` to the recipient public key `pub_key` with application supplied
     /// `info`, and additional data `aad`.
     ///
     /// Returns ciphertext that can be used with [Self::open] by the recipient to recover plaintext
-    /// using the same `info` and `aad` and the private key corresponding to `pk_r`.
+    /// using the same `info` and `aad` and the private key corresponding to `pub_key`. RFC 9180
+    /// refers to `pub_key` as `pkR`.
     fn seal(
         &mut self,
-        pk_r: &HpkePublicKey,
         info: &[u8],
         aad: &[u8],
         plaintext: &[u8],
+        pub_key: &HpkePublicKey,
     ) -> Result<(EncapsulatedSecret, Vec<u8>), Error>;
 
     /// Open the provided `ciphertext` using the encapsulated secret `enc`, with application
     /// supplied `info`, and additional data `aad`.
     ///
     /// Returns plaintext if  the `info` and `aad` match those used with [Self::seal], and
-    /// decryption with `sk_r` succeeds.
+    /// decryption with `secret_key` succeeds. RFC 9180 refers to `secret_key` as `skR`.
     fn open(
         &mut self,
         enc: &EncapsulatedSecret,
-        sk_r: &HpkePrivateKey,
         info: &[u8],
         aad: &[u8],
         ciphertext: &[u8],
+        secret_key: &HpkePrivateKey,
     ) -> Result<Vec<u8>, Error>;
 }
 

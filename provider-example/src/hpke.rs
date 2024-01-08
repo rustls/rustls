@@ -54,12 +54,12 @@ impl Debug for HpkeRs {
 impl Hpke for HpkeRs {
     fn seal(
         &mut self,
-        pk_r: &HpkePublicKey,
         info: &[u8],
         aad: &[u8],
         plaintext: &[u8],
+        pub_key: &HpkePublicKey,
     ) -> Result<(EncapsulatedSecret, Vec<u8>), Error> {
-        let pk_r = hpke_rs::HpkePublicKey::new(pk_r.0.clone());
+        let pk_r = hpke_rs::HpkePublicKey::new(pub_key.0.clone());
         let (enc, ciphertext) = self
             .0
             .seal(&pk_r, info, aad, plaintext, None, None, None)
@@ -70,12 +70,12 @@ impl Hpke for HpkeRs {
     fn open(
         &mut self,
         enc: &EncapsulatedSecret,
-        sk_r: &HpkePrivateKey,
         info: &[u8],
         aad: &[u8],
         ciphertext: &[u8],
+        secret_key: &HpkePrivateKey,
     ) -> Result<Vec<u8>, Error> {
-        let sk_r = hpke_rs::HpkePrivateKey::new(sk_r.secret_bytes().to_vec());
+        let sk_r = hpke_rs::HpkePrivateKey::new(secret_key.secret_bytes().to_vec());
         self.0
             .open(
                 enc.0.as_slice(),

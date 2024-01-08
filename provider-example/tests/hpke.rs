@@ -30,11 +30,11 @@ fn check_test_vectors() {
             let pt = hex::decode(enc.pt).unwrap();
 
             let (enc, ciphertext) = hpke
-                .seal(&pk_r, &info, &aad, &pt)
+                .seal(&info, &aad, &pt, &pk_r)
                 .unwrap();
 
             let plaintext = hpke
-                .open(&enc, &sk_r, &info, &aad, &ciphertext)
+                .open(&enc, &info, &aad, &ciphertext, &sk_r)
                 .unwrap();
             assert_eq!(plaintext, pt);
         }
