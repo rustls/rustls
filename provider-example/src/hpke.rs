@@ -20,7 +20,7 @@ pub static HPKE_PROVIDER: &'static dyn HpkeProvider = &HpkeRsProvider {};
 struct HpkeRsProvider {}
 
 impl HpkeProvider for HpkeRsProvider {
-    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + '_>, Error> {
+    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + 'static>, Error> {
         Ok(Box::new(HpkeRs(hpke_rs::Hpke::new(
             hpke_rs::Mode::Base,
             KemAlgorithm::try_from(suite.kem.get_u16()).map_err(other_err)?,
@@ -72,7 +72,7 @@ impl Hpke for HpkeRs {
         &mut self,
         info: &[u8],
         pub_key: &HpkePublicKey,
-    ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + '_>), Error> {
+    ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error> {
         let pk_r = hpke_rs::HpkePublicKey::new(pub_key.0.clone());
         let (enc, context) = self
             .0
@@ -112,7 +112,7 @@ impl Hpke for HpkeRs {
         enc: &EncapsulatedSecret,
         info: &[u8],
         secret_key: &HpkePrivateKey,
-    ) -> Result<Box<dyn HpkeOpener + '_>, Error> {
+    ) -> Result<Box<dyn HpkeOpener + 'static>, Error> {
         let sk_r = hpke_rs::HpkePrivateKey::new(secret_key.secret_bytes().to_vec());
         Ok(Box::new(HpkeRsReceiver {
             context: self

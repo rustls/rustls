@@ -19,7 +19,7 @@ pub trait HpkeProvider: Debug + Send + Sync + 'static {
     /// Start setting up to use HPKE in base mode with the chosen suite.
     ///
     /// May return an error if the suite is unsupported by the provider.
-    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + '_>, Error>;
+    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + 'static>, Error>;
 
     /// Does the provider support the given [HpkeSuite]?
     fn supports_suite(&self, suite: &HpkeSuite) -> bool;
@@ -61,7 +61,7 @@ pub trait Hpke: Debug + Send + Sync {
         &mut self,
         info: &[u8],
         pub_key: &HpkePublicKey,
-    ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + '_>), Error>;
+    ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error>;
 
     /// Open the provided `ciphertext` using the encapsulated secret `enc`, with application
     /// supplied `info`, and additional data `aad`.
@@ -86,14 +86,14 @@ pub trait Hpke: Debug + Send + Sync {
         enc: &EncapsulatedSecret,
         info: &[u8],
         secret_key: &HpkePrivateKey,
-    ) -> Result<Box<dyn HpkeOpener + '_>, Error>;
+    ) -> Result<Box<dyn HpkeOpener + 'static>, Error>;
 }
 
 /// An HPKE sealer context.
 ///
 /// This is a stateful object that can be used to seal messages for receipt by
 /// a receiver.
-pub trait HpkeSealer: Debug + Send + Sync {
+pub trait HpkeSealer: Debug + Send + Sync + 'static {
     /// Seal the provided `plaintext` with additional data `aad`, returning
     /// ciphertext.
     fn seal(&mut self, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Error>;
@@ -103,7 +103,7 @@ pub trait HpkeSealer: Debug + Send + Sync {
 ///
 /// This is a stateful object that can be used to open sealed messages sealed
 /// by a sender.
-pub trait HpkeOpener: Debug + Send + Sync {
+pub trait HpkeOpener: Debug + Send + Sync + 'static {
     /// Open the provided `ciphertext` with additional data `aad`, returning plaintext.
     fn open(&mut self, aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Error>;
 }
