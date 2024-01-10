@@ -760,6 +760,10 @@ fn handle_err(err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme)
+        | Error::PeerMisbehaved(PeerMisbehaved::SignedKxWithWrongAlgorithm) => {
+            quit(":WRONG_SIGNATURE_TYPE:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
@@ -1091,6 +1095,9 @@ pub fn main() {
                     }
                 }
             }
+            "-verify-prefs" => {
+                lookup_scheme(args.remove(0).parse::<u16>().unwrap());
+            }
             "-max-cert-list" |
             "-expect-curve-id" |
             "-expect-resume-curve-id" |
@@ -1314,7 +1321,6 @@ pub fn main() {
             "-handshake-twice" |
             "-on-resume-verify-fail" |
             "-reverify-on-resume" |
-            "-verify-prefs" |
             "-no-op-extra-handshake" |
             "-expect-peer-cert-file" |
             "-no-rsa-pss-rsae-certs" |
