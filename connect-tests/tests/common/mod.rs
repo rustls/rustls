@@ -308,6 +308,9 @@ impl TlsClient {
             args.push("--verbose");
         }
 
+        args.push("--proto");
+        args.push("http/1.1");
+
         if self.max_fragment_size.is_some() {
             args.push("--max-frag-size");
             fragstring = self

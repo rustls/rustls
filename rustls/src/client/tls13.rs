@@ -89,6 +89,18 @@ pub(super) fn handle_server_hello(
             )
         })?;
 
+    // !craft! begin
+    let our_key_share = if let Some(key_share_alt) = cx
+        .data
+        .craft_connection_data
+        .find_key_share(their_key_share.group)
+    {
+        key_share_alt
+    } else {
+        our_key_share
+    };
+    // !craft! end
+
     if our_key_share.group() != their_key_share.group {
         return Err({
             cx.common.send_fatal_alert(

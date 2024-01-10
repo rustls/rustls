@@ -21,6 +21,14 @@ macro_rules! enum_builder {
                     ,$enum_name::Unknown(x) => x
                 }
             }
+
+            #[allow(dead_code)]
+            $enum_vis fn craft_is_unknown(&self) -> bool {
+                match self {
+                    $enum_name::Unknown(_) => true,
+                    _ => false,
+                }
+            }
         }
         impl Codec for $enum_name {
             // NOTE(allow) fully qualified Vec is only needed in no-std mode
@@ -72,6 +80,14 @@ macro_rules! enum_builder {
                 match self {
                     $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
                     ,$enum_name::Unknown(_) => None,
+                }
+            }
+
+            #[allow(dead_code)]
+            $enum_vis fn craft_is_unknown(&self) -> bool {
+                match self {
+                    $enum_name::Unknown(_) => true,
+                    _ => false,
                 }
             }
         }

@@ -271,6 +271,12 @@ fn emit_client_hello_for_retry(
     // Do we have a SessionID or ticket cached for this host?
     let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
 
+    // !craft! begin
+    config
+        .craft
+        .patch_extension(cx, &config, retryreq, &mut exts);
+    // !craft! end
+
     // Note what extensions we sent.
     input.hello.sent_extensions = exts
         .iter()
@@ -288,6 +294,12 @@ fn emit_client_hello_for_retry(
         .collect();
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+
+    // !craft! begin
+    config
+        .craft
+        .patch_cipher(cx, &mut cipher_suites);
+    // !craft! end
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,

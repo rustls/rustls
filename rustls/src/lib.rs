@@ -541,3 +541,6 @@ pub mod ticketer;
 
 /// This is the rustls manual.
 pub mod manual;
+
+/// Core craft functionality
+pub mod craft;

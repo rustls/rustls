@@ -422,7 +422,12 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         (_, _) => {
             panic!("must provide --auth-certs and --auth-key together");
         }
-    };
+    }
+    .with_fingerprint(
+        rustls::craft::CHROME_108
+            .test_alpn_http1
+            .builder(),
+    );
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 

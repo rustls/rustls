@@ -19,7 +19,7 @@ p256 = "0.13.2"
 pkcs8 = { version = "0.10.2", features = ["std"] }
 pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
 rand_core = "0.6.0"
-rustls = { path = "../rustls", default-features = false, features = ["logging", "tls12"] }
+craftls = { path = "../rustls", default-features = false, features = ["logging", "tls12"] }
 rsa = { version = "0.9.0", features = ["sha2"] }
 sha2 = "0.10.0"
 signature = "2"

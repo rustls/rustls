@@ -4,6 +4,7 @@ use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
+use crate::craft::FingerprintBuilder;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
@@ -146,7 +147,8 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 #[derive(Debug)]
 pub struct ClientConfig {
     /// Source of randomness and other crypto.
-    pub(super) provider: Arc<CryptoProvider>,
+    /// !craft! pub(super) -> pub(crate)
+    pub(crate) provider: Arc<CryptoProvider>,
 
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
@@ -173,7 +175,8 @@ pub struct ClientConfig {
 
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
-    pub(super) versions: versions::EnabledVersions,
+    /// !craft! pub(super) -> pub(crate)
+    pub(crate) versions: versions::EnabledVersions,
 
     /// Whether to send the Server Name Indication (SNI) extension
     /// during the client handshake.
@@ -197,6 +200,9 @@ pub struct ClientConfig {
     ///
     /// The default is false.
     pub enable_early_data: bool,
+
+    /// !craft! craft options
+    pub(crate) craft: crate::craft::CraftOptions,
 }
 
 /// What mechanisms to support for resuming a TLS 1.2 session.
@@ -229,6 +235,7 @@ impl Clone for ClientConfig {
             key_log: Arc::clone(&self.key_log),
             enable_secret_extraction: self.enable_secret_extraction,
             enable_early_data: self.enable_early_data,
+            craft: self.craft.clone(), // !craft!
         }
     }
 }
@@ -314,12 +321,22 @@ impl ClientConfig {
             .find(|&scs| scs.suite() == suite)
     }
 
-    pub(super) fn find_kx_group(&self, group: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {
+    /// !craft! +pub(crate)
+    pub(crate) fn find_kx_group(&self, group: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {
         self.provider
             .kx_groups
             .iter()
             .copied()
             .find(|skxg| skxg.name() == group)
+    }
+
+    /// !craft!
+    ///
+    /// Applies a [`FingerprintBuilder`] to the client configuration.
+    ///
+    /// This method takes the current `ClientConfig`, applies the modifications defined by the `FingerprintBuilder` (which is derived from a [`crate::craft::Fingerprint`] or [`crate::craft::FingerprintSet`]), and returns the updated configuration.
+    pub fn with_fingerprint(self, fingerprint_builder: FingerprintBuilder) -> Self {
+        fingerprint_builder.patch_config(self)
     }
 }
 
@@ -644,7 +661,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
-        let mut data = ClientConnectionData::new();
+        let mut data = ClientConnectionData::new(&config); // !craft! new() -> new(config: &ClientConfig)
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -665,13 +682,18 @@ impl ConnectionCore<ClientConnectionData> {
 pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
+
+    /// !craft!
+    pub(crate) craft_connection_data: crate::craft::CraftConnectionData,
 }
 
 impl ClientConnectionData {
-    fn new() -> Self {
+    /// !craft! new() -> new(config: &ClientConfig)
+    fn new(config: &ClientConfig) -> Self {
         Self {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
+            craft_connection_data: crate::craft::CraftConnectionData::new(config),
         }
     }
 }

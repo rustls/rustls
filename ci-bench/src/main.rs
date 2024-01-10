@@ -510,7 +510,12 @@ impl ClientSideStepper<'_> {
         .with_protocol_versions(&[params.version])
         .unwrap()
         .with_root_certificates(root_store)
-        .with_no_client_auth();
+        .with_no_client_auth()
+        .with_fingerprint(
+            rustls::craft::CHROME_108
+                .test_alpn_http1
+                .builder(),
+        );
 
         if resume != ResumptionKind::No {
             cfg.resumption = Resumption::in_memory_sessions(128);

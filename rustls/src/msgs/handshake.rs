@@ -37,7 +37,7 @@ macro_rules! wrapped_payload(
   ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident,) => {
     $(#[$comment])*
     #[derive(Clone, Debug)]
-    $vis struct $name($inner);
+    $vis struct $name($vis /* !craft! +$vis */ $inner);
 
     impl From<Vec<u8>> for $name {
         fn from(v: Vec<u8>) -> Self {
@@ -556,6 +556,8 @@ pub enum ClientExtension {
     TransportParametersDraft(Vec<u8>),
     EarlyData,
     Unknown(UnknownExtension),
+
+    CraftPadding(crate::craft::CraftPadding),
 }
 
 impl ClientExtension {
@@ -578,6 +580,7 @@ impl ClientExtension {
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
             Self::Unknown(ref r) => r.typ,
+            Self::CraftPadding(_) => ExtensionType::Padding,
         }
     }
 }
@@ -607,6 +610,7 @@ impl Codec for ClientExtension {
                 nested.buf.extend_from_slice(r);
             }
             Self::Unknown(ref r) => r.encode(nested.buf),
+            Self::CraftPadding(ref r) => r.encode(nested.buf),
         }
     }
 
@@ -1286,6 +1290,7 @@ impl TlsListElement for CertificateDer<'_> {
 #[derive(Debug)]
 pub(crate) enum CertificateExtension {
     CertificateStatus(CertificateStatus),
+    CraftDummySCT,
     Unknown(UnknownExtension),
 }
 
@@ -1294,6 +1299,7 @@ impl CertificateExtension {
         match *self {
             Self::CertificateStatus(_) => ExtensionType::StatusRequest,
             Self::Unknown(ref r) => r.typ,
+            Self::CraftDummySCT => ExtensionType::SCT,
         }
     }
 
@@ -1313,6 +1319,7 @@ impl Codec for CertificateExtension {
         match *self {
             Self::CertificateStatus(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
+            Self::CraftDummySCT => unimplemented!(),
         }
     }
 
@@ -1325,6 +1332,10 @@ impl Codec for CertificateExtension {
             ExtensionType::StatusRequest => {
                 let st = CertificateStatus::read(&mut sub)?;
                 Self::CertificateStatus(st)
+            }
+            ExtensionType::SCT => {
+                sub.take(sub.left());
+                Self::CraftDummySCT
             }
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
@@ -1384,7 +1395,7 @@ impl CertificateEntry {
     pub(crate) fn has_unknown_extension(&self) -> bool {
         self.exts
             .iter()
-            .any(|ext| ext.get_type() != ExtensionType::StatusRequest)
+            .any(|ext| ext.get_type().craft_is_unknown())
     }
 
     pub(crate) fn get_ocsp_response(&self) -> Option<&Vec<u8>> {

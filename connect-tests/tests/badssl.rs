@@ -15,7 +15,7 @@ mod online {
     fn no_cbc() {
         connect("cbc.badssl.com")
             .fails()
-            .expect(r"TLS error: AlertReceived\(HandshakeFailure\)")
+            .expect(r"TLS error: PeerMisbehaved\(SelectedUnofferedCipherSuite\)") // !craft! r"TLS error: AlertReceived\(HandshakeFailure\)" => ...
             .go()
             .unwrap();
     }

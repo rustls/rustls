@@ -376,7 +376,12 @@ fn make_client_config(
         .unwrap()
     } else {
         cfg.with_no_client_auth()
-    };
+    }
+    .with_fingerprint(
+        rustls::craft::CHROME_108
+            .test_alpn_http1
+            .builder(),
+    );
 
     if resume != ResumptionParam::No {
         cfg.resumption = Resumption::in_memory_sessions(128);
