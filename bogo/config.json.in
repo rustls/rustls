@@ -34,7 +34,7 @@
     "TLS-ECH-*": "",
     "ALPS-*": "",
     "*Kyber*": "",
-    "ExtraClientEncryptedExtension-TLS-TLS13": "uses ALPS",
+    "ExtraClientEncryptedExtension-*": "we don't implement ALPS",
     "SendHelloRetryRequest-2-TLS13": "we accept any supported keyshare",
     "OmitExtensions-ServerHello-TLS12": "bug in bogo if sct offered",
     "EmptyExtensions-ServerHello-TLS12": "",

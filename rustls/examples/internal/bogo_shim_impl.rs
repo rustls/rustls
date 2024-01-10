@@ -43,6 +43,7 @@ macro_rules! println_err(
 #[derive(Debug)]
 struct Options {
     port: u16,
+    shim_id: u64,
     side: Side,
     max_fragment: Option<usize>,
     resumes: usize,
@@ -91,6 +92,7 @@ impl Options {
     fn new() -> Self {
         Options {
             port: 0,
+            shim_id: 0,
             side: Side::Client,
             max_fragment: None,
             resumes: 0,
@@ -844,6 +846,9 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
     let mut sent_exporter = false;
     let mut quench_writes = false;
 
+    conn.write_all(&opts.shim_id.to_le_bytes())
+        .unwrap();
+
     loop {
         if !sent_message && (opts.queue_data || (opts.queue_data_on_resume && count > 0)) {
             if !opts
@@ -1019,6 +1024,9 @@ pub fn main() {
         match arg.as_ref() {
             "-port" => {
                 opts.port = args.remove(0).parse::<u16>().unwrap();
+            }
+            "-shim-id" => {
+                opts.shim_id = args.remove(0).parse::<u64>().unwrap();
             }
             "-server" => {
                 opts.side = Side::Server;
@@ -1253,6 +1261,7 @@ pub fn main() {
             "-no-tls1" |
             "-no-ssl3" |
             "-handoff" |
+            "-ipv6" |
             "-decline-alpn" |
             "-expect-no-session" |
             "-expect-session-miss" |
