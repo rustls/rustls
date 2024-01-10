@@ -369,6 +369,7 @@ mod x509;
 mod check;
 mod bs_debug;
 mod builder;
+mod compression;
 mod enums;
 mod key_log;
 mod key_log_file;
@@ -485,7 +486,12 @@ pub mod client {
     pub use crate::msgs::persist::Tls13ClientSessionValue;
 }
 
+pub use crate::compression::{
+    BrotliParams, CertificateCompression, CompressionProvider, ZlibParams, ZstdParams,
+    BROTLI_DEFAULT, ZLIB_DEFAULT, ZSTD_DEFAULT,
+};
 pub use client::{ClientConfig, ClientConnection};
+pub use msgs::enums::CertificateCompressionAlgorithm;
 
 /// Items for use in a server.
 pub mod server {

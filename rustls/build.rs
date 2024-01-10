@@ -4,10 +4,13 @@
 /// See the comment in lib.rs to understand why we need this.
 
 #[cfg_attr(feature = "read_buf", rustversion::not(nightly))]
-fn main() {}
+fn main() {
+    println!("cargo:rustc-cfg=cert_compress");
+}
 
 #[cfg(feature = "read_buf")]
 #[rustversion::nightly]
 fn main() {
+    println!("cargo:rustc-cfg=cert_compress");
     println!("cargo:rustc-cfg=read_buf");
 }

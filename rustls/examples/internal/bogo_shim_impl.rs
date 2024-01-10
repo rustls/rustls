@@ -17,6 +17,7 @@ use rustls::{
     PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm, SignatureScheme,
     SupportedProtocolVersion,
 };
+use rustls::{CertificateCompression, CertificateCompressionAlgorithm, CompressionProvider};
 
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
 use rustls::crypto::aws_lc_rs as provider;
@@ -84,6 +85,7 @@ struct Options {
     expect_version: u16,
     resumption_delay: u32,
     queue_early_data_after_received_messages: Vec<usize>,
+    install_cert_compression_algs: Vec<u16>,
 }
 
 impl Options {
@@ -131,6 +133,7 @@ impl Options {
             expect_version: 0,
             resumption_delay: 0,
             queue_early_data_after_received_messages: vec![],
+            install_cert_compression_algs: vec![],
         }
     }
 
@@ -186,6 +189,90 @@ fn load_root_certs() -> Arc<RootCertStore> {
     roots.add_parsable_certificates(load_cert("cert.pem"));
 
     Arc::new(roots)
+}
+
+const SHRINKING_COMPRESSION_ALG_ID: u16 = 0xff01;
+const EXPANDING_COMPRESSION_ALG_ID: u16 = 0xff02;
+
+struct AdhocCompressionProvider {
+    compress_fn: &'static (dyn Fn(Vec<u8>, &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync),
+    decompress_fn: &'static (dyn Fn(Vec<u8>, &[u8]) -> std::io::Result<Vec<u8>> + Send + Sync),
+}
+
+impl Debug for AdhocCompressionProvider {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdhocCompressionProvider")
+            .finish()
+    }
+}
+
+impl CompressionProvider for AdhocCompressionProvider {
+    fn compress(&self, writer: Vec<u8>, input: &[u8]) -> io::Result<Vec<u8>> {
+        (self.compress_fn)(writer, input)
+    }
+
+    fn decompress(&self, writer: Vec<u8>, input: &[u8]) -> io::Result<Vec<u8>> {
+        (self.decompress_fn)(writer, input)
+    }
+}
+
+static EXPANDING_COMPRESSION: CertificateCompression = CertificateCompression {
+    alg: CertificateCompressionAlgorithm::Unknown(EXPANDING_COMPRESSION_ALG_ID),
+    provider: &AdhocCompressionProvider {
+        // Add `expanding` algorithm
+        // https://github.com/google/boringssl/blob/a2278d4d2cabe73f6663e3299ea7808edfa306b9/ssl/test/runner/runner.go#L15930
+        //
+        // expanding_prefix is just some arbitrary byte string. This has to match the value in the shim.
+        compress_fn: &|writer: Vec<u8>, input: &[u8]| {
+            let expanding_prefix = [1, 2, 3, 4].as_ref();
+            let mut w = writer;
+            w.extend_from_slice(expanding_prefix);
+            w.extend_from_slice(input);
+            Ok(w)
+        },
+        decompress_fn: &|_writer: Vec<u8>, input: &[u8]| {
+            let expanding_prefix = [1, 2, 3, 4].as_ref();
+            if !input.starts_with(expanding_prefix) {
+                panic!("cannot decompress certificate message {:x?}", input);
+            }
+
+            Ok(input[expanding_prefix.len()..].to_vec())
+        },
+    },
+};
+
+static SHRINKING_COMPRESSION: CertificateCompression = CertificateCompression {
+    alg: CertificateCompressionAlgorithm::Unknown(SHRINKING_COMPRESSION_ALG_ID),
+    provider: &AdhocCompressionProvider {
+        // Add `shrinking` algorithm
+        // https://github.com/google/boringssl/blob/a2278d4d2cabe73f6663e3299ea7808edfa306b9/ssl/test/runner/runner.go#L15912
+        //
+        // shrinking_prefix is the first two bytes of a Certificate message
+        compress_fn: &|_writer: Vec<u8>, input: &[u8]| {
+            let shrinking_prefix = [0, 0].as_ref();
+            if !input.starts_with(&shrinking_prefix) {
+                panic!("cannot compress certificate message {:x?}", input);
+            }
+
+            Ok(input[shrinking_prefix.len()..].to_vec())
+        },
+        decompress_fn: &|writer: Vec<u8>, input: &[u8]| {
+            let shrinking_prefix = [0, 0].as_ref();
+            let mut w = writer;
+            w.extend_from_slice(shrinking_prefix);
+            w.extend_from_slice(input);
+
+            Ok(w)
+        },
+    },
+};
+
+fn get_certificate_compression_algorithms(id: u16) -> &'static CertificateCompression {
+    match id {
+        EXPANDING_COMPRESSION_ALG_ID => &EXPANDING_COMPRESSION,
+        SHRINKING_COMPRESSION_ALG_ID => &SHRINKING_COMPRESSION,
+        _ => unimplemented!(),
+    }
 }
 
 fn split_protocols(protos: &str) -> Vec<String> {
@@ -678,6 +765,14 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         cfg.enable_early_data = true;
     }
 
+    if opts.install_cert_compression_algs.len() > 0 {
+        cfg.certificate_compression_algorithms = opts
+            .install_cert_compression_algs
+            .iter()
+            .map(|&id| get_certificate_compression_algorithms(id))
+            .collect();
+    }
+
     Arc::new(cfg)
 }
 
@@ -754,6 +849,8 @@ fn handle_err(err: Error) -> ! {
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
         Error::InvalidCertificate(e) => quit(&format!(":BAD_CERT: ({:?})", e)),
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
+        Error::FailedCertificateDecompression => quit(":CERT_DECOMPRESSION_FAILED:"),
+        Error::UnknownCertCompressionAlg => quit(":UNKNOWN_CERT_COMPRESSION_ALG:"),
         _ => {
             println_err!("unhandled error: {:?}", err);
             quit(":FIXME:")
@@ -1216,6 +1313,15 @@ pub fn main() {
             "-resumption-delay" => {
                 opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
                 align_time();
+            }
+            "-install-cert-compression-algs" => {
+                opts.install_cert_compression_algs = vec![
+                    SHRINKING_COMPRESSION_ALG_ID,
+                    EXPANDING_COMPRESSION_ALG_ID
+                ];
+            }
+            "-install-one-cert-compression-alg" => {
+                opts.install_cert_compression_algs = vec![args.remove(0).parse::<u16>().unwrap()];
             }
 
             // defaults:

@@ -81,6 +81,15 @@ pub enum Error {
     /// We failed to acquire random bytes from the system.
     FailedToGetRandomBytes,
 
+    /// We failed to perform certificate decompression
+    FailedCertificateDecompression,
+
+    /// We failed to perform certificate compression
+    FailedCertificateCompression,
+
+    /// Unknown certificate compression algorithm
+    UnknownCertCompressionAlg,
+
     /// This function doesn't work until the TLS handshake
     /// is complete.
     HandshakeNotComplete,
@@ -182,6 +191,7 @@ pub enum PeerMisbehaved {
     DuplicateNewSessionTicketExtensions,
     DuplicateServerHelloExtensions,
     DuplicateServerNameTypes,
+    DuplicateCertificateCompressionAlgorithms,
     EarlyDataAttemptedInSecondClientHello,
     EarlyDataExtensionWithoutResumption,
     EarlyDataOfferedWithVariedCipherSuite,
@@ -519,6 +529,15 @@ impl fmt::Display for Error {
             Self::NoApplicationProtocol => write!(f, "peer doesn't support any known protocol"),
             Self::FailedToGetCurrentTime => write!(f, "failed to get current time"),
             Self::FailedToGetRandomBytes => write!(f, "failed to get random bytes"),
+            Self::FailedCertificateDecompression => {
+                write!(f, "failed to decompress certificate")
+            }
+            Self::FailedCertificateCompression => {
+                write!(f, "failed to compress certificate")
+            }
+            Self::UnknownCertCompressionAlg => {
+                write!(f, "unknown certificate compression algorithm")
+            }
             Self::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }

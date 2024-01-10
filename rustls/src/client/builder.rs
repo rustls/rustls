@@ -153,6 +153,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             resumption: Resumption::default(),
             max_fragment_size: None,
             client_auth_cert_resolver,
+            certificate_compression_algorithms: Vec::new(),
             versions: self.state.versions,
             enable_sni: true,
             verifier: self.state.verifier,

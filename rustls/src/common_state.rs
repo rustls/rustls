@@ -43,6 +43,7 @@ pub struct CommonState {
     pub(crate) received_plaintext: ChunkVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
     pub(crate) sendable_tls: ChunkVecBuffer,
+    pub(crate) certificate_compression_algorithm: Option<crate::CertificateCompressionAlgorithm>,
     queued_key_update_message: Option<Vec<u8>>,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
@@ -72,6 +73,7 @@ impl CommonState {
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
             sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            certificate_compression_algorithm: None,
             queued_key_update_message: None,
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),

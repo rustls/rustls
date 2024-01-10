@@ -473,7 +473,9 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::CertificateTls13(..),
+                        payload:
+                            HandshakePayload::CertificateTls13(..)
+                            | HandshakePayload::CompressedCertificate(..),
                         ..
                     },
                 ..
@@ -508,6 +510,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 &[ContentType::Handshake],
                 &[
                     HandshakeType::Certificate,
+                    HandshakeType::CompressedCertificate,
                     HandshakeType::CertificateRequest,
                 ],
             )),
@@ -599,11 +602,36 @@ struct ExpectCertificate {
 impl State<ClientConnectionData> for ExpectCertificate {
     fn handle(mut self: Box<Self>, cx: &mut ClientContext<'_>, m: Message) -> hs::NextStateOrError {
         self.transcript.add_message(&m);
-        let cert_chain = require_handshake_msg_move!(
-            m,
-            HandshakeType::Certificate,
-            HandshakePayload::CertificateTls13
-        )?;
+
+        let cert_chain = if m.is_handshake_type(HandshakeType::CompressedCertificate) {
+            let compressed_cert_chain = require_handshake_msg!(
+                m,
+                HandshakeType::CompressedCertificate,
+                HandshakePayload::CompressedCertificate
+            )?;
+
+            cx.common
+                .certificate_compression_algorithm = Some(compressed_cert_chain.algorithm);
+
+            let cert_chain = if let Some(provider) = self
+                .config
+                .certificate_compression_algorithms
+                .iter()
+                .find(|cc| cc.alg == compressed_cert_chain.algorithm)
+                .map(|v| v.provider)
+            {
+                compressed_cert_chain.decompress(provider)
+            } else {
+                Err(Error::UnknownCertCompressionAlg)
+            };
+            cert_chain?
+        } else {
+            require_handshake_msg_move!(
+                m,
+                HandshakeType::Certificate,
+                HandshakePayload::CertificateTls13
+            )?
+        };
 
         // This is only non-empty for client auth.
         if !cert_chain.context.0.is_empty() {
@@ -863,6 +891,12 @@ impl State<ClientConnectionData> for ExpectFinished {
                     signer,
                     auth_context_tls13: auth_context,
                 } => {
+                    assert!(
+                        cx.common
+                            .certificate_compression_algorithm
+                            .is_none(),
+                        "client cert compression is unimplemented"
+                    );
                     emit_certificate_tls13(
                         &mut st.transcript,
                         Some(&certkey),
