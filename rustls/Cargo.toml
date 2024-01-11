@@ -1,6 +1,6 @@
 [package]
 name = "craftls"
-version = "0.22.0"
+version = "0.22.0-craft.0.1"
 edition = "2021"
 rust-version = "1.61"
 license = "Apache-2.0 OR ISC OR MIT"

@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "craftls"
-version = "0.22.0"
+version = "0.22.0-craft.0.1"
 dependencies = [
  "aws-lc-rs",
  "base64",
