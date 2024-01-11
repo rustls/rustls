@@ -75,6 +75,10 @@ pub static CHROME_108_SIGNATURE_ALGO: &[SignatureScheme] = &[
     SignatureScheme::RSA_PKCS1_SHA512,
 ];
 
+pub static DEFAULT_RUSTLS_SESSION_TICKET: ClientExtension = ClientExtension::SessionTicket(
+    crate::msgs::handshake::ClientSessionTicket::Offer(Payload(vec![])),
+);
+
 #[dynamic]
 /// The extension list of chrome 108
 pub static CHROME_108_EXT: Vec<ExtensionSpec> = {
@@ -96,9 +100,7 @@ pub static CHROME_108_EXT: Vec<ExtensionSpec> = {
         ])),
         Keep(OrDefault(
             ExtensionType::SessionTicket,
-            ClientExtension::SessionTicket(crate::msgs::handshake::ClientSessionTicket::Offer(
-                Payload(vec![]),
-            )),
+            DEFAULT_RUSTLS_SESSION_TICKET.clone(),
         )),
         Craft(CraftExtension::Protocols(&[b"h2", b"http/1.1"])),
         Rustls(ClientExtension::CertificateStatusRequest(OCSP_REQ.clone())),

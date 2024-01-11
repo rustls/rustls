@@ -48,6 +48,8 @@ While these non-features may be included in browser fingerprints for completenes
 
 # Example code
 
+See `examples/src/bin/craftclient.rs`
+
 ## Configuration
 
 ### Direct Usage

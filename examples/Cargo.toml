@@ -18,3 +18,5 @@ rustls-pemfile = "2"
 serde = "1.0"
 serde_derive = "1.0"
 webpki-roots = "0.26"
+
+static_init = "1.0.3" #!craft!

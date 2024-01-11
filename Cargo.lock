@@ -1832,6 +1832,7 @@ dependencies = [
  "rustls-pki-types",
  "serde",
  "serde_derive",
+ "static_init",
  "webpki-roots 0.26.0",
 ]
 

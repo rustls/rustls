@@ -395,6 +395,9 @@ pub mod internal {
             pub use crate::msgs::enums::{
                 AlertLevel, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem, NamedGroup,
             };
+            // !craft! begin
+            pub use crate::msgs::enums::{ECPointFormat, ExtensionType, PSKKeyExchangeMode};
+            // !craft! end
         }
         pub mod fragmenter {
             pub use crate::msgs::fragmenter::MessageFragmenter;
