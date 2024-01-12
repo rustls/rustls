@@ -54,9 +54,8 @@
 //!
 //! ### Platform support
 //!
-//! While Rustls itself is platform independent, by default it uses
-//! [`ring`](https://crates.io/crates/ring) for implementing the cryptography in
-//! TLS. As a result, rustls only runs on platforms
+//! While Rustls itself is platform independent, by default it uses [`ring`] for implementing
+//! the cryptography in TLS. As a result, rustls only runs on platforms
 //! supported by `ring`. At the time of writing, this means 32-bit ARM, Aarch64 (64-bit ARM),
 //! x86, x86-64, LoongArch64, 32-bit & 64-bit Little Endian MIPS, 32-bit PowerPC (Big Endian),
 //! 64-bit PowerPC (Big and Little Endian), 64-bit RISC-V, and s390x. We do not presently
@@ -74,9 +73,56 @@
 //! Rustls requires Rust 1.61 or later.
 //!
 //! [ring-target-platforms]: https://github.com/briansmith/ring/blob/2e8363b433fa3b3962c877d9ed2e9145612f3160/include/ring-core/target.h#L18-L64
-//! [crypto::CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/trait.CryptoProvider.html
+//! [`crypto::CryptoProvider`]: https://docs.rs/rustls/latest/rustls/crypto/trait.CryptoProvider.html
+//! [`ring`]: https://crates.io/crates/ring
 //!
-//! ## Design Overview
+//! ### Cryptography providers
+//!
+//! Since Rustls 0.22 it has been possible to choose the provider of the cryptographic primitives
+//! that Rustls uses. This may be appealing if you have specific platform, compliance or feature
+//! requirements that aren't met by the default provider, [`ring`].
+//!
+//! Users that wish to customize the provider in use can do so when constructing `ClientConfig`
+//! and `ServerConfig` instances using the `with_crypto_provider` method on the respective config
+//! builder types. See the [`crypto::CryptoProvider`] documentation for more details.
+//!
+//! #### Built-in providers
+//!
+//! Rustls ships with two built-in providers controlled with associated feature flags:
+//!
+//!   * [`ring`] - enabled by default, available with the `ring` feature flag enabled. This
+//!     provider is used by default when an explicit provider is not specified.
+//!   * [`aws-lc-rs`] - available with the `aws_lc_rs` feature flag enabled.
+//!
+//! [`aws-lc-rs`]: https://github.com/aws/aws-lc-rs
+//!
+//! #### Third-party providers
+//!
+//! The community has also started developing third-party providers for Rustls:
+//!
+//!   * [`rustls-mbedtls-provider`] - a provider that uses [`mbedtls`] for cryptography.
+//!   * [`boring-rustls-provider`] - a work-in-progress provider that uses [`boringssl`] for
+//!     cryptography.
+//!
+//! [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider
+//! [`mbedtls`]: https://github.com/Mbed-TLS/mbedtls
+//! [`boring-rustls-provider`]: https://github.com/janrueth/boring-rustls-provider
+//! [`boringssl`]: https://github.com/google/boringssl
+//!
+//! #### Custom provider
+//!
+//! We also provide a simple example of writing your own provider in the [`custom-provider`]
+//! example. This example implements a minimal provider using parts of the [`RustCrypto`]
+//! ecosystem.
+//!
+//! See the [Making a custom CryptoProvider] section of the documentation for more information
+//! on this topic.
+//!
+//! [`custom-provider`]: https://github.com/rustls/rustls/tree/main/provider-example/
+//! [`RustCrypto`]: https://github.com/RustCrypto
+//! [Making a custom CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html#making-a-custom-cryptoprovider
+//!
+//! ## Design overview
 //!
 //! Rustls is a low-level library. If your goal is to make HTTPS connections you may prefer
 //! to use a library built on top of Rustls like [hyper] or [ureq].
