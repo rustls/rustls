@@ -273,7 +273,7 @@ fn emit_client_hello_for_retry(
     let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
 
     // Extensions MAY be randomized
-    // but they also need to keep the same order as the the previous ClientHello
+    // but they also need to keep the same order as the previous ClientHello
     exts.sort_by_cached_key(|new_ext| {
         // PSK extension is always last
         if let ClientExtension::PresharedKey(..) = new_ext {
