@@ -1,5 +1,6 @@
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
+use crate::compression::CertificateCompression;
 use crate::conn::{ConnectionCommon, ConnectionCore};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -173,6 +174,10 @@ pub struct ClientConfig {
     /// How to decide what client auth certificate/keys to use.
     pub client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
 
+    /// Certificate compression algorithms.
+    /// If None, certificate compression won't be enabled
+    pub certificate_compression_algorithms: Vec<&'static CertificateCompression>,
+
     /// Supported versions, in no particular order.  The default
     /// is all supported versions.
     /// !craft! pub(super) -> pub(crate)
@@ -229,6 +234,7 @@ impl Clone for ClientConfig {
             alpn_protocols: self.alpn_protocols.clone(),
             max_fragment_size: self.max_fragment_size,
             client_auth_cert_resolver: Arc::clone(&self.client_auth_cert_resolver),
+            certificate_compression_algorithms: Vec::new(),
             versions: self.versions,
             enable_sni: self.enable_sni,
             verifier: Arc::clone(&self.verifier),

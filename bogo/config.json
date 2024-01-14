@@ -29,8 +29,11 @@
     "EchoTLS13CompatibilitySessionID": "",
     "ClientOCSPCallback*": "ocsp not supported yet",
     "ServerOCSPCallback*": "",
-    "CertCompression*": "not implemented",
-    "DuplicateCertCompressionExt*": "",
+    "CertCompressionPriority-TLS13": "unimplemented: server-side",
+    "CertCompressionRandom-TLS13": "unimplemented: server-side",
+    "CertCompressionShrinks-TLS13": "unimplemented: server-side",
+    "CertCompressionExpands-TLS13": "unimplemented: server-side",
+    "DuplicateCertCompressionExt*": "unimplemented: server-side",
     "TLS-ECH-*": "",
     "ALPS-*": "",
     "*Kyber*": "",
@@ -139,6 +142,7 @@
     ":ENCRYPTED_LENGTH_TOO_LONG:": ":GARBAGE:"
   },
   "TestErrorMap": {
+    "CertCompressionTooLargeClient-TLS13": ":CERT_DECOMPRESSION_FAILED:",
     "EmptyCertificateList": ":NO_CERTS:",
     "SendInvalidRecordType": ":GARBAGE:",
     "NoSharedCipher": ":HANDSHAKE_FAILURE:",

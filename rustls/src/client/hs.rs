@@ -265,6 +265,20 @@ fn emit_client_hello_for_retry(
         )));
     }
 
+    if support_tls13
+        && !config
+            .certificate_compression_algorithms
+            .is_empty()
+    {
+        exts.push(ClientExtension::CompressCertificate(
+            config
+                .certificate_compression_algorithms
+                .iter()
+                .map(|v| v.alg)
+                .collect(),
+        ))
+    }
+
     // Extra extensions must be placed before the PSK extension
     exts.extend(extra_exts.iter().cloned());
 

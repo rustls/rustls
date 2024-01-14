@@ -98,6 +98,7 @@ enum_builder! {
         SCT => 0x0012,
         Padding => 0x0015,
         ExtendedMasterSecret => 0x0017,
+        CompressCertificate => 0x001b,
         SessionTicket => 0x0023,
         PreSharedKey => 0x0029,
         EarlyData => 0x002a,
@@ -330,6 +331,18 @@ enum_builder! {
     @U16
     pub enum EchVersion {
         V14 => 0xfe0d
+    }
+}
+
+enum_builder! {
+    /// The `CertificateCompressionAlgorithm` TLS protocol enum.  Values in this enum are taken
+    /// from the various RFCs covering TLS, and are listed by IANA.
+    /// The `Unknown` item is used when processing unrecognised ordinals.
+    @U16
+    pub enum CertificateCompressionAlgorithm {
+        Zlib => 0x01,
+        Brotli => 0x02,
+        Zstd => 0x03
     }
 }
 

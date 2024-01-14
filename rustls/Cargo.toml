@@ -29,6 +29,11 @@ zeroize = "1.6.0"
 static_init = "1.0.3" #!craft!
 paste = "1.0" #!craft!
 
+
+brotli = "3.4.0"
+flate2 = "1.0"
+zstd = "0.13.0"
+
 [features]
 default = ["logging", "ring", "tls12"]
 logging = ["log"]
