@@ -1,0 +1,388 @@
+TRACE BDCR ok: 00008200
+└─ embassy_stm32::rcc::bd::{impl#2}::init @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-stm32/src/fmt.rs:117
+DEBUG flash: latency=5
+└─ embassy_stm32::rcc::_version::init @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-stm32/src/fmt.rs:130
+DEBUG rcc: Clocks { sys: Hertz(180000000), pclk1: Hertz(45000000), pclk1_tim: Hertz(90000000), pclk2: Hertz(90000000), pclk2_tim: Hertz(180000000), hclk1: Hertz(180000000), hclk2: Hertz(180000000), hclk3: Hertz(180000000), plli2s1_q: None, plli2s1_r: None, pllsai1_q: None, pllsai1_r: None, pll1_q: None, rtc: Some(Hertz(32000)) }
+└─ embassy_stm32::rcc::set_freqs @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-stm32/src/fmt.rs:130
+TRACE [0]: adding
+└─ smoltcp::iface::socket_set::{impl#2}::add::put @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+DEBUG IPv4: UP
+└─ embassy_net::{impl#5}::apply_static_config @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-net/src/fmt.rs:130
+DEBUG    IP address:      192.168.50.204/24
+└─ embassy_net::{impl#5}::apply_static_config @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-net/src/fmt.rs:130
+DEBUG    Default gateway: Some(192.168.50.1)
+└─ embassy_net::{impl#5}::apply_static_config @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-net/src/fmt.rs:130
+DEBUG    DNS server:      1.1.1.1
+└─ embassy_net::{impl#5}::apply_static_config @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-net/src/fmt.rs:130
+INFO  Waiting for DHCP...
+└─ no_std_embedded_demo::set_up_network_stack::{async_fn#0} @ src/main.rs:642
+INFO  IP address: 192.168.50.204
+└─ no_std_embedded_demo::set_up_network_stack::{async_fn#0} @ src/main.rs:646
+TRACE sending 37 octets to 1.1.1.1 from port 4901
+└─ smoltcp::socket::dns::{impl#3}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+DEBUG address 192.168.50.1 not in neighbor cache, sending ARP request
+└─ smoltcp::iface::interface::{impl#3}::lookup_hardware_addr @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:18
+TRACE SocketHandle(0): neighbor 1.1.1.1 missing, silencing until t+1.000s
+└─ smoltcp::iface::socket_meta::{impl#0}::neighbor_missing @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE SocketHandle(0): neighbor 1.1.1.1 silence timer expired, rediscovering
+└─ smoltcp::iface::socket_meta::{impl#0}::egress_permitted @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending 37 octets to 1.1.1.1 from port 4901
+└─ smoltcp::socket::dns::{impl#3}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+DEBUG address 192.168.50.1 not in neighbor cache, sending ARP request
+└─ smoltcp::iface::interface::{impl#3}::lookup_hardware_addr @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:18
+TRACE SocketHandle(0): neighbor 1.1.1.1 missing, silencing until t+1.000s
+└─ smoltcp::iface::socket_meta::{impl#0}::neighbor_missing @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+INFO  link_up = true
+└─ embassy_net::{impl#5}::poll @ /home/aissata/.cargo/git/checkouts/embassy-9312dcb0ed774b29/fe8c46b/embassy-net/src/fmt.rs:143
+TRACE SocketHandle(0): neighbor 1.1.1.1 silence timer expired, rediscovering
+└─ smoltcp::iface::socket_meta::{impl#0}::egress_permitted @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending 37 octets to 1.1.1.1 from port 4901
+└─ smoltcp::socket::dns::{impl#3}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+DEBUG address 192.168.50.1 not in neighbor cache, sending ARP request
+└─ smoltcp::iface::interface::{impl#3}::lookup_hardware_addr @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:18
+TRACE SocketHandle(0): neighbor 1.1.1.1 missing, silencing until t+1.000s
+└─ smoltcp::iface::socket_meta::{impl#0}::neighbor_missing @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE filled 192.168.50.1 => Ethernet(Address([212, 93, 100, 205, 88, 208])) (was empty)
+└─ smoltcp::iface::neighbor::{impl#1}::fill @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE SocketHandle(0): neighbor 1.1.1.1 discovered, unsilencing
+└─ smoltcp::iface::socket_meta::{impl#0}::egress_permitted @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending 37 octets to 1.1.1.1 from port 4901
+└─ smoltcp::socket::dns::{impl#3}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE receiving 69 octets from 1.1.1.1:4901
+└─ smoltcp::socket::dns::{impl#3}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE A: 162.159.200.123
+└─ smoltcp::socket::dns::{impl#3}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE A: 162.159.200.1
+└─ smoltcp::socket::dns::{impl#3}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE too many addresses in response, ignoring 162.159.200.1
+└─ smoltcp::socket::dns::{impl#3}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE [1]: adding
+└─ smoltcp::iface::socket_set::{impl#2}::add::put @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE udp:None:45698:162.159.200.123:123: buffer to send 48 octets
+└─ smoltcp::socket::udp::{impl#5}::send @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE udp:None:45698:162.159.200.123:123: sending 48 octets
+└─ smoltcp::socket::udp::{impl#5}::dispatch::{closure#0} @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE udp:None:45698:162.159.200.123:123: receiving 48 octets
+└─ smoltcp::socket::udp::{impl#5}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE udp:None:45698:162.159.200.123:123: receive 48 buffered octets
+└─ smoltcp::socket::udp::{impl#5}::recv @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE [1]: removing
+└─ smoltcp::iface::socket_set::{impl#2}::remove @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+INFO  querying host "github.com"...
+└─ no_std_embedded_demo::main::{async_fn#0} @ src/main.rs:106
+TRACE sending 28 octets to 1.1.1.1 from port 51349
+└─ smoltcp::socket::dns::{impl#3}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE receiving 44 octets from 1.1.1.1:51349
+└─ smoltcp::socket::dns::{impl#3}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE A: 140.82.121.3
+└─ smoltcp::socket::dns::{impl#3}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE [1]: adding
+└─ smoltcp::iface::socket_set::{impl#2}::add::put @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+INFO  Connecting...
+└─ no_std_embedded_demo::main::{async_fn#0} @ src/main.rs:120
+TRACE state=Closed=>SynSent
+└─ smoltcp::socket::tcp::{impl#9}::set_state @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE outgoing segment will send data or flags
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending SYN
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sampling at seq=478679061
+└─ smoltcp::socket::tcp::{impl#6}::on_send @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sample=22 rtt=266 dev=136 rto=810
+└─ smoltcp::socket::tcp::{impl#6}::sample @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE received SYN|ACK
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE state=SynSent=>Established
+└─ smoltcp::socket::tcp::{impl#9}::set_state @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE outgoing segment will acknowledge
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+INFO  Connected to Some(140.82.121.3:443)
+└─ no_std_embedded_demo::main::{async_fn#0} @ src/main.rs:125
+INFO  Iter count: 1
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 0B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: MustEncodeTlsData
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+INFO  Iter count: 3
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 0B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: MustTransmitTlsData
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE sent 119B of TLS data
+└─ no_std_embedded_demo::send_tls::{async_fn#0} @ src/main.rs:395
+INFO  Iter count: 5
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 0B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: NeedsMoreTlsData { num_bytes: None }
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE outgoing segment will send data or flags
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE tx buffer: sending 119 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending PSH|ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sampling at seq=478679180
+└─ smoltcp::socket::tcp::{impl#6}::on_send @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sample=23 rtt=236 dev=156 rto=860
+└─ smoltcp::socket::tcp::{impl#6}::sample @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE tx buffer: dequeueing 119 octets (now 0)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 512)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE starting delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 1024)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE delayed ack timer already started, forcing expiry
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE outgoing segment will acknowledge
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE stop delayed ack timer (was force-expired)
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE read 1024B of TLS data
+└─ no_std_embedded_demo::recv_tls::{async_fn#0} @ src/main.rs:383
+INFO  Iter count: 7
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 1024B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: NeedsMoreTlsData { num_bytes: None }
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE outgoing segment will update window
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 512)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE starting delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 1024)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE delayed ack timer already started, forcing expiry
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE outgoing segment will acknowledge
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE stop delayed ack timer (was force-expired)
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE read 1024B of TLS data
+└─ no_std_embedded_demo::recv_tls::{async_fn#0} @ src/main.rs:383
+TRACE discarded 70B
+└─ no_std_embedded_demo::buffer::{impl#0}::discard @ src/main.rs:496
+INFO  Iter count: 9
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 1978B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: NeedsMoreTlsData { num_bytes: None }
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE outgoing segment will update window
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 512)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE starting delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 1024)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE delayed ack timer already started, forcing expiry
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE outgoing segment will acknowledge
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE stop delayed ack timer (was force-expired)
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE read 1024B of TLS data
+└─ no_std_embedded_demo::recv_tls::{async_fn#0} @ src/main.rs:383
+INFO  Iter count: 11
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 3002B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: NeedsMoreTlsData { num_bytes: None }
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE outgoing segment will update window
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 320 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 320 octets (now 320)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE starting delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE read 320B of TLS data
+└─ no_std_embedded_demo::recv_tls::{async_fn#0} @ src/main.rs:383
+INFO  Iter count: 13
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 3322B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: MustEncodeTlsData
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE discarded 3322B
+└─ no_std_embedded_demo::buffer::{impl#0}::discard @ src/main.rs:496
+INFO  Iter count: 15
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 0B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: MustEncodeTlsData
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+INFO  Iter count: 17
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 0B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: MustEncodeTlsData
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+INFO  Iter count: 19
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 0B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: MustTransmitTlsData
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE sent 85B of TLS data
+└─ no_std_embedded_demo::send_tls::{async_fn#0} @ src/main.rs:395
+INFO  Iter count: 21
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 0B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: NeedsMoreTlsData { num_bytes: None }
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE outgoing segment will send data or flags
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE tx buffer: sending 85 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending PSH|ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE stop delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sampling at seq=478679265
+└─ smoltcp::socket::tcp::{impl#6}::on_send @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sample=34 rtt=211 dev=162 rto=859
+└─ smoltcp::socket::tcp::{impl#6}::sample @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE tx buffer: dequeueing 85 octets (now 0)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 43 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 43 octets (now 43)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE starting delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE read 43B of TLS data
+└─ no_std_embedded_demo::recv_tls::{async_fn#0} @ src/main.rs:383
+INFO  Iter count: 23
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 43B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: TrafficTransit
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+WARN  queued HTTP request
+└─ no_std_embedded_demo::encrypt_http_request @ src/main.rs:411
+TRACE sent 103B of TLS data
+└─ no_std_embedded_demo::send_tls::{async_fn#0} @ src/main.rs:395
+TRACE outgoing segment will send data or flags
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE tx buffer: sending 103 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending PSH|ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE stop delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sampling at seq=478679368
+└─ smoltcp::socket::tcp::{impl#6}::on_send @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rtte: sample=25 rtt=188 dev=163 rto=840
+└─ smoltcp::socket::tcp::{impl#6}::sample @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE tx buffer: dequeueing 103 octets (now 0)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 512)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE starting delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 1024)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE delayed ack timer already started, forcing expiry
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE outgoing segment will acknowledge
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE stop delayed ack timer (was force-expired)
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE read 1024B of TLS data
+└─ no_std_embedded_demo::recv_tls::{async_fn#0} @ src/main.rs:383
+TRACE discarded 43B
+└─ no_std_embedded_demo::buffer::{impl#0}::discard @ src/main.rs:496
+INFO  Iter count: 25
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 1024B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: TrafficTransit
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE outgoing segment will update window
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 512)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE starting delayed ack timer
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: receiving 512 octets at offset 0
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE rx buffer: enqueueing 512 octets (now 1024)
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE delayed ack timer already started, forcing expiry
+└─ smoltcp::socket::tcp::{impl#9}::process @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE outgoing segment will acknowledge
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE sending ACK
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE stop delayed ack timer (was force-expired)
+└─ smoltcp::socket::tcp::{impl#9}::dispatch @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+TRACE read 1024B of TLS data
+└─ no_std_embedded_demo::recv_tls::{async_fn#0} @ src/main.rs:383
+INFO  Iter count: 27
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 2048B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: AppDataAvailable
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+INFO  Payload: HTTP/1.1 200 OK
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:279
+TRACE discarded 1391B
+└─ no_std_embedded_demo::buffer::{impl#0}::discard @ src/main.rs:496
+INFO  Iter count: 29
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:257
+TRACE 657B in incoming TLS buffer
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:258
+TRACE state: TrafficTransit
+└─ no_std_embedded_demo::converse::{async_fn#0} @ src/main.rs:262
+TRACE sent 23B of TLS data
+└─ no_std_embedded_demo::send_tls::{async_fn#0} @ src/main.rs:395
+TRACE [1]: removing
+└─ smoltcp::iface::socket_set::{impl#2}::remove @ /home/aissata/.cargo/git/checkouts/smoltcp-d6a83fd2b0891566/b57e2f9/src/macros.rs:17
+INFO  Sleeping...
+└─ no_std_embedded_demo::____embassy_main_task::{async_fn#0} @ src/main.rs:82
