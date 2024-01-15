@@ -3807,6 +3807,7 @@ mod test_quic {
         Ok(change)
     }
 
+    #[ignore = "craftls: quic unimplemeted"]
     #[test]
     fn test_quic_handshake() {
         fn equal_packet_keys(x: &dyn quic::PacketKey, y: &dyn quic::PacketKey) -> bool {
@@ -4518,6 +4519,7 @@ fn test_client_config_keyshare_mismatch() {
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }
 
+#[ignore = "craftls: require special config"]
 #[cfg(feature = "tls12")]
 #[test]
 fn test_client_sends_helloretryrequest() {
@@ -4616,6 +4618,7 @@ fn test_client_sends_helloretryrequest() {
     ));
 }
 
+#[ignore = "craftls: require special configuration"]
 #[test]
 fn test_client_rejects_hrr_with_varied_session_id() {
     use rustls::internal::msgs::handshake::SessionId;

@@ -454,6 +454,7 @@ dependencies = [
  "flate2",
  "log",
  "paste",
+ "rand",
  "ring 0.17.6",
  "rustls-pemfile 2.0.0",
  "rustls-pki-types",

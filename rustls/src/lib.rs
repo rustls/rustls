@@ -154,7 +154,8 @@
 //! # );
 //! # let config = rustls::ClientConfig::builder()
 //! #     .with_root_certificates(root_store)
-//! #     .with_no_client_auth();
+//! #     .with_no_client_auth()
+//! #     .with_fingerprint(rustls::craft::CHROME_108.builder());
 //! let rc_config = Arc::new(config);
 //! let example_com = "example.com".try_into().unwrap();
 //! let mut client = rustls::ClientConnection::new(rc_config, example_com);

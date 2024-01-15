@@ -312,7 +312,7 @@ fn emit_client_hello_for_retry(
     // !craft! begin
     config
         .craft
-        .patch_cipher(cx, &mut cipher_suites);
+        .patch_cipher(cx, &config, &mut cipher_suites);
     // !craft! end
 
     let mut chp = HandshakeMessagePayload {

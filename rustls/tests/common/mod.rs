@@ -433,9 +433,11 @@ pub fn finish_client_config(
         .with_root_certificates(root_store)
         .with_no_client_auth()
         .with_fingerprint(
-            rustls::craft::CHROME_108
+            rustls::craft::RUSTLS_TEST
                 .test_alpn_http1
-                .builder(),
+                .builder()
+                .dangerous_craft_test_mode()
+                .dangerous_disable_override_suite(),
         )
 }
 
@@ -455,7 +457,7 @@ pub fn finish_client_config_with_creds(
         .with_client_auth_cert(kt.get_client_chain(), kt.get_client_key())
         .unwrap()
         .with_fingerprint(
-            rustls::craft::CHROME_108
+            rustls::craft::RUSTLS_TEST
                 .test_alpn_http1
                 .builder(),
         )
@@ -508,7 +510,7 @@ pub fn make_client_config_with_verifier(
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()
         .with_fingerprint(
-            rustls::craft::CHROME_108
+            rustls::craft::RUSTLS_TEST
                 .test_alpn_http1
                 .builder(),
         )

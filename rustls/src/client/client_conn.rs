@@ -2,10 +2,10 @@ use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::compression::CertificateCompression;
 use crate::conn::{ConnectionCommon, ConnectionCore};
+use crate::craft::FingerprintBuilder;
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
-use crate::craft::FingerprintBuilder;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
@@ -667,7 +667,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
-        let mut data = ClientConnectionData::new(&config); // !craft! new() -> new(config: &ClientConfig)
+        let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -694,12 +694,11 @@ pub struct ClientConnectionData {
 }
 
 impl ClientConnectionData {
-    /// !craft! new() -> new(config: &ClientConfig)
-    fn new(config: &ClientConfig) -> Self {
+    fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
-            craft_connection_data: crate::craft::CraftConnectionData::new(config),
+            craft_connection_data: crate::craft::CraftConnectionData::new(),
         }
     }
 }

@@ -28,6 +28,7 @@ pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
 zeroize = "1.6.0"
 static_init = "1.0.3" #!craft!
 paste = "1.0" #!craft!
+rand = "0.8.5" #!craft!
 
 
 brotli = "3.4.0"

@@ -1,5 +1,6 @@
 mod fingerprints;
 pub use fingerprints::*;
+use rand::{thread_rng, Rng};
 
 use crate::client::ClientConnectionData;
 use crate::common_state::Context;
@@ -14,7 +15,7 @@ use crate::msgs::handshake::{HelloRetryRequest, UnknownExtension};
 use crate::version::{TLS12, TLS13};
 use crate::versions::EnabledVersions;
 use crate::{
-    CipherSuite, ClientConfig, NamedGroup, ProtocolVersion, SignatureScheme, ALL_VERSIONS,
+    CipherSuite, ClientConfig, Error, NamedGroup, ProtocolVersion, SignatureScheme, ALL_VERSIONS,
 };
 use alloc::sync::Arc;
 use core::fmt::Debug;
@@ -25,17 +26,10 @@ use std::{collections::HashMap, vec::Vec};
 use static_init::dynamic;
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct CraftOptions(Option<CraftOptionsImpl>);
-
-#[derive(Clone, Debug)]
-struct CraftOptionsImpl {
-    fingerprint: Fingerprint,
-    strict_mode: bool,
-    override_keyshare: bool,
-}
+pub(crate) struct CraftOptions(Option<FingerprintBuilder>);
 
 impl CraftOptions {
-    fn get(&self) -> &CraftOptionsImpl {
+    fn get(&self) -> &FingerprintBuilder {
         assert!(self.0.is_some(), "The tls client config doesn't contain a fingerprint, please consider calling ClientConfig::with_fingerprint(...)");
         self.0.as_ref().unwrap()
     }
@@ -55,8 +49,12 @@ impl CraftOptions {
     pub(crate) fn patch_cipher(
         &self,
         cx: &mut Context<'_, ClientConnectionData>,
+        config: &ClientConfig,
         extension: &mut Vec<CipherSuite>,
     ) {
+        if !config.craft.get().override_suite {
+            return;
+        }
         self.get()
             .fingerprint
             .patch_cipher(cx, extension)
@@ -101,17 +99,12 @@ impl Debug for CraftConnectionData {
 }
 
 impl CraftConnectionData {
-    pub(crate) fn new(config: &ClientConfig) -> Self {
+    pub(crate) fn new() -> Self {
         use BoringSslGreaseIndex::*;
-        let mut grease_seed_u8 = [0u8; NumOfGrease as usize];
         let mut grease_seed = [0u16; NumOfGrease as usize];
-        config
-            .provider
-            .secure_random
-            .fill(&mut grease_seed_u8)
-            .unwrap();
+        thread_rng().fill(&mut grease_seed);
         for i in 0..NumOfGrease as usize {
-            let unit = ((grease_seed_u8[i] & 0xf0) | 0x0a) as u16;
+            let unit = (grease_seed[i] & 0xf0u16) | 0x0au16;
             grease_seed[i] = unit << 8 | unit;
         }
         if grease_seed[Extension1 as usize] == grease_seed[Extension2 as usize] {
@@ -221,7 +214,7 @@ impl SupportedKxGroup for CraftFakeKxGroup {
         self.name
     }
 
-    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, crate::Error> {
+    fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
         todo!()
     }
 }
@@ -285,10 +278,9 @@ pub enum CraftExtension {
     FakeApplicationSettings,
 
     /// Hardcoded fake CompressCert extension that provides no compression algorithm
-    #[cfg(not(cert_compress))]
     FakeCompressCert,
+
     /// CompressCert extension
-    #[cfg(cert_compress)]
     CompressCert(&'static [crate::CertificateCompressionAlgorithm]),
 
     /// Client Hello Padding extension that mimics the BoringSSL padding style
@@ -353,33 +345,31 @@ impl CraftExtension {
                 Self::make_ext(ExtensionType::RenegotiationInfo, vec![0])
             }
             CraftExtension::SupportedCurves(curves) => {
-                let origin_curves = get_origin_ext!(
+                let mut origin_curves = get_origin_ext!(
                     ext_store.remove(&ExtensionType::EllipticCurves.get_u16()),
                     ClientExtension::NamedGroups,
                     craft_config.strict_mode
                 );
-
-                ClientExtension::NamedGroups(
-                    curves
-                        .iter()
-                        .map(|v| {
-                            v.val_or(
+                if config
+                    .craft
+                    .get()
+                    .override_supported_curves
+                {
+                    for (i, v) in curves.iter().enumerate() {
+                        if v.is_grease() {
+                            origin_curves.insert(
+                                i,
                                 cx.data
                                     .craft_connection_data
                                     .grease_seed
-                                    .get(BoringSslGreaseIndex::Group),
-                            )
-                        })
-                        .filter(|group| {
-                            if !group.craft_is_unknown() && !origin_curves.contains(&group) {
-                                assert!(!craft_config.strict_mode);
-                                false
-                            } else {
-                                true
-                            }
-                        })
-                        .collect(),
-                )
+                                    .get(BoringSslGreaseIndex::Group)
+                                    .into(),
+                            );
+                            break;
+                        }
+                    }
+                }
+                ClientExtension::NamedGroups(origin_curves)
             }
             CraftExtension::SupportedVersions(versions) => {
                 let origin_versions = get_origin_ext!(
@@ -450,14 +440,14 @@ impl CraftExtension {
                             payload: PayloadU16(vec![0]),
                         },
                         GreaseOr::T(group) => {
-                            if (origin_ks_group != config.provider.kx_groups[0].name()
-                                || *group == origin_ks_group)
-                                && origin_ks.is_some()
+                            if origin_ks.is_some()
+                                && (origin_ks_group != config.provider.kx_groups[0].name()
+                                    || *group == origin_ks_group)
                             {
                                 origin_ks.take().unwrap()
                             } else if !key_shares
                                 .iter()
-                                .any(|ks: &KeyShareEntry| ks.group == *group)
+                                .any(|ks: &KeyShareEntry| ks.group.get_u16() == group.get_u16())
                             {
                                 let ks_data = match config
                                     .find_kx_group(*group)
@@ -486,6 +476,10 @@ impl CraftExtension {
                     });
                 }
 
+                if let Some(origin_ks) = origin_ks {
+                    key_shares.push(origin_ks);
+                }
+
                 ClientExtension::KeyShare(key_shares)
             }
             CraftExtension::FakeApplicationSettings => {
@@ -502,9 +496,7 @@ impl CraftExtension {
                     },
                 })
             }
-            #[cfg(not(cert_compress))]
             CraftExtension::FakeCompressCert => Self::make_ext(0x001b.into(), vec![2, 0, 0]),
-            #[cfg(cert_compress)]
             CraftExtension::CompressCert(algorithms) => {
                 if craft_config.strict_mode {
                     config
@@ -672,6 +664,7 @@ impl Fingerprint {
             override_version: true,
             override_keyshare: true,
             override_cert_compress: true,
+            override_suite: true,
         }
     }
 
@@ -704,7 +697,6 @@ impl Fingerprint {
                 | ClientExtension::Cookie(_) => {
                     ext_store.insert(ext.get_type().get_u16(), ext);
                 }
-                #[cfg(cert_compress)]
                 ClientExtension::CompressCertificate(_) => {
                     ext_store.insert(ext.get_type().get_u16(), ext);
                 }
@@ -812,6 +804,7 @@ pub struct FingerprintBuilder {
     strict_mode: bool,
     override_keyshare: bool,
     override_cert_compress: bool,
+    override_suite: bool,
 }
 
 impl FingerprintBuilder {
@@ -834,6 +827,12 @@ impl FingerprintBuilder {
         self
     }
 
+    /// Disables the override of cipher suites. Intended only for testing purposes
+    pub fn dangerous_disable_override_suite(mut self) -> Self {
+        self.override_suite = false;
+        self
+    }
+
     /// Enters a craftls test mode that disables various overrides and strict checking against the [`Fingerprint`].
     /// This mode is intended for testing and should be used with caution as it relaxes the
     /// constraints normally enforced by the builder, potentially allowing configurations that
@@ -843,17 +842,12 @@ impl FingerprintBuilder {
         self.strict_mode = false;
         self.override_alpn = false;
         self.override_version = false;
-        self.override_supported_curves = false;
         self.override_cert_compress = false;
         self
     }
 
     fn build(self) -> CraftOptions {
-        CraftOptions(Some(CraftOptionsImpl {
-            fingerprint: self.fingerprint,
-            strict_mode: self.strict_mode,
-            override_keyshare: self.override_keyshare,
-        }))
+        CraftOptions(Some(self))
     }
 
     pub(crate) fn patch_config(self, mut config: ClientConfig) -> ClientConfig {
@@ -920,7 +914,6 @@ impl FingerprintBuilder {
                         .map(|p| p.to_vec())
                         .collect();
                 }
-                #[cfg(cert_compress)]
                 ExtensionSpec::Craft(CraftExtension::CompressCert(algos)) => {
                     if !self.override_cert_compress {
                         continue;
@@ -941,38 +934,6 @@ impl FingerprintBuilder {
         config.craft = self.build();
         config
     }
-}
-
-/// Constructs a `CertCompression` extension suitable for use with [`ExtensionSpec`].
-///
-/// This macro is necessary because, as of the last update, Rustls does not natively support a
-/// certificate compression extension. An implementation is under review (for more than 2 years) for inclusion
-/// in Rustls. In the interim, this macro facilitates our own `CompressCertExt`
-/// implementation. The intent is for configurations using this macro to seamlessly transition to the official Rustls implementation when it
-/// becomes available.
-///
-/// The macro allows specifying one or more compression algorithms that should be included
-/// in the `CertCompression` extension.
-///
-/// # Examples
-/// ```
-/// cert_compress_ext!(crate::CertificateCompressionAlgorithm::Zlib, crate::CertificateCompressionAlgorithm::Brotli);
-/// ```
-#[macro_export]
-macro_rules! cert_compress_ext {
-    ($($algo:expr),+) => {{
-        #[cfg(cert_compress)]
-        {
-            Craft(CraftExtension::CompressCert(&[
-                $($algo),+
-            ]))
-        }
-        // Only available with internal branches
-        #[cfg(not(cert_compress))]
-        {
-            Craft(CraftExtension::FakeCompressCert)
-        }
-    }};
 }
 
 /// Represents a collection of [`Fingerprint`] instances, each configured with different ALPN extensions.

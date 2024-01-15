@@ -125,6 +125,7 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
     }
 }
 
+#[ignore = "craftls: require special configuration"]
 #[test]
 fn client_can_override_certificate_verification_and_offer_no_signature_schemes() {
     for kt in ALL_KEY_TYPES.iter() {

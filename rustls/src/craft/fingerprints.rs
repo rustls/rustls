@@ -121,10 +121,75 @@ pub static CHROME_108_EXT: Vec<ExtensionSpec> = {
             GreaseOrVersion::T(ProtocolVersion::TLSv1_2),
         ])),
         Keep(Optional(ExtensionType::Cookie)),
-        crate::cert_compress_ext!(crate::CertificateCompressionAlgorithm::Brotli),
+        Craft(CraftExtension::CompressCert(&[
+            crate::CertificateCompressionAlgorithm::Brotli,
+        ])),
         Craft(CraftExtension::FakeApplicationSettings),
         Craft(CraftExtension::Grease2),
         Craft(CraftExtension::Padding),
+        Keep(Optional(ExtensionType::PreSharedKey)),
+    ]
+};
+
+#[dynamic]
+/// The extension list of chrome 108
+pub(crate) static CHROME_108_EXT_TEST: Vec<ExtensionSpec> = {
+    use ExtensionSpec::*;
+    use KeepExtension::*;
+    vec![
+        Craft(CraftExtension::Grease1),
+        Keep(Must(ExtensionType::ServerName)),
+        Rustls(ClientExtension::ExtendedMasterSecretRequest),
+        Craft(CraftExtension::RenegotiationInfo),
+        Craft(CraftExtension::SupportedCurves(&[
+            Grease,
+            GreaseOrCurve::T(NamedGroup::X25519),
+            GreaseOrCurve::T(NamedGroup::secp256r1),
+            GreaseOrCurve::T(NamedGroup::secp384r1),
+        ])),
+        Rustls(ClientExtension::EcPointFormats(vec![
+            ECPointFormat::Uncompressed,
+        ])),
+        Keep(OrDefault(
+            ExtensionType::SessionTicket,
+            DEFAULT_RUSTLS_SESSION_TICKET.clone(),
+        )),
+        Craft(CraftExtension::Protocols(&[b"h2", b"http/1.1"])),
+        Rustls(ClientExtension::CertificateStatusRequest(OCSP_REQ.clone())),
+        Rustls(ClientExtension::SignatureAlgorithms(
+            [
+                SignatureScheme::RSA_PSS_SHA512,
+                SignatureScheme::RSA_PSS_SHA384,
+                SignatureScheme::RSA_PSS_SHA256,
+                SignatureScheme::RSA_PKCS1_SHA512,
+                SignatureScheme::RSA_PKCS1_SHA384,
+                SignatureScheme::RSA_PKCS1_SHA256,
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ED25519,
+            ]
+            .to_vec(),
+        )),
+        Craft(CraftExtension::SignedCertificateTimestamp),
+        Craft(CraftExtension::KeyShare(&[
+            Grease,
+            GreaseOrCurve::T(NamedGroup::X25519),
+        ])),
+        Rustls(ClientExtension::PresharedKeyModes(vec![
+            PSKKeyExchangeMode::PSK_DHE_KE,
+        ])),
+        Craft(CraftExtension::SupportedVersions(&[
+            Grease,
+            GreaseOrVersion::T(ProtocolVersion::TLSv1_3),
+            GreaseOrVersion::T(ProtocolVersion::TLSv1_2),
+        ])),
+        Keep(Optional(ExtensionType::Cookie)),
+        Craft(CraftExtension::CompressCert(&[
+            crate::CertificateCompressionAlgorithm::Brotli,
+        ])),
+        // Craft(CraftExtension::FakeApplicationSettings),
+        Craft(CraftExtension::Grease2),
+        // Craft(CraftExtension::Padding),
         Keep(Optional(ExtensionType::PreSharedKey)),
     ]
 };
@@ -157,6 +222,7 @@ pub static CHROME_CIPHER: Vec<GreaseOrCipher> = {
 
 define_fingerprint!(CHROME_108 { &CHROME_108_EXT, &CHROME_CIPHER });
 define_fingerprint!(CHROME_112 { shuffle(&CHROME_108_EXT), &CHROME_CIPHER });
+define_fingerprint!(RUSTLS_TEST { &CHROME_108_EXT_TEST, &CHROME_CIPHER });
 
 /// The cipher list of Safari 17.1
 ///
@@ -245,7 +311,9 @@ pub static SAFARI_17_1_EXT: Vec<ExtensionSpec> = {
             GreaseOrVersion::T(ProtocolVersion::TLSv1_0),
         ])),
         Keep(Optional(ExtensionType::Cookie)),
-        crate::cert_compress_ext!(crate::CertificateCompressionAlgorithm::Zlib),
+        Craft(CraftExtension::CompressCert(&[
+            crate::CertificateCompressionAlgorithm::Zlib,
+        ])),
         Craft(CraftExtension::Grease2),
         Craft(CraftExtension::Padding),
     ]
