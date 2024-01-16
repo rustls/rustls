@@ -134,8 +134,7 @@ async fn main(
         .with_root_certificates(root_store)
         .with_no_client_auth();
     tls_config.enable_early_data = SEND_EARLY_DATA;
-   
-    
+    tls_config.time_provider = lib::stub();
 
     let tls_config = Arc::new(tls_config);
 

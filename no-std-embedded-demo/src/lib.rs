@@ -56,7 +56,6 @@ pub fn provider() -> CryptoProvider {
 #[derive(Debug)]
 struct Provider;
 
-
 impl SecureRandom for Provider {
     fn fill(&self, bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
         use rand_core::RngCore;
@@ -80,7 +79,16 @@ impl KeyProvider for Provider {
     }
 }
 
-impl TimeProvider for Provider {
+
+#[derive(Debug)]
+struct StubTimeProvider;
+
+pub fn stub() -> Arc<dyn TimeProvider> {
+    Arc::new(StubTimeProvider)
+}
+
+
+impl TimeProvider for StubTimeProvider {
     fn current_time(&self) -> Option<UnixTime> {
         // let ntp_time = embassy_futures::block_on(async {
         //     let provisory = NTP_TIME.lock().await;
@@ -114,8 +122,7 @@ impl TimeProvider for Provider {
         //     Some(UnixTime::since_unix_epoch(Duration::from_secs(
         //         UNIX_TIME,
         //     )))
-        Some(UnixTime::since_unix_epoch(Duration::from_secs(UNIX_TIME)))
-
+            Some(UnixTime::since_unix_epoch(Duration::from_secs(UNIX_TIME)))
         }
     }
 
