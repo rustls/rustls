@@ -27,16 +27,17 @@ use embassy_time::Timer;
 use embassy_time::{Duration, Instant};
 use embedded_io_async::Write;
 use no_std_embedded_demo as lib;
-use pki_types::{DnsName, InvalidDnsNameError, ServerName};
+use rustls::pki_types::{DnsName, InvalidDnsNameError, ServerName};
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 
-use crate::lib::{init_call_to_ntp_server, time_provider, TIME_FROM_START};
+use crate::lib::{init_call_to_ntp_server, TIME_FROM_START};
 #[allow(unused_imports)]
 use rustls::version::{TLS12, TLS13};
-use rustls::{
-    AppDataRecord, ClientConfig, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
-    MayEncryptAppData, RootCertStore, UnbufferedStatus,
+use rustls::{ClientConfig, RootCertStore};
+use rustls::unbuffered::{
+    AppDataRecord, ConnectionState, EncryptError, WriteTraffic, EncodeError, InsufficientSizeError,UnbufferedStatus
 };
+
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
 
@@ -127,15 +128,15 @@ async fn main(
             .cloned(),
     );
 
-    let mut tls_config = ClientConfig::builder_with_provider(lib::PROVIDER)
-        .with_safe_default_cipher_suites()
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(&[&TLS13])
+    let mut tls_config = ClientConfig::builder_with_provider(lib::provider().into())
+        .with_safe_default_protocol_versions()
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
     tls_config.enable_early_data = SEND_EARLY_DATA;
-    tls_config.time_provider = time_provider::stub();
+   
+    
+
     let tls_config = Arc::new(tls_config);
 
     let mut incoming_tls = TlsBuffer::init(incoming_tls);
@@ -187,11 +188,11 @@ async fn converse(
         info!("Iter count: {}", iter_count);
         trace!("{}B in incoming TLS buffer", incoming_tls.used());
         let UnbufferedStatus { mut discard, state } =
-            conn.process_tls_records(incoming_tls.filled_mut())?;
+            conn.process_tls_records(incoming_tls.filled_mut());
 
         trace!("state: {}", Debug2Format(&state));
-        match state {
-            ConnectionState::AppDataAvailable(mut state) => {
+        match state.unwrap() {
+            ConnectionState::ReadTraffic(mut state) => {
                 while let Some(res) = state.next_record() {
                     let AppDataRecord {
                         discard: new_discard,
@@ -214,7 +215,7 @@ async fn converse(
                     received_response = true;
                 }
             }
-            ConnectionState::MustEncodeTlsData(mut state) => {
+            ConnectionState::EncodeTlsData(mut state) => {
                 try_or_resize_and_retry(
                     |dest| state.encode(dest),
                     |e| {
@@ -228,7 +229,7 @@ async fn converse(
                 )?;
             }
 
-            ConnectionState::MustTransmitTlsData(mut state) => {
+            ConnectionState::TransmitTlsData(mut state) => {
                 if let Some(mut may_encrypt_early_data) = state.may_encrypt_early_data() {
                     let written = try_or_resize_and_retry(
                         |out_buffer| may_encrypt_early_data.encrypt(EARLY_DATA, out_buffer),
@@ -255,11 +256,11 @@ async fn converse(
                 state.done();
             }
 
-            ConnectionState::NeedsMoreTlsData { .. } => {
+            ConnectionState::BlockedHandshake { .. } => {
                 recv_tls(&mut socket, &mut incoming_tls).await?;
             }
 
-            ConnectionState::TrafficTransit(mut may_encrypt) => {
+            ConnectionState::WriteTraffic(mut may_encrypt) => {
                 if encrypt_http_request(&mut sent_request, &mut may_encrypt, &mut outgoing_tls) {
                     send_tls(&mut socket, &mut outgoing_tls).await?;
                     recv_tls(&mut socket, &mut incoming_tls).await?;
@@ -284,7 +285,7 @@ async fn converse(
                     open_connection = false;
                 }
             }
-            ConnectionState::ConnectionClosed => {
+            ConnectionState::Closed => {
                 open_connection = false;
             }
             state => {
@@ -329,7 +330,7 @@ async fn send_tls<'a>(
 
 fn encrypt_http_request(
     sent_request: &mut bool,
-    may_encrypt: &mut MayEncryptAppData<'_, ClientConnectionData>,
+    may_encrypt: &mut WriteTraffic<'_, ClientConnectionData>,
     outgoing_tls: &mut TlsBuffer,
 ) -> bool {
     if !*sent_request {
@@ -533,7 +534,7 @@ enum Error {
     Rustls(rustls::Error),
     Spawn(SpawnError),
     Tcp(tcp::Error),
-    EncryptError(rustls::EncryptError),
+    EncryptError(rustls::unbuffered::EncryptError),
     Utf8Error(Utf8Error),
     DnsError(dns::Error),
     NoDnsResolution,
@@ -587,8 +588,8 @@ impl From<SpawnError> for Error {
     }
 }
 
-impl From<rustls::EncryptError> for Error {
-    fn from(v: rustls::EncryptError) -> Self {
+impl From<rustls::unbuffered::EncryptError> for Error {
+    fn from(v: rustls::unbuffered::EncryptError) -> Self {
         Self::EncryptError(v)
     }
 }

@@ -5,8 +5,9 @@ extern crate alloc;
 extern crate std;
 
 use core::ops::Range;
-
 use alloc::sync::Arc;
+use defmt::{dbg, Debug2Format};
+use rustls::pki_types::UnixTime;
 
 use embassy_net::{
     dns::DnsQueryType,
@@ -17,62 +18,107 @@ use embassy_stm32::eth::{generic_smi::GenericSMI, Ethernet};
 use embassy_stm32::peripherals::ETH;
 use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, mutex::Mutex};
 use embassy_time::Instant;
-use pki_types::PrivateKeyDer;
+use rustls::crypto::CryptoProvider;
+use rustls::pki_types::PrivateKeyDer;
+use rustls::crypto::SecureRandom;
+use rustls::crypto::KeyProvider;
+use rustls::time_provider::TimeProvider;
 
 mod aead;
 mod hash;
 mod hmac;
+
+use core::time::Duration;
+
+const TIME_BETWEEN_1900_1970: u64 = 2_208_988_800;
 #[cfg(feature = "std")]
 mod hpke;
 mod kx;
 mod sign;
 mod verify;
-const UNIX_TIME: u64 = 1702453769; // `date +%s`
+const UNIX_TIME: u64 = 1705398728; // `date +%s`
 
 #[cfg(feature = "std")]
 pub use hpke::HPKE_PROVIDER;
 pub static NTP_TIME: Mutex<ThreadModeRawMutex, Option<u64>> = Mutex::new(None);
 pub static TIME_FROM_START: Mutex<ThreadModeRawMutex, Option<Instant>> = Mutex::new(None);
 
-pub static PROVIDER: &'static dyn rustls::crypto::CryptoProvider = &Provider;
 
+pub fn provider() -> CryptoProvider {
+    CryptoProvider {
+        cipher_suites: ALL_CIPHER_SUITES.to_vec(),
+        kx_groups: kx::ALL_KX_GROUPS.to_vec(),
+        signature_verification_algorithms: verify::ALGORITHMS,
+        secure_random: &Provider,
+        key_provider: &Provider,
+    }
+}
 #[derive(Debug)]
 struct Provider;
 
-impl rustls::crypto::CryptoProvider for Provider {
-    fn fill_random(&self, bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
+
+impl SecureRandom for Provider {
+    fn fill(&self, bytes: &mut [u8]) -> Result<(), rustls::crypto::GetRandomFailed> {
         use rand_core::RngCore;
         rand_core::OsRng
             .try_fill_bytes(bytes)
             .map_err(|_| rustls::crypto::GetRandomFailed)
     }
+}
 
-    fn default_cipher_suites(&self) -> &'static [rustls::SupportedCipherSuite] {
-        ALL_CIPHER_SUITES
-    }
-
-    fn default_kx_groups(&self) -> &'static [&'static dyn rustls::crypto::SupportedKxGroup] {
-        kx::ALL_KX_GROUPS
-    }
-
+impl KeyProvider for Provider {
     fn load_private_key(
         &self,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<Arc<dyn rustls::sign::SigningKey>, rustls::Error> {
-        let key = sign::EcdsaSigningKeyP256::try_from(key_der).map_err(|err| {
-            #[cfg(feature = "std")]
-            let err = rustls::OtherError(Arc::new(err));
-            #[cfg(not(feature = "std"))]
-            let err = rustls::Error::General(alloc::format!("{}", err));
-            err
-        })?;
-        Ok(Arc::new(key))
-    }
-
-    fn signature_verification_algorithms(&self) -> rustls::WebPkiSupportedAlgorithms {
-        verify::ALGORITHMS
+        Ok(Arc::new(
+            sign::EcdsaSigningKeyP256::try_from(key_der).map_err(|err| {
+                let err = rustls::Error::General(alloc::format!("{}", err));
+                err
+            })?,
+        ))
     }
 }
+
+impl TimeProvider for Provider {
+    fn current_time(&self) -> Option<UnixTime> {
+        // let ntp_time = embassy_futures::block_on(async {
+        //     let provisory = NTP_TIME.lock().await;
+        //     provisory.as_ref().map(|v| *v)
+        // });
+
+        // dbg!(ntp_time);
+
+        // let time_from_start =
+        //     embassy_futures::block_on(async { *TIME_FROM_START.lock().await });
+
+        // dbg!(time_from_start);
+
+        // let now_from_start = if let Some(now) = time_from_start {
+        //     now
+        // } else {
+        //     unreachable!();
+        // };
+
+        // // Either the call to NTP server was successful and we can use NTP time ...
+        // if let Some(now) = ntp_time {
+        //     let now_in_unix = now - TIME_BETWEEN_1900_1970;
+        // dbg!(now_in_unix + now_from_start.elapsed().as_secs());
+        //     Some(UnixTime::since_unix_epoch(Duration::from_secs(
+        //         now_in_unix + now_from_start.elapsed().as_secs(),
+        //     )))
+        // } else {
+        //     dbg!(Debug2Format(&UnixTime::since_unix_epoch(Duration::from_secs(
+        //         UNIX_TIME))));
+        //     // .. or we can use the hardcoded UNIX time
+        //     Some(UnixTime::since_unix_epoch(Duration::from_secs(
+        //         UNIX_TIME,
+        //     )))
+        Some(UnixTime::since_unix_epoch(Duration::from_secs(UNIX_TIME)))
+
+        }
+    }
+
 
 static ALL_CIPHER_SUITES: &[rustls::SupportedCipherSuite] = &[
     TLS13_CHACHA20_POLY1305_SHA256,
@@ -81,7 +127,7 @@ static ALL_CIPHER_SUITES: &[rustls::SupportedCipherSuite] = &[
 
 pub static TLS13_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherSuite =
     rustls::SupportedCipherSuite::Tls13(&rustls::Tls13CipherSuite {
-        common: rustls::CipherSuiteCommon {
+        common: rustls::crypto::CipherSuiteCommon {
             suite: rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
             hash_provider: &hash::Sha256,
             confidentiality_limit: u64::MAX,
@@ -94,7 +140,7 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherSuite =
 
 pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherSuite =
     rustls::SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
-        common: rustls::CipherSuiteCommon {
+        common: rustls::crypto::CipherSuiteCommon {
             suite: rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             hash_provider: &hash::Sha256,
             confidentiality_limit: u64::MAX,
@@ -108,7 +154,6 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherS
         prf_provider: &rustls::crypto::tls12::PrfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,
     });
-
 pub async fn init_call_to_ntp_server(stack: &'static Stack<Ethernet<'static, ETH, GenericSMI>>) {
     // TODO: SPIN once
     let ntp_time = get_time_from_ntp_server(stack).await;
@@ -170,51 +215,4 @@ pub async fn get_time_from_ntp_server(
 
     let transmit_seconds = u32::from_be_bytes(response[TX_SECONDS].try_into().unwrap());
     transmit_seconds.into()
-}
-pub mod time_provider {
-    use core::time::Duration;
-    use pki_types::UnixTime;
-    use rustls::time_provider::{GetCurrentTime, TimeProvider};
-
-    use crate::{NTP_TIME, TIME_FROM_START};
-    const TIME_BETWEEN_1900_1970: u64 = 2_208_988_800;
-
-    pub fn stub() -> TimeProvider {
-        TimeProvider::new(StubTimeProvider)
-    }
-
-    #[derive(Debug)]
-    struct StubTimeProvider;
-
-    impl GetCurrentTime for StubTimeProvider {
-        fn get_current_time(&self) -> Option<UnixTime> {
-            let ntp_time = embassy_futures::block_on(async {
-                let provisory = NTP_TIME.lock().await;
-                provisory.as_ref().map(|v| *v)
-            });
-
-            let time_from_start =
-                embassy_futures::block_on(async { *TIME_FROM_START.lock().await });
-
-            let now_from_start = if let Some(now) = time_from_start {
-                now
-            } else {
-                unreachable!();
-            };
-
-            // Either the call to NTP server was successful and we can use NTP time ...
-            if let Some(now) = ntp_time {
-                let now_in_unix = now - TIME_BETWEEN_1900_1970;
-
-                Some(UnixTime::since_unix_epoch(Duration::from_secs(
-                    now_in_unix + now_from_start.elapsed().as_secs(),
-                )))
-            } else {
-                // .. or we can use the hardcoded UNIX time
-                Some(UnixTime::since_unix_epoch(Duration::from_secs(
-                    super::UNIX_TIME,
-                )))
-            }
-        }
-    }
 }
