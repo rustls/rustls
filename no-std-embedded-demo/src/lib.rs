@@ -90,42 +90,41 @@ pub fn stub() -> Arc<dyn TimeProvider> {
 
 impl TimeProvider for StubTimeProvider {
     fn current_time(&self) -> Option<UnixTime> {
-        // let ntp_time = embassy_futures::block_on(async {
-        //     let provisory = NTP_TIME.lock().await;
-        //     provisory.as_ref().map(|v| *v)
-        // });
+        let ntp_time = embassy_futures::block_on(async {
+            let provisory = NTP_TIME.lock().await;
+            provisory.as_ref().map(|v| *v)
+        });
 
-        // dbg!(ntp_time);
+        dbg!(ntp_time);
 
-        // let time_from_start =
-        //     embassy_futures::block_on(async { *TIME_FROM_START.lock().await });
+        let time_from_start =
+            embassy_futures::block_on(async { *TIME_FROM_START.lock().await });
 
-        // dbg!(time_from_start);
+        dbg!(time_from_start);
 
-        // let now_from_start = if let Some(now) = time_from_start {
-        //     now
-        // } else {
-        //     unreachable!();
-        // };
+        let now_from_start = if let Some(now) = time_from_start {
+            now
+        } else {
+            unreachable!();
+        };
 
-        // // Either the call to NTP server was successful and we can use NTP time ...
-        // if let Some(now) = ntp_time {
-        //     let now_in_unix = now - TIME_BETWEEN_1900_1970;
-        // dbg!(now_in_unix + now_from_start.elapsed().as_secs());
-        //     Some(UnixTime::since_unix_epoch(Duration::from_secs(
-        //         now_in_unix + now_from_start.elapsed().as_secs(),
-        //     )))
-        // } else {
-        //     dbg!(Debug2Format(&UnixTime::since_unix_epoch(Duration::from_secs(
-        //         UNIX_TIME))));
-        //     // .. or we can use the hardcoded UNIX time
-        //     Some(UnixTime::since_unix_epoch(Duration::from_secs(
-        //         UNIX_TIME,
-        //     )))
-            Some(UnixTime::since_unix_epoch(Duration::from_secs(UNIX_TIME)))
+        // Either the call to NTP server was successful and we can use NTP time ...
+        if let Some(now) = ntp_time {
+            let now_in_unix = now - TIME_BETWEEN_1900_1970;
+        dbg!(now_in_unix + now_from_start.elapsed().as_secs());
+            Some(UnixTime::since_unix_epoch(Duration::from_secs(
+                now_in_unix + now_from_start.elapsed().as_secs(),
+            )))
+        } else {
+            dbg!(Debug2Format(&UnixTime::since_unix_epoch(Duration::from_secs(
+                UNIX_TIME))));
+            // .. or we can use the hardcoded UNIX time
+            Some(UnixTime::since_unix_epoch(Duration::from_secs(
+                UNIX_TIME,
+            )))
         }
     }
-
+}
 
 static ALL_CIPHER_SUITES: &[rustls::SupportedCipherSuite] = &[
     TLS13_CHACHA20_POLY1305_SHA256,

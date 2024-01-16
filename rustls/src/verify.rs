@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
-
 use pki_types::{CertificateDer, ServerName, UnixTime};
 
 use crate::enums::SignatureScheme;

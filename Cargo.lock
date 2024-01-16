@@ -1733,7 +1733,6 @@ dependencies = [
  "log",
  "ring 0.17.5",
  "rustls-pemfile 2.0.0-alpha.2",
- "rustls-pki-types",
  "rustls-webpki 0.102.0-alpha.8",
  "rustversion",
  "subtle",
