@@ -96,14 +96,14 @@ mod client_hello {
                         PeerIncompatible::NamedGroupsExtensionRequired,
                     )
                 })?;
+
+            // "RFC 4492 specified that if this extension is missing,
+            // it means that only the uncompressed point format is
+            // supported"
+            // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
             let ecpoints_ext = client_hello
                 .ecpoints_extension()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::EcPointsExtensionRequired,
-                    )
-                })?;
+                .unwrap_or(&[ECPointFormat::Uncompressed]);
 
             trace!("namedgroups {:?}", groups_ext);
             trace!("ecpoints {:?}", ecpoints_ext);
