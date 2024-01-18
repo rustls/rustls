@@ -334,11 +334,17 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 mod danger {
     use pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::client::danger::HandshakeSignatureValid;
-    use rustls::crypto::{verify_tls12_signature, verify_tls13_signature};
+    use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
     use rustls::DigitallySignedStruct;
 
     #[derive(Debug)]
-    pub struct NoCertificateVerification {}
+    pub struct NoCertificateVerification(CryptoProvider);
+
+    impl NoCertificateVerification {
+        pub fn new(provider: CryptoProvider) -> Self {
+            Self(provider)
+        }
+    }
 
     impl rustls::client::danger::ServerCertVerifier for NoCertificateVerification {
         fn verify_server_cert(
@@ -362,7 +368,7 @@ mod danger {
                 message,
                 cert,
                 dss,
-                &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+                &self.0.signature_verification_algorithms,
             )
         }
 
@@ -376,12 +382,12 @@ mod danger {
                 message,
                 cert,
                 dss,
-                &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+                &self.0.signature_verification_algorithms,
             )
         }
 
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            rustls::crypto::ring::default_provider()
+            self.0
                 .signature_verification_algorithms
                 .supported_schemes()
         }
@@ -467,7 +473,9 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     if args.flag_insecure {
         config
             .dangerous()
-            .set_certificate_verifier(Arc::new(danger::NoCertificateVerification {}));
+            .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
+                rustls::crypto::ring::default_provider(),
+            )));
     }
 
     Arc::new(config)
