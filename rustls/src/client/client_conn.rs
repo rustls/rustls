@@ -10,6 +10,7 @@ use pki_types::{ServerName, UnixTime};
 use super::handy::NoClientSessionStorage;
 use super::hs;
 use crate::builder::ConfigBuilder;
+use crate::client::ech::EchState;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::hpke::{HpkeProvider, HpkeSuite};
@@ -582,7 +583,10 @@ impl EchConfig {
 
             let key_config = &contents.key_config;
             for cipher_suite in &key_config.symmetric_cipher_suites {
-                // TODO(@cpu): Confirm we known the tag length for the chosen AEAD ID.
+                if EchState::aead_tag_len(cipher_suite.aead_id).is_err() {
+                    continue; // Unsupported EXPORT_ONLY AEAD cipher suite.
+                }
+
                 let suite = HpkeSuite {
                     kem: key_config.kem_id,
                     sym: *cipher_suite,
