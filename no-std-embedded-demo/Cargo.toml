@@ -73,7 +73,7 @@ p256 = { version = "0.13.2", default-features = false, features = [
 ] }
 pkcs8 = { version = "0.10.2" }
 rand_core = { version = "0.6", features = ["getrandom"] }
-rustls = { git = "https://github.com/japaric/rustls", branch="no-std-support", default-features = false, features = [
+rustls = { git = "https://github.com/japaric/rustls", rev="3fc09522b45ae4bccdc8bbc4f7e67ffde964d9e4", default-features = false, features = [
     "tls12",
 ] }
 rsa = { version = "0.9.0", features = ["sha2"], default-features = false }
@@ -89,9 +89,10 @@ heapless = "0.8.0"
 tlsf = "1.1.0" 
 
 [profile.dev]
-opt-level = "z"
+opt-level = 3
 
 [profile.release]
 debug = 2
+opt-level = 3
 
 [workspace]

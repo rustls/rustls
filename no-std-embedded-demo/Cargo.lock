@@ -1450,7 +1450,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.0-alpha.0"
-source = "git+https://github.com/japaric/rustls?branch=no-std-support#3fc09522b45ae4bccdc8bbc4f7e67ffde964d9e4"
+source = "git+https://github.com/japaric/rustls?rev=3fc09522b45ae4bccdc8bbc4f7e67ffde964d9e4#3fc09522b45ae4bccdc8bbc4f7e67ffde964d9e4"
 dependencies = [
  "rustls-pki-types",
  "rustls-webpki",
