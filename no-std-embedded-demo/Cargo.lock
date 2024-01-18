@@ -1115,6 +1115,7 @@ dependencies = [
  "signature",
  "spin 0.9.8",
  "static_cell",
+ "tlsf",
  "webpki-roots",
  "x25519-dalek",
 ]
@@ -1630,6 +1631,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sptr"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
+
+[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1741,6 +1748,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.48",
+]
+
+[[package]]
+name = "tlsf"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4071a23c5e616f03541d30e3bfb673ad32f5c29b86800c294d5ae9d7e63b9c9"
+dependencies = [
+ "sptr",
 ]
 
 [[package]]

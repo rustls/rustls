@@ -1,6 +1,11 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 #runner = "probe-rs run --chip STM32F429ZITx"
 runner = "probe-run --chip STM32F429ZITx"
+
+rustflags = [
+  "-C", "linker=flip-link",
+]
+
 [build]
 target = "thumbv7em-none-eabi"
 

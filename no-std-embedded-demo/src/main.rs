@@ -6,7 +6,6 @@ extern crate alloc;
 use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-
 use core::result::Result as CoreResult;
 use core::str::Utf8Error;
 use defmt::*;
@@ -40,7 +39,7 @@ use rustls::unbuffered::{
 
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
-
+use core::mem::MaybeUninit;
 use crate::buffer::TlsBuffer;
 use crate::buffers::Buffers;
 
@@ -52,7 +51,8 @@ bind_interrupts!(struct Irqs {
 const KB: usize = 1024;
 // Note that some sites like www.google.com/www.cloudflare.com need 
 // extra heap allocation here, this is the reason for 
-const HEAP_SIZE: usize = 25 * KB + 11*1024;
+const HEAP_SIZE: usize = 4 * KB + 5840 + 1024;
+
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
 
@@ -70,6 +70,7 @@ const SERVER_PORT: u16 = 443;
 
 #[embassy_executor::main]
 async fn start(spawner: Spawner) -> ! {
+
     heap::init();
 
     if let Err(e) = main(&spawner, buffers::get().unwrap()).await {
@@ -628,22 +629,98 @@ mod getrandom {
 }
 
 mod heap {
+    use core::alloc::{GlobalAlloc, Layout};
+    use core::mem::MaybeUninit;
+    use core::ptr::{self, NonNull};
     use linked_list_allocator::LockedHeap;
-    use spin::Once;
+    use spin::{mutex::SpinMutex,Once};
+    use tlsf::Tlsf;
+    use defmt::{dbg, Debug2Format, trace};
+    
+    #[global_allocator]
+    static HEAP: Heap = Heap {
+        inner: SpinMutex::new(Tlsf::empty()),
+    };
+
+    struct Heap {
+        inner: SpinMutex<Tlsf<'static, 2>>,
+    }
 
     pub fn init() {
         static ONCE: Once = Once::new();
 
         ONCE.call_once(|| unsafe {
-            static mut MEMORY: [u8; super::HEAP_SIZE] = [0; super::HEAP_SIZE];
-
-            HEAP.lock()
-                .init(MEMORY.as_mut_ptr(), MEMORY.len())
+            static mut MEMORY: [MaybeUninit<u32>; super::HEAP_SIZE] = [MaybeUninit::uninit(); super::HEAP_SIZE];
+            HEAP.inner.lock().initialize(&mut MEMORY);
         });
     }
 
-    #[global_allocator]
-    static HEAP: LockedHeap = LockedHeap::empty();
+
+    unsafe impl GlobalAlloc for Heap {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            let mut tlsf = self.inner.lock();
+
+            log_stats(&tlsf);
+
+            let ptr = tlsf
+                .memalign(layout)
+                .map(|nn| nn.as_mut_ptr().cast())
+                .unwrap_or(ptr::null_mut());
+
+            dbg!(
+                "alloc(Layout {{ size: {}, align: {} }} -> {})",
+                layout.size(),
+                layout.align(),
+                ptr
+            );
+
+            log_stats(&tlsf);
+
+            ptr
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
+            if let Some(nn) = NonNull::new(ptr) {
+                let mut tlsf = self.inner.lock();
+
+                log_stats(&tlsf);
+
+                dbg!("free({})", nn);
+
+                tlsf.free(nn.cast());
+
+                log_stats(&tlsf);
+            }
+        }
+    }
+
+    fn log_stats(tlsf: &Tlsf<2>) {
+        let mut total_used = 0;
+        let mut used_count = 0;
+        let mut total_free = 0;
+        let mut free_count = 0;
+        for block in tlsf.blocks() {
+            if block.is_free() {
+                free_count += 1;
+                total_free += block.usable_size();
+            } else {
+                used_count += 1;
+                total_used += block.usable_size();
+            }
+        }
+
+        trace!(
+            "{}B of used memory across {} blocks; {}B of free memory across {} blocks",
+            total_used,
+            used_count,
+            total_free,
+            free_count
+        );
+    }
+
+    unsafe impl Sync for Heap {}
+
+
 }
 
 mod buffers {
