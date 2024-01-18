@@ -39,7 +39,7 @@ use rustls::unbuffered::{
 
 use static_cell::make_static;
 use {defmt_rtt as _, panic_probe as _};
-use core::mem::MaybeUninit;
+
 use crate::buffer::TlsBuffer;
 use crate::buffers::Buffers;
 
@@ -51,7 +51,7 @@ bind_interrupts!(struct Irqs {
 const KB: usize = 1024;
 // Note that some sites like www.google.com/www.cloudflare.com need 
 // extra heap allocation here, this is the reason for 
-const HEAP_SIZE: usize = 4 * KB + 5840 + 1024;
+const HEAP_SIZE: usize = 25*KB/4;
 
 const INCOMING_TLS_BUFSIZ: usize = 6 * KB;
 const MAC_ADDR: [u8; 6] = [0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF];
@@ -632,10 +632,9 @@ mod heap {
     use core::alloc::{GlobalAlloc, Layout};
     use core::mem::MaybeUninit;
     use core::ptr::{self, NonNull};
-    use linked_list_allocator::LockedHeap;
     use spin::{mutex::SpinMutex,Once};
     use tlsf::Tlsf;
-    use defmt::{dbg, Debug2Format, trace};
+    use defmt::{dbg, trace};
     
     #[global_allocator]
     static HEAP: Heap = Heap {
@@ -643,7 +642,7 @@ mod heap {
     };
 
     struct Heap {
-        inner: SpinMutex<Tlsf<'static, 2>>,
+        inner: SpinMutex<Tlsf<'static, 8>>,
     }
 
     pub fn init() {
@@ -694,7 +693,7 @@ mod heap {
         }
     }
 
-    fn log_stats(tlsf: &Tlsf<2>) {
+    fn log_stats(tlsf: &Tlsf<8>) {
         let mut total_used = 0;
         let mut used_count = 0;
         let mut total_free = 0;
