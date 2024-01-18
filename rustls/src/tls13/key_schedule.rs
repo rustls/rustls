@@ -211,7 +211,6 @@ impl KeyScheduleHandshakeStart {
         new
     }
 
-    #[allow(dead_code)] // TODO(@cpu): remove in subsequent commit.
     pub(crate) fn server_ech_confirmation_secret(
         &mut self,
         client_hello_inner_random: &[u8],
@@ -805,7 +804,6 @@ fn hkdf_expand_label_slice(
     })
 }
 
-#[allow(dead_code)] // TODO(@cpu): remove in subsequent commit.
 pub(crate) fn server_ech_hrr_confirmation_secret(
     hkdf_provider: &'static dyn Hkdf,
     client_hello_inner_random: &[u8],

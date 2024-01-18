@@ -1150,7 +1150,6 @@ impl HelloRetryRequest {
         }
     }
 
-    #[allow(dead_code)] // TODO(@cpu): remove in subsequent commits.
     pub(crate) fn ech_retry_request(&self) -> Option<&Vec<u8>> {
         let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
         match *ext {
@@ -1204,7 +1203,6 @@ pub(crate) enum Encoding {
     /// Standard RFC 8446 encoding.
     Standard,
     /// Encoding for ECH confirmation.
-    #[allow(dead_code)] // TODO(@cpu): Remove in subsequent commits.
     EchConfirmation,
 }
 
@@ -1896,7 +1894,6 @@ pub(crate) trait HasServerExtensions {
         }
     }
 
-    #[allow(dead_code)]
     fn server_ech_extension(&self) -> Option<ServerEncryptedClientHello> {
         let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
         match ext {
@@ -2599,7 +2596,6 @@ pub struct EchConfigContents {
     pub extensions: Vec<EchConfigExtension>,
 }
 
-#[allow(dead_code)] // TODO(@cpu): Remove in subsequent commits.
 impl EchConfigContents {
     /// Returns true if there is more than one extension of a given
     /// type.

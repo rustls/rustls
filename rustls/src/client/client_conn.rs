@@ -510,7 +510,6 @@ pub enum Tls12Resumption {
 ///
 /// Note: differs from the protocol-encoded EchConfig (`EchConfigMsg`).
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // TODO(@cpu): remove in subsequent commit.
 pub struct EchConfig {
     /// The provider to use for HPKE operations.
     pub(crate) hpke_provider: &'static dyn HpkeProvider,
@@ -557,7 +556,6 @@ impl EchConfig {
         })
     }
 
-    #[allow(dead_code)] // TODO(@cpu): remove in subsequent commit.
     pub(crate) fn hpke_info(&self) -> Vec<u8> {
         // "tls ech" || 0x00 || ECHConfig
         // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-6.1
