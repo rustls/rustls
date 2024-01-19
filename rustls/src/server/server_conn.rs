@@ -315,6 +315,20 @@ pub struct ServerConfig {
     /// If this is 0, no tickets are sent and clients will not be able to
     /// do any resumption.
     pub send_tls13_tickets: usize,
+
+    /// If set to `true`, requires the client to support the extended
+    /// master secret extraction method defined in [RFC 7627].
+    ///
+    /// The default is `false`.
+    ///
+    /// It must be set to `true` to meet FIPS requirement mentioned in section
+    /// **D.Q Transition of the TLS 1.2 KDF to Support the Extended Master
+    /// Secret** from [FIPS 140-3 IG.pdf].
+    ///
+    /// [RFC 7627]: https://datatracker.ietf.org/doc/html/rfc7627
+    /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
+    #[cfg(feature = "tls12")]
+    pub require_ems: bool,
 }
 
 // Avoid a `Clone` bound on `C`.
@@ -335,6 +349,8 @@ impl Clone for ServerConfig {
             max_early_data_size: self.max_early_data_size,
             send_half_rtt_data: self.send_half_rtt_data,
             send_tls13_tickets: self.send_tls13_tickets,
+            #[cfg(feature = "tls12")]
+            require_ems: self.require_ems,
         }
     }
 }

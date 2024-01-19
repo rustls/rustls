@@ -193,6 +193,20 @@ pub struct ClientConfig {
     /// The default is false.
     pub enable_early_data: bool,
 
+    /// If set to `true`, requires the server to support the extended
+    /// master secret extraction method defined in [RFC 7627].
+    ///
+    /// The default is `false`.
+    ///
+    /// It must be set to `true` to meet FIPS requirement mentioned in section
+    /// **D.Q Transition of the TLS 1.2 KDF to Support the Extended Master
+    /// Secret** from [FIPS 140-3 IG.pdf].
+    ///
+    /// [RFC 7627]: https://datatracker.ietf.org/doc/html/rfc7627
+    /// [FIPS 140-3 IG.pdf]: https://csrc.nist.gov/csrc/media/Projects/cryptographic-module-validation-program/documents/fips%20140-3/FIPS%20140-3%20IG.pdf
+    #[cfg(feature = "tls12")]
+    pub require_ems: bool,
+
     /// Source of randomness and other crypto.
     pub(super) provider: Arc<CryptoProvider>,
 
@@ -308,6 +322,8 @@ impl Clone for ClientConfig {
             key_log: Arc::clone(&self.key_log),
             enable_secret_extraction: self.enable_secret_extraction,
             enable_early_data: self.enable_early_data,
+            #[cfg(feature = "tls12")]
+            require_ems: self.require_ems,
         }
     }
 }

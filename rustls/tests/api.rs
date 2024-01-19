@@ -5057,6 +5057,64 @@ fn test_client_rejects_illegal_tls13_ccs() {
     );
 }
 
+#[cfg(feature = "tls12")]
+#[test]
+fn test_client_rejects_no_extended_master_secret_extension_when_require_ems() {
+    let key_type = KeyType::Rsa;
+    let mut client_config = make_client_config(key_type);
+    client_config.require_ems = true;
+    let server_config = finish_server_config(
+        key_type,
+        server_config_builder_with_versions(&[&rustls::version::TLS12]),
+    );
+    let (client, server) = make_pair_for_configs(client_config, server_config);
+    let (mut client, mut server) = (client.into(), server.into());
+    transfer_altered(&mut client, remove_ems_request, &mut server);
+    server.process_new_packets().unwrap();
+    transfer_altered(&mut server, |_| Altered::InPlace, &mut client);
+    assert_eq!(
+        client.process_new_packets(),
+        Err(Error::PeerIncompatible(
+            PeerIncompatible::ExtendedMasterSecretExtensionRequired
+        ))
+    );
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn test_server_rejects_no_extended_master_secret_extension_when_require_ems() {
+    let key_type = KeyType::Rsa;
+    let client_config = make_client_config(key_type);
+    let mut server_config = finish_server_config(
+        key_type,
+        server_config_builder_with_versions(&[&rustls::version::TLS12]),
+    );
+    server_config.require_ems = true;
+    let (client, server) = make_pair_for_configs(client_config, server_config);
+    let (mut client, mut server) = (client.into(), server.into());
+    transfer_altered(&mut client, remove_ems_request, &mut server);
+    assert_eq!(
+        server.process_new_packets(),
+        Err(Error::PeerIncompatible(
+            PeerIncompatible::ExtendedMasterSecretExtensionRequired
+        ))
+    );
+}
+
+#[cfg(feature = "tls12")]
+fn remove_ems_request(msg: &mut Message) -> Altered {
+    if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+        if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
+            ch.extensions
+                .retain(|ext| !matches!(ext, ClientExtension::ExtendedMasterSecretRequest))
+        }
+
+        *encoded = Payload::new(parsed.get_encoding());
+    }
+
+    Altered::InPlace
+}
+
 /// https://github.com/rustls/rustls/issues/797
 #[cfg(feature = "tls12")]
 #[test]
