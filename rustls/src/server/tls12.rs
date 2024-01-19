@@ -81,6 +81,11 @@ mod client_hello {
 
             if client_hello.ems_support_offered() {
                 self.using_ems = true;
+            } else if self.config.require_ems {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    PeerIncompatible::ExtendedMasterSecretExtensionRequired,
+                ));
             }
 
             let groups_ext = client_hello

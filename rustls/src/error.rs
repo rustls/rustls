@@ -257,6 +257,7 @@ impl From<PeerMisbehaved> for Error {
 /// versions.
 pub enum PeerIncompatible {
     EcPointsExtensionRequired,
+    ExtendedMasterSecretExtensionRequired,
     KeyShareExtensionRequired,
     NamedGroupsExtensionRequired,
     NoCertificateRequestSignatureSchemesInCommon,
