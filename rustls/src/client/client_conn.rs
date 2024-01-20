@@ -326,6 +326,12 @@ impl ClientConfig {
     }
 }
 
+impl AsRef<Arc<CryptoProvider>> for ClientConfig {
+    fn as_ref(&self) -> &Arc<CryptoProvider> {
+        &self.provider
+    }
+}
+
 /// Configuration for how/when a client is allowed to resume a previous session.
 #[derive(Clone, Debug)]
 pub struct Resumption {

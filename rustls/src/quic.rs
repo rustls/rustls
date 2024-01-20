@@ -4,7 +4,8 @@ use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, SideData};
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
-use crate::enums::{AlertDescription, ProtocolVersion};
+use crate::crypto::CryptoProvider;
+use crate::enums::{AlertDescription, CipherSuite, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::deframer::DeframerVecBuffer;
 use crate::msgs::handshake::{ClientExtension, ServerExtension};
@@ -760,6 +761,44 @@ impl<'a> KeyBuilder<'a> {
         );
         self.alg
             .header_protection_key(header_key)
+    }
+}
+
+/// Crypto provider context required for producing QUIC initial keys
+#[derive(Clone, Copy)]
+pub struct InitialSuite {
+    pub(crate) suite: &'static Tls13CipherSuite,
+    pub(crate) quic: &'static dyn Algorithm,
+}
+
+impl InitialSuite {
+    /// Find a suitable cipher suite from the given [`CryptoProvider`].
+    pub fn from_provider(provider: &CryptoProvider) -> Option<Self> {
+        provider
+            .cipher_suites
+            .iter()
+            .find_map(|suite| {
+                let suite = suite.tls13()?;
+                if suite.common.suite != CipherSuite::TLS13_AES_128_GCM_SHA256 {
+                    return None;
+                }
+
+                Some(Self {
+                    suite,
+                    quic: suite.quic?,
+                })
+            })
+    }
+
+    /// Produce a set of initial keys given the connection ID, side and version
+    pub fn keys(&self, client_dst_connection_id: &[u8], side: Side, version: Version) -> Keys {
+        Keys::initial(
+            version,
+            self.suite,
+            self.quic,
+            client_dst_connection_id,
+            side,
+        )
     }
 }
 

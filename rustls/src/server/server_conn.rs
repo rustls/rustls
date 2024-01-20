@@ -407,6 +407,12 @@ impl ServerConfig {
     }
 }
 
+impl AsRef<Arc<CryptoProvider>> for ServerConfig {
+    fn as_ref(&self) -> &Arc<CryptoProvider> {
+        &self.provider
+    }
+}
+
 /// Allows reading of early data in resumed TLS1.3 connections.
 ///
 /// "Early data" is also known as "0-RTT data".
