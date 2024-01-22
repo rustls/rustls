@@ -86,6 +86,7 @@ struct Options {
     expect_version: u16,
     resumption_delay: u32,
     queue_early_data_after_received_messages: Vec<usize>,
+    require_ems: bool,
 }
 
 impl Options {
@@ -135,6 +136,7 @@ impl Options {
             expect_version: 0,
             resumption_delay: 0,
             queue_early_data_after_received_messages: vec![],
+            require_ems: false,
         }
     }
 
@@ -535,6 +537,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
     cfg.max_fragment_size = opts.max_fragment;
     cfg.send_tls13_tickets = 1;
+    cfg.require_ems = opts.require_ems;
 
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
@@ -683,6 +686,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay));
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
+    cfg.require_ems = opts.require_ems;
 
     if !opts.protocols.is_empty() {
         cfg.alpn_protocols = opts
@@ -1260,6 +1264,9 @@ pub fn main() {
                 opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
                 align_time();
             }
+            "-expect-extended-master-secret" => {
+                opts.require_ems = true;
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -1272,7 +1279,6 @@ pub fn main() {
             "-decline-alpn" |
             "-expect-no-session" |
             "-expect-session-miss" |
-            "-expect-extended-master-secret" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
             // internal openssl details:
