@@ -54,8 +54,7 @@ obsolete cryptography by default.
 * TLS1.3 resumption via tickets or session storage.
 * TLS1.3 0-RTT data for clients.
 * TLS1.3 0-RTT data for servers.
-* Server authentication by clients.
-* Client authentication by servers.
+* Server and optional client authentication.
 * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
 * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 * OCSP stapling by servers.
