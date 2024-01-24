@@ -178,15 +178,14 @@ impl OpaqueMessage {
         }
     }
 
-    /// This is the maximum on-the-wire size of a TLSCiphertext.
-    /// That's 2^14 payload bytes, a header, and a 2KB allowance
-    /// for ciphertext overheads.
-    const MAX_PAYLOAD: u16 = 16384 + 2048;
+    /// Maximum message payload size.
+    /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
+    const MAX_PAYLOAD: u16 = 16_384 + 2048;
 
     /// Content type, version and size.
     const HEADER_SIZE: u16 = 1 + 2 + 2;
 
-    /// Maximum on-wire message size.
+    /// Maximum on-the-wire message size.
     pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
 }
 
