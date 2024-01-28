@@ -572,7 +572,6 @@ impl AsRef<[u8]> for Tag {
 pub trait Algorithm: Send + Sync {
     /// Produce a `PacketKey` encrypter/decrypter for this suite.
     ///
-    /// `suite` is the entire suite this `Algorithm` appeared in.
     /// `key` and `iv` is the key material to use.
     fn packet_key(&self, key: AeadKey, iv: Iv) -> Box<dyn PacketKey>;
 
