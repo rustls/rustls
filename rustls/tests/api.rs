@@ -2707,58 +2707,6 @@ fn sni_resolver_rejects_bad_certs() {
     );
 }
 
-fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
-    let mut client_secret = [0u8; 64];
-    let mut server_secret = [0u8; 64];
-
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-
-    assert_eq!(
-        Err(Error::HandshakeNotComplete),
-        client.export_keying_material(&mut client_secret, b"label", Some(b"context"))
-    );
-    assert_eq!(
-        Err(Error::HandshakeNotComplete),
-        server.export_keying_material(&mut server_secret, b"label", Some(b"context"))
-    );
-    do_handshake(&mut client, &mut server);
-
-    assert!(client
-        .export_keying_material(&mut client_secret, b"label", Some(b"context"))
-        .is_ok());
-    assert!(server
-        .export_keying_material(&mut server_secret, b"label", Some(b"context"))
-        .is_ok());
-    assert_eq!(client_secret.to_vec(), server_secret.to_vec());
-
-    let mut empty = vec![];
-    assert_eq!(
-        client
-            .export_keying_material(&mut empty, b"label", Some(b"context"))
-            .err(),
-        Some(Error::General(
-            "export_keying_material with zero-length output".into()
-        ))
-    );
-    assert_eq!(
-        server
-            .export_keying_material(&mut empty, b"label", Some(b"context"))
-            .err(),
-        Some(Error::General(
-            "export_keying_material with zero-length output".into()
-        ))
-    );
-
-    assert!(client
-        .export_keying_material(&mut client_secret, b"label", None)
-        .is_ok());
-    assert_ne!(client_secret.to_vec(), server_secret.to_vec());
-    assert!(server
-        .export_keying_material(&mut server_secret, b"label", None)
-        .is_ok());
-    assert_eq!(client_secret.to_vec(), server_secret.to_vec());
-}
-
 #[cfg(feature = "tls12")]
 #[test]
 fn test_tls12_exporter() {
