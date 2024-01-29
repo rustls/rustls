@@ -22,7 +22,7 @@ ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.1", features = ["std"], default-features = false }
 pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
-zeroize = "1.6.0"
+zeroize = "1.7"
 
 [features]
 default = ["logging", "ring", "tls12"]
