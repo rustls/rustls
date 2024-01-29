@@ -295,21 +295,22 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.5.2"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bc2aa0a35a53d7cfda07a69f74d67a918ced3ec1a607f5bce5da7c3aff6bab7"
+checksum = "bb94ba389c4c48d9dc1983f8653cb92f7d9fc50b261e0501be2b7a636cbcbc4a"
 dependencies = [
  "aws-lc-sys",
  "mirai-annotations",
+ "paste",
  "untrusted 0.7.1",
  "zeroize",
 ]
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.12.1"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2c6f9497a1bd3bed0a28a01b8836dbe9c7a2c521e47a14b165c64c4df592331"
+checksum = "b6e564487156f6ea22217c06263abd92ee65e4d9ff3dbc1f99f703f060f94715"
 dependencies = [
  "bindgen",
  "cmake",
@@ -360,9 +361,9 @@ checksum = "7dfdb4953a096c551ce9ace855a604d702e6e62d77fac690575ae347571717f5"
 
 [[package]]
 name = "bindgen"
-version = "0.68.1"
+version = "0.69.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "726e4313eb6ec35d2730258ad4e15b547ee75d6afaa1361a922e78e59b7d8078"
+checksum = "a4c69fae65a523209d34240b60abe0c42d33d1045d445c0839d8a4894a736e2d"
 dependencies = [
  "bitflags 2.4.2",
  "cexpr",
