@@ -1,8 +1,6 @@
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Context, Protocol, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
-#[cfg(any(feature = "ring", feature = "fips"))]
-use crate::crypto::default_provider;
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -14,12 +12,9 @@ use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 use crate::verify;
-#[cfg(any(feature = "ring", feature = "fips"))]
 use crate::versions;
 use crate::KeyLog;
-#[cfg(any(feature = "ring", feature = "fips"))]
-use crate::WantsVerifier;
-use crate::{sign, WantsVersions};
+use crate::{sign, WantsVerifier, WantsVersions};
 
 use super::hs;
 
@@ -359,43 +354,38 @@ impl Clone for ServerConfig {
 }
 
 impl ServerConfig {
-    /// Create a builder for a server configuration with the default
-    /// [`CryptoProvider`].
-    ///
-    /// This is:
-    ///
-    /// - [`crypto::aws_lc_rs::default_provider`] if the `fips` crate feature is
-    ///   enabled.
-    /// - [`crypto::ring::default_provider`] if the `ring` crate feature is
-    ///   enabled and the `fips` crate feature is not enabled.
-    ///
-    /// If neither of these are true, this function is not available and you
-    /// must use [`ServerConfig::builder_with_provider()`] instead.
+    /// Create a builder for a server configuration with the process-default
+    /// [`CryptoProvider`]: [`CryptoProvider::get_default`] and safe
+    /// protocol version defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(any(feature = "ring", feature = "fips"))]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
-        // Safety: we know the *ring* and aws-lc-rs providers' ciphersuites are compatible with the safe default protocol versions.
-        Self::builder_with_provider(default_provider().into())
-            .with_safe_default_protocol_versions()
-            .unwrap()
+        Self::builder_with_protocol_versions(versions::DEFAULT_VERSIONS)
     }
 
-    /// Create a builder for a server configuration with the default
-    /// [`CryptoProvider`] (see [`ServerConfig::builder()`] for details), safe
-    /// ciphersuite defaults and the provided protocol versions.
+    /// Create a builder for a server configuration with the process-default
+    /// [`CryptoProvider`]: [`CryptoProvider::get_default`] and
+    /// the provided protocol versions.
     ///
-    /// Panics if provided an empty slice of supported versions.
+    /// Panics if
+    /// - the supported versions are not compatible with the provider (eg.
+    ///   the combination of ciphersuites supported by the provider and supported
+    ///   versions lead to zero cipher suites being usable),
+    /// - if a `CryptoProvider` cannot be resolved using a combination of
+    ///   the crate features and process default.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
-    #[cfg(any(feature = "ring", feature = "fips"))]
     pub fn builder_with_protocol_versions(
         versions: &[&'static versions::SupportedProtocolVersion],
     ) -> ConfigBuilder<Self, WantsVerifier> {
-        // Safety: we know the *ring* and aws-lc-rs providers' ciphersuites are compatible with all protocol version choices.
-        Self::builder_with_provider(default_provider().into())
-            .with_protocol_versions(versions)
-            .unwrap()
+        // Safety assumptions:
+        // 1. that the provider has been installed (explicitly or implicitly)
+        // 2. that the process-level default provider is usable with the supplied protocol versions.
+        Self::builder_with_provider(Arc::clone(
+            CryptoProvider::get_default_or_install_from_crate_features(),
+        ))
+        .with_protocol_versions(versions)
+        .unwrap()
     }
 
     /// Create a builder for a server configuration with a specific [`CryptoProvider`].

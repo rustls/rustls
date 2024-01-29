@@ -18,6 +18,8 @@ rustversion = { version = "1.0.6", optional = true }
 [dependencies]
 aws-lc-rs = { version = "1.6", optional = true, default-features = false, features = ["aws-lc-sys"] }
 log = { version = "0.4.4", optional = true }
+# remove once our MSRV is >= 1.70
+once_cell = "1"
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.2", features = ["std"], default-features = false }

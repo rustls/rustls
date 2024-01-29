@@ -132,13 +132,15 @@ impl WebPkiServerVerifier {
     ///
     /// Server certificates will be verified using the trust anchors found in the provided `roots`.
     ///
-    /// The cryptography used comes from the default [`CryptoProvider`]: [`crypto::ring::default_provider`].
+    /// The cryptography used comes from the process-default [`CryptoProvider`]: [`CryptoProvider::get_default`].
     /// Use [`Self::builder_with_provider`] if you wish to customize this.
     ///
     /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
-    #[cfg(feature = "ring")]
     pub fn builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
-        Self::builder_with_provider(roots, crate::crypto::ring::default_provider().into())
+        Self::builder_with_provider(
+            roots,
+            Arc::clone(CryptoProvider::get_default_or_install_from_crate_features()),
+        )
     }
 
     /// Create a builder for the `webpki` server certificate verifier configuration using
