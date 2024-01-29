@@ -345,12 +345,9 @@ impl KeyType {
 pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     // ensure `ServerConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
-    #[cfg(any(feature = "ring", feature = "fips"))]
-    {
+    if exactly_one_provider() {
         rustls::ServerConfig::builder()
-    }
-    #[cfg(all(not(feature = "ring"), not(feature = "fips")))]
-    {
+    } else {
         rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
             .with_safe_default_protocol_versions()
             .unwrap()
@@ -360,12 +357,9 @@ pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::Wa
 pub fn server_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    #[cfg(feature = "ring")]
-    {
+    if exactly_one_provider() {
         rustls::ServerConfig::builder_with_protocol_versions(versions)
-    }
-    #[cfg(not(feature = "ring"))]
-    {
+    } else {
         rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
             .with_protocol_versions(versions)
             .unwrap()
@@ -375,12 +369,9 @@ pub fn server_config_builder_with_versions(
 pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     // ensure `ClientConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
-    #[cfg(any(feature = "ring", feature = "fips"))]
-    {
+    if exactly_one_provider() {
         rustls::ClientConfig::builder()
-    }
-    #[cfg(all(not(feature = "ring"), not(feature = "fips")))]
-    {
+    } else {
         rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
             .with_safe_default_protocol_versions()
             .unwrap()
@@ -390,12 +381,9 @@ pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::Wa
 pub fn client_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    #[cfg(feature = "ring")]
-    {
+    if exactly_one_provider() {
         rustls::ClientConfig::builder_with_protocol_versions(versions)
-    }
-    #[cfg(not(feature = "ring"))]
-    {
+    } else {
         rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
             .with_protocol_versions(versions)
             .unwrap()
@@ -574,25 +562,17 @@ pub fn make_client_config_with_verifier(
 }
 
 pub fn webpki_client_verifier_builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
-    #[cfg(feature = "ring")]
-    {
+    if exactly_one_provider() {
         WebPkiClientVerifier::builder(roots)
-    }
-
-    #[cfg(not(feature = "ring"))]
-    {
+    } else {
         WebPkiClientVerifier::builder_with_provider(roots, provider::default_provider().into())
     }
 }
 
 pub fn webpki_server_verifier_builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
-    #[cfg(feature = "ring")]
-    {
+    if exactly_one_provider() {
         WebPkiServerVerifier::builder(roots)
-    }
-
-    #[cfg(not(feature = "ring"))]
-    {
+    } else {
         WebPkiServerVerifier::builder_with_provider(roots, provider::default_provider().into())
     }
 }
@@ -754,4 +734,11 @@ pub fn do_suite_test(
     assert_eq!(Some(expect_version), server.protocol_version());
     assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
+}
+
+fn exactly_one_provider() -> bool {
+    cfg!(any(
+        all(feature = "ring", not(feature = "aws_lc_rs")),
+        all(feature = "aws_lc_rs", not(feature = "ring"))
+    ))
 }

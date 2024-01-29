@@ -7,6 +7,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use once_cell::sync::OnceCell;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
@@ -74,6 +75,25 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 ///
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.
+///
+/// # Using the per-process default `CryptoProvider`
+///
+/// There is the concept of an implicit default provider, configured at run-time once in
+/// a given process.
+///
+/// It is used for functions like [`ClientConfig::builder()`] and [`ServerConfig::builder()`].
+///
+/// The intention is that an application can specify the [`CryptoProvider`] they wish to use
+/// once, and have that apply to the variety of places where their application does TLS
+/// (which may be wrapped inside other libraries).
+/// They should do this by calling [`CryptoProvider::install_default()`] early on.
+///
+/// To achieve this goal:
+///
+/// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
+///   or otherwise rely on the [`CryptoProvider::get_default()`] provider.
+/// - _applications_ should call [`CryptoProvider::install_default()`] early
+///   in their `fn main()`.
 ///
 /// # Using a specific `CryptoProvider`
 ///
@@ -197,6 +217,61 @@ pub struct CryptoProvider {
 }
 
 impl CryptoProvider {
+    /// Sets this `CryptoProvider` as the default for this process.
+    ///
+    /// This can be called successfully at most once in any process execution.
+    ///
+    /// Call this early in your process to configure which provider is used for
+    /// the provider.  The configuration should happen before any use of
+    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
+    pub fn install_default(self) -> Result<(), Arc<Self>> {
+        PROCESS_DEFAULT_PROVIDER.set(Arc::new(self))
+    }
+
+    /// Returns the default `CryptoProvider` for this process.
+    ///
+    /// This will be `None` if no default has been set yet.
+    pub fn get_default() -> Option<&'static Arc<Self>> {
+        PROCESS_DEFAULT_PROVIDER.get()
+    }
+
+    /// An internal function that:
+    ///
+    /// - gets the pre-installed default, or
+    /// - installs one `from_crate_features()`, or else
+    /// - panics about the need to call [`CryptoProvider::install_default()`]
+    pub(crate) fn get_default_or_install_from_crate_features() -> &'static Arc<Self> {
+        if let Some(provider) = Self::get_default() {
+            return provider;
+        }
+
+        let provider = Self::from_crate_features()
+            .expect("no process-level `CryptoProvider` available. call `CryptoProvider::install_default()` before this point");
+        // Ignore the error resulting from us losing a race, and accept the outcome.
+        let _ = provider.install_default();
+        Self::get_default().unwrap()
+    }
+
+    /// Returns a provider named unambiguously by rustls crate features.
+    ///
+    /// This function returns `None` if the crate features are ambiguous (ie, specify two
+    /// providers), or specify no providers.  In both cases the application should
+    /// explicitly specify the provider to use with [`CryptoProvider::install_default`].
+    fn from_crate_features() -> Option<Self> {
+        #[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
+        {
+            return Some(ring::default_provider());
+        }
+
+        #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+        {
+            return Some(aws_lc_rs::default_provider());
+        }
+
+        #[allow(unreachable_code)]
+        None
+    }
+
     /// Returns `true` if this `CryptoProvider` is operating in FIPS mode.
     ///
     /// This covers only the cryptographic parts of FIPS approval.  There are
@@ -224,6 +299,8 @@ impl CryptoProvider {
             .map(|skxg| skxg.name())
     }
 }
+
+static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();
 
 /// A source of cryptographically secure randomness.
 pub trait SecureRandom: Send + Sync + Debug {
@@ -417,18 +494,6 @@ impl From<&[u8]> for SharedSecret {
             buf: source.to_vec(),
             offset: 0,
         }
-    }
-}
-
-#[cfg(any(feature = "ring", feature = "fips"))]
-pub(crate) fn default_provider() -> CryptoProvider {
-    #[cfg(all(feature = "ring", not(feature = "fips")))]
-    {
-        crate::crypto::ring::default_provider()
-    }
-    #[cfg(feature = "fips")]
-    {
-        crate::crypto::aws_lc_rs::default_provider()
     }
 }
 

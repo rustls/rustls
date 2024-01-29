@@ -1324,7 +1324,10 @@ fn test_client_cert_resolve(
     for version in rustls::ALL_VERSIONS {
         let expected_sigschemes = match version.version {
             ProtocolVersion::TLSv1_2 => vec![
-                #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+                #[cfg(all(
+                    not(all(feature = "ring", not(feature = "fips"))),
+                    feature = "aws_lc_rs"
+                ))]
                 SignatureScheme::ECDSA_NISTP521_SHA512,
                 SignatureScheme::ECDSA_NISTP384_SHA384,
                 SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -1337,7 +1340,10 @@ fn test_client_cert_resolve(
                 SignatureScheme::RSA_PKCS1_SHA256,
             ],
             ProtocolVersion::TLSv1_3 => vec![
-                #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+                #[cfg(all(
+                    not(all(feature = "ring", not(feature = "fips"))),
+                    feature = "aws_lc_rs"
+                ))]
                 SignatureScheme::ECDSA_NISTP521_SHA512,
                 SignatureScheme::ECDSA_NISTP384_SHA384,
                 SignatureScheme::ECDSA_NISTP256_SHA256,

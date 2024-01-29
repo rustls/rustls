@@ -2129,6 +2129,7 @@ dependencies = [
  "env_logger",
  "log",
  "num-bigint",
+ "once_cell",
  "ring",
  "rustls-pemfile 2.0.0",
  "rustls-pki-types",
