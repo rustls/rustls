@@ -3,9 +3,7 @@
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
 use crate::sign::{Signer, SigningKey};
-use crate::x509::{asn1_wrap, wrap_in_sequence};
 
-use super::ring_like::io::der;
 use super::ring_like::rand::SystemRandom;
 use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
@@ -222,9 +220,8 @@ impl EcdsaSigningKey {
     ) -> Result<Self, ()> {
         let key_pair = match der {
             PrivateKeyDer::Sec1(sec1) => {
-                // TODO: once https://github.com/aws/aws-lc-rs/pull/259 is released, we
-                // can delete `convert_sec1_to_pkcs8` and use `EcdsaKeyPair::from_private_key_der`
-                Self::convert_sec1_to_pkcs8(scheme, sigalg, sec1.secret_sec1_der())?
+                EcdsaKeyPair::from_private_key_der(sigalg, sec1.secret_sec1_der())
+                    .map_err(|_| ())?
             }
             PrivateKeyDer::Pkcs8(pkcs8) => {
                 EcdsaKeyPair::from_pkcs8(sigalg, pkcs8.secret_pkcs8_der()).map_err(|_| ())?
@@ -237,61 +234,7 @@ impl EcdsaSigningKey {
             scheme,
         })
     }
-
-    /// Convert a SEC1 encoding to PKCS8, and ask ring to parse it.  This
-    /// can be removed once <https://github.com/briansmith/ring/pull/1456>
-    /// (or equivalent) is landed.
-    fn convert_sec1_to_pkcs8(
-        scheme: SignatureScheme,
-        sigalg: &'static signature::EcdsaSigningAlgorithm,
-        maybe_sec1_der: &[u8],
-    ) -> Result<EcdsaKeyPair, ()> {
-        let pkcs8_prefix = match scheme {
-            SignatureScheme::ECDSA_NISTP256_SHA256 => &PKCS8_PREFIX_ECDSA_NISTP256,
-            SignatureScheme::ECDSA_NISTP384_SHA384 => &PKCS8_PREFIX_ECDSA_NISTP384,
-            SignatureScheme::ECDSA_NISTP521_SHA512 => &PKCS8_PREFIX_ECDSA_NISTP521,
-            _ => unreachable!(), // all callers are in this file
-        };
-
-        let sec1_wrap = asn1_wrap(der::Tag::OctetString as u8, maybe_sec1_der);
-
-        let mut pkcs8_inner = Vec::with_capacity(pkcs8_prefix.len() + sec1_wrap.len());
-        pkcs8_inner.extend_from_slice(pkcs8_prefix);
-        pkcs8_inner.extend_from_slice(&sec1_wrap);
-
-        EcdsaKeyPair::from_pkcs8(sigalg, &wrap_in_sequence(&pkcs8_inner)).map_err(|_| ())
-    }
 }
-
-// This is (line-by-line):
-// - INTEGER Version = 0
-// - SEQUENCE (privateKeyAlgorithm)
-//   - id-ecPublicKey OID
-//   - prime256v1 OID
-const PKCS8_PREFIX_ECDSA_NISTP256: &[u8] = b"\x02\x01\x00\
-      \x30\x13\
-      \x06\x07\x2a\x86\x48\xce\x3d\x02\x01\
-      \x06\x08\x2a\x86\x48\xce\x3d\x03\x01\x07";
-
-// This is (line-by-line):
-// - INTEGER Version = 0
-// - SEQUENCE (privateKeyAlgorithm)
-//   - id-ecPublicKey OID
-//   - secp384r1 OID
-const PKCS8_PREFIX_ECDSA_NISTP384: &[u8] = b"\x02\x01\x00\
-     \x30\x10\
-     \x06\x07\x2a\x86\x48\xce\x3d\x02\x01\
-     \x06\x05\x2b\x81\x04\x00\x22";
-
-// This is (line-by-line):
-// - INTEGER Version = 0
-// - SEQUENCE (privateKeyAlgorithm)
-//   - id-ecPublicKey OID
-//   - secp521r1 OID
-const PKCS8_PREFIX_ECDSA_NISTP521: &[u8] = b"\x02\x01\x00\
-     \x30\x10\
-     \x06\x07\x2a\x86\x48\xce\x3d\x02\x01\
-     \x06\x05\x2b\x81\x04\x00\x23";
 
 impl SigningKey for EcdsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
