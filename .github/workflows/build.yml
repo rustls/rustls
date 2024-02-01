@@ -52,18 +52,27 @@ jobs:
 
       # nb. feature sets that include "fips" should be --release --
       # this is required for fips on windows.
+      # nb. "--all-targets" does not include doctests
       - name: cargo test (release; all features)
-        run: cargo test --release --locked --all-features
+        run: cargo test --release --locked --all-features --all-targets
+        env:
+          RUST_BACKTRACE: 1
+
+      # nb. this is separate so it can be skipped on macOS & windows, where
+      # doctests don't work: https://github.com/rust-lang/cargo/issues/8531
+      - name: cargo test --doc (release; all-features)
+        if: ${{ runner.os != 'macOS' && runner.os != 'Windows' }}
+        run: cargo test --release --locked --all-features --doc
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; aws-lc-rs)
-        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging
+        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging --all-targets
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (release; fips)
-        run: cargo test --release --no-default-features --features fips,tls12,read_buf,logging
+        run: cargo test --release --no-default-features --features fips,tls12,read_buf,logging --all-targets
         env:
           RUST_BACKTRACE: 1
 
