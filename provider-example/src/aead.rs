@@ -86,7 +86,7 @@ struct Tls13Cipher(chacha20poly1305::ChaCha20Poly1305, cipher::Iv);
 impl cipher::MessageEncrypter for Tls13Cipher {
     fn encrypt(
         &mut self,
-        m: cipher::BorrowedPlainMessage,
+        m: cipher::OutboundMessage,
         seq: u64,
     ) -> Result<cipher::OpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -121,7 +121,7 @@ impl cipher::MessageDecrypter for Tls13Cipher {
         &mut self,
         mut m: cipher::BorrowedOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<cipher::BorrowedPlainMessage<'a>, rustls::Error> {
+    ) -> Result<cipher::InboundMessage<'a>, rustls::Error> {
         let payload = &mut m.payload;
         let nonce = chacha20poly1305::Nonce::from(cipher::Nonce::new(&self.1, seq).0);
         let aad = cipher::make_tls13_aad(payload.len());
@@ -139,7 +139,7 @@ struct Tls12Cipher(chacha20poly1305::ChaCha20Poly1305, cipher::Iv);
 impl cipher::MessageEncrypter for Tls12Cipher {
     fn encrypt(
         &mut self,
-        m: cipher::BorrowedPlainMessage,
+        m: cipher::OutboundMessage,
         seq: u64,
     ) -> Result<cipher::OpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -166,7 +166,7 @@ impl cipher::MessageDecrypter for Tls12Cipher {
         &mut self,
         mut m: cipher::BorrowedOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<cipher::BorrowedPlainMessage<'a>, rustls::Error> {
+    ) -> Result<cipher::InboundMessage<'a>, rustls::Error> {
         let payload = &m.payload;
         let nonce = chacha20poly1305::Nonce::from(cipher::Nonce::new(&self.1, seq).0);
         let aad = cipher::make_tls12_aad(
@@ -181,7 +181,7 @@ impl cipher::MessageDecrypter for Tls12Cipher {
             .decrypt_in_place(&nonce, &aad, &mut BufferAdapter(payload))
             .map_err(|_| rustls::Error::DecryptError)?;
 
-        Ok(m.into_plain_message())
+        Ok(m.into_inbound_message())
     }
 }
 

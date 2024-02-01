@@ -3,17 +3,14 @@ use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::internal::record_layer::RecordLayer;
 use crate::msgs::alert::AlertMessagePayload;
-use crate::msgs::base::Payload;
+use crate::msgs::base::{BorrowedPayload, Payload};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::codec::{Codec, Reader, ReaderMut};
 use crate::msgs::enums::AlertLevel;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::handshake::HandshakeMessagePayload;
 
 use alloc::vec::Vec;
-
-use super::base::BorrowedPayload;
-use super::codec::ReaderMut;
 
 #[derive(Debug)]
 pub enum MessagePayload<'a> {
@@ -197,11 +194,11 @@ pub struct BorrowedOpaqueMessage<'a> {
 }
 
 impl<'a> BorrowedOpaqueMessage<'a> {
-    /// Force conversion into a plaintext message.
+    /// Force conversion into an inbound plaintext message.
     ///
     /// See [`OpaqueMessage::into_plain_message`] for more information
-    pub fn into_plain_message(self) -> BorrowedPlainMessage<'a> {
-        BorrowedPlainMessage {
+    pub fn into_inbound_message(self) -> InboundMessage<'a> {
+        InboundMessage {
             typ: self.typ,
             version: self.version,
             payload: self.payload.into_inner(),
@@ -212,7 +209,7 @@ impl<'a> BorrowedOpaqueMessage<'a> {
     ///
     /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
     /// or the message (post-unpadding) is too long.
-    pub fn into_tls13_unpadded_message(mut self) -> Result<BorrowedPlainMessage<'a>, Error> {
+    pub fn into_tls13_unpadded_message(mut self) -> Result<InboundMessage<'a>, Error> {
         let payload = &mut self.payload;
 
         if payload.len() > MAX_FRAGMENT_LEN + 1 {
@@ -229,7 +226,7 @@ impl<'a> BorrowedOpaqueMessage<'a> {
         }
 
         self.version = ProtocolVersion::TLSv1_3;
-        Ok(self.into_plain_message())
+        Ok(self.into_inbound_message())
     }
 
     pub(crate) fn read(r: &mut ReaderMut<'a>) -> Result<Self, MessageError> {
@@ -338,8 +335,16 @@ impl PlainMessage {
         }
     }
 
-    pub fn borrow(&self) -> BorrowedPlainMessage<'_> {
-        BorrowedPlainMessage {
+    pub fn borrow_inbound(&self) -> InboundMessage<'_> {
+        InboundMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: self.payload.bytes(),
+        }
+    }
+
+    pub fn borrow_outbound(&self) -> OutboundMessage<'_> {
+        OutboundMessage {
             version: self.version,
             typ: self.typ,
             payload: self.payload.bytes(),
@@ -406,10 +411,10 @@ impl TryFrom<PlainMessage> for Message<'static> {
 ///
 /// A [`PlainMessage`] must contain plaintext content. Encrypted content should be stored in an
 /// [`OpaqueMessage`] and decrypted before being stored into a [`PlainMessage`].
-impl<'a> TryFrom<BorrowedPlainMessage<'a>> for Message<'a> {
+impl<'a> TryFrom<InboundMessage<'a>> for Message<'a> {
     type Error = Error;
 
-    fn try_from(plain: BorrowedPlainMessage<'a>) -> Result<Self, Self::Error> {
+    fn try_from(plain: InboundMessage<'a>) -> Result<Self, Self::Error> {
         Ok(Self {
             version: plain.version,
             payload: MessagePayload::new(plain.typ, plain.version, plain.payload)?,
@@ -419,44 +424,100 @@ impl<'a> TryFrom<BorrowedPlainMessage<'a>> for Message<'a> {
 
 /// A TLS frame, named TLSPlaintext in the standard.
 ///
-/// This type differs from `OpaqueMessage` because it borrows
-/// its payload.  You can make a `OpaqueMessage` from an
-/// `BorrowMessage`, but this involves a copy.
+/// This type borrows its decrypted payload from a `MessageDeframer`.
+/// You can make a `OpaqueMessage` from an `InboundMessage`,
+/// but this involves a copy.
 ///
 /// This type also cannot decode its internals and
 /// cannot be read/encoded; only `OpaqueMessage` can do that.
 #[derive(Debug)]
-pub struct BorrowedPlainMessage<'a> {
+pub struct InboundMessage<'a> {
     pub typ: ContentType,
     pub version: ProtocolVersion,
     pub payload: &'a [u8],
 }
 
-impl<'a> BorrowedPlainMessage<'a> {
-    pub fn to_unencrypted_opaque(&self) -> OpaqueMessage {
-        OpaqueMessage {
-            version: self.version,
-            typ: self.typ,
-            payload: Payload::Owned(self.payload.to_vec()),
-        }
+impl BorrowedPlainMessage for InboundMessage<'_> {
+    fn payload_to_vec(&self) -> Vec<u8> {
+        self.payload.to_vec()
     }
 
-    pub fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
-        OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload.len())
+    fn payload_len(&self) -> usize {
+        self.payload.len()
     }
 
-    pub fn into_owned(self) -> PlainMessage {
-        let Self {
-            typ,
-            version,
-            payload,
-        } = self;
+    fn typ(&self) -> ContentType {
+        self.typ
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        self.version
+    }
+}
+
+/// A TLS frame, named TLSPlaintext in the standard.
+///
+/// This type borrows its "to be encrypted" data from the client.
+/// You can make a `OpaqueMessage` from an `OutboundMessage`,
+/// but this involves a copy.
+///
+/// This type also cannot decode its internals and
+/// cannot be read/encoded; only `OpaqueMessage` can do that.
+
+#[derive(Debug)]
+pub struct OutboundMessage<'a> {
+    pub typ: ContentType,
+    pub version: ProtocolVersion,
+    pub payload: &'a [u8],
+}
+
+impl BorrowedPlainMessage for OutboundMessage<'_> {
+    fn payload_to_vec(&self) -> Vec<u8> {
+        self.payload.to_vec()
+    }
+
+    fn payload_len(&self) -> usize {
+        self.payload.len()
+    }
+
+    fn typ(&self) -> ContentType {
+        self.typ
+    }
+
+    fn version(&self) -> ProtocolVersion {
+        self.version
+    }
+}
+
+/// Abstract both inbound and outbound variants of a plaintext message
+pub trait BorrowedPlainMessage: Sized {
+    fn into_owned(self) -> PlainMessage {
         PlainMessage {
-            typ,
-            version,
-            payload: Payload::new(payload),
+            version: self.version(),
+            typ: self.typ(),
+            payload: Payload::Owned(self.payload_to_vec()),
         }
     }
+
+    fn to_unencrypted_opaque(&self) -> OpaqueMessage {
+        OpaqueMessage {
+            version: self.version(),
+            typ: self.typ(),
+            payload: Payload::Owned(self.payload_to_vec()),
+        }
+    }
+
+    fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
+        OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload_len())
+    }
+
+    fn payload_to_vec(&self) -> Vec<u8>;
+
+    fn payload_len(&self) -> usize;
+
+    fn typ(&self) -> ContentType;
+
+    fn version(&self) -> ProtocolVersion;
 }
 
 #[derive(Debug)]

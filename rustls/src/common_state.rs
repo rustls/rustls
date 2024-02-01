@@ -7,8 +7,9 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::CertificateChain;
-use crate::msgs::message::MessagePayload;
-use crate::msgs::message::{BorrowedPlainMessage, Message, OpaqueMessage, PlainMessage};
+use crate::msgs::message::{
+    BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, OutboundMessage, PlainMessage,
+};
 use crate::quic;
 use crate::record_layer;
 use crate::suites::PartiallyExtractedSecrets;
@@ -300,7 +301,7 @@ impl CommonState {
         len
     }
 
-    fn send_single_fragment(&mut self, m: BorrowedPlainMessage) {
+    fn send_single_fragment(&mut self, m: OutboundMessage) {
         // Close connection once we start to run out of
         // sequence space.
         if self
@@ -548,7 +549,7 @@ impl CommonState {
         &self,
         outgoing_tls: &mut [u8],
         opt_msg: Option<&[u8]>,
-        fragments: impl Iterator<Item = BorrowedPlainMessage<'a>>,
+        fragments: impl Iterator<Item = OutboundMessage<'a>>,
     ) -> Result<(), EncryptError> {
         let mut required_size = 0;
         if let Some(message) = opt_msg {
@@ -572,7 +573,7 @@ impl CommonState {
         &mut self,
         outgoing_tls: &mut [u8],
         opt_msg: Option<Vec<u8>>,
-        fragments: impl Iterator<Item = BorrowedPlainMessage<'a>>,
+        fragments: impl Iterator<Item = OutboundMessage<'a>>,
     ) -> usize {
         let mut written = 0;
 
@@ -658,7 +659,7 @@ impl CommonState {
         let message = PlainMessage::from(Message::build_key_update_notify());
         self.queued_key_update_message = Some(
             self.record_layer
-                .encrypt_outgoing(message.borrow())
+                .encrypt_outgoing(message.borrow_outbound())
                 .encode(),
         );
     }
