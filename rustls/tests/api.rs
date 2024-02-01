@@ -27,7 +27,9 @@ use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
-use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
+use rustls::internal::msgs::message::{
+    BorrowedPlainMessage, Message, MessagePayload, PlainMessage,
+};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::SupportedCipherSuite;
 use rustls::{
@@ -745,11 +747,11 @@ fn test_tls13_valid_early_plaintext_alert() {
     //  * The negotiated protocol version is TLS 1.3.
     server
         .read_tls(&mut io::Cursor::new(
-            <Message as Into<PlainMessage>>::into(Message::build_alert(
+            PlainMessage::from(Message::build_alert(
                 AlertLevel::Fatal,
                 AlertDescription::UnknownCA,
             ))
-            .borrow()
+            .borrow_inbound()
             .to_unencrypted_opaque()
             .encode(),
         ))
@@ -797,11 +799,11 @@ fn test_tls13_late_plaintext_alert() {
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message.
     server
         .read_tls(&mut io::Cursor::new(
-            <Message as Into<PlainMessage>>::into(Message::build_alert(
+            PlainMessage::from(Message::build_alert(
                 AlertLevel::Fatal,
                 AlertDescription::UnknownCA,
             ))
-            .borrow()
+            .borrow_inbound()
             .to_unencrypted_opaque()
             .encode(),
         ))

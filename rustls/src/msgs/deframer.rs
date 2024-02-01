@@ -4,11 +4,10 @@ use core::slice::SliceIndex;
 use std::io;
 
 use super::codec::Codec;
-use super::message::{BorrowedOpaqueMessage, BorrowedPlainMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
-use crate::msgs::message::{MessageError, OpaqueMessage};
+use crate::msgs::message::{BorrowedOpaqueMessage, InboundMessage, MessageError, OpaqueMessage};
 use crate::record_layer::{Decrypted, RecordLayer};
 
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
@@ -113,13 +112,13 @@ impl MessageDeframer {
                     version,
                     payload,
                 } = m;
-                let raw_payload = RawSlice::from(&*payload);
+                let raw_payload_slice = RawSlice::from(&*payload);
                 // This is unencrypted. We check the contents later.
                 buffer.queue_discard(end);
-                let message = BorrowedPlainMessage {
+                let message = InboundMessage {
                     typ,
                     version,
-                    payload: buffer.take(raw_payload),
+                    payload: buffer.take(raw_payload_slice),
                 };
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
@@ -130,14 +129,19 @@ impl MessageDeframer {
             }
 
             // Decrypt the encrypted message (if necessary).
-            let msg = match record_layer.decrypt_incoming(m) {
+            let (typ, version, plain_payload_slice) = match record_layer.decrypt_incoming(m) {
                 Ok(Some(decrypted)) => {
                     let Decrypted {
                         want_close_before_decrypt,
-                        plaintext,
+                        plaintext:
+                            InboundMessage {
+                                typ,
+                                version,
+                                payload,
+                            },
                     } = decrypted;
                     debug_assert!(!want_close_before_decrypt);
-                    plaintext
+                    (typ, version, RawSlice::from(payload))
                 }
                 // This was rejected early data, discard it. If we currently have a handshake
                 // payload in progress, this counts as interleaved, so we error out.
@@ -153,7 +157,7 @@ impl MessageDeframer {
                 Err(e) => return Err(e),
             };
 
-            if self.joining_hs.is_some() && msg.typ != ContentType::Handshake {
+            if self.joining_hs.is_some() && typ != ContentType::Handshake {
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
@@ -162,19 +166,12 @@ impl MessageDeframer {
             }
 
             // If it's not a handshake message, just return it -- no joining necessary.
-            if msg.typ != ContentType::Handshake {
-                let BorrowedPlainMessage {
-                    typ,
-                    version,
-                    payload,
-                } = msg;
-                let raw_payload = RawSlice::from(payload);
-                let end = start + rd.used();
+            if typ != ContentType::Handshake {
                 buffer.queue_discard(end);
-                let message = BorrowedPlainMessage {
+                let message = InboundMessage {
                     typ,
                     version,
-                    payload: buffer.take(raw_payload),
+                    payload: buffer.take(plain_payload_slice),
                 };
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
@@ -186,9 +183,7 @@ impl MessageDeframer {
 
             // If we don't know the payload size yet or if the payload size is larger
             // than the currently buffered payload, we need to wait for more data.
-            let raw = RawSlice::from(msg.payload);
-            let version = msg.version;
-            let src = buffer.raw_slice_to_filled_range(raw);
+            let src = buffer.raw_slice_to_filled_range(plain_payload_slice);
             match self.append_hs(version, InternalPayload(src), end, buffer)? {
                 HandshakePayloadState::Blocked => return Ok(None),
                 HandshakePayloadState::Complete(len) => break len,
@@ -221,7 +216,7 @@ impl MessageDeframer {
             buffer.queue_discard(end);
         }
 
-        let message = BorrowedPlainMessage {
+        let message = InboundMessage {
             typ,
             version,
             payload: buffer.take(raw_payload),
@@ -686,7 +681,7 @@ pub struct Deframed<'a> {
     pub(crate) want_close_before_decrypt: bool,
     pub(crate) aligned: bool,
     pub(crate) trial_decryption_finished: bool,
-    pub message: BorrowedPlainMessage<'a>,
+    pub message: InboundMessage<'a>,
 }
 
 const HEADER_SIZE: usize = 1 + 3;
@@ -703,7 +698,7 @@ mod tests {
     use std::io;
 
     use crate::crypto::cipher::PlainMessage;
-    use crate::msgs::message::Message;
+    use crate::msgs::message::{BorrowedPlainMessage, Message};
 
     use super::*;
 

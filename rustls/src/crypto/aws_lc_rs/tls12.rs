@@ -7,7 +7,7 @@ use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage};
+use crate::msgs::message::{InboundMessage, OpaqueMessage, OutboundMessage};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls12::Tls12CipherSuite;
 use crate::version::TLS12;
@@ -265,7 +265,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         &mut self,
         mut msg: BorrowedOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<BorrowedPlainMessage<'a>, Error> {
+    ) -> Result<InboundMessage<'a>, Error> {
         let payload = &msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
@@ -297,12 +297,12 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_plain_message())
+        Ok(msg.into_inbound_message())
     }
 }
 
 impl MessageEncrypter for GcmMessageEncrypter {
-    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 
@@ -347,7 +347,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         &mut self,
         mut msg: BorrowedOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<BorrowedPlainMessage<'a>, Error> {
+    ) -> Result<InboundMessage<'a>, Error> {
         let payload = &msg.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
@@ -374,12 +374,12 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_plain_message())
+        Ok(msg.into_inbound_message())
     }
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
 

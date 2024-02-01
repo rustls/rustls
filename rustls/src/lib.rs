@@ -482,7 +482,9 @@ pub mod internal {
             };
         }
         pub mod message {
-            pub use crate::msgs::message::{Message, MessagePayload, OpaqueMessage, PlainMessage};
+            pub use crate::msgs::message::{
+                BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, PlainMessage,
+            };
         }
         pub mod persist {
             pub use crate::msgs::persist::ServerSessionValue;

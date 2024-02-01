@@ -10,7 +10,7 @@ use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec::Codec;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage};
+use crate::msgs::message::{InboundMessage, OpaqueMessage, OutboundMessage};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls13::Tls13CipherSuite;
 
@@ -220,7 +220,7 @@ struct AeadMessageDecrypter {
 }
 
 impl MessageEncrypter for AeadMessageEncrypter {
-    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(msg.payload);
@@ -251,7 +251,7 @@ impl MessageDecrypter for AeadMessageDecrypter {
         &mut self,
         mut msg: BorrowedOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<BorrowedPlainMessage<'a>, Error> {
+    ) -> Result<InboundMessage<'a>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);
@@ -276,7 +276,7 @@ struct GcmMessageEncrypter {
 }
 
 impl MessageEncrypter for GcmMessageEncrypter {
-    fn encrypt(&mut self, msg: BorrowedPlainMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(msg.payload);
@@ -310,7 +310,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
         &mut self,
         mut msg: BorrowedOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<BorrowedPlainMessage<'a>, Error> {
+    ) -> Result<InboundMessage<'a>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);

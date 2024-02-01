@@ -1,12 +1,11 @@
 use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
-use crate::crypto::cipher::BorrowedPlainMessage;
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer};
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::message::{InboundMessage, Message, MessagePayload};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -337,7 +336,7 @@ impl ConnectionRandoms {
 
 // --- Common (to client and server) connection functions ---
 
-fn is_valid_ccs(msg: &BorrowedPlainMessage) -> bool {
+fn is_valid_ccs(msg: &InboundMessage) -> bool {
     // We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
     // Note: this is prior to the record layer, so is unencrypted. See
     // third paragraph of section 5 in RFC8446.
@@ -778,7 +777,7 @@ impl<Data> ConnectionCore<Data> {
         &mut self,
         state: Option<&dyn State<Data>>,
         deframer_buffer: &mut DeframerSliceBuffer<'b>,
-    ) -> Result<Option<BorrowedPlainMessage<'b>>, Error> {
+    ) -> Result<Option<InboundMessage<'b>>, Error> {
         match self.message_deframer.pop(
             &mut self.common_state.record_layer,
             self.common_state.negotiated_version,
@@ -833,7 +832,7 @@ impl<Data> ConnectionCore<Data> {
 
     fn process_msg(
         &mut self,
-        msg: BorrowedPlainMessage,
+        msg: InboundMessage,
         state: Box<dyn State<Data>>,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {

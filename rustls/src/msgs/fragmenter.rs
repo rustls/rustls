@@ -1,6 +1,6 @@
 use crate::enums::ContentType;
 use crate::enums::ProtocolVersion;
-use crate::msgs::message::{BorrowedPlainMessage, PlainMessage};
+use crate::msgs::message::{OutboundMessage, PlainMessage};
 use crate::Error;
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -26,7 +26,7 @@ impl MessageFragmenter {
     pub fn fragment_message<'a>(
         &self,
         msg: &'a PlainMessage,
-    ) -> impl Iterator<Item = BorrowedPlainMessage<'a>> + 'a {
+    ) -> impl Iterator<Item = OutboundMessage<'a>> + 'a {
         self.fragment_slice(msg.typ, msg.version, msg.payload.bytes())
     }
 
@@ -37,13 +37,13 @@ impl MessageFragmenter {
         typ: ContentType,
         version: ProtocolVersion,
         payload: &'a [u8],
-    ) -> impl ExactSizeIterator<Item = BorrowedPlainMessage<'a>> {
+    ) -> impl ExactSizeIterator<Item = OutboundMessage<'a>> {
         payload
             .chunks(self.max_frag)
-            .map(move |c| BorrowedPlainMessage {
+            .map(move |payload| OutboundMessage {
                 typ,
                 version,
-                payload: c,
+                payload,
             })
     }
 
@@ -71,10 +71,10 @@ mod tests {
     use crate::enums::ContentType;
     use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
-    use crate::msgs::message::{BorrowedPlainMessage, PlainMessage};
+    use crate::msgs::message::{BorrowedPlainMessage, OutboundMessage, PlainMessage};
 
     fn msg_eq(
-        m: &BorrowedPlainMessage,
+        m: &OutboundMessage,
         total_len: usize,
         typ: &ContentType,
         version: &ProtocolVersion,

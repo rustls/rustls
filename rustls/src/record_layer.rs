@@ -2,7 +2,7 @@ use core::num::NonZeroU64;
 
 use crate::crypto::cipher::{BorrowedOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
-use crate::msgs::message::{BorrowedPlainMessage, OpaqueMessage};
+use crate::msgs::message::{InboundMessage, OpaqueMessage, OutboundMessage};
 
 #[cfg(feature = "logging")]
 use crate::log::trace;
@@ -67,7 +67,7 @@ impl RecordLayer {
         if self.decrypt_state != DirectionState::Active {
             return Ok(Some(Decrypted {
                 want_close_before_decrypt: false,
-                plaintext: encr.into_plain_message(),
+                plaintext: encr.into_inbound_message(),
             }));
         }
 
@@ -108,7 +108,7 @@ impl RecordLayer {
     ///
     /// `plain` is a TLS message we'd like to send.  This function
     /// panics if the requisite keying material hasn't been established yet.
-    pub(crate) fn encrypt_outgoing(&mut self, plain: BorrowedPlainMessage) -> OpaqueMessage {
+    pub(crate) fn encrypt_outgoing(&mut self, plain: OutboundMessage) -> OpaqueMessage {
         debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(!self.encrypt_exhausted());
         let seq = self.write_seq;
@@ -242,7 +242,7 @@ pub(crate) struct Decrypted<'a> {
     /// Whether the peer appears to be getting close to encrypting too many messages with this key.
     pub(crate) want_close_before_decrypt: bool,
     /// The decrypted message.
-    pub(crate) plaintext: BorrowedPlainMessage<'a>,
+    pub(crate) plaintext: InboundMessage<'a>,
 }
 
 #[cfg(test)]
@@ -259,8 +259,8 @@ mod tests {
                 &mut self,
                 m: BorrowedOpaqueMessage<'a>,
                 _: u64,
-            ) -> Result<BorrowedPlainMessage<'a>, Error> {
-                Ok(m.into_plain_message())
+            ) -> Result<InboundMessage<'a>, Error> {
+                Ok(m.into_inbound_message())
             }
         }
 
