@@ -4,6 +4,7 @@ permissions:
   contents: read
 
 on:
+  workflow_dispatch:
   schedule:
     # We run these tests on a daily basis (at a time slightly offset from the
     # top of the hour), as their runtime is either too long for the usual per-PR
