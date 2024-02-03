@@ -102,11 +102,15 @@
 //!   * [`rustls-mbedtls-provider`] - a provider that uses [`mbedtls`] for cryptography.
 //!   * [`boring-rustls-provider`] - a work-in-progress provider that uses [`boringssl`] for
 //!     cryptography.
+//!   * [`rustls-rustcrypto`] - an experimental provider that uses the crypto primitives
+//!     from [`RustCrypto`] for cryptography.
 //!
 //! [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider
 //! [`mbedtls`]: https://github.com/Mbed-TLS/mbedtls
 //! [`boring-rustls-provider`]: https://github.com/janrueth/boring-rustls-provider
 //! [`boringssl`]: https://github.com/google/boringssl
+//! [`rustls-rustcrypto`]: https://github.com/RustCrypto/rustls-rustcrypto
+//! [`RustCrypto`]: https://github.com/RustCrypto
 //!
 //! #### Custom provider
 //!
