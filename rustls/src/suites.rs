@@ -1,7 +1,7 @@
 use crate::common_state::Protocol;
 use crate::crypto;
 use crate::crypto::cipher::{AeadKey, Iv};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureAlgorithm, SignatureScheme};
+use crate::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
@@ -9,7 +9,6 @@ use crate::tls13::Tls13CipherSuite;
 use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
 
-use alloc::vec::Vec;
 use core::fmt;
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
@@ -172,31 +171,6 @@ pub(crate) fn choose_ciphersuite_preferring_server(
     }
 
     None
-}
-
-/// Return a list of the ciphersuites in `all` with the suites
-/// incompatible with `SignatureAlgorithm` `sigalg` removed.
-pub(crate) fn reduce_given_sigalg(
-    all: &[SupportedCipherSuite],
-    sigalg: SignatureAlgorithm,
-) -> Vec<SupportedCipherSuite> {
-    all.iter()
-        .filter(|&&suite| suite.usable_for_signature_algorithm(sigalg))
-        .copied()
-        .collect()
-}
-
-/// Return a list of the ciphersuites in `all` with the suites
-/// incompatible with the chosen `version` removed.
-pub(crate) fn reduce_given_version_and_protocol(
-    all: &[SupportedCipherSuite],
-    version: ProtocolVersion,
-    proto: Protocol,
-) -> Vec<SupportedCipherSuite> {
-    all.iter()
-        .filter(|&&suite| suite.version().version == version && suite.usable_for_protocol(proto))
-        .copied()
-        .collect()
 }
 
 /// Return true if `sigscheme` is usable by any of the given suites.

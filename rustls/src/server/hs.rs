@@ -334,19 +334,19 @@ impl ExpectClientHello {
         };
         let certkey = ActiveCertifiedKey::from_certified_key(&certkey);
 
-        // Reduce our supported ciphersuites by the certificate.
-        // (no-op for TLS1.3)
-        let suitable_suites = suites::reduce_given_sigalg(
-            &self.config.provider.cipher_suites,
-            certkey.get_key().algorithm(),
-        );
-
-        // And version
-        let suitable_suites = suites::reduce_given_version_and_protocol(
-            &suitable_suites,
-            version,
-            cx.common.protocol,
-        );
+        let suitable_suites = self
+            .config
+            .provider
+            .cipher_suites
+            .iter()
+            .filter(|suite| {
+                // Reduce our supported ciphersuites by the certificate.
+                suite.usable_for_signature_algorithm(certkey.get_key().algorithm())
+                // And version
+                && suite.version().version == version && suite.usable_for_protocol(cx.common.protocol)
+            })
+            .copied()
+            .collect::<Vec<_>>();
 
         let suite = if self.config.ignore_client_order {
             suites::choose_ciphersuite_preferring_server(
