@@ -5063,14 +5063,19 @@ fn test_client_rejects_illegal_tls13_ccs() {
 
 #[cfg(feature = "tls12")]
 #[test]
-fn test_client_rejects_no_extended_master_secret_extension_when_require_ems() {
+fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
     let key_type = KeyType::Rsa;
     let mut client_config = make_client_config(key_type);
-    client_config.require_ems = true;
-    let server_config = finish_server_config(
+    if cfg!(feature = "fips") {
+        assert!(client_config.require_ems);
+    } else {
+        client_config.require_ems = true;
+    }
+    let mut server_config = finish_server_config(
         key_type,
         server_config_builder_with_versions(&[&rustls::version::TLS12]),
     );
+    server_config.require_ems = false;
     let (client, server) = make_pair_for_configs(client_config, server_config);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, remove_ems_request, &mut server);
@@ -5086,14 +5091,18 @@ fn test_client_rejects_no_extended_master_secret_extension_when_require_ems() {
 
 #[cfg(feature = "tls12")]
 #[test]
-fn test_server_rejects_no_extended_master_secret_extension_when_require_ems() {
+fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
     let key_type = KeyType::Rsa;
     let client_config = make_client_config(key_type);
     let mut server_config = finish_server_config(
         key_type,
         server_config_builder_with_versions(&[&rustls::version::TLS12]),
     );
-    server_config.require_ems = true;
+    if cfg!(feature = "fips") {
+        assert!(server_config.require_ems);
+    } else {
+        server_config.require_ems = true;
+    }
     let (client, server) = make_pair_for_configs(client_config, server_config);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, remove_ems_request, &mut server);
@@ -5792,6 +5801,24 @@ fn test_client_fips_service_indicator() {
 #[test]
 fn test_server_fips_service_indicator() {
     assert!(make_server_config(KeyType::Rsa).fips());
+}
+
+#[cfg(feature = "fips")]
+#[test]
+fn test_client_fips_service_indicator_includes_require_ems() {
+    let mut client_config = make_client_config(KeyType::Rsa);
+    assert!(client_config.fips());
+    client_config.require_ems = false;
+    assert!(!client_config.fips());
+}
+
+#[cfg(feature = "fips")]
+#[test]
+fn test_server_fips_service_indicator_includes_require_ems() {
+    let mut server_config = make_server_config(KeyType::Rsa);
+    assert!(server_config.fips());
+    server_config.require_ems = false;
+    assert!(!server_config.fips());
 }
 
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs", not(feature = "fips")))]

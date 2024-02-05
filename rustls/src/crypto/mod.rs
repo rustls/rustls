@@ -194,6 +194,11 @@ pub struct CryptoProvider {
 
 impl CryptoProvider {
     /// Returns `true` if this `CryptoProvider` is operating in FIPS mode.
+    ///
+    /// This covers only the cryptographic parts of FIPS approval.  There are
+    /// also TLS protocol-level recommendations made by NIST.  You should
+    /// prefer to call [`ClientConfig::fips()`] or [`ServerConfig::fips()`]
+    /// which take these into account.
     pub fn fips(&self) -> bool {
         let Self {
             cipher_suites,

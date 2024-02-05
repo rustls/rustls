@@ -125,7 +125,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             send_half_rtt_data: false,
             send_tls13_tickets: 4,
             #[cfg(feature = "tls12")]
-            require_ems: false,
+            require_ems: cfg!(feature = "fips"),
         }
     }
 }
