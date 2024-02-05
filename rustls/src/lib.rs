@@ -313,7 +313,8 @@
 //!
 //! - `fips`: enable support for FIPS140-3-approved cryptography, via the aws-lc-rs crate.
 //!   This feature enables the `aws_lc_rs` feature, which makes the rustls crate depend
-//!   on [aws-lc-rs](https://github.com/aws/aws-lc-rs).
+//!   on [aws-lc-rs](https://github.com/aws/aws-lc-rs).  It also changes the default
+//!   for [`ServerConfig::require_ems`] and [`ClientConfig::require_ems`].
 //!
 //! - `tls12` (enabled by default): enable support for TLS version 1.2. Note that, due to the
 //!   additive nature of Cargo features and because it is enabled by default, other crates

@@ -198,7 +198,8 @@ pub struct ClientConfig {
     /// If set to `true`, requires the server to support the extended
     /// master secret extraction method defined in [RFC 7627].
     ///
-    /// The default is `false`.
+    /// The default is `true` if the `fips` crate feature is enabled,
+    /// `false` otherwise.
     ///
     /// It must be set to `true` to meet FIPS requirement mentioned in section
     /// **D.Q Transition of the TLS 1.2 KDF to Support the Extended Master
@@ -279,8 +280,20 @@ impl ClientConfig {
 
     /// Return true if connections made with this `ClientConfig` will
     /// operate in FIPS mode.
+    ///
+    /// This is different from [`CryptoProvider::fips()`]: [`CryptoProvider::fips()`]
+    /// is concerned only with cryptography, whereas this _also_ covers TLS-level
+    /// configuration that NIST recommends.
     pub fn fips(&self) -> bool {
-        self.provider.fips()
+        #[cfg(feature = "tls12")]
+        {
+            self.provider.fips() && self.require_ems
+        }
+
+        #[cfg(not(feature = "tls12"))]
+        {
+            self.provider.fips()
+        }
     }
 
     /// We support a given TLS version if it's quoted in the configured
