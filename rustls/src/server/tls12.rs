@@ -88,15 +88,6 @@ mod client_hello {
                 ));
             }
 
-            let groups_ext = client_hello
-                .namedgroups_extension()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NamedGroupsExtensionRequired,
-                    )
-                })?;
-
             // "RFC 4492 specified that if this extension is missing,
             // it means that only the uncompressed point format is
             // supported"
@@ -105,7 +96,6 @@ mod client_hello {
                 .ecpoints_extension()
                 .unwrap_or(&[ECPointFormat::Uncompressed]);
 
-            trace!("namedgroups {:?}", groups_ext);
             trace!("ecpoints {:?}", ecpoints_ext);
 
             if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
@@ -185,19 +175,7 @@ mod client_hello {
                 ));
             }
 
-            let group = self
-                .config
-                .provider
-                .kx_groups
-                .iter()
-                .find(|skxg| groups_ext.contains(&skxg.name()))
-                .cloned()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NoKxGroupsInCommon,
-                    )
-                })?;
+            let group = self.pick_kx_group(client_hello, cx)?;
 
             let ecpoint = ECPointFormat::SUPPORTED
                 .iter()
@@ -273,6 +251,36 @@ mod client_hello {
                     send_ticket: self.send_ticket,
                 }))
             }
+        }
+
+        fn pick_kx_group(
+            &self,
+            client_hello: &ClientHelloPayload,
+            cx: &mut ServerContext<'_>,
+        ) -> Result<&'static dyn SupportedKxGroup, Error> {
+            let peer_groups_ext = client_hello
+                .namedgroups_extension()
+                .ok_or_else(|| {
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::NamedGroupsExtensionRequired,
+                    )
+                })?;
+
+            trace!("namedgroups {:?}", peer_groups_ext);
+
+            self.config
+                .provider
+                .kx_groups
+                .iter()
+                .find(|skxg| peer_groups_ext.contains(&skxg.name()))
+                .cloned()
+                .ok_or_else(|| {
+                    cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::NoKxGroupsInCommon,
+                    )
+                })
         }
 
         fn start_resumption(
