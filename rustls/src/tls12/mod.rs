@@ -320,7 +320,7 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
-pub(crate) fn decode_ecdh_params<'a, T: Codec<'a>>(
+pub(crate) fn decode_kx_params<'a, T: Codec<'a>>(
     common: &mut CommonState,
     kx_params: &'a [u8],
 ) -> Result<T, Error> {
@@ -353,12 +353,12 @@ mod tests {
         server_buf.push(34);
 
         let mut common = CommonState::new(Side::Client);
-        assert!(decode_ecdh_params::<ServerEcdhParams>(&mut common, &server_buf).is_err());
+        assert!(decode_kx_params::<ServerEcdhParams>(&mut common, &server_buf).is_err());
     }
 
     #[test]
     fn client_ecdhe_invalid() {
         let mut common = CommonState::new(Side::Server);
-        assert!(decode_ecdh_params::<ClientEcdhParams>(&mut common, &[34]).is_err());
+        assert!(decode_kx_params::<ClientEcdhParams>(&mut common, &[34]).is_err());
     }
 }

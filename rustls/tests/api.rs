@@ -2828,55 +2828,6 @@ fn test_tls13_exporter_maximum_output_length() {
     );
 }
 
-fn do_suite_test(
-    client_config: ClientConfig,
-    server_config: ServerConfig,
-    expect_suite: SupportedCipherSuite,
-    expect_version: ProtocolVersion,
-) {
-    println!(
-        "do_suite_test {:?} {:?}",
-        expect_version,
-        expect_suite.suite()
-    );
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-
-    assert_eq!(None, client.negotiated_cipher_suite());
-    assert_eq!(None, server.negotiated_cipher_suite());
-    assert_eq!(None, client.protocol_version());
-    assert_eq!(None, server.protocol_version());
-    assert!(client.is_handshaking());
-    assert!(server.is_handshaking());
-
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-
-    assert!(client.is_handshaking());
-    assert!(server.is_handshaking());
-    assert_eq!(None, client.protocol_version());
-    assert_eq!(Some(expect_version), server.protocol_version());
-    assert_eq!(None, client.negotiated_cipher_suite());
-    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
-
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
-
-    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
-    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
-
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-    transfer(&mut server, &mut client);
-    client.process_new_packets().unwrap();
-
-    assert!(!client.is_handshaking());
-    assert!(!server.is_handshaking());
-    assert_eq!(Some(expect_version), client.protocol_version());
-    assert_eq!(Some(expect_version), server.protocol_version());
-    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
-    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
-}
-
 fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
     for scs in provider::ALL_CIPHER_SUITES
         .iter()
