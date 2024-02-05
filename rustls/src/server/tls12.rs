@@ -428,12 +428,12 @@ mod client_hello {
         let kx = selected_group
             .start()
             .map_err(|_| Error::FailedToGetRandomBytes)?;
-        let secdh = ServerEcdhParams::new(&*kx);
+        let kx_params = ServerEcdhParams::new(&*kx);
 
         let mut msg = Vec::new();
         msg.extend(randoms.client);
         msg.extend(randoms.server);
-        secdh.encode(&mut msg);
+        kx_params.encode(&mut msg);
 
         let signer = signing_key
             .choose_scheme(&sigschemes)
@@ -442,7 +442,7 @@ mod client_hello {
         let sig = signer.sign(&msg)?;
 
         let skx = ServerKeyExchangePayload::Ecdhe(EcdheServerKeyExchange {
-            params: secdh,
+            params: kx_params,
             dss: DigitallySignedStruct::new(sigscheme, sig),
         });
 
@@ -628,7 +628,7 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
         // Complete key agreement, and set up encryption with the
         // resulting premaster secret.
         let peer_kx_params =
-            tls12::decode_ecdh_params::<ClientEcdhParams>(cx.common, client_kx.bytes())?;
+            tls12::decode_kx_params::<ClientEcdhParams>(cx.common, client_kx.bytes())?;
         let secrets = ConnectionSecrets::from_key_exchange(
             self.server_kx,
             &peer_kx_params.public.0,

@@ -17,6 +17,7 @@ use rustls::Error;
 use rustls::RootCertStore;
 use rustls::{ClientConfig, ClientConnection};
 use rustls::{ConnectionCommon, ServerConfig, ServerConnection, SideData};
+use rustls::{ProtocolVersion, SupportedCipherSuite};
 
 #[cfg(all(any(not(feature = "ring"), feature = "fips"), feature = "aws_lc_rs"))]
 pub use rustls::crypto::aws_lc_rs as provider;
@@ -704,4 +705,53 @@ impl io::Read for FailsReads {
     fn read(&mut self, _b: &mut [u8]) -> io::Result<usize> {
         Err(io::Error::from(self.errkind))
     }
+}
+
+pub fn do_suite_test(
+    client_config: ClientConfig,
+    server_config: ServerConfig,
+    expect_suite: SupportedCipherSuite,
+    expect_version: ProtocolVersion,
+) {
+    println!(
+        "do_suite_test {:?} {:?}",
+        expect_version,
+        expect_suite.suite()
+    );
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+
+    assert_eq!(None, client.negotiated_cipher_suite());
+    assert_eq!(None, server.negotiated_cipher_suite());
+    assert_eq!(None, client.protocol_version());
+    assert_eq!(None, server.protocol_version());
+    assert!(client.is_handshaking());
+    assert!(server.is_handshaking());
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    assert!(client.is_handshaking());
+    assert!(server.is_handshaking());
+    assert_eq!(None, client.protocol_version());
+    assert_eq!(Some(expect_version), server.protocol_version());
+    assert_eq!(None, client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
+
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
+
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    assert!(!client.is_handshaking());
+    assert!(!server.is_handshaking());
+    assert_eq!(Some(expect_version), client.protocol_version());
+    assert_eq!(Some(expect_version), server.protocol_version());
+    assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
+    assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 }

@@ -444,7 +444,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
         )?;
         self.transcript.add_message(&m);
 
-        let ecdhe = opaque_kx
+        let kx = opaque_kx
             .unwrap_given_kxa(self.suite.kx)
             .ok_or_else(|| {
                 cx.common.send_fatal_alert(
@@ -455,12 +455,12 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
 
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
-        ecdhe.params.encode(&mut kx_params);
-        let server_kx = ServerKxDetails::new(kx_params, ecdhe.dss);
+        kx.params.encode(&mut kx_params);
+        let server_kx = ServerKxDetails::new(kx_params, kx.dss);
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
-            debug!("ECDHE curve is {:?}", ecdhe.params.curve_params);
+            debug!("ECDHE curve is {:?}", kx.params.curve_params);
         }
 
         Ok(Box::new(ExpectServerDoneOrCertReq {
@@ -894,7 +894,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
         // 5a.
         let ecdh_params =
-            tls12::decode_ecdh_params::<ServerEcdhParams>(cx.common, &st.server_kx.kx_params)?;
+            tls12::decode_kx_params::<ServerEcdhParams>(cx.common, &st.server_kx.kx_params)?;
         let named_group = ecdh_params.curve_params.named_group;
         let skxg = match st.config.find_kx_group(named_group) {
             Some(skxg) => skxg,
