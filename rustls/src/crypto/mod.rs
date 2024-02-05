@@ -321,24 +321,26 @@ pub trait ActiveKeyExchange: Send + Sync {
 }
 
 /// The result from [`ActiveKeyExchange::complete`].
-pub struct SharedSecret(Vec<u8>);
+pub struct SharedSecret {
+    buf: Vec<u8>,
+}
 
 impl SharedSecret {
     /// Returns the shared secret as a slice of bytes.
     pub fn secret_bytes(&self) -> &[u8] {
-        &self.0
+        &self.buf
     }
 }
 
 impl Drop for SharedSecret {
     fn drop(&mut self) {
-        self.0.zeroize();
+        self.buf.zeroize();
     }
 }
 
 impl From<&[u8]> for SharedSecret {
     fn from(source: &[u8]) -> Self {
-        Self(source.to_vec())
+        Self { buf: source.to_vec() }
     }
 }
 
