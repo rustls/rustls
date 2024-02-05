@@ -421,8 +421,8 @@ impl FilledDeframerBuffer for DeframerVecBuffer {
 }
 
 impl DeframerBuffer<true> for DeframerVecBuffer {
-    fn copy(&mut self, src: &[u8], at: usize) {
-        copy_into_buffer(self.unfilled(), src, at);
+    fn copy(&mut self, src: &[u8], _: usize) {
+        copy_into_buffer(self.unfilled(), src, 0);
         self.advance(src.len());
     }
 }
