@@ -460,7 +460,8 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
-            debug!("ECDHE curve is {:?}", kx.params.curve_params);
+            let crate::msgs::handshake::ServerKeyExchangeParams::Ecdh(ecdh) = kx.params;
+            debug!("ECDHE curve is {:?}", ecdh.curve_params);
         }
 
         Ok(Box::new(ExpectServerDoneOrCertReq {

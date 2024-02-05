@@ -1577,35 +1577,47 @@ impl Codec<'_> for ServerEcdhParams {
 }
 
 #[derive(Debug)]
-pub struct EcdheServerKeyExchange {
-    pub(crate) params: ServerEcdhParams,
+pub(crate) enum ServerKeyExchangeParams {
+    Ecdh(ServerEcdhParams),
+}
+
+impl ServerKeyExchangeParams {
+    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
+        match self {
+            Self::Ecdh(ecdh) => ecdh.encode(buf),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ServerKeyExchange {
+    pub(crate) params: ServerKeyExchangeParams,
     pub(crate) dss: DigitallySignedStruct,
 }
 
-impl Codec<'_> for EcdheServerKeyExchange {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.params.encode(bytes);
-        self.dss.encode(bytes);
-    }
-
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
-        let params = ServerEcdhParams::read(r)?;
-        let dss = DigitallySignedStruct::read(r)?;
-
-        Ok(Self { params, dss })
+impl ServerKeyExchange {
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        self.params.encode(buf);
+        self.dss.encode(buf);
     }
 }
 
 #[derive(Debug)]
 pub enum ServerKeyExchangePayload {
-    Ecdhe(EcdheServerKeyExchange),
+    Known(ServerKeyExchange),
     Unknown(Payload<'static>),
+}
+
+impl From<ServerKeyExchange> for ServerKeyExchangePayload {
+    fn from(value: ServerKeyExchange) -> Self {
+        Self::Known(value)
+    }
 }
 
 impl Codec<'_> for ServerKeyExchangePayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match *self {
-            Self::Ecdhe(ref x) => x.encode(bytes),
+            Self::Known(ref x) => x.encode(bytes),
             Self::Unknown(ref x) => x.encode(bytes),
         }
     }
@@ -1619,19 +1631,21 @@ impl Codec<'_> for ServerKeyExchangePayload {
 
 impl ServerKeyExchangePayload {
     #[cfg(feature = "tls12")]
-    pub(crate) fn unwrap_given_kxa(
-        &self,
-        kxa: KeyExchangeAlgorithm,
-    ) -> Option<EcdheServerKeyExchange> {
+    pub(crate) fn unwrap_given_kxa(&self, kxa: KeyExchangeAlgorithm) -> Option<ServerKeyExchange> {
         if let Self::Unknown(ref unk) = *self {
             let mut rd = Reader::init(unk.bytes());
 
-            let result = match kxa {
-                KeyExchangeAlgorithm::ECDHE => EcdheServerKeyExchange::read(&mut rd),
+            let result = ServerKeyExchange {
+                params: match kxa {
+                    KeyExchangeAlgorithm::ECDHE => {
+                        ServerKeyExchangeParams::Ecdh(ServerEcdhParams::read(&mut rd).ok()?)
+                    },
+                },
+                dss: DigitallySignedStruct::read(&mut rd).ok()?,
             };
 
             if !rd.any_left() {
-                return result.ok();
+                return Some(result);
             };
         }
 
