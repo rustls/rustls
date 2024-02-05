@@ -10,16 +10,17 @@ use crate::msgs::handshake::{
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
     ClientSessionTicket, ConvertProtocolNameList, ConvertServerNameList, DistinguishedName,
-    EcParameters, EcdheServerKeyExchange, HandshakeMessagePayload, HandshakePayload,
-    HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
-    NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
-    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
-    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId,
-    UnknownExtension,
+    EcParameters, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
+    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerEcdhParams,
+    ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
 
 use pki_types::{CertificateDer, DnsName};
+
+use super::handshake::{ServerKeyExchange, ServerKeyExchangeParams};
 
 #[test]
 fn rejects_short_random() {
@@ -809,14 +810,14 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
 }
 
 fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
-    ServerKeyExchangePayload::Ecdhe(EcdheServerKeyExchange {
-        params: ServerEcdhParams {
+    ServerKeyExchangePayload::Known(ServerKeyExchange {
+        params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
             curve_params: EcParameters {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: NamedGroup::X25519,
             },
             public: PayloadU8(vec![1, 2, 3]),
-        },
+        }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
 }
