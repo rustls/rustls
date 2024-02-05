@@ -263,7 +263,7 @@ jobs:
         run: ./admin/coverage --lcov --output-path final.info
 
       - name: Report to codecov.io
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: final.info
           fail_ci_if_error: false
