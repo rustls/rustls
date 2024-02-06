@@ -21,7 +21,7 @@ jobs:
           - stable
           - beta
           - nightly
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         # but only stable on macos/windows (slower platforms)
         include:
           - os: macos-latest
@@ -84,7 +84,7 @@ jobs:
 
   msrv:
     name: MSRV
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -141,7 +141,7 @@ jobs:
 
   bogo:
     name: BoGo test suite
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -172,7 +172,7 @@ jobs:
 
   fuzz:
     name: Smoke-test fuzzing targets
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -194,7 +194,7 @@ jobs:
 
   benchmarks:
     name: Run benchmarks
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -220,7 +220,7 @@ jobs:
 
   docs:
     name: Check for documentation errors
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -244,7 +244,7 @@ jobs:
 
   coverage:
     name: Measure coverage
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -271,7 +271,7 @@ jobs:
 
   minver:
     name: Check minimum versions of direct dependencies
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -294,7 +294,7 @@ jobs:
 
   cross:
     name: Check cross compilation targets
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
