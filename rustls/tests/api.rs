@@ -2294,6 +2294,35 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
     }
 }
 
+#[test]
+fn test_client_write_and_vectored_write_equivalence() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa);
+    do_handshake(&mut client, &mut server);
+
+    const N: usize = 1000;
+
+    let data_chunked: Vec<IoSlice> = std::iter::repeat(IoSlice::new(b"A"))
+        .take(N)
+        .collect();
+    let bytes_written_chunked = client
+        .writer()
+        .write_vectored(&data_chunked)
+        .unwrap();
+    let bytes_sent_chunked = transfer(&mut client, &mut server);
+    println!("write_vectored returned {bytes_written_chunked} and sent {bytes_sent_chunked}");
+
+    let data_contiguous = &[b'A'; N];
+    let bytes_written_contiguous = client
+        .writer()
+        .write(data_contiguous)
+        .unwrap();
+    let bytes_sent_contiguous = transfer(&mut client, &mut server);
+    println!("write returned {bytes_written_contiguous} and sent {bytes_sent_contiguous}");
+
+    assert_eq!(bytes_written_chunked, bytes_written_contiguous);
+    assert_eq!(bytes_sent_chunked, bytes_sent_contiguous);
+}
+
 struct FailsWrites {
     errkind: io::ErrorKind,
     after: usize,

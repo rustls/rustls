@@ -309,7 +309,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(&nonce.as_ref()[4..]);
-        payload.extend_from_slice(msg.payload);
+        msg.payload.copy_to_vec(&mut payload);
 
         self.enc_key
             .seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
@@ -385,7 +385,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
 
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut buf = Vec::with_capacity(total_len);
-        buf.extend_from_slice(msg.payload);
+        msg.payload.copy_to_vec(&mut buf);
 
         self.enc_key
             .seal_in_place_append_tag(nonce, aad, &mut buf)

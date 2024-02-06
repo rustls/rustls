@@ -4,6 +4,8 @@ use core::cmp;
 use std::io;
 use std::io::Read;
 
+use crate::msgs::message::OutboundChunks;
+
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
 /// appending a new byte vector, at the expense of
@@ -66,9 +68,9 @@ impl ChunkVecBuffer {
 
     /// Append a copy of `bytes`, perhaps a prefix if
     /// we're near the limit.
-    pub(crate) fn append_limited_copy(&mut self, bytes: &[u8]) -> usize {
-        let take = self.apply_limit(bytes.len());
-        self.append(bytes[..take].to_vec());
+    pub(crate) fn append_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
+        let take = self.apply_limit(payload.len());
+        self.append(payload.split_at(take).0.to_vec());
         take
     }
 
@@ -155,10 +157,10 @@ mod tests {
     #[test]
     fn short_append_copy_with_limit() {
         let mut cvb = ChunkVecBuffer::new(Some(12));
-        assert_eq!(cvb.append_limited_copy(b"hello"), 5);
-        assert_eq!(cvb.append_limited_copy(b"world"), 5);
-        assert_eq!(cvb.append_limited_copy(b"hello"), 2);
-        assert_eq!(cvb.append_limited_copy(b"world"), 0);
+        assert_eq!(cvb.append_limited_copy(b"hello".into()), 5);
+        assert_eq!(cvb.append_limited_copy(b"world".into()), 5);
+        assert_eq!(cvb.append_limited_copy(b"hello".into()), 2);
+        assert_eq!(cvb.append_limited_copy(b"world".into()), 0);
 
         let mut buf = [0u8; 12];
         assert_eq!(cvb.read(&mut buf).unwrap(), 12);

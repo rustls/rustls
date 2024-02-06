@@ -787,7 +787,7 @@ impl MayEncryptEarlyData<'_> {
         self.conn
             .core
             .common_state
-            .write_plaintext(&early_data[..allowed], outgoing_tls)
+            .write_plaintext(early_data[..allowed].into(), outgoing_tls)
             .map_err(|e| e.into())
     }
 }
