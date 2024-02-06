@@ -177,10 +177,9 @@ impl Clone for HandshakeHash {
     }
 }
 
-#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
-mod tests {
+test_for_each_provider! {
     use super::HandshakeHashBuffer;
-    use crate::test_provider::hash::SHA256;
+    use provider::hash::SHA256;
 
     #[test]
     fn hashes_correctly() {

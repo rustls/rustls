@@ -248,7 +248,9 @@ pub struct OutputLengthError;
 #[cfg(all(test, feature = "ring"))]
 mod tests {
     use super::{expand, Hkdf, HkdfUsingHmac};
-    use crate::test_provider::hmac;
+    // nb: crypto::aws_lc_rs provider doesn't provide (or need) hmac,
+    // so cannot be used for this test.
+    use crate::crypto::ring::hmac;
 
     struct ByteArray<const N: usize>([u8; N]);
 

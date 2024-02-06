@@ -338,12 +338,11 @@ pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
 
 pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
 
-#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
-mod tests {
+test_for_each_provider! {
     use super::*;
     use crate::common_state::{CommonState, Side};
-    use crate::msgs::handshake::ServerEcdhParams;
-    use crate::{msgs::handshake::ServerKeyExchangeParams, test_provider::kx_group::X25519};
+    use crate::msgs::handshake::{ServerEcdhParams, ServerKeyExchangeParams};
+    use provider::kx_group::X25519;
 
     #[test]
     fn server_ecdhe_remaining_bytes() {
