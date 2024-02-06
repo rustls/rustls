@@ -3,7 +3,7 @@
 
 use crate::NamedGroup;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Parameters of an FFDHE group, with Big-endian byte order
 pub struct FfdheGroup<'a> {
     pub p: &'a [u8],

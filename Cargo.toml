@@ -2,6 +2,8 @@
 members = [
   # CI benchmarks
   "ci-bench",
+  # Tests that require OpenSSL
+  "openssl-tests",
   # Network-based tests
   "connect-tests",
   # tests and example code
