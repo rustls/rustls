@@ -1,194 +1,189 @@
 // This program does benchmarking of the functions in verify.rs,
 // that do certificate chain validation and signature verification.
-//
-// Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
-// etc. because it's unstable at the time of writing.
 
-#![cfg(feature = "ring")]
+#![cfg(bench)]
 
 use core::time::Duration;
-use std::time::Instant;
 
-use crate::crypto::ring;
+use crate::crypto::CryptoProvider;
 use crate::verify::ServerCertVerifier;
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, ServerName, UnixTime};
 use webpki_roots;
 
-fn duration_nanos(d: Duration) -> u64 {
-    ((d.as_secs() as f64) * 1e9 + (d.subsec_nanos() as f64)) as u64
-}
+bench_for_each_provider! {
+    use super::Context;
 
-#[test]
-fn test_reddit_cert() {
-    Context::new(
-        "reddit",
-        "reddit.com",
-        &[
-            include_bytes!("testdata/cert-reddit.0.der"),
-            include_bytes!("testdata/cert-reddit.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn reddit_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "reddit.com",
+            &[
+                include_bytes!("testdata/cert-reddit.0.der"),
+                include_bytes!("testdata/cert-reddit.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_github_cert() {
-    Context::new(
-        "github",
-        "github.com",
-        &[
-            include_bytes!("testdata/cert-github.0.der"),
-            include_bytes!("testdata/cert-github.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn github_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "github.com",
+            &[
+                include_bytes!("testdata/cert-github.0.der"),
+                include_bytes!("testdata/cert-github.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_arstechnica_cert() {
-    Context::new(
-        "arstechnica",
-        "arstechnica.com",
-        &[
-            include_bytes!("testdata/cert-arstechnica.0.der"),
-            include_bytes!("testdata/cert-arstechnica.1.der"),
-            include_bytes!("testdata/cert-arstechnica.2.der"),
-            include_bytes!("testdata/cert-arstechnica.3.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn arstechnica_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "arstechnica.com",
+            &[
+                include_bytes!("testdata/cert-arstechnica.0.der"),
+                include_bytes!("testdata/cert-arstechnica.1.der"),
+                include_bytes!("testdata/cert-arstechnica.2.der"),
+                include_bytes!("testdata/cert-arstechnica.3.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_servo_cert() {
-    Context::new(
-        "servo",
-        "servo.org",
-        &[
-            include_bytes!("testdata/cert-servo.0.der"),
-            include_bytes!("testdata/cert-servo.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn servo_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "servo.org",
+            &[
+                include_bytes!("testdata/cert-servo.0.der"),
+                include_bytes!("testdata/cert-servo.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_twitter_cert() {
-    Context::new(
-        "twitter",
-        "twitter.com",
-        &[
-            include_bytes!("testdata/cert-twitter.0.der"),
-            include_bytes!("testdata/cert-twitter.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn twitter_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "twitter.com",
+            &[
+                include_bytes!("testdata/cert-twitter.0.der"),
+                include_bytes!("testdata/cert-twitter.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_wikipedia_cert() {
-    Context::new(
-        "wikipedia",
-        "wikipedia.org",
-        &[
-            include_bytes!("testdata/cert-wikipedia.0.der"),
-            include_bytes!("testdata/cert-wikipedia.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn wikipedia_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "wikipedia.org",
+            &[
+                include_bytes!("testdata/cert-wikipedia.0.der"),
+                include_bytes!("testdata/cert-wikipedia.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_google_cert() {
-    Context::new(
-        "google",
-        "www.google.com",
-        &[
-            include_bytes!("testdata/cert-google.0.der"),
-            include_bytes!("testdata/cert-google.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn google_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "www.google.com",
+            &[
+                include_bytes!("testdata/cert-google.0.der"),
+                include_bytes!("testdata/cert-google.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_hn_cert() {
-    Context::new(
-        "hn",
-        "news.ycombinator.com",
-        &[
-            include_bytes!("testdata/cert-hn.0.der"),
-            include_bytes!("testdata/cert-hn.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn hn_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "news.ycombinator.com",
+            &[
+                include_bytes!("testdata/cert-hn.0.der"),
+                include_bytes!("testdata/cert-hn.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_stackoverflow_cert() {
-    Context::new(
-        "stackoverflow",
-        "stackoverflow.com",
-        &[
-            include_bytes!("testdata/cert-stackoverflow.0.der"),
-            include_bytes!("testdata/cert-stackoverflow.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn stackoverflow_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "stackoverflow.com",
+            &[
+                include_bytes!("testdata/cert-stackoverflow.0.der"),
+                include_bytes!("testdata/cert-stackoverflow.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_duckduckgo_cert() {
-    Context::new(
-        "duckduckgo",
-        "duckduckgo.com",
-        &[
-            include_bytes!("testdata/cert-duckduckgo.0.der"),
-            include_bytes!("testdata/cert-duckduckgo.1.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn duckduckgo_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "duckduckgo.com",
+            &[
+                include_bytes!("testdata/cert-duckduckgo.0.der"),
+                include_bytes!("testdata/cert-duckduckgo.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_rustlang_cert() {
-    Context::new(
-        "rustlang",
-        "www.rust-lang.org",
-        &[
-            include_bytes!("testdata/cert-rustlang.0.der"),
-            include_bytes!("testdata/cert-rustlang.1.der"),
-            include_bytes!("testdata/cert-rustlang.2.der"),
-        ],
-    )
-    .bench(100)
-}
+    #[bench]
+    fn rustlang_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "www.rust-lang.org",
+            &[
+                include_bytes!("testdata/cert-rustlang.0.der"),
+                include_bytes!("testdata/cert-rustlang.1.der"),
+                include_bytes!("testdata/cert-rustlang.2.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 
-#[test]
-fn test_wapo_cert() {
-    Context::new(
-        "wapo",
-        "www.washingtonpost.com",
-        &[
-            include_bytes!("testdata/cert-wapo.0.der"),
-            include_bytes!("testdata/cert-wapo.1.der"),
-        ],
-    )
-    .bench(100)
+    #[bench]
+    fn wapo_cert(b: &mut test::Bencher) {
+        let ctx = Context::new(
+            provider::default_provider(),
+            "www.washingtonpost.com",
+            &[
+                include_bytes!("testdata/cert-wapo.0.der"),
+                include_bytes!("testdata/cert-wapo.1.der"),
+            ],
+        );
+        b.iter(|| ctx.verify_once());
+    }
 }
 
 struct Context {
-    name: &'static str,
-    domain: &'static str,
-    roots: RootCertStore,
+    server_name: ServerName<'static>,
     chain: Vec<CertificateDer<'static>>,
     now: UnixTime,
+    verifier: WebPkiServerVerifier,
 }
 
 impl Context {
-    fn new(name: &'static str, domain: &'static str, certs: &[&'static [u8]]) -> Self {
+    fn new(provider: CryptoProvider, domain: &'static str, certs: &[&'static [u8]]) -> Self {
         let mut roots = RootCertStore::empty();
         roots.extend(
             webpki_roots::TLS_SERVER_ROOTS
@@ -196,46 +191,32 @@ impl Context {
                 .cloned(),
         );
         Self {
-            name,
-            domain,
-            roots,
+            server_name: domain.try_into().unwrap(),
             chain: certs
                 .iter()
                 .copied()
                 .map(|bytes| CertificateDer::from(bytes.to_vec()))
                 .collect(),
             now: UnixTime::since_unix_epoch(Duration::from_secs(1_640_870_720)),
+            verifier: WebPkiServerVerifier::new_without_revocation(
+                roots,
+                provider.signature_verification_algorithms,
+            ),
         }
     }
 
-    fn bench(&self, count: usize) {
-        let verifier = WebPkiServerVerifier::new_without_revocation(
-            self.roots.clone(),
-            ring::default_provider().signature_verification_algorithms,
-        );
+    fn verify_once(&self) {
         const OCSP_RESPONSE: &[u8] = &[];
-        let mut times = Vec::new();
 
         let (end_entity, intermediates) = self.chain.split_first().unwrap();
-        for _ in 0..count {
-            let start = Instant::now();
-            let server_name = self.domain.try_into().unwrap();
-            verifier
-                .verify_server_cert(
-                    end_entity,
-                    intermediates,
-                    &server_name,
-                    OCSP_RESPONSE,
-                    self.now,
-                )
-                .unwrap();
-            times.push(duration_nanos(Instant::now().duration_since(start)));
-        }
-
-        println!(
-            "verify_server_cert({}): min {:?}us",
-            self.name,
-            times.iter().min().unwrap() / 1000
-        );
+        self.verifier
+            .verify_server_cert(
+                end_entity,
+                intermediates,
+                &self.server_name,
+                OCSP_RESPONSE,
+                self.now,
+            )
+            .unwrap();
     }
 }
