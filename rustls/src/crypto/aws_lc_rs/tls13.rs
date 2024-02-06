@@ -223,7 +223,7 @@ impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = Vec::with_capacity(total_len);
-        payload.extend_from_slice(msg.payload);
+        msg.payload.copy_to_vec(&mut payload);
         msg.typ.encode(&mut payload);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
@@ -279,7 +279,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
         let total_len = msg.payload.len() + 1 + self.enc_key.algorithm().tag_len();
         let mut payload = Vec::with_capacity(total_len);
-        payload.extend_from_slice(msg.payload);
+        msg.payload.copy_to_vec(&mut payload);
         msg.typ.encode(&mut payload);
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);

@@ -8,7 +8,8 @@ use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::CertificateChain;
 use crate::msgs::message::{
-    BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, OutboundMessage, PlainMessage,
+    BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, OutboundChunks, OutboundMessage,
+    PlainMessage,
 };
 use crate::quic;
 use crate::record_layer;
@@ -188,27 +189,29 @@ impl CommonState {
     /// all the data.
     pub(crate) fn buffer_plaintext(
         &mut self,
-        data: &[u8],
+        payload: OutboundChunks<'_>,
         sendable_plaintext: &mut ChunkVecBuffer,
     ) -> usize {
         self.perhaps_write_key_update();
-        self.send_plain(data, Limit::Yes, sendable_plaintext)
+        self.send_plain(payload, Limit::Yes, sendable_plaintext)
     }
 
     pub(crate) fn write_plaintext(
         &mut self,
-        plaintext: &[u8],
+        payload: OutboundChunks<'_>,
         outgoing_tls: &mut [u8],
     ) -> Result<usize, EncryptError> {
-        if plaintext.is_empty() {
+        if payload.is_empty() {
             return Ok(0);
         }
 
-        let fragments = self.message_fragmenter.fragment_slice(
-            ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_2,
-            plaintext,
-        );
+        let fragments = self
+            .message_fragmenter
+            .fragment_payload(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload.clone(),
+            );
 
         let remaining_encryptions = self
             .record_layer
@@ -226,11 +229,13 @@ impl CommonState {
             fragments,
         )?;
 
-        let fragments = self.message_fragmenter.fragment_slice(
-            ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_2,
-            plaintext,
-        );
+        let fragments = self
+            .message_fragmenter
+            .fragment_payload(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload,
+            );
 
         let opt_msg = self.queued_key_update_message.take();
         let written = self.write_fragments(outgoing_tls, opt_msg, fragments);
@@ -247,7 +252,7 @@ impl CommonState {
             return 0;
         }
 
-        self.send_appdata_encrypt(data, Limit::Yes)
+        self.send_appdata_encrypt(data.into(), Limit::Yes)
     }
 
     // Changing the keys must not span any fragmented handshake
@@ -277,7 +282,7 @@ impl CommonState {
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
-    fn send_appdata_encrypt(&mut self, payload: &[u8], limit: Limit) -> usize {
+    fn send_appdata_encrypt(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
         // Here, the limit on sendable_tls applies to encrypted data,
         // but we're respecting it for plaintext data -- so we'll
         // be out by whatever the cipher+record overhead is.  That's a
@@ -289,11 +294,13 @@ impl CommonState {
             Limit::No => payload.len(),
         };
 
-        let iter = self.message_fragmenter.fragment_slice(
-            ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_2,
-            &payload[..len],
-        );
+        let iter = self
+            .message_fragmenter
+            .fragment_payload(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload.split_at(len).0,
+            );
         for m in iter {
             self.send_single_fragment(m);
         }
@@ -328,7 +335,7 @@ impl CommonState {
     /// be less than `data.len()` if buffer limits were exceeded.
     fn send_plain(
         &mut self,
-        data: &[u8],
+        payload: OutboundChunks<'_>,
         limit: Limit,
         sendable_plaintext: &mut ChunkVecBuffer,
     ) -> usize {
@@ -336,25 +343,25 @@ impl CommonState {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
             let len = match limit {
-                Limit::Yes => sendable_plaintext.append_limited_copy(data),
-                Limit::No => sendable_plaintext.append(data.to_vec()),
+                Limit::Yes => sendable_plaintext.append_limited_copy(payload),
+                Limit::No => sendable_plaintext.append(payload.to_vec()),
             };
             return len;
         }
 
-        self.send_plain_non_buffering(data, limit)
+        self.send_plain_non_buffering(payload, limit)
     }
 
-    fn send_plain_non_buffering(&mut self, data: &[u8], limit: Limit) -> usize {
+    fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
         debug_assert!(self.may_send_application_data);
         debug_assert!(self.record_layer.is_encrypting());
 
-        if data.is_empty() {
+        if payload.is_empty() {
             // Don't send empty fragments.
             return 0;
         }
 
-        self.send_appdata_encrypt(data, limit)
+        self.send_appdata_encrypt(payload, limit)
     }
 
     /// Mark the connection as ready to send application data.
@@ -386,7 +393,7 @@ impl CommonState {
         }
 
         while let Some(buf) = sendable_plaintext.pop() {
-            self.send_plain_non_buffering(&buf, Limit::No);
+            self.send_plain_non_buffering(buf.as_slice().into(), Limit::No);
         }
     }
 

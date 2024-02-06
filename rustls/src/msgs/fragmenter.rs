@@ -1,6 +1,6 @@
 use crate::enums::ContentType;
 use crate::enums::ProtocolVersion;
-use crate::msgs::message::{OutboundMessage, PlainMessage};
+use crate::msgs::message::{OutboundChunks, OutboundMessage, PlainMessage};
 use crate::Error;
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
@@ -27,24 +27,22 @@ impl MessageFragmenter {
         &self,
         msg: &'a PlainMessage,
     ) -> impl Iterator<Item = OutboundMessage<'a>> + 'a {
-        self.fragment_slice(msg.typ, msg.version, msg.payload.bytes())
+        self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
     }
 
     /// Enqueue borrowed fragments of (version, typ, payload) which
     /// are no longer than max_frag onto the `out` deque.
-    pub(crate) fn fragment_slice<'a>(
+    pub(crate) fn fragment_payload<'a>(
         &self,
         typ: ContentType,
         version: ProtocolVersion,
-        payload: &'a [u8],
+        payload: OutboundChunks<'a>,
     ) -> impl ExactSizeIterator<Item = OutboundMessage<'a>> {
-        payload
-            .chunks(self.max_frag)
-            .map(move |payload| OutboundMessage {
-                typ,
-                version,
-                payload,
-            })
+        Chunker::new(payload, self.max_frag).map(move |payload| OutboundMessage {
+            typ,
+            version,
+            payload,
+        })
     }
 
     /// Set the maximum fragment size that will be produced.
@@ -65,13 +63,47 @@ impl MessageFragmenter {
     }
 }
 
+/// An iterator over borrowed fragments of a payload
+struct Chunker<'a> {
+    payload: OutboundChunks<'a>,
+    limit: usize,
+}
+
+impl<'a> Chunker<'a> {
+    fn new(payload: OutboundChunks<'a>, limit: usize) -> Self {
+        Self { payload, limit }
+    }
+}
+
+impl<'a> Iterator for Chunker<'a> {
+    type Item = OutboundChunks<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.payload.is_empty() {
+            return None;
+        }
+
+        let (before, after) = self.payload.split_at(self.limit);
+        self.payload = after;
+        Some(before)
+    }
+}
+
+impl<'a> ExactSizeIterator for Chunker<'a> {
+    fn len(&self) -> usize {
+        (self.payload.len() + self.limit - 1) / self.limit
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{MessageFragmenter, PACKET_OVERHEAD};
     use crate::enums::ContentType;
     use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
-    use crate::msgs::message::{BorrowedPlainMessage, OutboundMessage, PlainMessage};
+    use crate::msgs::message::{
+        BorrowedPlainMessage, OutboundChunks, OutboundMessage, PlainMessage,
+    };
 
     fn msg_eq(
         m: &OutboundMessage,
@@ -82,7 +114,7 @@ mod tests {
     ) {
         assert_eq!(&m.typ, typ);
         assert_eq!(&m.version, version);
-        assert_eq!(m.payload, bytes);
+        assert_eq!(m.payload.to_vec(), bytes);
 
         let buf = m.to_unencrypted_opaque().encode();
 
@@ -158,5 +190,36 @@ mod tests {
             &ProtocolVersion::TLSv1_2,
             b"\x01\x02\x03\x04\x05\x06\x07\x08",
         );
+    }
+
+    #[test]
+    fn fragment_multiple_slices() {
+        let typ = ContentType::Handshake;
+        let version = ProtocolVersion::TLSv1_2;
+        let payload_owner: Vec<&[u8]> = vec![&[b'a'; 8], &[b'b'; 12], &[b'c'; 32], &[b'd'; 20]];
+        let borrowed_payload = OutboundChunks::new(&payload_owner);
+        let mut frag = MessageFragmenter::default();
+        frag.set_max_fragment_size(Some(37)) // 32 + packet overhead
+            .unwrap();
+
+        let fragments = frag
+            .fragment_payload(typ, version, borrowed_payload)
+            .collect::<Vec<_>>();
+        assert_eq!(fragments.len(), 3);
+        msg_eq(
+            &fragments[0],
+            37,
+            &typ,
+            &version,
+            b"aaaaaaaabbbbbbbbbbbbcccccccccccc",
+        );
+        msg_eq(
+            &fragments[1],
+            37,
+            &typ,
+            &version,
+            b"ccccccccccccccccccccdddddddddddd",
+        );
+        msg_eq(&fragments[2], 13, &typ, &version, b"dddddddd");
     }
 }

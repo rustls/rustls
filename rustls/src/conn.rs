@@ -5,11 +5,12 @@ use crate::error::{Error, PeerMisbehaved};
 use crate::log::trace;
 use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer};
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{InboundMessage, Message, MessagePayload};
+use crate::msgs::message::{InboundMessage, Message, MessagePayload, OutboundChunks};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut};
@@ -257,18 +258,27 @@ impl<T> PlaintextSink for ConnectionCommon<T> {
         Ok(self
             .core
             .common_state
-            .buffer_plaintext(buf, &mut self.sendable_plaintext))
+            .buffer_plaintext(buf.into(), &mut self.sendable_plaintext))
     }
 
     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-        let mut sz = 0;
-        for buf in bufs {
-            sz += self
-                .core
-                .common_state
-                .buffer_plaintext(buf, &mut self.sendable_plaintext);
-        }
-        Ok(sz)
+        let payload_owner: Vec<&[u8]>;
+        let payload = match bufs.len() {
+            0 => return Ok(0),
+            1 => OutboundChunks::Single(bufs[0].deref()),
+            _ => {
+                payload_owner = bufs
+                    .iter()
+                    .map(|io_slice| io_slice.deref())
+                    .collect();
+
+                OutboundChunks::new(&payload_owner)
+            }
+        };
+        Ok(self
+            .core
+            .common_state
+            .buffer_plaintext(payload, &mut self.sendable_plaintext))
     }
 
     fn flush(&mut self) -> io::Result<()> {

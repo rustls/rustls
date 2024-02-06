@@ -93,7 +93,7 @@ impl cipher::MessageEncrypter for Tls13Cipher {
 
         // construct a TLSInnerPlaintext
         let mut payload = Vec::with_capacity(total_len);
-        payload.extend_from_slice(m.payload);
+        m.payload.copy_to_vec(&mut payload);
         payload.push(m.typ.get_u8());
 
         let nonce = chacha20poly1305::Nonce::from(cipher::Nonce::new(&self.1, seq).0);
@@ -145,7 +145,7 @@ impl cipher::MessageEncrypter for Tls12Cipher {
         let total_len = self.encrypted_payload_len(m.payload.len());
 
         let mut payload = Vec::with_capacity(total_len);
-        payload.extend_from_slice(m.payload);
+        m.payload.copy_to_vec(&mut payload);
 
         let nonce = chacha20poly1305::Nonce::from(cipher::Nonce::new(&self.1, seq).0);
         let aad = cipher::make_tls12_aad(seq, m.typ, m.version, payload.len());

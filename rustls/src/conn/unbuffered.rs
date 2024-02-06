@@ -400,7 +400,7 @@ impl<Data> WriteTraffic<'_, Data> {
         self.conn
             .core
             .common_state
-            .write_plaintext(application_data, outgoing_tls)
+            .write_plaintext(application_data.into(), outgoing_tls)
     }
 
     /// Encrypts a close_notify warning alert in `outgoing_tls`
