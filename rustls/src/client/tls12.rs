@@ -512,7 +512,7 @@ fn emit_certificate(
     common.send_msg(cert, false);
 }
 
-fn emit_clientkx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
+fn emit_client_kx(transcript: &mut HandshakeHash, common: &mut CommonState, pub_key: &[u8]) {
     let mut buf = Vec::new();
     let ecpoint = PayloadU8::new(Vec::from(pub_key));
     ecpoint.encode(&mut buf);
@@ -909,7 +909,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
         // 5b.
         let mut transcript = st.transcript;
-        emit_clientkx(&mut transcript, cx.common, kx.pub_key());
+        emit_client_kx(&mut transcript, cx.common, kx.pub_key());
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
         let ems_seed = st
             .using_ems
