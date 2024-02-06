@@ -390,3 +390,24 @@ jobs:
       - name: run cargo-check-external-types for rustls/
         working-directory: rustls/
         run: cargo check-external-types
+
+  openssl-tests:
+    name: Run openssl-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: openssl version
+        run: openssl version
+
+      - name: cargo test (in openssl-tests/)
+        working-directory: openssl-tests/
+        run: cargo test --locked -- --include-ignored
+        env:
+          RUST_BACKTRACE: 1
