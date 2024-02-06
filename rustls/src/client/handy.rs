@@ -218,8 +218,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
     }
 }
 
-#[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
-mod tests {
+test_for_each_provider! {
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
     use crate::msgs::enums::NamedGroup;
@@ -228,7 +227,7 @@ mod tests {
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
-    use crate::test_provider::cipher_suite;
+    use provider::cipher_suite;
 
     use pki_types::{ServerName, UnixTime};
 

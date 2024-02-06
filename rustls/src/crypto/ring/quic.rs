@@ -183,12 +183,11 @@ impl crate::quic::Algorithm for KeyBuilder {
     }
 }
 
-#[cfg(test)]
-mod tests {
+test_for_each_provider! {
     use crate::common_state::Side;
     use crate::crypto::tls13::OkmBlock;
     use crate::quic::*;
-    use crate::test_provider::tls13::{
+    use provider::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
 

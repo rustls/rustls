@@ -416,6 +416,9 @@ mod log {
 }
 
 #[macro_use]
+mod test_macros;
+
+#[macro_use]
 mod msgs;
 mod common_state;
 mod conn;
@@ -523,13 +526,6 @@ pub mod unbuffered {
     };
     pub use crate::conn::UnbufferedConnectionCommon;
 }
-
-// Have a (non-public) "test provider" mod which supplies
-// tests that need part of a *ring*-compatible provider module.
-#[cfg(all(any(test, bench), not(feature = "ring"), feature = "aws_lc_rs"))]
-use crate::crypto::aws_lc_rs as test_provider;
-#[cfg(all(any(test, bench), feature = "ring"))]
-use crate::crypto::ring as test_provider;
 
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier, WantsVersions};

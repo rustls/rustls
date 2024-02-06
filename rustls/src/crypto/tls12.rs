@@ -89,7 +89,9 @@ pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: 
 #[cfg(all(test, feature = "ring"))]
 mod tests {
     use crate::crypto::hmac::Hmac;
-    use crate::test_provider::hmac;
+    // nb: crypto::aws_lc_rs provider doesn't provide (or need) hmac,
+    // so cannot be used for this test.
+    use crate::crypto::ring::hmac;
 
     // Below known answer tests come from https://mailarchive.ietf.org/arch/msg/tls/fzVCzk-z3FShgGJ6DOXqM1ydxms/
 
@@ -148,12 +150,12 @@ mod tests {
     }
 }
 
-#[cfg(all(bench, any(feature = "ring", feature = "aws_lc_rs")))]
+#[cfg(all(bench, feature = "ring"))]
 mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use crate::crypto::hmac::Hmac;
-        use crate::test_provider::hmac;
+        use crate::crypto::ring::hmac;
 
         let label = &b"extended master secret"[..];
         let seed = [0u8; 32];
