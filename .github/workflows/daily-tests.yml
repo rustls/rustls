@@ -22,7 +22,7 @@ jobs:
           - stable
           - beta
           - nightly
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         # but only stable on macos/windows (slower platforms)
         include:
           - os: macos-latest
@@ -58,7 +58,7 @@ jobs:
           - stable
           - beta
           - nightly
-        os: [ubuntu-20.04]
+        os: [ubuntu-latest]
         # but only stable on macos/windows (slower platforms)
         include:
           - os: macos-latest
@@ -105,7 +105,7 @@ jobs:
 
   feature-powerset:
     name: Feature Powerset
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
