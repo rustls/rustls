@@ -1,9 +1,14 @@
 #![cfg(feature = "tls12")]
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+
 //! This file contains tests that use the test-only FFDHE KX group (defined in submodule `ffdhe`)
 
+#[macro_use]
+mod macros;
+
+test_for_each_provider! {
+
 mod common;
-use crate::common::*;
+use common::*;
 
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
@@ -315,7 +320,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
 }
 
 mod ffdhe {
-    use crate::common::provider;
+    use super::provider;
     use num_bigint::BigUint;
     use rustls::crypto::{
         ActiveKeyExchange, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm, SharedSecret,
@@ -426,3 +431,5 @@ mod ffdhe {
         bytes
     }
 }
+
+} // test_for_each_provider!

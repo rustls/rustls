@@ -1,8 +1,16 @@
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
 #![cfg_attr(read_buf, feature(read_buf))]
 #![cfg_attr(read_buf, feature(core_io_borrowed_buf))]
+
 //! Assorted public API tests.
+
 use std::cell::RefCell;
+
+#[macro_use]
+mod macros;
+
+test_for_each_provider! {
+use super::*;
+
 use std::fmt;
 use std::fmt::Debug;
 use std::io::{self, IoSlice, Read, Write};
@@ -13,8 +21,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
-use provider::cipher_suite;
-use provider::sign::RsaSigningKey;
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
@@ -35,7 +41,10 @@ use rustls::{ServerConfig, ServerConnection};
 use rustls::{Stream, StreamOwned};
 
 mod common;
-use crate::common::*;
+use common::*;
+
+use provider::cipher_suite;
+use provider::sign::RsaSigningKey;
 
 fn alpn_test_error(
     server_protos: Vec<Vec<u8>>,
@@ -473,8 +482,11 @@ fn server_can_get_client_cert_after_resumption() {
 }
 
 #[test]
-#[cfg(all(feature = "ring", not(feature = "fips")))]
 fn test_config_builders_debug() {
+    if !provider_is_ring() {
+        return;
+    }
+
     let b = ServerConfig::builder_with_provider(
         CryptoProvider {
             cipher_suites: vec![cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
@@ -979,13 +991,16 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
     check_sigalgs_reduced_by_ciphersuite(
         KeyType::EcdsaP256,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-        vec![
-            #[cfg(any(feature = "fips", all(not(feature = "ring"), feature = "aws_lc_rs")))]
+        if provider_is_aws_lc_rs() { vec![
             SignatureScheme::ECDSA_NISTP521_SHA512,
             SignatureScheme::ECDSA_NISTP384_SHA384,
             SignatureScheme::ECDSA_NISTP256_SHA256,
             SignatureScheme::ED25519,
-        ],
+        ] } else { vec![
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::ED25519,
+        ] }
     );
 }
 
@@ -1322,46 +1337,13 @@ fn test_client_cert_resolve(
     expected_root_hint_subjects: Vec<Vec<u8>>,
 ) {
     for version in rustls::ALL_VERSIONS {
-        let expected_sigschemes = match version.version {
-            ProtocolVersion::TLSv1_2 => vec![
-                #[cfg(all(
-                    not(all(feature = "ring", not(feature = "fips"))),
-                    feature = "aws_lc_rs"
-                ))]
-                SignatureScheme::ECDSA_NISTP521_SHA512,
-                SignatureScheme::ECDSA_NISTP384_SHA384,
-                SignatureScheme::ECDSA_NISTP256_SHA256,
-                SignatureScheme::ED25519,
-                SignatureScheme::RSA_PSS_SHA512,
-                SignatureScheme::RSA_PSS_SHA384,
-                SignatureScheme::RSA_PSS_SHA256,
-                SignatureScheme::RSA_PKCS1_SHA512,
-                SignatureScheme::RSA_PKCS1_SHA384,
-                SignatureScheme::RSA_PKCS1_SHA256,
-            ],
-            ProtocolVersion::TLSv1_3 => vec![
-                #[cfg(all(
-                    not(all(feature = "ring", not(feature = "fips"))),
-                    feature = "aws_lc_rs"
-                ))]
-                SignatureScheme::ECDSA_NISTP521_SHA512,
-                SignatureScheme::ECDSA_NISTP384_SHA384,
-                SignatureScheme::ECDSA_NISTP256_SHA256,
-                SignatureScheme::ED25519,
-                SignatureScheme::RSA_PSS_SHA512,
-                SignatureScheme::RSA_PSS_SHA384,
-                SignatureScheme::RSA_PSS_SHA256,
-            ],
-            _ => unreachable!(),
-        };
-
         println!("{:?} {:?}:", version.version, key_type);
 
         let mut client_config = make_client_config_with_versions(key_type, &[version]);
         client_config.client_auth_cert_resolver = Arc::new(ClientCheckCertResolve::new(
             1,
             expected_root_hint_subjects.clone(),
-            expected_sigschemes,
+            default_signature_schemes(version.version),
         ));
 
         let (mut client, mut server) =
@@ -1373,6 +1355,35 @@ fn test_client_cert_resolve(
         );
     }
 }
+
+fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
+    let mut v = vec![];
+
+    if provider_is_aws_lc_rs() {
+        v.push(SignatureScheme::ECDSA_NISTP521_SHA512);
+    }
+
+    v.extend_from_slice(&[
+        SignatureScheme::ECDSA_NISTP384_SHA384,
+        SignatureScheme::ECDSA_NISTP256_SHA256,
+        SignatureScheme::ED25519,
+        SignatureScheme::RSA_PSS_SHA512,
+        SignatureScheme::RSA_PSS_SHA384,
+        SignatureScheme::RSA_PSS_SHA256,
+    ]);
+
+    if version == ProtocolVersion::TLSv1_2 {
+        v.extend_from_slice(&[
+            SignatureScheme::RSA_PKCS1_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA256,
+        ]);
+    }
+
+    v
+}
+
+
 
 #[test]
 fn client_cert_resolve_default() {
@@ -2847,60 +2858,68 @@ fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
     panic!("find_suite given unsupported suite");
 }
 
-static TEST_CIPHERSUITES: &[(&rustls::SupportedProtocolVersion, KeyType, CipherSuite)] = &[
-    #[cfg(not(feature = "fips"))]
-    (
-        &rustls::version::TLS13,
-        KeyType::Rsa,
-        CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
-    ),
-    (
-        &rustls::version::TLS13,
-        KeyType::Rsa,
-        CipherSuite::TLS13_AES_256_GCM_SHA384,
-    ),
-    (
-        &rustls::version::TLS13,
-        KeyType::Rsa,
-        CipherSuite::TLS13_AES_128_GCM_SHA256,
-    ),
-    #[cfg(all(feature = "tls12", not(feature = "fips")))]
-    (
-        &rustls::version::TLS12,
-        KeyType::EcdsaP256,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-    ),
-    #[cfg(all(feature = "tls12", not(feature = "fips")))]
-    (
-        &rustls::version::TLS12,
-        KeyType::Rsa,
-        CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-    ),
-    #[cfg(feature = "tls12")]
-    (
-        &rustls::version::TLS12,
-        KeyType::EcdsaP384,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-    ),
-    #[cfg(feature = "tls12")]
-    (
-        &rustls::version::TLS12,
-        KeyType::EcdsaP384,
-        CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-    ),
-    #[cfg(feature = "tls12")]
-    (
-        &rustls::version::TLS12,
-        KeyType::Rsa,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-    ),
-    #[cfg(feature = "tls12")]
-    (
-        &rustls::version::TLS12,
-        KeyType::Rsa,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-    ),
-];
+fn test_ciphersuites() -> Vec<(&'static rustls::SupportedProtocolVersion, KeyType, CipherSuite)> {
+    let mut v = vec![
+        (
+            &rustls::version::TLS13,
+            KeyType::Rsa,
+            CipherSuite::TLS13_AES_256_GCM_SHA384,
+        ),
+        (
+            &rustls::version::TLS13,
+            KeyType::Rsa,
+            CipherSuite::TLS13_AES_128_GCM_SHA256,
+        ),
+        #[cfg(feature = "tls12")]
+        (
+            &rustls::version::TLS12,
+            KeyType::EcdsaP384,
+            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        ),
+        #[cfg(feature = "tls12")]
+        (
+            &rustls::version::TLS12,
+            KeyType::EcdsaP384,
+            CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+        ),
+        #[cfg(feature = "tls12")]
+        (
+            &rustls::version::TLS12,
+            KeyType::Rsa,
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        ),
+        #[cfg(feature = "tls12")]
+        (
+            &rustls::version::TLS12,
+            KeyType::Rsa,
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        ),
+    ];
+
+    if !provider_is_fips() {
+        v.extend_from_slice(&[
+            (
+                &rustls::version::TLS13,
+                KeyType::Rsa,
+                CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
+            ),
+            #[cfg(feature = "tls12")]
+            (
+                &rustls::version::TLS12,
+                KeyType::EcdsaP256,
+                CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+            ),
+            #[cfg(feature = "tls12")]
+            (
+                &rustls::version::TLS12,
+                KeyType::Rsa,
+                CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+            ),
+        ]);
+    }
+
+    v
+}
 
 #[test]
 fn negotiated_ciphersuite_default() {
@@ -2918,14 +2937,13 @@ fn negotiated_ciphersuite_default() {
 fn all_suites_covered() {
     assert_eq!(
         provider::DEFAULT_CIPHER_SUITES.len(),
-        TEST_CIPHERSUITES.len()
+        test_ciphersuites().len()
     );
 }
 
 #[test]
 fn negotiated_ciphersuite_client() {
-    for item in TEST_CIPHERSUITES {
-        let (version, kt, suite) = *item;
+    for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let client_config = finish_client_config(
             kt,
@@ -2946,8 +2964,7 @@ fn negotiated_ciphersuite_client() {
 
 #[test]
 fn negotiated_ciphersuite_server() {
-    for item in TEST_CIPHERSUITES {
-        let (version, kt, suite) = *item;
+    for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let server_config = finish_server_config(
             kt,
@@ -5023,7 +5040,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
 fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
     let key_type = KeyType::Rsa;
     let mut client_config = make_client_config(key_type);
-    if cfg!(feature = "fips") {
+    if provider_is_fips() {
         assert!(client_config.require_ems);
     } else {
         client_config.require_ems = true;
@@ -5055,7 +5072,7 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
         key_type,
         server_config_builder_with_versions(&[&rustls::version::TLS12]),
     );
-    if cfg!(feature = "fips") {
+    if provider_is_fips() {
         assert!(server_config.require_ems);
     } else {
         server_config.require_ems = true;
@@ -5670,59 +5687,47 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
     ));
 }
 
-#[cfg(all(feature = "ring", not(feature = "fips")))]
 #[test]
 fn test_client_fips_service_indicator() {
-    assert!(!make_client_config(KeyType::Rsa).fips());
+    assert_eq!(
+        make_client_config(KeyType::Rsa).fips(),
+        provider_is_fips(),
+    );
 }
 
-#[cfg(all(feature = "ring", not(feature = "fips")))]
 #[test]
 fn test_server_fips_service_indicator() {
-    assert!(!make_server_config(KeyType::Rsa).fips());
+    assert_eq!(
+        make_server_config(KeyType::Rsa).fips(),
+        provider_is_fips(),
+    );
 }
 
-#[cfg(feature = "fips")]
-#[test]
-fn test_client_fips_service_indicator() {
-    assert!(make_client_config(KeyType::Rsa).fips());
-}
-
-#[cfg(feature = "fips")]
-#[test]
-fn test_server_fips_service_indicator() {
-    assert!(make_server_config(KeyType::Rsa).fips());
-}
-
-#[cfg(feature = "fips")]
 #[test]
 fn test_client_fips_service_indicator_includes_require_ems() {
+    if !provider_is_fips() {
+        return;
+    }
+
     let mut client_config = make_client_config(KeyType::Rsa);
     assert!(client_config.fips());
     client_config.require_ems = false;
     assert!(!client_config.fips());
 }
 
-#[cfg(feature = "fips")]
 #[test]
 fn test_server_fips_service_indicator_includes_require_ems() {
+    if !provider_is_fips() {
+        return;
+    }
+
     let mut server_config = make_server_config(KeyType::Rsa);
     assert!(server_config.fips());
     server_config.require_ems = false;
     assert!(!server_config.fips());
 }
 
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs", not(feature = "fips")))]
-#[test]
-fn test_client_fips_service_indicator() {
-    assert!(!make_client_config(KeyType::Rsa).fips());
-}
-
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs", not(feature = "fips")))]
-#[test]
-fn test_server_fips_service_indicator() {
-    assert!(!make_server_config(KeyType::Rsa).fips());
-}
+} // test_for_each_provider!
 
 #[derive(Default, Debug)]
 struct LogCounts {
@@ -5755,15 +5760,19 @@ impl LogCounts {
     }
 }
 
+// this must be outside test_for_each_provider!, as we want
+// one thread_local!, not one per provider.
 thread_local!(static COUNTS: RefCell<LogCounts> = RefCell::new(LogCounts::new()));
 
 struct CountingLogger;
 
+#[allow(dead_code)]
 static LOGGER: CountingLogger = CountingLogger;
 
+#[allow(dead_code)]
 impl CountingLogger {
     fn install() {
-        log::set_logger(&LOGGER).unwrap();
+        let _ = log::set_logger(&LOGGER);
         log::set_max_level(log::LevelFilter::Trace);
     }
 

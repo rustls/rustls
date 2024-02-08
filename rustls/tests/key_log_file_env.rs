@@ -1,5 +1,3 @@
-#![cfg(feature = "ring")]
-
 //! Tests of [`rustls::KeyLogFile`] that require us to set environment variables.
 //!
 //!                                 vvvv
@@ -23,24 +21,20 @@
 //! file was created successfully, with the right permissions, etc., and that it
 //! contains something like what we expect.
 
-#[allow(dead_code)]
-mod common;
-
-use crate::common::{
-    do_handshake, make_client_config_with_versions, make_pair_for_arc_configs, make_server_config,
-    transfer, KeyType,
-};
 use std::{
     env,
-    io::Write,
-    sync::{Arc, Mutex, Once},
+    sync::{Mutex, Once},
 };
+
+#[macro_use]
+mod macros;
 
 /// Approximates `#[serial]` from the `serial_test` crate.
 ///
 /// No attempt is made to recover from a poisoned mutex, which will
 /// happen when `f` panics. In other words, all the tests that use
 /// `serialized` will start failing after one test panics.
+#[allow(dead_code)]
 fn serialized(f: impl FnOnce()) {
     // Ensure every test is run serialized
     // TODO: Use `std::sync::Lazy` once that is stable.
@@ -59,9 +53,23 @@ fn serialized(f: impl FnOnce()) {
     f()
 }
 
+test_for_each_provider! {
+
+use super::*;
+
+use std::sync::Arc;
+use std::io::Write;
+
+mod common;
+use common::{
+    do_handshake, make_client_config_with_versions, make_pair_for_arc_configs, make_server_config,
+    transfer, KeyType,
+};
+
+
 #[test]
 fn exercise_key_log_file_for_client() {
-    serialized(|| {
+    super::serialized(|| {
         let server_config = Arc::new(make_server_config(KeyType::Rsa));
         env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
 
@@ -83,7 +91,7 @@ fn exercise_key_log_file_for_client() {
 
 #[test]
 fn exercise_key_log_file_for_server() {
-    serialized(|| {
+    super::serialized(|| {
         let mut server_config = make_server_config(KeyType::Rsa);
 
         env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
@@ -104,3 +112,5 @@ fn exercise_key_log_file_for_server() {
         }
     })
 }
+
+} // test_for_each_provider!

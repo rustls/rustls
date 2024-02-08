@@ -1,15 +1,18 @@
 //! Tests for configuring and using a [`ClientCertVerifier`] for a server.
 
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+#[macro_use]
+mod macros;
+
+test_for_each_provider! {
 
 mod common;
-
-use crate::common::{
+use common::{
     do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,
     make_client_config_with_versions, make_client_config_with_versions_with_auth,
     make_pair_for_arc_configs, server_config_builder, server_name, webpki_client_verifier_builder,
     ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
+
 use rustls::client::danger::HandshakeSignatureValid;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
@@ -207,3 +210,5 @@ impl ClientCertVerifier for MockClientVerifier {
         }
     }
 }
+
+} // test_for_each_provider!
