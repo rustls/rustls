@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+#![allow(clippy::duplicate_mod)]
 
 use std::io;
 use std::ops::{Deref, DerefMut};
@@ -9,6 +9,7 @@ use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, Ser
 use webpki::anchor_from_trusted_cert;
 
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
+use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
@@ -19,11 +20,7 @@ use rustls::{ClientConfig, ClientConnection};
 use rustls::{ConnectionCommon, ServerConfig, ServerConnection, SideData};
 use rustls::{ProtocolVersion, SupportedCipherSuite};
 
-#[cfg(all(any(not(feature = "ring"), feature = "fips"), feature = "aws_lc_rs"))]
-pub use rustls::crypto::aws_lc_rs as provider;
-#[cfg(all(feature = "ring", not(feature = "fips")))]
-pub use rustls::crypto::ring as provider;
-use rustls::crypto::CryptoProvider;
+use super::provider;
 
 macro_rules! embed_files {
     (

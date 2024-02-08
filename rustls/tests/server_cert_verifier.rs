@@ -1,9 +1,12 @@
 //! Tests for configuring and using a [`ServerCertVerifier`] for a client.
 
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+#[macro_use]
+mod macros;
+
+test_for_each_provider! {
 
 mod common;
-use crate::common::{
+use common::{
     do_handshake, do_handshake_until_both_error, make_client_config_with_versions,
     make_pair_for_arc_configs, make_server_config, ErrorFromPeer, ALL_KEY_TYPES,
 };
@@ -275,3 +278,5 @@ impl Default for MockServerVerifier {
         }
     }
 }
+
+} // test_for_each_provider!

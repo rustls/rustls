@@ -1,4 +1,8 @@
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+#[macro_use]
+mod macros;
+
+test_for_each_provider! {
+
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
@@ -11,9 +15,8 @@ use rustls::unbuffered::{
 use rustls::version::TLS13;
 use rustls::{ClientConfig, ServerConfig};
 
-use crate::common::*;
-
 mod common;
+use common::*;
 
 const MAX_ITERATIONS: usize = 100;
 
@@ -875,3 +878,5 @@ fn server_receives_incorrect_first_handshake_message() {
         _ => panic!("unexpected alert sending state"),
     };
 }
+
+} // test_for_each_provider!
