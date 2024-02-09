@@ -4,7 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::{str, thread};
 
-use rustls::crypto::{ring as provider, CryptoProvider};
+use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, SupportedProtocolVersion};
 use rustls_pemfile::Item;

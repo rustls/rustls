@@ -2,7 +2,7 @@
 //! so that unused cryptography in rustls can be discarded by the linker.  You can
 //! observe using `nm` that the binary of this program does not contain any AES code.
 
-use rustls::crypto::{ring as provider, CryptoProvider};
+use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;

@@ -28,7 +28,7 @@ use docopt::Docopt;
 use mio::net::TcpStream;
 use serde::Deserialize;
 
-use rustls::crypto::{ring as provider, CryptoProvider};
+use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::RootCertStore;
 

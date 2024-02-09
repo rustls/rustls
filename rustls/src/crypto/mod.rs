@@ -66,12 +66,12 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// This crate comes with two built-in options, provided as
 /// `CryptoProvider` structures:
 ///
-/// - [`crypto::ring::default_provider`]: (behind the `ring` crate feature, which
-///   is enabled by default).  This provider uses the [*ring*](https://github.com/briansmith/ring)
-///   crate.
 /// - [`crypto::aws_lc_rs::default_provider`]: (behind the `aws_lc_rs` feature,
-///   which is optional).  This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
+///   which is enabled by default).  This provider uses the [aws-lc-rs](https://github.com/aws/aws-lc-rs)
 ///   crate.  The `fips` crate feature makes this option use FIPS140-3-approved cryptography.
+/// - [`crypto::ring::default_provider`]: (behind the `ring` crate feature, which
+///   is optional).  This provider uses the [*ring*](https://github.com/briansmith/ring)
+///   crate.
 ///
 /// This structure provides defaults. Everything in it can be overridden at
 /// runtime by replacing field values as needed.
@@ -123,15 +123,15 @@ pub use crate::msgs::handshake::KeyExchangeAlgorithm;
 /// API ([`ConfigBuilder::with_single_cert`] etc.), it might look like this:
 ///
 /// ```
-/// # #[cfg(feature = "ring")] {
+/// # #[cfg(feature = "aws_lc_rs")] {
 /// # use std::sync::Arc;
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
-/// use rustls::crypto::ring;
+/// use rustls::crypto::aws_lc_rs;
 ///
 /// pub fn provider() -> rustls::crypto::CryptoProvider {
 ///   rustls::crypto::CryptoProvider{
 ///     key_provider: &HsmKeyLoader,
-///     ..ring::default_provider()
+///     ..aws_lc_rs::default_provider()
 ///   }
 /// }
 ///

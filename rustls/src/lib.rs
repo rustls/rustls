@@ -53,13 +53,12 @@
 //!
 //! ### Platform support
 //!
-//! While Rustls itself is platform independent, by default it uses [`ring`] for implementing
-//! the cryptography in TLS. As a result, rustls only runs on platforms
-//! supported by `ring`. At the time of writing, this means 32-bit ARM, Aarch64 (64-bit ARM),
-//! x86, x86-64, LoongArch64, 32-bit & 64-bit Little Endian MIPS, 32-bit PowerPC (Big Endian),
-//! 64-bit PowerPC (Big and Little Endian), 64-bit RISC-V, and s390x. We do not presently
-//! support WebAssembly.
-//! For more information, see [the supported `ring` target platforms][ring-target-platforms].
+//! While Rustls itself is platform independent, by default it uses [`aws-lc-rs`] for implementing
+//! the cryptography in TLS.  See [the aws-lc-rs FAQ][aws-lc-rs-platforms-faq] for more details of the
+//! platform/architecture support constraints in aws-lc-rs.
+//!
+//! [`ring`] is also available via the `ring` crate feature: see
+//! [the supported `ring` target platforms][ring-target-platforms].
 //!
 //! By providing a custom instance of the [`crypto::CryptoProvider`] struct, you
 //! can replace all cryptography dependencies of rustls.  This is a route to being portable
@@ -67,19 +66,21 @@
 //! [`crypto::CryptoProvider`] documentation for more details.
 //!
 //! Specifying `default-features = false` when depending on rustls will remove the
-//! dependency on *ring*.
+//! dependency on aws-lc-rs.
 //!
 //! Rustls requires Rust 1.61 or later.
 //!
 //! [ring-target-platforms]: https://github.com/briansmith/ring/blob/2e8363b433fa3b3962c877d9ed2e9145612f3160/include/ring-core/target.h#L18-L64
 //! [`crypto::CryptoProvider`]: https://docs.rs/rustls/latest/rustls/crypto/trait.CryptoProvider.html
 //! [`ring`]: https://crates.io/crates/ring
+//! [aws-lc-rs-platforms-faq]: https://aws.github.io/aws-lc-rs/faq.html#can-i-run-aws-lc-rs-on-x-platform-or-architecture
+//! [`aws-lc-rs`]: https://crates.io/crates/aws-lc-rs
 //!
 //! ### Cryptography providers
 //!
 //! Since Rustls 0.22 it has been possible to choose the provider of the cryptographic primitives
 //! that Rustls uses. This may be appealing if you have specific platform, compliance or feature
-//! requirements that aren't met by the default provider, [`ring`].
+//! requirements that aren't met by the default provider, [`aws-lc-rs`].
 //!
 //! Users that wish to customize the provider in use can do so when constructing `ClientConfig`
 //! and `ServerConfig` instances using the `with_crypto_provider` method on the respective config
@@ -89,11 +90,11 @@
 //!
 //! Rustls ships with two built-in providers controlled with associated feature flags:
 //!
-//!   * [`ring`] - enabled by default, available with the `ring` feature flag enabled. This
-//!     provider is used by default when an explicit provider is not specified.
-//!   * [`aws-lc-rs`] - available with the `aws_lc_rs` feature flag enabled.
+//!   * [`aws-lc-rs`] - enabled by default, available with the `aws_lc_rs` feature flag enabled.
+//!   * [`ring`] - available with the `ring` feature flag enabled.
 //!
-//! [`aws-lc-rs`]: https://github.com/aws/aws-lc-rs
+//! See the documentation for [`crypto::CryptoProvider`] for details on how providers are
+//! selected.
 //!
 //! #### Third-party providers
 //!
@@ -176,7 +177,7 @@
 //! the Mozilla set of root certificates.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "ring")] {
+//! # #[cfg(feature = "aws-lc-rs")] {
 //! let root_store = rustls::RootCertStore::from_iter(
 //!     webpki_roots::TLS_SERVER_ROOTS
 //!         .iter()
@@ -191,7 +192,7 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "ring")] {
+//! # #[cfg(feature = "aws_lc_rs")] {
 //! # let root_store: rustls::RootCertStore = panic!();
 //! let config = rustls::ClientConfig::builder()
 //!     .with_root_certificates(root_store)
@@ -203,11 +204,11 @@
 //! know what to expect to find in the server's certificate.
 //!
 //! ```rust
-//! # #[cfg(feature = "ring")] {
+//! # #[cfg(feature = "aws_lc_rs")] {
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
-//! # rustls::crypto::ring::default_provider().install_default();
+//! # rustls::crypto::aws_lc_rs::default_provider().install_default();
 //! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
 //! #      .iter()
@@ -246,7 +247,7 @@
 //! errors.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "ring")] {
+//! # #[cfg(feature = "aws_lc_rs")] {
 //! # let mut client = rustls::ClientConnection::new(panic!(), panic!()).unwrap();
 //! # struct Socket { }
 //! # impl Socket {
@@ -304,17 +305,18 @@
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
 //!
-//! - `ring` (enabled by default): makes the rustls crate depend on the *ring* crate, which is
-//!    used for cryptography by default. Without this feature, these items must be provided
-//!    externally to the core rustls crate: see [`CryptoProvider`].
-//!
-//! - `aws_lc_rs`: makes the rustls crate depend on the aws-lc-rs crate,
-//!   which can be used for cryptography as an alternative to *ring*.
-//!   Use `rustls::crypto::aws_lc_rs::default_provider()` as a `CryptoProvider`
-//!   when making a `ClientConfig` or `ServerConfig` to use aws-lc-rs
+//! - `aws_lc_rs` (enabled by default): makes the rustls crate depend on the [`aws-lc-rs`] crate.
+//!   Use `rustls::crypto::aws_lc_rs::default_provider().install_default()` to
+//!   use it as the default `CryptoProvider`, or provide it explicitly
+//!   when making a `ClientConfig` or `ServerConfig`.
 //!
 //!   Note that aws-lc-rs has additional build-time dependencies like cmake.
 //!   See [the documentation](https://aws.github.io/aws-lc-rs/requirements/index.html) for details.
+//!
+//! - `ring`: makes the rustls crate depend on the *ring* crate for cryptography.
+//!   Use `rustls::crypto::ring::default_provider().install_default()` to
+//!   use it as the default `CryptoProvider`, or provide it explicitly
+//!   when making a `ClientConfig` or `ServerConfig`.
 //!
 //! - `fips`: enable support for FIPS140-3-approved cryptography, via the aws-lc-rs crate.
 //!   This feature enables the `aws_lc_rs` feature, which makes the rustls crate depend

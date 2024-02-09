@@ -654,7 +654,7 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
 /// # Example
 ///
 /// ```no_run
-/// # #[cfg(feature = "ring")] {
+/// # #[cfg(feature = "aws_lc_rs")] {
 /// # fn choose_server_config(
 /// #     _: rustls::server::ClientHello,
 /// # ) -> std::sync::Arc<rustls::ServerConfig> {

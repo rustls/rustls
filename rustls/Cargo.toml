@@ -27,7 +27,7 @@ pki-types = { package = "rustls-pki-types", version = "1.2", features = ["std"] 
 zeroize = "1.7"
 
 [features]
-default = ["logging", "ring", "tls12"]
+default = ["aws_lc_rs", "logging", "tls12"]
 logging = ["log"]
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 ring = ["dep:ring", "webpki/ring"]
