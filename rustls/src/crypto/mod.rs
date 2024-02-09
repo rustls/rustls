@@ -500,7 +500,20 @@ impl From<&[u8]> for SharedSecret {
 /// This function returns a [`CryptoProvider`] that uses
 /// FIPS140-3-approved cryptography.
 ///
-/// You can use this like:
+/// Using this function expresses in your code that you require
+/// FIPS-approved cryptography, and will not compile if you make
+/// a mistake with cargo features.
+///
+/// Install this as the process-default provider, like:
+///
+/// ```rust
+/// # #[cfg(feature = "fips")] {
+/// rustls::crypto::default_fips_provider().install_default()
+///     .expect("default provider already set elsewhere");
+/// # }
+/// ```
+///
+/// You can also use this explicitly, like:
 ///
 /// ```rust
 /// # #[cfg(feature = "fips")] {
@@ -514,10 +527,6 @@ impl From<&[u8]> for SharedSecret {
 ///     .with_no_client_auth();
 /// # }
 /// ```
-///
-/// This expresses in your code that you require FIPS-approved
-/// cryptography, and will not compile if you make a mistake
-/// with cargo features.
 #[cfg(feature = "fips")]
 pub fn default_fips_provider() -> CryptoProvider {
     crate::crypto::aws_lc_rs::default_provider()
