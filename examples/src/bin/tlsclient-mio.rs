@@ -28,7 +28,7 @@ use docopt::Docopt;
 use mio::net::TcpStream;
 use serde::Deserialize;
 
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{ring as provider, CryptoProvider};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::RootCertStore;
 
@@ -258,7 +258,7 @@ struct Args {
 
 /// Find a ciphersuite with the given name
 fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
-    for suite in rustls::crypto::ring::ALL_CIPHER_SUITES {
+    for suite in provider::ALL_CIPHER_SUITES {
         let sname = format!("{:?}", suite.suite()).to_lowercase();
 
         if sname == name.to_string().to_lowercase() {
@@ -417,7 +417,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let suites = if !args.flag_suite.is_empty() {
         lookup_suites(&args.flag_suite)
     } else {
-        rustls::crypto::ring::DEFAULT_CIPHER_SUITES.to_vec()
+        provider::DEFAULT_CIPHER_SUITES.to_vec()
     };
 
     let versions = if !args.flag_protover.is_empty() {
@@ -429,7 +429,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let config = rustls::ClientConfig::builder_with_provider(
         CryptoProvider {
             cipher_suites: suites,
-            ..rustls::crypto::ring::default_provider()
+            ..provider::default_provider()
         }
         .into(),
     )
@@ -474,7 +474,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
         config
             .dangerous()
             .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
-                rustls::crypto::ring::default_provider(),
+                provider::default_provider(),
             )));
     }
 

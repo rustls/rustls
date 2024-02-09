@@ -4,8 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::{str, thread};
 
-use rustls::crypto::ring::default_provider;
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{ring as provider, CryptoProvider};
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, SupportedProtocolVersion};
 use rustls_pemfile::Item;
@@ -211,10 +210,10 @@ fn ffdhe_provider() -> CryptoProvider {
     CryptoProvider {
         cipher_suites: vec![
             ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-            rustls::crypto::ring::cipher_suite::TLS13_AES_128_GCM_SHA256,
+            provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
         ],
         kx_groups: vec![&FfdheKxGroup(rustls::NamedGroup::FFDHE2048)],
-        ..default_provider()
+        ..provider::default_provider()
     }
 }
 
