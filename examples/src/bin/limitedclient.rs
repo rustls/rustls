@@ -2,7 +2,7 @@
 //! so that unused cryptography in rustls can be discarded by the linker.  You can
 //! observe using `nm` that the binary of this program does not contain any AES code.
 
-use rustls::crypto::{ring, CryptoProvider};
+use rustls::crypto::{ring as provider, CryptoProvider};
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
@@ -16,9 +16,9 @@ fn main() {
 
     let config = rustls::ClientConfig::builder_with_provider(
         CryptoProvider {
-            cipher_suites: vec![ring::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
-            kx_groups: vec![ring::kx_group::X25519],
-            ..ring::default_provider()
+            cipher_suites: vec![provider::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256],
+            kx_groups: vec![provider::kx_group::X25519],
+            ..provider::default_provider()
         }
         .into(),
     )

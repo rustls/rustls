@@ -1,6 +1,7 @@
 use num_bigint::BigUint;
 use rustls::crypto::{
-    ActiveKeyExchange, CipherSuiteCommon, KeyExchangeAlgorithm, SharedSecret, SupportedKxGroup,
+    ring as provider, ActiveKeyExchange, CipherSuiteCommon, KeyExchangeAlgorithm, SharedSecret,
+    SupportedKxGroup,
 };
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite};
@@ -15,7 +16,7 @@ pub struct FfdheKxGroup(pub NamedGroup);
 impl SupportedKxGroup for FfdheKxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, rustls::Error> {
         let mut x = vec![0; 64];
-        rustls::crypto::ring::default_provider()
+        provider::default_provider()
             .secure_random
             .fill(&mut x)?;
         let x = BigUint::from_bytes_be(&x);
@@ -42,14 +43,14 @@ impl SupportedKxGroup for FfdheKxGroup {
 }
 
 static TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite =
-    match &rustls::crypto::ring::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
-        SupportedCipherSuite::Tls12(provider) => Tls12CipherSuite {
+    match &provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
+        SupportedCipherSuite::Tls12(original) => Tls12CipherSuite {
             common: CipherSuiteCommon {
                 suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-                ..provider.common
+                ..original.common
             },
             kx: KeyExchangeAlgorithm::DHE,
-            ..**provider
+            ..**original
         },
         _ => unreachable!(),
     };
