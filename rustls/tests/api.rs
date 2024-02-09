@@ -4745,6 +4745,92 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
 
 #[cfg(feature = "tls12")]
 #[test]
+fn test_client_sends_share_for_less_preferred_group() {
+    // this is a test for the case described in:
+    // https://datatracker.ietf.org/doc/draft-davidben-tls-key-share-prediction/
+
+    // common to both client configs
+    let shared_storage = Arc::new(ClientStorage::new());
+
+    // first, client sends a secp384r1 share and server agrees. secp384r1 is inserted
+    //   into kx group cache.
+    let mut client_config_1 =
+        make_client_config_with_kx_groups(KeyType::Rsa, vec![provider::kx_group::SECP384R1]);
+    client_config_1.resumption = Resumption::store(shared_storage.clone());
+
+    // second, client supports (x25519, secp384r1) and so kx group cache
+    //   contains a supported but less-preferred group.
+    let mut client_config_2 = make_client_config_with_kx_groups(
+        KeyType::Rsa,
+        vec![provider::kx_group::X25519, provider::kx_group::SECP384R1],
+    );
+    client_config_2.resumption = Resumption::store(shared_storage.clone());
+
+    let server_config = make_server_config(KeyType::Rsa);
+
+    // first handshake
+    let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
+    do_handshake_until_error(&mut client_1, &mut server).unwrap();
+
+    let ops = shared_storage.ops();
+    println!("storage {:#?}", ops);
+    assert_eq!(ops.len(), 9);
+    assert!(matches!(
+        ops[3],
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::secp384r1)
+    ));
+
+    // second handshake (this must HRR to the most-preferred group)
+    let assert_client_sends_secp384_share = |msg: &mut Message| -> Altered {
+        match &msg.payload {
+            MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
+                HandshakePayload::ClientHello(ch) => {
+                    let keyshares = ch
+                        .keyshare_extension()
+                        .expect("missing key share extension");
+                    assert_eq!(keyshares.len(), 1);
+                    assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
+                }
+                _ => panic!("unexpected handshake message {:?}", parsed),
+            },
+            _ => panic!("unexpected non-handshake message {:?}", msg),
+        };
+        Altered::InPlace
+    };
+
+    let assert_server_requests_retry_to_x25519 = |msg: &mut Message| -> Altered {
+        match &msg.payload {
+            MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
+                HandshakePayload::HelloRetryRequest(hrr) => {
+                    let group = hrr.requested_key_share_group();
+                    assert_eq!(group, Some(rustls::NamedGroup::X25519));
+                }
+                _ => panic!("unexpected handshake message {:?}", parsed),
+            },
+            MessagePayload::ChangeCipherSpec(_) => (),
+            _ => panic!("unexpected non-handshake message {:?}", msg),
+        };
+        Altered::InPlace
+    };
+
+    let (client_2, server) = make_pair_for_configs(client_config_2, server_config);
+    let (mut client_2, mut server) = (client_2.into(), server.into());
+    transfer_altered(
+        &mut client_2,
+        assert_client_sends_secp384_share,
+        &mut server,
+    );
+    server.process_new_packets().unwrap();
+    transfer_altered(
+        &mut server,
+        assert_server_requests_retry_to_x25519,
+        &mut client_2,
+    );
+    client_2.process_new_packets().unwrap();
+}
+
+#[cfg(feature = "tls12")]
+#[test]
 fn test_tls13_client_resumption_does_not_reuse_tickets() {
     let shared_storage = Arc::new(ClientStorage::new());
 

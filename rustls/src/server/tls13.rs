@@ -197,79 +197,74 @@ mod client_hello {
                 });
             }
 
-            // choose a share that we support
-            let chosen_share_and_kxg = self
+            // Choose the most preferred common group.
+            let mutually_preferred_group = match self
                 .config
                 .provider
                 .kx_groups
                 .iter()
-                .find_map(|group| {
-                    shares_ext
-                        .iter()
-                        .find(|share| share.group == group.name())
-                        .map(|share| (share, *group))
-                });
-
-            let chosen_share_and_kxg = match chosen_share_and_kxg {
-                Some(s) => s,
+                .find(|group| groups_ext.contains(&group.name()))
+            {
+                Some(group) => *group,
                 None => {
-                    // We don't have a suitable key share.  Choose a suitable group and
-                    // send a HelloRetryRequest.
-                    let retry_group_maybe = self
-                        .config
-                        .provider
-                        .kx_groups
-                        .iter()
-                        .find(|group| groups_ext.contains(&group.name()))
-                        .cloned();
-
-                    self.transcript.add_message(chm);
-
-                    if let Some(group) = retry_group_maybe {
-                        if self.done_retry {
-                            return Err(cx.common.send_fatal_alert(
-                                AlertDescription::IllegalParameter,
-                                PeerMisbehaved::RefusedToFollowHelloRetryRequest,
-                            ));
-                        }
-
-                        emit_hello_retry_request(
-                            &mut self.transcript,
-                            self.suite,
-                            client_hello.session_id,
-                            cx.common,
-                            group.name(),
-                        );
-                        emit_fake_ccs(cx.common);
-
-                        let skip_early_data = max_early_data_size(self.config.max_early_data_size);
-
-                        let next = Box::new(hs::ExpectClientHello {
-                            config: self.config,
-                            transcript: HandshakeHashOrBuffer::Hash(self.transcript),
-                            #[cfg(feature = "tls12")]
-                            session_id: SessionId::empty(),
-                            #[cfg(feature = "tls12")]
-                            using_ems: false,
-                            done_retry: true,
-                            send_tickets: self.send_tickets,
-                            extra_exts: self.extra_exts,
-                        });
-
-                        return if early_data_requested {
-                            Ok(Box::new(ExpectAndSkipRejectedEarlyData {
-                                skip_data_left: skip_early_data,
-                                next,
-                            }))
-                        } else {
-                            Ok(next)
-                        };
-                    }
-
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
                         PeerIncompatible::NoKxGroupsInCommon,
                     ));
+                }
+            };
+
+            // See if there is a KeyShare for that group.
+            let chosen_share_and_kxg = shares_ext.iter().find_map(|share| {
+                (share.group == mutually_preferred_group.name())
+                    .then(|| (share, mutually_preferred_group))
+            });
+
+            let chosen_share_and_kxg = match chosen_share_and_kxg {
+                Some(s) => s,
+                None => {
+                    // We don't have a suitable key share.  Send a HelloRetryRequest
+                    // for the mutually_preferred_group.
+                    self.transcript.add_message(chm);
+
+                    if self.done_retry {
+                        return Err(cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::RefusedToFollowHelloRetryRequest,
+                        ));
+                    }
+
+                    emit_hello_retry_request(
+                        &mut self.transcript,
+                        self.suite,
+                        client_hello.session_id,
+                        cx.common,
+                        mutually_preferred_group.name(),
+                    );
+                    emit_fake_ccs(cx.common);
+
+                    let skip_early_data = max_early_data_size(self.config.max_early_data_size);
+
+                    let next = Box::new(hs::ExpectClientHello {
+                        config: self.config,
+                        transcript: HandshakeHashOrBuffer::Hash(self.transcript),
+                        #[cfg(feature = "tls12")]
+                        session_id: SessionId::empty(),
+                        #[cfg(feature = "tls12")]
+                        using_ems: false,
+                        done_retry: true,
+                        send_tickets: self.send_tickets,
+                        extra_exts: self.extra_exts,
+                    });
+
+                    return if early_data_requested {
+                        Ok(Box::new(ExpectAndSkipRejectedEarlyData {
+                            skip_data_left: skip_early_data,
+                            next,
+                        }))
+                    } else {
+                        Ok(next)
+                    };
                 }
             };
 
