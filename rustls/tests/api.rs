@@ -5210,72 +5210,6 @@ fn test_acceptor() {
     assert!(acceptor.accept().is_err());
 }
 
-#[derive(Default, Debug)]
-struct LogCounts {
-    trace: usize,
-    debug: usize,
-    info: usize,
-    warn: usize,
-    error: usize,
-}
-
-impl LogCounts {
-    fn new() -> Self {
-        Self {
-            ..Default::default()
-        }
-    }
-
-    fn reset(&mut self) {
-        *self = Self::new();
-    }
-
-    fn add(&mut self, level: log::Level) {
-        match level {
-            log::Level::Trace => self.trace += 1,
-            log::Level::Debug => self.debug += 1,
-            log::Level::Info => self.info += 1,
-            log::Level::Warn => self.warn += 1,
-            log::Level::Error => self.error += 1,
-        }
-    }
-}
-
-thread_local!(static COUNTS: RefCell<LogCounts> = RefCell::new(LogCounts::new()));
-
-struct CountingLogger;
-
-static LOGGER: CountingLogger = CountingLogger;
-
-impl CountingLogger {
-    fn install() {
-        log::set_logger(&LOGGER).unwrap();
-        log::set_max_level(log::LevelFilter::Trace);
-    }
-
-    fn reset() {
-        COUNTS.with(|c| {
-            c.borrow_mut().reset();
-        });
-    }
-}
-
-impl log::Log for CountingLogger {
-    fn enabled(&self, _metadata: &log::Metadata) -> bool {
-        true
-    }
-
-    fn log(&self, record: &log::Record) {
-        println!("logging at {:?}: {:?}", record.level(), record.args());
-
-        COUNTS.with(|c| {
-            c.borrow_mut().add(record.level());
-        });
-    }
-
-    fn flush(&self) {}
-}
-
 #[test]
 fn test_no_warning_logging_during_successful_sessions() {
     CountingLogger::install();
@@ -5788,4 +5722,70 @@ fn test_client_fips_service_indicator() {
 #[test]
 fn test_server_fips_service_indicator() {
     assert!(!make_server_config(KeyType::Rsa).fips());
+}
+
+#[derive(Default, Debug)]
+struct LogCounts {
+    trace: usize,
+    debug: usize,
+    info: usize,
+    warn: usize,
+    error: usize,
+}
+
+impl LogCounts {
+    fn new() -> Self {
+        Self {
+            ..Default::default()
+        }
+    }
+
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+
+    fn add(&mut self, level: log::Level) {
+        match level {
+            log::Level::Trace => self.trace += 1,
+            log::Level::Debug => self.debug += 1,
+            log::Level::Info => self.info += 1,
+            log::Level::Warn => self.warn += 1,
+            log::Level::Error => self.error += 1,
+        }
+    }
+}
+
+thread_local!(static COUNTS: RefCell<LogCounts> = RefCell::new(LogCounts::new()));
+
+struct CountingLogger;
+
+static LOGGER: CountingLogger = CountingLogger;
+
+impl CountingLogger {
+    fn install() {
+        log::set_logger(&LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Trace);
+    }
+
+    fn reset() {
+        COUNTS.with(|c| {
+            c.borrow_mut().reset();
+        });
+    }
+}
+
+impl log::Log for CountingLogger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        println!("logging at {:?}: {:?}", record.level(), record.args());
+
+        COUNTS.with(|c| {
+            c.borrow_mut().add(record.level());
+        });
+    }
+
+    fn flush(&self) {}
 }
