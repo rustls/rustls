@@ -28,8 +28,8 @@ use crate::{ClientConfig, ServerConfig};
 /// supported protocol versions.
 ///
 /// ```
-/// # #[cfg(feature = "ring")] {
-/// # rustls::crypto::ring::default_provider().install_default();
+/// # #[cfg(feature = "aws_lc_rs")] {
+/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// use rustls::{ClientConfig, ServerConfig};
 /// ClientConfig::builder()
 /// //  ...
@@ -44,8 +44,8 @@ use crate::{ClientConfig, ServerConfig};
 /// You may also override the choice of protocol versions:
 ///
 /// ```no_run
-/// # #[cfg(feature = "ring")] {
-/// # rustls::crypto::ring::default_provider().install_default();
+/// # #[cfg(feature = "aws_lc_rs")] {
+/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// # use rustls::ServerConfig;
 /// ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
 /// //  ...
@@ -80,8 +80,8 @@ use crate::{ClientConfig, ServerConfig};
 /// For example:
 ///
 /// ```
-/// # #[cfg(feature = "ring")] {
-/// # rustls::crypto::ring::default_provider().install_default();
+/// # #[cfg(feature = "aws_lc_rs")] {
+/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
 /// ClientConfig::builder()
@@ -104,8 +104,8 @@ use crate::{ClientConfig, ServerConfig};
 /// For example:
 ///
 /// ```no_run
-/// # #[cfg(feature = "ring")] {
-/// # rustls::crypto::ring::default_provider().install_default();
+/// # #[cfg(feature = "aws_lc_rs")] {
+/// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// # use rustls::ServerConfig;
 /// # let certs = vec![];
 /// # let private_key = pki_types::PrivateKeyDer::from(
@@ -141,7 +141,7 @@ use crate::{ClientConfig, ServerConfig};
 /// Additionally, ServerConfig and ClientConfig carry a private field containing a
 /// [`CryptoProvider`], from [`ClientConfig::builder_with_provider()`] or
 /// [`ServerConfig::builder_with_provider()`]. This determines which cryptographic backend
-/// is used. The default is [`ring::provider`].
+/// is used. The default is [the process-default provider](`CryptoProvider::get_default`).
 ///
 /// [builder]: https://rust-unofficial.github.io/patterns/patterns/creational/builder.html
 /// [typestate]: http://cliffle.com/blog/rust-typestate/
@@ -156,7 +156,7 @@ use crate::{ClientConfig, ServerConfig};
 /// [`ConfigBuilder<ServerConfig, WantsVerifier>`]: struct.ConfigBuilder.html#impl-6
 /// [`WantsClientCert`]: crate::client::WantsClientCert
 /// [`WantsServerCert`]: crate::server::WantsServerCert
-/// [`ring::provider`]: crate::crypto::ring::default_provider
+/// [`CryptoProvider::get_default`]: crate::crypto::CryptoProvider::get_default
 /// [`DangerousClientConfigBuilder::with_custom_certificate_verifier`]: crate::client::danger::DangerousClientConfigBuilder::with_custom_certificate_verifier
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
