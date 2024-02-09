@@ -344,15 +344,6 @@ impl ConnectionRandoms {
     }
 }
 
-// --- Common (to client and server) connection functions ---
-
-fn is_valid_ccs(msg: &InboundMessage) -> bool {
-    // We passthrough ChangeCipherSpec messages in the deframer without decrypting them.
-    // Note: this is prior to the record layer, so is unencrypted. See
-    // third paragraph of section 5 in RFC8446.
-    msg.typ == ContentType::ChangeCipherSpec && msg.payload == [0x01]
-}
-
 /// Interface shared by client and server connections.
 pub struct ConnectionCommon<Data> {
     pub(crate) core: ConnectionCore<Data>,
@@ -853,7 +844,7 @@ impl<Data> ConnectionCore<Data> {
                 .may_receive_application_data
             && self.common_state.is_tls13()
         {
-            if !is_valid_ccs(&msg)
+            if !msg.is_valid_ccs()
                 || self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS
             {
                 // "An implementation which receives any other change_cipher_spec value or
