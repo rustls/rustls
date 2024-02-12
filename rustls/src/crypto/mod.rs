@@ -292,12 +292,6 @@ impl CryptoProvider {
             && secure_random.fips()
             && key_provider.fips()
     }
-
-    pub(crate) fn supported_kx_group_names(&self) -> impl Iterator<Item = NamedGroup> + '_ {
-        self.kx_groups
-            .iter()
-            .map(|skxg| skxg.name())
-    }
 }
 
 static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();

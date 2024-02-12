@@ -5103,8 +5103,8 @@ fn test_server_rejects_empty_sni_extension() {
 }
 
 #[test]
-fn test_server_rejects_clients_without_any_kx_group_overlap() {
-    fn different_kx_group(msg: &mut Message) -> Altered {
+fn test_server_rejects_clients_without_any_kx_groups() {
+    fn delete_kx_groups(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
                 for mut ext in ch.extensions.iter_mut() {
@@ -5124,13 +5124,46 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
 
     let (client, server) = make_pair(KeyType::Rsa);
     let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, different_kx_group, &mut server);
+    transfer_altered(&mut client, delete_kx_groups, &mut server);
     assert_eq!(
         server.process_new_packets(),
         Err(Error::PeerIncompatible(
             PeerIncompatible::NoKxGroupsInCommon
         ))
     );
+}
+
+#[test]
+fn test_server_rejects_clients_without_any_kx_group_overlap() {
+    for version in rustls::ALL_VERSIONS {
+        let (mut client, mut server) = make_pair_for_configs(
+            make_client_config_with_kx_groups(KeyType::Rsa, vec![provider::kx_group::X25519]),
+            finish_server_config(
+                KeyType::Rsa,
+                ServerConfig::builder_with_provider(
+                    CryptoProvider {
+                        kx_groups: vec![provider::kx_group::SECP384R1],
+                        ..provider::default_provider()
+                    }
+                    .into(),
+                )
+                .with_protocol_versions(&[version])
+                .unwrap(),
+            ),
+        );
+        transfer(&mut client, &mut server);
+        assert_eq!(
+            server.process_new_packets(),
+            Err(Error::PeerIncompatible(
+                PeerIncompatible::NoKxGroupsInCommon
+            ))
+        );
+        transfer(&mut server, &mut client);
+        assert_eq!(
+            client.process_new_packets(),
+            Err(Error::AlertReceived(AlertDescription::HandshakeFailure))
+        );
+    }
 }
 
 #[test]
