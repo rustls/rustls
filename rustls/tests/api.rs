@@ -984,16 +984,20 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
     check_sigalgs_reduced_by_ciphersuite(
         KeyType::EcdsaP256,
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-        if provider_is_aws_lc_rs() { vec![
-            SignatureScheme::ECDSA_NISTP521_SHA512,
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            SignatureScheme::ED25519,
-        ] } else { vec![
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            SignatureScheme::ED25519,
-        ] }
+        if provider_is_aws_lc_rs() {
+            vec![
+                SignatureScheme::ECDSA_NISTP521_SHA512,
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ED25519,
+            ]
+        } else {
+            vec![
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ED25519,
+            ]
+        },
     );
 }
 
@@ -1375,8 +1379,6 @@ fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
 
     v
 }
-
-
 
 #[test]
 fn client_cert_resolve_default() {
@@ -2880,7 +2882,11 @@ fn find_suite(suite: CipherSuite) -> SupportedCipherSuite {
     panic!("find_suite given unsupported suite");
 }
 
-fn test_ciphersuites() -> Vec<(&'static rustls::SupportedProtocolVersion, KeyType, CipherSuite)> {
+fn test_ciphersuites() -> Vec<(
+    &'static rustls::SupportedProtocolVersion,
+    KeyType,
+    CipherSuite,
+)> {
     let mut v = vec![
         (
             &rustls::version::TLS13,
@@ -5711,18 +5717,12 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
 
 #[test]
 fn test_client_fips_service_indicator() {
-    assert_eq!(
-        make_client_config(KeyType::Rsa).fips(),
-        provider_is_fips(),
-    );
+    assert_eq!(make_client_config(KeyType::Rsa).fips(), provider_is_fips());
 }
 
 #[test]
 fn test_server_fips_service_indicator() {
-    assert_eq!(
-        make_server_config(KeyType::Rsa).fips(),
-        provider_is_fips(),
-    );
+    assert_eq!(make_server_config(KeyType::Rsa).fips(), provider_is_fips());
 }
 
 #[test]
