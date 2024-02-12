@@ -149,6 +149,7 @@ mod client_hello {
             server_key: ActiveCertifiedKey,
             chm: &Message,
             client_hello: &ClientHelloPayload,
+            selected_kxg: &'static dyn SupportedKxGroup,
             mut sigschemes_ext: Vec<SignatureScheme>,
         ) -> hs::NextStateOrError<'static> {
             if client_hello.compression_methods.len() != 1 {
@@ -157,15 +158,6 @@ mod client_hello {
                     PeerMisbehaved::OfferedIncorrectCompressions,
                 ));
             }
-
-            let groups_ext = client_hello
-                .namedgroups_extension()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NamedGroupsExtensionRequired,
-                    )
-                })?;
 
             sigschemes_ext.retain(SignatureScheme::supported_in_tls13);
 
@@ -197,27 +189,9 @@ mod client_hello {
                 });
             }
 
-            // Choose the most preferred common group.
-            let mutually_preferred_group = match self
-                .config
-                .provider
-                .kx_groups
-                .iter()
-                .find(|group| groups_ext.contains(&group.name()))
-            {
-                Some(group) => *group,
-                None => {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NoKxGroupsInCommon,
-                    ));
-                }
-            };
-
-            // See if there is a KeyShare for that group.
+            // See if there is a KeyShare for the selected kx group.
             let chosen_share_and_kxg = shares_ext.iter().find_map(|share| {
-                (share.group == mutually_preferred_group.name())
-                    .then(|| (share, mutually_preferred_group))
+                (share.group == selected_kxg.name()).then(|| (share, selected_kxg))
             });
 
             let chosen_share_and_kxg = match chosen_share_and_kxg {
@@ -239,7 +213,7 @@ mod client_hello {
                         self.suite,
                         client_hello.session_id,
                         cx.common,
-                        mutually_preferred_group.name(),
+                        selected_kxg.name(),
                     );
                     emit_fake_ccs(cx.common);
 

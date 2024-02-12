@@ -9,8 +9,6 @@ use crate::tls13::Tls13CipherSuite;
 #[cfg(feature = "tls12")]
 use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
-use crate::NamedGroup;
-use alloc::vec::Vec;
 
 use core::fmt;
 
@@ -149,6 +147,18 @@ impl SupportedCipherSuite {
             Self::Tls13(_) => ALL_KEY_EXCHANGE_ALGORITHMS,
         }
     }
+
+    /// Say if the given `KeyExchangeAlgorithm` is supported by this cipher suite.
+    ///
+    /// TLS 1.3 cipher suites support all key exchange types, but TLS 1.2 suites
+    /// support only one.
+    pub(crate) fn usable_for_kx_algorithm(&self, _kxa: KeyExchangeAlgorithm) -> bool {
+        match self {
+            #[cfg(feature = "tls12")]
+            Self::Tls12(tls12) => tls12.kx == _kxa,
+            Self::Tls13(_) => true,
+        }
+    }
 }
 
 impl fmt::Debug for SupportedCipherSuite {
@@ -186,60 +196,6 @@ pub(crate) fn choose_ciphersuite_preferring_server(
     }
 
     None
-}
-
-/// Return a list of the ciphersuites in `all` with the suites
-/// incompatible with the Groups extension removed.
-pub(crate) fn reduce_given_kx_groups(
-    all: &mut Vec<SupportedCipherSuite>,
-    groups_ext: Option<&[NamedGroup]>,
-    supported_groups: &[NamedGroup],
-) {
-    let mut ecdhe_kx_ok = false;
-
-    #[cfg(feature = "tls12")]
-    let mut ext_has_ffdhe_groups = false;
-    let mut ext_has_known_ffdhe_groups = false;
-    for g in groups_ext.into_iter().flatten() {
-        if g.key_exchange_algorithm() == KeyExchangeAlgorithm::DHE {
-            #[cfg(feature = "tls12")]
-            {
-                ext_has_ffdhe_groups = true;
-            }
-            if supported_groups.contains(g) {
-                ext_has_known_ffdhe_groups = true;
-            }
-        } else if supported_groups.contains(g) {
-            ecdhe_kx_ok = true;
-        }
-        if ecdhe_kx_ok & ext_has_known_ffdhe_groups {
-            break;
-        }
-    }
-
-    #[cfg(feature = "tls12")]
-    let ffdhe_kx_ok_tls12 = ext_has_known_ffdhe_groups ||
-        // https://datatracker.ietf.org/doc/html/rfc7919#section-4 (paragraph 2)
-        !ext_has_ffdhe_groups && supported_groups
-                .iter()
-                .any(|g| g.key_exchange_algorithm() == KeyExchangeAlgorithm::DHE);
-
-    let ffdhe_kx_ok_tls13 = ext_has_known_ffdhe_groups;
-
-    all.retain(|suite| {
-        let suite_kx = suite.key_exchange_algorithms();
-        // echde:
-        ecdhe_kx_ok && suite_kx.contains(&KeyExchangeAlgorithm::ECDHE) ||
-            // dhe:
-            {
-                let ffdhe_kx_ok = match suite {
-                    #[cfg(feature = "tls12")]
-                    SupportedCipherSuite::Tls12(_) => ffdhe_kx_ok_tls12,
-                    SupportedCipherSuite::Tls13(_) => ffdhe_kx_ok_tls13,
-                };
-                ffdhe_kx_ok && suite_kx.contains(&KeyExchangeAlgorithm::DHE)
-            }
-    })
 }
 
 /// Return true if `sigscheme` is usable by any of the given suites.
