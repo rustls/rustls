@@ -111,7 +111,7 @@ impl CommonState {
     /// if client authentication was completed.
     ///
     /// The return value is None until this value is available.
-    pub fn peer_certificates(&self) -> Option<&[CertificateDer<'_>]> {
+    pub fn peer_certificates(&self) -> Option<&[CertificateDer<'static>]> {
         self.peer_certificates.as_deref()
     }
 
