@@ -167,37 +167,6 @@ impl fmt::Debug for SupportedCipherSuite {
     }
 }
 
-// These both O(N^2)!
-pub(crate) fn choose_ciphersuite_preferring_client(
-    client_suites: &[CipherSuite],
-    server_suites: &[SupportedCipherSuite],
-) -> Option<SupportedCipherSuite> {
-    for client_suite in client_suites {
-        if let Some(selected) = server_suites
-            .iter()
-            .find(|x| *client_suite == x.suite())
-        {
-            return Some(*selected);
-        }
-    }
-
-    None
-}
-
-pub(crate) fn choose_ciphersuite_preferring_server(
-    client_suites: &[CipherSuite],
-    server_suites: &[SupportedCipherSuite],
-) -> Option<SupportedCipherSuite> {
-    if let Some(selected) = server_suites
-        .iter()
-        .find(|x| client_suites.contains(&x.suite()))
-    {
-        return Some(*selected);
-    }
-
-    None
-}
-
 /// Return true if `sigscheme` is usable by any of the given suites.
 pub(crate) fn compatible_sigscheme_for_suites(
     sigscheme: SignatureScheme,
@@ -264,47 +233,7 @@ pub enum ConnectionTrafficSecrets {
 }
 
 test_for_each_provider! {
-    use super::*;
-    use crate::enums::CipherSuite;
     use provider::tls13::*;
-
-    #[test]
-    fn test_client_pref() {
-        let client = vec![
-            CipherSuite::TLS13_AES_128_GCM_SHA256,
-            CipherSuite::TLS13_AES_256_GCM_SHA384,
-        ];
-        let server = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
-        let chosen = choose_ciphersuite_preferring_client(&client, &server);
-        assert!(chosen.is_some());
-        assert_eq!(chosen.unwrap(), TLS13_AES_128_GCM_SHA256);
-    }
-
-    #[test]
-    fn test_server_pref() {
-        let client = vec![
-            CipherSuite::TLS13_AES_128_GCM_SHA256,
-            CipherSuite::TLS13_AES_256_GCM_SHA384,
-        ];
-        let server = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
-        let chosen = choose_ciphersuite_preferring_server(&client, &server);
-        assert!(chosen.is_some());
-        assert_eq!(chosen.unwrap(), TLS13_AES_256_GCM_SHA384);
-    }
-
-    #[test]
-    fn test_pref_fails() {
-        assert!(choose_ciphersuite_preferring_client(
-            &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-            provider::ALL_CIPHER_SUITES
-        )
-        .is_none());
-        assert!(choose_ciphersuite_preferring_server(
-            &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-            provider::ALL_CIPHER_SUITES
-        )
-        .is_none());
-    }
 
     #[test]
     fn test_scs_is_debug() {

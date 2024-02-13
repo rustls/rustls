@@ -3011,6 +3011,45 @@ fn negotiated_ciphersuite_server() {
     }
 }
 
+#[test]
+fn negotiated_ciphersuite_server_ignoring_client_preference() {
+    for (version, kt, suite) in test_ciphersuites() {
+        let scs = find_suite(suite);
+        let scs_other = if scs.suite() == CipherSuite::TLS13_AES_256_GCM_SHA384 {
+            find_suite(CipherSuite::TLS13_AES_128_GCM_SHA256)
+        } else {
+            find_suite(CipherSuite::TLS13_AES_256_GCM_SHA384)
+        };
+        let mut server_config = finish_server_config(
+            kt,
+            ServerConfig::builder_with_provider(
+                CryptoProvider {
+                    cipher_suites: vec![scs, scs_other],
+                    ..provider::default_provider()
+                }
+                .into(),
+            )
+            .with_protocol_versions(&[version])
+            .unwrap(),
+        );
+        server_config.ignore_client_order = true;
+
+        let client_config = finish_client_config(
+            kt,
+            ClientConfig::builder_with_provider(
+                CryptoProvider {
+                cipher_suites: vec![ scs_other, scs ],
+                ..provider::default_provider()
+            }.into(),
+        )
+        .with_safe_default_protocol_versions()
+        .unwrap());
+
+        do_suite_test(client_config, server_config, scs, version.version);
+    }
+
+}
+
 #[derive(Debug, PartialEq)]
 struct KeyLogItem {
     label: String,
