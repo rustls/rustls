@@ -244,14 +244,13 @@ pub struct WebPkiClientVerifier {
 
 impl WebPkiClientVerifier {
     /// Create a builder for the `webpki` client certificate verifier configuration using
-    /// the default [`CryptoProvider`].
+    /// the [process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider].
     ///
     /// Client certificate authentication will be offered by the server, and client certificates
     /// will be verified using the trust anchors found in the provided `roots`. If you
     /// wish to disable client authentication use [`WebPkiClientVerifier::no_client_auth()`] instead.
     ///
-    /// The cryptography used comes from the process-default [`CryptoProvider`]: [`CryptoProvider::get_default`].
-    /// Use [`Self::builder_with_provider`] if you wish to customize this.
+    /// Use [`Self::builder_with_provider`] if you wish to specify an explicit provider.
     ///
     /// For more information, see the [`ClientCertVerifierBuilder`] documentation.
     pub fn builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {

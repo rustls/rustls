@@ -128,12 +128,11 @@ pub struct WebPkiServerVerifier {
 #[allow(unreachable_pub)]
 impl WebPkiServerVerifier {
     /// Create a builder for the `webpki` server certificate verifier configuration using
-    /// the default [`CryptoProvider`].
+    /// the [process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider].
     ///
     /// Server certificates will be verified using the trust anchors found in the provided `roots`.
     ///
-    /// The cryptography used comes from the process-default [`CryptoProvider`]: [`CryptoProvider::get_default`].
-    /// Use [`Self::builder_with_provider`] if you wish to customize this.
+    /// Use [`Self::builder_with_provider`] if you wish to specify an explicit provider.
     ///
     /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
     pub fn builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
