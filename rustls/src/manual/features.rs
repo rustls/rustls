@@ -1,13 +1,19 @@
 /*!
 
+The below list reflects the support provided with the default crate features.
+Items marked with an asterisk `*` can be extended or altered via public
+APIs ([`CryptoProvider`] for example).
+
+[`CryptoProvider`]: crate::crypto::CryptoProvider
+
 ## Current features
 
 * TLS1.2 and TLS1.3
-* ECDSA, Ed25519 or RSA server authentication by clients
-* ECDSA, Ed25519 or RSA server authentication by servers
-* Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves
-* AES128-GCM and AES256-GCM bulk encryption, with safe nonces
-* ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905))
+* ECDSA, Ed25519 or RSA server authentication by clients `*`
+* ECDSA, Ed25519 or RSA server authentication by servers `*`
+* Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves `*`
+* AES128-GCM and AES256-GCM bulk encryption, with safe nonces `*`
+* ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)) `*`
 * ALPN support
 * SNI support
 * Tunable fragment size to make TLS messages match size of underlying transport
@@ -35,12 +41,12 @@ and will not support:
 * Renegotiation
 * Kerberos
 * TLS 1.2 protocol compression
-* Discrete-log Diffie-Hellman
+* Discrete-log Diffie-Hellman `*`
 * Automatic protocol version downgrade
 * Using CA certificates directly to authenticate a server/client (often called "self-signed
   certificates"). _Rustls' default certificate verifier does not support using a trust anchor as
   both a CA certificate and an end-entity certificate in order to limit complexity and risk in
   path building. While dangerous, all authentication can be turned off if required --
-  see the [example code](https://github.com/rustls/rustls/blob/992e2364a006b2e84a8cf6a7c3eaf0bdb773c9de/examples/src/bin/tlsclient-mio.rs#L318)_
+  see the [example code](https://github.com/rustls/rustls/blob/992e2364a006b2e84a8cf6a7c3eaf0bdb773c9de/examples/src/bin/tlsclient-mio.rs#L318)_ `*`
 
 */
