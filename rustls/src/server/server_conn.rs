@@ -354,18 +354,18 @@ impl Clone for ServerConfig {
 }
 
 impl ServerConfig {
-    /// Create a builder for a server configuration with the process-default
-    /// [`CryptoProvider`]: [`CryptoProvider::get_default`] and safe
-    /// protocol version defaults.
+    /// Create a builder for a server configuration with
+    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider]
+    /// and safe protocol version defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_protocol_versions(versions::DEFAULT_VERSIONS)
     }
 
-    /// Create a builder for a server configuration with the process-default
-    /// [`CryptoProvider`]: [`CryptoProvider::get_default`] and
-    /// the provided protocol versions.
+    /// Create a builder for a server configuration with
+    /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider]
+    /// and the provided protocol versions.
     ///
     /// Panics if
     /// - the supported versions are not compatible with the provider (eg.
