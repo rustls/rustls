@@ -1,0 +1,64 @@
+name: documentation
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 18 * * *'
+
+jobs:
+  generate:
+    name: Generate pre-release documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Generate version information
+        run: |
+          echo >tag.html \
+            "<script>var version = document.querySelector(\"span.version\");" \
+            "version.innerHTML += \"<br>(pre-release docs from <tt>$GITHUB_REF</tt>)\";" \
+            "version.title = \"commit $GITHUB_SHA\";" \
+            "</script>"
+
+      - name: cargo doc
+        run: cargo doc --locked --all-features --no-deps --package rustls
+        env:
+          RUSTDOCFLAGS: -Dwarnings --cfg=docsrs --html-after-content tag.html
+
+      - name: Massage rustdoc output
+        run: |
+          # lockfile causes deployment step to go wrong, due to permissions
+          rm -f target/doc/.lock
+          # make resulting url be more sensible
+          mv target/doc/rustls target/doc/prerelease
+
+      - name: Package and upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./target/doc/
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: generate
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}prerelease/
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
