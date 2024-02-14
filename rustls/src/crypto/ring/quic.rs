@@ -100,13 +100,9 @@ pub(crate) struct PacketKey {
     key: aead::LessSafeKey,
     /// Computes unique nonces for each packet
     iv: Iv,
-    /// Confidentiality limit (see [`CipherSuiteCommon::confidentiality_limit`][csc-limit])
-    ///
-    /// [csc-limit]: crate::crypto::CipherSuiteCommon::confidentiality_limit
+    /// Confidentiality limit (see [`quic::PacketKey::confidentiality_limit`])
     confidentiality_limit: u64,
-    /// Integrity limit (see [`CipherSuiteCommon::integrity_limit`][csc-limit])
-    ///
-    /// [csc-limit]: crate::crypto::CipherSuiteCommon::integrity_limit
+    /// Integrity limit (see [`quic::PacketKey::integrity_limit`])
     integrity_limit: u64,
 }
 
@@ -175,16 +171,12 @@ impl quic::PacketKey for PacketKey {
         self.key.algorithm().tag_len()
     }
 
-    /// Confidentiality limit (see [`CipherSuiteCommon::confidentiality_limit`][csc-limit])
-    ///
-    /// [csc-limit]: crate::crypto::CipherSuiteCommon::confidentiality_limit
+    /// Confidentiality limit (see [`quic::PacketKey::confidentiality_limit`])
     fn confidentiality_limit(&self) -> u64 {
         self.confidentiality_limit
     }
 
-    /// Integrity limit (see [`CipherSuiteCommon::integrity_limit`][csc-limit])
-    ///
-    /// [csc-limit]: crate::crypto::CipherSuiteCommon::integrity_limit
+    /// Integrity limit (see [`quic::PacketKey::integrity_limit`])
     fn integrity_limit(&self) -> u64 {
         self.integrity_limit
     }
