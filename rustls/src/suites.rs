@@ -20,25 +20,17 @@ pub struct CipherSuiteCommon {
     /// Which hash function the suite uses.
     pub hash_provider: &'static dyn crypto::hash::Hash,
 
-    /// Number of messages that can be safely encrypted with a single key of this type
+    /// Number of TCP-TLS messages that can be safely encrypted with a single key of this type
     ///
     /// Once a `MessageEncrypter` produced for this suite has encrypted more than
     /// `confidentiality_limit` messages, an attacker gains an advantage in distinguishing it
     /// from an ideal pseudorandom permutation (PRP).
     ///
     /// This is to be set on the assumption that messages are maximally sized --
-    /// at least 2 ** 14 bytes for TCP-TLS and 2 ** 16 for QUIC.
+    /// at least 2 ** 14 bytes. It **does not** consider confidentiality limits for
+    /// QUIC connections - see the [`quic::KeyBuilder.confidentiality_limit`] field for
+    /// this context.
     pub confidentiality_limit: u64,
-
-    /// Number of messages that can be safely decrypted with a single key of this type
-    ///
-    /// Once a `MessageDecrypter` produced for this suite has failed to decrypt `integrity_limit`
-    /// messages, an attacker gains an advantage in forging messages.
-    ///
-    /// This is not relevant for TLS over TCP (which is implemented in this crate)
-    /// because a single failed decryption is fatal to the connection.  However,
-    /// this quantity is used by QUIC.
-    pub integrity_limit: u64,
 }
 
 impl CipherSuiteCommon {
