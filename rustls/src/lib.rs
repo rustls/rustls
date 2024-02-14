@@ -4,52 +4,8 @@
 //! requires no configuration to achieve that security, and provides no unsafe features or
 //! obsolete cryptography by default.
 //!
-//! ## Current functionality (with default crate features)
-//!
-//! * TLS1.2 and TLS1.3.
-//! * ECDSA, Ed25519 or RSA server authentication by clients.
-//! * ECDSA, Ed25519 or RSA server authentication by servers.
-//! * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves.
-//! * AES128-GCM and AES256-GCM bulk encryption, with safe nonces.
-//! * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)).
-//! * ALPN support.
-//! * SNI support.
-//! * Tunable fragment size to make TLS messages match size of underlying transport.
-//! * Optional use of vectored IO to minimise system calls.
-//! * TLS1.2 session resumption.
-//! * TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).
-//! * TLS1.3 resumption via tickets or session storage.
-//! * TLS1.3 0-RTT data for clients.
-//! * TLS1.3 0-RTT data for servers.
-//! * Server and optional client authentication.
-//! * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
-//! * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
-//! * OCSP stapling by servers.
-//!
-//! ## Non-features
-//!
-//! For reasons [explained in the manual](manual),
-//! rustls does not and will not support:
-//!
-//! * SSL1, SSL2, SSL3, TLS1 or TLS1.1.
-//! * RC4.
-//! * DES or triple DES.
-//! * EXPORT ciphersuites.
-//! * MAC-then-encrypt ciphersuites.
-//! * Ciphersuites without forward secrecy.
-//! * Renegotiation.
-//! * Kerberos.
-//! * TLS 1.2 protocol compression.
-//! * Discrete-log Diffie-Hellman.
-//! * Automatic protocol version downgrade.
-//! * Using CA certificates directly to authenticate a server/client (often called "self-signed
-//!   certificates"). _Rustls' default certificate verifier does not support using a trust anchor as
-//!   both a CA certificate and an end-entity certificate in order to limit complexity and risk in
-//!   path building. While dangerous, all authentication can be turned off if required --
-//!   see the [example code](https://github.com/rustls/rustls/blob/992e2364a006b2e84a8cf6a7c3eaf0bdb773c9de/examples/src/bin/tlsclient-mio.rs#L318)_.
-//!
-//! There are plenty of other libraries that provide these features should you
-//! need them.
+//! Rustls implements TLS1.2 and TLS1.3 for both clients and servers. See [the full
+//! list of protocol features](manual::_04_features).
 //!
 //! ### Platform support
 //!
