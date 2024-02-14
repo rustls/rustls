@@ -173,7 +173,8 @@ impl ClientCertVerifierBuilder {
 }
 
 /// A client certificate verifier that uses the `webpki` crate[^1] to perform client certificate
-/// validation. It must be created via the [WebPkiClientVerifier::builder()] function.
+/// validation. It must be created via the [`WebPkiClientVerifier::builder()`] or
+/// [`WebPkiClientVerifier::builder_with_provider()`] functions.
 ///
 /// Once built, the provided `Arc<dyn ClientCertVerifier>` can be used with a Rustls [`ServerConfig`]
 /// to configure client certificate validation using [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
@@ -247,7 +248,7 @@ impl WebPkiClientVerifier {
     ///
     /// Client certificate authentication will be offered by the server, and client certificates
     /// will be verified using the trust anchors found in the provided `roots`. If you
-    /// wish to disable client authentication use [WebPkiClientVerifier::no_client_auth()] instead.
+    /// wish to disable client authentication use [`WebPkiClientVerifier::no_client_auth()`] instead.
     ///
     /// The cryptography used comes from the process-default [`CryptoProvider`]: [`CryptoProvider::get_default`].
     /// Use [`Self::builder_with_provider`] if you wish to customize this.
