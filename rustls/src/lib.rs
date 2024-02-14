@@ -297,7 +297,7 @@
 //! You can find several client and server examples of varying complexity in the [examples]
 //! directory, including [`tlsserver-mio`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsserver-mio.rs)
 //! and [`tlsclient-mio`](https://github.com/rustls/rustls/blob/main/examples/src/bin/tlsclient-mio.rs)
-//! - full worked examples using [`mio`].
+//! \- full worked examples using [`mio`].
 //!
 //! [`mio`]: https://docs.rs/mio/latest/mio/
 //!
