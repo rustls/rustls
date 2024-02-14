@@ -27,7 +27,7 @@
 //! Rustls requires Rust 1.61 or later.
 //!
 //! [ring-target-platforms]: https://github.com/briansmith/ring/blob/2e8363b433fa3b3962c877d9ed2e9145612f3160/include/ring-core/target.h#L18-L64
-//! [`crypto::CryptoProvider`]: https://docs.rs/rustls/latest/rustls/crypto/trait.CryptoProvider.html
+//! [`crypto::CryptoProvider`]: crate::crypto::CryptoProvider
 //! [`ring`]: https://crates.io/crates/ring
 //! [aws-lc-rs-platforms-faq]: https://aws.github.io/aws-lc-rs/faq.html#can-i-run-aws-lc-rs-on-x-platform-or-architecture
 //! [`aws-lc-rs`]: https://crates.io/crates/aws-lc-rs
