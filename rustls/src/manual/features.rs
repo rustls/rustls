@@ -10,25 +10,17 @@
 * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)).
 * ALPN support.
 * SNI support.
-* Tunable MTU to make TLS messages match size of underlying transport.
+* Tunable fragment size to make TLS messages match size of underlying transport.
 * Optional use of vectored IO to minimise system calls.
 * TLS1.2 session resumption.
-* TLS1.2 resumption via tickets (RFC5077).
+* TLS1.2 resumption via tickets ([RFC5077](https://tools.ietf.org/html/rfc5077)).
 * TLS1.3 resumption via tickets or session storage.
 * TLS1.3 0-RTT data for clients.
-* Client authentication by clients.
-* Client authentication by servers.
-* Extended master secret support (RFC7627).
-* Exporters (RFC5705).
+* TLS1.3 0-RTT data for servers.
+* Server and optional client authentication.
+* Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627)).
+* Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705)).
 * OCSP stapling by servers.
-* SCT stapling by servers.
-* SCT verification by clients.
-
-## Possible future features
-
-* PSK support.
-* OCSP verification by clients.
-* Certificate pinning.
 
 ## Non-features
 
@@ -43,8 +35,13 @@ and will not support:
 * Ciphersuites without forward secrecy.
 * Renegotiation.
 * Kerberos.
-* Compression.
+* TLS 1.2 protocol compression.
 * Discrete-log Diffie-Hellman.
 * Automatic protocol version downgrade.
+* Using CA certificates directly to authenticate a server/client (often called "self-signed
+  certificates"). _Rustls' default certificate verifier does not support using a trust anchor as
+  both a CA certificate and an end-entity certificate in order to limit complexity and risk in
+  path building. While dangerous, all authentication can be turned off if required --
+  see the [example code](https://github.com/rustls/rustls/blob/992e2364a006b2e84a8cf6a7c3eaf0bdb773c9de/examples/src/bin/tlsclient-mio.rs#L318)_.
 
 */
