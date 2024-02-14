@@ -504,6 +504,9 @@ impl From<&[u8]> for SharedSecret {
 /// FIPS-approved cryptography, and will not compile if you make
 /// a mistake with cargo features.
 ///
+/// See our [FIPS documentation](crate::manual::_06_fips) for
+/// more detail.
+///
 /// Install this as the process-default provider, like:
 ///
 /// ```rust
