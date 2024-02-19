@@ -329,9 +329,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.6.1"
+version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb94ba389c4c48d9dc1983f8653cb92f7d9fc50b261e0501be2b7a636cbcbc4a"
+checksum = "df33e4a55b03f8780ba55041bc7be91a2a8ec8c03517b0379d2d6c96d2c30d95"
 dependencies = [
  "aws-lc-fips-sys",
  "aws-lc-sys",
@@ -543,9 +543,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.0"
+version = "4.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80c21025abd42669a92efc996ef13cfb2c5c627858421ea58d5c3b331a6c134f"
+checksum = "c918d541ef2913577a0f9566e9ce27cb35b6df072075769e0b26cb5a554520da"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -553,9 +553,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.0"
+version = "4.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458bf1f341769dfcf849846f65dffdf9146daa56bcd2a47cb4e1de9915567c99"
+checksum = "9f3e7391dad68afb0c2ede1bf619f579a3dc9c2ec67f089baa397123a2f3d1eb"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2046,16 +2046,17 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.17.7"
+version = "0.17.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "688c63d65483050968b2a8937f7995f443e27041a0f7700aa59b0822aedebb74"
+checksum = "c17fa4cb658e3583423e915b9f3acc01cceaee1860e33d59ebae66adc3a2dc0d"
 dependencies = [
  "cc",
+ "cfg-if",
  "getrandom",
  "libc",
  "spin 0.9.8",
  "untrusted",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2151,7 +2152,7 @@ dependencies = [
  "num-bigint",
  "once_cell",
  "ring",
- "rustls-pemfile 2.0.0",
+ "rustls-pemfile 2.1.0",
  "rustls-pki-types",
  "rustls-webpki 0.102.2",
  "rustversion",
@@ -2172,7 +2173,7 @@ dependencies = [
  "itertools",
  "rayon",
  "rustls 0.23.0-alpha.0",
- "rustls-pemfile 2.0.0",
+ "rustls-pemfile 2.1.0",
  "rustls-pki-types",
 ]
 
@@ -2197,7 +2198,7 @@ dependencies = [
  "mio",
  "rcgen",
  "rustls 0.23.0-alpha.0",
- "rustls-pemfile 2.0.0",
+ "rustls-pemfile 2.1.0",
  "rustls-pki-types",
  "serde",
  "serde_derive",
@@ -2215,7 +2216,7 @@ dependencies = [
  "once_cell",
  "openssl",
  "rustls 0.23.0-alpha.0",
- "rustls-pemfile 2.0.0",
+ "rustls-pemfile 2.1.0",
  "rustls-pki-types",
 ]
 
@@ -2230,9 +2231,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pemfile"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35e4980fa29e4c4b212ffb3db068a564cbf560e51d3944b7c88bd8bf5bec64f4"
+checksum = "3c333bb734fcdedcea57de1602543590f545f127dc8b533324318fd492c5c70b"
 dependencies = [
  "base64",
  "rustls-pki-types",
@@ -2240,9 +2241,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.2.0"
+version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a716eb65e3158e90e17cd93d855216e27bde02745ab842f2cab4a39dba1bacf"
+checksum = "048a63e5b3ac996d78d402940b5fa47973d2d080c6c6fffa1d0f19c4445310b7"
 
 [[package]]
 name = "rustls-provider-example"
