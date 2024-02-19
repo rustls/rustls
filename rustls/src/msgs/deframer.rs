@@ -698,7 +698,7 @@ mod tests {
     use std::io;
 
     use crate::crypto::cipher::PlainMessage;
-    use crate::msgs::message::{BorrowedPlainMessage, Message};
+    use crate::msgs::message::Message;
 
     use super::*;
 

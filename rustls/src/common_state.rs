@@ -8,8 +8,7 @@ use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::CertificateChain;
 use crate::msgs::message::{
-    BorrowedPlainMessage, Message, MessagePayload, OpaqueMessage, OutboundChunks, OutboundMessage,
-    PlainMessage,
+    Message, MessagePayload, OpaqueMessage, OutboundChunks, OutboundMessage, PlainMessage,
 };
 use crate::quic;
 use crate::record_layer;

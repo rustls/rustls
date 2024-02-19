@@ -446,23 +446,14 @@ impl InboundMessage<'_> {
     pub(crate) fn is_valid_ccs(&self) -> bool {
         self.typ == ContentType::ChangeCipherSpec && self.payload == [0x01]
     }
-}
 
-impl BorrowedPlainMessage for InboundMessage<'_> {
-    fn payload_to_vec(&self) -> Vec<u8> {
-        self.payload.to_vec()
-    }
-
-    fn payload_len(&self) -> usize {
-        self.payload.len()
-    }
-
-    fn typ(&self) -> ContentType {
-        self.typ
-    }
-
-    fn version(&self) -> ProtocolVersion {
-        self.version
+    #[cfg(test)]
+    pub(crate) fn into_owned(self) -> PlainMessage {
+        PlainMessage {
+            version: self.version,
+            typ: self.typ,
+            payload: Payload::Owned(self.payload.to_vec()),
+        }
     }
 }
 
@@ -482,53 +473,18 @@ pub struct OutboundMessage<'a> {
     pub payload: OutboundChunks<'a>,
 }
 
-impl BorrowedPlainMessage for OutboundMessage<'_> {
-    fn payload_to_vec(&self) -> Vec<u8> {
-        self.payload.to_vec()
+impl OutboundMessage<'_> {
+    pub(crate) fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
+        OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload.len())
     }
 
-    fn payload_len(&self) -> usize {
-        self.payload.len()
-    }
-
-    fn typ(&self) -> ContentType {
-        self.typ
-    }
-
-    fn version(&self) -> ProtocolVersion {
-        self.version
-    }
-}
-
-/// Abstract both inbound and outbound variants of a plaintext message
-pub trait BorrowedPlainMessage: Sized {
-    fn into_owned(self) -> PlainMessage {
-        PlainMessage {
-            version: self.version(),
-            typ: self.typ(),
-            payload: Payload::Owned(self.payload_to_vec()),
-        }
-    }
-
-    fn to_unencrypted_opaque(&self) -> OpaqueMessage {
+    pub(crate) fn to_unencrypted_opaque(&self) -> OpaqueMessage {
         OpaqueMessage {
-            version: self.version(),
-            typ: self.typ(),
-            payload: Payload::Owned(self.payload_to_vec()),
+            version: self.version,
+            typ: self.typ,
+            payload: Payload::Owned(self.payload.to_vec()),
         }
     }
-
-    fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
-        OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload_len())
-    }
-
-    fn payload_to_vec(&self) -> Vec<u8>;
-
-    fn payload_len(&self) -> usize;
-
-    fn typ(&self) -> ContentType;
-
-    fn version(&self) -> ProtocolVersion;
 }
 
 #[derive(Debug, Clone)]

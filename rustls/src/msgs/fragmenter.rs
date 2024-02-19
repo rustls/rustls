@@ -101,9 +101,7 @@ mod tests {
     use crate::enums::ContentType;
     use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
-    use crate::msgs::message::{
-        BorrowedPlainMessage, OutboundChunks, OutboundMessage, PlainMessage,
-    };
+    use crate::msgs::message::{OutboundChunks, OutboundMessage, PlainMessage};
 
     fn msg_eq(
         m: &OutboundMessage,
