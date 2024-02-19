@@ -7,7 +7,11 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+#[cfg(not(feature = "std"))]
+use once_cell::race::OnceBox;
+#[cfg(feature = "std")]
 use once_cell::sync::OnceCell;
+
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
@@ -224,8 +228,21 @@ impl CryptoProvider {
     /// Call this early in your process to configure which provider is used for
     /// the provider.  The configuration should happen before any use of
     /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
+    #[cfg(feature = "std")]
     pub fn install_default(self) -> Result<(), Arc<Self>> {
         PROCESS_DEFAULT_PROVIDER.set(Arc::new(self))
+    }
+
+    /// Sets this `CryptoProvider` as the default for this process.
+    ///
+    /// This can be called successfully at most once in any process execution.
+    ///
+    /// Call this early in your process to configure which provider is used for
+    /// the provider.  The configuration should happen before any use of
+    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
+    #[cfg(not(feature = "std"))]
+    pub fn install_default(self) -> Result<(), Box<Arc<Self>>> {
+        PROCESS_DEFAULT_PROVIDER.set(Box::new(Arc::new(self)))
     }
 
     /// Returns the default `CryptoProvider` for this process.
@@ -294,7 +311,10 @@ impl CryptoProvider {
     }
 }
 
+#[cfg(feature = "std")]
 static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();
+#[cfg(not(feature = "std"))]
+static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
 
 /// A source of cryptographically secure randomness.
 pub trait SecureRandom: Send + Sync + Debug {
