@@ -504,9 +504,9 @@ impl DeframerBuffer<'_, InternalPayload> for DeframerVecBuffer {
 
 #[cfg(feature = "std")]
 impl<'a> DeframerBuffer<'a, ExternalPayload<'a>> for DeframerVecBuffer {
-    fn copy(&mut self, payload: &ExternalPayload<'a>, at: usize) {
+    fn copy(&mut self, payload: &ExternalPayload<'a>, _at: usize) {
         let len = payload.len();
-        self.unfilled()[at..at + len].copy_from_slice(payload.0);
+        self.unfilled()[..len].copy_from_slice(payload.0);
         self.advance(len);
     }
 }

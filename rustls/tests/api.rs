@@ -4521,6 +4521,39 @@ mod test_quic {
             do_exporter_test(client_config, server_config);
         }
     }
+
+    #[test]
+    fn test_fragmented_append() {
+        // Create a QUIC client connection.
+        let client_config = make_client_config_with_versions(KeyType::Rsa, &[&rustls::version::TLS13]);
+        let client_config = Arc::new(client_config);
+        let mut client = quic::ClientConnection::new(
+            Arc::clone(&client_config),
+            quic::Version::V1,
+            server_name("localhost"),
+            b"client params"[..].into(),
+        )
+        .unwrap();
+
+        // Construct a message that is too large to fit in a single QUIC packet.
+        // We want the partial pieces to be large enough to overflow the deframer's
+        // 4096 byte buffer if mishandled.
+        let mut out = vec![0; 4096];
+        let len_bytes = u32::to_be_bytes(9266_u32);
+        out[1..4].copy_from_slice(&len_bytes[1..]);
+
+        // Read the message - this will put us into a joining handshake message state, buffering
+        // 4096 bytes into the deframer buffer.
+        client.read_hs(&out).unwrap();
+
+        // Read the message again - once more it isn't a complete message, so we'll try to
+        // append another 4096 bytes into the deframer buffer.
+        //
+        // If the deframer mishandles writing into the used buffer space this will panic with
+        // an index out of range error:
+        //   range end index 8192 out of range for slice of length 4096
+        client.read_hs(&out).unwrap();
+    }
 } // mod test_quic
 
 #[test]
