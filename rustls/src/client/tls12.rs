@@ -921,7 +921,11 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let named_group = kx_params
             .named_group()
             .ok_or(PeerMisbehaved::SelectedUnofferedKxGroup)?;
-        let skxg = match st.config.find_kx_group(named_group) {
+        let skxg = match st
+            .config
+            .provider
+            .find_kx_group(named_group)
+        {
             Some(skxg) => skxg,
             None => {
                 return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());

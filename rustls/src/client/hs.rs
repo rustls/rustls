@@ -614,6 +614,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         }
 
         let suite = config
+            .provider
             .find_cipher_suite(server_hello.cipher_suite)
             .ok_or_else(|| {
                 cx.common.send_fatal_alert(
@@ -827,7 +828,10 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks us to use a ciphersuite we didn't offer.
         let config = &self.next.input.config;
-        let cs = match config.find_cipher_suite(hrr.cipher_suite) {
+        let cs = match config
+            .provider
+            .find_cipher_suite(hrr.cipher_suite)
+        {
             Some(cs) => cs,
             None => {
                 return Err({
@@ -857,7 +861,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                let skxg = match config.find_kx_group(group) {
+                let skxg = match config.provider.find_kx_group(group) {
                     Some(skxg) => skxg,
                     None => {
                         return Err(cx.common.send_fatal_alert(

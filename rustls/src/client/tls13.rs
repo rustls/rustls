@@ -210,7 +210,11 @@ pub(super) fn initial_key_share(
         .resumption
         .store
         .kx_hint(server_name)
-        .and_then(|group_name| config.find_kx_group(group_name))
+        .and_then(|group_name| {
+            config
+                .provider
+                .find_kx_group(group_name)
+        })
         .unwrap_or_else(|| {
             config
                 .provider

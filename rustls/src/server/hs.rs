@@ -429,9 +429,7 @@ impl ExpectClientHello {
             let supported = self
                 .config
                 .provider
-                .kx_groups
-                .iter()
-                .find(|skxg| skxg.name() == *offered_group);
+                .find_kx_group(*offered_group);
 
             match offered_group.key_exchange_algorithm() {
                 KeyExchangeAlgorithm::DHE => {
@@ -510,7 +508,7 @@ impl ExpectClientHello {
             .find_map(|maybe_skxg| match maybe_skxg {
                 Some(skxg) => suite
                     .usable_for_kx_algorithm(skxg.name().key_exchange_algorithm())
-                    .then(|| *skxg),
+                    .then(|| skxg),
                 None => None,
             });
 

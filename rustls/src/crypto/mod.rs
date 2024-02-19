@@ -1,6 +1,6 @@
 use crate::sign::SigningKey;
 use crate::{suites, ProtocolVersion, SupportedProtocolVersion};
-use crate::{Error, NamedGroup};
+use crate::{CipherSuite, Error, NamedGroup};
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -291,6 +291,23 @@ impl CryptoProvider {
             && signature_verification_algorithms.fips()
             && secure_random.fips()
             && key_provider.fips()
+    }
+
+    pub(crate) fn find_cipher_suite(
+        &self,
+        name: CipherSuite,
+    ) -> Option<suites::SupportedCipherSuite> {
+        self.cipher_suites
+            .iter()
+            .find(|suite| suite.suite() == name)
+            .copied()
+    }
+
+    pub(crate) fn find_kx_group(&self, name: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {
+        self.kx_groups
+            .iter()
+            .find(|group| group.name() == name)
+            .copied()
     }
 }
 

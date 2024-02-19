@@ -1,8 +1,8 @@
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
-use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
+use crate::crypto::CryptoProvider;
+use crate::enums::{ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::trace;
@@ -310,22 +310,6 @@ impl ClientConfig {
     /// extra care.
     pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
         danger::DangerousClientConfig { cfg: self }
-    }
-
-    pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
-        self.provider
-            .cipher_suites
-            .iter()
-            .copied()
-            .find(|&scs| scs.suite() == suite)
-    }
-
-    pub(super) fn find_kx_group(&self, group: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {
-        self.provider
-            .kx_groups
-            .iter()
-            .copied()
-            .find(|skxg| skxg.name() == group)
     }
 }
 
