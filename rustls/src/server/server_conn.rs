@@ -469,6 +469,11 @@ impl ServerConfig {
         }
     }
 
+    /// Return the crypto provider used to construct this client configuration.
+    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+        &self.provider
+    }
+
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.

@@ -325,6 +325,11 @@ impl ClientConfig {
         }
     }
 
+    /// Return the crypto provider used to construct this client configuration.
+    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+        &self.provider
+    }
+
     /// Access configuration options whose use is dangerous and requires
     /// extra care.
     pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
