@@ -7,12 +7,11 @@ use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{InboundMessage, OpaqueMessage, OutboundMessage};
+use crate::msgs::message::{InboundMessage, OpaqueMessage, OutboundMessage, PrefixedPayload};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls12::Tls12CipherSuite;
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use super::ring_like::aead;
 
@@ -287,17 +286,17 @@ impl MessageDecrypter for GcmMessageDecrypter {
 
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+        let total_len = self.encrypted_payload_len(msg.payload.len());
+        let mut payload = PrefixedPayload::with_capacity(total_len);
+
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
-
-        let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut payload = Vec::with_capacity(total_len);
         payload.extend_from_slice(&nonce.as_ref()[4..]);
-        msg.payload.copy_to_vec(&mut payload);
+        payload.extend_from_chunks(&msg.payload);
 
         self.enc_key
-            .seal_in_place_separate_tag(nonce, aad, &mut payload[GCM_EXPLICIT_NONCE_LEN..])
-            .map(|tag| payload.extend(tag.as_ref()))
+            .seal_in_place_separate_tag(nonce, aad, &mut payload.as_mut()[GCM_EXPLICIT_NONCE_LEN..])
+            .map(|tag| payload.extend_from_slice(tag.as_ref()))
             .map_err(|_| Error::EncryptError)?;
 
         Ok(OpaqueMessage::new(msg.typ, msg.version, payload))
@@ -364,18 +363,18 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+        let total_len = self.encrypted_payload_len(msg.payload.len());
+        let mut payload = PrefixedPayload::with_capacity(total_len);
+
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).0);
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
-
-        let total_len = self.encrypted_payload_len(msg.payload.len());
-        let mut buf = Vec::with_capacity(total_len);
-        msg.payload.copy_to_vec(&mut buf);
+        payload.extend_from_chunks(&msg.payload);
 
         self.enc_key
-            .seal_in_place_append_tag(nonce, aad, &mut buf)
+            .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OpaqueMessage::new(msg.typ, msg.version, buf))
+        Ok(OpaqueMessage::new(msg.typ, msg.version, payload))
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {

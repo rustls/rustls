@@ -247,6 +247,8 @@ pub(crate) struct Decrypted<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::cipher::BorrowedPayload;
+
     use super::*;
 
     #[test]
@@ -291,13 +293,12 @@ mod tests {
 
         // Decrypting a message should update the read_seq and track that we have now performed
         // a decryption.
-        let mut msg = OpaqueMessage::new(
-            ContentType::Handshake,
-            ProtocolVersion::TLSv1_2,
-            vec![0xC0, 0xFF, 0xEE],
-        );
         record_layer
-            .decrypt_incoming(msg.borrow())
+            .decrypt_incoming(BorrowedOpaqueMessage {
+                typ: ContentType::Handshake,
+                version: ProtocolVersion::TLSv1_2,
+                payload: BorrowedPayload::new(&mut [0xC0, 0xFF, 0xEE]),
+            })
             .unwrap();
         assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
         assert_eq!(record_layer.read_seq, 1);
