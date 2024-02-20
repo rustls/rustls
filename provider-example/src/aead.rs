@@ -1,12 +1,12 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use chacha20poly1305::aead::Buffer;
 use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
 use rustls::crypto::cipher::{
     make_tls12_aad, make_tls13_aad, AeadKey, BorrowedOpaqueMessage, BorrowedPayload,
     InboundMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce, OpaqueMessage,
-    OutboundMessage, Tls12AeadAlgorithm, Tls13AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
+    OutboundMessage, PrefixedPayload, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
+    UnsupportedOperationError, NONCE_LEN,
 };
 use rustls::{ConnectionTrafficSecrets, ContentType, ProtocolVersion};
 
@@ -83,17 +83,15 @@ struct Tls13Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 impl MessageEncrypter for Tls13Cipher {
     fn encrypt(&mut self, m: OutboundMessage, seq: u64) -> Result<OpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
+        let mut payload = PrefixedPayload::with_capacity(total_len);
 
-        // construct a TLSInnerPlaintext
-        let mut payload = Vec::with_capacity(total_len);
-        m.payload.copy_to_vec(&mut payload);
-        payload.push(m.typ.get_u8());
-
+        payload.extend_from_chunks(&m.payload);
+        payload.extend_from_slice(&m.typ.get_array());
         let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
         let aad = make_tls13_aad(total_len);
 
         self.0
-            .encrypt_in_place(&nonce, &aad, &mut payload)
+            .encrypt_in_place(&nonce, &aad, &mut EncryptBufferAdapter(&mut payload))
             .map_err(|_| rustls::Error::EncryptError)
             .map(|_| {
                 OpaqueMessage::new(
@@ -132,15 +130,14 @@ struct Tls12Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 impl MessageEncrypter for Tls12Cipher {
     fn encrypt(&mut self, m: OutboundMessage, seq: u64) -> Result<OpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
+        let mut payload = PrefixedPayload::with_capacity(total_len);
 
-        let mut payload = Vec::with_capacity(total_len);
-        m.payload.copy_to_vec(&mut payload);
-
+        payload.extend_from_chunks(&m.payload);
         let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
-        let aad = make_tls12_aad(seq, m.typ, m.version, payload.len());
+        let aad = make_tls12_aad(seq, m.typ, m.version, m.payload.len());
 
         self.0
-            .encrypt_in_place(&nonce, &aad, &mut payload)
+            .encrypt_in_place(&nonce, &aad, &mut EncryptBufferAdapter(&mut payload))
             .map_err(|_| rustls::Error::EncryptError)
             .map(|_| OpaqueMessage::new(m.typ, m.version, payload))
     }
@@ -175,6 +172,31 @@ impl MessageDecrypter for Tls12Cipher {
 }
 
 const CHACHAPOLY1305_OVERHEAD: usize = 16;
+
+struct EncryptBufferAdapter<'a>(&'a mut PrefixedPayload);
+
+impl AsRef<[u8]> for EncryptBufferAdapter<'_> {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl AsMut<[u8]> for EncryptBufferAdapter<'_> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.0.as_mut()
+    }
+}
+
+impl Buffer for EncryptBufferAdapter<'_> {
+    fn extend_from_slice(&mut self, other: &[u8]) -> chacha20poly1305::aead::Result<()> {
+        self.0.extend_from_slice(other);
+        Ok(())
+    }
+
+    fn truncate(&mut self, len: usize) {
+        self.0.truncate(len)
+    }
+}
 
 struct BufferAdapter<'a, 'p>(&'a mut BorrowedPayload<'p>);
 

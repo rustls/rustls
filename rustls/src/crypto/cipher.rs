@@ -9,6 +9,7 @@ pub use crate::msgs::base::BorrowedPayload;
 use crate::msgs::codec;
 pub use crate::msgs::message::{
     BorrowedOpaqueMessage, InboundMessage, OpaqueMessage, OutboundMessage, PlainMessage,
+    PrefixedPayload,
 };
 use crate::suites::ConnectionTrafficSecrets;
 
