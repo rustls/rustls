@@ -325,6 +325,12 @@ impl ClientConfig {
         }
     }
 
+    /// Access configuration options whose use is dangerous and requires
+    /// extra care.
+    pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
+        danger::DangerousClientConfig { cfg: self }
+    }
+
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.
@@ -343,12 +349,6 @@ impl ClientConfig {
             .cipher_suites
             .iter()
             .any(|cs| cs.usable_for_protocol(proto))
-    }
-
-    /// Access configuration options whose use is dangerous and requires
-    /// extra care.
-    pub fn dangerous(&mut self) -> danger::DangerousClientConfig<'_> {
-        danger::DangerousClientConfig { cfg: self }
     }
 
     pub(super) fn find_cipher_suite(&self, suite: CipherSuite) -> Option<SupportedCipherSuite> {
