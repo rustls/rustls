@@ -797,6 +797,27 @@ impl<'a> KeyBuilder<'a> {
     }
 }
 
+/// Produces QUIC initial keys from a TLS 1.3 ciphersuite and a QUIC key generation algorithm.
+pub struct Suite {
+    /// The TLS 1.3 ciphersuite used to derive keys.
+    pub suite: &'static Tls13CipherSuite,
+    /// The QUIC key generation algorithm used to derive keys.
+    pub quic: &'static dyn Algorithm,
+}
+
+impl Suite {
+    /// Produce a set of initial keys given the connection ID, side and version
+    pub fn keys(&self, client_dst_connection_id: &[u8], side: Side, version: Version) -> Keys {
+        Keys::initial(
+            version,
+            self.suite,
+            self.quic,
+            client_dst_connection_id,
+            side,
+        )
+    }
+}
+
 /// Complete set of keys used to communicate with the peer
 pub struct Keys {
     /// Encrypts outgoing packets
