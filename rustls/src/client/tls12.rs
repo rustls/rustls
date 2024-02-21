@@ -895,7 +895,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
             st.config
                 .verifier
-                .verify_tls12_signature(&message, &st.server_cert.cert_chain[0], sig)
+                .verify_tls12_signature(&message, end_entity, sig)
                 .map_err(|err| {
                     cx.common
                         .send_cert_verify_error_alert(err)
