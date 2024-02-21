@@ -735,7 +735,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             .verifier
             .verify_tls13_signature(
                 &construct_server_verify_message(&handshake_hash),
-                &self.server_cert.cert_chain[0],
+                end_entity,
                 cert_verify,
             )
             .map_err(|err| {
