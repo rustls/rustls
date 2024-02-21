@@ -58,6 +58,12 @@ impl Tls13CipherSuite {
             && aead_alg.fips()
             && quic.map(|q| q.fips()).unwrap_or(true)
     }
+
+    /// Returns a `quic::Suite` for the ciphersuite, if supported.
+    pub fn quic_suite(&'static self) -> Option<crate::quic::Suite> {
+        self.quic
+            .map(|quic| crate::quic::Suite { quic, suite: self })
+    }
 }
 
 impl From<&'static Tls13CipherSuite> for SupportedCipherSuite {
