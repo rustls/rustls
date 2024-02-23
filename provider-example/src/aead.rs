@@ -118,7 +118,7 @@ impl MessageDecrypter for Tls13Cipher {
         let aad = make_tls13_aad(payload.len());
 
         self.0
-            .decrypt_in_place(&nonce, &aad, &mut BufferAdapter(payload))
+            .decrypt_in_place(&nonce, &aad, &mut DecryptBufferAdapter(payload))
             .map_err(|_| rustls::Error::DecryptError)?;
 
         m.into_tls13_unpadded_message()
@@ -164,7 +164,7 @@ impl MessageDecrypter for Tls12Cipher {
 
         let payload = &mut m.payload;
         self.0
-            .decrypt_in_place(&nonce, &aad, &mut BufferAdapter(payload))
+            .decrypt_in_place(&nonce, &aad, &mut DecryptBufferAdapter(payload))
             .map_err(|_| rustls::Error::DecryptError)?;
 
         Ok(m.into_inbound_message())
@@ -198,21 +198,21 @@ impl Buffer for EncryptBufferAdapter<'_> {
     }
 }
 
-struct BufferAdapter<'a, 'p>(&'a mut BorrowedPayload<'p>);
+struct DecryptBufferAdapter<'a, 'p>(&'a mut BorrowedPayload<'p>);
 
-impl AsRef<[u8]> for BufferAdapter<'_, '_> {
+impl AsRef<[u8]> for DecryptBufferAdapter<'_, '_> {
     fn as_ref(&self) -> &[u8] {
         self.0
     }
 }
 
-impl AsMut<[u8]> for BufferAdapter<'_, '_> {
+impl AsMut<[u8]> for DecryptBufferAdapter<'_, '_> {
     fn as_mut(&mut self) -> &mut [u8] {
         self.0
     }
 }
 
-impl Buffer for BufferAdapter<'_, '_> {
+impl Buffer for DecryptBufferAdapter<'_, '_> {
     fn extend_from_slice(&mut self, _: &[u8]) -> chacha20poly1305::aead::Result<()> {
         unreachable!("not used by `AeadInPlace::decrypt_in_place`")
     }
