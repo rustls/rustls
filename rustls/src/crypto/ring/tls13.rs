@@ -2,13 +2,15 @@ use alloc::boxed::Box;
 
 use crate::crypto;
 use crate::crypto::cipher::{
-    make_tls13_aad, AeadKey, BorrowedOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,
+    make_tls13_aad, AeadKey, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,
     Tls13AeadAlgorithm, UnsupportedOperationError,
 };
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
-use crate::msgs::message::{InboundMessage, OpaqueMessage, OutboundMessage, PrefixedPayload};
+use crate::msgs::message::{
+    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
+};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls13::Tls13CipherSuite;
 
@@ -190,7 +192,11 @@ struct Tls13MessageDecrypter {
 }
 
 impl MessageEncrypter for Tls13MessageEncrypter {
-    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(
+        &mut self,
+        msg: OutboundPlainMessage,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
@@ -203,7 +209,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OpaqueMessage::new(
+        Ok(OutboundOpaqueMessage::new(
             ContentType::ApplicationData,
             // Note: all TLS 1.3 application data records use TLSv1_2 (0x0303) as the legacy record
             // protocol version, see https://www.rfc-editor.org/rfc/rfc8446#section-5.1
@@ -220,9 +226,9 @@ impl MessageEncrypter for Tls13MessageEncrypter {
 impl MessageDecrypter for Tls13MessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: BorrowedOpaqueMessage<'a>,
+        mut msg: InboundOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<InboundMessage<'a>, Error> {
+    ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &mut msg.payload;
         if payload.len() < self.dec_key.algorithm().tag_len() {
             return Err(Error::DecryptError);

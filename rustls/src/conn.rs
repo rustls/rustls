@@ -5,7 +5,7 @@ use crate::error::{Error, PeerMisbehaved};
 use crate::log::trace;
 use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer};
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{InboundMessage, Message, MessagePayload, OutboundChunks};
+use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload, OutboundChunks};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
@@ -778,7 +778,7 @@ impl<Data> ConnectionCore<Data> {
         &mut self,
         state: Option<&dyn State<Data>>,
         deframer_buffer: &mut DeframerSliceBuffer<'b>,
-    ) -> Result<Option<InboundMessage<'b>>, Error> {
+    ) -> Result<Option<InboundPlainMessage<'b>>, Error> {
         match self.message_deframer.pop(
             &mut self.common_state.record_layer,
             self.common_state.negotiated_version,
@@ -833,7 +833,7 @@ impl<Data> ConnectionCore<Data> {
 
     fn process_msg(
         &mut self,
-        msg: InboundMessage,
+        msg: InboundPlainMessage,
         state: Box<dyn State<Data>>,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
     ) -> Result<Box<dyn State<Data>>, Error> {

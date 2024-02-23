@@ -7,7 +7,9 @@ use super::codec::Codec;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
-use crate::msgs::message::{BorrowedOpaqueMessage, InboundMessage, MessageError, OpaqueMessage};
+use crate::msgs::message::{
+    InboundOpaqueMessage, InboundPlainMessage, MessageError, OutboundOpaqueMessage,
+};
 use crate::record_layer::{Decrypted, RecordLayer};
 
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
@@ -65,7 +67,7 @@ impl MessageDeframer {
             // contain a header, and that header has a length which falls within `buf`.
             // If so, deframe it and place the message onto the frames output queue.
             let mut rd = codec::ReaderMut::init(buffer.filled_get_mut(start..));
-            let m = match BorrowedOpaqueMessage::read(&mut rd) {
+            let m = match InboundOpaqueMessage::read(&mut rd) {
                 Ok(m) => m,
                 Err(msg_err) => {
                     let err_kind = match msg_err {
@@ -107,7 +109,7 @@ impl MessageDeframer {
                 _ => false,
             };
             if self.joining_hs.is_none() && allowed_plaintext {
-                let BorrowedOpaqueMessage {
+                let InboundOpaqueMessage {
                     typ,
                     version,
                     payload,
@@ -115,7 +117,7 @@ impl MessageDeframer {
                 let raw_payload_slice = RawSlice::from(&*payload);
                 // This is unencrypted. We check the contents later.
                 buffer.queue_discard(end);
-                let message = InboundMessage {
+                let message = InboundPlainMessage {
                     typ,
                     version,
                     payload: buffer.take(raw_payload_slice),
@@ -134,7 +136,7 @@ impl MessageDeframer {
                     let Decrypted {
                         want_close_before_decrypt,
                         plaintext:
-                            InboundMessage {
+                            InboundPlainMessage {
                                 typ,
                                 version,
                                 payload,
@@ -168,7 +170,7 @@ impl MessageDeframer {
             // If it's not a handshake message, just return it -- no joining necessary.
             if typ != ContentType::Handshake {
                 buffer.queue_discard(end);
-                let message = InboundMessage {
+                let message = InboundPlainMessage {
                     typ,
                     version,
                     payload: buffer.take(plain_payload_slice),
@@ -216,7 +218,7 @@ impl MessageDeframer {
             buffer.queue_discard(end);
         }
 
-        let message = InboundMessage {
+        let message = InboundPlainMessage {
             typ,
             version,
             payload: buffer.take(raw_payload),
@@ -414,7 +416,7 @@ impl DeframerVecBuffer {
         // At this point, the buffer resizing logic below should reduce the buffer size.
         let allow_max = match is_joining_hs {
             true => MAX_HANDSHAKE_SIZE as usize,
-            false => OpaqueMessage::MAX_WIRE_SIZE,
+            false => OutboundOpaqueMessage::MAX_WIRE_SIZE,
         };
 
         if self.used >= allow_max {
@@ -422,7 +424,7 @@ impl DeframerVecBuffer {
         }
 
         // If we can and need to increase the buffer size to allow a 4k read, do so. After
-        // dealing with a large handshake message (exceeding `OpaqueMessage::MAX_WIRE_SIZE`),
+        // dealing with a large handshake message (exceeding `OutboundOpaqueMessage::MAX_WIRE_SIZE`),
         // make sure to reduce the buffer size again (large messages should be rare).
         // Also, reduce the buffer size if there are neither full nor partial messages in it,
         // which usually means that the other side suspended sending data.
@@ -681,7 +683,7 @@ pub struct Deframed<'a> {
     pub(crate) want_close_before_decrypt: bool,
     pub(crate) aligned: bool,
     pub(crate) trial_decryption_finished: bool,
-    pub message: InboundMessage<'a>,
+    pub message: InboundPlainMessage<'a>,
 }
 
 const HEADER_SIZE: usize = 1 + 3;
@@ -900,7 +902,7 @@ mod tests {
         assert_len(4096, d.input_bytes(&message));
         assert_len(4096, d.input_bytes(&message));
         assert_len(
-            OpaqueMessage::MAX_WIRE_SIZE - 16_384,
+            OutboundOpaqueMessage::MAX_WIRE_SIZE - 16_384,
             d.input_bytes(&message),
         );
         assert!(d.input_bytes(&message).is_err());

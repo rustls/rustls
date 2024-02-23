@@ -11,7 +11,7 @@ use webpki::anchor_from_trusted_cert;
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Reader;
-use rustls::internal::msgs::message::{Message, OpaqueMessage, PlainMessage};
+use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::Connection;
 use rustls::Error;
@@ -211,7 +211,7 @@ where
 
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
-            let message = OpaqueMessage::read(&mut reader).unwrap();
+            let message = OutboundOpaqueMessage::read(&mut reader).unwrap();
 
             // this is a bit of a falsehood: we don't know whether message
             // is encrypted.  it is quite unlikely that a genuine encrypted
