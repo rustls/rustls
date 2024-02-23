@@ -180,10 +180,10 @@ impl OpaqueMessage {
     const MAX_PAYLOAD: u16 = 16_384 + 2048;
 
     /// Content type, version and size.
-    const HEADER_SIZE: u16 = 1 + 2 + 2;
+    const HEADER_SIZE: usize = 1 + 2 + 2;
 
     /// Maximum on-the-wire message size.
-    pub const MAX_WIRE_SIZE: usize = (Self::MAX_PAYLOAD + Self::HEADER_SIZE) as usize;
+    pub const MAX_WIRE_SIZE: usize = Self::MAX_PAYLOAD as usize + Self::HEADER_SIZE;
 }
 
 /// A borrowed version of [`OpaqueMessage`].
@@ -475,7 +475,7 @@ pub struct OutboundMessage<'a> {
 
 impl OutboundMessage<'_> {
     pub(crate) fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
-        OpaqueMessage::HEADER_SIZE as usize + record_layer.encrypted_len(self.payload.len())
+        OpaqueMessage::HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
 
     pub(crate) fn to_unencrypted_opaque(&self) -> OpaqueMessage {
