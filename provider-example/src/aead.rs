@@ -3,10 +3,10 @@ use alloc::boxed::Box;
 use chacha20poly1305::aead::Buffer;
 use chacha20poly1305::{AeadInPlace, KeyInit, KeySizeUser};
 use rustls::crypto::cipher::{
-    make_tls12_aad, make_tls13_aad, AeadKey, BorrowedOpaqueMessage, BorrowedPayload,
-    InboundMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce, OpaqueMessage,
-    OutboundMessage, PrefixedPayload, Tls12AeadAlgorithm, Tls13AeadAlgorithm,
-    UnsupportedOperationError, NONCE_LEN,
+    make_tls12_aad, make_tls13_aad, AeadKey, BorrowedPayload, InboundOpaqueMessage,
+    InboundPlainMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce,
+    OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, Tls12AeadAlgorithm,
+    Tls13AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
 };
 use rustls::{ConnectionTrafficSecrets, ContentType, ProtocolVersion};
 
@@ -81,7 +81,11 @@ impl Tls12AeadAlgorithm for Chacha20Poly1305 {
 struct Tls13Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 
 impl MessageEncrypter for Tls13Cipher {
-    fn encrypt(&mut self, m: OutboundMessage, seq: u64) -> Result<OpaqueMessage, rustls::Error> {
+    fn encrypt(
+        &mut self,
+        m: OutboundPlainMessage,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
@@ -94,7 +98,7 @@ impl MessageEncrypter for Tls13Cipher {
             .encrypt_in_place(&nonce, &aad, &mut EncryptBufferAdapter(&mut payload))
             .map_err(|_| rustls::Error::EncryptError)
             .map(|_| {
-                OpaqueMessage::new(
+                OutboundOpaqueMessage::new(
                     ContentType::ApplicationData,
                     ProtocolVersion::TLSv1_2,
                     payload,
@@ -110,9 +114,9 @@ impl MessageEncrypter for Tls13Cipher {
 impl MessageDecrypter for Tls13Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: BorrowedOpaqueMessage<'a>,
+        mut m: InboundOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<InboundMessage<'a>, rustls::Error> {
+    ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
         let payload = &mut m.payload;
         let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
         let aad = make_tls13_aad(payload.len());
@@ -128,7 +132,11 @@ impl MessageDecrypter for Tls13Cipher {
 struct Tls12Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 
 impl MessageEncrypter for Tls12Cipher {
-    fn encrypt(&mut self, m: OutboundMessage, seq: u64) -> Result<OpaqueMessage, rustls::Error> {
+    fn encrypt(
+        &mut self,
+        m: OutboundPlainMessage,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
@@ -139,7 +147,7 @@ impl MessageEncrypter for Tls12Cipher {
         self.0
             .encrypt_in_place(&nonce, &aad, &mut EncryptBufferAdapter(&mut payload))
             .map_err(|_| rustls::Error::EncryptError)
-            .map(|_| OpaqueMessage::new(m.typ, m.version, payload))
+            .map(|_| OutboundOpaqueMessage::new(m.typ, m.version, payload))
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
@@ -150,9 +158,9 @@ impl MessageEncrypter for Tls12Cipher {
 impl MessageDecrypter for Tls12Cipher {
     fn decrypt<'a>(
         &mut self,
-        mut m: BorrowedOpaqueMessage<'a>,
+        mut m: InboundOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<InboundMessage<'a>, rustls::Error> {
+    ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
         let payload = &m.payload;
         let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
         let aad = make_tls12_aad(
@@ -167,7 +175,7 @@ impl MessageDecrypter for Tls12Cipher {
             .decrypt_in_place(&nonce, &aad, &mut DecryptBufferAdapter(payload))
             .map_err(|_| rustls::Error::DecryptError)?;
 
-        Ok(m.into_inbound_message())
+        Ok(m.into_plain_message())
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::crypto::cipher::{
-    make_tls12_aad, AeadKey, BorrowedOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter,
+    make_tls12_aad, AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter,
     MessageEncrypter, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
 };
 use crate::crypto::tls12::PrfUsingHmac;
@@ -7,7 +7,9 @@ use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{InboundMessage, OpaqueMessage, OutboundMessage, PrefixedPayload};
+use crate::msgs::message::{
+    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
+};
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls12::Tls12CipherSuite;
 
@@ -246,9 +248,9 @@ const GCM_OVERHEAD: usize = GCM_EXPLICIT_NONCE_LEN + 16;
 impl MessageDecrypter for GcmMessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: BorrowedOpaqueMessage<'a>,
+        mut msg: InboundOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<InboundMessage<'a>, Error> {
+    ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &msg.payload;
         if payload.len() < GCM_OVERHEAD {
             return Err(Error::DecryptError);
@@ -280,12 +282,16 @@ impl MessageDecrypter for GcmMessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_inbound_message())
+        Ok(msg.into_plain_message())
     }
 }
 
 impl MessageEncrypter for GcmMessageEncrypter {
-    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(
+        &mut self,
+        msg: OutboundPlainMessage,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
@@ -299,7 +305,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
             .map(|tag| payload.extend_from_slice(tag.as_ref()))
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OpaqueMessage::new(msg.typ, msg.version, payload))
+        Ok(OutboundOpaqueMessage::new(msg.typ, msg.version, payload))
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {
@@ -328,9 +334,9 @@ const CHACHAPOLY1305_OVERHEAD: usize = 16;
 impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        mut msg: BorrowedOpaqueMessage<'a>,
+        mut msg: InboundOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<InboundMessage<'a>, Error> {
+    ) -> Result<InboundPlainMessage<'a>, Error> {
         let payload = &msg.payload;
 
         if payload.len() < CHACHAPOLY1305_OVERHEAD {
@@ -357,12 +363,16 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
         }
 
         payload.truncate(plain_len);
-        Ok(msg.into_inbound_message())
+        Ok(msg.into_plain_message())
     }
 }
 
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
-    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(
+        &mut self,
+        msg: OutboundPlainMessage,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
@@ -374,7 +384,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
             .seal_in_place_append_tag(nonce, aad, &mut payload)
             .map_err(|_| Error::EncryptError)?;
 
-        Ok(OpaqueMessage::new(msg.typ, msg.version, payload))
+        Ok(OutboundOpaqueMessage::new(msg.typ, msg.version, payload))
     }
 
     fn encrypted_payload_len(&self, payload_len: usize) -> usize {

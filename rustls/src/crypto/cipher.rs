@@ -5,11 +5,10 @@ use std::error::Error as StdError;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
-pub use crate::msgs::base::BorrowedPayload;
 use crate::msgs::codec;
 pub use crate::msgs::message::{
-    BorrowedOpaqueMessage, InboundMessage, OpaqueMessage, OutboundMessage, PlainMessage,
-    PrefixedPayload,
+    BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, OutboundChunks,
+    OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
 };
 use crate::suites::ConnectionTrafficSecrets;
 
@@ -140,16 +139,20 @@ pub trait MessageDecrypter: Send + Sync {
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn decrypt<'a>(
         &mut self,
-        msg: BorrowedOpaqueMessage<'a>,
+        msg: InboundOpaqueMessage<'a>,
         seq: u64,
-    ) -> Result<InboundMessage<'a>, Error>;
+    ) -> Result<InboundPlainMessage<'a>, Error>;
 }
 
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter: Send + Sync {
     /// Encrypt the given TLS message `msg`, using the sequence number
     /// `seq which can be used to derive a unique [`Nonce`].
-    fn encrypt(&mut self, msg: OutboundMessage, seq: u64) -> Result<OpaqueMessage, Error>;
+    fn encrypt(
+        &mut self,
+        msg: OutboundPlainMessage,
+        seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error>;
 
     /// Return the length of the ciphertext that results from encrypting plaintext of
     /// length `payload_len`
@@ -319,7 +322,11 @@ impl From<[u8; Self::MAX_LEN]> for AeadKey {
 struct InvalidMessageEncrypter {}
 
 impl MessageEncrypter for InvalidMessageEncrypter {
-    fn encrypt(&mut self, _m: OutboundMessage, _seq: u64) -> Result<OpaqueMessage, Error> {
+    fn encrypt(
+        &mut self,
+        _m: OutboundPlainMessage,
+        _seq: u64,
+    ) -> Result<OutboundOpaqueMessage, Error> {
         Err(Error::EncryptError)
     }
 
@@ -334,9 +341,9 @@ struct InvalidMessageDecrypter {}
 impl MessageDecrypter for InvalidMessageDecrypter {
     fn decrypt<'a>(
         &mut self,
-        _m: BorrowedOpaqueMessage<'a>,
+        _m: InboundOpaqueMessage<'a>,
         _seq: u64,
-    ) -> Result<InboundMessage<'a>, Error> {
+    ) -> Result<InboundPlainMessage<'a>, Error> {
         Err(Error::DecryptError)
     }
 }
