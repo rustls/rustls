@@ -4,18 +4,6 @@
 
 In rough order of priority:
 
-* **FIPS Certification for Default Cryptographic Library**.
-  Change the default cryptographic library to something with FIPS certification.
-  rustls/rustls#1540
-
-* **Add No-Allocation / Write-Through API**.
-  Would make handshakes faster and give the caller more control over allocations.
-  RFC: rustls/rustls#1420
-
-* **Support no_std**.
-  Enables use of rustls in more memory-constrained environments.
-  RFC: rustls/rustls#1399
-
 * **OpenSSL API Compatibility Layer**.
   Add an OpenSSL C API compatibility layer for adoption purposes.
 
@@ -47,6 +35,20 @@ In rough order of priority:
   rustls/rustls#1687
 
 ## Past priorities
+
+Delivered in 0.23:
+
+* **FIPS Certification for Default Cryptographic Library**.
+  Change the default cryptographic library to something with FIPS certification.
+  rustls/rustls#1540
+
+* **Add No-Allocation / Write-Through API**.
+  Would make handshakes faster and give the caller more control over allocations.
+  RFC: rustls/rustls#1420
+
+* **Support no_std**.
+  Enables use of rustls in more memory-constrained environments.
+  RFC: rustls/rustls#1399
 
 Delivered in [rustls-platform-verifier](https://github.com/rustls/rustls-platform-verifier) 0.1.0:
 
