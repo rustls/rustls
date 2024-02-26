@@ -34,14 +34,14 @@ impl client::ClientSessionStore for NoClientSessionStorage {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod cache {
     use alloc::collections::VecDeque;
     use core::fmt;
-    use std::sync::Mutex;
 
     use pki_types::ServerName;
 
+    use crate::lock::Mutex;
     use crate::msgs::persist;
     use crate::{limited_cache, NamedGroup};
 
@@ -80,6 +80,7 @@ mod cache {
     impl ClientSessionMemoryCache {
         /// Make a new ClientSessionMemoryCache.  `size` is the
         /// maximum number of stored sessions.
+        #[cfg(feature = "std")]
         pub fn new(size: usize) -> Self {
             let max_servers = size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1)
                 / MAX_TLS13_TICKETS_PER_SERVER;
@@ -87,20 +88,36 @@ mod cache {
                 servers: Mutex::new(limited_cache::LimitedCache::new(max_servers)),
             }
         }
+
+        /// Make a new ClientSessionMemoryCache.  `size` is the
+        /// maximum number of stored sessions.
+        #[cfg(not(feature = "std"))]
+        pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Self {
+            let max_servers = size.saturating_add(MAX_TLS13_TICKETS_PER_SERVER - 1)
+                / MAX_TLS13_TICKETS_PER_SERVER;
+            Self {
+                servers: M::make_mutex(limited_cache::LimitedCache::new(max_servers)),
+            }
+        }
     }
 
     impl super::client::ClientSessionStore for ClientSessionMemoryCache {
         fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup) {
-            self.servers
-                .lock()
-                .unwrap()
-                .get_or_insert_default_and_edit(server_name, |data| data.kx_hint = Some(group));
+            #[cfg(feature = "std")]
+            let mut servers = self.servers.lock().unwrap();
+            #[cfg(not(feature = "std"))]
+            let mut servers = self.servers.lock();
+
+            servers.get_or_insert_default_and_edit(server_name, |data| data.kx_hint = Some(group));
         }
 
         fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup> {
-            self.servers
-                .lock()
-                .unwrap()
+            #[cfg(feature = "std")]
+            let servers = self.servers.lock().unwrap();
+            #[cfg(not(feature = "std"))]
+            let servers = self.servers.lock();
+
+            servers
                 .get(server_name)
                 .and_then(|sd| sd.kx_hint)
         }
@@ -111,12 +128,16 @@ mod cache {
             _value: persist::Tls12ClientSessionValue,
         ) {
             #[cfg(feature = "tls12")]
-            self.servers
-                .lock()
-                .unwrap()
-                .get_or_insert_default_and_edit(_server_name.clone(), |data| {
+            {
+                #[cfg(feature = "std")]
+                let mut servers = self.servers.lock().unwrap();
+                #[cfg(not(feature = "std"))]
+                let mut servers = self.servers.lock();
+
+                servers.get_or_insert_default_and_edit(_server_name.clone(), |data| {
                     data.tls12 = Some(_value)
                 });
+            }
         }
 
         fn tls12_session(
@@ -127,20 +148,30 @@ mod cache {
             return None;
 
             #[cfg(feature = "tls12")]
-            self.servers
-                .lock()
-                .unwrap()
-                .get(_server_name)
-                .and_then(|sd| sd.tls12.as_ref().cloned())
+            {
+                #[cfg(feature = "std")]
+                let servers = self.servers.lock().unwrap();
+                #[cfg(not(feature = "std"))]
+                let servers = self.servers.lock();
+
+                servers
+                    .get(_server_name)
+                    .and_then(|sd| sd.tls12.as_ref().cloned())
+            }
         }
 
         fn remove_tls12_session(&self, _server_name: &ServerName<'static>) {
             #[cfg(feature = "tls12")]
-            self.servers
-                .lock()
-                .unwrap()
-                .get_mut(_server_name)
-                .and_then(|data| data.tls12.take());
+            {
+                #[cfg(feature = "std")]
+                let mut servers = self.servers.lock().unwrap();
+                #[cfg(not(feature = "std"))]
+                let mut servers = self.servers.lock();
+
+                servers
+                    .get_mut(_server_name)
+                    .and_then(|data| data.tls12.take());
+            }
         }
 
         fn insert_tls13_ticket(
@@ -148,24 +179,29 @@ mod cache {
             server_name: ServerName<'static>,
             value: persist::Tls13ClientSessionValue,
         ) {
-            self.servers
-                .lock()
-                .unwrap()
-                .get_or_insert_default_and_edit(server_name.clone(), |data| {
-                    if data.tls13.len() == data.tls13.capacity() {
-                        data.tls13.pop_front();
-                    }
-                    data.tls13.push_back(value);
-                });
+            #[cfg(feature = "std")]
+            let mut servers = self.servers.lock().unwrap();
+            #[cfg(not(feature = "std"))]
+            let mut servers = self.servers.lock();
+
+            servers.get_or_insert_default_and_edit(server_name.clone(), |data| {
+                if data.tls13.len() == data.tls13.capacity() {
+                    data.tls13.pop_front();
+                }
+                data.tls13.push_back(value);
+            });
         }
 
         fn take_tls13_ticket(
             &self,
             server_name: &ServerName<'static>,
         ) -> Option<persist::Tls13ClientSessionValue> {
-            self.servers
-                .lock()
-                .unwrap()
+            #[cfg(feature = "std")]
+            let mut servers = self.servers.lock().unwrap();
+            #[cfg(not(feature = "std"))]
+            let mut servers = self.servers.lock();
+
+            servers
                 .get_mut(server_name)
                 .and_then(|data| data.tls13.pop_back())
         }
@@ -180,7 +216,7 @@ mod cache {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ClientSessionMemoryCache;
 
 #[derive(Debug)]

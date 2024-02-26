@@ -25,13 +25,13 @@ impl server::StoresServerSessions for NoServerSessionStorage {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod cache {
     use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt::{Debug, Formatter};
-    use std::sync::Mutex;
 
+    use crate::lock::Mutex;
     use crate::{limited_cache, server};
 
     /// An implementer of `StoresServerSessions` that stores everything
@@ -45,32 +45,51 @@ mod cache {
         /// Make a new ServerSessionMemoryCache.  `size` is the maximum
         /// number of stored sessions, and may be rounded-up for
         /// efficiency.
+        #[cfg(feature = "std")]
         pub fn new(size: usize) -> Arc<Self> {
             Arc::new(Self {
                 cache: Mutex::new(limited_cache::LimitedCache::new(size)),
+            })
+        }
+
+        /// Make a new ServerSessionMemoryCache.  `size` is the maximum
+        /// number of stored sessions, and may be rounded-up for
+        /// efficiency.
+        #[cfg(not(feature = "std"))]
+        pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Arc<Self> {
+            Arc::new(Self {
+                cache: M::make_mutex(limited_cache::LimitedCache::new(size)),
             })
         }
     }
 
     impl server::StoresServerSessions for ServerSessionMemoryCache {
         fn put(&self, key: Vec<u8>, value: Vec<u8>) -> bool {
-            self.cache
-                .lock()
-                .unwrap()
-                .insert(key, value);
+            #[cfg(feature = "std")]
+            let mut cache = self.cache.lock().unwrap();
+            #[cfg(not(feature = "std"))]
+            let mut cache = self.cache.lock();
+
+            cache.insert(key, value);
             true
         }
 
         fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
-            self.cache
-                .lock()
-                .unwrap()
-                .get(key)
-                .cloned()
+            #[cfg(feature = "std")]
+            let cache = self.cache.lock().unwrap();
+            #[cfg(not(feature = "std"))]
+            let cache = self.cache.lock();
+
+            cache.get(key).cloned()
         }
 
         fn take(&self, key: &[u8]) -> Option<Vec<u8>> {
-            self.cache.lock().unwrap().remove(key)
+            #[cfg(feature = "std")]
+            let mut cache = self.cache.lock().unwrap();
+            #[cfg(not(feature = "std"))]
+            let mut cache = self.cache.lock();
+
+            cache.remove(key)
         }
 
         fn can_cache(&self) -> bool {
@@ -133,7 +152,8 @@ mod cache {
         }
     }
 }
-#[cfg(feature = "std")]
+
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ServerSessionMemoryCache;
 
 /// Something which never produces tickets.

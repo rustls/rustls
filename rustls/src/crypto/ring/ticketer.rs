@@ -22,10 +22,26 @@ impl Ticketer {
     ///
     /// The encryption mechanism used is injected via TICKETER_AEAD;
     /// it must take a 256-bit key and 96-bit nonce.
+    #[cfg(feature = "std")]
     pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
         Ok(Arc::new(crate::ticketer::TicketSwitcher::new(
             6 * 60 * 60,
             make_ticket_generator,
+        )?))
+    }
+
+    /// Make the recommended Ticketer.  This produces tickets
+    /// with a 12 hour life and randomly generated keys.
+    ///
+    /// The encryption mechanism used is Chacha20Poly1305.
+    #[cfg(not(feature = "std"))]
+    pub fn new<M: crate::lock::MakeMutex>(
+        time_provider: &'static dyn TimeProvider,
+    ) -> Result<Arc<dyn ProducesTickets>, Error> {
+        Ok(Arc::new(crate::ticketer::TicketSwitcher::new::<M>(
+            6 * 60 * 60,
+            make_ticket_generator,
+            time_provider,
         )?))
     }
 }
