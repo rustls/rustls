@@ -19,10 +19,13 @@ impl Default for MessageFragmenter {
 }
 
 impl MessageFragmenter {
-    /// Take the Message `msg` and re-fragment it into new
-    /// messages whose fragment is no more than max_frag.
+    /// Take `msg` and fragment it into new messages with the same type and version.
+    ///
+    /// Each returned message size is no more than `max_frag`.
+    ///
     /// Return an iterator across those messages.
-    /// Payloads are borrowed.
+    ///
+    /// Payloads are borrowed from `msg`.
     pub fn fragment_message<'a>(
         &self,
         msg: &'a PlainMessage,
@@ -30,8 +33,13 @@ impl MessageFragmenter {
         self.fragment_payload(msg.typ, msg.version, msg.payload.bytes().into())
     }
 
-    /// Enqueue borrowed fragments of (version, typ, payload) which
-    /// are no longer than max_frag onto the `out` deque.
+    /// Take `payload` and fragment it into new messages with given type and version.
+    ///
+    /// Each returned message size is no more than `max_frag`.
+    ///
+    /// Return an iterator across those messages.
+    ///
+    /// Payloads are borrowed from `payload`.
     pub(crate) fn fragment_payload<'a>(
         &self,
         typ: ContentType,

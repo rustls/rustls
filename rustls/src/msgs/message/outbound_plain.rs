@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use super::{OutboundOpaqueMessage, PrefixedPayload};
 
-/// A TLS frame, named TLSPlaintext in the standard.
+/// A TLS frame, named `TLSPlaintext` in the standard.
 ///
 /// This outbound type borrows its "to be encrypted" payload from the "user".
 /// It is used for fragmenting and is consumed by encryption.
@@ -31,10 +31,11 @@ impl OutboundPlainMessage<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
 /// A collection of borrowed plaintext slices.
+///
 /// Warning: OutboundChunks does not guarantee that the simplest variant is used.
 /// Multiple can hold non fragmented or empty payloads.
+#[derive(Debug, Clone)]
 pub enum OutboundChunks<'a> {
     /// A single byte slice. Contrary to `Multiple`, this uses a single pointer indirection
     Single(&'a [u8]),
