@@ -195,16 +195,16 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod sni_resolver {
     use alloc::string::{String, ToString};
     use alloc::sync::Arc;
     use core::fmt::Debug;
-    use std::collections::HashMap;
 
     use pki_types::{DnsName, ServerName};
 
     use crate::error::Error;
+    use crate::hash_map::HashMap;
     use crate::server::ClientHello;
     use crate::webpki::{verify_server_name, ParsedCertificate};
     use crate::{server, sign};
@@ -295,7 +295,7 @@ mod sni_resolver {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use sni_resolver::ResolvesServerCertUsingSni;
 
 #[cfg(test)]
