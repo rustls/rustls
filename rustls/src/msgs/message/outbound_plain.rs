@@ -146,12 +146,6 @@ impl<'a> From<&'a [u8]> for OutboundChunks<'a> {
     }
 }
 
-impl<'a, const N: usize> From<&'a [u8; N]> for OutboundChunks<'a> {
-    fn from(payload: &'a [u8; N]) -> Self {
-        Self::Single(payload)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{println, vec};
