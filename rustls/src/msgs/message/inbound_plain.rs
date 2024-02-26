@@ -1,9 +1,11 @@
 use crate::{ContentType, ProtocolVersion};
 
-/// A TLS frame, named TLSPlaintext in the standard.
+/// A TLS frame, named `TLSPlaintext` in the standard.
 ///
-/// This inbound type borrows its decrypted payload from a `[MessageDeframer]`.
+/// This inbound type borrows its decrypted payload from a [`MessageDeframer`].
 /// It results from decryption.
+///
+/// [`MessageDeframer`]: crate::msgs::deframer::MessageDeframer
 #[derive(Debug)]
 pub struct InboundPlainMessage<'a> {
     pub typ: ContentType,

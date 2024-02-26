@@ -19,7 +19,7 @@ pub struct InboundOpaqueMessage<'a> {
 impl<'a> InboundOpaqueMessage<'a> {
     /// Construct a new `InboundOpaqueMessage` from constituent fields.
     ///
-    /// `body` is moved into the `payload` field.
+    /// `payload` is borrowed.
     pub fn new(typ: ContentType, version: ProtocolVersion, payload: &'a mut [u8]) -> Self {
         Self {
             typ,
@@ -127,7 +127,9 @@ impl<'a> BorrowedPayload<'a> {
     }
 }
 
-/// `v` is a message payload, immediately post-decryption.  This function
+/// Decode a TLS1.3 `TLSInnerPlaintext` encoding.
+///
+/// `p` is a message payload, immediately post-decryption.  This function
 /// removes zero padding bytes, until a non-zero byte is encountered which is
 /// the content type, which is returned.  See RFC8446 s5.2.
 ///

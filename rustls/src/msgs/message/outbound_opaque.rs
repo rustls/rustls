@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use super::OutboundChunks;
 
-/// A TLS frame, named TLSPlaintext in the standard.
+/// A TLS frame, named `TLSPlaintext` in the standard.
 ///
 /// This outbound type owns all memory for its interior parts.
 /// It results from encryption and is used for io write.
@@ -30,6 +30,8 @@ impl OutboundOpaqueMessage {
         }
     }
 
+    /// Construct by decoding from a [`Reader`].
+    ///
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
     pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
