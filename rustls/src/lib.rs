@@ -389,7 +389,7 @@ mod conn;
 pub mod crypto;
 mod error;
 mod hash_hs;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod limited_cache;
 mod rand;
 mod record_layer;
@@ -582,7 +582,7 @@ pub mod server {
 
     pub use builder::WantsServerCert;
     pub use handy::NoServerSessionStorage;
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ResolvesServerCertUsingSni;
     #[cfg(feature = "std")]
     pub use handy::ServerSessionMemoryCache;
@@ -638,3 +638,16 @@ pub mod ticketer;
 pub mod manual;
 
 pub mod time_provider;
+
+#[cfg(any(feature = "std", feature = "hashbrown"))]
+mod hash_map {
+    #[cfg(feature = "std")]
+    pub(crate) use std::collections::hash_map::Entry;
+    #[cfg(feature = "std")]
+    pub(crate) use std::collections::HashMap;
+
+    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
+    pub(crate) use hashbrown::hash_map::Entry;
+    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
+    pub(crate) use hashbrown::HashMap;
+}
