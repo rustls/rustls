@@ -1,8 +1,8 @@
 use alloc::collections::VecDeque;
 use core::borrow::Borrow;
 use core::hash::Hash;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+
+use crate::hash_map::{Entry, HashMap};
 
 /// A HashMap-alike, which never gets larger than a specified
 /// capacity, and evicts the oldest insertion to maintain this.
@@ -19,7 +19,6 @@ pub(crate) struct LimitedCache<K: Clone + Hash + Eq, V> {
     oldest: VecDeque<K>,
 }
 
-#[cfg(feature = "std")]
 impl<K, V> LimitedCache<K, V>
 where
     K: Eq + Hash + Clone + core::fmt::Debug,
@@ -211,7 +210,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "std")]
     #[test]
     fn test_get_or_insert_default_and_edit_evicts_old_items_to_meet_capacity() {
         let mut t = Test::new(3);
@@ -240,7 +238,6 @@ mod tests {
         assert_eq!(t.get("jkl"), None);
     }
 
-    #[cfg(feature = "std")]
     #[test]
     fn test_get_or_insert_default_and_edit_edits_existing_item() {
         let mut t = Test::new(3);
