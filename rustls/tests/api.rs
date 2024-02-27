@@ -33,8 +33,8 @@ use rustls::internal::msgs::message::{
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::SupportedCipherSuite;
 use rustls::{
-    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, KeyLog,
-    PeerIncompatible, PeerMisbehaved, SideData,
+    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, InvalidMessage,
+    KeyLog, PeerIncompatible, PeerMisbehaved, SideData,
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -5412,8 +5412,8 @@ fn test_acceptor() {
         io::ErrorKind::Other,
     );
     assert_eq!(
-        acceptor.accept().err(),
-        Some(Error::General("Acceptor polled after completion".into()))
+        acceptor.accept().err().unwrap().0,
+        Error::General("Acceptor polled after completion".into())
     );
 
     let mut acceptor = Acceptor::default();
@@ -5422,24 +5422,70 @@ fn test_acceptor() {
         .read_tls(&mut &buf[..3])
         .unwrap(); // incomplete message
     assert!(acceptor.accept().unwrap().is_none());
+
     acceptor
         .read_tls(&mut [0x80, 0x00].as_ref())
         .unwrap(); // invalid message (len = 32k bytes)
-    assert!(acceptor.accept().is_err());
+    let (err, mut alert) = acceptor.accept().unwrap_err();
+    assert_eq!(err, Error::InvalidMessage(InvalidMessage::MessageTooLarge));
+    let mut alert_content = Vec::new();
+    let _ = alert.write(&mut alert_content);
+    let expected = build_alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
+    assert_eq!(alert_content, expected);
 
     let mut acceptor = Acceptor::default();
     // Minimal valid 1-byte application data message is not a handshake message
     acceptor
         .read_tls(&mut [0x17, 0x03, 0x03, 0x00, 0x01, 0x00].as_ref())
         .unwrap();
-    assert!(acceptor.accept().is_err());
+    let (err, mut alert) = acceptor.accept().unwrap_err();
+    assert!(matches!(err, Error::InappropriateMessage { .. }));
+    let mut alert_content = Vec::new();
+    let _ = alert.write(&mut alert_content);
+    assert!(alert_content.is_empty()); // We do not expect an alert for this condition.
 
     let mut acceptor = Acceptor::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message
     acceptor
         .read_tls(&mut [0x16, 0x03, 0x03, 0x00, 0x05, 0x01, 0x00, 0x00, 0x01, 0x00].as_ref())
         .unwrap();
-    assert!(acceptor.accept().is_err());
+    let (err, mut alert) = acceptor.accept().unwrap_err();
+    assert!(matches!(err, Error::InvalidMessage(InvalidMessage::MissingData(_))));
+    let mut alert_content = Vec::new();
+    let _ = alert.write(&mut alert_content);
+    let expected = build_alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
+    assert_eq!(alert_content, expected);
+}
+
+#[test]
+fn test_acceptor_rejected_handshake() {
+    use rustls::server::Acceptor;
+
+    let client_config = finish_client_config(KeyType::Ed25519, ClientConfig::builder_with_provider(provider::default_provider().into())
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap());
+    let mut client = ClientConnection::new(client_config.into(), server_name("localhost")).unwrap();
+    let mut buf = Vec::new();
+    client.write_tls(&mut buf).unwrap();
+
+    let server_config = finish_server_config(KeyType::Ed25519, ServerConfig::builder_with_provider(provider::default_provider().into())
+        .with_protocol_versions(&[&rustls::version::TLS12])
+        .unwrap());
+    let mut acceptor = Acceptor::default();
+    acceptor
+        .read_tls(&mut buf.as_slice())
+        .unwrap();
+    let accepted = acceptor.accept().unwrap().unwrap();
+    let ch = accepted.client_hello();
+    assert_eq!(ch.server_name(), Some("localhost"));
+
+    let (err, mut alert) = accepted.into_connection(server_config.into()).unwrap_err();
+    assert_eq!(err, Error::PeerIncompatible(PeerIncompatible::Tls12NotOfferedOrEnabled));
+
+    let mut alert_content = Vec::new();
+    let _ = alert.write(&mut alert_content);
+    let expected = build_alert(AlertLevel::Fatal, AlertDescription::ProtocolVersion, &[]);
+    assert_eq!(alert_content, expected);
 }
 
 #[test]
