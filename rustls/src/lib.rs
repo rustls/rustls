@@ -593,7 +593,7 @@ pub mod server {
         Accepted, ServerConfig, ServerConnectionData, UnbufferedServerConnection,
     };
     #[cfg(feature = "std")]
-    pub use server_conn::{Acceptor, ReadEarlyData, ServerConnection};
+    pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
     pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
 
     /// Dangerous configuration that should be audited and used with extreme care.

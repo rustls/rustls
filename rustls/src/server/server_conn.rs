@@ -503,6 +503,7 @@ mod connection {
     use crate::error::Error;
     use crate::server::hs;
     use crate::suites::ExtractedSecrets;
+    use crate::vecbuf::ChunkVecBuffer;
 
     use alloc::boxed::Box;
     use alloc::sync::Arc;
@@ -759,25 +760,36 @@ mod connection {
         /// Returns `Ok(Some(accepted))` if the connection has been accepted. Call
         /// `accepted.into_connection()` to continue. Do not call this function again.
         ///
-        /// Returns `Err(err)` if an error occurred. Do not call this function again.
-        pub fn accept(&mut self) -> Result<Option<Accepted>, Error> {
+        /// Returns `Err((err, alert))` if an error occurred. If an alert is returned, the
+        /// application should call `alert.write()` to send the alert to the client. It should
+        /// not call `accept()` again.
+        pub fn accept(&mut self) -> Result<Option<Accepted>, (Error, AcceptedAlert)> {
             let mut connection = match self.inner.take() {
                 Some(conn) => conn,
                 None => {
-                    return Err(Error::General("Acceptor polled after completion".into()));
+                    return Err((
+                        Error::General("Acceptor polled after completion".into()),
+                        AcceptedAlert::empty(),
+                    ));
                 }
             };
 
-            let message = match connection.first_handshake_message()? {
-                Some(msg) => msg,
-                None => {
+            let message = match connection.first_handshake_message() {
+                Ok(Some(msg)) => msg,
+                Ok(None) => {
                     self.inner = Some(connection);
                     return Ok(None);
                 }
+                Err(err) => return Err((err, AcceptedAlert::from(connection))),
             };
 
-            let (_, sig_schemes) =
-                hs::process_client_hello(&message, false, &mut Context::from(&mut connection))?;
+            let mut cx = Context::from(&mut connection);
+            let sig_schemes = match hs::process_client_hello(&message, false, &mut cx) {
+                Ok((_, sig_schemes)) => sig_schemes,
+                Err(err) => {
+                    return Err((err, AcceptedAlert::from(connection)));
+                }
+            };
 
             Ok(Some(Accepted {
                 connection,
@@ -786,9 +798,39 @@ mod connection {
             }))
         }
     }
+
+    /// Represents a TLS alert resulting from handling the client's `ClientHello` message.
+    ///
+    /// When [`Acceptor::accept()`] returns an error, it yields an `AcceptedAlert` such that the
+    /// application can communicate failure to the client via [`AcceptedAlert::write()`].
+    pub struct AcceptedAlert(ChunkVecBuffer);
+
+    impl AcceptedAlert {
+        pub(super) fn empty() -> Self {
+            Self(ChunkVecBuffer::new(None))
+        }
+
+        /// Send the alert to the client.
+        pub fn write(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
+            self.0.write_to(wr)
+        }
+    }
+
+    impl From<ConnectionCommon<ServerConnectionData>> for AcceptedAlert {
+        fn from(conn: ConnectionCommon<ServerConnectionData>) -> Self {
+            Self(conn.core.common_state.sendable_tls)
+        }
+    }
+
+    impl Debug for AcceptedAlert {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+            f.debug_struct("AcceptedAlert").finish()
+        }
+    }
 }
+
 #[cfg(feature = "std")]
-pub use connection::{Acceptor, ReadEarlyData, ServerConnection};
+pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
 /// Unbuffered version of `ServerConnection`
 ///
@@ -859,21 +901,29 @@ impl Accepted {
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
     #[cfg(feature = "std")]
-    pub fn into_connection(mut self, config: Arc<ServerConfig>) -> Result<ServerConnection, Error> {
-        self.connection
-            .set_max_fragment_size(config.max_fragment_size)?;
+    pub fn into_connection(
+        mut self,
+        config: Arc<ServerConfig>,
+    ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+        if let Err(err) = self
+            .connection
+            .set_max_fragment_size(config.max_fragment_size)
+        {
+            // We have a connection here, but it won't contain an alert since the error
+            // is with the fragment size configured in the `ServerConfig`.
+            return Err((err, AcceptedAlert::empty()));
+        }
 
         self.connection.enable_secret_extraction = config.enable_secret_extraction;
 
         let state = hs::ExpectClientHello::new(config, Vec::new());
         let mut cx = hs::ServerContext::from(&mut self.connection);
 
-        let new = state.with_certified_key(
-            self.sig_schemes,
-            Self::client_hello_payload(&self.message),
-            &self.message,
-            &mut cx,
-        )?;
+        let ch = Self::client_hello_payload(&self.message);
+        let new = match state.with_certified_key(self.sig_schemes, ch, &self.message, &mut cx) {
+            Ok(new) => new,
+            Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
+        };
 
         self.connection.replace_state(new);
         Ok(ServerConnection {
@@ -890,6 +940,12 @@ impl Accepted {
             },
             _ => unreachable!(),
         }
+    }
+}
+
+impl Debug for Accepted {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Accepted").finish()
     }
 }
 

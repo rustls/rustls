@@ -43,8 +43,8 @@ fn main() {
                 conn.write_tls(&mut stream).unwrap();
                 conn.complete_io(&mut stream).unwrap();
             }
-            Err(e) => {
-                eprintln!("{}", e);
+            Err((err, _)) => {
+                eprintln!("{err}");
             }
         }
     }
