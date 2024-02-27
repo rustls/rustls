@@ -52,7 +52,7 @@ impl OutboundOpaqueMessage {
         let length = self.payload.len() as u16;
         let mut encoded_payload = self.payload.0;
         encoded_payload[0] = self.typ.get_u8();
-        encoded_payload[1..3].copy_from_slice(&self.version.get_u16().to_be_bytes());
+        encoded_payload[1..3].copy_from_slice(&self.version.to_array());
         encoded_payload[3..5].copy_from_slice(&(length).to_be_bytes());
         encoded_payload
     }
