@@ -2877,6 +2877,7 @@ impl rustls::server::StoresServerSessions for ServerStorage {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // complete mock, but not 100% used in tests
 enum ClientStorageOp {
     SetKxHint(rustls::ServerName, rustls::NamedGroup),
     GetKxHint(rustls::ServerName, Option<rustls::NamedGroup>),
