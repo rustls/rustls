@@ -237,11 +237,12 @@ pub const NONCE_LEN: usize = 12;
 /// See RFC8446 s5.2 for the `additional_data` definition.
 #[inline]
 pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
+    let version = ProtocolVersion::TLSv1_2.to_array();
     [
         ContentType::ApplicationData.get_u8(),
         // Note: this is `legacy_record_version`, i.e. TLS1.2 even for TLS1.3.
-        (ProtocolVersion::TLSv1_2.get_u16() >> 8) as u8,
-        (ProtocolVersion::TLSv1_2.get_u16() & 0xff) as u8,
+        version[0],
+        version[1],
         (payload_len >> 8) as u8,
         (payload_len & 0xff) as u8,
     ]
