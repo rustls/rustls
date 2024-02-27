@@ -1,4 +1,4 @@
-use super::outbound_opaque::read_opaque_message_header;
+use super::outbound::read_opaque_message_header;
 use super::MessageError;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
