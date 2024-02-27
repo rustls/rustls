@@ -7,13 +7,11 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::AlertLevel;
 use crate::msgs::handshake::HandshakeMessagePayload;
 
-mod inbound_opaque;
-mod inbound_plain;
+mod inbound;
+pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
+
 mod outbound_opaque;
 mod outbound_plain;
-
-pub use inbound_opaque::{BorrowedPayload, InboundOpaqueMessage};
-pub use inbound_plain::InboundPlainMessage;
 pub use outbound_opaque::{OutboundOpaqueMessage, PrefixedPayload};
 pub use outbound_plain::{OutboundChunks, OutboundPlainMessage};
 
