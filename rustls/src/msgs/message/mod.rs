@@ -10,10 +10,10 @@ use crate::msgs::handshake::HandshakeMessagePayload;
 mod inbound;
 pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
 
-mod outbound_opaque;
-mod outbound_plain;
-pub use outbound_opaque::{OutboundOpaqueMessage, PrefixedPayload};
-pub use outbound_plain::{OutboundChunks, OutboundPlainMessage};
+mod outbound;
+pub use outbound::{
+    OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
+};
 
 use alloc::vec::Vec;
 
