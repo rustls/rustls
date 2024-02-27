@@ -286,15 +286,7 @@ pub(crate) trait ConvertServerNameList {
 impl ConvertServerNameList for [ServerName] {
     /// RFC6066: "The ServerNameList MUST NOT contain more than one name of the same name_type."
     fn has_duplicate_names_for_type(&self) -> bool {
-        let mut seen = BTreeSet::new();
-
-        for name in self {
-            if !seen.insert(u8::from(name.typ)) {
-                return true;
-            }
-        }
-
-        false
+        has_duplicates::<_, _, u8>(self.iter().map(|name| name.typ))
     }
 
     fn single_hostname(&self) -> Option<DnsName<'_>> {
@@ -856,18 +848,11 @@ impl ClientHelloPayload {
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = BTreeSet::new();
-
-        for ext in &self.extensions {
-            let typ = u16::from(ext.ext_type());
-
-            if seen.contains(&typ) {
-                return true;
-            }
-            seen.insert(typ);
-        }
-
-        false
+        has_duplicates::<_, _, u16>(
+            self.extensions
+                .iter()
+                .map(|ext| ext.ext_type()),
+        )
     }
 
     pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
@@ -1107,18 +1092,11 @@ impl HelloRetryRequest {
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = BTreeSet::new();
-
-        for ext in &self.extensions {
-            let typ = u16::from(ext.ext_type());
-
-            if seen.contains(&typ) {
-                return true;
-            }
-            seen.insert(typ);
-        }
-
-        false
+        has_duplicates::<_, _, u16>(
+            self.extensions
+                .iter()
+                .map(|ext| ext.ext_type()),
+        )
     }
 
     pub(crate) fn has_unknown_extension(&self) -> bool {
@@ -1380,18 +1358,11 @@ impl CertificateEntry {
     }
 
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = BTreeSet::new();
-
-        for ext in &self.exts {
-            let typ = u16::from(ext.ext_type());
-
-            if seen.contains(&typ) {
-                return true;
-            }
-            seen.insert(typ);
-        }
-
-        false
+        has_duplicates::<_, _, u16>(
+            self.exts
+                .iter()
+                .map(|ext| ext.ext_type()),
+        )
     }
 
     pub(crate) fn has_unknown_extension(&self) -> bool {
@@ -1807,18 +1778,11 @@ pub(crate) trait HasServerExtensions {
     /// Returns true if there is more than one extension of a given
     /// type.
     fn has_duplicate_extension(&self) -> bool {
-        let mut seen = BTreeSet::new();
-
-        for ext in self.extensions() {
-            let typ = u16::from(ext.ext_type());
-
-            if seen.contains(&typ) {
-                return true;
-            }
-            seen.insert(typ);
-        }
-
-        false
+        has_duplicates::<_, _, u16>(
+            self.extensions()
+                .iter()
+                .map(|ext| ext.ext_type()),
+        )
     }
 
     fn find_extension(&self, ext: ExtensionType) -> Option<&ServerExtension> {
@@ -2135,18 +2099,11 @@ impl NewSessionTicketPayloadTls13 {
     }
 
     pub(crate) fn has_duplicate_extension(&self) -> bool {
-        let mut seen = BTreeSet::new();
-
-        for ext in &self.exts {
-            let typ = u16::from(ext.ext_type());
-
-            if seen.contains(&typ) {
-                return true;
-            }
-            seen.insert(typ);
-        }
-
-        false
+        has_duplicates::<_, _, u16>(
+            self.exts
+                .iter()
+                .map(|ext| ext.ext_type()),
+        )
     }
 
     pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&NewSessionTicketExtension> {
@@ -2585,4 +2542,16 @@ impl Codec<'_> for EchConfig {
 
 impl TlsListElement for EchConfig {
     const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>(iter: I) -> bool {
+    let mut seen = BTreeSet::new();
+
+    for x in iter {
+        if !seen.insert(x.into()) {
+            return true;
+        }
+    }
+
+    false
 }
