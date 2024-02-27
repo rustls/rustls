@@ -147,7 +147,7 @@ pub trait MessageDecrypter: Send + Sync {
 /// Objects with this trait can encrypt TLS messages.
 pub trait MessageEncrypter: Send + Sync {
     /// Encrypt the given TLS message `msg`, using the sequence number
-    /// `seq which can be used to derive a unique [`Nonce`].
+    /// `seq` which can be used to derive a unique [`Nonce`].
     fn encrypt(
         &mut self,
         msg: OutboundPlainMessage,
