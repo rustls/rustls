@@ -196,8 +196,8 @@ enum_builder! {
 
 impl NamedGroup {
     /// Return the key exchange algorithm associated with this `NamedGroup`
-    pub fn key_exchange_algorithm(&self) -> KeyExchangeAlgorithm {
-        match self.get_u16() {
+    pub fn key_exchange_algorithm(self) -> KeyExchangeAlgorithm {
+        match u16::from(self) {
             x if (0x100..0x200).contains(&x) => KeyExchangeAlgorithm::DHE,
             _ => KeyExchangeAlgorithm::ECDHE,
         }

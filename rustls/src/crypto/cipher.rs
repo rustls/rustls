@@ -239,7 +239,7 @@ pub const NONCE_LEN: usize = 12;
 pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
     let version = ProtocolVersion::TLSv1_2.to_array();
     [
-        ContentType::ApplicationData.get_u8(),
+        ContentType::ApplicationData.into(),
         // Note: this is `legacy_record_version`, i.e. TLS1.2 even for TLS1.3.
         version[0],
         version[1],
@@ -260,8 +260,8 @@ pub fn make_tls12_aad(
 ) -> [u8; TLS12_AAD_SIZE] {
     let mut out = [0; TLS12_AAD_SIZE];
     codec::put_u64(seq, &mut out[0..]);
-    out[8] = typ.get_u8();
-    codec::put_u16(vers.get_u16(), &mut out[9..]);
+    out[8] = typ.into();
+    codec::put_u16(vers.into(), &mut out[9..]);
     codec::put_u16(len as u16, &mut out[11..]);
     out
 }

@@ -795,7 +795,7 @@ fn test_tls13_late_plaintext_alert() {
 }
 
 fn build_alert(level: AlertLevel, desc: AlertDescription, suffix: &[u8]) -> Vec<u8> {
-    let mut v = vec![ ContentType::Alert.get_u8() ];
+    let mut v = vec![ContentType::Alert.into()];
     ProtocolVersion::TLSv1_2.encode(&mut v);
     ((2 + suffix.len()) as u16).encode(&mut v);
     level.encode(&mut v);
