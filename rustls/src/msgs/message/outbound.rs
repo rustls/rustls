@@ -206,7 +206,7 @@ impl OutboundOpaqueMessage {
         PlainMessage {
             version: self.version,
             typ: self.typ,
-            payload: Payload::Owned(self.payload.to_vec()),
+            payload: Payload::Owned(self.payload.as_ref().to_vec()),
         }
     }
 
@@ -238,10 +238,6 @@ impl PrefixedPayload {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.as_ref().to_vec()
     }
 
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
