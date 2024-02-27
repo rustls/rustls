@@ -7,6 +7,8 @@
 #![cfg(feature = "ring")]
 
 use core::time::Duration;
+use std::prelude::v1::*;
+use std::println;
 use std::time::Instant;
 
 use crate::crypto::ring;

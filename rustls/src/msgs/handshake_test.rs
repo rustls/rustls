@@ -21,6 +21,9 @@ use crate::verify::DigitallySignedStruct;
 
 use pki_types::{CertificateDer, DnsName};
 
+use std::prelude::v1::*;
+use std::{format, println, vec};
+
 #[test]
 fn rejects_short_random() {
     let bytes = [0x01; 31];

@@ -234,6 +234,7 @@ pub(crate) struct Decrypted {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::vec;
 
     #[test]
     fn test_has_decrypted() {

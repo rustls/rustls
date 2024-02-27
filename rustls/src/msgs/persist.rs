@@ -411,6 +411,7 @@ mod tests {
 
     #[test]
     fn serversessionvalue_is_debug() {
+        use std::{println, vec};
         let ssv = ServerSessionValue::new(
             None,
             ProtocolVersion::TLSv1_3,

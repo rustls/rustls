@@ -413,7 +413,9 @@ mod tests {
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
+    use std::prelude::v1::*;
     use std::sync::Arc;
+    use std::{format, println, vec};
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der

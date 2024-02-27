@@ -6,9 +6,10 @@ use super::codec::Reader;
 use super::enums::AlertLevel;
 use super::message::{Message, OpaqueMessage, PlainMessage};
 
-use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::prelude::v1::*;
+use std::{format, fs, println, vec};
 
 #[test]
 fn test_read_fuzz_corpus() {

@@ -229,6 +229,7 @@ mod tests {
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
     use crate::test_provider::cipher_suite;
+    use alloc::vec::Vec;
 
     use pki_types::{ServerName, UnixTime};
 

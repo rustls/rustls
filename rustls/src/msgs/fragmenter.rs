@@ -72,6 +72,7 @@ mod tests {
     use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
     use crate::msgs::message::{BorrowedPlainMessage, PlainMessage};
+    use std::prelude::v1::*;
 
     fn msg_eq(
         m: &BorrowedPlainMessage,

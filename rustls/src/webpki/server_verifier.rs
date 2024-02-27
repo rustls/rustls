@@ -282,7 +282,9 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 
 #[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
+    use std::prelude::v1::*;
     use std::sync::Arc;
+    use std::{println, vec};
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
