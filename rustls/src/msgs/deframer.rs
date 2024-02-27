@@ -674,16 +674,16 @@ struct HandshakePayloadMeta {
 /// (`MAX_HANDSHAKE_SIZE`), `Ok(None)` if the buffer is too small to contain a complete header,
 /// and `Ok(Some(len))` otherwise.
 fn payload_size(buf: &[u8]) -> Result<Option<usize>, Error> {
-    if buf.len() < HEADER_SIZE {
+    if buf.len() < HANDSHAKE_HEADER_SIZE {
         return Ok(None);
     }
 
-    let (header, _) = buf.split_at(HEADER_SIZE);
+    let (header, _) = buf.split_at(HANDSHAKE_HEADER_SIZE);
     match codec::u24::read_bytes(&header[1..]) {
         Ok(len) if len.0 > MAX_HANDSHAKE_SIZE => Err(Error::InvalidMessage(
             InvalidMessage::HandshakePayloadTooLarge,
         )),
-        Ok(len) => Ok(Some(HEADER_SIZE + usize::from(len))),
+        Ok(len) => Ok(Some(HANDSHAKE_HEADER_SIZE + usize::from(len))),
         _ => Ok(None),
     }
 }
@@ -696,7 +696,7 @@ pub struct Deframed<'a> {
     pub message: InboundPlainMessage<'a>,
 }
 
-const HEADER_SIZE: usize = 1 + 3;
+const HANDSHAKE_HEADER_SIZE: usize = 1 + 3;
 
 /// TLS allows for handshake messages of up to 16MB.  We
 /// restrict that to 64KB to limit potential for denial-of-
