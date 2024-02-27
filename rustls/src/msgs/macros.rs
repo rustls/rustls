@@ -1,13 +1,13 @@
 /// A macro which defines an enum type.
 macro_rules! enum_builder {
     ($(#[$comment:meta])* @U8 $($enum:tt)+) => {
-        enum_builder!(u8: get_u8 $(#[$comment])* $($enum)+);
+        enum_builder!(u8: $(#[$comment])* $($enum)+);
     };
     ($(#[$comment:meta])* @U16 $($enum:tt)+) => {
-        enum_builder!(u16: get_u16 $(#[$comment])* $($enum)+);
+        enum_builder!(u16: $(#[$comment])* $($enum)+);
     };
     (
-        $uint:ty: $get_uint:ident
+        $uint:ty:
         $(#[$comment:meta])*
         $enum_vis:vis enum $enum_name:ident
         { $( $enum_var: ident => $enum_val: expr ),* $(,)? }
@@ -21,17 +21,10 @@ macro_rules! enum_builder {
         }
 
         impl $enum_name {
-            $enum_vis fn $get_uint(&self) -> $uint {
-                match self {
-                    $( $enum_name::$enum_var => $enum_val),*
-                    ,$enum_name::Unknown(x) => *x
-                }
-            }
-
             // NOTE(allow) generated irrespective if there are callers
             #[allow(dead_code)]
-            $enum_vis fn to_array(&self) -> [u8; core::mem::size_of::<$uint>()] {
-                self.$get_uint().to_be_bytes()
+            $enum_vis fn to_array(self) -> [u8; core::mem::size_of::<$uint>()] {
+                <$uint>::from(self).to_be_bytes()
             }
 
             // NOTE(allow) generated irrespective if there are callers
@@ -48,7 +41,7 @@ macro_rules! enum_builder {
             // NOTE(allow) fully qualified Vec is only needed in no-std mode
             #[allow(unused_qualifications)]
             fn encode(&self, bytes: &mut alloc::vec::Vec<u8>) {
-                self.$get_uint().encode(bytes);
+                <$uint>::from(*self).encode(bytes);
             }
 
             fn read(r: &mut Reader) -> Result<Self, crate::error::InvalidMessage> {
@@ -64,6 +57,15 @@ macro_rules! enum_builder {
                 match x {
                     $($enum_val => $enum_name::$enum_var),*
                     , x => $enum_name::Unknown(x),
+                }
+            }
+        }
+
+        impl From<$enum_name> for $uint {
+            fn from(value: $enum_name) -> Self {
+                match value {
+                    $( $enum_name::$enum_var => $enum_val),*
+                    ,$enum_name::Unknown(x) => x
                 }
             }
         }

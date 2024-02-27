@@ -271,7 +271,7 @@ impl ExpectClientHello {
             } else {
                 ProtocolVersion::TLSv1_2
             }
-        } else if client_hello.client_version.get_u16() < ProtocolVersion::TLSv1_2.get_u16() {
+        } else if u16::from(client_hello.client_version) < u16::from(ProtocolVersion::TLSv1_2) {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::ProtocolVersion,
                 PeerIncompatible::Tls12NotOffered,

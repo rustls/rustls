@@ -141,8 +141,9 @@ impl Options {
     }
 
     fn version_allowed(&self, vers: ProtocolVersion) -> bool {
-        (self.min_version.is_none() || vers.get_u16() >= self.min_version.unwrap().get_u16())
-            && (self.max_version.is_none() || vers.get_u16() <= self.max_version.unwrap().get_u16())
+        (self.min_version.is_none() || u16::from(vers) >= u16::from(self.min_version.unwrap()))
+            && (self.max_version.is_none()
+                || u16::from(vers) <= u16::from(self.max_version.unwrap()))
     }
 
     fn tls13_supported(&self) -> bool {

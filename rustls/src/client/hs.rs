@@ -291,8 +291,8 @@ fn emit_client_hello_for_retry(
             return u32::MAX;
         }
 
-        let seed =
-            (input.hello.extension_order_seed as u32) << 16 | (new_ext.ext_type().get_u16() as u32);
+        let seed = (input.hello.extension_order_seed as u32) << 16
+            | (u16::from(new_ext.ext_type()) as u32);
         match low_quality_integer_hash(seed) {
             u32::MAX => 0,
             key => key,

@@ -289,7 +289,7 @@ impl ConvertServerNameList for [ServerName] {
         let mut seen = BTreeSet::new();
 
         for name in self {
-            if !seen.insert(name.typ.get_u8()) {
+            if !seen.insert(u8::from(name.typ)) {
                 return true;
             }
         }
@@ -859,7 +859,7 @@ impl ClientHelloPayload {
         let mut seen = BTreeSet::new();
 
         for ext in &self.extensions {
-            let typ = ext.ext_type().get_u16();
+            let typ = u16::from(ext.ext_type());
 
             if seen.contains(&typ) {
                 return true;
@@ -954,7 +954,7 @@ impl ClientHelloPayload {
             let mut seen = BTreeSet::new();
 
             for kse in entries {
-                let grp = kse.group.get_u16();
+                let grp = u16::from(kse.group);
 
                 if !seen.insert(grp) {
                     return true;
@@ -1110,7 +1110,7 @@ impl HelloRetryRequest {
         let mut seen = BTreeSet::new();
 
         for ext in &self.extensions {
-            let typ = ext.ext_type().get_u16();
+            let typ = u16::from(ext.ext_type());
 
             if seen.contains(&typ) {
                 return true;
@@ -1383,7 +1383,7 @@ impl CertificateEntry {
         let mut seen = BTreeSet::new();
 
         for ext in &self.exts {
-            let typ = ext.ext_type().get_u16();
+            let typ = u16::from(ext.ext_type());
 
             if seen.contains(&typ) {
                 return true;
@@ -1810,7 +1810,7 @@ pub(crate) trait HasServerExtensions {
         let mut seen = BTreeSet::new();
 
         for ext in self.extensions() {
-            let typ = ext.ext_type().get_u16();
+            let typ = u16::from(ext.ext_type());
 
             if seen.contains(&typ) {
                 return true;
@@ -2138,7 +2138,7 @@ impl NewSessionTicketPayloadTls13 {
         let mut seen = BTreeSet::new();
 
         for ext in &self.exts {
-            let typ = ext.ext_type().get_u16();
+            let typ = u16::from(ext.ext_type());
 
             if seen.contains(&typ) {
                 return true;

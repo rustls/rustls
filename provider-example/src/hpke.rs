@@ -23,16 +23,16 @@ impl HpkeProvider for HpkeRsProvider {
     fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + 'static>, Error> {
         Ok(Box::new(HpkeRs(hpke_rs::Hpke::new(
             hpke_rs::Mode::Base,
-            KemAlgorithm::try_from(suite.kem.get_u16()).map_err(other_err)?,
-            KdfAlgorithm::try_from(suite.sym.kdf_id.get_u16()).map_err(other_err)?,
-            AeadAlgorithm::try_from(suite.sym.aead_id.get_u16()).map_err(other_err)?,
+            KemAlgorithm::try_from(u16::from(suite.kem)).map_err(other_err)?,
+            KdfAlgorithm::try_from(u16::from(suite.sym.kdf_id)).map_err(other_err)?,
+            AeadAlgorithm::try_from(u16::from(suite.sym.aead_id)).map_err(other_err)?,
         ))))
     }
 
     fn supports_suite(&self, suite: &HpkeSuite) -> bool {
-        let kem = KemAlgorithm::try_from(suite.kem.get_u16()).ok();
-        let kdf = KdfAlgorithm::try_from(suite.sym.kdf_id.get_u16()).ok();
-        let aead = AeadAlgorithm::try_from(suite.sym.aead_id.get_u16()).ok();
+        let kem = KemAlgorithm::try_from(u16::from(suite.kem)).ok();
+        let kdf = KdfAlgorithm::try_from(u16::from(suite.sym.kdf_id)).ok();
+        let aead = AeadAlgorithm::try_from(u16::from(suite.sym.aead_id)).ok();
         match (kem, kdf, aead) {
             (Some(kem), Some(kdf), Some(aead)) => {
                 HpkeRustCrypto::supports_kem(kem).is_ok()
