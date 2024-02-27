@@ -19,6 +19,7 @@ macro_rules! enum_builder {
             $( $enum_var),*
             ,Unknown($uint)
         }
+
         impl $enum_name {
             $enum_vis fn $get_uint(&self) -> $uint {
                 match self {
@@ -29,7 +30,7 @@ macro_rules! enum_builder {
 
             // NOTE(allow) generated irrespective if there are callers
             #[allow(dead_code)]
-            $enum_vis fn get_array(&self) -> [u8; core::mem::size_of::<$uint>()] {
+            $enum_vis fn to_array(&self) -> [u8; core::mem::size_of::<$uint>()] {
                 self.$get_uint().to_be_bytes()
             }
 
@@ -42,6 +43,7 @@ macro_rules! enum_builder {
                 }
             }
         }
+
         impl Codec<'_> for $enum_name {
             // NOTE(allow) fully qualified Vec is only needed in no-std mode
             #[allow(unused_qualifications)]
@@ -56,6 +58,7 @@ macro_rules! enum_builder {
                 }
             }
         }
+
         impl From<$uint> for $enum_name {
             fn from(x: $uint) -> Self {
                 match x {

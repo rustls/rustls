@@ -90,7 +90,7 @@ impl MessageEncrypter for Tls13Cipher {
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
         payload.extend_from_chunks(&m.payload);
-        payload.extend_from_slice(&m.typ.get_array());
+        payload.extend_from_slice(&m.typ.to_array());
         let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
         let aad = make_tls13_aad(total_len);
 
