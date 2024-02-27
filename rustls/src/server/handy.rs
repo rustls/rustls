@@ -207,6 +207,7 @@ mod tests {
     use crate::server::ProducesTickets;
     use crate::server::ResolvesServerCert;
     use crate::server::StoresServerSessions;
+    use std::vec;
 
     #[test]
     fn test_noserversessionstorage_drops_put() {

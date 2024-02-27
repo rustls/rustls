@@ -317,6 +317,8 @@ impl<'a> Drop for LengthPrefixedBuffer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::prelude::v1::*;
+    use std::vec;
 
     #[test]
     fn interrupted_length_prefixed_buffer_leaves_maximum_length() {

@@ -243,6 +243,7 @@ pub struct OutputLengthError;
 mod tests {
     use super::{expand, Hkdf, HkdfUsingHmac};
     use crate::test_provider::hmac;
+    use std::prelude::v1::*;
 
     struct ByteArray<const N: usize>([u8; N]);
 

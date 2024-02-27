@@ -831,6 +831,8 @@ where
 #[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use core::fmt::Debug;
+    use std::prelude::v1::*;
+    use std::vec;
 
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
     use crate::test_provider::ring_like::aead;
