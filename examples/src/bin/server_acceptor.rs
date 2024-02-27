@@ -117,17 +117,27 @@ fn main() {
         // connection.
         let accepted = loop {
             acceptor.read_tls(&mut stream).unwrap();
-            if let Some(accepted) = acceptor.accept().unwrap() {
-                break accepted;
+
+            match acceptor.accept() {
+                Ok(Some(accepted)) => break accepted,
+                Ok(None) => continue,
+                Err((e, mut alert)) => {
+                    alert.write(&mut stream).unwrap();
+                    panic!("error accepting connection: {e}");
+                }
             }
         };
 
         // Generate a server config for the accepted connection, optionally customizing the
         // configuration based on the client hello.
         let config = test_pki.server_config(&crl_path, accepted.client_hello());
-        let mut conn = accepted
-            .into_connection(config)
-            .unwrap();
+        let mut conn = match accepted.into_connection(config) {
+            Ok(conn) => conn,
+            Err((e, mut alert)) => {
+                alert.write(&mut stream).unwrap();
+                panic!("error completing accepting connection: {e}");
+            }
+        };
 
         // Proceed with handling the ServerConnection
         // Important: We do no error handling here, but you should!
