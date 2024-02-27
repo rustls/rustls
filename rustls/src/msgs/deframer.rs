@@ -709,7 +709,8 @@ const READ_SIZE: usize = 4096;
 #[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
-    use std::io;
+    use std::prelude::v1::*;
+    use std::vec;
 
     use crate::crypto::cipher::PlainMessage;
     use crate::msgs::message::Message;

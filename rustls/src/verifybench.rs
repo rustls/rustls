@@ -4,6 +4,7 @@
 #![cfg(bench)]
 
 use core::time::Duration;
+use std::prelude::v1::*;
 
 use crate::crypto::CryptoProvider;
 use crate::verify::ServerCertVerifier;

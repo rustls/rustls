@@ -234,6 +234,7 @@ pub enum ConnectionTrafficSecrets {
 
 test_for_each_provider! {
     use provider::tls13::*;
+    use std::println;
 
     #[test]
     fn test_scs_is_debug() {

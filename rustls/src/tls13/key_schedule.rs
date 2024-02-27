@@ -830,6 +830,8 @@ where
 
 test_for_each_provider! {
     use core::fmt::Debug;
+    use std::vec;
+    use std::prelude::v1::*;
 
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
     use provider::ring_like::aead;

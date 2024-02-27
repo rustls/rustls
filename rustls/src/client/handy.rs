@@ -233,6 +233,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 }
 
 test_for_each_provider! {
+    use std::prelude::v1::*;
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
     use crate::msgs::enums::NamedGroup;

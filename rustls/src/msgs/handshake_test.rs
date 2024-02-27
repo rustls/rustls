@@ -22,6 +22,9 @@ use pki_types::{CertificateDer, DnsName};
 
 use super::handshake::{ServerDhParams, ServerKeyExchange, ServerKeyExchangeParams};
 
+use std::prelude::v1::*;
+use std::{format, println, vec};
+
 #[test]
 fn rejects_short_random() {
     let bytes = [0x01; 31];

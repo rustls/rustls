@@ -414,7 +414,9 @@ test_for_each_provider! {
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
+    use std::prelude::v1::*;
     use std::sync::Arc;
+    use std::{vec, format, println};
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der
