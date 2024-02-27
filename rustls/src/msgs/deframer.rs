@@ -9,7 +9,7 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
 #[cfg(feature = "std")]
-use crate::msgs::message::OutboundOpaqueMessage;
+use crate::msgs::message::MAX_WIRE_SIZE;
 use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError};
 use crate::record_layer::{Decrypted, RecordLayer};
 
@@ -448,7 +448,7 @@ impl DeframerVecBuffer {
         // At this point, the buffer resizing logic below should reduce the buffer size.
         let allow_max = match is_joining_hs {
             true => MAX_HANDSHAKE_SIZE as usize,
-            false => OutboundOpaqueMessage::MAX_WIRE_SIZE,
+            false => MAX_WIRE_SIZE,
         };
 
         if self.used >= allow_max {
@@ -913,10 +913,7 @@ mod tests {
         assert_len(4096, d.input_bytes(&message));
         assert_len(4096, d.input_bytes(&message));
         assert_len(4096, d.input_bytes(&message));
-        assert_len(
-            OutboundOpaqueMessage::MAX_WIRE_SIZE - 16_384,
-            d.input_bytes(&message),
-        );
+        assert_len(MAX_WIRE_SIZE - 16_384, d.input_bytes(&message));
         assert!(d.input_bytes(&message).is_err());
     }
 

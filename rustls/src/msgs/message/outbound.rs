@@ -1,4 +1,4 @@
-use super::{MessageError, PlainMessage};
+use super::{MessageError, PlainMessage, HEADER_SIZE, MAX_PAYLOAD};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::internal::record_layer::RecordLayer;
 use crate::msgs::base::Payload;
@@ -19,7 +19,7 @@ pub struct OutboundPlainMessage<'a> {
 
 impl OutboundPlainMessage<'_> {
     pub(crate) fn encoded_len(&self, record_layer: &RecordLayer) -> usize {
-        OutboundOpaqueMessage::HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
+        HEADER_SIZE + record_layer.encrypted_len(self.payload.len())
     }
 
     pub(crate) fn to_unencrypted_opaque(&self) -> OutboundOpaqueMessage {
@@ -209,16 +209,6 @@ impl OutboundOpaqueMessage {
             payload: Payload::Owned(self.payload.as_ref().to_vec()),
         }
     }
-
-    /// Maximum message payload size.
-    /// That's 2^14 payload bytes and a 2KB allowance for ciphertext overheads.
-    const MAX_PAYLOAD: u16 = 16_384 + 2048;
-
-    /// Content type, version and size.
-    pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
-
-    /// Maximum on-the-wire message size.
-    pub const MAX_WIRE_SIZE: usize = Self::MAX_PAYLOAD as usize + Self::HEADER_SIZE;
 }
 
 #[derive(Clone, Debug)]
@@ -226,9 +216,8 @@ pub struct PrefixedPayload(Vec<u8>);
 
 impl PrefixedPayload {
     pub fn with_capacity(capacity: usize) -> Self {
-        let mut prefixed_payload =
-            Vec::with_capacity(OutboundOpaqueMessage::HEADER_SIZE + capacity);
-        prefixed_payload.resize(OutboundOpaqueMessage::HEADER_SIZE, 0);
+        let mut prefixed_payload = Vec::with_capacity(HEADER_SIZE + capacity);
+        prefixed_payload.resize(HEADER_SIZE, 0);
         Self(prefixed_payload)
     }
 
@@ -241,24 +230,23 @@ impl PrefixedPayload {
     }
 
     pub fn truncate(&mut self, len: usize) {
-        self.0
-            .truncate(len + OutboundOpaqueMessage::HEADER_SIZE)
+        self.0.truncate(len + HEADER_SIZE)
     }
 
     fn len(&self) -> usize {
-        self.0.len() - OutboundOpaqueMessage::HEADER_SIZE
+        self.0.len() - HEADER_SIZE
     }
 }
 
 impl AsRef<[u8]> for PrefixedPayload {
     fn as_ref(&self) -> &[u8] {
-        &self.0[OutboundOpaqueMessage::HEADER_SIZE..]
+        &self.0[HEADER_SIZE..]
     }
 }
 
 impl AsMut<[u8]> for PrefixedPayload {
     fn as_mut(&mut self) -> &mut [u8] {
-        &mut self.0[OutboundOpaqueMessage::HEADER_SIZE..]
+        &mut self.0[HEADER_SIZE..]
     }
 }
 
@@ -270,8 +258,8 @@ impl<'a> Extend<&'a u8> for PrefixedPayload {
 
 impl From<&[u8]> for PrefixedPayload {
     fn from(content: &[u8]) -> Self {
-        let mut payload = Vec::with_capacity(OutboundOpaqueMessage::HEADER_SIZE + content.len());
-        payload.extend(&[0u8; OutboundOpaqueMessage::HEADER_SIZE]);
+        let mut payload = Vec::with_capacity(HEADER_SIZE + content.len());
+        payload.extend(&[0u8; HEADER_SIZE]);
         payload.extend(content);
         Self(payload)
     }
@@ -311,7 +299,7 @@ pub(crate) fn read_opaque_message_header(
     }
 
     // Reject oversize messages
-    if len >= OutboundOpaqueMessage::MAX_PAYLOAD {
+    if len >= MAX_PAYLOAD {
         return Err(MessageError::MessageTooLarge);
     }
 
