@@ -32,7 +32,7 @@ use serde::Deserialize;
 use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
-use rustls::{self, RootCertStore};
+use rustls::RootCertStore;
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);
