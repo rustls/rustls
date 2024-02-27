@@ -1095,6 +1095,7 @@ impl crate::conn::SideData for ServerConnectionData {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::format;
 
     // these branches not reachable externally, unless something else goes wrong.
     #[test]

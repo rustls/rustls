@@ -91,6 +91,7 @@ mod cache {
     mod tests {
         use super::*;
         use crate::server::StoresServerSessions;
+        use std::vec;
 
         #[test]
         fn test_serversessionmemorycache_accepts_put() {
@@ -304,6 +305,7 @@ mod tests {
     use super::*;
     use crate::server::ProducesTickets;
     use crate::server::StoresServerSessions;
+    use std::vec;
 
     #[test]
     fn test_noserversessionstorage_drops_put() {

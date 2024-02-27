@@ -923,9 +923,9 @@ impl Default for Version {
 
 #[cfg(test)]
 mod tests {
-    use crate::quic::HeaderProtectionKey;
-
     use super::PacketKey;
+    use crate::quic::HeaderProtectionKey;
+    use std::prelude::v1::*;
 
     #[test]
     fn auto_traits() {

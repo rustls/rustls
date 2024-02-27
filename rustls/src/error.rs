@@ -603,6 +603,8 @@ mod tests {
     use super::{Error, InvalidMessage};
     use crate::error::CertRevocationListError;
     use crate::error::OtherError;
+    use std::prelude::v1::*;
+    use std::{println, vec};
 
     #[test]
     fn certificate_error_equality() {

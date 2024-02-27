@@ -45,7 +45,7 @@ macro_rules! bench_for_each_provider {
 test_for_each_provider! {
     #[test]
     fn test_each_provider() {
-        println!("provider is {:?}", provider::default_provider());
+        std::println!("provider is {:?}", provider::default_provider());
     }
 }
 

@@ -552,6 +552,7 @@ pub fn default_fips_provider() -> CryptoProvider {
 #[cfg(test)]
 mod tests {
     use super::SharedSecret;
+    use std::vec;
 
     #[test]
     fn test_shared_secret_strip_leading_zeros() {

@@ -110,6 +110,8 @@ mod tests {
     use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
     use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
+    use std::prelude::v1::*;
+    use std::vec;
 
     fn msg_eq(
         m: &OutboundPlainMessage,

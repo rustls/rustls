@@ -124,6 +124,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::prelude::v1::*;
+
     type Test = super::LimitedCache<String, usize>;
 
     #[test]
