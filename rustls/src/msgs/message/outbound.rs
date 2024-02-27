@@ -232,10 +232,6 @@ impl PrefixedPayload {
         Self(prefixed_payload)
     }
 
-    fn len(&self) -> usize {
-        self.0.len() - OutboundOpaqueMessage::HEADER_SIZE
-    }
-
     pub fn extend_from_slice(&mut self, slice: &[u8]) {
         self.0.extend_from_slice(slice)
     }
@@ -247,6 +243,10 @@ impl PrefixedPayload {
     pub fn truncate(&mut self, len: usize) {
         self.0
             .truncate(len + OutboundOpaqueMessage::HEADER_SIZE)
+    }
+
+    fn len(&self) -> usize {
+        self.0.len() - OutboundOpaqueMessage::HEADER_SIZE
     }
 }
 
