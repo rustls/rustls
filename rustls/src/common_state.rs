@@ -434,7 +434,7 @@ impl CommonState {
             if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
                 return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
             } else {
-                warn!("TLS alert warning received: {:#?}", alert);
+                warn!("TLS alert warning received: {:?}", alert);
                 return Ok(());
             }
         }
