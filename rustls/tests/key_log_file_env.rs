@@ -21,10 +21,8 @@
 //! file was created successfully, with the right permissions, etc., and that it
 //! contains something like what we expect.
 
-use std::{
-    env,
-    sync::{Mutex, Once},
-};
+use std::env;
+use std::sync::{Mutex, Once};
 
 #[macro_use]
 mod macros;

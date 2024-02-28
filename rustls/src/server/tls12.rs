@@ -1,9 +1,22 @@
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+
+pub(super) use client_hello::CompleteClientHelloHandling;
+use pki_types::UnixTime;
+use subtle::ConstantTimeEq;
+
+use super::common::ActiveCertifiedKey;
+use super::hs::{self, ServerContext};
+use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
-use crate::enums::ProtocolVersion;
-use crate::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -13,46 +26,28 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
     CertificateChain, ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload,
+    NewSessionTicketPayload, SessionId,
 };
-use crate::msgs::handshake::{NewSessionTicketPayload, SessionId};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify;
 
-use super::common::ActiveCertifiedKey;
-use super::hs::{self, ServerContext};
-use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
-
-use pki_types::UnixTime;
-use subtle::ConstantTimeEq;
-
-use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
-use alloc::string::ToString;
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
-
-pub(super) use client_hello::CompleteClientHelloHandling;
-
 mod client_hello {
     use pki_types::CertificateDer;
 
+    use super::*;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
-    use crate::msgs::enums::ECPointFormat;
-    use crate::msgs::enums::{ClientCertificateType, Compression};
-    use crate::msgs::handshake::CertificateStatus;
-    use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
-    use crate::msgs::handshake::{ClientExtension, ClientHelloPayload, ServerHelloPayload};
-    use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
-    use crate::msgs::handshake::{ServerKeyExchange, ServerKeyExchangeParams};
+    use crate::msgs::enums::{ClientCertificateType, Compression, ECPointFormat};
+    use crate::msgs::handshake::{
+        CertificateRequestPayload, CertificateStatus, ClientExtension, ClientHelloPayload,
+        ClientSessionTicket, Random, ServerExtension, ServerHelloPayload, ServerKeyExchange,
+        ServerKeyExchangeParams, ServerKeyExchangePayload,
+    };
     use crate::sign;
     use crate::verify::DigitallySignedStruct;
-
-    use super::*;
 
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,

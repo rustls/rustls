@@ -11,9 +11,9 @@ mod inbound;
 pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
 
 mod outbound;
-pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
-
 use alloc::vec::Vec;
+
+pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 
 #[derive(Debug)]
 pub enum MessagePayload<'a> {

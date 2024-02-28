@@ -1,13 +1,13 @@
-use crate::enums::{AlertDescription, ContentType, HandshakeType};
-use crate::msgs::handshake::KeyExchangeAlgorithm;
-use crate::rand;
-
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
+
+use crate::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::msgs::handshake::KeyExchangeAlgorithm;
+use crate::rand;
 
 /// rustls reports protocol errors using this type.
 #[non_exhaustive]
@@ -600,11 +600,11 @@ pub use other_error::OtherError;
 
 #[cfg(test)]
 mod tests {
-    use super::{Error, InvalidMessage};
-    use crate::error::CertRevocationListError;
-    use crate::error::OtherError;
     use std::prelude::v1::*;
     use std::{println, vec};
+
+    use super::{Error, InvalidMessage};
+    use crate::error::{CertRevocationListError, OtherError};
 
     #[test]
     fn certificate_error_equality() {

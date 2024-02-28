@@ -26,11 +26,10 @@ use std::{fs, process, str};
 
 use docopt::Docopt;
 use mio::net::TcpStream;
-use serde::Deserialize;
-
 use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::RootCertStore;
+use serde::Deserialize;
 
 const CLIENT: mio::Token = mio::Token(0);
 

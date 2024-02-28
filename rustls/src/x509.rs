@@ -42,8 +42,9 @@ const DER_SEQUENCE_TAG: u8 = 0x30;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::vec;
+
+    use super::*;
 
     #[test]
     fn test_empty() {

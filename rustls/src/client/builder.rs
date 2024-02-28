@@ -1,6 +1,12 @@
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::marker::PhantomData;
+
+use pki_types::{CertificateDer, PrivateKeyDer};
+
+use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::client::handy;
-use crate::client::{ClientConfig, ResolvesClientCert};
+use crate::client::{handy, ClientConfig, ResolvesClientCert};
 use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
@@ -8,14 +14,6 @@ use crate::msgs::handshake::CertificateChain;
 use crate::time_provider::TimeProvider;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{verify, versions};
-
-use super::client_conn::Resumption;
-
-use pki_types::{CertificateDer, PrivateKeyDer};
-
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::marker::PhantomData;
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates.

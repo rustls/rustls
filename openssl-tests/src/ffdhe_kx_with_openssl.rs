@@ -4,6 +4,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::{str, thread};
 
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use rustls::version::{TLS12, TLS13};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, SupportedProtocolVersion};
@@ -12,8 +13,6 @@ use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 
 use crate::ffdhe::{self, FfdheKxGroup};
 use crate::utils::verify_openssl3_available;
-
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 
 #[test]
 fn rustls_server_with_ffdhe_kx_tls13() {

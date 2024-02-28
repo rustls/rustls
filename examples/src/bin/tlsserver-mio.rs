@@ -27,12 +27,11 @@ use std::{fs, net};
 use docopt::Docopt;
 use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
-use serde::Deserialize;
-
 use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
 use rustls::RootCertStore;
+use serde::Deserialize;
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);

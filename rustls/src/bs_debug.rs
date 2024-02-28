@@ -41,9 +41,10 @@ impl<'a> fmt::Debug for BsDebug<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::BsDebug;
     use std::format;
     use std::prelude::v1::*;
+
+    use super::BsDebug;
 
     #[test]
     fn debug() {

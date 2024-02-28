@@ -6,12 +6,12 @@
 use core::time::Duration;
 use std::prelude::v1::*;
 
+use pki_types::{CertificateDer, ServerName, UnixTime};
+use webpki_roots;
+
 use crate::crypto::CryptoProvider;
 use crate::verify::ServerCertVerifier;
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
-
-use pki_types::{CertificateDer, ServerName, UnixTime};
-use webpki_roots;
 
 bench_for_each_provider! {
     use super::Context;

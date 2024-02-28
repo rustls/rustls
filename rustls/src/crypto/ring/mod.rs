@@ -1,3 +1,9 @@
+use alloc::sync::Arc;
+
+use pki_types::PrivateKeyDer;
+pub(crate) use ring as ring_like;
+use webpki::ring as webpki_algs;
+
 use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
@@ -5,13 +11,6 @@ use crate::sign::SigningKey;
 use crate::suites::SupportedCipherSuite;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::Error;
-
-use pki_types::PrivateKeyDer;
-use webpki::ring as webpki_algs;
-
-use alloc::sync::Arc;
-
-pub(crate) use ring as ring_like;
 
 /// Using software keys for authentication.
 pub mod sign;
@@ -167,9 +166,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 ///
 /// [`ALL_KX_GROUPS`] is provided as an array of all of these values.
 pub mod kx_group {
-    pub use super::kx::SECP256R1;
-    pub use super::kx::SECP384R1;
-    pub use super::kx::X25519;
+    pub use super::kx::{SECP256R1, SECP384R1, X25519};
 }
 
 pub use kx::ALL_KX_GROUPS;

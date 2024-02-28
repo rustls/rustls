@@ -6,19 +6,16 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName};
-use webpki::anchor_from_trusted_cert;
-
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
-use rustls::Connection;
-use rustls::Error;
-use rustls::RootCertStore;
-use rustls::{ClientConfig, ClientConnection};
-use rustls::{ConnectionCommon, ServerConfig, ServerConnection, SideData};
-use rustls::{ProtocolVersion, SupportedCipherSuite};
+use rustls::{
+    ClientConfig, ClientConnection, Connection, ConnectionCommon, Error, ProtocolVersion,
+    RootCertStore, ServerConfig, ServerConnection, SideData, SupportedCipherSuite,
+};
+use webpki::anchor_from_trusted_cert;
 
 use super::provider;
 

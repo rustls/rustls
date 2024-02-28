@@ -1,5 +1,4 @@
-use crate::enums::ContentType;
-use crate::enums::ProtocolVersion;
+use crate::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
 use crate::Error;
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
@@ -105,13 +104,13 @@ impl<'a> ExactSizeIterator for Chunker<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MessageFragmenter, PACKET_OVERHEAD};
-    use crate::enums::ContentType;
-    use crate::enums::ProtocolVersion;
-    use crate::msgs::base::Payload;
-    use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
     use std::prelude::v1::*;
     use std::vec;
+
+    use super::{MessageFragmenter, PACKET_OVERHEAD};
+    use crate::enums::{ContentType, ProtocolVersion};
+    use crate::msgs::base::Payload;
+    use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
 
     fn msg_eq(
         m: &OutboundPlainMessage,

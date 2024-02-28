@@ -1,7 +1,7 @@
-use crate::conn::{ConnectionCommon, SideData};
-
 use core::ops::{Deref, DerefMut};
 use std::io::{IoSlice, Read, Result, Write};
+
+use crate::conn::{ConnectionCommon, SideData};
 
 /// This type implements `io::Read` and `io::Write`, encapsulating
 /// a Connection `C` and an underlying transport `T`, such as a socket.
@@ -221,10 +221,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::net::TcpStream;
+
     use super::{Stream, StreamOwned};
     use crate::client::ClientConnection;
     use crate::server::ServerConnection;
-    use std::net::TcpStream;
 
     #[test]
     fn stream_can_be_created_for_connection_and_tcpstream() {

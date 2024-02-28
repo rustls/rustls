@@ -1,14 +1,14 @@
-use crate::error::Error;
-use crate::time_provider::TimeProvider;
-use crate::versions;
-use crate::{crypto::CryptoProvider, msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS};
-
 use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::marker::PhantomData;
 
+use crate::crypto::CryptoProvider;
+use crate::error::Error;
+use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;
+use crate::time_provider::TimeProvider;
+use crate::versions;
 #[cfg(doc)]
 use crate::{ClientConfig, ServerConfig};
 

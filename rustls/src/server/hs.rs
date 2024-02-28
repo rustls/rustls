@@ -1,3 +1,13 @@
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+
+use pki_types::DnsName;
+
+use super::server_conn::ServerConnectionData;
+#[cfg(feature = "tls12")]
+use super::tls12;
 use crate::common_state::{Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
@@ -12,26 +22,15 @@ use crate::log::{debug, trace};
 use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
-use crate::msgs::handshake::{ClientHelloPayload, KeyExchangeAlgorithm, Random, ServerExtension};
-use crate::msgs::handshake::{ConvertProtocolNameList, ConvertServerNameList, HandshakePayload};
+use crate::msgs::handshake::{
+    ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, HandshakePayload,
+    KeyExchangeAlgorithm, Random, ServerExtension,
+};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
-use crate::server::{ClientHello, ServerConfig};
-use crate::suites;
-use crate::SupportedCipherSuite;
-
-use super::server_conn::ServerConnectionData;
-#[cfg(feature = "tls12")]
-use super::tls12;
 use crate::server::common::ActiveCertifiedKey;
-use crate::server::tls13;
-
-use pki_types::DnsName;
-
-use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
+use crate::server::{tls13, ClientHello, ServerConfig};
+use crate::{suites, SupportedCipherSuite};
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;

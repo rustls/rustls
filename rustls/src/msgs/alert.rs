@@ -1,9 +1,9 @@
+use alloc::vec::Vec;
+
 use crate::enums::AlertDescription;
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::AlertLevel;
-
-use alloc::vec::Vec;
 
 #[derive(Debug)]
 pub struct AlertMessagePayload {

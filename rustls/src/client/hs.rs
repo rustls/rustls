@@ -1,6 +1,21 @@
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::ops::Deref;
+
+use pki_types::ServerName;
+
+#[cfg(feature = "tls12")]
+use super::tls12;
+use super::Tls12Resumption;
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
+use crate::client::client_conn::ClientConnectionData;
+use crate::client::common::ClientHelloDetails;
+use crate::client::{tls13, ClientConfig};
 use crate::common_state::{CommonState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
@@ -10,34 +25,16 @@ use crate::hash_hs::HandshakeHashBuffer;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-use crate::msgs::enums::{Compression, ExtensionType};
-use crate::msgs::enums::{ECPointFormat, PSKKeyExchangeMode};
-use crate::msgs::handshake::ConvertProtocolNameList;
-use crate::msgs::handshake::{CertificateStatusRequest, ClientSessionTicket};
-use crate::msgs::handshake::{ClientExtension, HasServerExtensions};
-use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::handshake::{HelloRetryRequest, KeyShareEntry};
-use crate::msgs::handshake::{Random, SessionId};
+use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode};
+use crate::msgs::handshake::{
+    CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
+    ConvertProtocolNameList, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
+    HelloRetryRequest, KeyShareEntry, Random, SessionId,
+};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::SupportedCipherSuite;
-
-#[cfg(feature = "tls12")]
-use super::tls12;
-use super::Tls12Resumption;
-use crate::client::client_conn::ClientConnectionData;
-use crate::client::common::ClientHelloDetails;
-use crate::client::{tls13, ClientConfig};
-
-use pki_types::ServerName;
-
-use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
-use core::ops::Deref;
 
 pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;

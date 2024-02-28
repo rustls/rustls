@@ -1,9 +1,9 @@
 #![allow(clippy::duplicate_mod)]
 
+use alloc::boxed::Box;
+
 use super::ring_like;
 use crate::crypto;
-
-use alloc::boxed::Box;
 
 #[cfg(feature = "tls12")]
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring_like::hmac::HMAC_SHA256);

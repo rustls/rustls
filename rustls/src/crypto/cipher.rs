@@ -2,6 +2,8 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use core::fmt;
 
+use zeroize::Zeroize;
+
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;
@@ -10,8 +12,6 @@ pub use crate::msgs::message::{
     OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
 };
 use crate::suites::ConnectionTrafficSecrets;
-
-use zeroize::Zeroize;
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {

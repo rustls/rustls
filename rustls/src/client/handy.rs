@@ -1,14 +1,12 @@
-use crate::client;
+use alloc::sync::Arc;
+
+use pki_types::ServerName;
+
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::msgs::handshake::CertificateChain;
 use crate::msgs::persist;
-use crate::sign;
-use crate::NamedGroup;
-
-use pki_types::ServerName;
-
-use alloc::sync::Arc;
+use crate::{client, sign, NamedGroup};
 
 /// An implementer of `ClientSessionStore` which does nothing.
 #[derive(Debug)]
@@ -42,11 +40,10 @@ mod cache {
     use core::fmt;
     use std::sync::Mutex;
 
-    use crate::limited_cache;
-    use crate::msgs::persist;
-    use crate::NamedGroup;
-
     use pki_types::ServerName;
+
+    use crate::msgs::persist;
+    use crate::{limited_cache, NamedGroup};
 
     const MAX_TLS13_TICKETS_PER_SERVER: usize = 8;
 

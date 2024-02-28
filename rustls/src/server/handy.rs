@@ -1,11 +1,10 @@
-use crate::msgs::handshake::CertificateChain;
-use crate::server;
-use crate::server::ClientHello;
-use crate::sign;
-
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+
+use crate::msgs::handshake::CertificateChain;
+use crate::server::ClientHello;
+use crate::{server, sign};
 
 /// Something which never stores sessions.
 #[derive(Debug)]
@@ -28,13 +27,12 @@ impl server::StoresServerSessions for NoServerSessionStorage {
 
 #[cfg(feature = "std")]
 mod cache {
-    use crate::limited_cache;
-    use crate::server;
-
     use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt::{Debug, Formatter};
     use std::sync::Mutex;
+
+    use crate::{limited_cache, server};
 
     /// An implementer of `StoresServerSessions` that stores everything
     /// in memory.  If enforces a limit on the number of stored sessions
@@ -89,9 +87,10 @@ mod cache {
 
     #[cfg(test)]
     mod tests {
+        use std::vec;
+
         use super::*;
         use crate::server::StoresServerSessions;
-        use std::vec;
 
         #[test]
         fn test_serversessionmemorycache_accepts_put() {
@@ -198,18 +197,17 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
 
 #[cfg(feature = "std")]
 mod sni_resolver {
-    use crate::error::Error;
-    use crate::server;
-    use crate::server::ClientHello;
-    use crate::sign;
-    use crate::webpki::{verify_server_name, ParsedCertificate};
-
-    use pki_types::{DnsName, ServerName};
-
     use alloc::string::{String, ToString};
     use alloc::sync::Arc;
     use core::fmt::Debug;
     use std::collections::HashMap;
+
+    use pki_types::{DnsName, ServerName};
+
+    use crate::error::Error;
+    use crate::server::ClientHello;
+    use crate::webpki::{verify_server_name, ParsedCertificate};
+    use crate::{server, sign};
 
     /// Something that resolves do different cert chains/keys based
     /// on client-supplied server name (via SNI).
@@ -302,10 +300,10 @@ pub use sni_resolver::ResolvesServerCertUsingSni;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::server::ProducesTickets;
-    use crate::server::StoresServerSessions;
     use std::vec;
+
+    use super::*;
+    use crate::server::{ProducesTickets, StoresServerSessions};
 
     #[test]
     fn test_noserversessionstorage_drops_put() {

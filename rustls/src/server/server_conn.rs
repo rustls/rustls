@@ -1,8 +1,23 @@
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt;
+use core::fmt::{Debug, Formatter};
+use core::marker::PhantomData;
+use core::ops::{Deref, DerefMut};
+#[cfg(feature = "std")]
+use std::io;
+
+use pki_types::{DnsName, UnixTime};
+
+use super::hs;
 use crate::builder::ConfigBuilder;
 #[cfg(feature = "std")]
 use crate::common_state::Protocol;
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
+#[cfg(doc)]
+use crate::crypto;
 use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
@@ -15,29 +30,9 @@ use crate::msgs::message::Message;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::verify;
-use crate::versions;
-use crate::KeyLog;
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
-use crate::{sign, WantsVersions};
-
-use super::hs;
-
-use pki_types::{DnsName, UnixTime};
-
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::fmt;
-use core::fmt::{Debug, Formatter};
-use core::marker::PhantomData;
-use core::ops::{Deref, DerefMut};
-#[cfg(feature = "std")]
-use std::io;
-
-#[cfg(doc)]
-use crate::crypto;
+use crate::{sign, verify, versions, KeyLog, WantsVersions};
 
 /// A trait for the ability to store server session data.
 ///
@@ -503,13 +498,6 @@ impl ServerConfig {
 
 #[cfg(feature = "std")]
 mod connection {
-    use crate::common_state::{CommonState, Context, Side};
-    use crate::conn::{ConnectionCommon, ConnectionCore};
-    use crate::error::Error;
-    use crate::server::hs;
-    use crate::suites::ExtractedSecrets;
-    use crate::vecbuf::ChunkVecBuffer;
-
     use alloc::boxed::Box;
     use alloc::sync::Arc;
     use alloc::vec::Vec;
@@ -519,6 +507,12 @@ mod connection {
     use std::io;
 
     use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
+    use crate::common_state::{CommonState, Context, Side};
+    use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::error::Error;
+    use crate::server::hs;
+    use crate::suites::ExtractedSecrets;
+    use crate::vecbuf::ChunkVecBuffer;
 
     /// Allows reading of early data in resumed TLS1.3 connections.
     ///
@@ -1099,8 +1093,9 @@ impl crate::conn::SideData for ServerConnectionData {}
 #[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::format;
+
+    use super::*;
 
     // these branches not reachable externally, unless something else goes wrong.
     #[test]

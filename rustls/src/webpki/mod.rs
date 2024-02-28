@@ -14,17 +14,14 @@ mod server_verifier;
 mod verify;
 
 pub use anchors::RootCertStore;
-
 pub use client_verifier::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 pub use server_verifier::{ServerCertVerifierBuilder, WebPkiServerVerifier};
-
-pub use verify::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
-
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]
 pub use verify::{
     verify_server_cert_signed_by_trust_anchor, verify_server_name, ParsedCertificate,
 };
+pub use verify::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
 
 /// An error that can occur when building a certificate verifier.
 #[derive(Debug, Clone)]
@@ -150,7 +147,8 @@ mod tests {
 
     #[test]
     fn crl_error_from_webpki() {
-        use super::{crl_error, CertRevocationListError::*};
+        use super::crl_error;
+        use super::CertRevocationListError::*;
 
         let testcases = &[
             (webpki::Error::InvalidCrlSignatureForPublicKey, BadSignature),

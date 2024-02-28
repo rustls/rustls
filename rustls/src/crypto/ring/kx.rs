@@ -1,15 +1,14 @@
 #![allow(clippy::duplicate_mod)]
 
+use alloc::boxed::Box;
+use core::fmt;
+
+use super::ring_like::agreement;
+use super::ring_like::rand::SystemRandom;
 use crate::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
-
-use super::ring_like::agreement;
-use super::ring_like::rand::SystemRandom;
-
-use alloc::boxed::Box;
-use core::fmt;
 
 /// A key-exchange group supported by *ring*.
 ///

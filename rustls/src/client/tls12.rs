@@ -1,9 +1,22 @@
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+
+use pki_types::ServerName;
+pub(super) use server_hello::CompleteServerHelloHandling;
+use subtle::ConstantTimeEq;
+
+use super::client_conn::ClientConnectionData;
+use super::hs::ClientContext;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
+use crate::client::common::{ClientAuthDetails, ServerCertDetails};
+use crate::client::{hs, ClientConfig};
 use crate::common_state::{CommonState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::KeyExchangeAlgorithm;
-use crate::enums::ProtocolVersion;
-use crate::enums::{AlertDescription, ContentType, HandshakeType};
+use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
@@ -22,29 +35,10 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify::{self, DigitallySignedStruct};
 
-use super::client_conn::ClientConnectionData;
-use super::hs::ClientContext;
-use crate::client::common::ClientAuthDetails;
-use crate::client::common::ServerCertDetails;
-use crate::client::{hs, ClientConfig};
-
-use pki_types::ServerName;
-use subtle::ConstantTimeEq;
-
-use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
-
-pub(super) use server_hello::CompleteServerHelloHandling;
-
 mod server_hello {
-    use crate::msgs::enums::ExtensionType;
-    use crate::msgs::handshake::HasServerExtensions;
-    use crate::msgs::handshake::ServerHelloPayload;
-
     use super::*;
+    use crate::msgs::enums::ExtensionType;
+    use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
 
     pub(in crate::client) struct CompleteServerHelloHandling {
         pub(in crate::client) config: Arc<ClientConfig>,

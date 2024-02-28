@@ -360,12 +360,12 @@ extern crate std;
 #[allow(unused_extern_crates)]
 extern crate test;
 
-#[cfg(doc)]
-use crate::crypto::CryptoProvider;
-
 // log for logging (optional).
 #[cfg(feature = "logging")]
 use log;
+
+#[cfg(doc)]
+use crate::crypto::CryptoProvider;
 
 #[cfg(not(feature = "logging"))]
 #[macro_use]
@@ -554,13 +554,11 @@ pub mod client {
         pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     }
 
+    pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{
         verify_server_cert_signed_by_trust_anchor, verify_server_name, ServerCertVerifierBuilder,
         VerifierBuilderError, WebPkiServerVerifier,
     };
-
-    pub use crate::msgs::persist::Tls12ClientSessionValue;
-    pub use crate::msgs::persist::Tls13ClientSessionValue;
 }
 
 pub use client::ClientConfig;
@@ -578,23 +576,23 @@ pub mod server {
     mod tls12;
     mod tls13;
 
-    pub use crate::verify::NoClientAuth;
-    pub use crate::webpki::{
-        ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
-    };
     pub use builder::WantsServerCert;
     pub use handy::NoServerSessionStorage;
     #[cfg(feature = "std")]
     pub use handy::ResolvesServerCertUsingSni;
     #[cfg(feature = "std")]
     pub use handy::ServerSessionMemoryCache;
-    pub use server_conn::StoresServerSessions;
     pub use server_conn::{
-        Accepted, ServerConfig, ServerConnectionData, UnbufferedServerConnection,
+        Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
+        ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
     };
     #[cfg(feature = "std")]
     pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-    pub use server_conn::{ClientHello, ProducesTickets, ResolvesServerCert};
+
+    pub use crate::verify::NoClientAuth;
+    pub use crate::webpki::{
+        ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,
+    };
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {

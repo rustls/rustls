@@ -1,12 +1,11 @@
 #![allow(clippy::duplicate_mod)]
 
-use crate::crypto::cipher::{AeadKey, Iv, Nonce};
-use crate::error::Error;
-use crate::quic;
-
 use alloc::boxed::Box;
 
 use super::ring_like::aead;
+use crate::crypto::cipher::{AeadKey, Iv, Nonce};
+use crate::error::Error;
+use crate::quic;
 
 pub(crate) struct HeaderProtectionKey(aead::quic::HeaderProtectionKey);
 

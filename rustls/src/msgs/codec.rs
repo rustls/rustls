@@ -1,7 +1,8 @@
-use crate::error::InvalidMessage;
-
 use alloc::vec::Vec;
-use core::{fmt::Debug, mem};
+use core::fmt::Debug;
+use core::mem;
+
+use crate::error::InvalidMessage;
 
 /// Wrapper over a slice of bytes that allows reading chunks from
 /// with the current position state held using a cursor.
@@ -377,9 +378,10 @@ impl<'a> Drop for LengthPrefixedBuffer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::prelude::v1::*;
     use std::vec;
+
+    use super::*;
 
     #[test]
     fn interrupted_length_prefixed_buffer_leaves_maximum_length() {
