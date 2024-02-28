@@ -67,12 +67,12 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; aws-lc-rs)
-        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging --all-targets
+        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging,std --all-targets
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (release; fips)
-        run: cargo test --release --no-default-features --features fips,tls12,read_buf,logging --all-targets
+        run: cargo test --release --no-default-features --features fips,tls12,read_buf,logging,std --all-targets
         env:
           RUST_BACKTRACE: 1
 
@@ -132,15 +132,15 @@ jobs:
         working-directory: rustls
 
       - name: cargo test (debug; no default features; tls12)
-        run: cargo test --locked --no-default-features --features tls12
+        run: cargo test --locked --no-default-features --features tls12,std
         working-directory: rustls
 
       - name: cargo test (debug; no default features; aws-lc-rs,tls12)
-        run: cargo test --no-default-features --features aws_lc_rs,tls12
+        run: cargo test --no-default-features --features aws_lc_rs,tls12,std
         working-directory: rustls
 
       - name: cargo test (debug; no default features; fips,tls12)
-        run: cargo test --no-default-features --features fips,tls12
+        run: cargo test --no-default-features --features fips,tls12,std
         working-directory: rustls
 
       - name: cargo test (release; no run)
@@ -216,10 +216,10 @@ jobs:
         run: cargo run -p rustls --release --locked --example bench
 
       - name: Smoke-test benchmark program (aws-lc-rs)
-        run: cargo run -p rustls --release --locked --example bench --no-default-features --features aws_lc_rs,tls12
+        run: cargo run -p rustls --release --locked --example bench --no-default-features --features aws_lc_rs,tls12,std
 
       - name: Smoke-test benchmark program (fips)
-        run: cargo run -p rustls --release --locked --example bench --no-default-features --features fips,tls12
+        run: cargo run -p rustls --release --locked --example bench --no-default-features --features fips,tls12,std
 
       - name: Run micro-benchmarks
         run: cargo bench --locked --all-features
