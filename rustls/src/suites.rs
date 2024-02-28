@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::common_state::Protocol;
 use crate::crypto::cipher::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
@@ -9,8 +11,6 @@ use crate::tls13::Tls13CipherSuite;
 #[cfg(feature = "tls12")]
 use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
-
-use core::fmt;
 
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
 pub struct CipherSuiteCommon {

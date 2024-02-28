@@ -1,11 +1,11 @@
+use core::ops::{Deref, DerefMut};
+
 use super::outbound::read_opaque_message_header;
 use super::MessageError;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::codec::ReaderMut;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-
-use core::ops::{Deref, DerefMut};
 
 /// A TLS frame, named TLSPlaintext in the standard.
 ///

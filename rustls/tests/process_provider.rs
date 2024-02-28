@@ -4,15 +4,14 @@
 //! executable, and runs tests in an indeterminate order.  That restricts us
 //! to doing all the desired tests, in series, in one function.
 
-use rustls::crypto::CryptoProvider;
-use rustls::ClientConfig;
-
 #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
 use rustls::crypto::aws_lc_rs as provider;
 #[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
 use rustls::crypto::ring as provider;
 #[cfg(all(feature = "ring", feature = "aws_lc_rs"))]
 use rustls::crypto::ring as provider;
+use rustls::crypto::CryptoProvider;
+use rustls::ClientConfig;
 
 mod common;
 use crate::common::*;

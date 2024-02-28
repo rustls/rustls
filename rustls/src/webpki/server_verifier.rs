@@ -1,5 +1,3 @@
-#[cfg(feature = "logging")]
-use crate::log::trace;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -7,6 +5,8 @@ use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTi
 use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
+#[cfg(feature = "logging")]
+use crate::log::trace;
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
@@ -15,10 +15,9 @@ use crate::webpki::verify::{
     ParsedCertificate,
 };
 use crate::webpki::{parse_crls, verify_server_name, VerifierBuilderError};
-use crate::{Error, RootCertStore, SignatureScheme};
-
 #[cfg(doc)]
 use crate::{crypto, ConfigBuilder, ServerConfig};
+use crate::{Error, RootCertStore, SignatureScheme};
 
 /// A builder for configuring a `webpki` server certificate verifier.
 ///

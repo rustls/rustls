@@ -1,6 +1,6 @@
-use crate::sign;
-
 use pki_types::CertificateDer;
+
+use crate::sign;
 
 /// ActiveCertifiedKey wraps [`sign::CertifiedKey`] and tracks OSCP state in a single handshake.
 pub(super) struct ActiveCertifiedKey<'a> {

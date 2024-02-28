@@ -1,3 +1,10 @@
+use alloc::boxed::Box;
+use core::fmt::Debug;
+use core::mem;
+use core::ops::{Deref, DerefMut};
+#[cfg(feature = "std")]
+use std::io;
+
 use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
@@ -9,28 +16,21 @@ use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
-use alloc::boxed::Box;
-use core::fmt::Debug;
-use core::mem;
-use core::ops::{Deref, DerefMut};
-#[cfg(feature = "std")]
-use std::io;
-
 pub(crate) mod unbuffered;
 
 #[cfg(feature = "std")]
 mod connection {
+    use alloc::vec::Vec;
+    use core::fmt::Debug;
+    use core::ops::{Deref, DerefMut};
+    use std::io;
+
     use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
     use crate::ConnectionCommon;
-
-    use alloc::vec::Vec;
-    use core::fmt::Debug;
-    use core::ops::{Deref, DerefMut};
-    use std::io;
 
     /// A client or server connection.
     #[derive(Debug)]

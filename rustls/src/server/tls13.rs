@@ -1,74 +1,57 @@
-use crate::check::inappropriate_handshake_message;
-use crate::check::inappropriate_message;
-use crate::common_state::Protocol;
-use crate::common_state::{CommonState, Side, State};
-use crate::conn::ConnectionRandoms;
-use crate::enums::ProtocolVersion;
-use crate::enums::{AlertDescription, ContentType, HandshakeType};
-use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
-use crate::hash_hs::HandshakeHash;
-#[cfg(feature = "logging")]
-use crate::log::{debug, trace, warn};
-use crate::msgs::codec::Codec;
-use crate::msgs::enums::KeyUpdateRequest;
-use crate::msgs::handshake::CertificateChain;
-use crate::msgs::handshake::HandshakeMessagePayload;
-use crate::msgs::handshake::HandshakePayload;
-use crate::msgs::handshake::{NewSessionTicketExtension, NewSessionTicketPayloadTls13};
-use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
-use crate::rand;
-use crate::server::ServerConfig;
-use crate::suites::PartiallyExtractedSecrets;
-use crate::tls13::construct_client_verify_message;
-use crate::tls13::construct_server_verify_message;
-use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
-use crate::tls13::Tls13CipherSuite;
-use crate::verify;
-
-use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
-use super::server_conn::ServerConnectionData;
-
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub(super) use client_hello::CompleteClientHelloHandling;
 use pki_types::{CertificateDer, UnixTime};
 use subtle::ConstantTimeEq;
 
-pub(super) use client_hello::CompleteClientHelloHandling;
+use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
+use super::server_conn::ServerConnectionData;
+use crate::check::{inappropriate_handshake_message, inappropriate_message};
+use crate::common_state::{CommonState, Protocol, Side, State};
+use crate::conn::ConnectionRandoms;
+use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
+use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
+use crate::hash_hs::HandshakeHash;
+#[cfg(feature = "logging")]
+use crate::log::{debug, trace, warn};
+use crate::msgs::codec::Codec;
+use crate::msgs::enums::KeyUpdateRequest;
+use crate::msgs::handshake::{
+    CertificateChain, HandshakeMessagePayload, HandshakePayload, NewSessionTicketExtension,
+    NewSessionTicketPayloadTls13,
+};
+use crate::msgs::message::{Message, MessagePayload};
+use crate::msgs::persist;
+use crate::server::ServerConfig;
+use crate::suites::PartiallyExtractedSecrets;
+use crate::tls13::key_schedule::{KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending};
+use crate::tls13::{
+    construct_client_verify_message, construct_server_verify_message, Tls13CipherSuite,
+};
+use crate::{rand, verify};
 
 mod client_hello {
+    use super::*;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
-    use crate::msgs::enums::NamedGroup;
-    use crate::msgs::enums::{Compression, PSKKeyExchangeMode};
-    use crate::msgs::handshake::CertReqExtension;
-    use crate::msgs::handshake::CertificateEntry;
-    use crate::msgs::handshake::CertificateExtension;
-    use crate::msgs::handshake::CertificatePayloadTls13;
-    use crate::msgs::handshake::CertificateRequestPayloadTls13;
-    use crate::msgs::handshake::CertificateStatus;
-    use crate::msgs::handshake::ClientHelloPayload;
-    use crate::msgs::handshake::HelloRetryExtension;
-    use crate::msgs::handshake::HelloRetryRequest;
-    use crate::msgs::handshake::KeyShareEntry;
-    use crate::msgs::handshake::Random;
-    use crate::msgs::handshake::ServerExtension;
-    use crate::msgs::handshake::ServerHelloPayload;
-    use crate::msgs::handshake::SessionId;
+    use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
+    use crate::msgs::handshake::{
+        CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTls13,
+        CertificateRequestPayloadTls13, CertificateStatus, ClientHelloPayload, HelloRetryExtension,
+        HelloRetryRequest, KeyShareEntry, Random, ServerExtension, ServerHelloPayload, SessionId,
+    };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
     use crate::tls13::key_schedule::{
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
-
-    use super::*;
 
     #[derive(PartialEq)]
     pub(super) enum EarlyDataDecision {

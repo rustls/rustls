@@ -1,3 +1,9 @@
+use alloc::boxed::Box;
+use alloc::collections::VecDeque;
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use core::fmt::Debug;
+
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::common_state::Side;
 use crate::crypto::cipher::{AeadKey, Iv};
@@ -9,14 +15,17 @@ use crate::tls13::key_schedule::{
 };
 use crate::tls13::Tls13CipherSuite;
 
-use alloc::boxed::Box;
-use alloc::collections::VecDeque;
-use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use core::fmt::Debug;
-
 #[cfg(feature = "std")]
 mod connection {
+    use alloc::sync::Arc;
+    use alloc::vec;
+    use alloc::vec::Vec;
+    use core::fmt::{self, Debug};
+    use core::ops::{Deref, DerefMut};
+
+    use pki_types::ServerName;
+
+    use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, Protocol, DEFAULT_BUFFER_LIMIT};
     use crate::conn::{ConnectionCore, SideData};
@@ -26,16 +35,6 @@ mod connection {
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::vecbuf::ChunkVecBuffer;
-
-    use pki_types::ServerName;
-
-    use alloc::sync::Arc;
-    use alloc::vec;
-    use alloc::vec::Vec;
-    use core::fmt::{self, Debug};
-    use core::ops::{Deref, DerefMut};
-
-    use super::{DirectionalKeys, KeyChange, Version};
 
     /// A QUIC client or server connection.
     #[derive(Debug)]
@@ -966,9 +965,10 @@ impl Default for Version {
 
 #[cfg(test)]
 mod tests {
+    use std::prelude::v1::*;
+
     use super::PacketKey;
     use crate::quic::HeaderProtectionKey;
-    use std::prelude::v1::*;
 
     #[test]
     fn auto_traits() {

@@ -3,16 +3,13 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
-use std::env;
-use std::fs;
 use std::io::{self, Read, Write};
-use std::ops::Deref;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{env, fs};
 
 use pki_types::{CertificateDer, PrivateKeyDer};
-
 use rustls::client::Resumption;
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
 use rustls::crypto::aws_lc_rs as provider;
@@ -24,10 +21,10 @@ use rustls::crypto::ring as provider;
 use rustls::crypto::ring::{cipher_suite, Ticketer};
 use rustls::crypto::CryptoProvider;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
-use rustls::RootCertStore;
-use rustls::{ClientConfig, ClientConnection};
-use rustls::{ConnectionCommon, SideData};
-use rustls::{ServerConfig, ServerConnection};
+use rustls::{
+    ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
+    ServerConnection, SideData,
+};
 
 pub fn main() {
     let mut args = std::env::args();

@@ -1,3 +1,8 @@
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
+use pki_types::CertificateDer;
+
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "logging")]
@@ -11,19 +16,12 @@ use crate::msgs::message::{
     Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
     PlainMessage,
 };
-use crate::quic;
-use crate::record_layer;
-use crate::suites::PartiallyExtractedSecrets;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-
-use alloc::boxed::Box;
-use alloc::vec::Vec;
-
-use pki_types::CertificateDer;
+use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {

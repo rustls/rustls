@@ -1,19 +1,17 @@
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::marker::PhantomData;
+
+use pki_types::{CertificateDer, PrivateKeyDer};
+
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::msgs::handshake::CertificateChain;
-use crate::server::handy;
-use crate::server::{ResolvesServerCert, ServerConfig};
+use crate::server::{handy, ResolvesServerCert, ServerConfig};
 use crate::time_provider::TimeProvider;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
-use crate::versions;
-use crate::NoKeyLog;
-
-use pki_types::{CertificateDer, PrivateKeyDer};
-
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::marker::PhantomData;
+use crate::{versions, NoKeyLog};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.

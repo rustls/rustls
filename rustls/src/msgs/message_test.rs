@@ -1,15 +1,14 @@
-use crate::enums::{AlertDescription, HandshakeType};
-use crate::msgs::base::{PayloadU16, PayloadU24, PayloadU8};
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::prelude::v1::*;
+use std::{format, fs, println, vec};
 
 use super::base::Payload;
 use super::codec::Reader;
 use super::enums::AlertLevel;
 use super::message::{Message, OutboundOpaqueMessage, PlainMessage};
-
-use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::prelude::v1::*;
-use std::{format, fs, println, vec};
+use crate::enums::{AlertDescription, HandshakeType};
+use crate::msgs::base::{PayloadU16, PayloadU24, PayloadU8};
 
 #[test]
 fn test_read_fuzz_corpus() {

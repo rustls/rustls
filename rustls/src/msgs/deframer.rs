@@ -712,10 +712,9 @@ mod tests {
     use std::prelude::v1::*;
     use std::vec;
 
+    use super::*;
     use crate::crypto::cipher::PlainMessage;
     use crate::msgs::message::Message;
-
-    use super::*;
 
     #[test]
     fn check_incremental() {

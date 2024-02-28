@@ -1,12 +1,12 @@
-use crate::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::error::Error;
-
-use pki_types::CertificateDer;
-
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+
+use pki_types::CertificateDer;
+
+use crate::enums::{SignatureAlgorithm, SignatureScheme};
+use crate::error::Error;
 
 /// An abstract signing key.
 ///

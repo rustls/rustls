@@ -1,22 +1,21 @@
 #![allow(clippy::duplicate_mod)]
 
-use crate::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::error::Error;
-use crate::sign::{Signer, SigningKey};
-use crate::x509::{asn1_wrap, wrap_in_sequence};
+use alloc::boxed::Box;
+use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::{format, vec};
+use core::fmt::{self, Debug, Formatter};
+
+use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use super::ring_like::io::der;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
 use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
-use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
-
-use alloc::boxed::Box;
-use alloc::format;
-use alloc::string::ToString;
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
-use core::fmt::{self, Debug, Formatter};
+use crate::enums::{SignatureAlgorithm, SignatureScheme};
+use crate::error::Error;
+use crate::sign::{Signer, SigningKey};
+use crate::x509::{asn1_wrap, wrap_in_sequence};
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
@@ -408,9 +407,11 @@ impl Debug for Ed25519Signer {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloc::format;
+
     use pki_types::{PrivatePkcs1KeyDer, PrivateSec1KeyDer};
+
+    use super::*;
 
     #[test]
     fn can_load_ecdsa_nistp256_pkcs8() {

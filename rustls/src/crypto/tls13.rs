@@ -1,10 +1,10 @@
-use super::hmac;
-use super::ActiveKeyExchange;
+use alloc::boxed::Box;
+
+use zeroize::Zeroize;
+
+use super::{hmac, ActiveKeyExchange};
 use crate::error::Error;
 use crate::version::TLS13;
-
-use alloc::boxed::Box;
-use zeroize::Zeroize;
 
 /// Implementation of `HkdfExpander` via `hmac::Key`.
 pub struct HkdfExpanderUsingHmac(Box<dyn hmac::Key>);
@@ -247,11 +247,12 @@ pub struct OutputLengthError;
 
 #[cfg(all(test, feature = "ring"))]
 mod tests {
+    use std::prelude::v1::*;
+
     use super::{expand, Hkdf, HkdfUsingHmac};
     // nb: crypto::aws_lc_rs provider doesn't provide (or need) hmac,
     // so cannot be used for this test.
     use crate::crypto::ring::hmac;
-    use std::prelude::v1::*;
 
     struct ByteArray<const N: usize>([u8; N]);
 

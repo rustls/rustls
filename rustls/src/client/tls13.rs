@@ -1,8 +1,18 @@
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+
+use pki_types::ServerName;
+use subtle::ConstantTimeEq;
+
+use super::client_conn::ClientConnectionData;
+use super::hs::ClientContext;
 use crate::check::inappropriate_handshake_message;
-use crate::common_state::Protocol;
-use crate::common_state::{CommonState, Side, State};
+use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
+use crate::client::{hs, ClientConfig, ClientSessionStore};
+use crate::common_state::{CommonState, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{
     AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -13,40 +23,24 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
-use crate::msgs::enums::ExtensionType;
-use crate::msgs::enums::KeyUpdateRequest;
-use crate::msgs::handshake::NewSessionTicketPayloadTls13;
-use crate::msgs::handshake::{CertificateEntry, CertificatePayloadTls13};
-use crate::msgs::handshake::{ClientExtension, ServerExtension};
-use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
-use crate::msgs::handshake::{PresharedKeyIdentity, PresharedKeyOffer};
+use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
+use crate::msgs::handshake::{
+    CertificateEntry, CertificatePayloadTls13, ClientExtension, HandshakeMessagePayload,
+    HandshakePayload, HasServerExtensions, NewSessionTicketPayloadTls13, PresharedKeyIdentity,
+    PresharedKeyOffer, ServerExtension, ServerHelloPayload,
+};
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sign::{CertifiedKey, Signer};
 use crate::suites::PartiallyExtractedSecrets;
-use crate::tls13::construct_client_verify_message;
-use crate::tls13::construct_server_verify_message;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleTraffic,
 };
-use crate::tls13::Tls13CipherSuite;
+use crate::tls13::{
+    construct_client_verify_message, construct_server_verify_message, Tls13CipherSuite,
+};
 use crate::verify::{self, DigitallySignedStruct};
-use crate::KeyLog;
-
-use super::client_conn::ClientConnectionData;
-use super::hs::ClientContext;
-use crate::client::common::ServerCertDetails;
-use crate::client::common::{ClientAuthDetails, ClientHelloDetails};
-use crate::client::{hs, ClientConfig, ClientSessionStore};
-
-use pki_types::ServerName;
-use subtle::ConstantTimeEq;
-
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
+use crate::{crypto, KeyLog};
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[

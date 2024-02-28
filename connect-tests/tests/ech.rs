@@ -3,7 +3,6 @@ mod ech_config {
     use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
     use hickory_resolver::proto::rr::{RData, RecordType};
     use hickory_resolver::Resolver;
-
     use rustls::internal::msgs::codec::{Codec, Reader};
     use rustls::internal::msgs::enums::EchVersion;
     use rustls::internal::msgs::handshake::EchConfig;

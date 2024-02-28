@@ -1,9 +1,9 @@
+use alloc::vec::Vec;
+use core::fmt;
+
 use crate::crypto;
 use crate::crypto::hash;
 use crate::suites::{CipherSuiteCommon, SupportedCipherSuite};
-
-use alloc::vec::Vec;
-use core::fmt;
 
 pub(crate) mod key_schedule;
 

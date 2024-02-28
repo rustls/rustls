@@ -1,3 +1,7 @@
+use alloc::boxed::Box;
+
+use aws_lc_rs::{aead, tls_prf};
+
 use crate::crypto::cipher::{
     make_tls12_aad, AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter,
     MessageEncrypter, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
@@ -13,10 +17,6 @@ use crate::msgs::message::{
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls12::Tls12CipherSuite;
 use crate::version::TLS12;
-
-use alloc::boxed::Box;
-
-use aws_lc_rs::{aead, tls_prf};
 
 /// The TLS1.2 ciphersuite TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256.
 pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =

@@ -1,13 +1,12 @@
-use crate::rand;
-use crate::server::ProducesTickets;
-use crate::Error;
-
-use pki_types::UnixTime;
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 use std::sync::{Mutex, MutexGuard};
+
+use pki_types::UnixTime;
+
+use crate::server::ProducesTickets;
+use crate::{rand, Error};
 
 #[derive(Debug)]
 pub(crate) struct TicketSwitcherState {

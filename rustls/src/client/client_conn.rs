@@ -1,3 +1,13 @@
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::marker::PhantomData;
+use core::ops::{Deref, DerefMut};
+use core::{fmt, mem};
+
+use pki_types::{ServerName, UnixTime};
+
+use super::handy::NoClientSessionStorage;
+use super::hs;
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
@@ -9,32 +19,16 @@ use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
-use crate::sign;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
-use crate::versions;
-use crate::KeyLog;
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
-use crate::{verify, WantsVersions};
-
-use super::handy::NoClientSessionStorage;
-use super::hs;
-
-use pki_types::{ServerName, UnixTime};
-
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::fmt;
-use core::marker::PhantomData;
-use core::mem;
-use core::ops::{Deref, DerefMut};
-
 #[cfg(doc)]
 use crate::{crypto, DistinguishedName};
+use crate::{sign, verify, versions, KeyLog, WantsVersions};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -584,22 +578,20 @@ impl EarlyData {
 
 #[cfg(feature = "std")]
 mod connection {
-    use crate::common_state::Protocol;
-    use crate::conn::ConnectionCommon;
-    use crate::conn::ConnectionCore;
-    use crate::error::Error;
-    use crate::suites::ExtractedSecrets;
-    use crate::ClientConfig;
-
-    use pki_types::ServerName;
-
     use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
     use std::io;
 
+    use pki_types::ServerName;
+
     use super::ClientConnectionData;
+    use crate::common_state::Protocol;
+    use crate::conn::{ConnectionCommon, ConnectionCore};
+    use crate::error::Error;
+    use crate::suites::ExtractedSecrets;
+    use crate::ClientConfig;
 
     /// Stub that implements io::Write and dispatches to `write_early_data`.
     pub struct WriteEarlyData<'a> {
