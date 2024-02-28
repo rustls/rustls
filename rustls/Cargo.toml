@@ -27,10 +27,10 @@ pki-types = { package = "rustls-pki-types", version = "1.2", features = ["alloc"
 zeroize = "1.7"
 
 [features]
-default = ["logging", "std", "tls12"]
-std = ["aws_lc_rs", "webpki/std", "pki-types/std", "once_cell/std"]
+default = ["aws_lc_rs", "logging", "std", "tls12"]
+std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
-aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs", "std"]
+aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 ring = ["dep:ring", "webpki/ring"]
 tls12 = []
 read_buf = ["rustversion", "std"]
