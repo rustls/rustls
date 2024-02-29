@@ -4,12 +4,16 @@
    dependency updates which are not already automatically taken by their semver specs.
    - If we do, take them if possible.  There should be dependabot PRs submitted for these already, but if
      not make separate commits for these and land those first.
-2. Update `rustls/Cargo.toml` to set the correct version.
-3. Make a commit with the new version number, something like 'Prepare $VERSION'.  This
+2. Run the daily-tests CI workflow to check if we have any unfixed regressions.
+   You can run the workflow manually for the to-be-released branch by visiting
+   [the daily-tests workflow](https://github.com/rustls/rustls/actions/workflows/daily-tests.yml)
+   in your browser and selecting "Run workflow".
+3. Update `rustls/Cargo.toml` to set the correct version.
+4. Make a commit with the new version number, something like 'Prepare $VERSION'.  This
    should not contain functional changes: just version numbers, and perhaps markdown changes.
-4. Do a dry run: in `rustls/` check `cargo publish --dry-run`.
+5. Do a dry run: in `rustls/` check `cargo publish --dry-run`.
    - Do not use `--allow-dirty`; use a separate working tree if needed.
-5. Come up with text detailing headline changes for this release.  General guidelines:
+6. Come up with text detailing headline changes for this release.  General guidelines:
    * :green_heart: include any breaking changes.
    * :green_heart: include any major new headline features.
    * :green_heart: include any major, user-visible bug fixes.
@@ -18,7 +22,7 @@
    * :x: omit any internal build, process or test improvements.
    * :x: omit any minor or user-invisible bug fixes.
    * :x: omit any changes to dependency versions (unless these cause breaking changes).
-5. Open a PR with the above commit and include the release notes in the description.
+7. Open a PR with the above commit and include the release notes in the description.
    Wait for review and CI to confirm it as green.
    - Any red _should_ naturally block the release.
    - If rustc nightly is broken, this _may_ be acceptable if the reason is understood
