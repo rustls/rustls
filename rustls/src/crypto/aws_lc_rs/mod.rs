@@ -27,6 +27,7 @@ pub(crate) mod hash;
 pub(crate) mod kx;
 #[path = "../ring/quic.rs"]
 pub(crate) mod quic;
+#[cfg(feature = "std")]
 #[path = "../ring/ticketer.rs"]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
@@ -224,6 +225,7 @@ pub mod kx_group {
 }
 
 pub use kx::ALL_KX_GROUPS;
+#[cfg(feature = "std")]
 pub use ticketer::Ticketer;
 
 use super::SupportedKxGroup;
@@ -244,6 +246,7 @@ mod ring_shim {
 }
 
 /// AEAD algorithm that is used by `mod ticketer`.
+#[cfg(feature = "std")]
 pub(super) static TICKETER_AEAD: &ring_like::aead::Algorithm = &ring_like::aead::AES_256_GCM;
 
 /// Are we in FIPS mode?
