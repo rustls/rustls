@@ -263,7 +263,7 @@ impl CryptoProvider {
         }
 
         let provider = Self::from_crate_features()
-            .expect("no process-level `CryptoProvider` available. call `CryptoProvider::install_default()` before this point");
+            .expect("no process-level CryptoProvider available -- call CryptoProvider::install_default() before this point");
         // Ignore the error resulting from us losing a race, and accept the outcome.
         let _ = provider.install_default();
         Self::get_default().unwrap()
