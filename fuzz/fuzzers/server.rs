@@ -3,11 +3,11 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::server::ResolvesServerCert;
-use rustls::{ServerConfig, ServerConnection};
-
 use std::io;
 use std::sync::Arc;
+
+use rustls::server::ResolvesServerCert;
+use rustls::{ServerConfig, ServerConnection};
 
 #[derive(Debug)]
 struct Fail;
