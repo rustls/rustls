@@ -544,7 +544,8 @@ impl From<&[u8]> for SharedSecret {
 ///     .with_no_client_auth();
 /// # }
 /// ```
-#[cfg(feature = "fips")]
+#[cfg(any(feature = "fips", docsrs))]
+#[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
 pub fn default_fips_provider() -> CryptoProvider {
     crate::crypto::aws_lc_rs::default_provider()
 }
