@@ -361,13 +361,13 @@ jobs:
           components: rustfmt
           toolchain: nightly-2024-02-21
       - name: Check formatting (unstable)
-        run: cargo fmt-unstable --all -- --check
+        run: cargo fmt --all -- --check --config-path .rustfmt.unstable.toml
         continue-on-error: true
       - name: Check formatting (unstable, connect-tests workspace)
-        run: cargo fmt-unstable --all --manifest-path=connect-tests/Cargo.toml -- --check
+        run: cargo fmt --all --manifest-path=connect-tests/Cargo.toml -- --check --config-path .rustfmt.unstable.toml
         continue-on-error: true
       - name: Check formatting (unstable, fuzz workspace)
-        run: cargo fmt-unstable --all --manifest-path=fuzz/Cargo.toml -- --check
+        run: cargo fmt --all --manifest-path=fuzz/Cargo.toml -- --check --config-path .rustfmt.unstable.toml
         continue-on-error: true
 
   clippy:
