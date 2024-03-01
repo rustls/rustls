@@ -17,3 +17,6 @@ pki-types = { package = "rustls-pki-types", version = "1" }
 rayon = "1.7.0"
 rustls = { path = "../rustls", features = ["ring", "aws_lc_rs"] }
 rustls-pemfile = "2"
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.5"
