@@ -34,7 +34,8 @@ jobs:
             "</script>"
 
       - name: cargo doc
-        run: cargo doc --locked --all-features --no-deps --package rustls
+        # keep features in sync with Cargo.toml `[package.metadata.docs.rs]` section
+        run: cargo doc --locked --features read_buf,ring --no-deps --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings --cfg=docsrs --html-after-content tag.html
 

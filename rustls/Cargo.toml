@@ -61,7 +61,8 @@ harness = false
 required-features = ["ring"]
 
 [package.metadata.docs.rs]
-all-features = true
+# all non-default features except fips (cannot build on docs.rs environment)
+features = ["read_buf", "ring"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo_check_external_types]
