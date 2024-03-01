@@ -3,9 +3,10 @@
 extern crate libfuzzer_sys;
 extern crate rustls;
 
-use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use std::io;
 use std::sync::Arc;
+
+use rustls::{ClientConfig, ClientConnection, RootCertStore};
 
 fuzz_target!(|data: &[u8]| {
     let root_store = RootCertStore::empty();
