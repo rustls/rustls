@@ -847,3 +847,7 @@ fn table<'a>(diffs: impl Iterator<Item = &'a Diff>, emoji_feedback: bool) {
         )
     }
 }
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
