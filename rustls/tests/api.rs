@@ -5643,6 +5643,75 @@ fn test_secret_extraction_enabled() {
     }
 }
 
+#[test]
+fn test_secret_extract_produces_correct_variant() {
+    fn check(suite: SupportedCipherSuite, f: impl Fn(ConnectionTrafficSecrets) -> bool) {
+        let kt = KeyType::Rsa;
+
+        let provider: Arc<CryptoProvider> = CryptoProvider {
+            cipher_suites: vec![suite],
+            ..provider::default_provider()
+        }
+        .into();
+
+        let mut server_config = finish_server_config(
+            kt,
+            ServerConfig::builder_with_provider(provider.clone())
+                .with_safe_default_protocol_versions()
+                .unwrap(),
+        );
+
+        server_config.enable_secret_extraction = true;
+        let server_config = Arc::new(server_config);
+
+        let mut client_config = finish_client_config(
+            kt,
+            ClientConfig::builder_with_provider(provider)
+                .with_safe_default_protocol_versions()
+                .unwrap(),
+        );
+        client_config.enable_secret_extraction = true;
+
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+
+        do_handshake(&mut client, &mut server);
+
+        let client_secrets = client
+            .dangerous_extract_secrets()
+            .unwrap();
+        let server_secrets = server
+            .dangerous_extract_secrets()
+            .unwrap();
+
+        assert!(f(client_secrets.tx.1));
+        assert!(f(client_secrets.rx.1));
+        assert!(f(server_secrets.tx.1));
+        assert!(f(server_secrets.rx.1));
+    }
+
+    check(cipher_suite::TLS13_AES_128_GCM_SHA256, |sec| {
+        matches!(sec, ConnectionTrafficSecrets::Aes128Gcm { .. })
+    });
+    check(cipher_suite::TLS13_AES_256_GCM_SHA384, |sec| {
+        matches!(sec, ConnectionTrafficSecrets::Aes256Gcm { .. })
+    });
+    check(cipher_suite::TLS13_CHACHA20_POLY1305_SHA256, |sec| {
+        matches!(sec, ConnectionTrafficSecrets::Chacha20Poly1305 { .. })
+    });
+
+    check(cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, |sec| {
+        matches!(sec, ConnectionTrafficSecrets::Aes128Gcm { .. })
+    });
+    check(cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, |sec| {
+        matches!(sec, ConnectionTrafficSecrets::Aes256Gcm { .. })
+    });
+    check(
+        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        |sec| matches!(sec, ConnectionTrafficSecrets::Chacha20Poly1305 { .. }),
+    );
+}
+
 /// Test that secrets cannot be extracted unless explicitly enabled, and until
 /// the handshake is done.
 #[cfg(feature = "tls12")]
