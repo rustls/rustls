@@ -183,9 +183,11 @@ impl Tls12AeadAlgorithm for GcmAlgorithm {
         write_iv: &[u8],
         explicit: &[u8],
     ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
-        Ok(ConnectionTrafficSecrets::Aes128Gcm {
-            key,
-            iv: gcm_iv(write_iv, explicit),
+        let iv = gcm_iv(write_iv, explicit);
+        Ok(match self.0.key_len() {
+            16 => ConnectionTrafficSecrets::Aes128Gcm { key, iv },
+            32 => ConnectionTrafficSecrets::Aes256Gcm { key, iv },
+            _ => unreachable!(),
         })
     }
 }
