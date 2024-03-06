@@ -52,10 +52,10 @@ mod cache {
 
         // Zero or one TLS1.2 sessions.
         #[cfg(feature = "tls12")]
-        tls12: Option<super::persist::Tls12ClientSessionValue>,
+        tls12: Option<persist::Tls12ClientSessionValue>,
 
         // Up to MAX_TLS13_TICKETS_PER_SERVER TLS1.3 tickets, oldest first.
-        tls13: VecDeque<super::persist::Tls13ClientSessionValue>,
+        tls13: VecDeque<persist::Tls13ClientSessionValue>,
     }
 
     impl Default for ServerData {
