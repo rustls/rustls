@@ -16,18 +16,27 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        # test a bunch of toolchains on ubuntu
         rust:
           - stable
           - beta
           - nightly
-        os: [ubuntu-latest]
-        # but only stable on macos/windows (slower platforms)
-        include:
-          - os: macos-latest
-            rust: stable
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+        exclude:
+          # only stable on macos/windows (slower platforms)
           - os: windows-latest
-            rust: stable
+            rust: beta
+          - os: windows-latest
+            rust: nightly
+          - os: macos-latest
+            rust: beta
+          - os: macos-latest
+            rust: nightly
+          # and never use macos/windows for merge checks
+          - os: ${{ github.event_name == 'merge_group' && 'windows-latest' }}
+          - os: ${{ github.event_name == 'merge_group' && 'macos-latest' }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
