@@ -335,8 +335,8 @@ enum_builder! {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    //! These tests are intended to provide coverage and
-    //! check panic-safety of relatively unused values.
+    // These tests are intended to provide coverage and
+    // check panic-safety of relatively unused values.
 
     use super::*;
     use std::prelude::v1::*;
