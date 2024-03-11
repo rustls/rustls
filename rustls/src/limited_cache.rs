@@ -77,26 +77,23 @@ where
         }
     }
 
-    pub(crate) fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+    pub(crate) fn get<Q: Hash + Eq + ?Sized>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
-        Q: Hash + Eq,
     {
         self.map.get(k)
     }
 
-    pub(crate) fn get_mut<Q: ?Sized>(&mut self, k: &Q) -> Option<&mut V>
+    pub(crate) fn get_mut<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
-        Q: Hash + Eq,
     {
         self.map.get_mut(k)
     }
 
-    pub(crate) fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<V>
+    pub(crate) fn remove<Q: Hash + Eq + ?Sized>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,
-        Q: Hash + Eq,
     {
         if let Some(value) = self.map.remove(k) {
             // O(N) search, followed by O(N) removal
