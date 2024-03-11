@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
+use std::env::var_os;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
+use std::io;
 use std::io::Write;
 use std::sync::Mutex;
-use std::{env, io};
 
 #[cfg(feature = "logging")]
 use crate::log::warn;
@@ -92,7 +93,7 @@ impl KeyLogFile {
     /// Makes a new `KeyLogFile`.  The environment variable is
     /// inspected and the named file is opened during this call.
     pub fn new() -> Self {
-        let var = env::var_os("SSLKEYLOGFILE");
+        let var = var_os("SSLKEYLOGFILE");
         Self(Mutex::new(KeyLogFileInner::new(var)))
     }
 }
