@@ -353,7 +353,9 @@ mod client_hello {
 
             if let Some(ref resume) = resumedata {
                 cx.data.received_resumption_data = Some(resume.application_data.0.clone());
-                cx.common.peer_certificates = resume.client_cert_chain.clone();
+                cx.common
+                    .peer_certificates
+                    .clone_from(&resume.client_cert_chain);
             }
 
             let full_handshake = resumedata.is_none();
