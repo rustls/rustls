@@ -137,7 +137,6 @@ pub static TLS13_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherSuite =
             suite: rustls::CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
             hash_provider: &hash::Sha256,
             confidentiality_limit: u64::MAX,
-            integrity_limit: 1 << 36,
         },
         hkdf_provider: &rustls::crypto::tls13::HkdfUsingHmac(&hmac::Sha256Hmac),
         aead_alg: &aead::Chacha20Poly1305,
@@ -150,7 +149,6 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: rustls::SupportedCipherS
             suite: rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             hash_provider: &hash::Sha256,
             confidentiality_limit: u64::MAX,
-            integrity_limit: 1 << 36,
         },
         kx: rustls::crypto::KeyExchangeAlgorithm::ECDHE,
         sign: &[

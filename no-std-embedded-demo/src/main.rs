@@ -128,14 +128,15 @@ async fn main(
             .iter()
             .cloned(),
     );
-
-    let mut tls_config = ClientConfig::builder_with_provider(lib::provider().into())
+    
+    let time_provider = lib::stub();
+    let mut tls_config = ClientConfig::builder_with_details(lib::provider().into(), time_provider)
         .with_safe_default_protocol_versions()
         .unwrap()
         .with_root_certificates(root_store)
         .with_no_client_auth();
     tls_config.enable_early_data = SEND_EARLY_DATA;
-    tls_config.time_provider = lib::stub();
+    //tls_config.time_provider = lib::stub();
 
     let tls_config = Arc::new(tls_config);
 
