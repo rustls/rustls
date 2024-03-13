@@ -2,10 +2,15 @@
 name = "rustls-post-quantum"
 version = "0.1.0"
 edition = "2021"
-publish = false
+license = "Apache-2.0 OR ISC OR MIT"
+readme = "README.md"
+description = "Experimental support for post-quantum key exchange in rustls"
+homepage = "https://github.com/rustls/rustls"
+repository = "https://github.com/rustls/rustls"
+categories = ["network-programming", "cryptography"]
 
 [dependencies]
-rustls = { path = "../rustls", features = ["aws_lc_rs"] }
+rustls = { version = "0.23.2", features = ["aws_lc_rs"] }
 aws-lc-rs = { version = "1.6", features = ["unstable"], default-features = false }
 
 [dev-dependencies]

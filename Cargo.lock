@@ -2159,6 +2159,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dfbdb5ddfafe3040e01fe9dced711e27b5336ac97d4a9b2089f0066a04b5846"
+dependencies = [
+ "aws-lc-rs",
+ "log",
+ "once_cell",
+ "rustls-pki-types",
+ "rustls-webpki 0.102.2",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "rustls-ci-bench"
 version = "0.0.1"
 dependencies = [
@@ -2248,7 +2263,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "env_logger",
- "rustls 0.23.2",
+ "rustls 0.23.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki-roots 0.26.1",
 ]
 
