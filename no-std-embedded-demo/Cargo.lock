@@ -1450,7 +1450,8 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.1"
-source = "git+https://github.com/Dajamante/rustls?branch=pinned-apis#0398ac50fe18521da038aa39b55eec6c83450523"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e153fc89608e0515660ca656fd7f2fa05ca6690f3fd6ad1b0a46e24a8130d838"
 dependencies = [
  "once_cell",
  "rustls-pki-types",
