@@ -1450,7 +1450,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.1"
-source = "git+https://github.com/rustls/rustls?rev=0398ac5#0398ac50fe18521da038aa39b55eec6c83450523"
+source = "git+https://github.com/Dajamante/rustls?branch=pinned-apis#0398ac50fe18521da038aa39b55eec6c83450523"
 dependencies = [
  "once_cell",
  "rustls-pki-types",
