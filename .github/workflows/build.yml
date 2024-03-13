@@ -126,7 +126,7 @@ jobs:
 
         # this target does _not_ include the libstd crate in its sysroot
         # it will catch unwanted usage of libstd in _dependencies_
-      - name: cargo build (debug; default features; no-std)
+      - name: cargo build (debug; no default features; no-std)
         run: cargo build --locked --no-default-features --target x86_64-unknown-none
         working-directory: rustls
 
