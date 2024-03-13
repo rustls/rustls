@@ -961,7 +961,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             }
             if opts.expect_version == 0x0304 {
                 match sess.protocol_version() {
-                    Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion::Unknown(0x7f17)) => {}
+                    Some(ProtocolVersion::TLSv1_3) | Some(ProtocolVersion::Other(0x7f17)) => {}
                     _ => quit_err("wrong protocol version"),
                 }
             }
@@ -1054,11 +1054,11 @@ pub fn main() {
             }
             "-min-version" => {
                 let min = args.remove(0).parse::<u16>().unwrap();
-                opts.min_version = Some(ProtocolVersion::Unknown(min));
+                opts.min_version = Some(ProtocolVersion::Other(min));
             }
             "-max-version" => {
                 let max = args.remove(0).parse::<u16>().unwrap();
-                opts.max_version = Some(ProtocolVersion::Unknown(max));
+                opts.max_version = Some(ProtocolVersion::Other(max));
             }
             "-max-send-fragment" => {
                 let max_fragment = args.remove(0).parse::<usize>().unwrap();

@@ -862,7 +862,7 @@ fn server_receives_incorrect_first_handshake_message() {
     assert_eq!(discard, junk_buffer_len);
     assert_eq!(
         format!("{state:?}"),
-        "Err(InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: Unknown(255) })"
+        "Err(InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: Other(255) })"
     );
 
     let UnbufferedStatus { discard, state } = server.process_tls_records(&mut []);

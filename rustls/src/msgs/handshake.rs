@@ -1080,7 +1080,7 @@ impl Codec<'_> for HelloRetryRequest {
         }
 
         Ok(Self {
-            legacy_version: ProtocolVersion::Unknown(0),
+            legacy_version: ProtocolVersion::Other(0),
             session_id,
             cipher_suite,
             extensions: Vec::read(r)?,
@@ -1175,7 +1175,7 @@ impl Codec<'_> for ServerHelloPayload {
         let extensions = if r.any_left() { Vec::read(r)? } else { vec![] };
 
         let ret = Self {
-            legacy_version: ProtocolVersion::Unknown(0),
+            legacy_version: ProtocolVersion::Other(0),
             random: ZERO_RANDOM,
             session_id,
             cipher_suite: suite,

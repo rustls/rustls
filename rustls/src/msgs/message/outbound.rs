@@ -276,14 +276,14 @@ pub(crate) fn read_opaque_message_header(
 ) -> Result<(ContentType, ProtocolVersion, u16), MessageError> {
     let typ = ContentType::read(r).map_err(|_| MessageError::TooShortForHeader)?;
     // Don't accept any new content-types.
-    if let ContentType::Unknown(_) = typ {
+    if let ContentType::Other(_) = typ {
         return Err(MessageError::InvalidContentType);
     }
 
     let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
     // Accept only versions 0x03XX for any XX.
     match version {
-        ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
+        ProtocolVersion::Other(ref v) if (v & 0xff00) != 0x0300 => {
             return Err(MessageError::UnknownProtocolVersion);
         }
         _ => {}

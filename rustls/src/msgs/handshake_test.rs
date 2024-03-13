@@ -117,7 +117,7 @@ fn can_roundtrip_unknown_client_ext() {
     let ext = ClientExtension::read(&mut rd).unwrap();
 
     println!("{:?}", ext);
-    assert_eq!(ext.ext_type(), ExtensionType::Unknown(0x1234));
+    assert_eq!(ext.ext_type(), ExtensionType::Other(0x1234));
     assert_eq!(bytes.to_vec(), ext.get_encoding());
 }
 
@@ -393,7 +393,7 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
             ClientExtension::TransportParameters(vec![1, 2, 3]),
             ClientExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
+                typ: ExtensionType::Other(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
             }),
         ],
@@ -472,7 +472,7 @@ fn test_truncated_client_extension_is_detected() {
 
         // these extension types don't have any internal encoding that rustls validates:
         match ext.ext_type() {
-            ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
+            ExtensionType::TransportParameters | ExtensionType::Other(_) => {
                 continue;
             }
             _ => {}
@@ -589,7 +589,7 @@ fn test_truncated_helloretry_extension_is_detected() {
         }
 
         // these extension types don't have any internal encoding that rustls validates:
-        if let ExtensionType::Unknown(_) = ext.ext_type() {
+        if let ExtensionType::Other(_) = ext.ext_type() {
             continue;
         }
 
@@ -656,7 +656,7 @@ fn test_truncated_server_extension_is_detected() {
 
         // these extension types don't have any internal encoding that rustls validates:
         match ext.ext_type() {
-            ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
+            ExtensionType::TransportParameters | ExtensionType::Other(_) => {
                 continue;
             }
             _ => {}
@@ -759,7 +759,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
             ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             ServerExtension::TransportParameters(vec![1, 2, 3]),
             ServerExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
+                typ: ExtensionType::Other(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
             }),
         ],
@@ -786,7 +786,7 @@ fn get_sample_helloretryrequest() -> HelloRetryRequest {
             HelloRetryExtension::Cookie(PayloadU16(vec![0])),
             HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             HelloRetryExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
+                typ: ExtensionType::Other(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
             }),
         ],
@@ -803,7 +803,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
                     ocsp_response: PayloadU24(vec![1, 2, 3]),
                 }),
                 CertificateExtension::Unknown(UnknownExtension {
-                    typ: ExtensionType::Unknown(12345),
+                    typ: ExtensionType::Other(12345),
                     payload: Payload::Borrowed(&[1, 2, 3]),
                 }),
             ],
@@ -854,7 +854,7 @@ fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTls13
             CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             CertReqExtension::AuthorityNames(vec![DistinguishedName::from(vec![1, 2, 3])]),
             CertReqExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
+                typ: ExtensionType::Other(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
             }),
         ],
@@ -875,7 +875,7 @@ fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTls13 {
         nonce: PayloadU8(vec![1, 2, 3]),
         ticket: PayloadU16(vec![4, 5, 6]),
         exts: vec![NewSessionTicketExtension::Unknown(UnknownExtension {
-            typ: ExtensionType::Unknown(12345),
+            typ: ExtensionType::Other(12345),
             payload: Payload::Borrowed(&[1, 2, 3]),
         })],
     }
@@ -968,7 +968,7 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             payload: HandshakePayload::CertificateStatus(get_sample_certificatestatus()),
         },
         HandshakeMessagePayload {
-            typ: HandshakeType::Unknown(99),
+            typ: HandshakeType::Other(99),
             payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
         },
     ]
@@ -1011,7 +1011,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
                 | (HandshakeType::ServerKeyExchange, _)
                 | (HandshakeType::ClientKeyExchange, _)
                 | (HandshakeType::Finished, _)
-                | (HandshakeType::Unknown(_), _) => continue,
+                | (HandshakeType::Other(_), _) => continue,
                 _ => {}
             };
 
@@ -1111,7 +1111,7 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             payload: HandshakePayload::CertificateStatus(get_sample_certificatestatus()),
         },
         HandshakeMessagePayload {
-            typ: HandshakeType::Unknown(99),
+            typ: HandshakeType::Other(99),
             payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
         },
     ]
@@ -1162,7 +1162,7 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
                 | (HandshakeType::ServerKeyExchange, _)
                 | (HandshakeType::ClientKeyExchange, _)
                 | (HandshakeType::Finished, _)
-                | (HandshakeType::Unknown(_), _) => continue,
+                | (HandshakeType::Other(_), _) => continue,
                 _ => {}
             };
 

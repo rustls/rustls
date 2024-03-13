@@ -401,7 +401,7 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// Named group the SupportedKxGroup operates in.
     ///
     /// If the `NamedGroup` enum does not have a name for the algorithm you are implementing,
-    /// you can use [`NamedGroup::Unknown`].
+    /// you can use [`NamedGroup::Other`].
     fn name(&self) -> NamedGroup;
 
     /// Return `true` if this is backed by a FIPS-approved implementation.

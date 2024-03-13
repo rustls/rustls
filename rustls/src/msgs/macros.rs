@@ -17,7 +17,7 @@ macro_rules! enum_builder {
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
             $( $enum_var),*
-            ,Unknown($uint)
+            ,Other($uint)
         }
 
         impl $enum_name {
@@ -32,7 +32,7 @@ macro_rules! enum_builder {
             $enum_vis fn as_str(&self) -> Option<&'static str> {
                 match self {
                     $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
-                    ,$enum_name::Unknown(_) => None,
+                    ,$enum_name::Other(_) => None,
                 }
             }
         }
@@ -56,7 +56,7 @@ macro_rules! enum_builder {
             fn from(x: $uint) -> Self {
                 match x {
                     $($enum_val => $enum_name::$enum_var),*
-                    , x => $enum_name::Unknown(x),
+                    , x => $enum_name::Other(x),
                 }
             }
         }
@@ -65,7 +65,7 @@ macro_rules! enum_builder {
             fn from(value: $enum_name) -> Self {
                 match value {
                     $( $enum_name::$enum_var => $enum_val),*
-                    ,$enum_name::Unknown(x) => x
+                    ,$enum_name::Other(x) => x
                 }
             }
         }

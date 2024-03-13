@@ -217,7 +217,7 @@ fn kyber768_r3() -> &'static kem::Algorithm<AlgorithmId> {
     get_algorithm(AlgorithmId::Kyber768_R3).expect("Kyber768_R3 not available")
 }
 
-const NAMED_GROUP: NamedGroup = NamedGroup::Unknown(0x6399);
+const NAMED_GROUP: NamedGroup = NamedGroup::Other(0x6399);
 
 const INVALID_KEY_SHARE: Error = Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare);
 

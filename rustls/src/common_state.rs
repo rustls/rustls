@@ -411,7 +411,7 @@ impl CommonState {
 
     pub(crate) fn process_alert(&mut self, alert: &AlertMessagePayload) -> Result<(), Error> {
         // Reject unknown AlertLevels.
-        if let AlertLevel::Unknown(_) = alert.level {
+        if let AlertLevel::Other(_) = alert.level {
             return Err(self.send_fatal_alert(
                 AlertDescription::IllegalParameter,
                 Error::AlertReceived(alert.description),
