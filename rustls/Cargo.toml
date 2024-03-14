@@ -46,6 +46,9 @@ num-bigint = "0.4.4"
 rustls-pemfile = "2"
 webpki-roots = "0.26"
 
+[target.'cfg(not(target_env = "msvc"))'.dev-dependencies]
+tikv-jemallocator = "0.5"
+
 [[example]]
 name = "bogo_shim"
 path = "examples/internal/bogo_shim.rs"
