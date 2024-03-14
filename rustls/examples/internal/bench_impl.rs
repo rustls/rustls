@@ -658,3 +658,7 @@ fn all_tests() {
         bench_handshake(test, ClientAuth::Yes, ResumptionParam::Tickets);
     }
 }
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
