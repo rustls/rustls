@@ -49,14 +49,13 @@
 //! ```
 //!
 
+use aws_lc_rs::kem;
+use aws_lc_rs::unstable::kem::{get_algorithm, AlgorithmId};
 use rustls::crypto::aws_lc_rs::{default_provider, kx_group};
 use rustls::crypto::{
     ActiveKeyExchange, CompletedKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup,
 };
 use rustls::{Error, NamedGroup, PeerMisbehaved};
-
-use aws_lc_rs::kem;
-use aws_lc_rs::unstable::kem::{get_algorithm, AlgorithmId};
 
 /// A `CryptoProvider` which includes `X25519Kyber768Draft00` key exchange.
 pub fn provider() -> CryptoProvider {
