@@ -126,27 +126,27 @@ embed_files! {
     (EDDSA_INTER_KEY, "eddsa", "inter.key");
     (EDDSA_INTER_REQ, "eddsa", "inter.req");
 
-    (RSA_CA_CERT, "rsa", "ca.cert");
-    (RSA_CA_DER, "rsa", "ca.der");
-    (RSA_CA_KEY, "rsa", "ca.key");
-    (RSA_CLIENT_CERT, "rsa", "client.cert");
-    (RSA_CLIENT_CHAIN, "rsa", "client.chain");
-    (RSA_CLIENT_FULLCHAIN, "rsa", "client.fullchain");
-    (RSA_CLIENT_KEY, "rsa", "client.key");
-    (RSA_CLIENT_REQ, "rsa", "client.req");
-    (RSA_CLIENT_RSA, "rsa", "client.rsa");
-    (RSA_END_CRL_PEM, "rsa", "end.revoked.crl.pem");
-    (RSA_CLIENT_CRL_PEM, "rsa", "client.revoked.crl.pem");
-    (RSA_INTERMEDIATE_CRL_PEM, "rsa", "inter.revoked.crl.pem");
-    (RSA_END_CERT, "rsa", "end.cert");
-    (RSA_END_CHAIN, "rsa", "end.chain");
-    (RSA_END_FULLCHAIN, "rsa", "end.fullchain");
-    (RSA_END_KEY, "rsa", "end.key");
-    (RSA_END_REQ, "rsa", "end.req");
-    (RSA_END_RSA, "rsa", "end.rsa");
-    (RSA_INTER_CERT, "rsa", "inter.cert");
-    (RSA_INTER_KEY, "rsa", "inter.key");
-    (RSA_INTER_REQ, "rsa", "inter.req");
+    (RSA_2048_CA_CERT, "rsa-2048", "ca.cert");
+    (RSA_2048_CA_DER, "rsa-2048", "ca.der");
+    (RSA_2048_CA_KEY, "rsa-2048", "ca.key");
+    (RSA_2048_CLIENT_CERT, "rsa-2048", "client.cert");
+    (RSA_2048_CLIENT_CHAIN, "rsa-2048", "client.chain");
+    (RSA_2048_CLIENT_FULLCHAIN, "rsa-2048", "client.fullchain");
+    (RSA_2048_CLIENT_KEY, "rsa-2048", "client.key");
+    (RSA_2048_CLIENT_REQ, "rsa-2048", "client.req");
+    (RSA_2048_CLIENT, "rsa-2048", "client.rsa");
+    (RSA_2048_END_CRL_PEM, "rsa-2048", "end.revoked.crl.pem");
+    (RSA_2048_CLIENT_CRL_PEM, "rsa-2048", "client.revoked.crl.pem");
+    (RSA_2048_INTERMEDIATE_CRL_PEM, "rsa-2048", "inter.revoked.crl.pem");
+    (RSA_2048_END_CERT, "rsa-2048", "end.cert");
+    (RSA_2048_END_CHAIN, "rsa-2048", "end.chain");
+    (RSA_2048_END_FULLCHAIN, "rsa-2048", "end.fullchain");
+    (RSA_2048_END_KEY, "rsa-2048", "end.key");
+    (RSA_2048_END_REQ, "rsa-2048", "end.req");
+    (RSA_2048_END, "rsa-2048", "end.rsa");
+    (RSA_2048_INTER_CERT, "rsa-2048", "inter.cert");
+    (RSA_2048_INTER_KEY, "rsa-2048", "inter.key");
+    (RSA_2048_INTER_REQ, "rsa-2048", "inter.req");
 }
 
 pub fn transfer(
@@ -243,7 +243,7 @@ where
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum KeyType {
-    Rsa,
+    Rsa2048,
     EcdsaP256,
     EcdsaP384,
     EcdsaP521,
@@ -251,7 +251,7 @@ pub enum KeyType {
 }
 
 pub static ALL_KEY_TYPES: &[KeyType] = &[
-    KeyType::Rsa,
+    KeyType::Rsa2048,
     KeyType::EcdsaP256,
     KeyType::EcdsaP384,
     #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
@@ -262,7 +262,7 @@ pub static ALL_KEY_TYPES: &[KeyType] = &[
 impl KeyType {
     fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
-            Self::Rsa => bytes_for("rsa", part),
+            Self::Rsa2048 => bytes_for("rsa-2048", part),
             Self::EcdsaP256 => bytes_for("ecdsa-p256", part),
             Self::EcdsaP384 => bytes_for("ecdsa-p384", part),
             Self::EcdsaP521 => bytes_for("ecdsa-p521", part),
@@ -325,7 +325,7 @@ impl KeyType {
 
     pub fn ca_distinguished_name(&self) -> &'static [u8] {
         match self {
-            KeyType::Rsa => &b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA"[..],
+            KeyType::Rsa2048 => &b"0\x1a1\x180\x16\x06\x03U\x04\x03\x0c\x0fponytown RSA CA"[..],
             KeyType::EcdsaP256 => {
                 &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA"[..]
             }

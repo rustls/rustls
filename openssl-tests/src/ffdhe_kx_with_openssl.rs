@@ -225,7 +225,7 @@ fn server_config_with_ffdhe_kx(protocol: &'static SupportedProtocolVersion) -> S
         .unwrap()
 }
 
-const CERT_CHAIN_FILE: &str = "../test-ca/rsa/end.fullchain";
-const PRIV_KEY_FILE: &str = "../test-ca/rsa/end.key";
-const CA_FILE: &str = "../test-ca/rsa/ca.der";
-const CA_PEM_FILE: &str = "../test-ca/rsa/ca.cert";
+const CERT_CHAIN_FILE: &str = "../test-ca/rsa-2048/end.fullchain";
+const PRIV_KEY_FILE: &str = "../test-ca/rsa-2048/end.key";
+const CA_FILE: &str = "../test-ca/rsa-2048/ca.der";
+const CA_PEM_FILE: &str = "../test-ca/rsa-2048/ca.cert";
