@@ -2,16 +2,16 @@
 members = [
   # CI benchmarks
   "ci-bench",
-  # Tests that require OpenSSL
-  "openssl-tests",
   # Network-based tests
   "connect-tests",
   # tests and example code
   "examples",
-  # the main library and tests
-  "rustls",
+  # Tests that require OpenSSL
+  "openssl-tests",
   # example of custom provider
   "provider-example",
+  # the main library and tests
+  "rustls",
   # experimental post-quantum algorithm support
   "rustls-post-quantum",
 ]
