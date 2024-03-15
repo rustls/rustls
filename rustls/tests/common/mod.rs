@@ -53,7 +53,6 @@ embed_files! {
     (ECDSA_P256_CLIENT_CHAIN, "ecdsa-p256", "client.chain");
     (ECDSA_P256_CLIENT_FULLCHAIN, "ecdsa-p256", "client.fullchain");
     (ECDSA_P256_CLIENT_KEY, "ecdsa-p256", "client.key");
-    (ECDSA_P256_CLIENT_REQ, "ecdsa-p256", "client.req");
     (ECDSA_P256_END_CRL_PEM, "ecdsa-p256", "end.revoked.crl.pem");
     (ECDSA_P256_CLIENT_CRL_PEM, "ecdsa-p256", "client.revoked.crl.pem");
     (ECDSA_P256_INTERMEDIATE_CRL_PEM, "ecdsa-p256", "inter.revoked.crl.pem");
@@ -61,10 +60,8 @@ embed_files! {
     (ECDSA_P256_END_CHAIN, "ecdsa-p256", "end.chain");
     (ECDSA_P256_END_FULLCHAIN, "ecdsa-p256", "end.fullchain");
     (ECDSA_P256_END_KEY, "ecdsa-p256", "end.key");
-    (ECDSA_P256_END_REQ, "ecdsa-p256", "end.req");
     (ECDSA_P256_INTER_CERT, "ecdsa-p256", "inter.cert");
     (ECDSA_P256_INTER_KEY, "ecdsa-p256", "inter.key");
-    (ECDSA_P256_INTER_REQ, "ecdsa-p256", "inter.req");
 
     (ECDSA_P384_CA_CERT, "ecdsa-p384", "ca.cert");
     (ECDSA_P384_CA_DER, "ecdsa-p384", "ca.der");
@@ -73,7 +70,6 @@ embed_files! {
     (ECDSA_P384_CLIENT_CHAIN, "ecdsa-p384", "client.chain");
     (ECDSA_P384_CLIENT_FULLCHAIN, "ecdsa-p384", "client.fullchain");
     (ECDSA_P384_CLIENT_KEY, "ecdsa-p384", "client.key");
-    (ECDSA_P384_CLIENT_REQ, "ecdsa-p384", "client.req");
     (ECDSA_P384_END_CRL_PEM, "ecdsa-p384", "end.revoked.crl.pem");
     (ECDSA_P384_CLIENT_CRL_PEM, "ecdsa-p384", "client.revoked.crl.pem");
     (ECDSA_P384_INTERMEDIATE_CRL_PEM, "ecdsa-p384", "inter.revoked.crl.pem");
@@ -81,10 +77,8 @@ embed_files! {
     (ECDSA_P384_END_CHAIN, "ecdsa-p384", "end.chain");
     (ECDSA_P384_END_FULLCHAIN, "ecdsa-p384", "end.fullchain");
     (ECDSA_P384_END_KEY, "ecdsa-p384", "end.key");
-    (ECDSA_P384_END_REQ, "ecdsa-p384", "end.req");
     (ECDSA_P384_INTER_CERT, "ecdsa-p384", "inter.cert");
     (ECDSA_P384_INTER_KEY, "ecdsa-p384", "inter.key");
-    (ECDSA_P384_INTER_REQ, "ecdsa-p384", "inter.req");
 
     (ECDSA_P521_CA_CERT, "ecdsa-p521", "ca.cert");
     (ECDSA_P521_CA_DER, "ecdsa-p521", "ca.der");
@@ -93,7 +87,6 @@ embed_files! {
     (ECDSA_P521_CLIENT_CHAIN, "ecdsa-p521", "client.chain");
     (ECDSA_P521_CLIENT_FULLCHAIN, "ecdsa-p521", "client.fullchain");
     (ECDSA_P521_CLIENT_KEY, "ecdsa-p521", "client.key");
-    (ECDSA_P521_CLIENT_REQ, "ecdsa-p521", "client.req");
     (ECDSA_P521_END_CRL_PEM, "ecdsa-p521", "end.revoked.crl.pem");
     (ECDSA_P521_CLIENT_CRL_PEM, "ecdsa-p521", "client.revoked.crl.pem");
     (ECDSA_P521_INTERMEDIATE_CRL_PEM, "ecdsa-p521", "inter.revoked.crl.pem");
@@ -101,10 +94,8 @@ embed_files! {
     (ECDSA_P521_END_CHAIN, "ecdsa-p521", "end.chain");
     (ECDSA_P521_END_FULLCHAIN, "ecdsa-p521", "end.fullchain");
     (ECDSA_P521_END_KEY, "ecdsa-p521", "end.key");
-    (ECDSA_P521_END_REQ, "ecdsa-p521", "end.req");
     (ECDSA_P521_INTER_CERT, "ecdsa-p521", "inter.cert");
     (ECDSA_P521_INTER_KEY, "ecdsa-p521", "inter.key");
-    (ECDSA_P521_INTER_REQ, "ecdsa-p521", "inter.req");
 
     (EDDSA_CA_CERT, "eddsa", "ca.cert");
     (EDDSA_CA_DER, "eddsa", "ca.der");
@@ -113,7 +104,6 @@ embed_files! {
     (EDDSA_CLIENT_CHAIN, "eddsa", "client.chain");
     (EDDSA_CLIENT_FULLCHAIN, "eddsa", "client.fullchain");
     (EDDSA_CLIENT_KEY, "eddsa", "client.key");
-    (EDDSA_CLIENT_REQ, "eddsa", "client.req");
     (EDDSA_END_CRL_PEM, "eddsa", "end.revoked.crl.pem");
     (EDDSA_CLIENT_CRL_PEM, "eddsa", "client.revoked.crl.pem");
     (EDDSA_INTERMEDIATE_CRL_PEM, "eddsa", "inter.revoked.crl.pem");
@@ -121,10 +111,8 @@ embed_files! {
     (EDDSA_END_CHAIN, "eddsa", "end.chain");
     (EDDSA_END_FULLCHAIN, "eddsa", "end.fullchain");
     (EDDSA_END_KEY, "eddsa", "end.key");
-    (EDDSA_END_REQ, "eddsa", "end.req");
     (EDDSA_INTER_CERT, "eddsa", "inter.cert");
     (EDDSA_INTER_KEY, "eddsa", "inter.key");
-    (EDDSA_INTER_REQ, "eddsa", "inter.req");
 
     (RSA_2048_CA_CERT, "rsa-2048", "ca.cert");
     (RSA_2048_CA_DER, "rsa-2048", "ca.der");
@@ -133,8 +121,6 @@ embed_files! {
     (RSA_2048_CLIENT_CHAIN, "rsa-2048", "client.chain");
     (RSA_2048_CLIENT_FULLCHAIN, "rsa-2048", "client.fullchain");
     (RSA_2048_CLIENT_KEY, "rsa-2048", "client.key");
-    (RSA_2048_CLIENT_REQ, "rsa-2048", "client.req");
-    (RSA_2048_CLIENT, "rsa-2048", "client.rsa");
     (RSA_2048_END_CRL_PEM, "rsa-2048", "end.revoked.crl.pem");
     (RSA_2048_CLIENT_CRL_PEM, "rsa-2048", "client.revoked.crl.pem");
     (RSA_2048_INTERMEDIATE_CRL_PEM, "rsa-2048", "inter.revoked.crl.pem");
@@ -142,11 +128,8 @@ embed_files! {
     (RSA_2048_END_CHAIN, "rsa-2048", "end.chain");
     (RSA_2048_END_FULLCHAIN, "rsa-2048", "end.fullchain");
     (RSA_2048_END_KEY, "rsa-2048", "end.key");
-    (RSA_2048_END_REQ, "rsa-2048", "end.req");
-    (RSA_2048_END, "rsa-2048", "end.rsa");
     (RSA_2048_INTER_CERT, "rsa-2048", "inter.cert");
     (RSA_2048_INTER_KEY, "rsa-2048", "inter.key");
-    (RSA_2048_INTER_REQ, "rsa-2048", "inter.req");
 }
 
 pub fn transfer(
