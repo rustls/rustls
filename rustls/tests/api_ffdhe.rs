@@ -53,13 +53,13 @@ fn ffdhe_ciphersuite() {
 
     for (expected_protocol, expected_cipher_suite) in test_cases {
         let client_config = finish_client_config(
-            KeyType::Rsa,
+            KeyType::Rsa2048,
             rustls::ClientConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
                 .with_protocol_versions(&[expected_protocol])
                 .unwrap(),
         );
         let server_config = finish_server_config(
-            KeyType::Rsa,
+            KeyType::Rsa2048,
             rustls::ServerConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
                 .with_safe_default_protocol_versions()
                 .unwrap(),
@@ -90,13 +90,13 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() 
     }
 
     let client_config = finish_client_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ClientConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
             .with_protocol_versions(&[&rustls::version::TLS12])
             .unwrap(),
     );
     let server_config = finish_server_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ServerConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
             .with_protocol_versions(&[&rustls::version::TLS12])
             .unwrap(),
@@ -122,13 +122,13 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
     }
 
     let client_config = finish_client_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ClientConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
             .with_protocol_versions(&[&rustls::version::TLS12])
             .unwrap(),
     );
     let server_config = finish_server_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ServerConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
             .with_safe_default_protocol_versions()
             .unwrap(),
@@ -145,7 +145,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
     use rustls::{CipherSuite, NamedGroup};
 
     let client_config = finish_client_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ClientConfig::builder_with_provider(
             CryptoProvider {
                 cipher_suites: vec![
@@ -165,7 +165,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
     );
 
     let server_config = finish_server_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ServerConfig::builder_with_provider(
             CryptoProvider {
                 cipher_suites: vec![
@@ -207,13 +207,13 @@ fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites
     }
 
     let client_config = finish_client_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ClientConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
             .with_protocol_versions(&[&rustls::version::TLS12])
             .unwrap(),
     );
     let server_config = finish_server_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ServerConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
             .with_safe_default_protocol_versions()
             .unwrap(),
@@ -228,7 +228,7 @@ fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites
 #[test]
 fn server_avoids_cipher_suite_with_no_common_kx_groups() {
     let server_config = finish_server_config(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         rustls::ServerConfig::builder_with_provider(
             CryptoProvider {
                 cipher_suites: vec![
@@ -307,7 +307,7 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
 
     for (client_kx_groups, protocol_version, expected_cipher_suite) in test_cases {
         let client_config = finish_client_config(
-            KeyType::Rsa,
+            KeyType::Rsa2048,
             rustls::ClientConfig::builder_with_provider(
                 CryptoProvider {
                     cipher_suites: vec![
