@@ -143,7 +143,7 @@ impl ResumptionParam {
 // copied from tests/api.rs
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum KeyType {
-    Rsa,
+    Rsa2048,
     EcdsaP256,
     EcdsaP384,
     Ed25519,
@@ -172,7 +172,7 @@ impl BenchmarkParam {
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     #[cfg(all(feature = "tls12", not(feature = "fips")))]
     BenchmarkParam::new(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
@@ -184,13 +184,13 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
@@ -208,17 +208,17 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     ),
     #[cfg(not(feature = "fips"))]
     BenchmarkParam::new(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         cipher_suite::TLS13_AES_256_GCM_SHA384,
         &rustls::version::TLS13,
     ),
     BenchmarkParam::new(
-        KeyType::Rsa,
+        KeyType::Rsa2048,
         cipher_suite::TLS13_AES_128_GCM_SHA256,
         &rustls::version::TLS13,
     ),
@@ -237,7 +237,7 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
 impl KeyType {
     fn path_for(&self, part: &str) -> String {
         match self {
-            Self::Rsa => format!("test-ca/rsa/{}", part),
+            Self::Rsa2048 => format!("test-ca/rsa-2048/{}", part),
             Self::EcdsaP256 => format!("test-ca/ecdsa-p256/{}", part),
             Self::EcdsaP384 => format!("test-ca/ecdsa-p384/{}", part),
             Self::Ed25519 => format!("test-ca/eddsa/{}", part),

@@ -111,8 +111,8 @@ fn tls13_handshake() {
 }
 
 fn handshake(version: &'static rustls::SupportedProtocolVersion) -> Outcome {
-    let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
-    let client_config = make_client_config(KeyType::Rsa);
+    let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
+    let client_config = make_client_config(KeyType::Rsa2048);
 
     run(
         Arc::new(client_config),
@@ -127,8 +127,8 @@ fn app_data_client_to_server() {
     let expected: &[_] = b"hello";
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
-        let client_config = make_client_config(KeyType::Rsa);
+        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
+        let client_config = make_client_config(KeyType::Rsa2048);
 
         let mut client_actions = Actions {
             app_data_to_send: Some(expected),
@@ -159,8 +159,8 @@ fn app_data_server_to_client() {
     let expected: &[_] = b"hello";
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
-        let client_config = make_client_config(KeyType::Rsa);
+        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
+        let client_config = make_client_config(KeyType::Rsa2048);
 
         let mut server_actions = Actions {
             app_data_to_send: Some(expected),
@@ -190,11 +190,11 @@ fn app_data_server_to_client() {
 fn early_data() {
     let expected: &[_] = b"hello";
 
-    let mut server_config = make_server_config(KeyType::Rsa);
+    let mut server_config = make_server_config(KeyType::Rsa2048);
     server_config.max_early_data_size = 128;
     let server_config = Arc::new(server_config);
 
-    let mut client_config = make_client_config_with_versions(KeyType::Rsa, &[&TLS13]);
+    let mut client_config = make_client_config_with_versions(KeyType::Rsa2048, &[&TLS13]);
     client_config.enable_early_data = true;
     let client_config = Arc::new(client_config);
 
@@ -409,8 +409,8 @@ fn run(
 fn close_notify_client_to_server() {
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
-        let client_config = make_client_config(KeyType::Rsa);
+        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
+        let client_config = make_client_config(KeyType::Rsa2048);
 
         let mut client_actions = Actions {
             send_close_notify: true,
@@ -433,8 +433,8 @@ fn close_notify_client_to_server() {
 fn close_notify_server_to_client() {
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa, &[version]);
-        let client_config = make_client_config(KeyType::Rsa);
+        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
+        let client_config = make_client_config(KeyType::Rsa2048);
 
         let mut server_actions = Actions {
             send_close_notify: true,
@@ -807,8 +807,8 @@ impl Buffer {
 fn make_connection_pair(
     version: &'static rustls::SupportedProtocolVersion,
 ) -> (UnbufferedClientConnection, UnbufferedServerConnection) {
-    let server_config = make_server_config(KeyType::Rsa);
-    let client_config = make_client_config_with_versions(KeyType::Rsa, &[version]);
+    let server_config = make_server_config(KeyType::Rsa2048);
+    let client_config = make_client_config_with_versions(KeyType::Rsa2048, &[version]);
 
     let client =
         UnbufferedClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();

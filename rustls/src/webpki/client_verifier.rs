@@ -432,7 +432,7 @@ test_for_each_provider! {
     fn test_crls() -> Vec<CertificateRevocationListDer<'static>> {
         load_crls(&[
             include_bytes!("../../../test-ca/ecdsa-p256/client.revoked.crl.pem").as_slice(),
-            include_bytes!("../../../test-ca/rsa/client.revoked.crl.pem").as_slice(),
+            include_bytes!("../../../test-ca/rsa-2048/client.revoked.crl.pem").as_slice(),
         ])
     }
 
@@ -449,7 +449,7 @@ test_for_each_provider! {
     fn test_roots() -> Arc<RootCertStore> {
         load_roots(&[
             include_bytes!("../../../test-ca/ecdsa-p256/ca.der").as_slice(),
-            include_bytes!("../../../test-ca/rsa/ca.der").as_slice(),
+            include_bytes!("../../../test-ca/rsa-2048/ca.der").as_slice(),
         ])
     }
 
