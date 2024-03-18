@@ -44,7 +44,9 @@ bencher = "0.1.5"
 env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest features)
 log = "0.4.4"
 num-bigint = "0.4.4"
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 rustls-pemfile = "2"
+time = { version = "0.3.6", default-features = false }
 webpki-roots = "0.26"
 
 [target.'cfg(not(target_env = "msvc"))'.dev-dependencies]
@@ -64,6 +66,10 @@ name = "benchmarks"
 path = "benches/benchmarks.rs"
 harness = false
 required-features = ["ring"]
+
+[[example]]
+name = "test_ca"
+path = "examples/internal/test_ca.rs"
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)

@@ -2185,6 +2185,7 @@ dependencies = [
  "log",
  "num-bigint",
  "once_cell",
+ "rcgen",
  "ring",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
@@ -2192,6 +2193,7 @@ dependencies = [
  "rustversion",
  "subtle",
  "tikv-jemallocator",
+ "time",
  "webpki-roots 0.26.1",
  "zeroize",
 ]
