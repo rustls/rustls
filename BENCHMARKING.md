@@ -24,12 +24,12 @@ benchmarks](https://github.com/ctz/openssl-bench), which produce similar measure
 #### Building
 
 The benchmarks are implemented in the form of "example code" in `rustls/examples/internal/bench.rs`.
-Use `cargo build --release -p rustls --example bench` to obtain the corresponding binary (you can
-toggle conditionally compiled code with the `--no-default-features` and `--features` flags).
+Use `cargo build --profile=bench -p rustls --example bench` to obtain the corresponding binary (you can
+toggle conditionally compiled code with the `--no-default-features` and `--features` flags) or simply run below, which will build and run the benchmark.
 
 Note: while `cargo build --release --example bench` also works, it results in surprises when used
 together with `--no-default-features` because of how Cargo's feature unification works (some
-features get enabled automatically by other subcrates).
+features get enabled automatically by other subcrates). It is also less performant than `--profile=bench`.
 
 #### Running
 
