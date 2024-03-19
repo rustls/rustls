@@ -42,6 +42,7 @@ enum_builder! {
         UnknownPSKIdentity => 0x73,
         CertificateRequired => 0x74,
         NoApplicationProtocol => 0x78,
+        EncryptedClientHelloRequired => 0x79,
     }
 }
 
@@ -564,6 +565,20 @@ enum_builder! {
         ECDSA => 0x03,
         ED25519 => 0x07,
         ED448 => 0x08,
+    }
+}
+
+enum_builder! {
+    /// The type of Encrypted Client Hello (`EchClientHelloType`).
+    ///
+    /// Specified in [draft-ietf-tls-esni Section 5].
+    /// TODO(XXX): Update reference once RFC is published.
+    ///
+    /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-5>
+    @U8
+    pub enum EchClientHelloType {
+        ClientHelloOuter => 0,
+        ClientHelloInner => 1
     }
 }
 

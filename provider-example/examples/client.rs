@@ -3,7 +3,9 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 fn main() {
-    env_logger::init();
+    env_logger::Builder::new()
+        .parse_filters("trace")
+        .init();
 
     let root_store = rustls::RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS

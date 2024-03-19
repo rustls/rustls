@@ -164,6 +164,10 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
             time_provider: self.state.time_provider,
+            #[cfg(feature = "std")]
+            grease_ech_hpke_provider: None,
+            #[cfg(feature = "std")]
+            ech_config: None,
         }
     }
 }

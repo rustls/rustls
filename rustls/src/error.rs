@@ -6,6 +6,8 @@ use core::fmt;
 use std::time::SystemTimeError;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
+#[cfg(feature = "std")]
+use crate::msgs::handshake::EchConfig;
 use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::rand;
 
@@ -237,6 +239,7 @@ pub enum PeerMisbehaved {
     UnsolicitedSctList,
     UnsolicitedServerHelloExtension,
     WrongGroupForKeyShare,
+    IllegalHelloRetryRequestWithInvalidEch,
 }
 
 impl From<PeerMisbehaved> for Error {
@@ -274,6 +277,8 @@ pub enum PeerIncompatible {
     Tls12NotOfferedOrEnabled,
     Tls13RequiredForQuic,
     UncompressedEcPointsRequired,
+    #[cfg(feature = "std")]
+    ServerRejectedEncryptedClientHello(Option<Vec<EchConfig>>),
 }
 
 impl From<PeerIncompatible> for Error {
