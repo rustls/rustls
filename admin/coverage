@@ -2,7 +2,7 @@
 
 set -e
 
-source <(cargo llvm-cov show-env --export-prefix)
+source <(cargo llvm-cov show-env --export-prefix "$@")
 cargo llvm-cov clean --workspace
 
 cargo build --locked --all-targets --all-features
