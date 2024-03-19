@@ -61,7 +61,7 @@ fn alpn_test_error(
 
     for version in rustls::ALL_VERSIONS {
         let mut client_config = make_client_config_with_versions(KeyType::Rsa, &[version]);
-        client_config.alpn_protocols = client_protos.clone();
+        client_config.alpn_protocols.clone_from(&client_protos);
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
