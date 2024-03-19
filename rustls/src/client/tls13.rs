@@ -10,8 +10,9 @@ use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
-use crate::client::ech::EchState;
-use crate::client::{ech, hs, ClientConfig, ClientSessionStore};
+#[cfg(feature = "std")]
+use crate::client::ech::{self, EchState};
+use crate::client::{hs, ClientConfig, ClientSessionStore};
 use crate::common_state::{CommonState, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
@@ -65,15 +66,15 @@ pub(super) fn handle_server_hello(
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName<'static>,
-    mut randoms: ConnectionRandoms,
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))] mut randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    mut transcript: HandshakeHash,
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))] mut transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     hello: ClientHelloDetails,
     our_key_share: Box<dyn ActiveKeyExchange>,
     mut sent_tls13_fake_ccs: bool,
-    ech_context: Option<EchState>,
-    server_hello_msg: &Message,
+    #[cfg(feature = "std")] ech_context: Option<EchState>,
+    #[cfg(feature = "std")] server_hello_msg: &Message,
 ) -> hs::NextStateOrError<'static> {
     validate_server_hello(cx.common, server_hello)?;
 
@@ -148,6 +149,7 @@ pub(super) fn handle_server_hello(
 
     let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
 
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
     let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
     // Remember what KX group the server liked for next time.
@@ -160,6 +162,7 @@ pub(super) fn handle_server_hello(
     // the two halves will have different record layer protections.  Disallow this.
     cx.common.check_aligned_handshake()?;
 
+    #[cfg(feature = "std")]
     let ech_status = match ech_context {
         // ECH wasn't offered.
         None => ech::Status::NotOffered,
@@ -205,6 +208,7 @@ pub(super) fn handle_server_hello(
         transcript,
         key_schedule,
         hello,
+        #[cfg(feature = "std")]
         ech_status,
     }))
 }
@@ -397,6 +401,7 @@ struct ExpectEncryptedExtensions {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     hello: ClientHelloDetails,
+    #[cfg(feature = "std")]
     ech_status: ech::Status,
 }
 
@@ -425,6 +430,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         // this stage rather than in the ExpectServerHello state because we want to be able to
         // include retry configs that may be present in the server's encrypted extensions. This
         // also allows us to send the alert in encrypted form.
+        #[cfg(feature = "std")]
         if matches!(self.ech_status, ech::Status::Rejected) {
             return Err(ech::fatal_alert_required(
                 exts.server_ech_extension()

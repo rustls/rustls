@@ -441,9 +441,11 @@ pub mod internal {
         pub mod handshake {
             pub use crate::msgs::handshake::{
                 CertificateChain, ClientExtension, ClientHelloPayload, DistinguishedName,
-                EchConfig, EchConfigContents, HandshakeMessagePayload, HandshakePayload,
-                HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, SessionId,
+                HandshakeMessagePayload, HandshakePayload, HpkeKeyConfig, HpkeSymmetricCipherSuite,
+                KeyShareEntry, Random, SessionId,
             };
+            #[cfg(feature = "std")]
+            pub use crate::msgs::handshake::{EchConfig, EchConfigContents};
         }
         pub mod message {
             pub use crate::msgs::message::{
@@ -534,6 +536,7 @@ pub mod client {
     pub(super) mod builder;
     mod client_conn;
     mod common;
+    #[cfg(feature = "std")]
     mod ech;
     pub(super) mod handy;
     mod hs;
@@ -543,11 +546,11 @@ pub mod client {
 
     pub use builder::WantsClientCert;
     pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, EchConfig,
-        ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
+        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
+        Resumption, Tls12Resumption, UnbufferedClientConnection,
     };
     #[cfg(feature = "std")]
-    pub use client_conn::{ClientConnection, WriteEarlyData};
+    pub use client_conn::{ClientConnection, EchConfig, WriteEarlyData};
     #[cfg(feature = "std")]
     pub use handy::ClientSessionMemoryCache;
 

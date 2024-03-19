@@ -23,10 +23,12 @@ use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
+#[cfg(feature = "std")]
+use crate::msgs::enums::EchVersion;
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest, NamedGroup,
-    PSKKeyExchangeMode, ServerNameType,
+    ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode,
+    ServerNameType,
 };
 use crate::rand;
 use crate::verify::DigitallySignedStruct;
@@ -701,6 +703,7 @@ pub enum ServerExtension {
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
+    #[cfg(feature = "std")]
     EncryptedClientHello(ServerEncryptedClientHello),
     Unknown(UnknownExtension),
 }
@@ -721,6 +724,7 @@ impl ServerExtension {
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
+            #[cfg(feature = "std")]
             Self::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
             Self::Unknown(ref r) => r.typ,
         }
@@ -747,6 +751,7 @@ impl Codec<'_> for ServerExtension {
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
                 nested.buf.extend_from_slice(r);
             }
+            #[cfg(feature = "std")]
             Self::EncryptedClientHello(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
@@ -775,6 +780,7 @@ impl Codec<'_> for ServerExtension {
                 Self::TransportParametersDraft(sub.rest().to_vec())
             }
             ExtensionType::EarlyData => Self::EarlyData,
+            #[cfg(feature = "std")]
             ExtensionType::EncryptedClientHello => {
                 Self::EncryptedClientHello(ServerEncryptedClientHello::read(&mut sub)?)
             }
@@ -1150,6 +1156,7 @@ impl HelloRetryRequest {
         }
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn ech_retry_request(&self) -> Option<&Vec<u8>> {
         let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
         match *ext {
@@ -1176,6 +1183,7 @@ impl HelloRetryRequest {
             // See draft-ietf-tls-esni-17 7.2.1:
             // <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#name-sending-helloretryrequest-2>
             // TODO(XXX): Replace with RFC reference once published.
+            #[cfg(feature = "std")]
             Encoding::EchConfirmation => {
                 let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
                 for ext in &self.extensions {
@@ -1203,6 +1211,7 @@ pub(crate) enum Encoding {
     /// Standard RFC 8446 encoding.
     Standard,
     /// Encoding for ECH confirmation.
+    #[cfg(feature = "std")]
     EchConfirmation,
 }
 
@@ -1300,6 +1309,7 @@ impl ServerHelloPayload {
             Encoding::Standard => self.random.encode(bytes),
             // When encoding a ServerHello for ECH confirmation, the random value
             // has the last 8 bytes zeroed out.
+            #[cfg(feature = "std")]
             Encoding::EchConfirmation => {
                 // Indexing safety: self.random is 32 bytes long by definition.
                 let rand_vec = self.random.get_encoding();
@@ -1894,6 +1904,7 @@ pub(crate) trait HasServerExtensions {
         }
     }
 
+    #[cfg(feature = "std")]
     fn server_ech_extension(&self) -> Option<ServerEncryptedClientHello> {
         let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
         match ext {
@@ -2589,6 +2600,7 @@ impl Codec<'_> for HpkeKeyConfig {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg(feature = "std")]
 pub struct EchConfigContents {
     pub key_config: HpkeKeyConfig,
     pub maximum_name_length: u8,
@@ -2596,6 +2608,7 @@ pub struct EchConfigContents {
     pub extensions: Vec<EchConfigExtension>,
 }
 
+#[cfg(feature = "std")]
 impl EchConfigContents {
     /// Returns true if there is more than one extension of a given
     /// type.
@@ -2621,6 +2634,7 @@ impl EchConfigContents {
     }
 }
 
+#[cfg(feature = "std")]
 impl Codec<'_> for EchConfigContents {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.key_config.encode(bytes);
@@ -2645,10 +2659,12 @@ impl Codec<'_> for EchConfigContents {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg(feature = "std")]
 pub enum EchConfigExtension {
     Unknown(UnknownExtension),
 }
 
+#[cfg(feature = "std")]
 impl EchConfigExtension {
     pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
@@ -2657,6 +2673,7 @@ impl EchConfigExtension {
     }
 }
 
+#[cfg(feature = "std")]
 impl Codec<'_> for EchConfigExtension {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.ext_type().encode(bytes);
@@ -2682,16 +2699,19 @@ impl Codec<'_> for EchConfigExtension {
     }
 }
 
+#[cfg(feature = "std")]
 impl TlsListElement for EchConfigExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg(feature = "std")]
 pub struct EchConfig {
     pub version: EchVersion,
     pub contents: EchConfigContents,
 }
 
+#[cfg(feature = "std")]
 impl Codec<'_> for EchConfig {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
@@ -2713,6 +2733,7 @@ impl Codec<'_> for EchConfig {
     }
 }
 
+#[cfg(feature = "std")]
 impl TlsListElement for EchConfig {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -2812,10 +2833,12 @@ impl Codec<'_> for EncryptedClientHelloOuter {
 /// TODO(XXX): Update reference once RFC is published.
 /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-5>
 #[derive(Clone, Debug)]
+#[cfg(feature = "std")]
 pub struct ServerEncryptedClientHello {
     pub(crate) retry_configs: Vec<EchConfig>,
 }
 
+#[cfg(feature = "std")]
 impl Codec<'_> for ServerEncryptedClientHello {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.retry_configs.encode(bytes);

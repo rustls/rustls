@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use pki_types::{DnsName, ServerName};
 use subtle::ConstantTimeEq;
 
+#[cfg(feature = "std")]
 use crate::client::EchConfig;
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{EncapsulatedSecret, HpkeProvider, HpkePublicKey, HpkeSealer, HpkeSuite};

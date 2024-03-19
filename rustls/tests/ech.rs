@@ -1,3 +1,5 @@
+#![cfg(feature = "std")]
+
 use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::DnsName;
 use rustls::internal::msgs::codec::{Codec, Reader};

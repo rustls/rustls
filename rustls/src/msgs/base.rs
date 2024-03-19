@@ -152,6 +152,7 @@ impl fmt::Debug for PayloadU16 {
 pub struct PayloadU8(pub(crate) Vec<u8>);
 
 impl PayloadU8 {
+    #[cfg(feature = "std")]
     pub(crate) fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
         (slice.len() as u8).encode(bytes);
         bytes.extend_from_slice(slice);

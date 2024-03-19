@@ -15,6 +15,7 @@ use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
+#[cfg(feature = "std")]
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig};
 use crate::common_state::{CommonState, State};
@@ -146,6 +147,7 @@ pub(super) fn start_handshake(
     let random = Random::new(config.provider.secure_random)?;
     let extension_order_seed = crate::rand::random_u16(config.provider.secure_random)?;
 
+    #[cfg(feature = "std")]
     let ech_context = match config.ech_config.as_ref() {
         Some(ech_config) => Some(EchState::new(
             ech_config,
@@ -176,6 +178,7 @@ pub(super) fn start_handshake(
             server_name,
         },
         cx,
+        #[cfg(feature = "std")]
         ech_context,
     )
 }
@@ -186,6 +189,7 @@ struct ExpectServerHello {
     early_key_schedule: Option<KeyScheduleEarly>,
     offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
     suite: Option<SupportedCipherSuite>,
+    #[cfg(feature = "std")]
     ech_context: Option<EchState>,
 }
 
@@ -214,7 +218,7 @@ fn emit_client_hello_for_retry(
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
-    mut ech_context: Option<EchState>,
+    #[cfg(feature = "std")] mut ech_context: Option<EchState>,
 ) -> NextStateOrError<'static> {
     let config = &input.config;
     let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !cx.common.is_quic();
@@ -266,12 +270,19 @@ fn emit_client_hello_for_retry(
     // We only want to send the SNI extension if the server name contains a DNS name and SNI is
     // enabled.
     if let (ServerName::DnsName(dns), true) = (&input.server_name, config.enable_sni) {
-        // If we have an ECH context, then we need to use the ECH config's public name for the
-        // outer hello SNI, otherwise we use the server name from the client config.
-        exts.push(ClientExtension::make_sni(match ech_context.as_ref() {
-            Some(ech_context) => &ech_context.outer_name,
-            None => dns,
-        }));
+        #[cfg(feature = "std")]
+        {
+            // If we have an ECH context, then we need to use the ECH config's public name for the
+            // outer hello SNI, otherwise we use the server name from the client config.
+            exts.push(ClientExtension::make_sni(match ech_context.as_ref() {
+                Some(ech_context) => &ech_context.outer_name,
+                None => dns,
+            }));
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            exts.push(ClientExtension::make_sni(dns));
+        }
     }
 
     if let Some(key_share) = &key_share {
@@ -335,6 +346,7 @@ fn emit_client_hello_for_retry(
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
+    #[cfg_attr(not(feature = "std"), allow(unused_mut))]
     let mut chp_payload = ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
         random: input.random,
@@ -344,6 +356,7 @@ fn emit_client_hello_for_retry(
         extensions: exts,
     };
 
+    #[cfg(feature = "std")]
     match (ech_context.as_mut(), config.grease_ech_hpke_provider) {
         // ECH config, GREASE is irrelevant.
         (Some(ech_context), _) => {
@@ -434,6 +447,7 @@ fn emit_client_hello_for_retry(
         early_key_schedule,
         offered_key_share: key_share,
         suite,
+        #[cfg(feature = "std")]
         ech_context,
     };
 
@@ -730,7 +744,9 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     // We always send a key share when TLS 1.3 is enabled.
                     self.offered_key_share.unwrap(),
                     self.input.sent_tls13_fake_ccs,
+                    #[cfg(feature = "std")]
                     self.ech_context,
+                    #[cfg(feature = "std")]
                     &m,
                 )
             }
@@ -768,7 +784,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     }
 
     fn handle_hello_retry_request(
-        mut self,
+        #[cfg_attr(not(feature = "std"), allow(unused_mut))] mut self,
         cx: &mut ClientContext<'_>,
         m: Message,
     ) -> NextStateOrError<'static> {
@@ -893,6 +909,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         cx.common.suite = Some(cs);
 
         // If we offered ECH, we need to confirm that the server accepted it.
+        #[cfg(feature = "std")]
         match (self.next.ech_context.as_ref(), cs.tls13()) {
             (Some(_), None) => {
                 unreachable!("ECH context should only be set when TLS 1.3 was negotiated")
@@ -913,6 +930,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // If we offered ECH, we also need to update the separate transcript with the
         // hello retry request message.
+        #[cfg(feature = "std")]
         if let Some(ech_context) = self.next.ech_context.as_mut() {
             ech_context.transcript_hrr_update(cs.hash_provider(), &m);
         }
@@ -947,6 +965,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             Some(cs),
             self.next.input,
             cx,
+            #[cfg(feature = "std")]
             self.next.ech_context,
         )
     }

@@ -23,7 +23,9 @@ enum SecretKind {
     ExporterMasterSecret,
     ResumptionMasterSecret,
     DerivedSecret,
+    #[cfg(feature = "std")]
     ServerEchConfirmationSecret,
+    #[cfg(feature = "std")]
     ServerEchHrrConfirmationSecret,
 }
 
@@ -40,7 +42,9 @@ impl SecretKind {
             ExporterMasterSecret => b"exp master",
             ResumptionMasterSecret => b"res master",
             DerivedSecret => b"derived",
+            #[cfg(feature = "std")]
             ServerEchConfirmationSecret => b"ech accept confirmation",
+            #[cfg(feature = "std")]
             ServerEchHrrConfirmationSecret => b"hrr ech accept confirmation",
         }
     }
@@ -211,6 +215,7 @@ impl KeyScheduleHandshakeStart {
         new
     }
 
+    #[cfg(feature = "std")]
     pub(crate) fn server_ech_confirmation_secret(
         &mut self,
         client_hello_inner_random: &[u8],
@@ -804,6 +809,7 @@ fn hkdf_expand_label_slice(
     })
 }
 
+#[cfg(feature = "std")]
 pub(crate) fn server_ech_hrr_confirmation_secret(
     hkdf_provider: &'static dyn Hkdf,
     client_hello_inner_random: &[u8],

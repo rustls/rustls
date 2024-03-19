@@ -6,7 +6,9 @@ use core::fmt;
 use std::time::SystemTimeError;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
-use crate::msgs::handshake::{EchConfig, KeyExchangeAlgorithm};
+#[cfg(feature = "std")]
+use crate::msgs::handshake::EchConfig;
+use crate::msgs::handshake::KeyExchangeAlgorithm;
 use crate::rand;
 
 /// rustls reports protocol errors using this type.
@@ -275,6 +277,7 @@ pub enum PeerIncompatible {
     Tls12NotOfferedOrEnabled,
     Tls13RequiredForQuic,
     UncompressedEcPointsRequired,
+    #[cfg(feature = "std")]
     ServerRejectedEncryptedClientHello(Option<Vec<EchConfig>>),
 }
 

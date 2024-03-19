@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+#[cfg(feature = "std")]
 use alloc::vec;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -10,18 +11,25 @@ use pki_types::{ServerName, UnixTime};
 use super::handy::NoClientSessionStorage;
 use super::hs;
 use crate::builder::ConfigBuilder;
+#[cfg(feature = "std")]
 use crate::client::ech::EchState;
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
+#[cfg(feature = "std")]
 use crate::crypto::hpke::{HpkeProvider, HpkeSuite};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::trace;
+#[cfg(feature = "std")]
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{EchVersion, NamedGroup};
-use crate::msgs::handshake::{ClientExtension, EchConfig as EchConfigMsg};
+#[cfg(feature = "std")]
+use crate::msgs::enums::EchVersion;
+use crate::msgs::enums::NamedGroup;
+use crate::msgs::handshake::ClientExtension;
+#[cfg(feature = "std")]
+use crate::msgs::handshake::EchConfig as EchConfigMsg;
 use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "std")]
@@ -209,8 +217,10 @@ pub struct ClientConfig {
 
     /// Provides the current system time
     pub time_provider: Arc<dyn TimeProvider>,
+
     /// When an HPKE provider is configured and no `ech_config` is provided, a GREASE
     /// ECH extension will be offered when negotiating TLS 1.3.
+    #[cfg(feature = "std")]
     pub grease_ech_hpke_provider: Option<&'static dyn HpkeProvider>,
 
     /// Source of randomness and other crypto.
@@ -224,6 +234,7 @@ pub struct ClientConfig {
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
 
     /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
+    #[cfg(feature = "std")]
     pub(super) ech_config: Option<EchConfig>,
 }
 
@@ -344,6 +355,7 @@ impl ClientConfig {
     ///
     /// If the client configuration has enabled TLS 1.2, this function will return an error. ECH
     /// may only be used with TLS 1.3+.
+    #[cfg(feature = "std")]
     pub fn enable_ech(&mut self, config: EchConfig) -> Result<(), Error> {
         if self
             .versions
@@ -418,7 +430,9 @@ impl Clone for ClientConfig {
             #[cfg(feature = "tls12")]
             require_ems: self.require_ems,
             time_provider: Arc::clone(&self.time_provider),
+            #[cfg(feature = "std")]
             grease_ech_hpke_provider: self.grease_ech_hpke_provider,
+            #[cfg(feature = "std")]
             ech_config: self.ech_config.clone(),
         }
     }
@@ -510,6 +524,7 @@ pub enum Tls12Resumption {
 ///
 /// Note: differs from the protocol-encoded EchConfig (`EchConfigMsg`).
 #[derive(Clone, Debug)]
+#[cfg(feature = "std")]
 pub struct EchConfig {
     /// The provider to use for HPKE operations.
     pub(crate) hpke_provider: &'static dyn HpkeProvider,
@@ -521,6 +536,7 @@ pub struct EchConfig {
     pub(crate) suite: HpkeSuite,
 }
 
+#[cfg(feature = "std")]
 impl EchConfig {
     /// Construct an EchConfig by selecting a ECH config from the provided bytes that is compatible
     /// with the given HPKE provider.
