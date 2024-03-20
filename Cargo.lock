@@ -2146,6 +2146,21 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dfbdb5ddfafe3040e01fe9dced711e27b5336ac97d4a9b2089f0066a04b5846"
+dependencies = [
+ "aws-lc-rs",
+ "log",
+ "once_cell",
+ "rustls-pki-types",
+ "rustls-webpki 0.102.2",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "rustls"
+version = "0.23.3"
 dependencies = [
  "aws-lc-rs",
  "base64",
@@ -2166,21 +2181,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustls"
-version = "0.23.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dfbdb5ddfafe3040e01fe9dced711e27b5336ac97d4a9b2089f0066a04b5846"
-dependencies = [
- "aws-lc-rs",
- "log",
- "once_cell",
- "rustls-pki-types",
- "rustls-webpki 0.102.2",
- "subtle",
- "zeroize",
-]
-
-[[package]]
 name = "rustls-ci-bench"
 version = "0.0.1"
 dependencies = [
@@ -2191,7 +2191,7 @@ dependencies = [
  "fxhash",
  "itertools",
  "rayon",
- "rustls 0.23.2",
+ "rustls 0.23.3",
  "rustls-pemfile 2.1.1",
  "rustls-pki-types",
  "tikv-jemallocator",
@@ -2204,7 +2204,7 @@ dependencies = [
  "hickory-resolver",
  "regex",
  "ring",
- "rustls 0.23.2",
+ "rustls 0.23.3",
 ]
 
 [[package]]
@@ -2217,7 +2217,7 @@ dependencies = [
  "log",
  "mio",
  "rcgen",
- "rustls 0.23.2",
+ "rustls 0.23.3",
  "rustls-pemfile 2.1.1",
  "rustls-pki-types",
  "serde",
@@ -2235,7 +2235,7 @@ dependencies = [
  "num-bigint",
  "once_cell",
  "openssl",
- "rustls 0.23.2",
+ "rustls 0.23.3",
  "rustls-pemfile 2.1.1",
  "rustls-pki-types",
 ]
@@ -2271,7 +2271,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "env_logger",
- "rustls 0.23.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls 0.23.2",
  "webpki-roots 0.26.1",
 ]
 
@@ -2293,7 +2293,7 @@ dependencies = [
  "rand_core",
  "rcgen",
  "rsa",
- "rustls 0.23.2",
+ "rustls 0.23.3",
  "rustls-pki-types",
  "rustls-webpki 0.102.2",
  "serde",
