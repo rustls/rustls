@@ -476,9 +476,9 @@ impl ExpectClientHello {
                 && suite.version().version == selected_version
                 // And protocol
                 && suite.usable_for_protocol(protocol)
-                // And key exchange groups
-                && (!ecdhe_possible || suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE))
-                && (!ffdhe_possible || suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
+                // And support one of key exchange groups
+                && (ecdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::ECDHE)
+                || ffdhe_possible && suite.usable_for_kx_algorithm(KeyExchangeAlgorithm::DHE))
             });
 
         // RFC 7919 (https://datatracker.ietf.org/doc/html/rfc7919#section-4) requires us to send
