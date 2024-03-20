@@ -248,6 +248,16 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
 
     let test_cases = [
         (
+            // TLS 1.2, have common
+            vec![
+                // this matches:
+                provider::kx_group::SECP256R1,
+                &ffdhe::FFDHE2048_KX_GROUP,
+            ],
+            &TLS12,
+            CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        ),
+        (
             vec![
                 // this matches:
                 provider::kx_group::SECP256R1,
@@ -264,6 +274,16 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
             ],
             &TLS12,
             CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+        ),
+        (
+            // TLS 1.3, have common
+            vec![
+                // this matches:
+                provider::kx_group::SECP256R1,
+                &ffdhe::FFDHE2048_KX_GROUP,
+            ],
+            &TLS13,
+            CipherSuite::TLS13_AES_128_GCM_SHA256,
         ),
         (
             vec![
