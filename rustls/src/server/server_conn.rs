@@ -810,6 +810,9 @@ mod connection {
         }
 
         /// Send the alert to the client.
+        ///
+        /// To account for short writes this function should be called repeatedly until it
+        /// returns `Ok(0)` or an error.
         pub fn write(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
             self.0.write_to(wr)
         }
