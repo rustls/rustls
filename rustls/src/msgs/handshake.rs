@@ -1509,14 +1509,15 @@ pub(crate) trait KxDecode<'a>: fmt::Debug + Sized {
     fn decode(r: &mut Reader<'a>, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage>;
 }
 
+#[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) enum ClientKeyExchangeParams {
     Ecdh(ClientEcdhParams),
     Dh(ClientDhParams),
 }
 
+#[cfg(feature = "tls12")]
 impl ClientKeyExchangeParams {
-    #[cfg(feature = "tls12")]
     pub(crate) fn pub_key(&self) -> &[u8] {
         match self {
             Self::Ecdh(ecdh) => &ecdh.public.0,
@@ -1524,7 +1525,6 @@ impl ClientKeyExchangeParams {
         }
     }
 
-    #[cfg(feature = "tls12")]
     pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Self::Ecdh(ecdh) => ecdh.encode(buf),
@@ -1533,6 +1533,7 @@ impl ClientKeyExchangeParams {
     }
 }
 
+#[cfg(feature = "tls12")]
 impl KxDecode<'_> for ClientKeyExchangeParams {
     fn decode(r: &mut Reader, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage> {
         use KeyExchangeAlgorithm::*;
