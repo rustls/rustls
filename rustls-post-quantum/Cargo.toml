@@ -10,7 +10,7 @@ repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 
 [dependencies]
-rustls = { version = "0.23.2", features = ["aws_lc_rs"] }
+rustls = { version = "0.23.2", features = ["aws_lc_rs"], path = "../rustls" }
 aws-lc-rs = { version = "1.6", features = ["unstable"], default-features = false }
 
 [dev-dependencies]
