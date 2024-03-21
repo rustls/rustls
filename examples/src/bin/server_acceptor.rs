@@ -121,7 +121,7 @@ fn main() {
                 Ok(Some(accepted)) => break accepted,
                 Ok(None) => continue,
                 Err((e, mut alert)) => {
-                    alert.write(&mut stream).unwrap();
+                    alert.write_all(&mut stream).unwrap();
                     panic!("error accepting connection: {e}");
                 }
             }
@@ -133,7 +133,7 @@ fn main() {
         let mut conn = match accepted.into_connection(config) {
             Ok(conn) => conn,
             Err((e, mut alert)) => {
-                alert.write(&mut stream).unwrap();
+                alert.write_all(&mut stream).unwrap();
                 panic!("error completing accepting connection: {e}");
             }
         };
