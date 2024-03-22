@@ -522,7 +522,8 @@ impl SignatureScheme {
             | Self::RSA_PSS_SHA256
             | Self::RSA_PSS_SHA384
             | Self::RSA_PSS_SHA512 => SignatureAlgorithm::RSA,
-            Self::ECDSA_NISTP256_SHA256
+            Self::ECDSA_SHA1_Legacy
+            | Self::ECDSA_NISTP256_SHA256
             | Self::ECDSA_NISTP384_SHA384
             | Self::ECDSA_NISTP521_SHA512 => SignatureAlgorithm::ECDSA,
             Self::ED25519 => SignatureAlgorithm::ED25519,
