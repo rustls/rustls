@@ -407,7 +407,6 @@ impl ServerSessionValue {
 mod tests {
     use super::*;
     use crate::enums::*;
-    use crate::msgs::codec::{Codec, Reader};
 
     #[test]
     fn serversessionvalue_is_debug() {
