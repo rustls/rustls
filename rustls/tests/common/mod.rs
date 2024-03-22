@@ -5,15 +5,19 @@ use std::io;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
-use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName};
+use pki_types::{
+    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName, UnixTime,
+};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionCommon, Error, ProtocolVersion,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SupportedCipherSuite,
+    ClientConfig, ClientConnection, Connection, ConnectionCommon, DigitallySignedStruct, Error,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
+    SupportedCipherSuite,
 };
 use webpki::anchor_from_trusted_cert;
 
@@ -735,4 +739,126 @@ fn exactly_one_provider() -> bool {
         all(feature = "ring", not(feature = "aws_lc_rs")),
         all(feature = "aws_lc_rs", not(feature = "ring"))
     ))
+}
+
+#[derive(Debug)]
+pub struct MockServerVerifier {
+    cert_rejection_error: Option<Error>,
+    tls12_signature_error: Option<Error>,
+    tls13_signature_error: Option<Error>,
+    signature_schemes: Vec<SignatureScheme>,
+}
+
+impl ServerCertVerifier for MockServerVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        server_name: &ServerName<'_>,
+        oscp_response: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, Error> {
+        println!(
+            "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?})",
+            end_entity, intermediates, server_name, oscp_response, now
+        );
+        if let Some(error) = &self.cert_rejection_error {
+            Err(error.clone())
+        } else {
+            Ok(ServerCertVerified::assertion())
+        }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        println!(
+            "verify_tls12_signature({:?}, {:?}, {:?})",
+            message, cert, dss
+        );
+        if let Some(error) = &self.tls12_signature_error {
+            Err(error.clone())
+        } else {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        println!(
+            "verify_tls13_signature({:?}, {:?}, {:?})",
+            message, cert, dss
+        );
+        if let Some(error) = &self.tls13_signature_error {
+            Err(error.clone())
+        } else {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.signature_schemes.clone()
+    }
+}
+
+impl MockServerVerifier {
+    pub fn accepts_anything() -> Self {
+        MockServerVerifier {
+            cert_rejection_error: None,
+            ..Default::default()
+        }
+    }
+
+    pub fn rejects_certificate(err: Error) -> Self {
+        MockServerVerifier {
+            cert_rejection_error: Some(err),
+            ..Default::default()
+        }
+    }
+
+    pub fn rejects_tls12_signatures(err: Error) -> Self {
+        MockServerVerifier {
+            tls12_signature_error: Some(err),
+            ..Default::default()
+        }
+    }
+
+    pub fn rejects_tls13_signatures(err: Error) -> Self {
+        MockServerVerifier {
+            tls13_signature_error: Some(err),
+            ..Default::default()
+        }
+    }
+
+    pub fn offers_no_signature_schemes() -> Self {
+        MockServerVerifier {
+            signature_schemes: vec![],
+            ..Default::default()
+        }
+    }
+}
+
+impl Default for MockServerVerifier {
+    fn default() -> Self {
+        MockServerVerifier {
+            cert_rejection_error: None,
+            tls12_signature_error: None,
+            tls13_signature_error: None,
+            signature_schemes: vec![
+                SignatureScheme::RSA_PSS_SHA256,
+                SignatureScheme::RSA_PKCS1_SHA256,
+                SignatureScheme::ED25519,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::ECDSA_NISTP521_SHA512,
+            ],
+        }
+    }
 }
