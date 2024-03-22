@@ -12,7 +12,7 @@ use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
 use rustls::{
-    self, client, server, sign, version, AlertDescription, CertificateError, Connection,
+    client, server, sign, version, AlertDescription, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
     PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm, SignatureScheme,
     SupportedProtocolVersion,

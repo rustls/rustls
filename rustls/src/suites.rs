@@ -250,7 +250,6 @@ pub enum ConnectionTrafficSecrets {
 #[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use super::*;
-    use crate::enums::CipherSuite;
     use crate::test_provider::tls13::*;
     use std::{println, vec};
 

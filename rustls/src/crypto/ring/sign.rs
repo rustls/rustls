@@ -306,7 +306,7 @@ struct EcdsaSigner {
 
 impl Signer for EcdsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        let rng = super::ring_like::rand::SystemRandom::new();
+        let rng = SystemRandom::new();
         self.key
             .sign(&rng, message)
             .map_err(|_| Error::General("signing failed".into()))
