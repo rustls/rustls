@@ -5413,6 +5413,51 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
     );
 }
 
+#[cfg(feature = "tls12")]
+#[test]
+fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
+    fn alter_server_signature_to_ecdsa_sha1(msg: &mut Message) -> Altered {
+        if let MessagePayload::Handshake {
+            parsed,
+            ref mut encoded,
+        } = &mut msg.payload
+        {
+            if let HandshakePayload::ServerKeyExchange(_) = &mut parsed.payload {
+                // nb. we don't care that this corrupts the signature, key exchange, etc.
+                let original = encoded.bytes();
+                let offset = 40; // of signature scheme
+                assert_eq!(
+                    &original[offset..offset + 2],
+                    &SignatureScheme::ECDSA_NISTP256_SHA256.to_array(),
+                    "expected ecdsa-sha256"
+                );
+                let mut altered = original.to_vec();
+                altered[offset..offset + 2]
+                    .copy_from_slice(&SignatureScheme::ECDSA_SHA1_Legacy.to_array());
+
+                *encoded = Payload::new(altered);
+            }
+        }
+        Altered::InPlace
+    }
+
+    let client_config = client_config_builder_with_versions(&[&rustls::version::TLS12])
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(MockServerVerifier::accepts_anything()))
+        .with_no_client_auth();
+    let server_config = make_server_config(KeyType::EcdsaP256);
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    let (mut client, mut server) = (client.into(), server.into());
+    transfer_altered(
+        &mut server,
+        alter_server_signature_to_ecdsa_sha1,
+        &mut client,
+    );
+    client.process_new_packets().unwrap();
+}
+
 #[test]
 fn test_acceptor() {
     use rustls::server::Acceptor;
