@@ -816,6 +816,14 @@ mod connection {
         pub fn write(&mut self, wr: &mut dyn io::Write) -> Result<usize, io::Error> {
             self.0.write_to(wr)
         }
+
+        /// Send the alert to the client.
+        ///
+        /// This function will invoke the writer until the buffer is empty.
+        pub fn write_all(&mut self, wr: &mut dyn io::Write) -> Result<(), io::Error> {
+            while self.write(wr)? != 0 {}
+            Ok(())
+        }
     }
 
     impl From<ConnectionCommon<ServerConnectionData>> for AcceptedAlert {
