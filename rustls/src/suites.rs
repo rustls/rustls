@@ -246,7 +246,6 @@ pub enum ConnectionTrafficSecrets {
     },
 }
 
-#[cfg(all(test, feature = "ring"))]
 #[cfg(all(test, any(feature = "ring", feature = "aws_lc_rs")))]
 mod tests {
     use super::*;
@@ -281,19 +280,19 @@ mod tests {
     fn test_pref_fails() {
         assert!(choose_ciphersuite_preferring_client(
             &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-            crypto::ring::ALL_CIPHER_SUITES
+            crate::test_provider::ALL_CIPHER_SUITES
         )
         .is_none());
         assert!(choose_ciphersuite_preferring_server(
             &[CipherSuite::TLS_NULL_WITH_NULL_NULL],
-            crypto::ring::ALL_CIPHER_SUITES
+            crate::test_provider::ALL_CIPHER_SUITES
         )
         .is_none());
     }
 
     #[test]
     fn test_scs_is_debug() {
-        println!("{:?}", crypto::ring::ALL_CIPHER_SUITES);
+        println!("{:?}", crate::test_provider::ALL_CIPHER_SUITES);
     }
 
     #[test]
