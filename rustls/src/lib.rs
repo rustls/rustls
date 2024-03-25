@@ -405,6 +405,7 @@ mod verifybench;
 mod x509;
 #[macro_use]
 mod check;
+#[cfg(feature = "logging")]
 mod bs_debug;
 mod builder;
 mod enums;
