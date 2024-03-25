@@ -270,7 +270,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         ///
         /// This is not an external interface.  Get one of these objects
         /// from [`Connection::writer`].
-        pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
+        pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Self {
             Writer { sink }
         }
     }

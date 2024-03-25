@@ -330,7 +330,7 @@ impl<'a> LengthPrefixedBuffer<'a> {
     ///
     /// After this, the body of the length-delimited structure should be appended to `LengthPrefixedBuffer::buf`.
     /// The length header is corrected in `LengthPrefixedBuffer::drop`.
-    pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> LengthPrefixedBuffer<'a> {
+    pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
         let len_offset = buf.len();
         buf.extend(match size_len {
             ListLength::U8 => &[0xff][..],
