@@ -268,7 +268,7 @@ impl<'a> Writer<'a> {
     ///
     /// This is not an external interface.  Get one of these objects
     /// from [`Connection::writer`].
-    pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Writer<'a> {
+    pub(crate) fn new(sink: &'a mut dyn PlaintextSink) -> Self {
         Writer { sink }
     }
 }

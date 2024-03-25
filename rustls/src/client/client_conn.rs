@@ -495,7 +495,7 @@ pub struct WriteEarlyData<'a> {
 }
 
 impl<'a> WriteEarlyData<'a> {
-    fn new(sess: &'a mut ClientConnection) -> WriteEarlyData<'a> {
+    fn new(sess: &'a mut ClientConnection) -> Self {
         WriteEarlyData { sess }
     }
 
