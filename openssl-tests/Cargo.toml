@@ -8,7 +8,7 @@ version = "0.0.1"
 
 [dependencies]
 asn1 = "0.16"
-base64 = "0.21"
+base64 = "0.22"
 num-bigint = "0.4.4"
 once_cell = "1.19"
 rustls = {path = "../rustls"}
