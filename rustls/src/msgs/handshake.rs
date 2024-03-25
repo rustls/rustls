@@ -1504,6 +1504,7 @@ impl Codec<'_> for EcParameters {
     }
 }
 
+#[cfg(feature = "tls12")]
 pub(crate) trait KxDecode<'a>: fmt::Debug + Sized {
     /// Decode a key exchange message given the key_exchange `algo`
     fn decode(r: &mut Reader<'a>, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage>;
@@ -1658,6 +1659,7 @@ impl Codec<'_> for ServerDhParams {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum ServerKeyExchangeParams {
     Ecdh(ServerEcdhParams),
@@ -1697,6 +1699,7 @@ impl ServerKeyExchangeParams {
     }
 }
 
+#[cfg(feature = "tls12")]
 impl KxDecode<'_> for ServerKeyExchangeParams {
     fn decode(r: &mut Reader, algo: KeyExchangeAlgorithm) -> Result<Self, InvalidMessage> {
         use KeyExchangeAlgorithm::*;
