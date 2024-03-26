@@ -27,9 +27,9 @@ use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode};
 use crate::msgs::handshake::{
-    CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
-    ConvertProtocolNameList, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryRequest, KeyShareEntry, Random, SessionId,
+    trim_hostname_trailing_dot_for_sni, CertificateStatusRequest, ClientExtensions,
+    ClientHelloPayload, ClientSessionTicket, ConvertProtocolNameList, HandshakeMessagePayload,
+    HandshakePayload, HasServerExtensions, HelloRetryRequest, KeyShareEntry, Random, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -94,7 +94,7 @@ fn find_session(
 
 pub(super) fn start_handshake(
     server_name: ServerName<'static>,
-    extra_exts: Vec<ClientExtension>,
+    extensions: ClientExtensions<'static>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError<'static> {
@@ -149,7 +149,7 @@ pub(super) fn start_handshake(
         transcript_buffer,
         None,
         key_share,
-        extra_exts,
+        extensions,
         None,
         ClientHelloInput {
             config,
@@ -176,7 +176,7 @@ struct ExpectServerHello {
 
 struct ExpectServerHelloOrHelloRetryRequest {
     next: ExpectServerHello,
-    extra_exts: Vec<ClientExtension>,
+    extensions: ClientExtensions<'static>,
 }
 
 struct ClientHelloInput {
@@ -195,7 +195,7 @@ fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
     key_share: Option<Box<dyn ActiveKeyExchange>>,
-    extra_exts: Vec<ClientExtension>,
+    extensions: ClientExtensions<'static>,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
@@ -216,9 +216,10 @@ fn emit_client_hello_for_retry(
     // should be unreachable thanks to config builder
     assert!(!supported_versions.is_empty());
 
-    let mut exts = vec![
-        ClientExtension::SupportedVersions(supported_versions),
-        ClientExtension::NamedGroups(
+    let extensions_for_retry = extensions.clone();
+
+    let mut exts = ClientExtensions {
+        named_groups: Some(
             config
                 .provider
                 .kx_groups
@@ -226,14 +227,17 @@ fn emit_client_hello_for_retry(
                 .map(|skxg| skxg.name())
                 .collect(),
         ),
-        ClientExtension::SignatureAlgorithms(
+        signature_schemes: Some(
             config
                 .verifier
                 .supported_verify_schemes(),
         ),
-        ClientExtension::ExtendedMasterSecretRequest,
-        ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
-    ];
+        supported_versions: Some(supported_versions),
+        extended_master_secret_request: Some(()),
+        certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
+
+        ..extensions
+    };
 
     // Send the ECPointFormat extension only if we are proposing ECDHE
     if config
@@ -242,51 +246,46 @@ fn emit_client_hello_for_retry(
         .iter()
         .any(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::ECDHE)
     {
-        exts.push(ClientExtension::EcPointFormats(
-            ECPointFormat::SUPPORTED.to_vec(),
-        ));
+        exts.ec_point_formats = Some(ECPointFormat::SUPPORTED.to_vec());
     }
 
     if let (ServerName::DnsName(dns), true) = (&input.server_name, config.enable_sni) {
         // We only want to send the SNI extension if the server name contains a DNS name.
-        exts.push(ClientExtension::make_sni(dns));
+        exts.server_name = Some(trim_hostname_trailing_dot_for_sni(dns));
     }
 
     if let Some(key_share) = &key_share {
         debug_assert!(support_tls13);
         let key_share = KeyShareEntry::new(key_share.group(), key_share.pub_key());
-        exts.push(ClientExtension::KeyShare(vec![key_share]));
+        exts.key_shares = Some(vec![key_share]);
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::cookie) {
-        exts.push(ClientExtension::Cookie(cookie.clone()));
+        exts.cookie = Some(cookie.clone());
     }
 
     if support_tls13 {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
-        let psk_modes = vec![PSKKeyExchangeMode::PSK_DHE_KE];
-        exts.push(ClientExtension::PresharedKeyModes(psk_modes));
+        exts.preshared_key_modes = Some(vec![PSKKeyExchangeMode::PSK_DHE_KE]);
     }
 
     if !config.alpn_protocols.is_empty() {
-        exts.push(ClientExtension::Protocols(Vec::from_slices(
+        exts.protocols = Some(Vec::from_slices(
             &config
                 .alpn_protocols
                 .iter()
                 .map(|proto| &proto[..])
                 .collect::<Vec<_>>(),
-        )));
+        ));
     }
-
-    // Extra extensions must be placed before the PSK extension
-    exts.extend(extra_exts.iter().cloned());
 
     // Do we have a SessionID or ticket cached for this host?
     let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
 
     // Extensions MAY be randomized
     // but they also need to keep the same order as the previous ClientHello
+    /* TODO
     exts.sort_by_cached_key(|new_ext| {
         // PSK extension is always last
         if let ClientExtension::PresharedKey(..) = new_ext {
@@ -300,12 +299,10 @@ fn emit_client_hello_for_retry(
             key => key,
         }
     });
+    */
 
     // Note what extensions we sent.
-    input.hello.sent_extensions = exts
-        .iter()
-        .map(ClientExtension::ext_type)
-        .collect();
+    input.hello.sent_extensions = exts.collect_used_extensions();
 
     let mut cipher_suites: Vec<_> = config
         .provider
@@ -392,7 +389,10 @@ fn emit_client_hello_for_retry(
     };
 
     if support_tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
+        Box::new(ExpectServerHelloOrHelloRetryRequest {
+            next,
+            extensions: extensions_for_retry,
+        })
     } else {
         Box::new(next)
     }
@@ -413,7 +413,7 @@ fn emit_client_hello_for_retry(
 /// If 1.3 resumption can continue, returns the 1.3 session value for further processing.
 fn prepare_resumption<'a>(
     resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
-    exts: &mut Vec<ClientExtension>,
+    exts: &mut ClientExtensions<'static>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
@@ -426,7 +426,7 @@ fn prepare_resumption<'a>(
                 || config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
             {
                 // If we don't have a ticket, request one.
-                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+                exts.session_ticket = Some(ClientSessionTicket::Request);
             }
             return None;
         }
@@ -439,9 +439,8 @@ fn prepare_resumption<'a>(
             if config.supports_version(ProtocolVersion::TLSv1_2)
                 && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
             {
-                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                    Payload::new(resuming.ticket()),
-                )));
+                exts.session_ticket =
+                    Some(ClientSessionTicket::Offer(Payload::new(resuming.ticket())));
             }
             return None; // TLS 1.2, so nothing to return here
         }
@@ -878,7 +877,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             transcript_buffer,
             Some(hrr),
             Some(key_share),
-            self.extra_exts,
+            self.extensions,
             Some(cs),
             self.next.input,
             cx,

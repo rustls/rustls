@@ -750,6 +750,9 @@ fn handle_err(err: Error) -> ! {
         | Error::InvalidMessage(InvalidMessage::UnknownProtocolVersion)
         | Error::InvalidMessage(InvalidMessage::MessageTooLarge) => quit(":GARBAGE:"),
         Error::InvalidMessage(InvalidMessage::UnexpectedMessage(_)) => quit(":GARBAGE:"),
+        Error::InvalidMessage(InvalidMessage::PreSharedKeyIsNotFinalExtension) => {
+            quit(":PRE_SHARED_KEY_MUST_BE_LAST:")
+        }
         Error::DecryptError => quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:"),
         Error::NoApplicationProtocol => quit(":NO_APPLICATION_PROTOCOL:"),
         Error::PeerIncompatible(

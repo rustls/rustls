@@ -297,6 +297,15 @@ impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
     }
 }
 
+impl Codec<'_> for () {
+    fn encode(&self, _: &mut Vec<u8>) {}
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        r.expect_empty("Empty")?;
+        Ok(())
+    }
+}
+
 /// A trait for types that can be encoded and decoded in a list.
 ///
 /// This trait is used to implement `Codec` for `Vec<T>`. Lists in the TLS wire format are

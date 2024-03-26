@@ -892,7 +892,7 @@ impl<Data> ConnectionCore<Data> {
             Err(err) => {
                 return Err(self
                     .common_state
-                    .send_fatal_alert(AlertDescription::DecodeError, err));
+                    .send_fatal_alert(err.into(), err));
             }
         };
 
