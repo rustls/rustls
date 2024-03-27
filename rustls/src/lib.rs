@@ -389,7 +389,7 @@ mod conn;
 pub mod crypto;
 mod error;
 mod hash_hs;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod limited_cache;
 mod rand;
 mod record_layer;
@@ -405,6 +405,7 @@ mod verifybench;
 mod x509;
 #[macro_use]
 mod check;
+#[cfg(feature = "logging")]
 mod bs_debug;
 mod builder;
 mod enums;
@@ -520,7 +521,7 @@ pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
@@ -547,7 +548,7 @@ pub mod client {
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ClientSessionMemoryCache;
 
     /// Dangerous configuration that should be audited and used with extreme care.
@@ -581,9 +582,9 @@ pub mod server {
 
     pub use builder::WantsServerCert;
     pub use handy::NoServerSessionStorage;
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ResolvesServerCertUsingSni;
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerSessionMemoryCache;
     pub use server_conn::{
         Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
@@ -629,7 +630,7 @@ pub mod sign {
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 /// APIs for implementing TLS tickets
 pub mod ticketer;
 
@@ -637,3 +638,51 @@ pub mod ticketer;
 pub mod manual;
 
 pub mod time_provider;
+
+/// APIs for implementing locks on no-std environments.
+pub mod lock {
+    #[cfg(not(feature = "std"))]
+    use alloc::boxed::Box;
+
+    #[cfg(not(feature = "std"))]
+    /// A lock protecting shared data.
+    pub trait Lock: Send + Sync {
+        /// The state protected by the lock.
+        type Data: Send;
+
+        /// Acquire the lock.
+        fn lock(&self) -> MutexGuard<'_, Self::Data>;
+    }
+
+    #[cfg(not(feature = "std"))]
+    /// A lock builder.
+    pub trait MakeMutex {
+        /// Create a new mutex.
+        fn make_mutex<T>(value: T) -> Mutex<T>
+        where
+            T: Send + 'static;
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub(crate) type Mutex<T> = alloc::sync::Arc<dyn Lock<Data = T>>;
+    #[cfg(not(feature = "std"))]
+    pub(crate) type MutexGuard<'a, T> = Box<dyn core::ops::DerefMut<Target = T> + 'a>;
+
+    #[cfg(feature = "std")]
+    pub(crate) use std::sync::Mutex;
+    #[cfg(feature = "std")]
+    pub(crate) use std::sync::MutexGuard;
+}
+
+#[cfg(any(feature = "std", feature = "hashbrown"))]
+mod hash_map {
+    #[cfg(feature = "std")]
+    pub(crate) use std::collections::hash_map::Entry;
+    #[cfg(feature = "std")]
+    pub(crate) use std::collections::HashMap;
+
+    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
+    pub(crate) use hashbrown::hash_map::Entry;
+    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
+    pub(crate) use hashbrown::HashMap;
+}

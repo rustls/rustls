@@ -19,7 +19,7 @@ pub(crate) mod hash;
 pub(crate) mod hmac;
 pub(crate) mod kx;
 pub(crate) mod quic;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
 pub(crate) mod tls12;
@@ -170,7 +170,7 @@ pub mod kx_group {
 }
 
 pub use kx::ALL_KX_GROUPS;
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use ticketer::Ticketer;
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
@@ -190,7 +190,7 @@ mod ring_shim {
 }
 
 /// AEAD algorithm that is used by `mod ticketer`.
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub(super) static TICKETER_AEAD: &ring_like::aead::Algorithm = &ring_like::aead::CHACHA20_POLY1305;
 
 pub(super) fn fips() -> bool {
