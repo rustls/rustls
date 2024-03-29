@@ -13,12 +13,13 @@ use std::sync::Mutex;
 use rustls::client::{ResolvesClientCert, Resumption};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
+use rustls::internal::msgs::handshake::ServerName as ServerNameExtensionItem;
 use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, ClientHello, ResolvesServerCert};
 #[cfg(feature = "secret_extraction")]
 use rustls::ConnectionTrafficSecrets;
 use rustls::{
-    sign, CertificateError, ConnectionCommon, Error, KeyLog, PeerIncompatible, PeerMisbehaved,
-    SideData,
+    sign, CertificateError, ConnectionCommon, Error, InvalidMessage, KeyLog, PeerIncompatible,
+    PeerMisbehaved, SideData,
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -800,6 +801,92 @@ fn client_trims_terminating_dot() {
 
         let err = do_handshake_until_error(&mut client, &mut server);
         assert!(err.is_err());
+    }
+}
+
+#[test]
+fn server_ignores_sni_with_ip_address() {
+    fn insert_ip_address_server_name(msg: &mut Message) -> Altered {
+        alter_sni_extension(
+            msg,
+            |snr| {
+                snr.clear();
+                snr.push(ServerNameExtensionItem::read_bytes(b"\x00\x00\x071.1.1.1").unwrap());
+            },
+            |parsed, _encoded| Payload::new(parsed.get_encoding()),
+        )
+    }
+
+    check_sni_error(
+        insert_ip_address_server_name,
+        Error::General("no server certificate chain resolved".to_string()),
+    );
+}
+
+#[test]
+fn server_rejects_sni_with_illegal_dns_name() {
+    fn insert_illegal_server_name(msg: &mut Message) -> Altered {
+        alter_sni_extension(
+            msg,
+            |_| (),
+            |_, encoded| {
+                // replace "localhost" with invalid DNS name
+                let mut altered = encoded.clone().0;
+                let needle = b"localhost";
+                let index = altered
+                    .windows(needle.len())
+                    .position(|window| window == needle)
+                    .unwrap();
+                altered[index..index + needle.len()].copy_from_slice(b"ab@cd.com");
+                Payload::new(altered)
+            },
+        )
+    }
+
+    check_sni_error(
+        insert_illegal_server_name,
+        Error::InvalidMessage(InvalidMessage::InvalidServerName),
+    );
+}
+
+fn alter_sni_extension(
+    msg: &mut Message,
+    alter_inner: impl Fn(&mut Vec<ServerNameExtensionItem>),
+    alter_encoding: impl Fn(&mut HandshakeMessagePayload, &mut Payload) -> Payload,
+) -> Altered {
+    if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+        if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
+            for mut ext in ch.extensions.iter_mut() {
+                if let ClientExtension::ServerName(snr) = &mut ext {
+                    alter_inner(snr);
+                }
+            }
+            *encoded = alter_encoding(parsed, encoded);
+        }
+    }
+
+    Altered::InPlace
+}
+
+fn check_sni_error(alteration: impl Fn(&mut Message) -> Altered, expected_error: Error) {
+    for kt in ALL_KEY_TYPES {
+        let client_config = make_client_config(kt);
+        let mut server_config = make_server_config(kt);
+
+        server_config.cert_resolver = Arc::new(ServerCheckNoSNI {});
+
+        let client = ClientConnection::new(Arc::new(client_config), dns_name("localhost")).unwrap();
+        let server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        let (mut client, mut server) = (client.into(), server.into());
+
+        transfer_altered(&mut client, &alteration, &mut server);
+        assert_eq!(server.process_new_packets(), Err(expected_error.clone()),);
+
+        let server_inner = match server {
+            rustls::Connection::Server(server) => server,
+            _ => unreachable!(),
+        };
+        assert_eq!(None, server_inner.server_name());
     }
 }
 
@@ -4327,6 +4414,7 @@ fn connection_types_are_not_huge() {
     assert_lt(mem::size_of::<ClientConnection>(), 1600);
 }
 
+use rustls::internal::msgs::handshake::HandshakeMessagePayload;
 use rustls::internal::msgs::{
     handshake::ClientExtension, handshake::HandshakePayload, message::Message,
     message::MessagePayload,
@@ -4335,18 +4423,13 @@ use rustls::internal::msgs::{
 #[test]
 fn test_server_rejects_duplicate_sni_names() {
     fn duplicate_sni_payload(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for mut ext in ch.extensions.iter_mut() {
-                    if let ClientExtension::ServerName(snr) = &mut ext {
-                        snr.push(snr[0].clone());
-                    }
-                }
-            }
-
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
+        alter_sni_extension(
+            msg,
+            |snr| {
+                snr.push(snr[0].clone());
+            },
+            |parsed, _encoded| Payload::new(parsed.get_encoding()),
+        )
     }
 
     let (client, server) = make_pair(KeyType::Rsa);
@@ -4363,19 +4446,11 @@ fn test_server_rejects_duplicate_sni_names() {
 #[test]
 fn test_server_rejects_empty_sni_extension() {
     fn empty_sni_payload(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for mut ext in ch.extensions.iter_mut() {
-                    if let ClientExtension::ServerName(snr) = &mut ext {
-                        snr.clear();
-                    }
-                }
-            }
-
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-
-        Altered::InPlace
+        alter_sni_extension(
+            msg,
+            |snr| snr.clear(),
+            |parsed, _encoded| Payload::new(parsed.get_encoding()),
+        )
     }
 
     let (client, server) = make_pair(KeyType::Rsa);
