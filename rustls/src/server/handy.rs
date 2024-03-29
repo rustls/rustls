@@ -25,13 +25,13 @@ impl server::StoresServerSessions for NoServerSessionStorage {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 mod cache {
     use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt::{Debug, Formatter};
-    use std::sync::Mutex;
 
+    use crate::lock::Mutex;
     use crate::{limited_cache, server};
 
     /// An implementer of `StoresServerSessions` that stores everything
@@ -45,9 +45,20 @@ mod cache {
         /// Make a new ServerSessionMemoryCache.  `size` is the maximum
         /// number of stored sessions, and may be rounded-up for
         /// efficiency.
+        #[cfg(feature = "std")]
         pub fn new(size: usize) -> Arc<Self> {
             Arc::new(Self {
                 cache: Mutex::new(limited_cache::LimitedCache::new(size)),
+            })
+        }
+
+        /// Make a new ServerSessionMemoryCache.  `size` is the maximum
+        /// number of stored sessions, and may be rounded-up for
+        /// efficiency.
+        #[cfg(not(feature = "std"))]
+        pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Arc<Self> {
+            Arc::new(Self {
+                cache: Mutex::new::<M>(limited_cache::LimitedCache::new(size)),
             })
         }
     }
@@ -133,7 +144,8 @@ mod cache {
         }
     }
 }
-#[cfg(feature = "std")]
+
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use cache::ServerSessionMemoryCache;
 
 /// Something which never produces tickets.

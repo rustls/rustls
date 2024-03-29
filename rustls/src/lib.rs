@@ -521,7 +521,7 @@ pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
 };
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
@@ -548,7 +548,7 @@ pub mod client {
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ClientSessionMemoryCache;
 
     /// Dangerous configuration that should be audited and used with extreme care.
@@ -584,7 +584,7 @@ pub mod server {
     pub use handy::NoServerSessionStorage;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ResolvesServerCertUsingSni;
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerSessionMemoryCache;
     pub use server_conn::{
         Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
@@ -630,7 +630,7 @@ pub mod sign {
 /// APIs for implementing QUIC TLS
 pub mod quic;
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "hashbrown"))]
 /// APIs for implementing TLS tickets
 pub mod ticketer;
 
@@ -638,6 +638,9 @@ pub mod ticketer;
 pub mod manual;
 
 pub mod time_provider;
+
+/// APIs abstracting over locking primitives.
+pub mod lock;
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod hash_map {
