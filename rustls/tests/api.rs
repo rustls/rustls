@@ -27,9 +27,7 @@ use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::AlertLevel;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
-use rustls::internal::msgs::message::{
-    Message, MessagePayload,
-};
+use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::SupportedCipherSuite;
 use rustls::{
@@ -61,7 +59,9 @@ fn alpn_test_error(
 
     for version in rustls::ALL_VERSIONS {
         let mut client_config = make_client_config_with_versions(KeyType::Rsa, &[version]);
-        client_config.alpn_protocols.clone_from(&client_protos);
+        client_config
+            .alpn_protocols
+            .clone_from(&client_protos);
 
         let (mut client, mut server) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -766,9 +766,11 @@ fn test_tls13_valid_early_plaintext_alert() {
     //  * The payload size is indicative of a plaintext alert message.
     //  * The negotiated protocol version is TLS 1.3.
     server
-        .read_tls(&mut io::Cursor::new(
-            &build_alert(AlertLevel::Fatal, AlertDescription::UnknownCA, &[])
-        ))
+        .read_tls(&mut io::Cursor::new(&build_alert(
+            AlertLevel::Fatal,
+            AlertDescription::UnknownCA,
+            &[],
+        )))
         .unwrap();
 
     // The server should process the plaintext alert without error.
@@ -790,7 +792,11 @@ fn test_tls13_too_short_early_plaintext_alert() {
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message
     // because the payload length is too large to be considered an early plaintext alert.
     server
-        .read_tls(&mut io::Cursor::new(&build_alert(AlertLevel::Fatal, AlertDescription::UnknownCA, &[0xff])))
+        .read_tls(&mut io::Cursor::new(&build_alert(
+            AlertLevel::Fatal,
+            AlertDescription::UnknownCA,
+            &[0xff],
+        )))
         .unwrap();
 
     // The server should produce a decrypt error trying to decrypt the plaintext alert.
@@ -807,7 +813,11 @@ fn test_tls13_late_plaintext_alert() {
 
     // Inject a plaintext alert from the client. The server should attempt to decrypt this message.
     server
-        .read_tls(&mut io::Cursor::new(&build_alert(AlertLevel::Fatal, AlertDescription::UnknownCA, &[])))
+        .read_tls(&mut io::Cursor::new(&build_alert(
+            AlertLevel::Fatal,
+            AlertDescription::UnknownCA,
+            &[],
+        )))
         .unwrap();
 
     // The server should produce a decrypt error, trying to decrypt a plaintext alert.
@@ -3058,16 +3068,17 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
             kt,
             ClientConfig::builder_with_provider(
                 CryptoProvider {
-                cipher_suites: vec![ scs_other, scs ],
-                ..provider::default_provider()
-            }.into(),
-        )
-        .with_safe_default_protocol_versions()
-        .unwrap());
+                    cipher_suites: vec![scs_other, scs],
+                    ..provider::default_provider()
+                }
+                .into(),
+            )
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+        );
 
         do_suite_test(client_config, server_config, scs, version.version);
     }
-
 }
 
 #[derive(Debug, PartialEq)]
@@ -4525,7 +4536,8 @@ mod test_quic {
     #[test]
     fn test_fragmented_append() {
         // Create a QUIC client connection.
-        let client_config = make_client_config_with_versions(KeyType::Rsa, &[&rustls::version::TLS13]);
+        let client_config =
+            make_client_config_with_versions(KeyType::Rsa, &[&rustls::version::TLS13]);
         let client_config = Arc::new(client_config);
         let mut client = quic::ClientConnection::new(
             Arc::clone(&client_config),
@@ -4559,7 +4571,8 @@ mod test_quic {
 #[test]
 fn test_client_does_not_offer_sha1() {
     use rustls::internal::msgs::{
-        codec::Reader, handshake::HandshakePayload, message::MessagePayload, message::OutboundOpaqueMessage,
+        codec::Reader, handshake::HandshakePayload, message::MessagePayload,
+        message::OutboundOpaqueMessage,
     };
     use rustls::HandshakeType;
 
@@ -5529,7 +5542,10 @@ fn test_acceptor() {
         .read_tls(&mut [0x16, 0x03, 0x03, 0x00, 0x05, 0x01, 0x00, 0x00, 0x01, 0x00].as_ref())
         .unwrap();
     let (err, mut alert) = acceptor.accept().unwrap_err();
-    assert!(matches!(err, Error::InvalidMessage(InvalidMessage::MissingData(_))));
+    assert!(matches!(
+        err,
+        Error::InvalidMessage(InvalidMessage::MissingData(_))
+    ));
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
     let expected = build_alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
@@ -5540,16 +5556,22 @@ fn test_acceptor() {
 fn test_acceptor_rejected_handshake() {
     use rustls::server::Acceptor;
 
-    let client_config = finish_client_config(KeyType::Ed25519, ClientConfig::builder_with_provider(provider::default_provider().into())
-        .with_protocol_versions(&[&rustls::version::TLS13])
-        .unwrap());
+    let client_config = finish_client_config(
+        KeyType::Ed25519,
+        ClientConfig::builder_with_provider(provider::default_provider().into())
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap(),
+    );
     let mut client = ClientConnection::new(client_config.into(), server_name("localhost")).unwrap();
     let mut buf = Vec::new();
     client.write_tls(&mut buf).unwrap();
 
-    let server_config = finish_server_config(KeyType::Ed25519, ServerConfig::builder_with_provider(provider::default_provider().into())
-        .with_protocol_versions(&[&rustls::version::TLS12])
-        .unwrap());
+    let server_config = finish_server_config(
+        KeyType::Ed25519,
+        ServerConfig::builder_with_provider(provider::default_provider().into())
+            .with_protocol_versions(&[&rustls::version::TLS12])
+            .unwrap(),
+    );
     let mut acceptor = Acceptor::default();
     acceptor
         .read_tls(&mut buf.as_slice())
@@ -5558,8 +5580,13 @@ fn test_acceptor_rejected_handshake() {
     let ch = accepted.client_hello();
     assert_eq!(ch.server_name(), Some("localhost"));
 
-    let (err, mut alert) = accepted.into_connection(server_config.into()).unwrap_err();
-    assert_eq!(err, Error::PeerIncompatible(PeerIncompatible::Tls12NotOfferedOrEnabled));
+    let (err, mut alert) = accepted
+        .into_connection(server_config.into())
+        .unwrap_err();
+    assert_eq!(
+        err,
+        Error::PeerIncompatible(PeerIncompatible::Tls12NotOfferedOrEnabled)
+    );
 
     let mut alert_content = Vec::new();
     let _ = alert.write(&mut alert_content);
