@@ -48,7 +48,7 @@ fn test_read_fuzz_corpus() {
 }
 
 #[test]
-fn can_read_safari_client_hello() {
+fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
     let _ = env_logger::Builder::new()
         .filter(None, log::LevelFilter::Trace)
         .try_init();
@@ -72,7 +72,7 @@ fn can_read_safari_client_hello() {
     let mut rd = Reader::init(bytes);
     let m = OutboundOpaqueMessage::read(&mut rd).unwrap();
     println!("m = {:?}", m);
-    assert!(Message::try_from(m.into_plain_message()).is_err());
+    Message::try_from(m.into_plain_message()).unwrap();
 }
 
 #[test]
