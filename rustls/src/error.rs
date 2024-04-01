@@ -149,12 +149,25 @@ pub enum InvalidMessage {
     UnsupportedCurveType,
     /// A peer sent an unsupported key exchange algorithm.
     UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
+    /// A peer sent a message where a given extension type was repeated
+    DuplicateExtension,
+    /// A peer sent a ClientHello with a "pre_shared_key" extension before another extension
+    PreSharedKeyIsNotFinalExtension,
 }
 
 impl From<InvalidMessage> for Error {
     #[inline]
     fn from(e: InvalidMessage) -> Self {
         Self::InvalidMessage(e)
+    }
+}
+
+impl From<InvalidMessage> for AlertDescription {
+    fn from(e: InvalidMessage) -> Self {
+        match e {
+            InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
+            _ => Self::DecodeError,
+        }
     }
 }
 

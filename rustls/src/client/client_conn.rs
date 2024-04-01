@@ -17,7 +17,7 @@ use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::ClientExtensions;
 use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
 #[cfg(feature = "std")]
@@ -579,7 +579,6 @@ impl EarlyData {
 #[cfg(feature = "std")]
 mod connection {
     use alloc::sync::Arc;
-    use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
     use std::io;
@@ -590,6 +589,7 @@ mod connection {
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
+    use crate::msgs::handshake::ClientExtensions;
     use crate::suites::ExtractedSecrets;
     use crate::ClientConfig;
 
@@ -654,7 +654,13 @@ mod connection {
         /// name of the server we want to talk to.
         pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
             Ok(Self {
-                inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
+                inner: ConnectionCore::for_client(
+                    config,
+                    name,
+                    ClientExtensions::default(),
+                    Protocol::Tcp,
+                )?
+                .into(),
             })
         }
 
@@ -758,7 +764,7 @@ impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        extra_exts: Vec<ClientExtension>,
+        extensions: ClientExtensions<'static>,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
@@ -774,7 +780,7 @@ impl ConnectionCore<ClientConnectionData> {
             sendable_plaintext: None,
         };
 
-        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        let state = hs::start_handshake(name, extensions, config, &mut cx)?;
         Ok(Self::new(state, data, common_state))
     }
 
@@ -796,7 +802,13 @@ impl UnbufferedClientConnection {
     /// the name of the server we want to talk to.
     pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
         Ok(Self {
-            inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
+            inner: ConnectionCore::for_client(
+                config,
+                name,
+                ClientExtensions::default(),
+                Protocol::Tcp,
+            )?
+            .into(),
         })
     }
 }

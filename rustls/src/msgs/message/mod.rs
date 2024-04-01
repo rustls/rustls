@@ -1,5 +1,5 @@
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage};
+use crate::error::InvalidMessage;
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -190,7 +190,7 @@ impl Message<'_> {
 }
 
 impl TryFrom<PlainMessage> for Message<'static> {
-    type Error = Error;
+    type Error = InvalidMessage;
 
     fn try_from(plain: PlainMessage) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -206,7 +206,7 @@ impl TryFrom<PlainMessage> for Message<'static> {
 /// A [`PlainMessage`] must contain plaintext content. Encrypted content should be stored in an
 /// [`InboundOpaqueMessage`] and decrypted before being stored into a [`PlainMessage`].
 impl<'a> TryFrom<InboundPlainMessage<'a>> for Message<'a> {
-    type Error = Error;
+    type Error = InvalidMessage;
 
     fn try_from(plain: InboundPlainMessage<'a>) -> Result<Self, Self::Error> {
         Ok(Self {
