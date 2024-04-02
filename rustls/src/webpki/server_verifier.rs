@@ -94,7 +94,7 @@ impl ServerCertVerifierBuilder {
     /// [`with_client_cert_verifier`][ConfigBuilder<ClientConfig, WantsVerifier>::with_client_cert_verifier].
     ///
     /// # Errors
-    /// This function will return a `CertVerifierBuilderError` if:
+    /// This function will return a [`VerifierBuilderError`] if:
     /// 1. No trust anchors have been provided.
     /// 2. DER encoded CRLs have been provided that can not be parsed successfully.
     pub fn build(self) -> Result<Arc<WebPkiServerVerifier>, VerifierBuilderError> {
