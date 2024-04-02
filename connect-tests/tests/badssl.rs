@@ -106,6 +106,7 @@ mod online {
             .unwrap();
     }
 
+    #[ignore] // https://github.com/chromium/badssl.com/issues/530
     #[test]
     fn rsa8192() {
         connect("rsa8192.badssl.com")
