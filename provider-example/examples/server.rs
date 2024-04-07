@@ -58,7 +58,7 @@ struct TestPki {
 impl TestPki {
     fn new() -> Self {
         let alg = &rcgen::PKCS_ECDSA_P256_SHA256;
-        let mut ca_params = rcgen::CertificateParams::new(Vec::new());
+        let mut ca_params = rcgen::CertificateParams::new(Vec::new()).unwrap();
         ca_params
             .distinguished_name
             .push(rcgen::DnType::OrganizationName, "Provider Server Example");
@@ -70,25 +70,22 @@ impl TestPki {
             rcgen::KeyUsagePurpose::KeyCertSign,
             rcgen::KeyUsagePurpose::DigitalSignature,
         ];
-        ca_params.alg = alg;
-        let ca_cert = rcgen::Certificate::from_params(ca_params).unwrap();
+        let ca_key = rcgen::KeyPair::generate_for(alg).unwrap();
+        let ca_cert = ca_params.self_signed(&ca_key).unwrap();
 
         // Create a server end entity cert issued by the CA.
-        let mut server_ee_params = rcgen::CertificateParams::new(vec!["localhost".to_string()]);
+        let mut server_ee_params =
+            rcgen::CertificateParams::new(vec!["localhost".to_string()]).unwrap();
         server_ee_params.is_ca = rcgen::IsCa::NoCa;
         server_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
-        server_ee_params.alg = alg;
-        let server_cert = rcgen::Certificate::from_params(server_ee_params).unwrap();
-        let server_cert_der = CertificateDer::from(
-            server_cert
-                .serialize_der_with_signer(&ca_cert)
-                .unwrap(),
-        );
-        let server_key_der =
-            PrivatePkcs8KeyDer::from(server_cert.serialize_private_key_der()).into();
+        let server_key = rcgen::KeyPair::generate_for(alg).unwrap();
+        let server_cert = server_ee_params
+            .signed_by(&server_key, &ca_cert, &ca_key)
+            .unwrap();
         Self {
-            server_cert_der,
-            server_key_der,
+            server_cert_der: server_cert.into(),
+            // TODO(XXX): update below once https://github.com/rustls/rcgen/issues/260 is resolved.
+            server_key_der: PrivatePkcs8KeyDer::from(server_key.serialize_der()).into(),
         }
     }
 
