@@ -29,12 +29,14 @@ In rough order of priority:
   consider implementing limits for TLS over TCP as well.
   rustls/rustls#755
 
+## Past priorities
+
+Delivered in 0.23.2:
+
 * **Support Post-Quantum Hybrid Key Exchange**.
   Experimental, optional support for the `X25519Kyber768Draft00` key exchange.
   This should track [the draft](https://datatracker.ietf.org/doc/draft-tls-westerbaan-xyber768d00/).
   rustls/rustls#1687
-
-## Past priorities
 
 Delivered in 0.23:
 
