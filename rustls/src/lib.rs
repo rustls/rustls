@@ -514,8 +514,8 @@ pub use crate::enums::{
     ProtocolVersion, SignatureAlgorithm, SignatureScheme,
 };
 pub use crate::error::{
-    CertRevocationListError, CertificateError, Error, InvalidMessage, OtherError, PeerIncompatible,
-    PeerMisbehaved,
+    CertRevocationListError, CertificateError, EncryptedClientHelloError, Error, InvalidMessage,
+    OtherError, PeerIncompatible, PeerMisbehaved,
 };
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
@@ -542,6 +542,7 @@ pub mod client {
     pub(super) mod builder;
     mod client_conn;
     mod common;
+    mod ech;
     pub(super) mod handy;
     mod hs;
     #[cfg(feature = "tls12")]
@@ -555,6 +556,7 @@ pub mod client {
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
+    pub use ech::{EchConfig, EchStatus};
     #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ClientSessionMemoryCache;
 
