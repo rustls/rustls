@@ -9,6 +9,7 @@ use pki_types::{ServerName, UnixTime};
 use super::handy::NoClientSessionStorage;
 use super::hs;
 use crate::builder::ConfigBuilder;
+use crate::client::{EchConfig, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
@@ -134,6 +135,11 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder_with_provider()`]
 /// function.
 ///
+/// Note that using [`ClientConfig::with_ech]` will produce a common configuration specific to
+/// the provided [`crate::client::EchConfig`] that may not be appropriate for all connections made
+/// by the program. In this case the configuration should only be shared by connections intended
+/// for domains that offer the provided [`crate::client::EchConfig`] in their DNS zone.
+///
 /// # Defaults
 ///
 /// * [`ClientConfig::max_fragment_size`]: the default is `None` (meaning 16kB).
@@ -248,6 +254,9 @@ pub struct ClientConfig {
     /// This is optional: [`compress::CompressionCache::Disabled`] gives
     /// a cache that does no caching.
     pub cert_compression_cache: Arc<compress::CompressionCache>,
+
+    /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
+    pub(super) ech_config: Option<EchConfig>,
 }
 
 impl ClientConfig {
@@ -596,6 +605,7 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
+    use crate::client::EchStatus;
     use pki_types::ServerName;
 
     use super::ClientConnectionData;
@@ -715,6 +725,11 @@ mod connection {
         /// Should be used with care as it exposes secret key material.
         pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
             self.inner.dangerous_extract_secrets()
+        }
+
+        /// Return the connection's Encrypted Client Hello (ECH) status.
+        pub fn ech_status(&self) -> EchStatus {
+            self.inner.core.data.ech_status
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
@@ -913,6 +928,7 @@ impl std::error::Error for EarlyDataError {}
 pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
+    pub(super) ech_status: EchStatus,
 }
 
 impl ClientConnectionData {
@@ -920,6 +936,7 @@ impl ClientConnectionData {
         Self {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
+            ech_status: EchStatus::NotOffered,
         }
     }
 }

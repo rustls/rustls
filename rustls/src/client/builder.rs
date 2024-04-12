@@ -6,14 +6,35 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
-use crate::client::{handy, ClientConfig, ResolvesClientCert};
+use crate::client::{handy, ClientConfig, EchConfig, ResolvesClientCert};
 use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
 use crate::time_provider::TimeProvider;
+use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{compress, verify, versions};
+use crate::{compress, verify, versions, WantsVersions};
+
+impl ConfigBuilder<ClientConfig, WantsVersions> {
+    /// Enable Encrypted Client Hello (ECH) with the given configuration.
+    ///
+    /// This implicitly selects TLS 1.3 as the only supported protocol version to meet the
+    /// requirement to support ECH.
+    ///
+    /// The `ClientConfig` that will be produced by this builder will be specific to the provided
+    /// [`crate::client::EchConfig`] and may not be appropriate for all connections made by the program.
+    /// In this case the configuration should only be shared by connections intended for domains
+    /// that offer the provided [`crate::client::EchConfig`] in their DNS zone.
+    pub fn with_ech(
+        self,
+        config: EchConfig,
+    ) -> Result<ConfigBuilder<ClientConfig, WantsVerifier>, Error> {
+        let mut res = self.with_protocol_versions(&[&TLS13][..])?;
+        res.state.client_ech_config = Some(config);
+        Ok(res)
+    }
+}
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates.
@@ -56,6 +77,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
                 versions: self.state.versions,
                 verifier,
                 time_provider: self.state.time_provider,
+                client_ech_config: self.state.client_ech_config,
             },
             side: PhantomData,
         }
@@ -95,6 +117,7 @@ pub(super) mod danger {
                     versions: self.cfg.state.versions,
                     verifier,
                     time_provider: self.cfg.state.time_provider,
+                    client_ech_config: None,
                 },
                 side: PhantomData,
             }
@@ -112,6 +135,7 @@ pub struct WantsClientCert {
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
     time_provider: Arc<dyn TimeProvider>,
+    client_ech_config: Option<EchConfig>,
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
@@ -167,6 +191,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
+            ech_config: self.state.client_ech_config,
         }
     }
 }

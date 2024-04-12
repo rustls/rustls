@@ -42,6 +42,7 @@ enum_builder! {
         UnknownPSKIdentity => 0x73,
         CertificateRequired => 0x74,
         NoApplicationProtocol => 0x78,
+        EncryptedClientHelloRequired => 0x79, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.2
     }
 }
 
@@ -579,6 +580,19 @@ enum_builder! {
         Zlib => 1,
         Brotli => 2,
         Zstd => 3,
+    }
+}
+
+enum_builder! {
+    /// The type of Encrypted Client Hello (`EchClientHelloType`).
+    ///
+    /// Specified in [draft-ietf-tls-esni Section 5].
+    ///
+    /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
+    @U8
+    pub enum EchClientHelloType {
+        ClientHelloOuter => 0,
+        ClientHelloInner => 1
     }
 }
 

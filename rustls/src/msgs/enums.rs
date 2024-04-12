@@ -116,6 +116,7 @@ enum_builder! {
         ChannelId => 0x754f,
         RenegotiationInfo => 0xff01,
         TransportParametersDraft => 0xffa5,
+        EncryptedClientHello => 0xfe0d, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.1
     }
 }
 
@@ -324,6 +325,19 @@ enum_builder! {
     }
 }
 
+impl HpkeAead {
+    /// Returns the length of the tag for the AEAD algorithm, or none if the AEAD is EXPORT_ONLY.
+    pub(crate) fn tag_len(&self) -> Option<usize> {
+        match self {
+            // See RFC 9180 Section 7.3, column `Nt`, the length in bytes of the authentication tag
+            // for the algorithm.
+            // https://www.rfc-editor.org/rfc/rfc9180.html#section-7.3
+            Self::AES_128_GCM | Self::AES_256_GCM | Self::CHACHA20_POLY_1305 => Some(16),
+            _ => None,
+        }
+    }
+}
+
 impl Default for HpkeAead {
     // TODO(XXX): revisit the default configuration. This is just what Cloudflare ships right now.
     fn default() -> Self {
@@ -340,7 +354,7 @@ enum_builder! {
     /// [draft-ietf-tls-esni Section 4]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-17.html#section-4>
     @U16
     pub enum EchVersion {
-        V14 => 0xfe0d,
+        V18 => 0xfe0d,
     }
 }
 

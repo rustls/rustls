@@ -23,6 +23,8 @@ enum SecretKind {
     ExporterMasterSecret,
     ResumptionMasterSecret,
     DerivedSecret,
+    ServerEchConfirmationSecret,
+    ServerEchHrrConfirmationSecret,
 }
 
 impl SecretKind {
@@ -38,6 +40,10 @@ impl SecretKind {
             ExporterMasterSecret => b"exp master",
             ResumptionMasterSecret => b"res master",
             DerivedSecret => b"derived",
+            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2
+            ServerEchConfirmationSecret => b"ech accept confirmation",
+            // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-7.2.1
+            ServerEchHrrConfirmationSecret => b"hrr ech accept confirmation",
         }
     }
 
@@ -205,6 +211,30 @@ impl KeyScheduleHandshakeStart {
         new.ks
             .set_encrypter(&new.server_handshake_traffic_secret, common);
         new
+    }
+
+    pub(crate) fn server_ech_confirmation_secret(
+        &mut self,
+        client_hello_inner_random: &[u8],
+        hs_hash: hash::Output,
+    ) -> [u8; 8] {
+        /*
+        Per ietf-tls-esni-17 section 7.2:
+        <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-7.2>
+        accept_confirmation = HKDF-Expand-Label(
+          HKDF-Extract(0, ClientHelloInner.random),
+          "ech accept confirmation",
+          transcript_ech_conf,8)
+         */
+        hkdf_expand_label(
+            self.ks
+                .suite
+                .hkdf_provider
+                .extract_from_secret(None, client_hello_inner_random)
+                .as_ref(),
+            SecretKind::ServerEchConfirmationSecret.to_bytes(),
+            hs_hash.as_ref(),
+        )
     }
 
     fn into_handshake(
@@ -773,6 +803,29 @@ fn hkdf_expand_label_slice(
     hkdf_expand_label_inner(expander, label, context, output.len(), |e, info| {
         e.expand_slice(info, output)
     })
+}
+
+pub(crate) fn server_ech_hrr_confirmation_secret(
+    hkdf_provider: &'static dyn Hkdf,
+    client_hello_inner_random: &[u8],
+    hs_hash: hash::Output,
+) -> [u8; 8] {
+    /*
+    Per ietf-tls-esni-17 section 7.2.1:
+    <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-7.2.1>
+    hrr_accept_confirmation = HKDF-Expand-Label(
+      HKDF-Extract(0, ClientHelloInner1.random),
+      "hrr ech accept confirmation",
+      transcript_hrr_ech_conf,
+      8)
+     */
+    hkdf_expand_label(
+        hkdf_provider
+            .extract_from_secret(None, client_hello_inner_random)
+            .as_ref(),
+        SecretKind::ServerEchHrrConfirmationSecret.to_bytes(),
+        hs_hash.as_ref(),
+    )
 }
 
 pub(crate) fn derive_traffic_key(expander: &dyn HkdfExpander, aead_key_len: usize) -> AeadKey {

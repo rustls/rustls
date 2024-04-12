@@ -4,7 +4,6 @@ mod ech_config {
     use hickory_resolver::proto::rr::{RData, RecordType};
     use hickory_resolver::Resolver;
     use rustls::internal::msgs::codec::{Codec, Reader};
-    use rustls::internal::msgs::enums::EchVersion;
     use rustls::internal::msgs::handshake::EchConfigPayload;
     use rustls::pki_types::EchConfigListBytes;
 
@@ -33,7 +32,7 @@ mod ech_config {
         assert!(!parsed_configs.is_empty());
         assert!(parsed_configs
             .iter()
-            .all(|config| config.version == EchVersion::V14));
+            .all(|config| matches!(config, EchConfigPayload::V18(_))));
     }
 
     /// Use `resolver` to make an HTTPS record type query for `domain`, returning the

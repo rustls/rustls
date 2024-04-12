@@ -10,6 +10,7 @@ use super::client_conn::ClientConnectionData;
 use super::hs::ClientContext;
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
+use crate::client::ech::{self, EchState, EchStatus};
 use crate::client::{hs, ClientConfig, ClientSessionStore};
 use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;
@@ -26,9 +27,9 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CertificatePayloadTls13, ClientExtension, HandshakeMessagePayload, HandshakePayload,
-    HasServerExtensions, NewSessionTicketPayloadTls13, PresharedKeyIdentity, PresharedKeyOffer,
-    ServerExtension, ServerHelloPayload, CERTIFICATE_MAX_SIZE_LIMIT,
+    CertificatePayloadTls13, ClientExtension, EchConfigPayload, HandshakeMessagePayload,
+    HandshakePayload, HasServerExtensions, NewSessionTicketPayloadTls13, PresharedKeyIdentity,
+    PresharedKeyOffer, ServerExtension, ServerHelloPayload, CERTIFICATE_MAX_SIZE_LIMIT,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -65,13 +66,15 @@ pub(super) fn handle_server_hello(
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName<'static>,
-    randoms: ConnectionRandoms,
+    mut randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
-    transcript: HandshakeHash,
+    mut transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
-    hello: ClientHelloDetails,
+    mut hello: ClientHelloDetails,
     our_key_share: Box<dyn ActiveKeyExchange>,
     mut sent_tls13_fake_ccs: bool,
+    server_hello_msg: &Message,
+    ech_state: Option<EchState>,
 ) -> hs::NextStateOrError<'static> {
     validate_server_hello(cx.common, server_hello)?;
 
@@ -146,7 +149,31 @@ pub(super) fn handle_server_hello(
 
     let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
 
-    let key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+    let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+
+    // If we have ECH state, check that the server accepted our offer.
+    if let Some(ech_state) = ech_state {
+        cx.data.ech_status = match ech_state.confirm_acceptance(
+            &mut key_schedule,
+            server_hello,
+            suite.common.hash_provider,
+        )? {
+            // The server accepted our ECH offer, so complete the inner transcript with the
+            // server hello message, and switch the relevant state to the copies for the
+            // inner client hello.
+            Some(mut accepted) => {
+                accepted
+                    .transcript
+                    .add_message(server_hello_msg);
+                transcript = accepted.transcript;
+                randoms.client = accepted.random.0;
+                hello.sent_extensions = accepted.sent_extensions;
+                EchStatus::Accepted
+            }
+            // The server rejected our ECH offer.
+            None => EchStatus::Rejected,
+        };
+    }
 
     // Remember what KX group the server liked for next time.
     config
@@ -392,6 +419,22 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
         hs::process_alpn_protocol(cx.common, &self.config, exts.alpn_protocol())?;
 
+        let ech_retry_configs = match (cx.data.ech_status, exts.server_ech_extension()) {
+            // If we didn't offer ECH, or ECH was accepted, but the server sent an ECH encrypted
+            // extension with retry configs, we must error.
+            (EchStatus::NotOffered | EchStatus::Accepted, Some(_)) => {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::UnsupportedExtension,
+                    PeerMisbehaved::UnsolicitedEchExtension,
+                ))
+            }
+            // If we offered ECH, and it was rejected, store the retry configs (if any) from
+            // the server's ECH extension. We will return them in an error produced at the end
+            // of the handshake.
+            (EchStatus::Rejected, ext) => ext.map(|ext| ext.retry_configs.to_vec()),
+            _ => None,
+        };
+
         // QUIC transport parameters
         if cx.common.is_quic() {
             match exts.quic_params_extension() {
@@ -442,6 +485,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 client_auth: None,
                 cert_verified,
                 sig_verified,
+                ech_retry_configs,
             }))
         } else {
             if exts.early_data_extension_offered() {
@@ -459,6 +503,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     suite: self.suite,
                     transcript: self.transcript,
                     key_schedule: self.key_schedule,
+                    ech_retry_configs,
                 })
             } else {
                 Box::new(ExpectCertificateOrCertReq {
@@ -468,6 +513,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     suite: self.suite,
                     transcript: self.transcript,
                     key_schedule: self.key_schedule,
+                    ech_retry_configs,
                 })
             })
         }
@@ -485,6 +531,7 @@ struct ExpectCertificateOrCompressedCertificateOrCertReq {
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrCertReq {
@@ -513,6 +560,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 key_schedule: self.key_schedule,
                 client_auth: None,
                 message_already_in_transcript: false,
+                ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -530,6 +578,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: None,
+                ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -547,6 +596,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificateOrC
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: true,
+                ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -574,6 +624,7 @@ struct ExpectCertificateOrCompressedCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
@@ -602,6 +653,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
                 message_already_in_transcript: false,
+                ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -619,6 +671,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCompressedCertificate {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: self.client_auth,
+                ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -644,6 +697,7 @@ struct ExpectCertificateOrCertReq {
     suite: &'static Tls13CipherSuite,
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
@@ -672,6 +726,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 key_schedule: self.key_schedule,
                 client_auth: None,
                 message_already_in_transcript: false,
+                ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
             MessagePayload::Handshake {
@@ -689,6 +744,7 @@ impl State<ClientConnectionData> for ExpectCertificateOrCertReq {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 offered_cert_compression: false,
+                ech_retry_configs: self.ech_retry_configs,
             })
             .handle(cx, m),
             payload => Err(inappropriate_handshake_message(
@@ -718,6 +774,7 @@ struct ExpectCertificateRequest {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     offered_cert_compression: bool,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateRequest {
@@ -794,6 +851,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 transcript: self.transcript,
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
+                ech_retry_configs: self.ech_retry_configs,
             })
         } else {
             Box::new(ExpectCertificate {
@@ -805,6 +863,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 key_schedule: self.key_schedule,
                 client_auth: Some(client_auth),
                 message_already_in_transcript: false,
+                ech_retry_configs: self.ech_retry_configs,
             })
         })
     }
@@ -822,6 +881,7 @@ struct ExpectCompressedCertificate {
     transcript: HandshakeHash,
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectCompressedCertificate {
@@ -909,6 +969,7 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             key_schedule: self.key_schedule,
             client_auth: self.client_auth,
             message_already_in_transcript: true,
+            ech_retry_configs: self.ech_retry_configs,
         })
         .handle(cx, m)
     }
@@ -927,6 +988,7 @@ struct ExpectCertificate {
     key_schedule: KeyScheduleHandshake,
     client_auth: Option<ClientAuthDetails>,
     message_already_in_transcript: bool,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificate {
@@ -980,6 +1042,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             key_schedule: self.key_schedule,
             server_cert,
             client_auth: self.client_auth,
+            ech_retry_configs: self.ech_retry_configs,
         }))
     }
 
@@ -998,6 +1061,7 @@ struct ExpectCertificateVerify<'a> {
     key_schedule: KeyScheduleHandshake,
     server_cert: ServerCertDetails<'a>,
     client_auth: Option<ClientAuthDetails>,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
@@ -1069,6 +1133,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             client_auth: self.client_auth,
             cert_verified,
             sig_verified,
+            ech_retry_configs: self.ech_retry_configs,
         }))
     }
 
@@ -1082,6 +1147,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             key_schedule: self.key_schedule,
             server_cert: self.server_cert.into_owned(),
             client_auth: self.client_auth,
+            ech_retry_configs: self.ech_retry_configs,
         })
     }
 }
@@ -1209,6 +1275,7 @@ struct ExpectFinished {
     client_auth: Option<ClientAuthDetails>,
     cert_verified: verify::ServerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
+    ech_retry_configs: Option<Vec<EchConfigPayload>>,
 }
 
 impl State<ClientConnectionData> for ExpectFinished {
@@ -1262,6 +1329,14 @@ impl State<ClientConnectionData> for ExpectFinished {
                     emit_certificate_tls13(&mut st.transcript, None, auth_context, cx.common);
                 }
                 ClientAuthDetails::Verify {
+                    auth_context_tls13: auth_context,
+                    ..
+                } if cx.data.ech_status == EchStatus::Rejected => {
+                    // If ECH was offered, and rejected, we MUST respond with
+                    // an empty certificate message.
+                    emit_certificate_tls13(&mut st.transcript, None, auth_context, cx.common);
+                }
+                ClientAuthDetails::Verify {
                     certkey,
                     signer,
                     auth_context_tls13: auth_context,
@@ -1312,6 +1387,13 @@ impl State<ClientConnectionData> for ExpectFinished {
         let key_schedule_traffic = key_schedule_pre_finished.into_traffic(cx.common);
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
+
+        // Now that we've reached the end of the normal handshake we must enforce ECH acceptance by
+        // sending an alert and returning an error (potentially with retry configs) if the server
+        // did not accept our ECH offer.
+        if cx.data.ech_status == EchStatus::Rejected {
+            return Err(ech::fatal_alert_required(st.ech_retry_configs, cx.common));
+        }
 
         let st = ExpectTraffic {
             config: Arc::clone(&st.config),
