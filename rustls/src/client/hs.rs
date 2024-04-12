@@ -316,12 +316,6 @@ fn emit_client_hello_for_retry(
         }
     });
 
-    // Note what extensions we sent.
-    input.hello.sent_extensions = exts
-        .iter()
-        .map(ClientExtension::ext_type)
-        .collect();
-
     let mut cipher_suites: Vec<_> = config
         .provider
         .cipher_suites
@@ -334,16 +328,25 @@ fn emit_client_hello_for_retry(
     // We don't do renegotiation at all, in fact.
     cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
+    let chp_payload = ClientHelloPayload {
+        client_version: ProtocolVersion::TLSv1_2,
+        random: input.random,
+        session_id: input.session_id,
+        cipher_suites,
+        compression_methods: vec![Compression::Null],
+        extensions: exts,
+    };
+
+    // Note what extensions we sent.
+    input.hello.sent_extensions = chp_payload
+        .extensions
+        .iter()
+        .map(ClientExtension::ext_type)
+        .collect();
+
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
-        payload: HandshakePayload::ClientHello(ClientHelloPayload {
-            client_version: ProtocolVersion::TLSv1_2,
-            random: input.random,
-            session_id: input.session_id,
-            cipher_suites,
-            compression_methods: vec![Compression::Null],
-            extensions: exts,
-        }),
+        payload: HandshakePayload::ClientHello(chp_payload),
     };
 
     let early_key_schedule = if let Some(resuming) = tls13_session {
