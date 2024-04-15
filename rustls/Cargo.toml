@@ -17,7 +17,7 @@ rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
 aws-lc-rs = { version = "1.6", optional = true, default-features = false, features = ["aws-lc-sys"] }
-hashbrown = { version = "0.13", optional = true } # 0.14+ requires 1.63 MSRV
+hashbrown = { version = "0.14", optional = true } # 0.14+ requires 1.63 MSRV
 log = { version = "0.4.4", optional = true }
 # remove once our MSRV is >= 1.70
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
@@ -41,12 +41,12 @@ fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 [dev-dependencies]
 base64 = "0.22"
 bencher = "0.1.5"
-env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest features)
+env_logger = "0.11" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest features)
 log = "0.4.4"
 num-bigint = "0.4.4"
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 rustls-pemfile = "2"
-time = { version = "0.3.6", default-features = false }
+time = { version = "0.3.36", default-features = false }
 webpki-roots = "0.26"
 
 [target.'cfg(not(target_env = "msvc"))'.dev-dependencies]
