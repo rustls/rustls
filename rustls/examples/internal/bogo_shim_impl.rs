@@ -24,9 +24,9 @@ use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
 use rustls::{
     client, server, sign, version, AlertDescription, CertificateError, Connection,
-    DigitallySignedStruct, DistinguishedName, Error, InvalidMessage, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm, SignatureScheme,
-    SupportedProtocolVersion,
+    DigitallySignedStruct, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
+    SignatureScheme, SupportedProtocolVersion,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -84,6 +84,8 @@ struct Options {
     resumption_delay: u32,
     queue_early_data_after_received_messages: Vec<usize>,
     require_ems: bool,
+    expect_handshake_kind: Option<Vec<HandshakeKind>>,
+    expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
 }
 
 impl Options {
@@ -134,6 +136,8 @@ impl Options {
             resumption_delay: 0,
             queue_early_data_after_received_messages: vec![],
             require_ems: false,
+            expect_handshake_kind: None,
+            expect_handshake_kind_resumed: Some(vec![HandshakeKind::Resumed]),
         }
     }
 
@@ -967,6 +971,18 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             }
         }
 
+        if opts.expect_handshake_kind.is_some() && !sess.is_handshaking() {
+            let expected_options = opts
+                .expect_handshake_kind
+                .as_ref()
+                .unwrap();
+            let actual = sess.handshake_kind().unwrap();
+            assert!(
+                expected_options.contains(&actual),
+                "wanted to see {expected_options:?} but got {actual:?}"
+            );
+        }
+
         let mut buf = [0u8; 1024];
         let len = match sess
             .reader()
@@ -1131,8 +1147,6 @@ pub fn main() {
             "-expect-secure-renegotiation" |
             "-expect-no-session-id" |
             "-enable-ed25519" |
-            "-expect-hrr" |
-            "-expect-no-hrr" |
             "-on-resume-expect-no-offer-early-data" |
             "-key-update" | //< we could implement an API for this
             "-expect-tls13-downgrade" |
@@ -1141,6 +1155,18 @@ pub fn main() {
                 println!("not checking {}; NYI", arg);
             }
 
+            "-expect-hrr" => {
+                opts.expect_handshake_kind = Some(vec![HandshakeKind::FullWithHelloRetryRequest]);
+            }
+            "-expect-no-hrr" => {
+                opts.expect_handshake_kind = Some(vec![HandshakeKind::Full]);
+            }
+            "-expect-session-miss" => {
+                opts.expect_handshake_kind_resumed = Some(vec![
+                    HandshakeKind::Full,
+                    HandshakeKind::FullWithHelloRetryRequest
+                ]);
+            }
             "-export-keying-material" => {
                 opts.export_keying_material = args.remove(0).parse::<usize>().unwrap();
             }
@@ -1276,7 +1302,6 @@ pub fn main() {
             "-ipv6" |
             "-decline-alpn" |
             "-expect-no-session" |
-            "-expect-session-miss" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
             // internal openssl details:
@@ -1388,5 +1413,8 @@ pub fn main() {
             opts.tickets = false;
             server_cfg = Some(make_server_cfg(&opts));
         }
+        opts.expect_handshake_kind = opts
+            .expect_handshake_kind_resumed
+            .clone();
     }
 }
