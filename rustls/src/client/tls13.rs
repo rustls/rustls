@@ -11,7 +11,7 @@ use super::hs::ClientContext;
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::{hs, ClientConfig, ClientSessionStore};
-use crate::common_state::{CommonState, Protocol, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{
@@ -425,6 +425,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     .server_cert_chain()
                     .clone(),
             );
+            cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
             // We *don't* reverify the certificate chain here: resumption is a
             // continuation of the previous session in terms of security policy.
@@ -445,6 +446,9 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             if exts.early_data_extension_offered() {
                 return Err(PeerMisbehaved::EarlyDataExtensionWithoutResumption.into());
             }
+            cx.common
+                .handshake_kind
+                .get_or_insert(HandshakeKind::Full);
             Ok(Box::new(ExpectCertificateOrCertReq {
                 config: self.config,
                 server_name: self.server_name,

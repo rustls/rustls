@@ -26,6 +26,7 @@ use crate::{quic, record_layer};
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
+    pub(crate) handshake_kind: Option<HandshakeKind>,
     pub(crate) side: Side,
     pub(crate) record_layer: record_layer::RecordLayer,
     pub(crate) suite: Option<SupportedCipherSuite>,
@@ -56,6 +57,7 @@ impl CommonState {
     pub(crate) fn new(side: Side) -> Self {
         Self {
             negotiated_version: None,
+            handshake_kind: None,
             side,
             record_layer: record_layer::RecordLayer::new(),
             suite: None,
@@ -138,6 +140,17 @@ impl CommonState {
     /// This returns `None` until the version is agreed.
     pub fn protocol_version(&self) -> Option<ProtocolVersion> {
         self.negotiated_version
+    }
+
+    /// Which kind of handshake was performed.
+    ///
+    /// This tells you whether the handshake was a resumption or not.
+    ///
+    /// This will return `Err(Error::HandshakeNotComplete)` before it is
+    /// known which sort of handshake occurred.
+    pub fn handshake_kind(&self) -> Result<HandshakeKind, Error> {
+        self.handshake_kind
+            .ok_or(Error::HandshakeNotComplete)
     }
 
     pub(crate) fn is_tls13(&self) -> bool {
@@ -680,6 +693,30 @@ impl CommonState {
             self.sendable_tls.append(message);
         }
     }
+}
+
+/// Describes which sort of handshake happened.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum HandshakeKind {
+    /// A full handshake.
+    ///
+    /// This is the typical TLS connection initiation process when resumption is
+    /// not yet unavailable, and the initial `ClientHello` was accepted by the server.
+    Full,
+
+    /// A full TLS1.3 handshake, with an extra round-trip for a `HelloRetryRequest`.
+    ///
+    /// The server can respond with a `HelloRetryRequest` if the initial `ClientHello`
+    /// is unacceptable for several reasons, the most likely if no supported key
+    /// shares were offered by the client.
+    FullWithHelloRetryRequest,
+
+    /// A resumed handshake.
+    ///
+    /// Resumed handshakes involve fewer round trips and less cryptography than
+    /// full ones, but can only happen when the peers have previously done a full
+    /// handshake together, and then remember data about it.
+    Resumed,
 }
 
 /// Values of this structure are returned from [`Connection::process_new_packets`]
