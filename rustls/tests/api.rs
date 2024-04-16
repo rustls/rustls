@@ -3377,8 +3377,10 @@ fn vectored_write_for_client_appdata() {
 fn vectored_write_for_server_handshake_with_half_rtt_data() {
     let mut server_config = make_server_config(KeyType::Rsa2048);
     server_config.send_half_rtt_data = true;
-    let (mut client, mut server) =
-        make_pair_for_configs(make_client_config_with_auth(KeyType::Rsa2048), server_config);
+    let (mut client, mut server) = make_pair_for_configs(
+        make_client_config_with_auth(KeyType::Rsa2048),
+        server_config,
+    );
 
     server
         .writer()
@@ -3417,8 +3419,10 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
 }
 
 fn check_half_rtt_does_not_work(server_config: ServerConfig) {
-    let (mut client, mut server) =
-        make_pair_for_configs(make_client_config_with_auth(KeyType::Rsa2048), server_config);
+    let (mut client, mut server) = make_pair_for_configs(
+        make_client_config_with_auth(KeyType::Rsa2048),
+        server_config,
+    );
 
     server
         .writer()
@@ -6202,12 +6206,18 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
 
 #[test]
 fn test_client_fips_service_indicator() {
-    assert_eq!(make_client_config(KeyType::Rsa2048).fips(), provider_is_fips());
+    assert_eq!(
+        make_client_config(KeyType::Rsa2048).fips(),
+        provider_is_fips()
+    );
 }
 
 #[test]
 fn test_server_fips_service_indicator() {
-    assert_eq!(make_server_config(KeyType::Rsa2048).fips(), provider_is_fips());
+    assert_eq!(
+        make_server_config(KeyType::Rsa2048).fips(),
+        provider_is_fips()
+    );
 }
 
 #[test]
