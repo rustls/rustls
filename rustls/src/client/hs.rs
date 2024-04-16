@@ -16,7 +16,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::{tls13, ClientConfig};
-use crate::common_state::{CommonState, State};
+use crate::common_state::{CommonState, HandshakeKind, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
@@ -843,6 +843,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // HRR selects the ciphersuite.
         cx.common.suite = Some(cs);
+        cx.common.handshake_kind = Some(HandshakeKind::FullWithHelloRetryRequest);
 
         // This is the draft19 change where the transcript became a tree
         let transcript = self

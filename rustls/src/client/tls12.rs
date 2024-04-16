@@ -13,7 +13,7 @@ use super::hs::ClientContext;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::client::common::{ClientAuthDetails, ServerCertDetails};
 use crate::client::{hs, ClientConfig};
-use crate::common_state::{CommonState, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -138,6 +138,7 @@ mod server_hello {
                             .clone()
                             .into_owned(),
                     );
+                    cx.common.handshake_kind = Some(HandshakeKind::Resumed);
                     let cert_verified = verify::ServerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -172,6 +173,7 @@ mod server_hello {
                 }
             }
 
+            cx.common.handshake_kind = Some(HandshakeKind::Full);
             Ok(Box::new(ExpectCertificate {
                 config: self.config,
                 resuming_session: None,

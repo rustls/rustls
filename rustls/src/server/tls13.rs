@@ -11,7 +11,7 @@ use subtle::ConstantTimeEq;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, Protocol, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -329,6 +329,14 @@ mod client_hello {
                 emit_fake_ccs(cx.common);
             }
 
+            if full_handshake {
+                cx.common
+                    .handshake_kind
+                    .get_or_insert(HandshakeKind::Full);
+            } else {
+                cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+            }
+
             let mut ocsp_response = server_key.get_ocsp();
             let doing_early_data = emit_encrypted_extensions(
                 &mut self.transcript,
@@ -555,6 +563,7 @@ mod client_hello {
         transcript.rollup_for_hrr();
         transcript.add_message(&m);
         common.send_msg(m, false);
+        common.handshake_kind = Some(HandshakeKind::FullWithHelloRetryRequest);
     }
 
     fn decide_if_early_data_allowed(

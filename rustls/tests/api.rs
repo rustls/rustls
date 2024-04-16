@@ -34,8 +34,8 @@ use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::SupportedCipherSuite;
 use rustls::{
-    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, InvalidMessage,
-    KeyLog, PeerIncompatible, PeerMisbehaved, SideData,
+    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, HandshakeKind,
+    InvalidMessage, KeyLog, PeerIncompatible, PeerMisbehaved, SideData,
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
@@ -502,6 +502,29 @@ fn server_can_get_client_cert_after_resumption() {
             do_handshake(&mut client, &mut server);
             let resumed_certs = server.peer_certificates();
             assert_eq!(original_certs, resumed_certs);
+        }
+    }
+}
+
+#[test]
+fn resumption_combinations() {
+    for kt in ALL_KEY_TYPES {
+        let server_config = make_server_config(*kt);
+        for version in rustls::ALL_VERSIONS {
+            let client_config = make_client_config_with_versions(*kt, &[version]);
+            let (mut client, mut server) =
+                make_pair_for_configs(client_config.clone(), server_config.clone());
+            do_handshake(&mut client, &mut server);
+
+            assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Full));
+            assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Full));
+
+            let (mut client, mut server) =
+                make_pair_for_configs(client_config.clone(), server_config.clone());
+            do_handshake(&mut client, &mut server);
+
+            assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
+            assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
         }
     }
 }
@@ -3759,6 +3782,8 @@ fn tls13_stateful_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
+    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Full));
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3774,6 +3799,8 @@ fn tls13_stateful_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
+    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3789,6 +3816,8 @@ fn tls13_stateful_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
+    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
 }
 
 #[test]
@@ -3815,6 +3844,8 @@ fn tls13_stateless_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
+    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Full));
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3830,6 +3861,8 @@ fn tls13_stateless_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
+    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3845,6 +3878,8 @@ fn tls13_stateless_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
+    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
 }
 
 #[test]
@@ -4740,6 +4775,9 @@ fn test_client_sends_helloretryrequest() {
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
+    assert_eq!(client.handshake_kind(), Err(Error::HandshakeNotComplete));
+    assert_eq!(server.handshake_kind(), Err(Error::HandshakeNotComplete));
+
     // client sends hello
     {
         let mut pipe = OtherSession::new(&mut server);
@@ -4749,6 +4787,12 @@ fn test_client_sends_helloretryrequest() {
         assert!(pipe.writevs[0].len() == 1);
     }
 
+    assert_eq!(client.handshake_kind(), Err(Error::HandshakeNotComplete));
+    assert_eq!(
+        server.handshake_kind(),
+        Ok(HandshakeKind::FullWithHelloRetryRequest)
+    );
+
     // server sends HRR
     {
         let mut pipe = OtherSession::new(&mut client);
@@ -4757,6 +4801,15 @@ fn test_client_sends_helloretryrequest() {
         assert_eq!(pipe.writevs.len(), 1); // only one writev
         assert!(pipe.writevs[0].len() == 2); // hello retry request and CCS
     }
+
+    assert_eq!(
+        client.handshake_kind(),
+        Ok(HandshakeKind::FullWithHelloRetryRequest)
+    );
+    assert_eq!(
+        server.handshake_kind(),
+        Ok(HandshakeKind::FullWithHelloRetryRequest)
+    );
 
     // client sends fixed hello
     {
@@ -4775,6 +4828,15 @@ fn test_client_sends_helloretryrequest() {
         assert_eq!(pipe.writevs.len(), 1);
         assert!(pipe.writevs[0].len() == 5); // server hello / encrypted exts / cert / cert-verify / finished
     }
+
+    assert_eq!(
+        client.handshake_kind(),
+        Ok(HandshakeKind::FullWithHelloRetryRequest)
+    );
+    assert_eq!(
+        server.handshake_kind(),
+        Ok(HandshakeKind::FullWithHelloRetryRequest)
+    );
 
     do_handshake_until_error(&mut client, &mut server).unwrap();
 

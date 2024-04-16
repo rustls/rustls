@@ -13,7 +13,7 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
-use crate::common_state::{CommonState, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -192,6 +192,8 @@ mod client_hello {
                 self.session_id = SessionId::random(self.config.provider.secure_random)?;
             }
 
+            cx.common.handshake_kind = Some(HandshakeKind::Full);
+
             self.send_ticket = emit_server_hello(
                 &self.config,
                 &mut self.transcript,
@@ -290,6 +292,7 @@ mod client_hello {
             cx.common
                 .start_encryption_tls12(&secrets, Side::Server);
             cx.common.peer_certificates = resumedata.client_cert_chain;
+            cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
             if self.send_ticket {
                 let now = self.config.current_time()?;
