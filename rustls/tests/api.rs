@@ -516,15 +516,15 @@ fn resumption_combinations() {
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
 
-            assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Full));
-            assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Full));
+            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+            assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
 
-            assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
-            assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
+            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+            assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
         }
     }
 }
@@ -3782,8 +3782,8 @@ fn tls13_stateful_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
-    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Full));
-    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Full));
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3799,8 +3799,8 @@ fn tls13_stateful_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
-    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
-    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3816,8 +3816,8 @@ fn tls13_stateful_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
-    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
-    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
 }
 
 #[test]
@@ -3844,8 +3844,8 @@ fn tls13_stateless_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
-    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Full));
-    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Full));
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
 
     // resumed
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3861,8 +3861,8 @@ fn tls13_stateless_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
-    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
-    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
 
     // resumed again
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
@@ -3878,8 +3878,8 @@ fn tls13_stateless_resumption() {
             .map(|certs| certs.len()),
         Some(3)
     );
-    assert_eq!(client.handshake_kind(), Ok(HandshakeKind::Resumed));
-    assert_eq!(server.handshake_kind(), Ok(HandshakeKind::Resumed));
+    assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+    assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
 }
 
 #[test]
@@ -4775,8 +4775,8 @@ fn test_client_sends_helloretryrequest() {
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
-    assert_eq!(client.handshake_kind(), Err(Error::HandshakeNotComplete));
-    assert_eq!(server.handshake_kind(), Err(Error::HandshakeNotComplete));
+    assert_eq!(client.handshake_kind(), None);
+    assert_eq!(server.handshake_kind(), None);
 
     // client sends hello
     {
@@ -4787,10 +4787,10 @@ fn test_client_sends_helloretryrequest() {
         assert!(pipe.writevs[0].len() == 1);
     }
 
-    assert_eq!(client.handshake_kind(), Err(Error::HandshakeNotComplete));
+    assert_eq!(client.handshake_kind(), None);
     assert_eq!(
         server.handshake_kind(),
-        Ok(HandshakeKind::FullWithHelloRetryRequest)
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
 
     // server sends HRR
@@ -4804,11 +4804,11 @@ fn test_client_sends_helloretryrequest() {
 
     assert_eq!(
         client.handshake_kind(),
-        Ok(HandshakeKind::FullWithHelloRetryRequest)
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
     assert_eq!(
         server.handshake_kind(),
-        Ok(HandshakeKind::FullWithHelloRetryRequest)
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
 
     // client sends fixed hello
@@ -4831,11 +4831,11 @@ fn test_client_sends_helloretryrequest() {
 
     assert_eq!(
         client.handshake_kind(),
-        Ok(HandshakeKind::FullWithHelloRetryRequest)
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
     assert_eq!(
         server.handshake_kind(),
-        Ok(HandshakeKind::FullWithHelloRetryRequest)
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
 
     do_handshake_until_error(&mut client, &mut server).unwrap();

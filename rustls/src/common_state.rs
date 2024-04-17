@@ -146,11 +146,10 @@ impl CommonState {
     ///
     /// This tells you whether the handshake was a resumption or not.
     ///
-    /// This will return `Err(Error::HandshakeNotComplete)` before it is
-    /// known which sort of handshake occurred.
-    pub fn handshake_kind(&self) -> Result<HandshakeKind, Error> {
+    /// This will return `None` before it is known which sort of
+    /// handshake occurred.
+    pub fn handshake_kind(&self) -> Option<HandshakeKind> {
         self.handshake_kind
-            .ok_or(Error::HandshakeNotComplete)
     }
 
     pub(crate) fn is_tls13(&self) -> bool {
