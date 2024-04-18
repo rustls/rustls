@@ -4443,3 +4443,131 @@ fn test_received_plaintext_backpressure() {
         24
     );
 }
+
+#[test]
+fn test_debug_server_name_from_ip() {
+    assert_eq!(
+        format!(
+            "{:?}",
+            rustls::ServerName::IpAddress("127.0.0.1".parse().unwrap())
+        ),
+        "IpAddress(127.0.0.1)"
+    )
+}
+
+#[test]
+fn test_debug_server_name_from_string() {
+    assert_eq!(
+        format!("{:?}", rustls::ServerName::try_from("a.com").unwrap()),
+        "DnsName(\"a.com\")"
+    )
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message() {
+    fn inject_corrupt_finished_message(msg: &mut Message) -> Altered {
+        if let MessagePayload::ChangeCipherSpec(_) = msg.payload {
+            // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
+            let mut raw_change_cipher_spec = [0x14u8, 0x03, 0x03, 0x00, 0x01, 0x01].to_vec();
+            let mut corrupt_finished = [0x16, 0x03, 0x03, 0x00, 0x28].to_vec();
+            corrupt_finished.extend([0u8; 0x28]);
+
+            let mut both = vec![];
+            both.append(&mut raw_change_cipher_spec);
+            both.append(&mut corrupt_finished);
+
+            Altered::Raw(both)
+        } else {
+            Altered::InPlace
+        }
+    }
+
+    let mut client_config =
+        make_client_config_with_versions(KeyType::Rsa, &[&rustls::version::TLS12]);
+    let storage = Arc::new(ClientStorage::new());
+    client_config.resumption = Resumption::store(storage.clone());
+    let client_config = Arc::new(client_config);
+    let server_config = Arc::new(make_server_config(KeyType::Rsa));
+
+    // successful handshake to allow resumption
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    // resumption
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    let mut client = client.into();
+    transfer_altered(
+        &mut server.into(),
+        inject_corrupt_finished_message,
+        &mut client,
+    );
+
+    // discard storage operations up to this point, to observe the one we want to test for.
+    storage.ops_and_reset();
+
+    // client cannot decrypt faulty Finished, and deletes saved session in case
+    // server resumption is buggy.
+    assert_eq!(
+        Some(Error::DecryptError),
+        client.process_new_packets().err()
+    );
+
+    assert!(matches!(
+        storage.ops()[0],
+        ClientStorageOp::RemoveTls12Session(_)
+    ));
+}
+
+#[test]
+fn test_complete_io_errors_if_close_notify_received_too_early() {
+    let mut server = ServerConnection::new(Arc::new(make_server_config(KeyType::Rsa))).unwrap();
+    let client_hello_followed_by_close_notify_alert = b"\
+        \x16\x03\x01\x00\xc8\x01\x00\x00\xc4\x03\x03\xec\x12\xdd\x17\x64\
+        \xa4\x39\xfd\x7e\x8c\x85\x46\xb8\x4d\x1e\xa0\x6e\xb3\xd7\xa0\x51\
+        \xf0\x3c\xb8\x17\x47\x0d\x4c\x54\xc5\xdf\x72\x00\x00\x1c\xea\xea\
+        \xc0\x2b\xc0\x2f\xc0\x2c\xc0\x30\xcc\xa9\xcc\xa8\xc0\x13\xc0\x14\
+        \x00\x9c\x00\x9d\x00\x2f\x00\x35\x00\x0a\x01\x00\x00\x7f\xda\xda\
+        \x00\x00\xff\x01\x00\x01\x00\x00\x00\x00\x16\x00\x14\x00\x00\x11\
+        \x77\x77\x77\x2e\x77\x69\x6b\x69\x70\x65\x64\x69\x61\x2e\x6f\x72\
+        \x67\x00\x17\x00\x00\x00\x23\x00\x00\x00\x0d\x00\x14\x00\x12\x04\
+        \x03\x08\x04\x04\x01\x05\x03\x08\x05\x05\x01\x08\x06\x06\x01\x02\
+        \x01\x00\x05\x00\x05\x01\x00\x00\x00\x00\x00\x12\x00\x00\x00\x10\
+        \x00\x0e\x00\x0c\x02\x68\x32\x08\x68\x74\x74\x70\x2f\x31\x2e\x31\
+        \x75\x50\x00\x00\x00\x0b\x00\x02\x01\x00\x00\x0a\x00\x0a\x00\x08\
+        \x1a\x1a\x00\x1d\x00\x17\x00\x18\x1a\x1a\x00\x01\x00\
+        \x15\x03\x03\x00\x02\x01\x00";
+
+    let mut stream = FakeStream(client_hello_followed_by_close_notify_alert);
+    assert_eq!(
+        server
+            .complete_io(&mut stream)
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::UnexpectedEof
+    );
+}
+
+struct FakeStream<'a>(&'a [u8]);
+
+impl<'a> io::Read for FakeStream<'a> {
+    fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+        let take = core::cmp::min(b.len(), self.0.len());
+        let (taken, remain) = self.0.split_at(take);
+        b[..take].copy_from_slice(taken);
+        self.0 = remain;
+        Ok(take)
+    }
+}
+
+impl<'a> io::Write for FakeStream<'a> {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        Ok(b.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
