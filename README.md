@@ -92,7 +92,7 @@ x86, x86-64, LoongArch64, 32-bit & 64-bit Little Endian MIPS, 32-bit PowerPC (Bi
 support WebAssembly.
 For more information, see [the supported `ring` target platforms][ring-target-platforms].
 
-Rustls requires Rust 1.61 or later.
+Rustls requires Rust 1.63 or later.
 
 [ring-target-platforms]: https://github.com/briansmith/ring/blob/2e8363b433fa3b3962c877d9ed2e9145612f3160/include/ring-core/target.h#L18-L64
 
