@@ -9,7 +9,7 @@ use pki_types::{ServerName, UnixTime};
 use super::handy::NoClientSessionStorage;
 use super::hs;
 use crate::builder::ConfigBuilder;
-use crate::client::{EchConfig, EchStatus};
+use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
@@ -256,7 +256,7 @@ pub struct ClientConfig {
     pub cert_compression_cache: Arc<compress::CompressionCache>,
 
     /// How to offer Encrypted Client Hello (ECH). The default is to not offer ECH.
-    pub(super) ech_config: Option<EchConfig>,
+    pub(super) ech_mode: Option<EchMode>,
 }
 
 impl ClientConfig {

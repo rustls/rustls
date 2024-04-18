@@ -16,7 +16,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
-use crate::client::{tls13, ClientConfig, EchStatus};
+use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
 use crate::common_state::{CommonState, HandshakeKind, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
@@ -147,8 +147,8 @@ pub(super) fn start_handshake(
     let random = Random::new(config.provider.secure_random)?;
     let extension_order_seed = crate::rand::random_u16(config.provider.secure_random)?;
 
-    let ech_state = match config.ech_config.as_ref() {
-        Some(ech_config) => Some(EchState::new(
+    let ech_state = match config.ech_mode.as_ref() {
+        Some(EchMode::Enable(ech_config)) => Some(EchState::new(
             ech_config,
             server_name.clone(),
             config
@@ -157,7 +157,7 @@ pub(super) fn start_handshake(
             config.provider.secure_random,
             config.enable_sni,
         )?),
-        None => None,
+        _ => None,
     };
 
     emit_client_hello_for_retry(
@@ -334,9 +334,9 @@ fn emit_client_hello_for_retry(
     exts.extend(extra_exts.iter().cloned());
 
     // If this is a second client hello we're constructing in response to an HRR, and
-    // we've rejected ECH, then we need to carry forward the exact same ECH
-    // extension we used in the first hello.
-    if matches!(cx.data.ech_status, EchStatus::Rejected) & retryreq.is_some() {
+    // we've rejected ECH or sent GREASE ECH, then we need to carry forward the
+    // exact same ECH extension we used in the first hello.
+    if matches!(cx.data.ech_status, EchStatus::Rejected | EchStatus::Grease) & retryreq.is_some() {
         if let Some(prev_ech_ext) = input.prev_ech_ext.take() {
             exts.push(prev_ech_ext);
         }
@@ -387,7 +387,18 @@ fn emit_client_hello_for_retry(
         extensions: exts,
     };
 
-    #[allow(clippy::single_match)] // TODO(@cpu): using a match to reduce churn.
+    let ech_grease_ext = config
+        .ech_mode
+        .as_ref()
+        .and_then(|mode| match mode {
+            EchMode::Grease(cfg) => Some(cfg.grease_ext(
+                config.provider.secure_random,
+                input.server_name.clone(),
+                &chp_payload,
+            )),
+            _ => None,
+        });
+
     match (cx.data.ech_status, &mut ech_state) {
         // If we haven't offered ECH, or have offered ECH but got a non-rejecting HRR, then
         // we need to replace the client hello payload with an ECH client hello payload.
@@ -397,6 +408,21 @@ fn emit_client_hello_for_retry(
             cx.data.ech_status = EchStatus::Offered;
             // Store the ECH extension in case we need to carry it forward in a subsequent hello.
             input.prev_ech_ext = chp_payload.extensions.last().cloned();
+        }
+        // If we haven't offered ECH, and have no ECH state, then consider whether to use GREASE
+        // ECH.
+        (EchStatus::NotOffered, None) => {
+            if let Some(grease_ext) = ech_grease_ext {
+                // Add the GREASE ECH extension.
+                let grease_ext = grease_ext?;
+                chp_payload
+                    .extensions
+                    .push(grease_ext.clone());
+                cx.data.ech_status = EchStatus::Grease;
+                // Store the GREASE ECH extension in case we need to carry it forward in a
+                // subsequent hello.
+                input.prev_ech_ext = Some(grease_ext);
+            }
         }
         _ => {}
     }

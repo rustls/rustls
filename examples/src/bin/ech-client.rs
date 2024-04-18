@@ -30,7 +30,9 @@ fn main() {
         .init();
 
     // Select a compatible ECH config.
-    let ech_config = EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES).unwrap();
+    let ech_mode = EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES)
+        .unwrap()
+        .into();
 
     let root_store = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
@@ -39,7 +41,7 @@ fn main() {
     // Construct a rustls client config with a custom provider, and ECH enabled.
     let mut config =
         rustls::ClientConfig::builder_with_provider(aws_lc_rs::default_provider().into())
-            .with_ech(ech_config)
+            .with_ech(ech_mode)
             .unwrap()
             .with_root_certificates(root_store)
             .with_no_client_auth();

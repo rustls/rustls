@@ -14,12 +14,12 @@ use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::ExtensionType;
+use crate::msgs::enums::{ExtensionType, HpkeKem};
 use crate::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, EchConfigPayload, Encoding, EncryptedClientHello,
-    EncryptedClientHelloOuter, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
-    HpkeSymmetricCipherSuite, PresharedKeyBinder, PresharedKeyOffer, Random, ServerHelloPayload,
-    SessionId,
+    ClientExtension, ClientHelloPayload, EchConfigContents, EchConfigPayload, Encoding,
+    EncryptedClientHello, EncryptedClientHelloOuter, HandshakeMessagePayload, HandshakePayload,
+    HelloRetryRequest, HpkeKeyConfig, HpkeSymmetricCipherSuite, PresharedKeyBinder,
+    PresharedKeyOffer, Random, ServerHelloPayload, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -32,6 +32,32 @@ use crate::{
     AlertDescription, CommonState, EncryptedClientHelloError, Error, HandshakeType,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, Tls13CipherSuite,
 };
+
+/// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
+#[derive(Clone, Debug)]
+pub enum EchMode {
+    /// ECH is enabled and the ClientHello will be encrypted based on the provided
+    /// configuration.
+    Enable(EchConfig),
+
+    /// No ECH configuration is available but the client should act as though it were.
+    ///
+    /// This is an anti-ossification measure, sometimes referred to as "GREASE"[^0].
+    /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
+    Grease(EchGreaseConfig),
+}
+
+impl From<EchConfig> for EchMode {
+    fn from(config: EchConfig) -> Self {
+        Self::Enable(config)
+    }
+}
+
+impl From<EchGreaseConfig> for EchMode {
+    fn from(config: EchGreaseConfig) -> Self {
+        Self::Grease(config)
+    }
+}
 
 /// Configuration for performing encrypted client hello.
 ///
@@ -134,11 +160,106 @@ impl EchConfig {
     }
 }
 
+/// Configuration for GREASE Encrypted Client Hello.
+#[derive(Clone, Debug)]
+pub struct EchGreaseConfig {
+    pub(crate) suite: &'static dyn Hpke,
+    pub(crate) placeholder_key: HpkePublicKey,
+}
+
+impl EchGreaseConfig {
+    /// Construct a GREASE ECH configuration.
+    ///
+    /// This configuration is used when the client wishes to offer ECH to prevent ossification,
+    /// but doesn't have a real ECH configuration to use for the remote server. In this case
+    /// a placeholder or "GREASE"[^0] extension is used.
+    ///
+    /// Returns an error if the HPKE provider does not support the given suite.
+    ///
+    /// [^0]: <https://www.rfc-editor.org/rfc/rfc8701>
+    pub fn new(suite: &'static dyn Hpke, placeholder_key: HpkePublicKey) -> Self {
+        Self {
+            suite,
+            placeholder_key,
+        }
+    }
+
+    /// Build a GREASE ECH extension based on the placeholder configuration.
+    ///
+    /// See <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#name-grease-ech> for
+    /// more information.
+    pub(crate) fn grease_ext(
+        &self,
+        secure_random: &'static dyn SecureRandom,
+        inner_name: ServerName<'static>,
+        outer_hello: &ClientHelloPayload,
+    ) -> Result<ClientExtension, Error> {
+        trace!("Preparing GREASE ECH extension");
+
+        // Pick a random config id.
+        let mut config_id: [u8; 1] = [0; 1];
+        secure_random.fill(&mut config_id[..])?;
+
+        let suite = self.suite.suite();
+
+        // Construct a dummy ECH state - we don't have a real ECH config from a server since
+        // this is for GREASE.
+        let mut grease_state = EchState::new(
+            &EchConfig {
+                config: EchConfigPayload::V18(EchConfigContents {
+                    key_config: HpkeKeyConfig {
+                        config_id: config_id[0],
+                        kem_id: HpkeKem::DHKEM_P256_HKDF_SHA256,
+                        public_key: PayloadU16(self.placeholder_key.0.clone()),
+                        symmetric_cipher_suites: vec![suite.sym],
+                    },
+                    maximum_name_length: 0,
+                    public_name: DnsName::try_from("filler").unwrap(),
+                    extensions: Vec::default(),
+                }),
+                suite: self.suite,
+            },
+            inner_name,
+            false,
+            secure_random,
+            false, // Does not matter if we enable/disable SNI here. Inner hello is not used.
+        )?;
+
+        // Construct an inner hello using the outer hello - this allows us to know the size of
+        // dummy payload we should use for the GREASE extension.
+        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, &None);
+
+        // Generate a payload of random data equivalent in length to a real inner hello.
+        let payload_len = encoded_inner_hello.len()
+            + suite
+                .sym
+                .aead_id
+                .tag_len()
+                // Safety: we have confirmed the AEAD is supported when building the config. All
+                //  supported AEADs have a tag length.
+                .unwrap();
+        let mut payload = vec![0; payload_len];
+        secure_random.fill(&mut payload)?;
+
+        // Return the GREASE extension.
+        Ok(ClientExtension::EncryptedClientHello(
+            EncryptedClientHello::Outer(EncryptedClientHelloOuter {
+                cipher_suite: suite.sym,
+                config_id: config_id[0],
+                enc: PayloadU16(grease_state.enc.0),
+                payload: PayloadU16::new(payload),
+            }),
+        ))
+    }
+}
+
 /// An enum representing ECH offer status.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum EchStatus {
     /// ECH was not offered - it is a normal TLS handshake.
     NotOffered,
+    /// GREASE ECH was sent. This is not considered offering ECH.
+    Grease,
     /// ECH was offered but we do not yet know whether the offer was accepted or rejected.
     Offered,
     /// ECH was offered and the server accepted.
