@@ -439,8 +439,8 @@ impl CommonState {
         }
 
         // If we get a CloseNotify, make a note to declare EOF to our
-        // caller.
-        if alert.description == AlertDescription::CloseNotify {
+        // caller.  But do not treat unauthenticated alerts like this.
+        if self.may_receive_application_data && alert.description == AlertDescription::CloseNotify {
             self.has_received_close_notify = true;
             return Ok(());
         }
