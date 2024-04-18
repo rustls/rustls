@@ -5855,6 +5855,44 @@ fn test_complete_io_errors_if_close_notify_received_too_early() {
     );
 }
 
+#[test]
+fn test_complete_io_with_no_io_needed() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa);
+    do_handshake(&mut client, &mut server);
+    client
+        .writer()
+        .write_all(b"hello")
+        .unwrap();
+    client.send_close_notify();
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+    server
+        .writer()
+        .write_all(b"hello")
+        .unwrap();
+    server.send_close_notify();
+    transfer(&mut server, &mut client);
+    client.process_new_packets().unwrap();
+
+    // neither want any IO: both directions are closed.
+    assert!(!client.wants_write());
+    assert!(!client.wants_read());
+    assert!(!server.wants_write());
+    assert!(!server.wants_read());
+    assert_eq!(
+        client
+            .complete_io(&mut FakeStream(&[]))
+            .unwrap(),
+        (0, 0)
+    );
+    assert_eq!(
+        server
+            .complete_io(&mut FakeStream(&[]))
+            .unwrap(),
+        (0, 0)
+    );
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {

@@ -391,6 +391,11 @@ impl<Data> ConnectionCommon<Data> {
         loop {
             let until_handshaked = self.is_handshaking();
 
+            if !self.wants_write() && !self.wants_read() {
+                // We will make no further progress.
+                return Ok((rdlen, wrlen));
+            }
+
             while self.wants_write() {
                 wrlen += self.write_tls(io)?;
             }
