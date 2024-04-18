@@ -174,7 +174,7 @@ mod client_hello {
 
             // See if there is a KeyShare for the selected kx group.
             let chosen_share_and_kxg = shares_ext.iter().find_map(|share| {
-                (share.group == selected_kxg.name()).then(|| (share, selected_kxg))
+                (share.group == selected_kxg.name()).then_some((share, selected_kxg))
             });
 
             let chosen_share_and_kxg = match chosen_share_and_kxg {

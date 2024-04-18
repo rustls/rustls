@@ -509,7 +509,7 @@ impl ExpectClientHello {
             .find_map(|maybe_skxg| match maybe_skxg {
                 Some(skxg) => suite
                     .usable_for_kx_algorithm(skxg.name().key_exchange_algorithm())
-                    .then(|| *skxg),
+                    .then_some(*skxg),
                 None => None,
             });
 

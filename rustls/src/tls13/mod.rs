@@ -40,7 +40,7 @@ impl Tls13CipherSuite {
     /// Can a session using suite self resume from suite prev?
     pub fn can_resume_from(&self, prev: &'static Self) -> Option<&'static Self> {
         (prev.common.hash_provider.algorithm() == self.common.hash_provider.algorithm())
-            .then(|| prev)
+            .then_some(prev)
     }
 
     /// Return `true` if this is backed by a FIPS-approved implementation.
