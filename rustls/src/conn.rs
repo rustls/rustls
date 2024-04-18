@@ -486,6 +486,11 @@ impl<Data> ConnectionCommon<Data> {
         let mut rdlen = 0;
 
         loop {
+            if !self.wants_write() && !self.wants_read() {
+                // We will make no further progress.
+                return Ok((rdlen, wrlen));
+            }
+
             while self.wants_write() {
                 wrlen += self.write_tls(io)?;
             }
