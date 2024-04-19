@@ -285,7 +285,6 @@ pub(crate) mod tests {
     //! check panic-safety of relatively unused values.
 
     use super::*;
-    use crate::msgs::codec::Codec;
 
     #[test]
     fn test_enums() {

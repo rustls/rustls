@@ -386,7 +386,7 @@ pub(crate) struct Quic {
     pub(crate) params: Option<Vec<u8>>,
     pub(crate) alert: Option<AlertDescription>,
     pub(crate) hs_queue: VecDeque<(bool, Vec<u8>)>,
-    pub(crate) early_secret: Option<ring::hkdf::Prk>,
+    pub(crate) early_secret: Option<hkdf::Prk>,
     pub(crate) hs_secrets: Option<Secrets>,
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
@@ -821,7 +821,7 @@ pub enum KeyChange {
 }
 
 /// Compute the nonce to use for encrypting or decrypting `packet_number`
-fn nonce_for(packet_number: u64, iv: &Iv) -> ring::aead::Nonce {
+fn nonce_for(packet_number: u64, iv: &Iv) -> aead::Nonce {
     let mut out = [0; aead::NONCE_LEN];
     out[4..].copy_from_slice(&packet_number.to_be_bytes());
     for (out, inp) in out.iter_mut().zip(iv.0.iter()) {

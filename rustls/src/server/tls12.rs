@@ -34,10 +34,10 @@ mod client_hello {
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::ECPointFormat;
     use crate::msgs::enums::{ClientCertificateType, Compression};
+    use crate::msgs::handshake::ClientExtension;
     use crate::msgs::handshake::ServerECDHParams;
     use crate::msgs::handshake::{CertificateRequestPayload, ClientSessionTicket, Random};
     use crate::msgs::handshake::{CertificateStatus, ECDHEServerKeyExchange};
-    use crate::msgs::handshake::{ClientExtension, SessionId};
     use crate::msgs::handshake::{ClientHelloPayload, ServerHelloPayload};
     use crate::msgs::handshake::{ServerExtension, ServerKeyExchangePayload};
     use crate::sign;

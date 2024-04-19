@@ -16,13 +16,13 @@ fn make_tls12_aad(
     typ: ContentType,
     vers: ProtocolVersion,
     len: usize,
-) -> ring::aead::Aad<[u8; TLS12_AAD_SIZE]> {
+) -> aead::Aad<[u8; TLS12_AAD_SIZE]> {
     let mut out = [0; TLS12_AAD_SIZE];
     codec::put_u64(seq, &mut out[0..]);
     out[8] = typ.get_u8();
     codec::put_u16(vers.get_u16(), &mut out[9..]);
     codec::put_u16(len as u16, &mut out[11..]);
-    ring::aead::Aad::from(out)
+    aead::Aad::from(out)
 }
 
 pub(crate) struct AesGcm;

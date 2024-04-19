@@ -209,7 +209,6 @@ mod test {
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
-    use std::convert::TryInto;
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {

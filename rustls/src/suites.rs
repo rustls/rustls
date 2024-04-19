@@ -280,7 +280,6 @@ pub enum ConnectionTrafficSecrets {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::enums::CipherSuite;
 
     #[test]
     fn test_client_pref() {

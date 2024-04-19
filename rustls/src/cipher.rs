@@ -30,17 +30,17 @@ impl dyn MessageDecrypter {
 
 /// A write or read IV.
 #[derive(Default)]
-pub(crate) struct Iv(pub(crate) [u8; ring::aead::NONCE_LEN]);
+pub(crate) struct Iv(pub(crate) [u8; aead::NONCE_LEN]);
 
 impl Iv {
     #[cfg(feature = "tls12")]
-    fn new(value: [u8; ring::aead::NONCE_LEN]) -> Self {
+    fn new(value: [u8; aead::NONCE_LEN]) -> Self {
         Self(value)
     }
 
     #[cfg(feature = "tls12")]
     pub(crate) fn copy(value: &[u8]) -> Self {
-        debug_assert_eq!(value.len(), ring::aead::NONCE_LEN);
+        debug_assert_eq!(value.len(), aead::NONCE_LEN);
         let mut iv = Self::new(Default::default());
         iv.0.copy_from_slice(value);
         iv
@@ -68,8 +68,8 @@ impl From<hkdf::Okm<'_, IvLen>> for Iv {
     }
 }
 
-pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> ring::aead::Nonce {
-    let mut nonce = [0u8; ring::aead::NONCE_LEN];
+pub(crate) fn make_nonce(iv: &Iv, seq: u64) -> aead::Nonce {
+    let mut nonce = [0u8; aead::NONCE_LEN];
     codec::put_u64(seq, &mut nonce[4..]);
 
     nonce
