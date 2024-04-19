@@ -16,7 +16,6 @@ use rustls::{
 };
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use env_logger;
 
 use std::io::{self, BufReader, Read, Write};
 use std::sync::Arc;
