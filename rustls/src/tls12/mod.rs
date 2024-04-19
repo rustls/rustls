@@ -26,7 +26,7 @@ pub static TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
-            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+            aead_algorithm: &aead::CHACHA20_POLY1305,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -42,7 +42,7 @@ pub static TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
             bulk: BulkAlgorithm::Chacha20Poly1305,
-            aead_algorithm: &ring::aead::CHACHA20_POLY1305,
+            aead_algorithm: &aead::CHACHA20_POLY1305,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -58,7 +58,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
-            aead_algorithm: &ring::aead::AES_128_GCM,
+            aead_algorithm: &aead::AES_128_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -74,7 +74,7 @@ pub static TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
+            aead_algorithm: &aead::AES_256_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_RSA_SCHEMES,
@@ -90,7 +90,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
             bulk: BulkAlgorithm::Aes128Gcm,
-            aead_algorithm: &ring::aead::AES_128_GCM,
+            aead_algorithm: &aead::AES_128_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -106,7 +106,7 @@ pub static TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
             bulk: BulkAlgorithm::Aes256Gcm,
-            aead_algorithm: &ring::aead::AES_256_GCM,
+            aead_algorithm: &aead::AES_256_GCM,
         },
         kx: KeyExchangeAlgorithm::ECDHE,
         sign: TLS12_ECDSA_SCHEMES,
@@ -411,7 +411,7 @@ impl ConnectionSecrets {
             iv: server_iv,
         };
 
-        let (client_secrets, server_secrets) = if algo == &ring::aead::AES_128_GCM {
+        let (client_secrets, server_secrets) = if algo == &aead::AES_128_GCM {
             let extract = |pair: Pair| -> ConnectionTrafficSecrets {
                 let mut key = [0u8; 16];
                 key.copy_from_slice(pair.key);
@@ -426,7 +426,7 @@ impl ConnectionSecrets {
             };
 
             (extract(client_pair), extract(server_pair))
-        } else if algo == &ring::aead::AES_256_GCM {
+        } else if algo == &aead::AES_256_GCM {
             let extract = |pair: Pair| -> ConnectionTrafficSecrets {
                 let mut key = [0u8; 32];
                 key.copy_from_slice(pair.key);
@@ -441,7 +441,7 @@ impl ConnectionSecrets {
             };
 
             (extract(client_pair), extract(server_pair))
-        } else if algo == &ring::aead::CHACHA20_POLY1305 {
+        } else if algo == &aead::CHACHA20_POLY1305 {
             let extract = |pair: Pair| -> ConnectionTrafficSecrets {
                 let mut key = [0u8; 32];
                 key.copy_from_slice(pair.key);
@@ -511,7 +511,6 @@ pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common_state::{CommonState, Side};
     use crate::msgs::handshake::{ClientECDHParams, ServerECDHParams};
 
     #[test]

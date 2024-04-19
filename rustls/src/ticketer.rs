@@ -68,8 +68,8 @@ impl ProducesTickets for AeadTicketer {
         // Random nonce, because a counter is a privacy leak.
         let mut nonce_buf = [0u8; 12];
         rand::fill_random(&mut nonce_buf).ok()?;
-        let nonce = ring::aead::Nonce::assume_unique_for_key(nonce_buf);
-        let aad = ring::aead::Aad::empty();
+        let nonce = aead::Nonce::assume_unique_for_key(nonce_buf);
+        let aad = aead::Aad::empty();
 
         let mut ciphertext =
             Vec::with_capacity(nonce_buf.len() + message.len() + self.key.algorithm().tag_len());
@@ -91,7 +91,7 @@ impl ProducesTickets for AeadTicketer {
         let ciphertext = ciphertext.get(nonce.len()..)?;
 
         // This won't fail since `nonce` has the required length.
-        let nonce = ring::aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
+        let nonce = aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
 
         let mut out = Vec::from(ciphertext);
 
@@ -292,14 +292,14 @@ fn ticketswitcher_switching_test() {
     assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
     {
         // Trigger new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(10)));
+        t.maybe_roll(TimeBase(now.0 + time::Duration::from_secs(10)));
     }
     let cipher2 = t.encrypt(b"ticket 2").unwrap();
     assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
     assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
     {
         // Trigger new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(20)));
+        t.maybe_roll(TimeBase(now.0 + time::Duration::from_secs(20)));
     }
     let cipher3 = t.encrypt(b"ticket 3").unwrap();
     assert!(t.decrypt(&cipher1).is_none());
@@ -321,7 +321,7 @@ fn ticketswitcher_recover_test() {
     t.generator = fail_generator;
     {
         // Failed new ticketer
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(10)));
+        t.maybe_roll(TimeBase(now.0 + time::Duration::from_secs(10)));
     }
     t.generator = generate_inner;
     let cipher2 = t.encrypt(b"ticket 2").unwrap();
@@ -329,7 +329,7 @@ fn ticketswitcher_recover_test() {
     assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
     {
         // recover
-        t.maybe_roll(TimeBase(now.0 + std::time::Duration::from_secs(20)));
+        t.maybe_roll(TimeBase(now.0 + time::Duration::from_secs(20)));
     }
     let cipher3 = t.encrypt(b"ticket 3").unwrap();
     assert!(t.decrypt(&cipher1).is_none());

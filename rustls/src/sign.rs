@@ -191,7 +191,7 @@ impl Signer for RsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
         let mut sig = vec![0; self.key.public().modulus_len()];
 
-        let rng = ring::rand::SystemRandom::new();
+        let rng = SystemRandom::new();
         self.key
             .sign(self.encoding, &rng, message, &mut sig)
             .map(|_| sig)
@@ -312,7 +312,7 @@ struct EcdsaSigner {
 
 impl Signer for EcdsaSigner {
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
-        let rng = ring::rand::SystemRandom::new();
+        let rng = SystemRandom::new();
         self.key
             .sign(&rng, message)
             .map_err(|_| Error::General("signing failed".into()))

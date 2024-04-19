@@ -352,7 +352,7 @@ impl<'a> ReadEarlyData<'a> {
     }
 }
 
-impl<'a> std::io::Read for ReadEarlyData<'a> {
+impl<'a> io::Read for ReadEarlyData<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.early_data.read(buf)
     }
