@@ -57,7 +57,7 @@ impl<'a> DnsNameRef<'a> {
 impl<'a> TryFrom<&'a str> for DnsNameRef<'a> {
     type Error = InvalidDnsNameError;
 
-    fn try_from(value: &'a str) -> Result<DnsNameRef<'a>, Self::Error> {
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         validate(value.as_bytes())?;
         Ok(DnsNameRef(value))
     }
