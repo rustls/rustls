@@ -106,7 +106,7 @@ pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
 
 impl<'a> TryFrom<&'a Certificate> for ParsedCertificate<'a> {
     type Error = Error;
-    fn try_from(value: &'a Certificate) -> Result<ParsedCertificate<'a>, Self::Error> {
+    fn try_from(value: &'a Certificate) -> Result<Self, Self::Error> {
         webpki::EndEntityCert::try_from(value.0.as_ref())
             .map_err(crate::verify::pki_error)
             .map(ParsedCertificate)
