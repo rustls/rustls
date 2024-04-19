@@ -473,7 +473,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
 
     do_handshake(&mut client, &mut server);
 
-    let mut buf = vec![0u8; plaintext_size as usize];
+    let buf = vec![0u8; plaintext_size as usize];
 
     let total_data = apply_work_multiplier(if plaintext_size < 8192 {
         64 * 1024 * 1024
