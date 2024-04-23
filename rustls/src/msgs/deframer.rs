@@ -482,6 +482,10 @@ impl DeframerVecBuffer {
     fn unfilled(&mut self) -> &mut [u8] {
         &mut self.buf[self.used..]
     }
+
+    pub(crate) fn as_slice(&self) -> &[u8] {
+        &self.buf
+    }
 }
 
 #[cfg(feature = "std")]

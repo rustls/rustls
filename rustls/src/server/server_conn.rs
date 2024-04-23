@@ -799,6 +799,16 @@ mod connection {
                 sig_schemes,
             }))
         }
+
+        /// Yields an iterator over the buffered chunks of bytes
+        ///
+        /// Will yield an empty iterator after `accept()` has returned `Ok(Some(_))` or `Err(_)`.
+        pub fn buffered(&self) -> &[u8] {
+            match &self.inner {
+                Some(conn) => conn.deframer_buffer.as_slice(),
+                None => &[],
+            }
+        }
     }
 
     /// Represents a TLS alert resulting from handling the client's `ClientHello` message.
