@@ -34,6 +34,7 @@ logging = ["log"]
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 ring = ["dep:ring", "webpki/ring"]
+web = ["ring/wasm32_unknown_unknown_js"]
 tls12 = []
 read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
