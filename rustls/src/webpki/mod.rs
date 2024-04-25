@@ -61,6 +61,7 @@ fn pki_error(error: webpki::Error) -> Error {
         CertNotValidForName => CertificateError::NotValidForName.into(),
         CertRevoked => CertificateError::Revoked.into(),
         UnknownRevocationStatus => CertificateError::UnknownRevocationStatus.into(),
+        CrlExpired => CertificateError::ExpiredRevocationList.into(),
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey
