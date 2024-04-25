@@ -315,6 +315,9 @@ pub enum CertificateError {
     /// The certificate's revocation status could not be determined.
     UnknownRevocationStatus,
 
+    /// The certificate's revocation status could not be determined, because the CRL is expired.
+    ExpiredRevocationList,
+
     /// A certificate is not correctly signed by the key of its alleged
     /// issuer.
     BadSignature,
@@ -358,6 +361,7 @@ impl PartialEq<Self> for CertificateError {
             (NotValidForName, NotValidForName) => true,
             (InvalidPurpose, InvalidPurpose) => true,
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
+            (ExpiredRevocationList, ExpiredRevocationList) => true,
             _ => false,
         }
     }
@@ -378,7 +382,7 @@ impl From<CertificateError> for AlertDescription {
             Revoked => Self::CertificateRevoked,
             // OpenSSL, BoringSSL and AWS-LC all generate an Unknown CA alert for
             // the case where revocation status can not be determined, so we do the same here.
-            UnknownIssuer | UnknownRevocationStatus => Self::UnknownCA,
+            UnknownIssuer | UnknownRevocationStatus | ExpiredRevocationList => Self::UnknownCA,
             BadSignature => Self::DecryptError,
             InvalidPurpose => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,

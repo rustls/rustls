@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTime};
-use webpki::{CertRevocationList, RevocationCheckDepth, UnknownStatusPolicy};
+use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 #[cfg(feature = "logging")]
@@ -28,6 +28,7 @@ pub struct ServerCertVerifierBuilder {
     crls: Vec<CertificateRevocationListDer<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
+    revocation_expiration_policy: ExpirationPolicy,
     supported_algs: WebPkiSupportedAlgorithms,
 }
 
@@ -41,6 +42,7 @@ impl ServerCertVerifierBuilder {
             crls: Vec::new(),
             revocation_check_depth: RevocationCheckDepth::Chain,
             unknown_revocation_policy: UnknownStatusPolicy::Deny,
+            revocation_expiration_policy: ExpirationPolicy::Ignore,
             supported_algs,
         }
     }
@@ -83,6 +85,19 @@ impl ServerCertVerifierBuilder {
         self
     }
 
+    /// Enforce the CRL nextUpdate field (i.e. expiration)
+    ///
+    /// If CRLs are provided with [`with_crls`][Self::with_crls] and the verification time is
+    /// beyond the time in the CRL nextUpdate field, it is expired and treated as an error condition.
+    /// Overrides the default behavior where expired CRLs are not treated as an error condition.
+    ///
+    /// If no CRLs are provided then this setting has no effect as revocation status checks
+    /// are not performed.
+    pub fn enforce_revocation_expiration(mut self) -> Self {
+        self.revocation_expiration_policy = ExpirationPolicy::Enforce;
+        self
+    }
+
     /// Build a server certificate verifier, allowing control over the root certificates to use as
     /// trust anchors, and to control how server certificate revocation checking is performed.
     ///
@@ -107,6 +122,7 @@ impl ServerCertVerifierBuilder {
             parse_crls(self.crls)?,
             self.revocation_check_depth,
             self.unknown_revocation_policy,
+            self.revocation_expiration_policy,
             self.supported_algs,
         )
         .into())
@@ -121,6 +137,7 @@ pub struct WebPkiServerVerifier {
     crls: Vec<CertRevocationList<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
+    revocation_expiration_policy: ExpirationPolicy,
     supported: WebPkiSupportedAlgorithms,
 }
 
@@ -167,6 +184,7 @@ impl WebPkiServerVerifier {
             Vec::default(),
             RevocationCheckDepth::Chain,
             UnknownStatusPolicy::Allow,
+            ExpirationPolicy::Ignore,
             supported_algs,
         )
     }
@@ -187,6 +205,7 @@ impl WebPkiServerVerifier {
         crls: Vec<CertRevocationList<'static>>,
         revocation_check_depth: RevocationCheckDepth,
         unknown_revocation_policy: UnknownStatusPolicy,
+        revocation_expiration_policy: ExpirationPolicy,
         supported: WebPkiSupportedAlgorithms,
     ) -> Self {
         Self {
@@ -194,6 +213,7 @@ impl WebPkiServerVerifier {
             crls,
             revocation_check_depth,
             unknown_revocation_policy,
+            revocation_expiration_policy,
             supported,
         }
     }
@@ -234,6 +254,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
                     .unwrap()
                     .with_depth(self.revocation_check_depth)
                     .with_status_policy(self.unknown_revocation_policy)
+                    .with_expiration_policy(self.revocation_expiration_policy)
                     .build(),
             )
         };
@@ -409,6 +430,20 @@ test_for_each_provider! {
         )
         .allow_unknown_revocation_status()
         .only_check_end_entity_revocation();
+        // The builder should be Debug.
+        println!("{:?}", builder);
+        builder.build().unwrap();
+    }
+
+    #[test]
+    fn test_server_verifier_enforce_expiration() {
+        // We should be able to build a server cert. verifier that allows unknown revocation
+        // status.
+        let builder = WebPkiServerVerifier::builder_with_provider(
+            test_roots(),
+            provider::default_provider().into(),
+        )
+        .enforce_revocation_expiration();
         // The builder should be Debug.
         println!("{:?}", builder);
         builder.build().unwrap();
