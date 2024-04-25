@@ -28,7 +28,27 @@
     "ClientOCSPCallback*": "ocsp not supported yet",
     "ServerOCSPCallback*": "",
     "DuplicateCertCompressionExt*-TLS12": "RFC8879: if TLS 1.2 or earlier is negotiated, the peers MUST ignore this extension",
-    "TLS-ECH-*": "",
+#if defined(RING)
+    "TLS-ECH-*": "*ring* has no HPKE provider for ECH",
+#elif defined(AWS_LC_RS) && defined(FIPS)
+    "TLS-ECH-*": "ECH test suites use non-FIPS approved algos",
+#else
+    "TLS-ECH-Server*": "ECH server support NYI",
+    "TLS-ECH-Client-ExpectECHOuterExtensions": "ECH extension compression NYI",
+    "TLS-ECH-Client-CompressSupportedVersions": "ECH extension compression NYI",
+    "TLS-ECH-Client-SelectECHConfig": "TODO(XXX): re-enable after upstream bogo fix",
+    "TLS-ECH-Client-NoSupportedConfigs": "TODO(XXX): re-enable after upstream bogo fix",
+    "TLS-ECH-Client-SkipInvalidPublicName*": "we allow underscore names, don't fallback on no ECH configs",
+    "TLS-ECH-Client-NoSupportedConfigs-GREASE": "we don't fallback to GREASE for no ECH configs",
+    "TLS-ECH-Client-TLS12-RejectRetryConfigs": "we disable TLS1.2 w/ ECH",
+    "TLS-ECH-Client-Reject-NoClientCertificate-TLS12": "we disable TLS1.2 w/ ECH",
+    "TLS-ECH-Client-Reject-TLS12": "we disable TLS1.2 w/ ECH",
+    "TLS-ECH-Client-Reject-ResumeInnerSession-TLS12": "we disable TLS1.2 w/ ECH",
+    "TLS-ECH-GREASE-Client-TLS12-RejectRetryConfigs": "we disable TLS1.2 w/ ECH",
+    "TLS-ECH-Client-Reject-EarlyDataRejected-TLS12": "we disable TLS1.2 w/ ECH",
+    "TLS-ECH-Client-Reject-NoClientCertificate-TLS12-Async": "we disable TLS1.2 w/ ECH",
+    "TLS-ECH-Client-Reject-ResumeInnerSession-TLS13": "assumes no outter GREASE PSK, we send GREASE PSK",
+#endif
     "ALPS-*": "",
     "*Kyber*": "",
     "ExtraClientEncryptedExtension-*": "we don't implement ALPS",
