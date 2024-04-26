@@ -5,7 +5,7 @@
 
 set -xe
 
-case ${BOGO_SHIM_PROVIDER:-ring} in
+case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
   ring)
       cargo build -p rustls --example bogo_shim $(../admin/all-features-except aws-lc-rs,aws_lc_rs,fips rustls)
       cpp -P -DRING config.json.in > config.json
