@@ -114,7 +114,7 @@ pub static DEFAULT_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     tls12::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 ];
 
-/// A list of all the cipher suites supported by the rustls *ring* provider.
+/// A list of all the cipher suites supported by the rustls aws-lc-rs provider.
 pub static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = &[
     // TLS1.3 suites
     tls13::TLS13_AES_256_GCM_SHA384,
@@ -149,7 +149,7 @@ pub mod cipher_suite {
 }
 
 /// A `WebPkiSupportedAlgorithms` value that reflects webpki's capabilities when
-/// compiled against *ring*.
+/// compiled against aws-lc-rs.
 static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[
         webpki_algs::ECDSA_P256_SHA256,
