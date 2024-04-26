@@ -84,7 +84,7 @@ impl Tls13CipherSuite {
 
     /// Can a session using suite self resume from suite prev?
     pub fn can_resume_from(&self, prev: &'static Self) -> Option<&'static Self> {
-        (prev.hash_algorithm() == self.hash_algorithm()).then(|| prev)
+        (prev.hash_algorithm() == self.hash_algorithm()).then_some(prev)
     }
 }
 
