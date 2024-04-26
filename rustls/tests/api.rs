@@ -1129,9 +1129,9 @@ fn server_cert_resolve_reduces_sigalgs_for_ecdsa_ciphersuite() {
         CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
         if provider_is_aws_lc_rs() {
             vec![
-                SignatureScheme::ECDSA_NISTP521_SHA512,
                 SignatureScheme::ECDSA_NISTP384_SHA384,
                 SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::ECDSA_NISTP521_SHA512,
                 SignatureScheme::ED25519,
             ]
         } else {
@@ -1499,10 +1499,6 @@ fn test_client_cert_resolve(
 fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
     let mut v = vec![];
 
-    if provider_is_aws_lc_rs() {
-        v.push(SignatureScheme::ECDSA_NISTP521_SHA512);
-    }
-
     v.extend_from_slice(&[
         SignatureScheme::ECDSA_NISTP384_SHA384,
         SignatureScheme::ECDSA_NISTP256_SHA256,
@@ -1511,6 +1507,10 @@ fn default_signature_schemes(version: ProtocolVersion) -> Vec<SignatureScheme> {
         SignatureScheme::RSA_PSS_SHA384,
         SignatureScheme::RSA_PSS_SHA256,
     ]);
+
+    if provider_is_aws_lc_rs() {
+        v.insert(2, SignatureScheme::ECDSA_NISTP521_SHA512);
+    }
 
     if version == ProtocolVersion::TLSv1_2 {
         v.extend_from_slice(&[
