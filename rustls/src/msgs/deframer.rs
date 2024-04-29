@@ -505,6 +505,10 @@ impl DeframerBuffer<'_, InternalPayload> for DeframerVecBuffer {
 #[cfg(feature = "std")]
 impl<'a> DeframerBuffer<'a, ExternalPayload<'a>> for DeframerVecBuffer {
     fn copy(&mut self, payload: &ExternalPayload<'a>, at: usize) {
+        // The `at` was actually used before this code had to be tweaked for
+        // the unbuffered connection APIs support.
+        // Refactoring the trait and the surrounding code in a way that avoid
+        // having an `at` argument at the `copy` fn would be great.
         debug_assert_eq!(at, self.used);
         let len = payload.len();
         self.unfilled()[..len].copy_from_slice(payload.0);
