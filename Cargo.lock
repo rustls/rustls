@@ -327,9 +327,8 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "aws-lc-fips-sys"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e872633d0107cd8f882b08dd9a6ee0e5bf0511da083778f666e325d597069ae"
+version = "0.12.7"
+source = "git+https://github.com/cpu/aws-lc-rs?rev=58f8fe83a42fb65a7efb65f4fe84234211318221#58f8fe83a42fb65a7efb65f4fe84234211318221"
 dependencies = [
  "bindgen",
  "cmake",
@@ -342,8 +341,7 @@ dependencies = [
 [[package]]
 name = "aws-lc-rs"
 version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5509d663b2c00ee421bda8d6a24d6c42e15970957de1701b8df9f6fbe5707df1"
+source = "git+https://github.com/cpu/aws-lc-rs?rev=58f8fe83a42fb65a7efb65f4fe84234211318221#58f8fe83a42fb65a7efb65f4fe84234211318221"
 dependencies = [
  "aws-lc-fips-sys",
  "aws-lc-sys",
@@ -356,8 +354,7 @@ dependencies = [
 [[package]]
 name = "aws-lc-sys"
 version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d5d317212c2a78d86ba6622e969413c38847b62f48111f8b763af3dac2f9840"
+source = "git+https://github.com/cpu/aws-lc-rs?rev=58f8fe83a42fb65a7efb65f4fe84234211318221#58f8fe83a42fb65a7efb65f4fe84234211318221"
 dependencies = [
  "bindgen",
  "cc",

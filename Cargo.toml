@@ -26,3 +26,6 @@ resolver = "2"
 [profile.bench]
 codegen-units = 1
 lto = "yes"
+
+[patch.crates-io]
+aws-lc-rs = { git = "https://github.com/cpu/aws-lc-rs", rev = "58f8fe83a42fb65a7efb65f4fe84234211318221" }
