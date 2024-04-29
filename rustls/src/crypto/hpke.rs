@@ -2,6 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use zeroize::Zeroize;
+
 use crate::msgs::enums::HpkeKem;
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
 use crate::Error;
@@ -126,6 +128,12 @@ impl HpkePrivateKey {
 impl From<Vec<u8>> for HpkePrivateKey {
     fn from(bytes: Vec<u8>) -> Self {
         Self(bytes)
+    }
+}
+
+impl Drop for HpkePrivateKey {
+    fn drop(&mut self) {
+        self.0.zeroize();
     }
 }
 
