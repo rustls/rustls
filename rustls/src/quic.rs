@@ -722,9 +722,9 @@ pub trait PacketKey: Send + Sync {
     /// Once a `MessageDecrypter` produced for this suite has failed to decrypt `integrity_limit`
     /// messages, an attacker gains an advantage in forging messages.
     ///
-    /// This is not relevant for TLS over TCP (which is implemented in this crate)
-    /// because a single failed decryption is fatal to the connection.  However,
-    /// this quantity is used by QUIC.
+    /// This is not relevant for TLS over TCP (which is also implemented in this crate)
+    /// because a single failed decryption is fatal to the connection.
+    /// However, this quantity is used by QUIC.
     fn integrity_limit(&self) -> u64;
 }
 
