@@ -1373,6 +1373,51 @@ fn client_check_server_certificate_intermediate_revoked() {
     }
 }
 
+#[test]
+fn client_check_server_certificate_ee_crl_expired() {
+    for kt in ALL_KEY_TYPES {
+        let server_config = Arc::new(make_server_config(*kt));
+
+        // Setup a server verifier that will check the EE certificate's revocation status, with CRL expiration enforced.
+        let crls = vec![kt.end_entity_crl_expired()];
+        let enforce_expiration_builder = webpki_server_verifier_builder(get_client_root_store(*kt))
+            .with_crls(crls)
+            .only_check_end_entity_revocation()
+            .enforce_revocation_expiration();
+
+        // Also setup a server verifier without CRL expiration enforced.
+        let crls = vec![kt.end_entity_crl_expired()];
+        let ignore_expiration_builder = webpki_server_verifier_builder(get_client_root_store(*kt))
+            .with_crls(crls)
+            .only_check_end_entity_revocation();
+
+        for version in rustls::ALL_VERSIONS {
+            let client_config = make_client_config_with_verifier(&[version], enforce_expiration_builder.clone());
+            let mut client =
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+
+            // We expect the handshake to fail since the CRL is expired.
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert_eq!(
+                err,
+                Err(ErrorFromPeer::Client(Error::InvalidCertificate(
+                    CertificateError::ExpiredRevocationList
+                )))
+            );
+
+            let client_config = make_client_config_with_verifier(&[version], ignore_expiration_builder.clone());
+            let mut client =
+                ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+
+            // We expect the handshake to succeed when CRL expiration is ignored.
+            let res = do_handshake_until_error(&mut client, &mut server);
+            assert!(res.is_ok())
+        }
+    }
+}
+
 /// Simple smoke-test of the webpki verify_server_cert_signed_by_trust_anchor helper API.
 /// This public API is intended to be used by consumers implementing their own verifier and
 /// so isn't used by the other existing verifier tests.

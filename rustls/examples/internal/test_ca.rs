@@ -70,18 +70,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .unwrap(),
                     _ => panic!("unexpected role for CRL generation: {role:?}"),
                 };
-                let crl = crl_for_serial(
+
+                let revoked_crl = crl_for_serial(
                     cert.params()
                         .serial_number
                         .clone()
                         .unwrap(),
                 )
                 .signed_by(&issuer.cert, &issuer.key_pair)?;
-                let mut crl_file = File::create(
+                let mut revoked_crl_file = File::create(
                     alg.output_directory()
                         .join(format!("{}.revoked.crl.pem", role.label())),
                 )?;
-                crl_file.write_all(crl.pem().unwrap().as_bytes())?;
+                revoked_crl_file.write_all(revoked_crl.pem().unwrap().as_bytes())?;
+
+                let expired_crl = expired_crl().signed_by(&issuer.cert, &issuer.key_pair)?;
+                let mut expired_crl_file = File::create(
+                    alg.output_directory()
+                        .join(format!("{}.expired.crl.pem", role.label())),
+                )?;
+                expired_crl_file.write_all(expired_crl.pem().unwrap().as_bytes())?;
             }
 
             // When we're issuing end entity or client certs we have a bit of extra work to do
@@ -125,7 +133,7 @@ fn crl_for_serial(serial_number: SerialNumber) -> CertificateRevocationListParam
     let now = OffsetDateTime::now_utc();
     CertificateRevocationListParams {
         this_update: now,
-        next_update: now + Duration::from_secs(60 * 60 * 24 * 5),
+        next_update: now + Duration::from_secs(60 * 60 * 24 * 365 * 100), // 100 years
         crl_number: SerialNumber::from(1234),
         issuing_distribution_point: None,
         revoked_certs: vec![RevokedCertParams {
@@ -134,6 +142,18 @@ fn crl_for_serial(serial_number: SerialNumber) -> CertificateRevocationListParam
             reason_code: Some(RevocationReason::KeyCompromise),
             invalidity_date: None,
         }],
+        key_identifier_method: KeyIdMethod::Sha256,
+    }
+}
+
+fn expired_crl() -> CertificateRevocationListParams {
+    let now = OffsetDateTime::now_utc();
+    CertificateRevocationListParams {
+        this_update: now - Duration::from_secs(60),
+        next_update: now,
+        crl_number: SerialNumber::from(1234),
+        issuing_distribution_point: None,
+        revoked_certs: vec![],
         key_identifier_method: KeyIdMethod::Sha256,
     }
 }
