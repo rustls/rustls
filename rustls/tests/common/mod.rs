@@ -56,6 +56,7 @@ embed_files! {
     (ECDSA_P256_END_CRL_PEM, "ecdsa-p256", "end.revoked.crl.pem");
     (ECDSA_P256_CLIENT_CRL_PEM, "ecdsa-p256", "client.revoked.crl.pem");
     (ECDSA_P256_INTERMEDIATE_CRL_PEM, "ecdsa-p256", "inter.revoked.crl.pem");
+    (ECDSA_P256_EXPIRED_CRL_PEM, "ecdsa-p256", "end.expired.crl.pem");
     (ECDSA_P256_END_CERT, "ecdsa-p256", "end.cert");
     (ECDSA_P256_END_CHAIN, "ecdsa-p256", "end.chain");
     (ECDSA_P256_END_FULLCHAIN, "ecdsa-p256", "end.fullchain");
@@ -73,6 +74,7 @@ embed_files! {
     (ECDSA_P384_END_CRL_PEM, "ecdsa-p384", "end.revoked.crl.pem");
     (ECDSA_P384_CLIENT_CRL_PEM, "ecdsa-p384", "client.revoked.crl.pem");
     (ECDSA_P384_INTERMEDIATE_CRL_PEM, "ecdsa-p384", "inter.revoked.crl.pem");
+    (ECDSA_P384_EXPIRED_CRL_PEM, "ecdsa-p384", "end.expired.crl.pem");
     (ECDSA_P384_END_CERT, "ecdsa-p384", "end.cert");
     (ECDSA_P384_END_CHAIN, "ecdsa-p384", "end.chain");
     (ECDSA_P384_END_FULLCHAIN, "ecdsa-p384", "end.fullchain");
@@ -90,6 +92,7 @@ embed_files! {
     (ECDSA_P521_END_CRL_PEM, "ecdsa-p521", "end.revoked.crl.pem");
     (ECDSA_P521_CLIENT_CRL_PEM, "ecdsa-p521", "client.revoked.crl.pem");
     (ECDSA_P521_INTERMEDIATE_CRL_PEM, "ecdsa-p521", "inter.revoked.crl.pem");
+    (ECDSA_P521_EXPIRED_CRL_PEM, "ecdsa-p521", "end.expired.crl.pem");
     (ECDSA_P521_END_CERT, "ecdsa-p521", "end.cert");
     (ECDSA_P521_END_CHAIN, "ecdsa-p521", "end.chain");
     (ECDSA_P521_END_FULLCHAIN, "ecdsa-p521", "end.fullchain");
@@ -107,6 +110,7 @@ embed_files! {
     (EDDSA_END_CRL_PEM, "eddsa", "end.revoked.crl.pem");
     (EDDSA_CLIENT_CRL_PEM, "eddsa", "client.revoked.crl.pem");
     (EDDSA_INTERMEDIATE_CRL_PEM, "eddsa", "inter.revoked.crl.pem");
+    (EDDSA_EXPIRED_CRL_PEM, "eddsa", "end.expired.crl.pem");
     (EDDSA_END_CERT, "eddsa", "end.cert");
     (EDDSA_END_CHAIN, "eddsa", "end.chain");
     (EDDSA_END_FULLCHAIN, "eddsa", "end.fullchain");
@@ -124,6 +128,7 @@ embed_files! {
     (RSA_2048_END_CRL_PEM, "rsa-2048", "end.revoked.crl.pem");
     (RSA_2048_CLIENT_CRL_PEM, "rsa-2048", "client.revoked.crl.pem");
     (RSA_2048_INTERMEDIATE_CRL_PEM, "rsa-2048", "inter.revoked.crl.pem");
+    (RSA_2048_EXPIRED_CRL_PEM, "rsa-2048", "end.expired.crl.pem");
     (RSA_2048_END_CERT, "rsa-2048", "end.cert");
     (RSA_2048_END_CHAIN, "rsa-2048", "end.chain");
     (RSA_2048_END_FULLCHAIN, "rsa-2048", "end.fullchain");
@@ -141,6 +146,7 @@ embed_files! {
     (RSA_3072_END_CRL_PEM, "rsa-3072", "end.revoked.crl.pem");
     (RSA_3072_CLIENT_CRL_PEM, "rsa-3072", "client.revoked.crl.pem");
     (RSA_3072_INTERMEDIATE_CRL_PEM, "rsa-3072", "inter.revoked.crl.pem");
+    (RSA_3072_EXPIRED_CRL_PEM, "rsa-3072", "end.expired.crl.pem");
     (RSA_3072_END_CERT, "rsa-3072", "end.cert");
     (RSA_3072_END_CHAIN, "rsa-3072", "end.chain");
     (RSA_3072_END_FULLCHAIN, "rsa-3072", "end.fullchain");
@@ -158,6 +164,7 @@ embed_files! {
     (RSA_4096_END_CRL_PEM, "rsa-4096", "end.revoked.crl.pem");
     (RSA_4096_CLIENT_CRL_PEM, "rsa-4096", "client.revoked.crl.pem");
     (RSA_4096_INTERMEDIATE_CRL_PEM, "rsa-4096", "inter.revoked.crl.pem");
+    (RSA_4096_EXPIRED_CRL_PEM, "rsa-4096", "end.expired.crl.pem");
     (RSA_4096_END_CERT, "rsa-4096", "end.cert");
     (RSA_4096_END_CHAIN, "rsa-4096", "end.chain");
     (RSA_4096_END_FULLCHAIN, "rsa-4096", "end.fullchain");
@@ -315,15 +322,19 @@ impl KeyType {
     }
 
     pub fn end_entity_crl(&self) -> CertificateRevocationListDer<'static> {
-        self.get_crl("end")
+        self.get_crl("end", "revoked")
     }
 
     pub fn client_crl(&self) -> CertificateRevocationListDer<'static> {
-        self.get_crl("client")
+        self.get_crl("client", "revoked")
     }
 
     pub fn intermediate_crl(&self) -> CertificateRevocationListDer<'static> {
-        self.get_crl("inter")
+        self.get_crl("inter", "revoked")
+    }
+
+    pub fn end_entity_crl_expired(&self) -> CertificateRevocationListDer<'static> {
+        self.get_crl("end", "expired")
     }
 
     fn get_client_key(&self) -> PrivateKeyDer<'static> {
@@ -337,9 +348,9 @@ impl KeyType {
         )
     }
 
-    fn get_crl(&self, role: &str) -> CertificateRevocationListDer<'static> {
+    fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
         rustls_pemfile::crls(&mut io::BufReader::new(
-            self.bytes_for(&format!("{role}.revoked.crl.pem")),
+            self.bytes_for(&format!("{role}.{type}.crl.pem")),
         ))
         .map(|result| result.unwrap())
         .next() // We only expect one CRL.
