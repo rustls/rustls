@@ -9,7 +9,7 @@ Rustls is a modern TLS library written in Rust.
 # Status
 
 Rustls is used in production at many organizations and projects. We aim to maintain
-reasonable API surface stability but the API may evolve as we make changes to accomodate
+reasonable API surface stability but the API may evolve as we make changes to accommodate
 new features or performance improvements.
 
 We have a [roadmap](ROADMAP.md) for our future plans. We also have [benchmarks](BENCHMARKING.md) to
