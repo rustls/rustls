@@ -16,7 +16,6 @@ build = "build.rs"
 rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
-aws-lc-rs = { version = "1.6", optional = true, default-features = false, features = ["aws-lc-sys"] }
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
 log = { version = "0.4.4", optional = true }
 # remove once our MSRV is >= 1.70
@@ -26,6 +25,12 @@ subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.2", features = ["alloc"], default-features = false }
 pki-types = { package = "rustls-pki-types", version = "1.2", features = ["alloc"] }
 zeroize = "1.7"
+
+[target.'cfg(target_env = "msvc")'.dependencies]
+aws-lc-rs = { version = "1.7", optional = true, default-features = false, features = ["aws-lc-sys", "bindgen"] }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+aws-lc-rs = { version = "1.7", optional = true, default-features = false, features = ["aws-lc-sys"] }
 
 [features]
 default = ["aws_lc_rs", "logging", "std", "tls12"]
