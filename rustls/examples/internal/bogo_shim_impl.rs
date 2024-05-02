@@ -1413,8 +1413,7 @@ pub fn main() {
             opts.tickets = false;
             server_cfg = Some(make_server_cfg(&opts));
         }
-        opts.expect_handshake_kind = opts
-            .expect_handshake_kind_resumed
-            .clone();
+        opts.expect_handshake_kind
+            .clone_from(&opts.expect_handshake_kind_resumed);
     }
 }
