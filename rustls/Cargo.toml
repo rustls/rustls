@@ -28,10 +28,10 @@ once_cell = { version = "1.16", default-features = false, features = [
 ] }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
-webpki = { package = "rustls-webpki", version = "0.102.2", features = [
+webpki = { package = "rustls-webpki", version = "0.102.3", features = [
   "alloc",
 ], default-features = false }
-pki-types = { package = "rustls-pki-types", version = "1.2", features = [
+pki-types = { package = "rustls-pki-types", version = "1.5", features = [
   "alloc",
 ] }
 zeroize = "1.7"
