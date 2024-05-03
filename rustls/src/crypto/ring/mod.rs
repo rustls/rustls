@@ -16,6 +16,7 @@ use crate::Error;
 pub mod sign;
 
 pub(crate) mod hash;
+#[cfg(any(test, feature = "tls12"))]
 pub(crate) mod hmac;
 pub(crate) mod kx;
 pub(crate) mod quic;
