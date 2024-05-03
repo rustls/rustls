@@ -882,11 +882,12 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
 
             // Check the signature is compatible with the ciphersuite.
             let sig = &st.server_kx.kx_sig;
-            if !SupportedCipherSuite::from(suite).usable_for_signature_algorithm(sig.scheme.sign())
+            if !SupportedCipherSuite::from(suite)
+                .usable_for_signature_algorithm(sig.scheme.algorithm())
             {
                 warn!(
                     "peer signed kx with wrong algorithm (got {:?} expect {:?})",
-                    sig.scheme.sign(),
+                    sig.scheme.algorithm(),
                     suite.sign
                 );
                 return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
