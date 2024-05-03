@@ -101,7 +101,7 @@ impl SupportedCipherSuite {
             Self::Tls12(inner) => inner
                 .sign
                 .iter()
-                .any(|scheme| scheme.sign() == _sig_alg),
+                .any(|scheme| scheme.algorithm() == _sig_alg),
         }
     }
 
@@ -164,7 +164,7 @@ pub(crate) fn compatible_sigscheme_for_suites(
     sigscheme: SignatureScheme,
     common_suites: &[SupportedCipherSuite],
 ) -> bool {
-    let sigalg = sigscheme.sign();
+    let sigalg = sigscheme.algorithm();
     common_suites
         .iter()
         .any(|&suite| suite.usable_for_signature_algorithm(sigalg))

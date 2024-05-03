@@ -513,7 +513,7 @@ enum_builder! {
 }
 
 impl SignatureScheme {
-    pub(crate) fn sign(&self) -> SignatureAlgorithm {
+    pub(crate) fn algorithm(&self) -> SignatureAlgorithm {
         match *self {
             Self::RSA_PKCS1_SHA1
             | Self::RSA_PKCS1_SHA256

@@ -248,7 +248,7 @@ impl SigningKey for EcdsaSigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.sign()
+        self.scheme.algorithm()
     }
 }
 
@@ -332,7 +332,7 @@ impl SigningKey for Ed25519SigningKey {
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
-        self.scheme.sign()
+        self.scheme.algorithm()
     }
 }
 
