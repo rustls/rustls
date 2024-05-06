@@ -9,5 +9,7 @@ fn main() {}
 #[cfg(feature = "read_buf")]
 #[rustversion::nightly]
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(bench)");
+    println!("cargo:rustc-check-cfg=cfg(read_buf)");
     println!("cargo:rustc-cfg=read_buf");
 }
