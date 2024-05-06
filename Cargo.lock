@@ -341,9 +341,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.7.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5509d663b2c00ee421bda8d6a24d6c42e15970957de1701b8df9f6fbe5707df1"
+checksum = "8487b59d62764df8231cb371c459314df895b41756df457a1fb1243d65c89195"
 dependencies = [
  "aws-lc-fips-sys",
  "aws-lc-sys",
@@ -355,9 +355,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.15.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d5d317212c2a78d86ba6622e969413c38847b62f48111f8b763af3dac2f9840"
+checksum = "c15eb61145320320eb919d9bab524617a7aa4216c78d342fae3a758bc33073e4"
 dependencies = [
  "bindgen",
  "cc",
@@ -397,9 +397,9 @@ checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
 name = "base64"
-version = "0.22.0"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "base64ct"
@@ -2176,7 +2176,7 @@ name = "rustls"
 version = "0.23.5"
 dependencies = [
  "aws-lc-rs",
- "base64 0.22.0",
+ "base64 0.22.1",
  "bencher",
  "env_logger",
  "hashbrown",
@@ -2247,7 +2247,7 @@ name = "rustls-openssl-tests"
 version = "0.0.1"
 dependencies = [
  "asn1",
- "base64 0.22.0",
+ "base64 0.22.1",
  "num-bigint",
  "once_cell",
  "openssl",
@@ -2271,7 +2271,7 @@ version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29993a25686778eb88d4189742cd713c9bce943bc54251a33509dc63cbacf73d"
 dependencies = [
- "base64 0.22.0",
+ "base64 0.22.1",
  "rustls-pki-types",
 ]
 
@@ -2392,18 +2392,18 @@ checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
 
 [[package]]
 name = "serde"
-version = "1.0.199"
+version = "1.0.200"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c9f6e76df036c77cd94996771fb40db98187f096dd0b9af39c6c6e452ba966a"
+checksum = "ddc6f9cc94d67c0e21aaf7eda3a010fd3af78ebf6e096aa6e2e13c79749cce4f"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.199"
+version = "1.0.200"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11bd257a6541e141e42ca6d24ae26f7714887b47e89aa739099104c7e4d3b7fc"
+checksum = "856f046b9400cee3c8c94ed572ecdb752444c24528c035cd35882aad6f492bcb"
 dependencies = [
  "proc-macro2",
  "quote",
