@@ -7,7 +7,7 @@ description = "Rustls CPU instruction counting benchmarks."
 publish = false
 
 [dependencies]
-anyhow = "1.0.73"
+anyhow = "1.0.83"
 async-trait = "0.1.74"
 byteorder = "1.4.3"
 clap = { version = "4.3.21", features = ["derive"] }
