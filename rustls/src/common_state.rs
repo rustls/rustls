@@ -399,8 +399,13 @@ impl CommonState {
     }
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
-        self.received_plaintext
-            .append(bytes.into_vec());
+        if !self.has_received_close_notify {
+            self.received_plaintext
+                .append(bytes.into_vec());
+        } else {
+            // "Any data received after a closure alert has been received MUST be ignored."
+            // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
+        }
     }
 
     #[cfg(feature = "tls12")]
