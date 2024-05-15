@@ -614,7 +614,7 @@ trait DeframerBuffer<'a, P: AppendPayload<'a>>: FilledDeframerBuffer {
     fn copy(&mut self, payload: &P, at: usize);
 }
 
-trait FilledDeframerBuffer {
+pub(crate) trait FilledDeframerBuffer {
     fn filled_get_mut<I: SliceIndex<[u8]>>(&mut self, index: I) -> &mut I::Output {
         self.filled_mut()
             .get_mut(index)
