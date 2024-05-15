@@ -23,10 +23,10 @@ use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
 use rustls::{
-    client, server, sign, version, AlertDescription, CertificateError, Connection,
-    DigitallySignedStruct, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
-    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
-    SignatureScheme, SupportedProtocolVersion,
+    client, compress, server, sign, version, AlertDescription, CertificateCompressionAlgorithm,
+    CertificateError, Connection, DigitallySignedStruct, DistinguishedName, Error, HandshakeKind,
+    InvalidMessage, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore,
+    Side, SignatureAlgorithm, SignatureScheme, SupportedProtocolVersion,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -86,6 +86,7 @@ struct Options {
     require_ems: bool,
     expect_handshake_kind: Option<Vec<HandshakeKind>>,
     expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
+    install_cert_compression_algs: CompressionAlgs,
 }
 
 impl Options {
@@ -138,6 +139,7 @@ impl Options {
             require_ems: false,
             expect_handshake_kind: None,
             expect_handshake_kind_resumed: Some(vec![HandshakeKind::Resumed]),
+            install_cert_compression_algs: CompressionAlgs::None,
         }
     }
 
@@ -573,6 +575,17 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
         cfg.send_half_rtt_data = true;
     }
 
+    match opts.install_cert_compression_algs {
+        CompressionAlgs::All => {
+            cfg.cert_compressors = vec![&ExpandingAlgorithm, &ShrinkingAlgorithm, &RandomAlgorithm];
+        }
+        CompressionAlgs::One(ShrinkingAlgorithm::ALGORITHM) => {
+            cfg.cert_compressors = vec![&ShrinkingAlgorithm];
+        }
+        CompressionAlgs::None => {}
+        _ => unimplemented!(),
+    }
+
     Arc::new(cfg)
 }
 
@@ -702,6 +715,18 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         cfg.enable_early_data = true;
     }
 
+    match opts.install_cert_compression_algs {
+        CompressionAlgs::All => {
+            cfg.cert_decompressors =
+                vec![&ExpandingAlgorithm, &ShrinkingAlgorithm, &RandomAlgorithm];
+        }
+        CompressionAlgs::One(ShrinkingAlgorithm::ALGORITHM) => {
+            cfg.cert_decompressors = vec![&ShrinkingAlgorithm];
+        }
+        CompressionAlgs::None => {}
+        _ => unimplemented!(),
+    }
+
     Arc::new(cfg)
 }
 
@@ -769,6 +794,15 @@ fn handle_err(err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme)
         | Error::PeerMisbehaved(PeerMisbehaved::SignedKxWithWrongAlgorithm) => {
             quit(":WRONG_SIGNATURE_TYPE:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedCertCompression) => {
+            quit(":UNKNOWN_CERT_COMPRESSION_ALG:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::InvalidCertCompression) => {
+            quit(":CERT_DECOMPRESSION_FAILED:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::OfferedDuplicateCertificateCompressions) => {
+            quit(":ERROR_PARSING_EXTENSION:")
         }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
@@ -1291,6 +1325,12 @@ pub fn main() {
             "-expect-extended-master-secret" => {
                 opts.require_ems = true;
             }
+            "-install-cert-compression-algs" => {
+                opts.install_cert_compression_algs = CompressionAlgs::All;
+            }
+            "-install-one-cert-compression-alg" => {
+                opts.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -1415,5 +1455,140 @@ pub fn main() {
         }
         opts.expect_handshake_kind
             .clone_from(&opts.expect_handshake_kind_resumed);
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum CompressionAlgs {
+    None,
+    All,
+    One(u16),
+}
+
+#[derive(Debug)]
+struct ShrinkingAlgorithm;
+
+impl ShrinkingAlgorithm {
+    const ALGORITHM: u16 = 0xff01;
+}
+
+impl compress::CertDecompressor for ShrinkingAlgorithm {
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Unknown(Self::ALGORITHM)
+    }
+
+    fn decompress(
+        &self,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), compress::DecompressionFailed> {
+        if output.len() != input.len() + 2 {
+            return Err(compress::DecompressionFailed);
+        }
+        output[..2].copy_from_slice(&[0, 0]);
+        output[2..].copy_from_slice(input);
+        Ok(())
+    }
+}
+
+impl compress::CertCompressor for ShrinkingAlgorithm {
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Unknown(Self::ALGORITHM)
+    }
+
+    fn compress(
+        &self,
+        mut input: Vec<u8>,
+        _: compress::CompressionLevel,
+    ) -> Result<Vec<u8>, compress::CompressionFailed> {
+        assert_eq!(input[..2], [0, 0]);
+        input.drain(0..2);
+        Ok(input)
+    }
+}
+
+#[derive(Debug)]
+struct ExpandingAlgorithm;
+
+impl compress::CertDecompressor for ExpandingAlgorithm {
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Unknown(0xff02)
+    }
+
+    fn decompress(
+        &self,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), compress::DecompressionFailed> {
+        if output.len() + 4 != input.len() {
+            return Err(compress::DecompressionFailed);
+        }
+        if input[..4] != [1, 2, 3, 4] {
+            return Err(compress::DecompressionFailed);
+        }
+        output.copy_from_slice(&input[4..]);
+        Ok(())
+    }
+}
+
+impl compress::CertCompressor for ExpandingAlgorithm {
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Unknown(0xff02)
+    }
+
+    fn compress(
+        &self,
+        mut input: Vec<u8>,
+        _: compress::CompressionLevel,
+    ) -> Result<Vec<u8>, compress::CompressionFailed> {
+        input.insert(0, 1);
+        input.insert(1, 2);
+        input.insert(2, 3);
+        input.insert(3, 4);
+        Ok(input)
+    }
+}
+
+#[derive(Debug)]
+struct RandomAlgorithm;
+
+impl compress::CertDecompressor for RandomAlgorithm {
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Unknown(0xff03)
+    }
+
+    fn decompress(
+        &self,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), compress::DecompressionFailed> {
+        if output.len() + 1 != input.len() {
+            return Err(compress::DecompressionFailed);
+        }
+        output.copy_from_slice(&input[1..]);
+        Ok(())
+    }
+}
+
+impl compress::CertCompressor for RandomAlgorithm {
+    fn algorithm(&self) -> CertificateCompressionAlgorithm {
+        CertificateCompressionAlgorithm::Unknown(0xff03)
+    }
+
+    fn compress(
+        &self,
+        mut input: Vec<u8>,
+        _: compress::CompressionLevel,
+    ) -> Result<Vec<u8>, compress::CompressionFailed> {
+        let random_byte = {
+            let mut bytes = [0];
+            provider::default_provider()
+                .secure_random
+                .fill(&mut bytes)
+                .unwrap();
+            bytes[0]
+        };
+        input.insert(0, random_byte);
+        Ok(input)
     }
 }
