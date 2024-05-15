@@ -1287,12 +1287,17 @@ impl<'a> Deref for CertificateChain<'a> {
 }
 
 impl TlsListElement for CertificateDer<'_> {
-    const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
+    const SIZE_LEN: ListLength = ListLength::U24 {
+        max: CERTIFICATE_MAX_SIZE_LIMIT,
+    };
 }
 
-// TLS1.3 changes the Certificate payload encoding.
-// That's annoying. It means the parsing is not
-// context-free any more.
+/// TLS has a 16MB size limit on any handshake message,
+/// plus a 16MB limit on any given certificate.
+///
+/// We contract that to 64KB to limit the amount of memory allocation
+/// that is directly controllable by the peer.
+pub(crate) const CERTIFICATE_MAX_SIZE_LIMIT: usize = 0x1_0000;
 
 #[derive(Debug)]
 pub(crate) enum CertificateExtension<'a> {
@@ -1418,7 +1423,9 @@ impl<'a> CertificateEntry<'a> {
 }
 
 impl<'a> TlsListElement for CertificateEntry<'a> {
-    const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
+    const SIZE_LEN: ListLength = ListLength::U24 {
+        max: CERTIFICATE_MAX_SIZE_LIMIT,
+    };
 }
 
 #[derive(Debug)]
