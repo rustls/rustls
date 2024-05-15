@@ -13,7 +13,7 @@ use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
 use crate::time_provider::TimeProvider;
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{verify, versions};
+use crate::{compress, verify, versions};
 
 impl ConfigBuilder<ClientConfig, WantsVerifier> {
     /// Choose how to verify server certificates.
@@ -164,6 +164,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
             time_provider: self.state.time_provider,
+            cert_decompressors: compress::default_cert_decompressors().to_vec(),
         }
     }
 }
