@@ -69,6 +69,7 @@ enum_builder! {
         CertificateURL => 0x15,
         CertificateStatus => 0x16,
         KeyUpdate => 0x18,
+        CompressedCertificate => 0x19,
         MessageHash => 0xfe,
     }
 }
@@ -568,10 +569,23 @@ enum_builder! {
     }
 }
 
+enum_builder! {
+    /// The "TLS Certificate Compression Algorithm IDs" TLS protocol enum.
+    /// Values in this enum are taken from [RFC8879].
+    ///
+    /// [RFC8879]: https://www.rfc-editor.org/rfc/rfc8879.html#section-7.3
+    @U16
+    pub enum CertificateCompressionAlgorithm {
+        Zlib => 1,
+        Brotli => 2,
+        Zstd => 3,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::msgs::enums::tests::test_enum8;
+    use crate::msgs::enums::tests::{test_enum16, test_enum8};
 
     #[test]
     fn test_enums() {
@@ -581,6 +595,10 @@ mod tests {
         test_enum8::<AlertDescription>(
             AlertDescription::CloseNotify,
             AlertDescription::NoApplicationProtocol,
+        );
+        test_enum16::<CertificateCompressionAlgorithm>(
+            CertificateCompressionAlgorithm::Zlib,
+            CertificateCompressionAlgorithm::Zstd,
         );
     }
 }
