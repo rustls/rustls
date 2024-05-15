@@ -6409,6 +6409,38 @@ fn test_junk_after_close_notify_received() {
     );
 }
 
+#[test]
+fn test_data_after_close_notify_is_ignored() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048);
+    do_handshake(&mut client, &mut server);
+
+    client
+        .writer()
+        .write_all(b"before")
+        .unwrap();
+    client.send_close_notify();
+    client
+        .writer()
+        .write_all(b"after")
+        .unwrap();
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    let mut received_data = [0u8; 128];
+    let count = server
+        .reader()
+        .read(&mut received_data)
+        .unwrap();
+    assert_eq!(&received_data[..count], b"before");
+    assert_eq!(
+        server
+            .reader()
+            .read(&mut received_data)
+            .unwrap(),
+        0
+    );
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {
