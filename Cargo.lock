@@ -2202,6 +2202,7 @@ dependencies = [
  "time",
  "webpki-roots 0.26.1",
  "zeroize",
+ "zlib-rs",
 ]
 
 [[package]]
@@ -3157,3 +3158,9 @@ dependencies = [
  "quote",
  "syn 2.0.50",
 ]
+
+[[package]]
+name = "zlib-rs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c52105e2dc6760ec88755876659dc301b51f6728f3b7a1bbdeeb66c6af4d44a1"
