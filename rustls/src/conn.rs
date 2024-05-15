@@ -184,26 +184,25 @@ mod connection {
         /// the return of [`Connection::process_new_packets`].
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             let len = self.received_plaintext.read(buf)?;
-
-            if len == 0 && !buf.is_empty() {
-                // No bytes available:
-                match (self.peer_cleanly_closed, self.has_seen_eof) {
-                    // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                    (true, _) => {}
-                    // unclean closure
-                    (false, true) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            UNEXPECTED_EOF_MESSAGE,
-                        ))
-                    }
-                    // connection still going, but needs more data: signal `WouldBlock` so that
-                    // the caller knows this
-                    (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
-                }
+            if len > 0 || buf.is_empty() {
+                return Ok(len);
             }
 
-            Ok(len)
+            // No bytes available:
+            match (self.peer_cleanly_closed, self.has_seen_eof) {
+                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+                (true, _) => Ok(len),
+                // unclean closure
+                (false, true) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        UNEXPECTED_EOF_MESSAGE,
+                    ))
+                }
+                // connection still going, but needs more data: signal `WouldBlock` so that
+                // the caller knows this
+                (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
+            }
         }
 
         /// Obtain plaintext data received from the peer over this TLS connection.
@@ -233,26 +232,23 @@ mod connection {
             self.received_plaintext
                 .read_buf(cursor.reborrow())?;
             let len = cursor.written() - before;
-
-            if len == 0 && cursor.capacity() > 0 {
-                // No bytes available:
-                match (self.peer_cleanly_closed, self.has_seen_eof) {
-                    // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                    (true, _) => {}
-                    // unclean closure
-                    (false, true) => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            UNEXPECTED_EOF_MESSAGE,
-                        ));
-                    }
-                    // connection still going, but need more data: signal `WouldBlock` so that
-                    // the caller knows this
-                    (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
-                }
+            if len > 0 || cursor.capacity() == 0 {
+                return Ok(());
             }
 
-            Ok(())
+            // No bytes available:
+            match (self.peer_cleanly_closed, self.has_seen_eof) {
+                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+                (true, _) => Ok(()),
+                // unclean closure
+                (false, true) => Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    UNEXPECTED_EOF_MESSAGE,
+                )),
+                // connection still going, but need more data: signal `WouldBlock` so that
+                // the caller knows this
+                (false, false) => Err(io::ErrorKind::WouldBlock.into()),
+            }
         }
     }
 
