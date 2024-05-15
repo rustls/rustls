@@ -6367,6 +6367,48 @@ fn test_complete_io_with_no_io_needed() {
     );
 }
 
+#[test]
+fn test_junk_after_close_notify_received() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048);
+    do_handshake(&mut client, &mut server);
+    client
+        .writer()
+        .write_all(b"hello")
+        .unwrap();
+    client.send_close_notify();
+
+    let mut client_buffer = vec![];
+    client
+        .write_tls(&mut io::Cursor::new(&mut client_buffer))
+        .unwrap();
+
+    // add some junk that will be dropped from the deframer buffer
+    // after the close_notify
+    client_buffer.extend_from_slice(&[0x17, 0x03, 0x03, 0x01]);
+
+    server
+        .read_tls(&mut io::Cursor::new(&client_buffer[..]))
+        .unwrap();
+    server.process_new_packets().unwrap();
+
+    // can read data received prior to close_notify
+    let mut received_data = [0u8; 128];
+    let len = server
+        .reader()
+        .read(&mut received_data)
+        .unwrap();
+    assert_eq!(&received_data[..len], b"hello");
+
+    // but subsequent reads just report clean EOF
+    assert_eq!(
+        server
+            .reader()
+            .read(&mut received_data)
+            .unwrap(),
+        0
+    );
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {
