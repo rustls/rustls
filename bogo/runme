@@ -8,11 +8,11 @@ set -xe
 case ${BOGO_SHIM_PROVIDER:-ring} in
   ring)
       cargo build -p rustls --example bogo_shim --no-default-features --features ring,tls12,logging,std
-      cpp -P -DRING config.json.in -oconfig.json
+      cpp -P -DRING config.json.in > config.json
       ;;
   aws-lc-rs)
       cargo build -p rustls --example bogo_shim --no-default-features --features aws_lc_rs,tls12,logging,std
-      cpp -P -DAWS_LC_RS config.json.in -oconfig.json
+      cpp -P -DAWS_LC_RS config.json.in > config.json
       ;;
   existing)
       ;;
