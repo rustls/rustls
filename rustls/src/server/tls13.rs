@@ -872,7 +872,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
         }
 
-        let client_cert = certp.convert();
+        let client_cert = certp.into_certificate_chain();
 
         let mandatory = self
             .config

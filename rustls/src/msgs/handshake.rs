@@ -1469,7 +1469,7 @@ impl CertificatePayloadTls13 {
             .unwrap_or_default()
     }
 
-    pub(crate) fn convert(self) -> CertificateChain<'static> {
+    pub(crate) fn into_certificate_chain(self) -> CertificateChain<'static> {
         CertificateChain(
             self.entries
                 .into_iter()
