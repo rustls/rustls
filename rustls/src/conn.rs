@@ -161,6 +161,24 @@ mod connection {
         pub(super) has_seen_eof: bool,
     }
 
+    impl<'a> Reader<'a> {
+        /// Check the connection's state if no bytes are available for reading.
+        fn check_no_bytes_state(&self) -> io::Result<()> {
+            match (self.peer_cleanly_closed, self.has_seen_eof) {
+                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
+                (true, _) => Ok(()),
+                // unclean closure
+                (false, true) => Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    UNEXPECTED_EOF_MESSAGE,
+                )),
+                // connection still going, but need more data: signal `WouldBlock` so that
+                // the caller knows this
+                (false, false) => Err(io::ErrorKind::WouldBlock.into()),
+            }
+        }
+    }
+
     impl<'a> io::Read for Reader<'a> {
         /// Obtain plaintext data received from the peer over this TLS connection.
         ///
@@ -188,21 +206,8 @@ mod connection {
                 return Ok(len);
             }
 
-            // No bytes available:
-            match (self.peer_cleanly_closed, self.has_seen_eof) {
-                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                (true, _) => Ok(len),
-                // unclean closure
-                (false, true) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        UNEXPECTED_EOF_MESSAGE,
-                    ))
-                }
-                // connection still going, but needs more data: signal `WouldBlock` so that
-                // the caller knows this
-                (false, false) => return Err(io::ErrorKind::WouldBlock.into()),
-            }
+            self.check_no_bytes_state()
+                .map(|()| len)
         }
 
         /// Obtain plaintext data received from the peer over this TLS connection.
@@ -236,19 +241,7 @@ mod connection {
                 return Ok(());
             }
 
-            // No bytes available:
-            match (self.peer_cleanly_closed, self.has_seen_eof) {
-                // cleanly closed; don't care about TCP EOF: express this as Ok(0)
-                (true, _) => Ok(()),
-                // unclean closure
-                (false, true) => Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    UNEXPECTED_EOF_MESSAGE,
-                )),
-                // connection still going, but need more data: signal `WouldBlock` so that
-                // the caller knows this
-                (false, false) => Err(io::ErrorKind::WouldBlock.into()),
-            }
+            self.check_no_bytes_state()
         }
     }
 
