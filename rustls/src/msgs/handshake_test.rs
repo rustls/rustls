@@ -793,14 +793,14 @@ fn get_sample_helloretryrequest() -> HelloRetryRequest {
     }
 }
 
-fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
+fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13<'static> {
     CertificatePayloadTls13 {
         context: PayloadU8(vec![1, 2, 3]),
         entries: vec![CertificateEntry {
             cert: CertificateDer::from(vec![3, 4, 5]),
             exts: vec![
                 CertificateExtension::CertificateStatus(CertificateStatus {
-                    ocsp_response: PayloadU24(vec![1, 2, 3]),
+                    ocsp_response: PayloadU24::new(vec![1, 2, 3]),
                 }),
                 CertificateExtension::Unknown(UnknownExtension {
                     typ: ExtensionType::Unknown(12345),
@@ -885,9 +885,9 @@ fn get_sample_encryptedextensions() -> Vec<ServerExtension> {
     get_sample_serverhellopayload().extensions
 }
 
-fn get_sample_certificatestatus() -> CertificateStatus {
+fn get_sample_certificatestatus() -> CertificateStatus<'static> {
     CertificateStatus {
-        ocsp_response: PayloadU24(vec![1, 2, 3]),
+        ocsp_response: PayloadU24::new(vec![1, 2, 3]),
     }
 }
 

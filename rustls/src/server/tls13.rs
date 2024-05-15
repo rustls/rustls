@@ -916,7 +916,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
-            client_cert,
+            client_cert: client_cert.into_owned(),
             send_tickets: self.send_tickets,
         }))
     }
