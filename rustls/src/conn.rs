@@ -10,7 +10,9 @@ use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
 use crate::log::trace;
-use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer};
+use crate::msgs::deframer::{
+    Deframed, DeframerSliceBuffer, DeframerVecBuffer, FilledDeframerBuffer, MessageDeframer,
+};
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
@@ -157,14 +159,14 @@ mod connection {
     /// A structure that implements [`std::io::Read`] for reading plaintext.
     pub struct Reader<'a> {
         pub(super) received_plaintext: &'a mut ChunkVecBuffer,
-        pub(super) peer_cleanly_closed: bool,
+        pub(super) has_received_close_notify: bool,
         pub(super) has_seen_eof: bool,
     }
 
     impl<'a> Reader<'a> {
         /// Check the connection's state if no bytes are available for reading.
         fn check_no_bytes_state(&self) -> io::Result<()> {
-            match (self.peer_cleanly_closed, self.has_seen_eof) {
+            match (self.has_received_close_notify, self.has_seen_eof) {
                 // cleanly closed; don't care about TCP EOF: express this as Ok(0)
                 (true, _) => Ok(()),
                 // unclean closure
@@ -172,7 +174,7 @@ mod connection {
                     io::ErrorKind::UnexpectedEof,
                     UNEXPECTED_EOF_MESSAGE,
                 )),
-                // connection still going, but need more data: signal `WouldBlock` so that
+                // connection still going, but needs more data: signal `WouldBlock` so that
                 // the caller knows this
                 (false, false) => Err(io::ErrorKind::WouldBlock.into()),
             }
@@ -490,8 +492,7 @@ impl<Data> ConnectionCommon<Data> {
             received_plaintext: &mut common.received_plaintext,
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
-            peer_cleanly_closed: common.has_received_close_notify
-                && !self.deframer_buffer.has_pending(),
+            has_received_close_notify: common.has_received_close_notify,
             has_seen_eof: common.has_seen_eof,
         }
     }
@@ -784,6 +785,16 @@ impl<Data> ConnectionCore<Data> {
                     deframer_buffer.discard(discard);
                     return Err(e);
                 }
+            }
+
+            if self
+                .common_state
+                .has_received_close_notify
+            {
+                // "Any data received after a closure alert has been received MUST be ignored."
+                // -- <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
+                discard = borrowed_buffer.filled().len();
+                break;
             }
         }
 
