@@ -81,31 +81,35 @@ impl fmt::Debug for Payload<'_> {
 
 /// An arbitrary, unknown-content, u24-length-prefixed payload
 #[derive(Clone, Eq, PartialEq)]
-pub(crate) struct PayloadU24(pub(crate) Vec<u8>);
+pub(crate) struct PayloadU24<'a>(pub(crate) Payload<'a>);
 
-impl PayloadU24 {
-    pub(crate) fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
+impl<'a> PayloadU24<'a> {
+    pub(crate) fn new(bytes: Vec<u8>) -> PayloadU24<'static> {
+        PayloadU24(Payload::Owned(bytes))
+    }
+
+    pub(crate) fn into_owned(self) -> PayloadU24<'static> {
+        PayloadU24(self.0.into_owned())
     }
 }
 
-impl Codec<'_> for PayloadU24 {
+impl<'a> Codec<'a> for PayloadU24<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        codec::u24(self.0.len() as u32).encode(bytes);
-        bytes.extend_from_slice(&self.0);
+        let inner = self.0.bytes();
+        codec::u24(inner.len() as u32).encode(bytes);
+        bytes.extend_from_slice(inner);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
-        let body = sub.rest().to_vec();
-        Ok(Self(body))
+        Ok(Self(Payload::read(&mut sub)))
     }
 }
 
-impl fmt::Debug for PayloadU24 {
+impl<'a> fmt::Debug for PayloadU24<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
+        self.0.fmt(f)
     }
 }
 

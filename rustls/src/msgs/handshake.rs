@@ -1295,12 +1295,12 @@ impl TlsListElement for CertificateDer<'_> {
 // context-free any more.
 
 #[derive(Debug)]
-pub(crate) enum CertificateExtension {
-    CertificateStatus(CertificateStatus),
+pub(crate) enum CertificateExtension<'a> {
+    CertificateStatus(CertificateStatus<'a>),
     Unknown(UnknownExtension),
 }
 
-impl CertificateExtension {
+impl<'a> CertificateExtension<'a> {
     pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::CertificateStatus(_) => ExtensionType::StatusRequest,
@@ -1308,15 +1308,22 @@ impl CertificateExtension {
         }
     }
 
-    pub(crate) fn cert_status(&self) -> Option<&Vec<u8>> {
+    pub(crate) fn cert_status(&self) -> Option<&[u8]> {
         match *self {
-            Self::CertificateStatus(ref cs) => Some(&cs.ocsp_response.0),
+            Self::CertificateStatus(ref cs) => Some(cs.ocsp_response.0.bytes()),
             _ => None,
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> CertificateExtension<'static> {
+        match self {
+            Self::CertificateStatus(st) => CertificateExtension::CertificateStatus(st.into_owned()),
+            Self::Unknown(unk) => CertificateExtension::Unknown(unk),
         }
     }
 }
 
-impl Codec<'_> for CertificateExtension {
+impl<'a> Codec<'a> for CertificateExtension<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.ext_type().encode(bytes);
 
@@ -1327,7 +1334,7 @@ impl Codec<'_> for CertificateExtension {
         }
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let typ = ExtensionType::read(r)?;
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
@@ -1345,35 +1352,46 @@ impl Codec<'_> for CertificateExtension {
     }
 }
 
-impl TlsListElement for CertificateExtension {
+impl<'a> TlsListElement for CertificateExtension<'a> {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Debug)]
-pub(crate) struct CertificateEntry {
-    pub(crate) cert: CertificateDer<'static>,
-    pub(crate) exts: Vec<CertificateExtension>,
+pub(crate) struct CertificateEntry<'a> {
+    pub(crate) cert: CertificateDer<'a>,
+    pub(crate) exts: Vec<CertificateExtension<'a>>,
 }
 
-impl Codec<'_> for CertificateEntry {
+impl<'a> Codec<'a> for CertificateEntry<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.cert.encode(bytes);
         self.exts.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
-            cert: CertificateDer::read(r)?.into_owned(),
+            cert: CertificateDer::read(r)?,
             exts: Vec::read(r)?,
         })
     }
 }
 
-impl CertificateEntry {
-    pub(crate) fn new(cert: CertificateDer<'static>) -> Self {
-        Self {
+impl<'a> CertificateEntry<'a> {
+    pub(crate) fn new(cert: CertificateDer<'static>) -> CertificateEntry<'static> {
+        CertificateEntry {
             cert,
             exts: Vec::new(),
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> CertificateEntry<'static> {
+        CertificateEntry {
+            cert: self.cert.into_owned(),
+            exts: self
+                .exts
+                .into_iter()
+                .map(CertificateExtension::into_owned)
+                .collect(),
         }
     }
 
@@ -1391,7 +1409,7 @@ impl CertificateEntry {
             .any(|ext| ext.ext_type() != ExtensionType::StatusRequest)
     }
 
-    pub(crate) fn ocsp_response(&self) -> Option<&Vec<u8>> {
+    pub(crate) fn ocsp_response(&self) -> Option<&[u8]> {
         self.exts
             .iter()
             .find(|ext| ext.ext_type() == ExtensionType::StatusRequest)
@@ -1399,23 +1417,23 @@ impl CertificateEntry {
     }
 }
 
-impl TlsListElement for CertificateEntry {
+impl<'a> TlsListElement for CertificateEntry<'a> {
     const SIZE_LEN: ListLength = ListLength::U24 { max: 0x1_0000 };
 }
 
 #[derive(Debug)]
-pub struct CertificatePayloadTls13 {
+pub struct CertificatePayloadTls13<'a> {
     pub(crate) context: PayloadU8,
-    pub(crate) entries: Vec<CertificateEntry>,
+    pub(crate) entries: Vec<CertificateEntry<'a>>,
 }
 
-impl Codec<'_> for CertificatePayloadTls13 {
+impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.context.encode(bytes);
         self.entries.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             context: PayloadU8::read(r)?,
             entries: Vec::read(r)?,
@@ -1423,11 +1441,22 @@ impl Codec<'_> for CertificatePayloadTls13 {
     }
 }
 
-impl CertificatePayloadTls13 {
-    pub(crate) fn new(entries: Vec<CertificateEntry>) -> Self {
+impl<'a> CertificatePayloadTls13<'a> {
+    pub(crate) fn new(entries: Vec<CertificateEntry<'a>>) -> Self {
         Self {
             context: PayloadU8::empty(),
             entries,
+        }
+    }
+
+    pub(crate) fn into_owned(self) -> CertificatePayloadTls13<'static> {
+        CertificatePayloadTls13 {
+            context: self.context,
+            entries: self
+                .entries
+                .into_iter()
+                .map(CertificateEntry::into_owned)
+                .collect(),
         }
     }
 
@@ -1465,11 +1494,11 @@ impl CertificatePayloadTls13 {
         self.entries
             .first()
             .and_then(CertificateEntry::ocsp_response)
-            .cloned()
+            .map(|resp| resp.to_vec())
             .unwrap_or_default()
     }
 
-    pub(crate) fn into_certificate_chain(self) -> CertificateChain<'static> {
+    pub(crate) fn into_certificate_chain(self) -> CertificateChain<'a> {
         CertificateChain(
             self.entries
                 .into_iter()
@@ -2175,17 +2204,17 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
 
 /// Only supports OCSP
 #[derive(Debug)]
-pub struct CertificateStatus {
-    pub(crate) ocsp_response: PayloadU24,
+pub struct CertificateStatus<'a> {
+    pub(crate) ocsp_response: PayloadU24<'a>,
 }
 
-impl Codec<'_> for CertificateStatus {
+impl<'a> Codec<'a> for CertificateStatus<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         CertificateStatusType::OCSP.encode(bytes);
         self.ocsp_response.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let typ = CertificateStatusType::read(r)?;
 
         match typ {
@@ -2197,16 +2226,22 @@ impl Codec<'_> for CertificateStatus {
     }
 }
 
-impl CertificateStatus {
-    pub(crate) fn new(ocsp: Vec<u8>) -> Self {
-        Self {
+impl<'a> CertificateStatus<'a> {
+    pub(crate) fn new(ocsp: Vec<u8>) -> CertificateStatus<'static> {
+        CertificateStatus {
             ocsp_response: PayloadU24::new(ocsp),
         }
     }
 
     #[cfg(feature = "tls12")]
     pub(crate) fn into_inner(self) -> Vec<u8> {
-        self.ocsp_response.0
+        self.ocsp_response.0.into_vec()
+    }
+
+    pub(crate) fn into_owned(self) -> CertificateStatus<'static> {
+        CertificateStatus {
+            ocsp_response: self.ocsp_response.into_owned(),
+        }
     }
 }
 
@@ -2217,7 +2252,7 @@ pub enum HandshakePayload<'a> {
     ServerHello(ServerHelloPayload),
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificateChain<'a>),
-    CertificateTls13(CertificatePayloadTls13),
+    CertificateTls13(CertificatePayloadTls13<'a>),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
     CertificateRequestTls13(CertificateRequestPayloadTls13),
@@ -2230,7 +2265,7 @@ pub enum HandshakePayload<'a> {
     EncryptedExtensions(Vec<ServerExtension>),
     KeyUpdate(KeyUpdateRequest),
     Finished(Payload<'a>),
-    CertificateStatus(CertificateStatus),
+    CertificateStatus(CertificateStatus<'a>),
     MessageHash(Payload<'a>),
     Unknown(Payload<'a>),
 }
@@ -2270,7 +2305,7 @@ impl HandshakePayload<'_> {
             ServerHello(x) => ServerHello(x),
             HelloRetryRequest(x) => HelloRetryRequest(x),
             Certificate(x) => Certificate(x.into_owned()),
-            CertificateTls13(x) => CertificateTls13(x),
+            CertificateTls13(x) => CertificateTls13(x.into_owned()),
             ServerKeyExchange(x) => ServerKeyExchange(x),
             CertificateRequest(x) => CertificateRequest(x),
             CertificateRequestTls13(x) => CertificateRequestTls13(x),
@@ -2283,7 +2318,7 @@ impl HandshakePayload<'_> {
             EncryptedExtensions(x) => EncryptedExtensions(x),
             KeyUpdate(x) => KeyUpdate(x),
             Finished(x) => Finished(x.into_owned()),
-            CertificateStatus(x) => CertificateStatus(x),
+            CertificateStatus(x) => CertificateStatus(x.into_owned()),
             MessageHash(x) => MessageHash(x.into_owned()),
             Unknown(x) => Unknown(x.into_owned()),
         }
