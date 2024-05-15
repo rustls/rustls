@@ -26,9 +26,9 @@ use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
+use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
 #[cfg(doc)]
 use crate::{crypto, DistinguishedName};
-use crate::{sign, verify, versions, KeyLog, WantsVersions};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -141,6 +141,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 ///    ids or tickets, with a max of eight tickets per server.
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
+/// * [`ClientConfig::cert_decompressors`]: depends on the crate features, see [`compress::default_cert_decompressors()`].
 ///
 /// [`RootCertStore`]: crate::RootCertStore
 #[derive(Clone, Debug)]
@@ -215,6 +216,18 @@ pub struct ClientConfig {
 
     /// How to verify the server certificate chain.
     pub(super) verifier: Arc<dyn verify::ServerCertVerifier>,
+
+    /// How to decompress the server's certificate chain.
+    ///
+    /// If this is non-empty, the [RFC8779] certificate compression
+    /// extension is offered, and any compressed certificates are
+    /// transparently decompressed during the handshake.
+    ///
+    /// This only applies to TLS1.3 connections.  It is ignored for
+    /// TLS1.2 connections.
+    ///
+    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
 }
 
 impl ClientConfig {

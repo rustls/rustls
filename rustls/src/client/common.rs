@@ -38,6 +38,7 @@ impl<'a> ServerCertDetails<'a> {
 pub(super) struct ClientHelloDetails {
     pub(super) sent_extensions: Vec<ExtensionType>,
     pub(super) extension_order_seed: u16,
+    pub(super) offered_cert_compression: bool,
 }
 
 impl ClientHelloDetails {
@@ -45,6 +46,7 @@ impl ClientHelloDetails {
         Self {
             sent_extensions: Vec::new(),
             extension_order_seed,
+            offered_cert_compression: false,
         }
     }
 
