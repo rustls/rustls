@@ -13,7 +13,9 @@ use pki_types::{CertificateDer, DnsName};
 #[cfg(feature = "tls12")]
 use crate::crypto::ActiveKeyExchange;
 use crate::crypto::SecureRandom;
-use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::enums::{
+    CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
+};
 use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
@@ -535,6 +537,10 @@ impl TlsListElement for ProtocolVersion {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
 
+impl TlsListElement for CertificateCompressionAlgorithm {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
+
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
     EcPointFormats(Vec<ECPointFormat>),
@@ -553,6 +559,7 @@ pub enum ClientExtension {
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
+    CertificateCompressionAlgorithms(Vec<CertificateCompressionAlgorithm>),
     Unknown(UnknownExtension),
 }
 
@@ -575,6 +582,7 @@ impl ClientExtension {
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
+            Self::CertificateCompressionAlgorithms(_) => ExtensionType::CompressCertificate,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -604,6 +612,7 @@ impl Codec<'_> for ClientExtension {
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
                 nested.buf.extend_from_slice(r);
             }
+            Self::CertificateCompressionAlgorithms(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -644,6 +653,9 @@ impl Codec<'_> for ClientExtension {
                 Self::TransportParametersDraft(sub.rest().to_vec())
             }
             ExtensionType::EarlyData if !sub.any_left() => Self::EarlyData,
+            ExtensionType::CompressCertificate => {
+                Self::CertificateCompressionAlgorithms(Vec::read(&mut sub)?)
+            }
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -2270,6 +2282,40 @@ impl<'a> CertificateStatus<'a> {
     }
 }
 
+// -- RFC8879 compressed certificates
+
+#[derive(Debug)]
+pub struct CompressedCertificatePayload<'a> {
+    pub(crate) alg: CertificateCompressionAlgorithm,
+    pub(crate) uncompressed_len: u32,
+    pub(crate) compressed: PayloadU24<'a>,
+}
+
+impl<'a> Codec<'a> for CompressedCertificatePayload<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.alg.encode(bytes);
+        codec::u24(self.uncompressed_len).encode(bytes);
+        self.compressed.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(Self {
+            alg: CertificateCompressionAlgorithm::read(r)?,
+            uncompressed_len: codec::u24::read(r)?.0,
+            compressed: PayloadU24::read(r)?,
+        })
+    }
+}
+
+impl CompressedCertificatePayload<'_> {
+    fn into_owned(self) -> CompressedCertificatePayload<'static> {
+        CompressedCertificatePayload {
+            compressed: self.compressed.into_owned(),
+            ..self
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum HandshakePayload<'a> {
     HelloRequest,
@@ -2278,6 +2324,7 @@ pub enum HandshakePayload<'a> {
     HelloRetryRequest(HelloRetryRequest),
     Certificate(CertificateChain<'a>),
     CertificateTls13(CertificatePayloadTls13<'a>),
+    CompressedCertificate(CompressedCertificatePayload<'a>),
     ServerKeyExchange(ServerKeyExchangePayload),
     CertificateRequest(CertificateRequestPayload),
     CertificateRequestTls13(CertificateRequestPayloadTls13),
@@ -2305,6 +2352,7 @@ impl HandshakePayload<'_> {
             HelloRetryRequest(ref x) => x.encode(bytes),
             Certificate(ref x) => x.encode(bytes),
             CertificateTls13(ref x) => x.encode(bytes),
+            CompressedCertificate(ref x) => x.encode(bytes),
             ServerKeyExchange(ref x) => x.encode(bytes),
             ClientKeyExchange(ref x) => x.encode(bytes),
             CertificateRequest(ref x) => x.encode(bytes),
@@ -2331,6 +2379,7 @@ impl HandshakePayload<'_> {
             HelloRetryRequest(x) => HelloRetryRequest(x),
             Certificate(x) => Certificate(x.into_owned()),
             CertificateTls13(x) => CertificateTls13(x.into_owned()),
+            CompressedCertificate(x) => CompressedCertificate(x.into_owned()),
             ServerKeyExchange(x) => ServerKeyExchange(x),
             CertificateRequest(x) => CertificateRequest(x),
             CertificateRequestTls13(x) => CertificateRequestTls13(x),
@@ -2430,6 +2479,9 @@ impl<'a> HandshakeMessagePayload<'a> {
                 let p = CertificateRequestPayload::read(&mut sub)?;
                 HandshakePayload::CertificateRequest(p)
             }
+            HandshakeType::CompressedCertificate => HandshakePayload::CompressedCertificate(
+                CompressedCertificatePayload::read(&mut sub)?,
+            ),
             HandshakeType::CertificateVerify => {
                 HandshakePayload::CertificateVerify(DigitallySignedStruct::read(&mut sub)?)
             }

@@ -4,7 +4,9 @@ use std::{format, println, vec};
 use pki_types::{CertificateDer, DnsName};
 
 use super::handshake::{ServerDhParams, ServerKeyExchange, ServerKeyExchangeParams};
-use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::enums::{
+    CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
+};
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
@@ -15,12 +17,13 @@ use crate::msgs::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
-    ClientSessionTicket, ConvertProtocolNameList, ConvertServerNameList, DistinguishedName,
-    EcParameters, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerEcdhParams,
-    ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId, UnknownExtension,
+    ClientSessionTicket, CompressedCertificatePayload, ConvertProtocolNameList,
+    ConvertServerNameList, DistinguishedName, EcParameters, HandshakeMessagePayload,
+    HandshakePayload, HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
+    NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
+    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId,
+    UnknownExtension,
 };
 use crate::verify::DigitallySignedStruct;
 
@@ -392,6 +395,11 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
             ClientExtension::TransportParameters(vec![1, 2, 3]),
+            ClientExtension::EarlyData,
+            ClientExtension::CertificateCompressionAlgorithms(vec![
+                CertificateCompressionAlgorithm::Brotli,
+                CertificateCompressionAlgorithm::Zlib,
+            ]),
             ClientExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
@@ -811,6 +819,14 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13<'static> {
     }
 }
 
+fn get_sample_compressed_certificate() -> CompressedCertificatePayload<'static> {
+    CompressedCertificatePayload {
+        alg: CertificateCompressionAlgorithm::Brotli,
+        uncompressed_len: 123,
+        compressed: PayloadU24(Payload::new(vec![1, 2, 3])),
+    }
+}
+
 fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Known(ServerKeyExchange {
         params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
@@ -1057,6 +1073,10 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
         HandshakeMessagePayload {
             typ: HandshakeType::Certificate,
             payload: HandshakePayload::CertificateTls13(get_sample_certificatepayloadtls13()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::CompressedCertificate,
+            payload: HandshakePayload::CompressedCertificate(get_sample_compressed_certificate()),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
