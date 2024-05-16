@@ -13,7 +13,7 @@ use rustls::unbuffered::{
     UnbufferedStatus, WriteTraffic,
 };
 use rustls::version::TLS13;
-use rustls::{ClientConfig, ServerConfig};
+use rustls::{ClientConfig, ServerConfig, SideData};
 
 mod common;
 use common::*;
@@ -402,6 +402,8 @@ fn run(
         assert!(count <= MAX_ITERATIONS, "handshake was not completed");
     }
 
+    outcome.server = Some(server);
+    outcome.client = Some(client);
     outcome
 }
 
@@ -453,6 +455,56 @@ fn close_notify_server_to_client() {
     }
 }
 
+#[test]
+fn junk_after_close_notify_received() {
+    // cf. test_junk_after_close_notify_received in api.rs
+    let mut outcome = handshake(&rustls::version::TLS13);
+    let mut client = outcome.client.take().unwrap();
+    let mut server = outcome.server.take().unwrap();
+
+    let mut client_send_buf = [0u8; 128];
+    let mut len = dbg!(write_traffic(
+        client.process_tls_records(&mut []),
+        |mut wt: WriteTraffic<_>| wt.queue_close_notify(&mut client_send_buf),
+    )
+    .unwrap());
+
+    client_send_buf[len..len + 4].copy_from_slice(&[0x17, 0x03, 0x03, 0x01]);
+    len += 4;
+
+    let discard = match dbg!(server.process_tls_records(dbg!(&mut client_send_buf[..len]))) {
+        UnbufferedStatus {
+            discard,
+            state: Ok(ConnectionState::Closed),
+        } => {
+            assert_eq!(discard, 24);
+            discard
+        }
+        st => {
+            panic!("unexpected server state {st:?} (wanted Closed)");
+        }
+    };
+
+    // further data in client_send_buf is ignored
+    let UnbufferedStatus { discard, .. } =
+        server.process_tls_records(dbg!(&mut client_send_buf[discard..len]));
+    assert_eq!(discard, 0);
+}
+
+fn write_traffic<T: SideData, F: FnMut(WriteTraffic<T>) -> Result<usize, EncryptError>>(
+    status: UnbufferedStatus<'_, '_, T>,
+    mut f: F,
+) -> Result<usize, EncryptError> {
+    let UnbufferedStatus { discard, state } = status;
+    assert_eq!(discard, 0);
+    let state = state.unwrap();
+    if let ConnectionState::WriteTraffic(state) = state {
+        f(state)
+    } else {
+        panic!("unexpected client state {state:?} (wanted WriteTraffic)");
+    }
+}
+
 #[derive(Debug)]
 enum State {
     Closed,
@@ -496,12 +548,14 @@ impl Actions<'_> {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Default)]
 struct Outcome {
+    server: Option<UnbufferedServerConnection>,
     server_transcript: Vec<String>,
     server_received_early_data: Vec<Vec<u8>>,
     server_received_app_data: Vec<Vec<u8>>,
     server_reached_connection_closed_state: bool,
+    client: Option<UnbufferedClientConnection>,
     client_transcript: Vec<String>,
     client_received_app_data: Vec<Vec<u8>>,
     client_reached_connection_closed_state: bool,
