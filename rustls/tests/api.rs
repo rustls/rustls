@@ -6442,6 +6442,59 @@ fn test_data_after_close_notify_is_ignored() {
     );
 }
 
+#[test]
+fn test_close_notify_sent_prior_to_handshake_complete() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048);
+    client.send_close_notify();
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(ErrorFromPeer::Server(Error::AlertReceived(
+            AlertDescription::CloseNotify
+        )))
+    );
+}
+
+#[test]
+fn test_subsequent_close_notify_ignored() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048);
+    client.send_close_notify();
+    assert!(transfer(&mut client, &mut server) > 0);
+
+    // does nothing
+    client.send_close_notify();
+    assert_eq!(transfer(&mut client, &mut server), 0);
+}
+
+#[test]
+fn test_second_close_notify_after_handshake() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048);
+    do_handshake(&mut client, &mut server);
+    client.send_close_notify();
+    assert!(transfer(&mut client, &mut server) > 0);
+    server.process_new_packets().unwrap();
+
+    // does nothing
+    client.send_close_notify();
+    assert_eq!(transfer(&mut client, &mut server), 0);
+}
+
+#[test]
+fn test_read_tls_artificial_eof_after_close_notify() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048);
+    do_handshake(&mut client, &mut server);
+    client.send_close_notify();
+    assert!(transfer(&mut client, &mut server) > 0);
+    server.process_new_packets().unwrap();
+
+    let buf = [1, 2, 3, 4];
+    assert_eq!(
+        server
+            .read_tls(&mut io::Cursor::new(buf))
+            .unwrap(),
+        0
+    );
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {
