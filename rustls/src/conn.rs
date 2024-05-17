@@ -645,6 +645,9 @@ impl<Data> ConnectionCommon<Data> {
     /// * In order to empty the incoming plaintext data buffer, you should empty it through
     ///   the [`reader()`] after the call to [`process_new_packets()`].
     ///
+    /// This function also returns `Ok(0)` once a `close_notify` alert has been successfully
+    /// received.  No additional data is ever read in this state.
+    ///
     /// [`process_new_packets()`]: ConnectionCommon::process_new_packets
     /// [`reader()`]: ConnectionCommon::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
@@ -653,6 +656,10 @@ impl<Data> ConnectionCommon<Data> {
                 io::ErrorKind::Other,
                 "received plaintext buffer full",
             ));
+        }
+
+        if self.has_received_close_notify {
+            return Ok(0);
         }
 
         let res = self
