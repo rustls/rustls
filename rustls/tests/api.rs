@@ -6390,6 +6390,7 @@ fn test_junk_after_close_notify_received() {
         .read_tls(&mut io::Cursor::new(&client_buffer[..]))
         .unwrap();
     server.process_new_packets().unwrap();
+    server.process_new_packets().unwrap(); // check for desync
 
     // can read data received prior to close_notify
     let mut received_data = [0u8; 128];
