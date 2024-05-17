@@ -475,14 +475,20 @@ impl CommonState {
         err.into()
     }
 
-    /// Queues a close_notify warning alert to be sent in the next
+    /// Queues a `close_notify` warning alert to be sent in the next
     /// [`Connection::write_tls`] call.  This informs the peer that the
     /// connection is being closed.
     ///
+    /// Does nothing if any `close_notify` or fatal alert was already sent.
+    ///
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     pub fn send_close_notify(&mut self) {
+        if self.sent_fatal_alert {
+            return;
+        }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
         self.send_warning_alert_no_log(AlertDescription::CloseNotify);
+        self.sent_fatal_alert = true;
     }
 
     pub(crate) fn eager_send_close_notify(
