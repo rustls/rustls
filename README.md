@@ -250,13 +250,13 @@ Here's a sample run; we start a TLS echo server, then connect to it with
 `openssl` and `tlsclient-mio`:
 
 ```
-$ cargo run --bin tlsserver-mio -- --certs test-ca/rsa/end.fullchain --key test-ca/rsa/end.rsa -p 8443 echo &
+$ cargo run --bin tlsserver-mio -- --certs test-ca/rsa-2048/end.fullchain --key test-ca/rsa-2048/end.key -p 8443 echo &
 $ echo hello world | openssl s_client -ign_eof -quiet -connect localhost:8443
 depth=2 CN = ponytown RSA CA
 verify error:num=19:self signed certificate in certificate chain
 hello world
 ^C
-$ echo hello world | cargo run --bin tlsclient-mio -- --cafile test-ca/rsa/ca.cert -p 8443 localhost
+$ echo hello world | cargo run --bin tlsclient-mio -- --cafile test-ca/rsa-2048/ca.cert -p 8443 localhost
 hello world
 ^C
 ```
