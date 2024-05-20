@@ -6495,6 +6495,29 @@ fn test_read_tls_artificial_eof_after_close_notify() {
     );
 }
 
+#[test]
+fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
+    let ocsp_response = b"hello-ocsp-world!";
+    let kt = KeyType::EcdsaP256;
+
+    for version in rustls::ALL_VERSIONS {
+        let server_config = server_config_builder()
+            .with_no_client_auth()
+            .with_single_cert_with_ocsp(kt.get_chain(), kt.get_key(), ocsp_response.to_vec())
+            .unwrap();
+
+        let client_config = client_config_builder_with_versions(&[version])
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(MockServerVerifier::expects_ocsp_response(
+                ocsp_response,
+            )))
+            .with_no_client_auth();
+
+        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+        do_handshake(&mut client, &mut server);
+    }
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {
