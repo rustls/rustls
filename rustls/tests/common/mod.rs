@@ -778,6 +778,7 @@ pub struct MockServerVerifier {
     tls12_signature_error: Option<Error>,
     tls13_signature_error: Option<Error>,
     signature_schemes: Vec<SignatureScheme>,
+    expected_ocsp_response: Option<Vec<u8>>,
 }
 
 impl ServerCertVerifier for MockServerVerifier {
@@ -786,13 +787,16 @@ impl ServerCertVerifier for MockServerVerifier {
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
         server_name: &ServerName<'_>,
-        oscp_response: &[u8],
+        ocsp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
         println!(
             "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?})",
-            end_entity, intermediates, server_name, oscp_response, now
+            end_entity, intermediates, server_name, ocsp_response, now
         );
+        if let Some(expected_ocsp) = &self.expected_ocsp_response {
+            assert_eq!(expected_ocsp, ocsp_response);
+        }
         if let Some(error) = &self.cert_rejection_error {
             Err(error.clone())
         } else {
@@ -847,6 +851,13 @@ impl MockServerVerifier {
         }
     }
 
+    pub fn expects_ocsp_response(response: &[u8]) -> Self {
+        MockServerVerifier {
+            expected_ocsp_response: Some(response.to_vec()),
+            ..Default::default()
+        }
+    }
+
     pub fn rejects_certificate(err: Error) -> Self {
         MockServerVerifier {
             cert_rejection_error: Some(err),
@@ -890,6 +901,7 @@ impl Default for MockServerVerifier {
                 SignatureScheme::ECDSA_NISTP384_SHA384,
                 SignatureScheme::ECDSA_NISTP521_SHA512,
             ],
+            expected_ocsp_response: None,
         }
     }
 }
