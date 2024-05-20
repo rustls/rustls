@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+
+DESCRIPTION = """
+Usage: admin/all-features-except a,b,c crate
+
+Prints the set of all features declared by the given crate, minus
+a, b and c.
+
+The output is decorated with `--no-default-features --features` meaning
+it can be used directly with cargo, for example:
+
+$ cargo build $(admin/all-features-except std,logging rustls)
+
+It is assumed but not verified that the remaining features do not
+have dependencies on the disabled features (otherwise, cargo will
+re-enable them without notification).
+"""
+
+import subprocess
+import argparse
+import json
+
+
+def crate_features(crate_name):
+    js = json.loads(
+        subprocess.check_output(
+            ["cargo", "metadata", "--no-deps", "--format-version=1"]
+        )
+    )
+    package = [p for p in js["packages"] if p["name"] == crate_name]
+    if len(package) != 1:
+        raise ValueError(f"crate {crate_name} not found in {js}")
+    return set(package[0]["features"].keys())
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=DESCRIPTION)
+    ap.add_argument(
+        dest="except_features",
+        metavar="FEATURE,FEATURE,..",
+        type=lambda x: set(x.strip().split(",")),
+        help="Which features to remove from the complete set of features",
+    )
+    ap.add_argument("crate", help="Which crate to determine features for")
+    opts = ap.parse_args()
+
+    features = crate_features(opts.crate)
+
+    for f in opts.except_features:
+        try:
+            features.remove(f)
+        except KeyError as e:
+            ap.error(f"feature `{f}' not found (known are {features})")
+
+    # drop default, as it may re-enable other features
+    features.discard("default")
+
+    print("--no-default-features", "--features", ",".join(sorted(features)))
