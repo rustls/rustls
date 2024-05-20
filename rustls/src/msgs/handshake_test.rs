@@ -990,6 +990,17 @@ fn can_roundtrip_all_tls12_handshake_payloads() {
 }
 
 #[test]
+fn can_into_owned_all_tls12_handshake_payloads() {
+    for hm in get_all_tls12_handshake_payloads().drain(..) {
+        let enc = hm.get_encoding();
+        let debug = format!("{hm:?}");
+        let other = hm.into_owned();
+        assert_eq!(enc, other.get_encoding());
+        assert_eq!(debug, format!("{other:?}"));
+    }
+}
+
+#[test]
 fn can_detect_truncation_of_all_tls12_handshake_payloads() {
     for hm in get_all_tls12_handshake_payloads().iter() {
         let mut enc = hm.get_encoding();
@@ -1131,6 +1142,17 @@ fn can_roundtrip_all_tls13_handshake_payloads() {
 
         println!("{:?}", hm);
         println!("{:?}", other);
+    }
+}
+
+#[test]
+fn can_into_owned_all_tls13_handshake_payloads() {
+    for hm in get_all_tls13_handshake_payloads().drain(..) {
+        let enc = hm.get_encoding();
+        let debug = format!("{hm:?}");
+        let other = hm.into_owned();
+        assert_eq!(enc, other.get_encoding());
+        assert_eq!(debug, format!("{other:?}"));
     }
 }
 
