@@ -6,7 +6,7 @@ use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
 use rustls_provider_example::HPKE_PROVIDER;
 use serde::Deserialize;
 
-/// Confirm opne/seal operations work using using the test vectors from [RFC 9180 Appendix A].
+/// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
 ///
 /// [RFC 9180 Appendix A]: https://www.rfc-editor.org/rfc/rfc9180#TestVectors
 #[test]
