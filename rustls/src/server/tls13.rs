@@ -34,16 +34,16 @@ use crate::{rand, verify};
 
 mod client_hello {
     use super::*;
-    use crate::compress::{CertCompressor, CompressionLevel};
+    use crate::compress::CertCompressor;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
-    use crate::msgs::base::{Payload, PayloadU24, PayloadU8};
+    use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
     use crate::msgs::handshake::{
         CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
-        ClientHelloPayload, CompressedCertificatePayload, HelloRetryExtension, HelloRetryRequest,
-        KeyShareEntry, Random, ServerExtension, ServerHelloPayload, SessionId,
+        ClientHelloPayload, HelloRetryExtension, HelloRetryRequest, KeyShareEntry, Random,
+        ServerExtension, ServerHelloPayload, SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
@@ -374,6 +374,7 @@ mod client_hello {
                     emit_compressed_certificate_tls13(
                         &mut self.transcript,
                         cx.common,
+                        &self.config,
                         server_key.get_cert(),
                         ocsp_response,
                         compressor,
@@ -748,30 +749,26 @@ mod client_hello {
     fn emit_compressed_certificate_tls13(
         transcript: &mut HandshakeHash,
         common: &mut CommonState,
+        config: &ServerConfig,
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
         cert_compressor: &'static dyn CertCompressor,
     ) {
-        let encoding =
-            CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response).get_encoding();
-        let uncompressed_len = encoding.len() as u32;
+        let payload = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
 
-        let compressed = match cert_compressor.compress(encoding, CompressionLevel::Interactive) {
-            Ok(compressed) => PayloadU24(Payload::new(compressed)),
-            Err(_) => {
-                return emit_certificate_tls13(transcript, common, cert_chain, ocsp_response);
-            }
+        let entry = match config
+            .cert_compression_cache
+            .compression_for(cert_compressor, &payload)
+        {
+            Ok(entry) => entry,
+            Err(_) => return emit_certificate_tls13(transcript, common, cert_chain, ocsp_response),
         };
 
         let c = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CompressedCertificate,
-                payload: HandshakePayload::CompressedCertificate(CompressedCertificatePayload {
-                    alg: cert_compressor.algorithm(),
-                    uncompressed_len,
-                    compressed,
-                }),
+                payload: HandshakePayload::CompressedCertificate(entry.compressed_cert_payload()),
             }),
         };
 

@@ -2332,6 +2332,14 @@ impl CompressedCertificatePayload<'_> {
             ..self
         }
     }
+
+    pub(crate) fn as_borrowed(&self) -> CompressedCertificatePayload {
+        CompressedCertificatePayload {
+            alg: self.alg,
+            uncompressed_len: self.uncompressed_len,
+            compressed: PayloadU24(Payload::Borrowed(self.compressed.0.bytes())),
+        }
+    }
 }
 
 #[derive(Debug)]

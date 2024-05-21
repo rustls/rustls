@@ -132,6 +132,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             require_ems: cfg!(feature = "fips"),
             time_provider: self.state.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),
+            cert_compression_cache: Arc::new(compress::CompressionCache::default()),
         }
     }
 }
