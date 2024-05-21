@@ -219,6 +219,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
 /// * [`ServerConfig::cert_compressors`]: depends on the crate features, see [`compress::default_cert_compressors()`].
+/// * [`ServerConfig::cert_compression_cache`]: caches the most recently used 4 compressions
 ///
 /// [`RootCertStore`]: crate::RootCertStore
 /// [`ServerSessionMemoryCache`]: crate::server::handy::ServerSessionMemoryCache
@@ -350,6 +351,12 @@ pub struct ServerConfig {
     ///
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
+
+    /// Caching for compressed certificates.
+    ///
+    /// This is optional: [`compress::CompressionCache::Disabled`] gives
+    /// a cache that does no caching.
+    pub cert_compression_cache: Arc<compress::CompressionCache>,
 }
 
 impl ServerConfig {

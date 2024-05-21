@@ -1,9 +1,17 @@
 //! Certificate compression and decompression support
 
+#[cfg(feature = "std")]
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+#[cfg(feature = "std")]
+use std::sync::Mutex;
 
 use crate::enums::CertificateCompressionAlgorithm;
+use crate::msgs::base::{Payload, PayloadU24};
+use crate::msgs::codec::Codec;
+use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
 
 /// Returns the supported `CertDecompressor` implementations enabled
 /// by crate features.
@@ -226,6 +234,184 @@ mod feat_brotli {
 #[cfg(feature = "brotli")]
 pub use feat_brotli::{BROTLI_COMPRESSOR, BROTLI_DECOMPRESSOR};
 
+/// An LRU cache for compressions.
+///
+/// The prospect of being able to reuse a given compression for many connections
+/// means we can afford to spend more time on that compression (by passing
+/// `CompressionLevel::Amortized` to the compressor).
+#[derive(Debug)]
+pub enum CompressionCache {
+    /// No caching happens, and compression happens each time using
+    /// `CompressionLevel::Interactive`.
+    Disabled,
+
+    /// Compressions are stored in an LRU cache.
+    #[cfg(feature = "std")]
+    Enabled(CompressionCacheInner),
+}
+
+/// Innards of an enabled CompressionCache.
+///
+/// You cannot make one of these directly. Use [`CompressionCache::new`].
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub struct CompressionCacheInner {
+    /// Maximum size of underlying storage.
+    size: usize,
+
+    /// LRU-order entries.
+    ///
+    /// First is least-used, last is most-used.
+    entries: Mutex<VecDeque<Arc<CompressionCacheEntry>>>,
+}
+
+impl CompressionCache {
+    /// Make a `CompressionCache` that stores up to `size` compressed
+    /// certificate messages.
+    #[cfg(feature = "std")]
+    pub fn new(size: usize) -> Self {
+        if size == 0 {
+            return Self::Disabled;
+        }
+
+        Self::Enabled(CompressionCacheInner {
+            size,
+            entries: Mutex::new(VecDeque::with_capacity(size)),
+        })
+    }
+
+    /// Return a `CompressionCacheEntry`, which is an owning
+    /// wrapper for a `CompressedCertificatePayload`.
+    ///
+    /// `compressor` is the compression function we have negotiated.
+    /// `original` is the uncompressed certificate message.
+    pub(crate) fn compression_for(
+        &self,
+        compressor: &dyn CertCompressor,
+        original: &CertificatePayloadTls13,
+    ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
+        match self {
+            Self::Disabled => Self::uncached_compression(compressor, original),
+
+            #[cfg(feature = "std")]
+            Self::Enabled(_) => self.compression_for_impl(compressor, original),
+        }
+    }
+
+    #[cfg(feature = "std")]
+    fn compression_for_impl(
+        &self,
+        compressor: &dyn CertCompressor,
+        original: &CertificatePayloadTls13,
+    ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
+        let (max_size, entries) = match self {
+            Self::Enabled(CompressionCacheInner { size, entries }) => (*size, entries),
+            _ => unreachable!(),
+        };
+
+        // context is a per-connection quantity, and included in the compressed data.
+        // it is not suitable for inclusion in the cache.
+        if !original.context.0.is_empty() {
+            return Self::uncached_compression(compressor, original);
+        }
+
+        // cache probe:
+        let encoding = original.get_encoding();
+        let algorithm = compressor.algorithm();
+
+        let mut cache = entries
+            .lock()
+            .map_err(|_| CompressionFailed)?;
+        for (i, item) in cache.iter().enumerate() {
+            if item.algorithm == algorithm && item.original == encoding {
+                // this item is now MRU
+                let item = cache.remove(i).unwrap();
+                cache.push_back(Arc::clone(&item));
+                return Ok(item);
+            }
+        }
+        drop(cache);
+
+        // do compression:
+        let uncompressed_len = encoding.len() as u32;
+        let compressed = compressor.compress(encoding.clone(), CompressionLevel::Amortized)?;
+        let new_entry = Arc::new(CompressionCacheEntry {
+            algorithm,
+            original: encoding,
+            compressed: CompressedCertificatePayload {
+                alg: algorithm,
+                uncompressed_len,
+                compressed: PayloadU24(Payload::new(compressed)),
+            },
+        });
+
+        // insert into cache
+        let mut cache = entries
+            .lock()
+            .map_err(|_| CompressionFailed)?;
+        if cache.len() == max_size {
+            cache.pop_front();
+        }
+        cache.push_back(Arc::clone(&new_entry));
+        Ok(new_entry)
+    }
+
+    /// Compress `original` using `compressor` at `Interactive` level.
+    fn uncached_compression(
+        compressor: &dyn CertCompressor,
+        original: &CertificatePayloadTls13,
+    ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
+        let algorithm = compressor.algorithm();
+        let encoding = original.get_encoding();
+        let uncompressed_len = encoding.len() as u32;
+        let compressed = compressor.compress(encoding, CompressionLevel::Interactive)?;
+
+        // this `CompressionCacheEntry` in fact never makes it into the cache, so
+        // `original` is left empty
+        Ok(Arc::new(CompressionCacheEntry {
+            algorithm,
+            original: Vec::new(),
+            compressed: CompressedCertificatePayload {
+                alg: algorithm,
+                uncompressed_len,
+                compressed: PayloadU24(Payload::new(compressed)),
+            },
+        }))
+    }
+}
+
+impl Default for CompressionCache {
+    fn default() -> Self {
+        #[cfg(feature = "std")]
+        {
+            // 4 entries allows 2 certificate chains times 2 compression algorithms
+            Self::new(4)
+        }
+
+        #[cfg(not(feature = "std"))]
+        {
+            Self::Disabled
+        }
+    }
+}
+
+#[cfg_attr(not(feature = "std"), allow(dead_code))]
+#[derive(Debug)]
+pub(crate) struct CompressionCacheEntry {
+    // cache key is algorithm + original:
+    algorithm: CertificateCompressionAlgorithm,
+    original: Vec<u8>,
+
+    // cache value is compression result:
+    compressed: CompressedCertificatePayload<'static>,
+}
+
+impl CompressionCacheEntry {
+    pub(crate) fn compressed_cert_payload(&self) -> CompressedCertificatePayload {
+        self.compressed.as_borrowed()
+    }
+}
+
 #[cfg(all(test, any(feature = "brotli", feature = "zlib")))]
 pub mod tests {
     use std::{println, vec};
@@ -305,5 +491,155 @@ pub mod tests {
         decomp
             .decompress(&junk, &mut recovered)
             .unwrap_err();
+    }
+
+    #[test]
+    #[cfg(all(feature = "brotli", feature = "zlib"))]
+    fn test_cache_evicts_lru() {
+        use core::sync::atomic::{AtomicBool, Ordering};
+
+        use pki_types::CertificateDer;
+
+        let cache = CompressionCache::default();
+
+        let cert = CertificateDer::from(vec![1]);
+
+        let cert1 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"1"));
+        let cert2 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"2"));
+        let cert3 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"3"));
+        let cert4 = CertificatePayloadTls13::new([&cert].into_iter(), Some(b"4"));
+
+        // insert zlib (1), (2), (3), (4)
+
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), true),
+                &cert1,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), true),
+                &cert2,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), true),
+                &cert3,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), true),
+                &cert4,
+            )
+            .unwrap();
+
+        // -- now full
+
+        // insert brotli (1) evicts zlib (1)
+        cache
+            .compression_for(
+                &RequireCompress(BROTLI_COMPRESSOR, AtomicBool::default(), true),
+                &cert4,
+            )
+            .unwrap();
+
+        // now zlib (2), (3), (4) and brotli (4) exist
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), false),
+                &cert2,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), false),
+                &cert3,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), false),
+                &cert4,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(BROTLI_COMPRESSOR, AtomicBool::default(), false),
+                &cert4,
+            )
+            .unwrap();
+
+        // insert zlib (1) requires re-compression & evicts zlib (2)
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), true),
+                &cert1,
+            )
+            .unwrap();
+
+        // now zlib (1), (3), (4) and brotli (4) exist
+        // query zlib (4), (3), (1) to demonstrate LRU tracks usage rather than insertion
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), false),
+                &cert4,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), false),
+                &cert3,
+            )
+            .unwrap();
+        cache
+            .compression_for(
+                &RequireCompress(ZLIB_COMPRESSOR, AtomicBool::default(), false),
+                &cert1,
+            )
+            .unwrap();
+
+        // now brotli (4), zlib (4), (3), (1)
+        // insert brotli (1) evicting brotli (4)
+        cache
+            .compression_for(
+                &RequireCompress(BROTLI_COMPRESSOR, AtomicBool::default(), true),
+                &cert1,
+            )
+            .unwrap();
+
+        // verify brotli (4) disappeared
+        cache
+            .compression_for(
+                &RequireCompress(BROTLI_COMPRESSOR, AtomicBool::default(), true),
+                &cert4,
+            )
+            .unwrap();
+
+        #[derive(Debug)]
+        struct RequireCompress(&'static dyn CertCompressor, AtomicBool, bool);
+
+        impl CertCompressor for RequireCompress {
+            fn compress(
+                &self,
+                input: Vec<u8>,
+                level: CompressionLevel,
+            ) -> Result<Vec<u8>, CompressionFailed> {
+                self.1.store(true, Ordering::SeqCst);
+                self.0.compress(input, level)
+            }
+
+            fn algorithm(&self) -> CertificateCompressionAlgorithm {
+                self.0.algorithm()
+            }
+        }
+
+        impl Drop for RequireCompress {
+            fn drop(&mut self) {
+                assert_eq!(self.1.load(Ordering::SeqCst), self.2);
+            }
+        }
     }
 }

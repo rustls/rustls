@@ -6559,6 +6559,136 @@ fn test_pinned_ocsp_response_given_to_custom_server_cert_verifier() {
     }
 }
 
+#[cfg(feature = "zlib")]
+#[test]
+fn test_server_uses_cached_compressed_certificates() {
+    static COMPRESS_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.cert_compressors = vec![&CountingCompressor];
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+    client_config.resumption = Resumption::disabled();
+
+    let server_config = Arc::new(server_config);
+    let client_config = Arc::new(client_config);
+
+    for _i in 0..10 {
+        dbg!(_i);
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        do_handshake(&mut client, &mut server);
+        dbg!(client.handshake_kind());
+    }
+
+    assert_eq!(COMPRESS_COUNT.load(Ordering::SeqCst), 1);
+
+    #[derive(Debug)]
+    struct CountingCompressor;
+
+    impl rustls::compress::CertCompressor for CountingCompressor {
+        fn compress(
+            &self,
+            input: Vec<u8>,
+            level: rustls::compress::CompressionLevel,
+        ) -> Result<Vec<u8>, rustls::compress::CompressionFailed> {
+            dbg!(COMPRESS_COUNT.fetch_add(1, Ordering::SeqCst));
+            rustls::compress::ZLIB_COMPRESSOR.compress(input, level)
+        }
+
+        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+            rustls::CertificateCompressionAlgorithm::Zlib
+        }
+    }
+}
+
+#[test]
+fn test_server_uses_uncompressed_certificate_if_compression_fails() {
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.cert_compressors = vec![&FailingCompressor];
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+    client_config.cert_decompressors = vec![&NeverDecompressor];
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    #[derive(Debug)]
+    struct FailingCompressor;
+
+    impl rustls::compress::CertCompressor for FailingCompressor {
+        fn compress(
+            &self,
+            _input: Vec<u8>,
+            _level: rustls::compress::CompressionLevel,
+        ) -> Result<Vec<u8>, rustls::compress::CompressionFailed> {
+            println!("compress called but doesn't work");
+            Err(rustls::compress::CompressionFailed)
+        }
+
+        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+            rustls::CertificateCompressionAlgorithm::Zlib
+        }
+    }
+
+    #[derive(Debug)]
+    struct NeverDecompressor;
+
+    impl rustls::compress::CertDecompressor for NeverDecompressor {
+        fn decompress(
+            &self,
+            _input: &[u8],
+            _output: &mut [u8],
+        ) -> Result<(), rustls::compress::DecompressionFailed> {
+            panic!("NeverDecompressor::decompress should not be called");
+        }
+
+        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+            rustls::CertificateCompressionAlgorithm::Zlib
+        }
+    }
+}
+
+#[cfg(feature = "zlib")]
+#[test]
+fn test_server_can_opt_out_of_compression_cache() {
+    static COMPRESS_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.cert_compressors = vec![&AlwaysInteractiveCompressor];
+    server_config.cert_compression_cache = Arc::new(rustls::compress::CompressionCache::Disabled);
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+    client_config.resumption = Resumption::disabled();
+
+    let server_config = Arc::new(server_config);
+    let client_config = Arc::new(client_config);
+
+    for _i in 0..10 {
+        dbg!(_i);
+        let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+        do_handshake(&mut client, &mut server);
+        dbg!(client.handshake_kind());
+    }
+
+    assert_eq!(COMPRESS_COUNT.load(Ordering::SeqCst), 10);
+
+    #[derive(Debug)]
+    struct AlwaysInteractiveCompressor;
+
+    impl rustls::compress::CertCompressor for AlwaysInteractiveCompressor {
+        fn compress(
+            &self,
+            input: Vec<u8>,
+            level: rustls::compress::CompressionLevel,
+        ) -> Result<Vec<u8>, rustls::compress::CompressionFailed> {
+            dbg!(COMPRESS_COUNT.fetch_add(1, Ordering::SeqCst));
+            assert_eq!(level, rustls::compress::CompressionLevel::Interactive);
+            rustls::compress::ZLIB_COMPRESSOR.compress(input, level)
+        }
+
+        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+            rustls::CertificateCompressionAlgorithm::Zlib
+        }
+    }
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {
