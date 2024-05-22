@@ -221,7 +221,7 @@ impl<'a> ClientHello<'a> {
 ///
 /// [`RootCertStore`]: crate::RootCertStore
 /// [`ServerSessionMemoryCache`]: crate::server::handy::ServerSessionMemoryCache
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ServerConfig {
     /// Source of randomness and other crypto.
     pub(super) provider: Arc<CryptoProvider>,
@@ -337,31 +337,6 @@ pub struct ServerConfig {
 
     /// Provides the current system time
     pub time_provider: Arc<dyn TimeProvider>,
-}
-
-// Avoid a `Clone` bound on `C`.
-impl Clone for ServerConfig {
-    fn clone(&self) -> Self {
-        Self {
-            provider: Arc::<CryptoProvider>::clone(&self.provider),
-            ignore_client_order: self.ignore_client_order,
-            max_fragment_size: self.max_fragment_size,
-            session_storage: Arc::clone(&self.session_storage),
-            ticketer: Arc::clone(&self.ticketer),
-            cert_resolver: Arc::clone(&self.cert_resolver),
-            alpn_protocols: self.alpn_protocols.clone(),
-            versions: self.versions,
-            verifier: Arc::clone(&self.verifier),
-            key_log: Arc::clone(&self.key_log),
-            enable_secret_extraction: self.enable_secret_extraction,
-            max_early_data_size: self.max_early_data_size,
-            send_half_rtt_data: self.send_half_rtt_data,
-            send_tls13_tickets: self.send_tls13_tickets,
-            #[cfg(feature = "tls12")]
-            require_ems: self.require_ems,
-            time_provider: Arc::clone(&self.time_provider),
-        }
-    }
 }
 
 impl ServerConfig {

@@ -143,7 +143,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// * [`ClientConfig::key_log`]: key material is not logged.
 ///
 /// [`RootCertStore`]: crate::RootCertStore
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ClientConfig {
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
@@ -370,27 +370,6 @@ impl ClientConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
-    }
-}
-
-impl Clone for ClientConfig {
-    fn clone(&self) -> Self {
-        Self {
-            provider: Arc::<CryptoProvider>::clone(&self.provider),
-            resumption: self.resumption.clone(),
-            alpn_protocols: self.alpn_protocols.clone(),
-            max_fragment_size: self.max_fragment_size,
-            client_auth_cert_resolver: Arc::clone(&self.client_auth_cert_resolver),
-            versions: self.versions,
-            enable_sni: self.enable_sni,
-            verifier: Arc::clone(&self.verifier),
-            key_log: Arc::clone(&self.key_log),
-            enable_secret_extraction: self.enable_secret_extraction,
-            enable_early_data: self.enable_early_data,
-            #[cfg(feature = "tls12")]
-            require_ems: self.require_ems,
-            time_provider: Arc::clone(&self.time_provider),
-        }
     }
 }
 
