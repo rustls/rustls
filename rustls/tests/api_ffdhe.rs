@@ -9,11 +9,11 @@ test_for_each_provider! {
 
 mod common;
 use common::*;
-
 use rustls::crypto::CryptoProvider;
+use rustls::internal::msgs::base::Payload;
+use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload};
-use rustls::internal::msgs::{base::Payload, codec::Codec};
 use rustls::version::{TLS12, TLS13};
 use rustls::{CipherSuite, ClientConfig};
 
@@ -340,15 +340,15 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
 }
 
 mod ffdhe {
-    use super::provider;
     use num_bigint::BigUint;
     use rustls::crypto::{
         ActiveKeyExchange, CipherSuiteCommon, CryptoProvider, KeyExchangeAlgorithm, SharedSecret,
         SupportedKxGroup,
     };
-    use rustls::{
-        ffdhe_groups::FfdheGroup, CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite,
-    };
+    use rustls::ffdhe_groups::FfdheGroup;
+    use rustls::{CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite};
+
+    use super::provider;
 
     /// A test-only `CryptoProvider`, only supporting FFDHE key exchange
     pub fn ffdhe_provider() -> CryptoProvider {
