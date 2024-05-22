@@ -1023,6 +1023,24 @@ impl ClientHelloPayload {
         self.find_extension(ExtensionType::EarlyData)
             .is_some()
     }
+
+    pub(crate) fn certificate_compression_extension(
+        &self,
+    ) -> Option<&[CertificateCompressionAlgorithm]> {
+        let ext = self.find_extension(ExtensionType::CompressCertificate)?;
+        match *ext {
+            ClientExtension::CertificateCompressionAlgorithms(ref algs) => Some(algs),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn has_certificate_compression_extension_with_duplicates(&self) -> bool {
+        if let Some(algs) = self.certificate_compression_extension() {
+            has_duplicates::<_, _, u16>(algs.iter().cloned())
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

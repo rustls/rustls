@@ -3455,7 +3455,7 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
-        assert!(wrlen > 3000); // its pretty big (contains cert chain)
+        assert!(wrlen > 2500); // its pretty big (contains cert chain)
         assert_eq!(pipe.writevs.len(), 1); // only one writev
         assert_eq!(pipe.writevs[0].len(), 8); // at least a server hello/ccs/cert/serverkx/0.5rtt data
     }
@@ -3497,7 +3497,7 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
         // don't assert exact sizes here, to avoid a brittle test
-        assert!(wrlen > 3000); // its pretty big (contains cert chain)
+        assert!(wrlen > 2500); // its pretty big (contains cert chain)
         assert_eq!(pipe.writevs.len(), 1); // only one writev
         assert!(pipe.writevs[0].len() >= 6); // at least a server hello/ccs/cert/serverkx data
     }

@@ -34,15 +34,16 @@ use crate::{rand, verify};
 
 mod client_hello {
     use super::*;
+    use crate::compress::{CertCompressor, CompressionLevel};
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
-    use crate::msgs::base::{Payload, PayloadU8};
+    use crate::msgs::base::{Payload, PayloadU24, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
     use crate::msgs::handshake::{
         CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
-        ClientHelloPayload, HelloRetryExtension, HelloRetryRequest, KeyShareEntry, Random,
-        ServerExtension, ServerHelloPayload, SessionId,
+        ClientHelloPayload, CompressedCertificatePayload, HelloRetryExtension, HelloRetryRequest,
+        KeyShareEntry, Random, ServerExtension, ServerHelloPayload, SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
@@ -157,6 +158,24 @@ mod client_hello {
                     PeerMisbehaved::OfferedDuplicateKeyShares,
                 ));
             }
+
+            if client_hello.has_certificate_compression_extension_with_duplicates() {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::OfferedDuplicateCertificateCompressions,
+                ));
+            }
+
+            let cert_compressor = client_hello
+                .certificate_compression_extension()
+                .and_then(|offered|
+                    // prefer server order when choosing a compression: the client's
+                    // extension here does not denote any preference.
+                    self.config
+                        .cert_compressors
+                        .iter()
+                        .find(|compressor| offered.contains(&compressor.algorithm()))
+                        .cloned());
 
             let early_data_requested = client_hello.early_data_extension_offered();
 
@@ -350,12 +369,23 @@ mod client_hello {
             let doing_client_auth = if full_handshake {
                 let client_auth =
                     emit_certificate_req_tls13(&mut self.transcript, cx, &self.config)?;
-                emit_certificate_tls13(
-                    &mut self.transcript,
-                    cx.common,
-                    server_key.get_cert(),
-                    ocsp_response,
-                );
+
+                if let Some(compressor) = cert_compressor {
+                    emit_compressed_certificate_tls13(
+                        &mut self.transcript,
+                        cx.common,
+                        server_key.get_cert(),
+                        ocsp_response,
+                        compressor,
+                    );
+                } else {
+                    emit_certificate_tls13(
+                        &mut self.transcript,
+                        cx.common,
+                        server_key.get_cert(),
+                        ocsp_response,
+                    );
+                }
                 emit_certificate_verify_tls13(
                     &mut self.transcript,
                     cx.common,
@@ -711,6 +741,41 @@ mod client_hello {
         };
 
         trace!("sending certificate {:?}", c);
+        transcript.add_message(&c);
+        common.send_msg(c, true);
+    }
+
+    fn emit_compressed_certificate_tls13(
+        transcript: &mut HandshakeHash,
+        common: &mut CommonState,
+        cert_chain: &[CertificateDer<'static>],
+        ocsp_response: Option<&[u8]>,
+        cert_compressor: &'static dyn CertCompressor,
+    ) {
+        let encoding =
+            CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response).get_encoding();
+        let uncompressed_len = encoding.len() as u32;
+
+        let compressed = match cert_compressor.compress(encoding, CompressionLevel::Interactive) {
+            Ok(compressed) => PayloadU24(Payload::new(compressed)),
+            Err(_) => {
+                return emit_certificate_tls13(transcript, common, cert_chain, ocsp_response);
+            }
+        };
+
+        let c = Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::CompressedCertificate,
+                payload: HandshakePayload::CompressedCertificate(CompressedCertificatePayload {
+                    alg: cert_compressor.algorithm(),
+                    uncompressed_len,
+                    compressed,
+                }),
+            }),
+        };
+
+        trace!("sending compressed certificate {:?}", c);
         transcript.add_message(&c);
         common.send_msg(c, true);
     }

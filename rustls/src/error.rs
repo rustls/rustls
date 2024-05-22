@@ -205,6 +205,7 @@ pub enum PeerMisbehaved {
     MissingKeyShare,
     MissingPskModesExtension,
     MissingQuicTransportParameters,
+    OfferedDuplicateCertificateCompressions,
     OfferedDuplicateKeyShares,
     OfferedEarlyDataWithOldProtocolVersion,
     OfferedEmptyApplicationProtocol,

@@ -32,7 +32,7 @@ use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
-use crate::{sign, verify, versions, KeyLog, WantsVersions};
+use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
 
 /// A trait for the ability to store server session data.
 ///
@@ -218,6 +218,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ServerConfig::key_log`]: key material is not logged.
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
+/// * [`ServerConfig::cert_compressors`]: depends on the crate features, see [`compress::default_cert_compressors()`].
 ///
 /// [`RootCertStore`]: crate::RootCertStore
 /// [`ServerSessionMemoryCache`]: crate::server::handy::ServerSessionMemoryCache
@@ -337,6 +338,18 @@ pub struct ServerConfig {
 
     /// Provides the current system time
     pub time_provider: Arc<dyn TimeProvider>,
+
+    /// How to compress the server's certificate chain.
+    ///
+    /// If a client supports this extension, and advertises support
+    /// for one of the compression algorithms included here, the
+    /// server certificate will be compressed according to [RFC8779].
+    ///
+    /// This only applies to TLS1.3 connections.  It is ignored for
+    /// TLS1.2 connections.
+    ///
+    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
 }
 
 impl ServerConfig {
