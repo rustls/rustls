@@ -11,7 +11,7 @@ use crate::msgs::handshake::CertificateChain;
 use crate::server::{handy, ResolvesServerCert, ServerConfig};
 use crate::time_provider::TimeProvider;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
-use crate::{versions, NoKeyLog};
+use crate::{compress, versions, NoKeyLog};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
@@ -131,6 +131,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
             time_provider: self.state.time_provider,
+            cert_compressors: compress::default_cert_compressors().to_vec(),
         }
     }
 }
