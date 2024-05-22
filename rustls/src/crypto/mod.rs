@@ -48,7 +48,6 @@ pub mod tls12;
 pub mod tls13;
 
 /// Hybrid public key encryption (RFC 9180).
-#[doc(hidden)]
 pub mod hpke;
 
 // Message signing interfaces. Re-exported under rustls::sign. Kept crate-internal here to
