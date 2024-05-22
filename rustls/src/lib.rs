@@ -384,6 +384,7 @@ mod test_macros;
 #[macro_use]
 mod msgs;
 mod common_state;
+pub mod compress;
 mod conn;
 /// Crypto provider interface.
 pub mod crypto;
@@ -505,8 +506,8 @@ pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, SideData};
 pub use crate::enums::{
-    AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion, SignatureAlgorithm,
-    SignatureScheme,
+    AlertDescription, CertificateCompressionAlgorithm, CipherSuite, ContentType, HandshakeType,
+    ProtocolVersion, SignatureAlgorithm, SignatureScheme,
 };
 pub use crate::error::{
     CertRevocationListError, CertificateError, Error, InvalidMessage, OtherError, PeerIncompatible,
