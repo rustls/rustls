@@ -2236,7 +2236,7 @@ impl<'a> Codec<'a> for CertificateStatus<'a> {
 impl<'a> CertificateStatus<'a> {
     pub(crate) fn new(ocsp: Vec<u8>) -> CertificateStatus<'static> {
         CertificateStatus {
-            ocsp_response: PayloadU24::new(ocsp),
+            ocsp_response: PayloadU24(Payload::Owned(ocsp)),
         }
     }
 

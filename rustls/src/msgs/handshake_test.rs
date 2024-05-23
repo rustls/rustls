@@ -800,7 +800,7 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13<'static> {
             cert: CertificateDer::from(vec![3, 4, 5]),
             exts: vec![
                 CertificateExtension::CertificateStatus(CertificateStatus {
-                    ocsp_response: PayloadU24::new(vec![1, 2, 3]),
+                    ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
                 }),
                 CertificateExtension::Unknown(UnknownExtension {
                     typ: ExtensionType::Unknown(12345),
@@ -887,7 +887,7 @@ fn get_sample_encryptedextensions() -> Vec<ServerExtension> {
 
 fn get_sample_certificatestatus() -> CertificateStatus<'static> {
     CertificateStatus {
-        ocsp_response: PayloadU24::new(vec![1, 2, 3]),
+        ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
     }
 }
 
