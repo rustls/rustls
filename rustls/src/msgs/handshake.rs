@@ -5,8 +5,8 @@ use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::fmt;
 use core::ops::Deref;
+use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
@@ -1382,7 +1382,7 @@ impl<'a> Codec<'a> for CertificateEntry<'a> {
 }
 
 impl<'a> CertificateEntry<'a> {
-    pub(crate) fn new(cert: CertificateDer<'static>) -> CertificateEntry<'static> {
+    pub(crate) fn new(cert: CertificateDer<'a>) -> CertificateEntry<'a> {
         CertificateEntry {
             cert,
             exts: Vec::new(),
@@ -1449,10 +1449,32 @@ impl<'a> Codec<'a> for CertificatePayloadTls13<'a> {
 }
 
 impl<'a> CertificatePayloadTls13<'a> {
-    pub(crate) fn new(entries: Vec<CertificateEntry<'a>>) -> Self {
+    pub(crate) fn new(
+        certs: impl Iterator<Item = &'a CertificateDer<'a>>,
+        ocsp_response: Option<&'a [u8]>,
+    ) -> Self {
         Self {
             context: PayloadU8::empty(),
-            entries,
+            entries: certs
+                // zip certificate iterator with `ocsp_response` followed by
+                // an infinite-length iterator of `None`.
+                .zip(
+                    ocsp_response
+                        .into_iter()
+                        .map(Some)
+                        .chain(iter::repeat(None)),
+                )
+                .map(|(cert, ocsp)| {
+                    let mut e = CertificateEntry::new(cert.clone());
+                    if let Some(ocsp) = ocsp {
+                        e.exts
+                            .push(CertificateExtension::CertificateStatus(
+                                CertificateStatus::new(ocsp),
+                            ));
+                    }
+                    e
+                })
+                .collect(),
         }
     }
 
@@ -2234,9 +2256,9 @@ impl<'a> Codec<'a> for CertificateStatus<'a> {
 }
 
 impl<'a> CertificateStatus<'a> {
-    pub(crate) fn new(ocsp: Vec<u8>) -> CertificateStatus<'static> {
+    pub(crate) fn new(ocsp: &'a [u8]) -> Self {
         CertificateStatus {
-            ocsp_response: PayloadU24(Payload::Owned(ocsp)),
+            ocsp_response: PayloadU24(Payload::Borrowed(ocsp)),
         }
     }
 

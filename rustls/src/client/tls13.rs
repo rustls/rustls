@@ -25,9 +25,9 @@ use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CertificateEntry, CertificatePayloadTls13, ClientExtension, HandshakeMessagePayload,
-    HandshakePayload, HasServerExtensions, NewSessionTicketPayloadTls13, PresharedKeyIdentity,
-    PresharedKeyOffer, ServerExtension, ServerHelloPayload,
+    CertificatePayloadTls13, ClientExtension, HandshakeMessagePayload, HandshakePayload,
+    HasServerExtensions, NewSessionTicketPayloadTls13, PresharedKeyIdentity, PresharedKeyOffer,
+    ServerExtension, ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -786,20 +786,11 @@ fn emit_certificate_tls13(
     auth_context: Option<Vec<u8>>,
     common: &mut CommonState,
 ) {
-    let context = auth_context.unwrap_or_default();
-
-    let mut cert_payload = CertificatePayloadTls13 {
-        context: PayloadU8::new(context),
-        entries: Vec::new(),
-    };
-
-    if let Some(certkey) = certkey {
-        for cert in &certkey.cert {
-            cert_payload
-                .entries
-                .push(CertificateEntry::new(cert.clone()));
-        }
-    }
+    let certs = certkey
+        .map(|ck| ck.cert.as_ref())
+        .unwrap_or(&[][..]);
+    let mut cert_payload = CertificatePayloadTls13::new(certs.iter(), None);
+    cert_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
 
     let m = Message {
         version: ProtocolVersion::TLSv1_3,
