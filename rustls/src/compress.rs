@@ -9,6 +9,8 @@ use crate::enums::CertificateCompressionAlgorithm;
 /// by crate features.
 pub fn default_cert_decompressors() -> &'static [&'static dyn CertDecompressor] {
     &[
+        #[cfg(feature = "brotli")]
+        BROTLI_DECOMPRESSOR,
         #[cfg(feature = "zlib")]
         ZLIB_DECOMPRESSOR,
     ]
@@ -32,6 +34,8 @@ pub trait CertDecompressor: Debug + Send + Sync {
 /// by crate features.
 pub fn default_cert_compressors() -> &'static [&'static dyn CertCompressor] {
     &[
+        #[cfg(feature = "brotli")]
+        BROTLI_COMPRESSOR,
         #[cfg(feature = "zlib")]
         ZLIB_COMPRESSOR,
     ]
@@ -141,3 +145,83 @@ mod feat_zlib_rs {
 
 #[cfg(feature = "zlib")]
 pub use feat_zlib_rs::{ZLIB_COMPRESSOR, ZLIB_DECOMPRESSOR};
+
+#[cfg(feature = "brotli")]
+mod feat_brotli {
+    use std::io::{Cursor, Write};
+
+    use super::*;
+
+    /// A certificate decompressor for the brotli algorithm using the `brotli` crate.
+    pub const BROTLI_DECOMPRESSOR: &dyn CertDecompressor = &BrotliDecompressor;
+
+    #[derive(Debug)]
+    struct BrotliDecompressor;
+
+    impl CertDecompressor for BrotliDecompressor {
+        fn decompress(&self, input: &[u8], output: &mut [u8]) -> Result<(), DecompressionFailed> {
+            let mut in_cursor = Cursor::new(input);
+            let mut out_cursor = Cursor::new(output);
+
+            brotli::BrotliDecompress(&mut in_cursor, &mut out_cursor)
+                .map_err(|_| DecompressionFailed)?;
+
+            if out_cursor.position() as usize != out_cursor.into_inner().len() {
+                return Err(DecompressionFailed);
+            }
+
+            Ok(())
+        }
+
+        fn algorithm(&self) -> CertificateCompressionAlgorithm {
+            CertificateCompressionAlgorithm::Brotli
+        }
+    }
+
+    /// A certificate compressor for the brotli algorithm using the `brotli` crate.
+    pub const BROTLI_COMPRESSOR: &dyn CertCompressor = &BrotliCompressor;
+
+    #[derive(Debug)]
+    struct BrotliCompressor;
+
+    impl CertCompressor for BrotliCompressor {
+        fn compress(
+            &self,
+            input: Vec<u8>,
+            level: CompressionLevel,
+        ) -> Result<Vec<u8>, CompressionFailed> {
+            let quality = match level {
+                CompressionLevel::Interactive => QUALITY_FAST,
+                CompressionLevel::Amortized => QUALITY_SLOW,
+            };
+            let output = Cursor::new(Vec::with_capacity(input.len() / 2));
+            let mut compressor = brotli::CompressorWriter::new(output, BUFFER_SIZE, quality, LGWIN);
+            compressor
+                .write_all(&input)
+                .map_err(|_| CompressionFailed)?;
+            Ok(compressor.into_inner().into_inner())
+        }
+
+        fn algorithm(&self) -> CertificateCompressionAlgorithm {
+            CertificateCompressionAlgorithm::Brotli
+        }
+    }
+
+    /// Brotli buffer size.
+    ///
+    /// Chosen based on brotli `examples/compress.rs`.
+    const BUFFER_SIZE: usize = 4096;
+
+    /// This is the default lgwin parameter, see `BrotliEncoderInitParams()`
+    const LGWIN: u32 = 22;
+
+    /// Compression quality we use for interactive compressions.
+    /// See <https://blog.cloudflare.com/results-experimenting-brotli> for data.
+    const QUALITY_FAST: u32 = 4;
+
+    /// Compression quality we use for offline compressions (the maximum).
+    const QUALITY_SLOW: u32 = 11;
+}
+
+#[cfg(feature = "brotli")]
+pub use feat_brotli::{BROTLI_COMPRESSOR, BROTLI_DECOMPRESSOR};

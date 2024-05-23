@@ -10,6 +10,10 @@ cargo test --locked --all-features
 cargo test --locked --no-default-features --features tls12,logging,aws_lc_rs,fips,std
 cargo test --locked --no-default-features --features tls12,logging,ring,std
 
+# ensure both zlib and brotli are tested, irrespective of their order
+cargo test --locked $(admin/all-features-except zlib-rs rustls)
+cargo test --locked $(admin/all-features-except brotli rustls)
+
 ## bogo
 cargo test --locked --all-features run_bogo_tests_ring -- --ignored
 cargo test --locked --all-features run_bogo_tests_aws_lc_rs -- --ignored
