@@ -84,10 +84,6 @@ impl fmt::Debug for Payload<'_> {
 pub(crate) struct PayloadU24<'a>(pub(crate) Payload<'a>);
 
 impl<'a> PayloadU24<'a> {
-    pub(crate) fn new(bytes: Vec<u8>) -> PayloadU24<'static> {
-        PayloadU24(Payload::Owned(bytes))
-    }
-
     pub(crate) fn into_owned(self) -> PayloadU24<'static> {
         PayloadU24(self.0.into_owned())
     }
