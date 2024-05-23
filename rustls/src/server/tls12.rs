@@ -1,4 +1,3 @@
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -380,13 +379,11 @@ mod client_hello {
     }
 
     fn emit_cert_status(transcript: &mut HandshakeHash, common: &mut CommonState, ocsp: &[u8]) {
-        let st = CertificateStatus::new(ocsp.to_owned());
-
         let c = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::CertificateStatus,
-                payload: HandshakePayload::CertificateStatus(st),
+                payload: HandshakePayload::CertificateStatus(CertificateStatus::new(ocsp)),
             }),
         };
 
