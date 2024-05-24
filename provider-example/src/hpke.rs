@@ -55,7 +55,7 @@ impl HpkeRs {
 
 impl Hpke for HpkeRs {
     fn seal(
-        &mut self,
+        &self,
         info: &[u8],
         aad: &[u8],
         plaintext: &[u8],
@@ -70,7 +70,7 @@ impl Hpke for HpkeRs {
     }
 
     fn setup_sealer(
-        &mut self,
+        &self,
         info: &[u8],
         pub_key: &HpkePublicKey,
     ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error> {
@@ -86,7 +86,7 @@ impl Hpke for HpkeRs {
     }
 
     fn open(
-        &mut self,
+        &self,
         enc: &EncapsulatedSecret,
         info: &[u8],
         aad: &[u8],
@@ -109,7 +109,7 @@ impl Hpke for HpkeRs {
     }
 
     fn setup_opener(
-        &mut self,
+        &self,
         enc: &EncapsulatedSecret,
         info: &[u8],
         secret_key: &HpkePrivateKey,
