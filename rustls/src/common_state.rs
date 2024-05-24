@@ -685,7 +685,10 @@ impl CommonState {
             // plaintext to send once we do.
             let len = match limit {
                 Limit::Yes => sendable_plaintext.enqueue_limited_copy(payload),
-                Limit::No => sendable_plaintext.enqueue(payload.to_vec()),
+                Limit::No => {
+                    sendable_plaintext.enqueue(payload.to_vec());
+                    payload.len()
+                }
             };
             return len;
         }

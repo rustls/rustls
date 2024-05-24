@@ -59,14 +59,10 @@ impl BufferQueue {
     }
 
     /// Place the buffer in line if it is not empty.
-    pub(crate) fn enqueue(&mut self, buf: Vec<u8>) -> usize {
-        let len = buf.len();
-
+    pub(crate) fn enqueue(&mut self, buf: Vec<u8>) {
         if !buf.is_empty() {
             self.buffers.push_back(buf);
         }
-
-        len
     }
 
     /// Take the next buffer in line, if any. Empty buffers are omitted.
