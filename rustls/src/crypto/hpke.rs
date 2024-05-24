@@ -8,25 +8,6 @@ use crate::msgs::enums::HpkeKem;
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
 use crate::Error;
 
-/// A provider for [RFC 9180] Hybrid Public Key Encryption (HPKE) in base mode.
-///
-/// At a minimum each provider must support the [HPKE ciphersuite profile] required for
-/// encrypted client hello (ECH):
-///  * KEM: DHKEM(X25519, HKDF-SHA256)
-///  * symmetric ciphersuite:  AES-128-GCM w/ HKDF-SHA256
-///
-/// [RFC 9180]: <https://www.rfc-editor.org/rfc/rfc9180.html>
-/// [HPKE ciphersuite profile]: <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-9>
-pub trait HpkeProvider: Debug + Send + Sync + 'static {
-    /// Start setting up to use HPKE in base mode with the chosen suite.
-    ///
-    /// May return an error if the suite is unsupported by the provider.
-    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + 'static>, Error>;
-
-    /// Does the provider support the given [HpkeSuite]?
-    fn supports_suite(&self, suite: &HpkeSuite) -> bool;
-}
-
 /// An HPKE suite, specifying a key encapsulation mechanism and a symmetric cipher suite.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HpkeSuite {

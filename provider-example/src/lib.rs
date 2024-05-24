@@ -13,13 +13,10 @@ mod aead;
 mod hash;
 mod hmac;
 #[cfg(feature = "std")]
-mod hpke;
+pub mod hpke;
 mod kx;
 mod sign;
 mod verify;
-
-#[cfg(feature = "std")]
-pub use hpke::HPKE_PROVIDER;
 
 pub fn provider() -> CryptoProvider {
     CryptoProvider {
