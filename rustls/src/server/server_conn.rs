@@ -29,7 +29,7 @@ use crate::msgs::message::Message;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
-use crate::vecbuf::ChunkVecBuffer;
+use crate::vecbuf::BufferQueue;
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
 use crate::{sign, verify, versions, KeyLog, WantsVersions};
@@ -515,7 +515,7 @@ mod connection {
     use crate::error::Error;
     use crate::server::hs;
     use crate::suites::ExtractedSecrets;
-    use crate::vecbuf::ChunkVecBuffer;
+    use crate::vecbuf::BufferQueue;
 
     /// Allows reading of early data in resumed TLS1.3 connections.
     ///
@@ -805,11 +805,11 @@ mod connection {
     ///
     /// When [`Acceptor::accept()`] returns an error, it yields an `AcceptedAlert` such that the
     /// application can communicate failure to the client via [`AcceptedAlert::write()`].
-    pub struct AcceptedAlert(ChunkVecBuffer);
+    pub struct AcceptedAlert(BufferQueue);
 
     impl AcceptedAlert {
         pub(super) fn empty() -> Self {
-            Self(ChunkVecBuffer::new(None))
+            Self(BufferQueue::new(None))
         }
 
         /// Send the alert to the client.
@@ -983,7 +983,7 @@ impl State<ServerConnectionData> for Accepting {
 
 pub(super) enum EarlyDataState {
     New,
-    Accepted(ChunkVecBuffer),
+    Accepted(BufferQueue),
     Rejected,
 }
 
@@ -999,7 +999,7 @@ impl EarlyDataState {
     }
 
     pub(super) fn accept(&mut self, max_size: usize) {
-        *self = Self::Accepted(ChunkVecBuffer::new(Some(max_size)));
+        *self = Self::Accepted(BufferQueue::new(Some(max_size)));
     }
 
     #[cfg(feature = "std")]
@@ -1013,7 +1013,7 @@ impl EarlyDataState {
 
     fn pop(&mut self) -> Option<Vec<u8>> {
         match self {
-            Self::Accepted(ref mut received) => received.pop(),
+            Self::Accepted(ref mut received) => received.dequeue(),
             _ => None,
         }
     }
@@ -1038,7 +1038,7 @@ impl EarlyDataState {
         let available = bytes.bytes().len();
         match self {
             Self::Accepted(ref mut received) if received.apply_limit(available) == available => {
-                received.append(bytes.into_vec());
+                received.enqueue(bytes.into_vec());
                 true
             }
             _ => false,

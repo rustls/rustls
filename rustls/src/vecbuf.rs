@@ -9,19 +9,19 @@ use std::io::Read;
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
 
-/// This is a byte buffer that is built from a vector
-/// of byte vectors.  This avoids extra copies when
-/// appending a new byte vector, at the expense of
-/// more complexity when reading out.
-pub(crate) struct ChunkVecBuffer {
-    chunks: VecDeque<Vec<u8>>,
+/// A BufferQueue manages a sequence of buffers.
+/// Keeping the buffers as is avoids copies at the
+/// expense of complexity when consuming the data.
+pub(crate) struct BufferQueue {
+    // ring buffer
+    buffers: VecDeque<Vec<u8>>,
     limit: Option<usize>,
 }
 
-impl ChunkVecBuffer {
+impl BufferQueue {
     pub(crate) fn new(limit: Option<usize>) -> Self {
         Self {
-            chunks: VecDeque::new(),
+            buffers: VecDeque::new(),
             limit,
         }
     }
@@ -39,14 +39,14 @@ impl ChunkVecBuffer {
 
     /// If we're empty
     pub(crate) fn is_empty(&self) -> bool {
-        self.chunks.is_empty()
+        self.buffers.is_empty()
     }
 
     /// How many bytes we're storing
     pub(crate) fn len(&self) -> usize {
         let mut len = 0;
-        for ch in &self.chunks {
-            len += ch.len();
+        for buf in &self.buffers {
+            len += buf.len();
         }
         len
     }
@@ -63,29 +63,29 @@ impl ChunkVecBuffer {
         }
     }
 
-    /// Take and append the given `bytes`.
-    pub(crate) fn append(&mut self, bytes: Vec<u8>) -> usize {
-        let len = bytes.len();
+    /// Place the buffer in line if it is not empty.
+    pub(crate) fn enqueue(&mut self, buf: Vec<u8>) -> usize {
+        let len = buf.len();
 
-        if !bytes.is_empty() {
-            self.chunks.push_back(bytes);
+        if !buf.is_empty() {
+            self.buffers.push_back(buf);
         }
 
         len
     }
 
-    /// Take one of the chunks from this object.
-    pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
-        self.chunks.pop_front()
+    /// Take the next buffer in line, if any. Empty buffers are omitted.
+    pub(crate) fn dequeue(&mut self) -> Option<Vec<u8>> {
+        self.buffers.pop_front()
     }
 
     #[cfg(read_buf)]
     /// Read data out of this object, writing it into `cursor`.
     pub(crate) fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
         while !self.is_empty() && cursor.capacity() > 0 {
-            let chunk = self.chunks[0].as_slice();
-            let used = cmp::min(chunk.len(), cursor.capacity());
-            cursor.append(&chunk[..used]);
+            let buf = self.buffers[0].as_slice();
+            let used = cmp::min(buf.len(), cursor.capacity());
+            cursor.append(&buf[..used]);
             self.consume(used);
         }
 
@@ -94,7 +94,7 @@ impl ChunkVecBuffer {
 }
 
 #[cfg(feature = "std")]
-impl ChunkVecBuffer {
+impl BufferQueue {
     pub(crate) fn is_full(&self) -> bool {
         self.limit
             .map(|limit| self.len() > limit)
@@ -103,9 +103,9 @@ impl ChunkVecBuffer {
 
     /// Append a copy of `bytes`, perhaps a prefix if
     /// we're near the limit.
-    pub(crate) fn append_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
+    pub(crate) fn enqueue_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
         let take = self.apply_limit(payload.len());
-        self.append(payload.split_at(take).0.to_vec());
+        self.enqueue(payload.split_at(take).0.to_vec());
         take
     }
 
@@ -115,7 +115,7 @@ impl ChunkVecBuffer {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
-            let used = self.chunks[0]
+            let used = self.buffers[0]
                 .as_slice()
                 .read(&mut buf[offs..])?;
 
@@ -127,10 +127,10 @@ impl ChunkVecBuffer {
     }
 
     fn consume(&mut self, mut used: usize) {
-        while let Some(mut buf) = self.chunks.pop_front() {
+        while let Some(mut buf) = self.buffers.pop_front() {
             if used < buf.len() {
                 buf.drain(..used);
-                self.chunks.push_front(buf);
+                self.buffers.push_front(buf);
                 break;
             } else {
                 used -= buf.len();
@@ -145,10 +145,10 @@ impl ChunkVecBuffer {
         }
 
         let mut bufs = [io::IoSlice::new(&[]); 64];
-        for (iov, chunk) in bufs.iter_mut().zip(self.chunks.iter()) {
-            *iov = io::IoSlice::new(chunk);
+        for (iov, buf) in bufs.iter_mut().zip(self.buffers.iter()) {
+            *iov = io::IoSlice::new(buf);
         }
-        let len = cmp::min(bufs.len(), self.chunks.len());
+        let len = cmp::min(bufs.len(), self.buffers.len());
         let used = wr.write_vectored(&bufs[..len])?;
         self.consume(used);
         Ok(used)
@@ -157,15 +157,15 @@ impl ChunkVecBuffer {
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use super::ChunkVecBuffer;
+    use super::BufferQueue;
 
     #[test]
-    fn short_append_copy_with_limit() {
-        let mut cvb = ChunkVecBuffer::new(Some(12));
-        assert_eq!(cvb.append_limited_copy(b"hello"[..].into()), 5);
-        assert_eq!(cvb.append_limited_copy(b"world"[..].into()), 5);
-        assert_eq!(cvb.append_limited_copy(b"hello"[..].into()), 2);
-        assert_eq!(cvb.append_limited_copy(b"world"[..].into()), 0);
+    fn short_enqueue_copy_with_limit() {
+        let mut cvb = BufferQueue::new(Some(12));
+        assert_eq!(cvb.enqueue_limited_copy(b"hello"[..].into()), 5);
+        assert_eq!(cvb.enqueue_limited_copy(b"world"[..].into()), 5);
+        assert_eq!(cvb.enqueue_limited_copy(b"hello"[..].into()), 2);
+        assert_eq!(cvb.enqueue_limited_copy(b"world"[..].into()), 0);
 
         let mut buf = [0u8; 12];
         assert_eq!(cvb.read(&mut buf).unwrap(), 12);
@@ -179,10 +179,10 @@ mod tests {
         use core::mem::MaybeUninit;
 
         {
-            let mut cvb = ChunkVecBuffer::new(None);
-            cvb.append(b"test ".to_vec());
-            cvb.append(b"fixture ".to_vec());
-            cvb.append(b"data".to_vec());
+            let mut cvb = BufferQueue::new(None);
+            cvb.enqueue(b"test ".to_vec());
+            cvb.enqueue(b"fixture ".to_vec());
+            cvb.enqueue(b"data".to_vec());
 
             let mut buf = [MaybeUninit::<u8>::uninit(); 8];
             let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();
@@ -197,8 +197,8 @@ mod tests {
         }
 
         {
-            let mut cvb = ChunkVecBuffer::new(None);
-            cvb.append(b"short message".to_vec());
+            let mut cvb = BufferQueue::new(None);
+            cvb.enqueue(b"short message".to_vec());
 
             let mut buf = [MaybeUninit::<u8>::uninit(); 1024];
             let mut buf: BorrowedBuf<'_> = buf.as_mut_slice().into();

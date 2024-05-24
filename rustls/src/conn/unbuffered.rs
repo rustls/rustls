@@ -56,7 +56,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 .core
                 .common_state
                 .received_plaintext
-                .pop()
+                .dequeue()
             {
                 break (
                     buffer.pending_discard(),
@@ -68,7 +68,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 .core
                 .common_state
                 .sendable_tls
-                .pop()
+                .dequeue()
             {
                 break (
                     buffer.pending_discard(),

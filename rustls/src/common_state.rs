@@ -20,7 +20,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
-use crate::vecbuf::ChunkVecBuffer;
+use crate::vecbuf::BufferQueue;
 use crate::{quic, record_layer};
 
 /// Connection state common to both client and server connections.
@@ -43,8 +43,8 @@ pub struct CommonState {
     pub(crate) received_middlebox_ccs: u8,
     pub(crate) peer_certificates: Option<CertificateChain<'static>>,
     message_fragmenter: MessageFragmenter,
-    pub(crate) received_plaintext: ChunkVecBuffer,
-    pub(crate) sendable_tls: ChunkVecBuffer,
+    pub(crate) received_plaintext: BufferQueue,
+    pub(crate) sendable_tls: BufferQueue,
     queued_key_update_message: Option<Vec<u8>>,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
@@ -73,8 +73,8 @@ impl CommonState {
             received_middlebox_ccs: 0,
             peer_certificates: None,
             message_fragmenter: MessageFragmenter::default(),
-            received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
-            sendable_tls: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            received_plaintext: BufferQueue::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
+            sendable_tls: BufferQueue::new(Some(DEFAULT_BUFFER_LIMIT)),
             queued_key_update_message: None,
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),
@@ -161,7 +161,7 @@ impl CommonState {
         msg: Message,
         mut state: Box<dyn State<Data>>,
         data: &mut Data,
-        sendable_plaintext: Option<&mut ChunkVecBuffer>,
+        sendable_plaintext: Option<&mut BufferQueue>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
@@ -312,7 +312,7 @@ impl CommonState {
         }
 
         let em = self.record_layer.encrypt_outgoing(m);
-        self.queue_tls_message(em);
+        self.enqueue_tls_message(em);
     }
 
     fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit) -> usize {
@@ -332,7 +332,7 @@ impl CommonState {
     /// Also flush `sendable_plaintext` if it is `Some`.  
     pub(crate) fn start_outgoing_traffic(
         &mut self,
-        sendable_plaintext: &mut Option<&mut ChunkVecBuffer>,
+        sendable_plaintext: &mut Option<&mut BufferQueue>,
     ) {
         self.may_send_application_data = true;
         if let Some(sendable_plaintext) = sendable_plaintext {
@@ -343,26 +343,26 @@ impl CommonState {
     /// Mark the connection as ready to send and receive application data.
     ///
     /// Also flush `sendable_plaintext` if it is `Some`.  
-    pub(crate) fn start_traffic(&mut self, sendable_plaintext: &mut Option<&mut ChunkVecBuffer>) {
+    pub(crate) fn start_traffic(&mut self, sendable_plaintext: &mut Option<&mut BufferQueue>) {
         self.may_receive_application_data = true;
         self.start_outgoing_traffic(sendable_plaintext);
     }
 
     /// Send any buffered plaintext.  Plaintext is buffered if
     /// written during handshake.
-    fn flush_plaintext(&mut self, sendable_plaintext: &mut ChunkVecBuffer) {
+    fn flush_plaintext(&mut self, sendable_plaintext: &mut BufferQueue) {
         if !self.may_send_application_data {
             return;
         }
 
-        while let Some(buf) = sendable_plaintext.pop() {
+        while let Some(buf) = sendable_plaintext.dequeue() {
             self.send_plain_non_buffering(buf.as_slice().into(), Limit::No);
         }
     }
 
     // Put m into sendable_tls for writing.
-    fn queue_tls_message(&mut self, m: OutboundOpaqueMessage) {
-        self.sendable_tls.append(m.encode());
+    fn enqueue_tls_message(&mut self, m: OutboundOpaqueMessage) {
+        self.sendable_tls.enqueue(m.encode());
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
@@ -391,7 +391,7 @@ impl CommonState {
                 .message_fragmenter
                 .fragment_message(msg);
             for m in iter {
-                self.queue_tls_message(m.to_unencrypted_opaque());
+                self.enqueue_tls_message(m.to_unencrypted_opaque());
             }
         } else {
             self.send_msg_encrypt(m.into());
@@ -400,7 +400,7 @@ impl CommonState {
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext
-            .append(bytes.into_vec());
+            .enqueue(bytes.into_vec());
     }
 
     #[cfg(feature = "tls12")]
@@ -651,7 +651,7 @@ impl CommonState {
     pub(crate) fn buffer_plaintext(
         &mut self,
         payload: OutboundChunks<'_>,
-        sendable_plaintext: &mut ChunkVecBuffer,
+        sendable_plaintext: &mut BufferQueue,
     ) -> usize {
         self.perhaps_write_key_update();
         self.send_plain(payload, Limit::Yes, sendable_plaintext)
@@ -678,14 +678,14 @@ impl CommonState {
         &mut self,
         payload: OutboundChunks<'_>,
         limit: Limit,
-        sendable_plaintext: &mut ChunkVecBuffer,
+        sendable_plaintext: &mut BufferQueue,
     ) -> usize {
         if !self.may_send_application_data {
             // If we haven't completed handshaking, buffer
             // plaintext to send once we do.
             let len = match limit {
-                Limit::Yes => sendable_plaintext.append_limited_copy(payload),
-                Limit::No => sendable_plaintext.append(payload.to_vec()),
+                Limit::Yes => sendable_plaintext.enqueue_limited_copy(payload),
+                Limit::No => sendable_plaintext.enqueue(payload.to_vec()),
             };
             return len;
         }
@@ -695,7 +695,7 @@ impl CommonState {
 
     pub(crate) fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
-            self.sendable_tls.append(message);
+            self.sendable_tls.enqueue(message);
         }
     }
 }
@@ -795,7 +795,7 @@ pub(crate) struct Context<'a, Data> {
     pub(crate) data: &'a mut Data,
     /// Buffered plaintext. This is `Some` if any plaintext was written during handshake and `None`
     /// otherwise.
-    pub(crate) sendable_plaintext: Option<&'a mut ChunkVecBuffer>,
+    pub(crate) sendable_plaintext: Option<&'a mut BufferQueue>,
 }
 
 /// Side of the connection.

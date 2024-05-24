@@ -34,7 +34,7 @@ mod connection {
     use crate::msgs::deframer::DeframerVecBuffer;
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
     use crate::server::{ServerConfig, ServerConnectionData};
-    use crate::vecbuf::ChunkVecBuffer;
+    use crate::vecbuf::BufferQueue;
 
     /// A QUIC client or server connection.
     #[derive(Debug)]
@@ -328,7 +328,7 @@ mod connection {
     pub struct ConnectionCommon<Data> {
         core: ConnectionCore<Data>,
         deframer_buffer: DeframerVecBuffer,
-        sendable_plaintext: ChunkVecBuffer,
+        sendable_plaintext: BufferQueue,
     }
 
     impl<Data: SideData> ConnectionCommon<Data> {
@@ -418,7 +418,7 @@ mod connection {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
-                sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+                sendable_plaintext: BufferQueue::new(Some(DEFAULT_BUFFER_LIMIT)),
             }
         }
     }

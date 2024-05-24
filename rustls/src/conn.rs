@@ -16,7 +16,7 @@ use crate::msgs::deframer::{
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
-use crate::vecbuf::ChunkVecBuffer;
+use crate::vecbuf::BufferQueue;
 
 pub(crate) mod unbuffered;
 
@@ -31,7 +31,7 @@ mod connection {
     use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
-    use crate::vecbuf::ChunkVecBuffer;
+    use crate::vecbuf::BufferQueue;
     use crate::ConnectionCommon;
 
     /// A client or server connection.
@@ -158,7 +158,7 @@ mod connection {
 
     /// A structure that implements [`std::io::Read`] for reading plaintext.
     pub struct Reader<'a> {
-        pub(super) received_plaintext: &'a mut ChunkVecBuffer,
+        pub(super) received_plaintext: &'a mut BufferQueue,
         pub(super) has_received_close_notify: bool,
         pub(super) has_seen_eof: bool,
     }
@@ -361,7 +361,7 @@ impl ConnectionRandoms {
 pub struct ConnectionCommon<Data> {
     pub(crate) core: ConnectionCore<Data>,
     deframer_buffer: DeframerVecBuffer,
-    sendable_plaintext: ChunkVecBuffer,
+    sendable_plaintext: BufferQueue,
 }
 
 impl<Data> ConnectionCommon<Data> {
@@ -713,7 +713,7 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
-            sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
+            sendable_plaintext: BufferQueue::new(Some(DEFAULT_BUFFER_LIMIT)),
         }
     }
 }
@@ -753,7 +753,7 @@ impl<Data> ConnectionCore<Data> {
     pub(crate) fn process_new_packets(
         &mut self,
         deframer_buffer: &mut DeframerVecBuffer,
-        sendable_plaintext: &mut ChunkVecBuffer,
+        sendable_plaintext: &mut BufferQueue,
     ) -> Result<IoState, Error> {
         let mut state = match mem::replace(&mut self.state, Err(Error::HandshakeNotComplete)) {
             Ok(state) => state,
@@ -873,7 +873,7 @@ impl<Data> ConnectionCore<Data> {
         &mut self,
         msg: InboundPlainMessage,
         state: Box<dyn State<Data>>,
-        sendable_plaintext: Option<&mut ChunkVecBuffer>,
+        sendable_plaintext: Option<&mut BufferQueue>,
     ) -> Result<Box<dyn State<Data>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
