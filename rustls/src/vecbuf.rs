@@ -3,8 +3,6 @@ use alloc::vec::Vec;
 use core::cmp;
 #[cfg(feature = "std")]
 use std::io;
-#[cfg(feature = "std")]
-use std::io::Read;
 
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
@@ -76,14 +74,30 @@ impl BufferQueue {
         self.buffers.pop_front()
     }
 
+    /// See the next buffer in line, if any. Empty buffers are omitted.
+    fn peek(&mut self) -> Option<&mut Vec<u8>> {
+        // The element at index 0 is the front of the queue.
+        self.buffers.get_mut(0)
+    }
+
     #[cfg(read_buf)]
-    /// Read data out of this object, writing it into `cursor`.
+    /// Dequeue and copy into `cursor` up to `capacity()` in size.
     pub(crate) fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
-        while !self.is_empty() && cursor.capacity() > 0 {
-            let buf = self.buffers[0].as_slice();
-            let used = cmp::min(buf.len(), cursor.capacity());
-            cursor.append(&buf[..used]);
-            self.consume(used);
+        let mut space = cursor.capacity();
+
+        while let Some(next) = self.peek() {
+            if next.len() > space {
+                if space != 0 {
+                    let taken = &next.drain(..space);
+                    cursor.append(taken.as_slice());
+                    // space = 0;
+                }
+                break;
+            }
+
+            cursor.append(&next);
+            space -= next.len();
+            self.dequeue(); // drop peeked
         }
 
         Ok(())
@@ -104,49 +118,62 @@ impl BufferQueue {
         take
     }
 
-    /// Read data out of this object, writing it into `buf`
-    /// and returning how many bytes were written there.
+    /// Dequeue into `p` with the number of bytes copied in return.
+    /// Reads of less than the capacity of `buf` imply queue exhaustion.
     pub(crate) fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut offs = 0;
+        let mut i = 0; // write index in buf
 
-        while offs < buf.len() && !self.is_empty() {
-            let used = self.buffers[0]
-                .as_slice()
-                .read(&mut buf[offs..])?;
-
-            self.consume(used);
-            offs += used;
-        }
-
-        Ok(offs)
-    }
-
-    fn consume(&mut self, mut used: usize) {
-        while let Some(mut buf) = self.buffers.pop_front() {
-            if used < buf.len() {
-                buf.drain(..used);
-                self.buffers.push_front(buf);
+        while let Some(next) = self.peek() {
+            let end = i + next.len();
+            if end > buf.len() {
+                if i < buf.len() {
+                    let left = &mut buf[i..];
+                    let taken = next.drain(..left.len());
+                    left.copy_from_slice(taken.as_slice());
+                    i = buf.len();
+                }
                 break;
-            } else {
-                used -= buf.len();
             }
+
+            buf[i..end].copy_from_slice(&next);
+            i = end;
+            self.dequeue(); // drop peeked
+        }
+
+        Ok(i)
+    }
+
+    /// Discard the next n octets in line.
+    fn consume(&mut self, mut n: usize) {
+        while let Some(buf) = self.peek() {
+            if buf.len() > n {
+                if n != 0 {
+                    buf.drain(..n);
+                    // n = 0;
+                }
+                break;
+            }
+            n -= buf.len();
+            self.dequeue(); // drop peeked
         }
     }
 
-    /// Read data out of this object, passing it `wr`
-    pub(crate) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
+    /// Dequeue data written to w with the total number of octets in return.
+    pub(crate) fn write_to(&mut self, w: &mut dyn io::Write) -> io::Result<usize> {
         if self.is_empty() {
             return Ok(0);
         }
 
+        // queue as "write vectors"
         let mut bufs = [io::IoSlice::new(&[]); 64];
         for (iov, buf) in bufs.iter_mut().zip(self.buffers.iter()) {
             *iov = io::IoSlice::new(buf);
         }
         let len = cmp::min(bufs.len(), self.buffers.len());
-        let used = wr.write_vectored(&bufs[..len])?;
-        self.consume(used);
-        Ok(used)
+
+        let written = w.write_vectored(&bufs[..len])?;
+        self.consume(written);
+        Ok(written)
     }
 }
 
