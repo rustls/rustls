@@ -15,25 +15,22 @@ use crate::msgs::message::OutboundChunks;
 pub(crate) struct BufferQueue {
     // ring buffer
     buffers: VecDeque<Vec<u8>>,
-    limit: Option<usize>,
+    limit: usize,
 }
 
 impl BufferQueue {
-    pub(crate) fn new(limit: Option<usize>) -> Self {
+    /// Constructor includes `set_limit(usize)`.
+    pub(crate) fn new(limit: usize) -> Self {
         Self {
             buffers: VecDeque::new(),
             limit,
         }
     }
 
-    /// Sets the upper limit on how many bytes this
-    /// object can store.
-    ///
-    /// Setting a lower limit than the currently stored
-    /// data is not an error.
-    ///
-    /// A [`None`] limit is interpreted as no limit.
-    pub(crate) fn set_limit(&mut self, new_limit: Option<usize>) {
+    /// Set an upper limit on the number of octets
+    /// enqueued, with zero for unlimited.
+    /// A lower value than `len()` is not an error.
+    pub(crate) fn set_limit(&mut self, new_limit: usize) {
         self.limit = new_limit;
     }
 
@@ -55,8 +52,8 @@ impl BufferQueue {
     /// bytes should we actually append to adhere to the
     /// currently set `limit`?
     pub(crate) fn apply_limit(&self, len: usize) -> usize {
-        if let Some(limit) = self.limit {
-            let space = limit.saturating_sub(self.len());
+        if self.limit != 0 {
+            let space = self.limit.saturating_sub(self.len());
             cmp::min(len, space)
         } else {
             len
@@ -96,9 +93,7 @@ impl BufferQueue {
 #[cfg(feature = "std")]
 impl BufferQueue {
     pub(crate) fn is_full(&self) -> bool {
-        self.limit
-            .map(|limit| self.len() > limit)
-            .unwrap_or_default()
+        self.limit != 0 && self.limit <= self.len()
     }
 
     /// Append a copy of `bytes`, perhaps a prefix if
@@ -161,7 +156,7 @@ mod tests {
 
     #[test]
     fn short_enqueue_copy_with_limit() {
-        let mut cvb = BufferQueue::new(Some(12));
+        let mut cvb = BufferQueue::new(12);
         assert_eq!(cvb.enqueue_limited_copy(b"hello"[..].into()), 5);
         assert_eq!(cvb.enqueue_limited_copy(b"world"[..].into()), 5);
         assert_eq!(cvb.enqueue_limited_copy(b"hello"[..].into()), 2);
@@ -179,7 +174,7 @@ mod tests {
         use core::mem::MaybeUninit;
 
         {
-            let mut cvb = BufferQueue::new(None);
+            let mut cvb = BufferQueue::new(0);
             cvb.enqueue(b"test ".to_vec());
             cvb.enqueue(b"fixture ".to_vec());
             cvb.enqueue(b"data".to_vec());
@@ -197,7 +192,7 @@ mod tests {
         }
 
         {
-            let mut cvb = BufferQueue::new(None);
+            let mut cvb = BufferQueue::new(0);
             cvb.enqueue(b"short message".to_vec());
 
             let mut buf = [MaybeUninit::<u8>::uninit(); 1024];

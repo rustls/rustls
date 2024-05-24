@@ -418,7 +418,7 @@ mod connection {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
-                sendable_plaintext: BufferQueue::new(Some(DEFAULT_BUFFER_LIMIT)),
+                sendable_plaintext: BufferQueue::new(DEFAULT_BUFFER_LIMIT),
             }
         }
     }

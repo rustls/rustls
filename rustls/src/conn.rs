@@ -478,8 +478,15 @@ impl<Data> ConnectionCommon<Data> {
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
     pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
-        self.sendable_plaintext.set_limit(limit);
-        self.sendable_tls.set_limit(limit);
+        let n = match limit {
+            Some(value) => {
+                assert!(value != 0);
+                value
+            }
+            None => 0,
+        };
+        self.sendable_plaintext.set_limit(n);
+        self.sendable_tls.set_limit(n);
     }
 }
 
@@ -713,7 +720,7 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
         Self {
             core,
             deframer_buffer: DeframerVecBuffer::default(),
-            sendable_plaintext: BufferQueue::new(Some(DEFAULT_BUFFER_LIMIT)),
+            sendable_plaintext: BufferQueue::new(DEFAULT_BUFFER_LIMIT),
         }
     }
 }

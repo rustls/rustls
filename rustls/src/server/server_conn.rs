@@ -809,7 +809,7 @@ mod connection {
 
     impl AcceptedAlert {
         pub(super) fn empty() -> Self {
-            Self(BufferQueue::new(None))
+            Self(BufferQueue::new(0))
         }
 
         /// Send the alert to the client.
@@ -999,7 +999,7 @@ impl EarlyDataState {
     }
 
     pub(super) fn accept(&mut self, max_size: usize) {
-        *self = Self::Accepted(BufferQueue::new(Some(max_size)));
+        *self = Self::Accepted(BufferQueue::new(max_size));
     }
 
     #[cfg(feature = "std")]
