@@ -90,6 +90,9 @@ pub trait Hpke: Debug + Send + Sync {
         info: &[u8],
         secret_key: &HpkePrivateKey,
     ) -> Result<Box<dyn HpkeOpener + 'static>, Error>;
+
+    /// Return the [HpkeSuite] that this HPKE instance supports.
+    fn suite(&self) -> HpkeSuite;
 }
 
 /// An HPKE sealer context.
