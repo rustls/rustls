@@ -6,13 +6,15 @@ mod macros;
 test_for_each_provider! {
 
 mod common;
+use std::sync::Arc;
+
 use common::{
     do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,
     make_client_config_with_versions, make_client_config_with_versions_with_auth,
     make_pair_for_arc_configs, server_config_builder, server_name, webpki_client_verifier_builder,
     ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
-
+use pki_types::{CertificateDer, UnixTime};
 use rustls::client::danger::HandshakeSignatureValid;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
@@ -20,10 +22,6 @@ use rustls::{
     AlertDescription, ClientConnection, DigitallySignedStruct, Error, InvalidMessage, ServerConfig,
     ServerConnection, SignatureScheme,
 };
-
-use pki_types::{CertificateDer, UnixTime};
-
-use std::sync::Arc;
 
 // Client is authorized!
 fn ver_ok() -> Result<ClientCertVerified, Error> {

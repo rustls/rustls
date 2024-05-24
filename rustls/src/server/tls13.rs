@@ -1,7 +1,5 @@
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use alloc::vec;
 use alloc::vec::Vec;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
@@ -42,9 +40,9 @@ mod client_hello {
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
     use crate::msgs::handshake::{
-        CertReqExtension, CertificateEntry, CertificateExtension, CertificatePayloadTls13,
-        CertificateRequestPayloadTls13, CertificateStatus, ClientHelloPayload, HelloRetryExtension,
-        HelloRetryRequest, KeyShareEntry, Random, ServerExtension, ServerHelloPayload, SessionId,
+        CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
+        ClientHelloPayload, HelloRetryExtension, HelloRetryRequest, KeyShareEntry, Random,
+        ServerExtension, ServerHelloPayload, SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
@@ -703,28 +701,7 @@ mod client_hello {
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
     ) {
-        let mut cert_entries = vec![];
-        for cert in cert_chain {
-            let entry = CertificateEntry {
-                cert: cert.to_owned(),
-                exts: Vec::new(),
-            };
-
-            cert_entries.push(entry);
-        }
-
-        if let Some(end_entity_cert) = cert_entries.first_mut() {
-            // Apply OCSP response to first certificate (we don't support OCSP
-            // except for leaf certs).
-            if let Some(ocsp) = ocsp_response {
-                let cst = CertificateStatus::new(ocsp.to_owned());
-                end_entity_cert
-                    .exts
-                    .push(CertificateExtension::CertificateStatus(cst));
-            }
-        }
-
-        let cert_body = CertificatePayloadTls13::new(cert_entries);
+        let cert_body = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
         let c = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload {

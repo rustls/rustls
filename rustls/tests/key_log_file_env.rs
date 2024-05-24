@@ -53,17 +53,16 @@ fn serialized(f: impl FnOnce()) {
 
 test_for_each_provider! {
 
-use super::*;
-
-use std::sync::Arc;
 use std::io::Write;
+use std::sync::Arc;
+
+use super::*;
 
 mod common;
 use common::{
     do_handshake, make_client_config_with_versions, make_pair_for_arc_configs, make_server_config,
     transfer, KeyType,
 };
-
 
 #[test]
 fn exercise_key_log_file_for_client() {

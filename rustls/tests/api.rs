@@ -9,16 +9,12 @@ use std::cell::RefCell;
 mod macros;
 
 test_for_each_provider! {
-use super::*;
-
-use std::fmt;
 use std::fmt::Debug;
 use std::io::{self, IoSlice, Read, Write};
-use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::{fmt, mem};
 
 use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
@@ -32,20 +28,18 @@ use rustls::internal::msgs::handshake::{
 };
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
-use rustls::SupportedCipherSuite;
 use rustls::{
-    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, HandshakeKind,
-    InvalidMessage, KeyLog, PeerIncompatible, PeerMisbehaved, SideData,
+    sign, AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
+    ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
+    HandshakeKind, InvalidMessage, KeyLog, PeerIncompatible, PeerMisbehaved, ProtocolVersion,
+    ServerConfig, ServerConnection, SideData, SignatureScheme, Stream, StreamOwned,
+    SupportedCipherSuite,
 };
-use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
-use rustls::{ClientConfig, ClientConnection};
-use rustls::{ConnectionTrafficSecrets, DistinguishedName};
-use rustls::{ServerConfig, ServerConnection};
-use rustls::{Stream, StreamOwned};
+
+use super::*;
 
 mod common;
 use common::*;
-
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
 
@@ -1392,7 +1386,8 @@ fn client_check_server_certificate_ee_crl_expired() {
             .only_check_end_entity_revocation();
 
         for version in rustls::ALL_VERSIONS {
-            let client_config = make_client_config_with_verifier(&[version], enforce_expiration_builder.clone());
+            let client_config =
+                make_client_config_with_verifier(&[version], enforce_expiration_builder.clone());
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
             let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
@@ -1406,7 +1401,8 @@ fn client_check_server_certificate_ee_crl_expired() {
                 )))
             );
 
-            let client_config = make_client_config_with_verifier(&[version], ignore_expiration_builder.clone());
+            let client_config =
+                make_client_config_with_verifier(&[version], ignore_expiration_builder.clone());
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
             let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
@@ -4023,8 +4019,9 @@ fn early_data_can_be_rejected_by_server() {
 }
 
 mod test_quic {
-    use super::*;
     use rustls::quic::{self, ConnectionCommon};
+
+    use super::*;
 
     // Returns the sender's next secrets to use, or the receiver's error.
     fn step<L: SideData, R: SideData>(
@@ -4738,10 +4735,9 @@ mod test_quic {
 
 #[test]
 fn test_client_does_not_offer_sha1() {
-    use rustls::internal::msgs::{
-        codec::Reader, handshake::HandshakePayload, message::MessagePayload,
-        message::OutboundOpaqueMessage,
-    };
+    use rustls::internal::msgs::codec::Reader;
+    use rustls::internal::msgs::handshake::HandshakePayload;
+    use rustls::internal::msgs::message::{MessagePayload, OutboundOpaqueMessage};
     use rustls::HandshakeType;
 
     for kt in ALL_KEY_TYPES {
