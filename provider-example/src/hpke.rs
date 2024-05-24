@@ -5,42 +5,81 @@ use core::fmt::Debug;
 use std::error::Error as StdError;
 
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
-use hpke_rs_crypto::HpkeCrypto;
 use hpke_rs_rust_crypto::HpkeRustCrypto;
 use rustls::crypto::hpke::{
-    EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkeProvider, HpkePublicKey, HpkeSealer,
-    HpkeSuite,
+    EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite,
 };
+use rustls::internal::msgs::enums::{
+    HpkeAead as HpkeAeadId, HpkeKdf as HpkeKdfId, HpkeKem as HpkeKemId,
+};
+use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
 use rustls::{Error, OtherError};
 
-pub static HPKE_PROVIDER: &'static dyn HpkeProvider = &HpkeRsProvider {};
+/// All supported HPKE suites.
+///
+/// Note: hpke-rs w/ rust-crypto does not support P-384 and P-521 DH KEMs.
+pub static ALL_SUPPORTED_SUITES: &[&dyn Hpke] = &[
+    DHKEM_P256_HKDF_SHA256_AES_128,
+    DHKEM_P256_HKDF_SHA256_AES_256,
+    DHKEM_P256_HKDF_SHA256_CHACHA20_POLY1305,
+    DHKEM_X25519_HKDF_SHA256_AES_128,
+    DHKEM_X25519_HKDF_SHA256_AES_256,
+    DHKEM_X25519_HKDF_SHA256_CHACHA20_POLY1305,
+];
 
-/// A Rustls HPKE provider backed by hpke-rs and the RustCrypto backend.
+pub static DHKEM_P256_HKDF_SHA256_AES_128: &HpkeRs = &HpkeRs(HpkeSuite {
+    kem: HpkeKemId::DHKEM_P256_HKDF_SHA256,
+    sym: HpkeSymmetricCipherSuite {
+        kdf_id: HpkeKdfId::HKDF_SHA256,
+        aead_id: HpkeAeadId::AES_128_GCM,
+    },
+});
+
+pub static DHKEM_P256_HKDF_SHA256_AES_256: &HpkeRs = &HpkeRs(HpkeSuite {
+    kem: HpkeKemId::DHKEM_P256_HKDF_SHA256,
+    sym: HpkeSymmetricCipherSuite {
+        kdf_id: HpkeKdfId::HKDF_SHA256,
+        aead_id: HpkeAeadId::AES_256_GCM,
+    },
+});
+
+pub static DHKEM_P256_HKDF_SHA256_CHACHA20_POLY1305: &HpkeRs = &HpkeRs(HpkeSuite {
+    kem: HpkeKemId::DHKEM_P256_HKDF_SHA256,
+    sym: HpkeSymmetricCipherSuite {
+        kdf_id: HpkeKdfId::HKDF_SHA256,
+        aead_id: HpkeAeadId::CHACHA20_POLY_1305,
+    },
+});
+
+pub static DHKEM_X25519_HKDF_SHA256_AES_128: &HpkeRs = &HpkeRs(HpkeSuite {
+    kem: HpkeKemId::DHKEM_X25519_HKDF_SHA256,
+    sym: HpkeSymmetricCipherSuite {
+        kdf_id: HpkeKdfId::HKDF_SHA256,
+        aead_id: HpkeAeadId::AES_128_GCM,
+    },
+});
+
+pub static DHKEM_X25519_HKDF_SHA256_AES_256: &HpkeRs = &HpkeRs(HpkeSuite {
+    kem: HpkeKemId::DHKEM_X25519_HKDF_SHA256,
+    sym: HpkeSymmetricCipherSuite {
+        kdf_id: HpkeKdfId::HKDF_SHA256,
+        aead_id: HpkeAeadId::AES_256_GCM,
+    },
+});
+
+pub static DHKEM_X25519_HKDF_SHA256_CHACHA20_POLY1305: &HpkeRs = &HpkeRs(HpkeSuite {
+    kem: HpkeKemId::DHKEM_X25519_HKDF_SHA256,
+    sym: HpkeSymmetricCipherSuite {
+        kdf_id: HpkeKdfId::HKDF_SHA256,
+        aead_id: HpkeAeadId::CHACHA20_POLY_1305,
+    },
+});
+
+/// A HPKE suite backed by the [hpke-rs] crate and its rust-crypto cryptography provider.
+///
+/// [hpke-rs]: https://github.com/franziskuskiefer/hpke-rs
 #[derive(Debug)]
-struct HpkeRsProvider {}
-
-impl HpkeProvider for HpkeRsProvider {
-    fn start(&self, suite: &HpkeSuite) -> Result<Box<dyn Hpke + 'static>, Error> {
-        Ok(Box::new(HpkeRs(*suite)))
-    }
-
-    fn supports_suite(&self, suite: &HpkeSuite) -> bool {
-        let kem = KemAlgorithm::try_from(u16::from(suite.kem)).ok();
-        let kdf = KdfAlgorithm::try_from(u16::from(suite.sym.kdf_id)).ok();
-        let aead = AeadAlgorithm::try_from(u16::from(suite.sym.aead_id)).ok();
-        match (kem, kdf, aead) {
-            (Some(kem), Some(kdf), Some(aead)) => {
-                HpkeRustCrypto::supports_kem(kem).is_ok()
-                    && HpkeRustCrypto::supports_kdf(kdf).is_ok()
-                    && HpkeRustCrypto::supports_aead(aead).is_ok()
-            }
-            _ => false,
-        }
-    }
-}
-
-#[derive(Debug)]
-struct HpkeRs(HpkeSuite);
+pub struct HpkeRs(HpkeSuite);
 
 impl HpkeRs {
     fn start(&self) -> Result<hpke_rs::Hpke<HpkeRustCrypto>, Error> {

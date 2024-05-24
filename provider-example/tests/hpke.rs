@@ -1,9 +1,9 @@
 use std::fs::File;
 
-use rustls::crypto::hpke::{HpkePrivateKey, HpkePublicKey, HpkeSuite};
+use rustls::crypto::hpke::{Hpke, HpkePrivateKey, HpkePublicKey, HpkeSuite};
 use rustls::internal::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
-use rustls_provider_example::HPKE_PROVIDER;
+use rustls_provider_example::hpke::ALL_SUPPORTED_SUITES;
 use serde::Deserialize;
 
 /// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
@@ -12,15 +12,12 @@ use serde::Deserialize;
 #[test]
 fn check_test_vectors() {
     for (idx, vec) in test_vectors().into_iter().enumerate() {
-        if !vec.applicable() {
+        let Some(hpke) = vec.applicable() else {
             println!("skipping inapplicable vector {idx}");
             continue;
-        }
+        };
 
         println!("testing vector {idx}");
-        let mut hpke = HPKE_PROVIDER
-            .start(&vec.suite())
-            .unwrap();
         let pk_r = HpkePublicKey(hex::decode(vec.pk_rm).unwrap());
         let sk_r = HpkePrivateKey::from(hex::decode(vec.sk_rm).unwrap());
         let info = hex::decode(vec.info).unwrap();
@@ -72,9 +69,16 @@ impl TestVector {
         }
     }
 
-    fn applicable(&self) -> bool {
+    fn applicable(&self) -> Option<&'static dyn Hpke> {
         // Only base mode test vectors for supported suites are applicable.
-        self.mode == 0 && HPKE_PROVIDER.supports_suite(&self.suite())
+        if self.mode == 0 {
+            return None;
+        }
+
+        ALL_SUPPORTED_SUITES
+            .iter()
+            .find(|hpke| hpke.suite() == self.suite())
+            .copied()
     }
 }
 
