@@ -49,7 +49,7 @@ pub trait Hpke: Debug + Send + Sync {
     /// using the same `info` and `aad` and the private key corresponding to `pub_key`. RFC 9180
     /// refers to `pub_key` as `pkR`.
     fn seal(
-        &mut self,
+        &self,
         info: &[u8],
         aad: &[u8],
         plaintext: &[u8],
@@ -61,7 +61,7 @@ pub trait Hpke: Debug + Send + Sync {
     /// Returns both an encapsulated ciphertext and a sealer context that can be used to seal
     /// messages to the recipient. RFC 9180 refers to `pub_key` as `pkR`.
     fn setup_sealer(
-        &mut self,
+        &self,
         info: &[u8],
         pub_key: &HpkePublicKey,
     ) -> Result<(EncapsulatedSecret, Box<dyn HpkeSealer + 'static>), Error>;
@@ -72,7 +72,7 @@ pub trait Hpke: Debug + Send + Sync {
     /// Returns plaintext if  the `info` and `aad` match those used with [Self::seal], and
     /// decryption with `secret_key` succeeds. RFC 9180 refers to `secret_key` as `skR`.
     fn open(
-        &mut self,
+        &self,
         enc: &EncapsulatedSecret,
         info: &[u8],
         aad: &[u8],
@@ -85,7 +85,7 @@ pub trait Hpke: Debug + Send + Sync {
     /// Returns an opener context that can be used to open sealed messages encrypted to the
     /// public key corresponding to `secret_key`. RFC 9180 refers to `secret_key` as `skR`.
     fn setup_opener(
-        &mut self,
+        &self,
         enc: &EncapsulatedSecret,
         info: &[u8],
         secret_key: &HpkePrivateKey,
