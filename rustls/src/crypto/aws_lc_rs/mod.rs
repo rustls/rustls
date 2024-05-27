@@ -17,6 +17,8 @@ use crate::suites::SupportedCipherSuite;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::Error;
 
+/// Hybrid public key encryption (HPKE).
+pub mod hpke;
 /// Using software keys for authentication.
 pub mod sign;
 
