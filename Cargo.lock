@@ -341,9 +341,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.7.1"
+version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8487b59d62764df8231cb371c459314df895b41756df457a1fb1243d65c89195"
+checksum = "474d7cec9d0a1126fad1b224b767fcbf351c23b0309bb21ec210bcfd379926a5"
 dependencies = [
  "aws-lc-fips-sys",
  "aws-lc-sys",
@@ -355,9 +355,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c15eb61145320320eb919d9bab524617a7aa4216c78d342fae3a758bc33073e4"
+checksum = "7505fc3cb7acbf42699a43a79dd9caa4ed9e99861dfbb837c5c0fb5a0a8d2980"
 dependencies = [
  "bindgen",
  "cc",
@@ -2400,18 +2400,18 @@ checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
 
 [[package]]
 name = "serde"
-version = "1.0.202"
+version = "1.0.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "226b61a0d411b2ba5ff6d7f73a476ac4f8bb900373459cd00fab8512828ba395"
+checksum = "7253ab4de971e72fb7be983802300c30b5a7f0c2e56fab8abfc6a214307c0094"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.202"
+version = "1.0.203"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6048858004bcff69094cd972ed40a32500f153bd3be9f716b2eed2e8217c4838"
+checksum = "500cbc0ebeb6f46627f50f3f5811ccf6bf00643be300b4c3eabc0ef55dc5b5ba"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3140,9 +3140,9 @@ dependencies = [
 
 [[package]]
 name = "zeroize"
-version = "1.7.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "525b4ec142c6b68a2d10f01f7bbf6755599ca3f81ea53b8431b7dd348f5fdb2d"
+checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 dependencies = [
  "zeroize_derive",
 ]
