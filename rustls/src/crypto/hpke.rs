@@ -72,6 +72,11 @@ pub trait Hpke: Debug + Send + Sync {
         secret_key: &HpkePrivateKey,
     ) -> Result<Box<dyn HpkeOpener + 'static>, Error>;
 
+    /// Return whether the HPKE instance is FIPS compatible.
+    fn fips(&self) -> bool {
+        false
+    }
+
     /// Return the [HpkeSuite] that this HPKE instance supports.
     fn suite(&self) -> HpkeSuite;
 }
