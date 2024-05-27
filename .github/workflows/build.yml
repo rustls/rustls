@@ -46,7 +46,8 @@ jobs:
       - name: Install ${{ matrix.rust }} toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
+          # TODO(XXX): Revert to "matrix.rust" after rust-lang/rust#125474 is fixed.
+          toolchain: ${{ matrix.rust == 'nightly' && 'nightly-2024-05-22' || matrix.rust }}
 
       - name: Install NASM for aws-lc-rs on Windows
         if: runner.os == 'Windows'
