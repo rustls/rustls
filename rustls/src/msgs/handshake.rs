@@ -955,19 +955,15 @@ impl ClientHelloPayload {
     }
 
     pub(crate) fn has_keyshare_extension_with_duplicates(&self) -> bool {
-        if let Some(entries) = self.keyshare_extension() {
-            let mut seen = BTreeSet::new();
-
-            for kse in entries {
-                let grp = u16::from(kse.group);
-
-                if !seen.insert(grp) {
-                    return true;
-                }
-            }
-        }
-
-        false
+        self.keyshare_extension()
+            .map(|entries| {
+                has_duplicates::<_, _, u16>(
+                    entries
+                        .iter()
+                        .map(|kse| u16::from(kse.group)),
+                )
+            })
+            .unwrap_or_default()
     }
 
     pub(crate) fn psk(&self) -> Option<&PresharedKeyOffer> {
