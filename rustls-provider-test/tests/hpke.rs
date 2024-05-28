@@ -1,9 +1,9 @@
 use std::fs::File;
 
+use rustls::crypto::aws_lc_rs;
 use rustls::crypto::hpke::{Hpke, HpkePrivateKey, HpkePublicKey, HpkeSuite};
 use rustls::internal::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
-use rustls_provider_example::hpke::ALL_SUPPORTED_SUITES;
 use serde::Deserialize;
 
 /// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
@@ -12,7 +12,7 @@ use serde::Deserialize;
 #[test]
 fn check_test_vectors() {
     for (idx, vec) in test_vectors().into_iter().enumerate() {
-        let Some(hpke) = vec.applicable() else {
+        let Some(hpke_pairs) = vec.applicable() else {
             println!("skipping inapplicable vector {idx}");
             continue;
         };
@@ -26,14 +26,16 @@ fn check_test_vectors() {
             let aad = hex::decode(enc.aad).unwrap();
             let pt = hex::decode(enc.pt).unwrap();
 
-            let (enc, ciphertext) = hpke
-                .seal(&info, &aad, &pt, &pk_r)
-                .unwrap();
+            for (sealer, opener) in &hpke_pairs {
+                let (enc, ciphertext) = sealer
+                    .seal(&info, &aad, &pt, &pk_r)
+                    .unwrap();
 
-            let plaintext = hpke
-                .open(&enc, &info, &aad, &ciphertext, &sk_r)
-                .unwrap();
-            assert_eq!(plaintext, pt);
+                let plaintext = opener
+                    .open(&enc, &info, &aad, &ciphertext, &sk_r)
+                    .unwrap();
+                assert_eq!(plaintext, pt);
+            }
         }
     }
 }
@@ -69,15 +71,45 @@ impl TestVector {
         }
     }
 
-    fn applicable(&self) -> Option<&'static dyn Hpke> {
+    fn applicable(&self) -> Option<Vec<(&'static dyn Hpke, &'static dyn Hpke)>> {
         // Only base mode test vectors for supported suites are applicable.
-        if self.mode == 0 {
+        if self.mode != 0 {
             return None;
         }
 
-        ALL_SUPPORTED_SUITES
+        match (
+            Self::lookup_suite(self.suite(), aws_lc_rs::hpke::ALL_SUPPORTED_SUITES),
+            Self::lookup_suite(self.suite(), provider_example::hpke::ALL_SUPPORTED_SUITES),
+        ) {
+            // Both providers support the suite. Test against themselves, and each other.
+            (Some(aws_suite), Some(hpke_rs_suite)) => Some(vec![
+                (aws_suite, aws_suite),
+                (hpke_rs_suite, hpke_rs_suite),
+                (aws_suite, hpke_rs_suite),
+                (hpke_rs_suite, aws_suite),
+            ]),
+
+            // aws-lc-rs supported the suite, not hpke-rs, test against itself
+            (Some(aws_suite), None) => Some(vec![(aws_suite, aws_suite)]),
+
+            // hpke-rs supported the suite, not AWS-LC-RS, test against itself
+            //
+            // Note: presently there are no suites hpke-rs supports that aws-lc-rs doesn't. This
+            //       is future-proofing.
+            (None, Some(hpke_rs_suite)) => Some(vec![(hpke_rs_suite, hpke_rs_suite)]),
+
+            // Neither provider supported the suite - nothing to do.
+            (None, None) => None,
+        }
+    }
+
+    fn lookup_suite(
+        suite: HpkeSuite,
+        supported: &[&'static dyn Hpke],
+    ) -> Option<&'static dyn Hpke> {
+        supported
             .iter()
-            .find(|hpke| hpke.suite() == self.suite())
+            .find(|s| s.suite() == suite)
             .copied()
     }
 }

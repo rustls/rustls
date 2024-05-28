@@ -2346,7 +2346,6 @@ dependencies = [
  "der",
  "ecdsa",
  "env_logger",
- "hex",
  "hmac",
  "hpke-rs",
  "hpke-rs-crypto",
@@ -2359,12 +2358,21 @@ dependencies = [
  "rustls 0.23.8",
  "rustls-pki-types",
  "rustls-webpki 0.102.4",
- "serde",
- "serde_json",
  "sha2",
  "signature",
  "webpki-roots 0.26.1",
  "x25519-dalek",
+]
+
+[[package]]
+name = "rustls-provider-test"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rustls 0.23.8",
+ "rustls-provider-example",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

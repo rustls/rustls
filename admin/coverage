@@ -18,4 +18,7 @@ cargo test --locked $(admin/all-features-except brotli rustls)
 cargo test --locked --all-features run_bogo_tests_ring -- --ignored
 cargo test --locked --all-features run_bogo_tests_aws_lc_rs -- --ignored
 
+## provider tests
+cargo test --locked --package rustls-provider-test
+
 cargo llvm-cov report "$@"
