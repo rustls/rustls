@@ -5,12 +5,9 @@ use alloc::boxed::Box;
 use super::ring_like;
 use crate::crypto;
 
-#[cfg(feature = "tls12")]
 pub(crate) static HMAC_SHA256: Hmac = Hmac(&ring_like::hmac::HMAC_SHA256);
-#[cfg(feature = "tls12")]
 pub(crate) static HMAC_SHA384: Hmac = Hmac(&ring_like::hmac::HMAC_SHA384);
-#[cfg(test)]
-#[allow(dead_code)] // only for TLS1.2 prf test
+#[allow(dead_code)] // Only used for TLS 1.2 prf test, and aws-lc-rs HPKE suites.
 pub(crate) static HMAC_SHA512: Hmac = Hmac(&ring_like::hmac::HMAC_SHA512);
 
 pub(crate) struct Hmac(&'static ring_like::hmac::Algorithm);
