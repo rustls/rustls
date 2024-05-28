@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 use zeroize::Zeroize;
 
@@ -53,33 +54,15 @@ pub struct HkdfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
 impl<'a> Hkdf for HkdfUsingHmac<'a> {
     fn extract_from_zero_ikm(&self, salt: Option<&[u8]>) -> Box<dyn HkdfExpander> {
         let zeroes = [0u8; hmac::Tag::MAX_LEN];
-        let salt = match salt {
-            Some(salt) => salt,
-            None => &zeroes[..self.0.hash_output_len()],
-        };
-        Box::new(HkdfExpanderUsingHmac(
-            self.0.with_key(
-                self.0
-                    .with_key(salt)
-                    .sign(&[&zeroes[..self.0.hash_output_len()]])
-                    .as_ref(),
-            ),
-        ))
+        Box::new(HkdfExpanderUsingHmac(self.0.with_key(
+            &self.extract_prk_from_secret(salt, &zeroes[..self.0.hash_output_len()]),
+        )))
     }
 
     fn extract_from_secret(&self, salt: Option<&[u8]>, secret: &[u8]) -> Box<dyn HkdfExpander> {
-        let zeroes = [0u8; hmac::Tag::MAX_LEN];
-        let salt = match salt {
-            Some(salt) => salt,
-            None => &zeroes[..self.0.hash_output_len()],
-        };
         Box::new(HkdfExpanderUsingHmac(
-            self.0.with_key(
-                self.0
-                    .with_key(salt)
-                    .sign(&[secret])
-                    .as_ref(),
-            ),
+            self.0
+                .with_key(&self.extract_prk_from_secret(salt, secret)),
         ))
     }
 
@@ -91,6 +74,21 @@ impl<'a> Hkdf for HkdfUsingHmac<'a> {
         self.0
             .with_key(key.as_ref())
             .sign(&[message])
+    }
+}
+
+impl<'a> HkdfPrkExtract for HkdfUsingHmac<'a> {
+    fn extract_prk_from_secret(&self, salt: Option<&[u8]>, secret: &[u8]) -> Vec<u8> {
+        let zeroes = [0u8; hmac::Tag::MAX_LEN];
+        let salt = match salt {
+            Some(salt) => salt,
+            None => &zeroes[..self.0.hash_output_len()],
+        };
+        self.0
+            .with_key(salt)
+            .sign(&[secret])
+            .as_ref()
+            .to_vec()
     }
 }
 
@@ -182,6 +180,25 @@ pub trait Hkdf: Send + Sync {
     fn fips(&self) -> bool {
         false
     }
+}
+
+/// An extended HKDF implementation that supports directly extracting a pseudo-random key (PRK).
+///
+/// The base [`Hkdf`] trait is tailored to the needs of TLS 1.3, where all extracted PRKs
+/// are expanded as-is, and so can be safely encapsulated without exposing the caller
+/// to the key material.
+///
+/// In other contexts (for example, hybrid public key encryption (HPKE)) it may be necessary
+/// to use the extracted PRK directly for purposes other than an immediate expansion.
+/// This trait can be implemented to offer this functionality when it is required.
+pub(crate) trait HkdfPrkExtract: Hkdf {
+    /// `HKDF-Extract(salt, secret)`
+    ///
+    /// A `salt` of `None` should be treated as a sequence of `HashLen` zero bytes.
+    ///
+    /// In most cases you should prefer [`Hkdf::extract_from_secret`] and using the
+    /// returned [HkdfExpander] instead of handling the PRK directly.
+    fn extract_prk_from_secret(&self, salt: Option<&[u8]>, secret: &[u8]) -> Vec<u8>;
 }
 
 /// `HKDF-Expand(PRK, info, L)` to construct any type from a byte array.
