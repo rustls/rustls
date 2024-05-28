@@ -22,6 +22,8 @@ pub mod sign;
 
 #[path = "../ring/hash.rs"]
 pub(crate) mod hash;
+#[path = "../ring/hmac.rs"]
+pub(crate) mod hmac;
 #[path = "../ring/kx.rs"]
 pub(crate) mod kx;
 #[path = "../ring/quic.rs"]
