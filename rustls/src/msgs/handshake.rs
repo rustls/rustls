@@ -1382,8 +1382,8 @@ impl<'a> Codec<'a> for CertificateEntry<'a> {
 }
 
 impl<'a> CertificateEntry<'a> {
-    pub(crate) fn new(cert: CertificateDer<'a>) -> CertificateEntry<'a> {
-        CertificateEntry {
+    pub(crate) fn new(cert: CertificateDer<'a>) -> Self {
+        Self {
             cert,
             exts: Vec::new(),
         }
