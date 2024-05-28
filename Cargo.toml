@@ -25,4 +25,4 @@ resolver = "2"
 
 [profile.bench]
 codegen-units = 1
-lto = "yes"
+lto = true
