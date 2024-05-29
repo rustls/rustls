@@ -2110,6 +2110,16 @@ impl CertificateRequestPayloadTls13 {
             _ => None,
         }
     }
+
+    pub(crate) fn certificate_compression_extension(
+        &self,
+    ) -> Option<&[CertificateCompressionAlgorithm]> {
+        let ext = self.find_extension(ExtensionType::CompressCertificate)?;
+        match *ext {
+            CertReqExtension::CertificateCompressionAlgorithms(ref comps) => Some(comps),
+            _ => None,
+        }
+    }
 }
 
 // -- NewSessionTicket --

@@ -7,7 +7,7 @@ use super::ResolvesClientCert;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ServerExtension};
-use crate::{sign, SignatureScheme};
+use crate::{compress, sign, SignatureScheme};
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails<'a> {
@@ -76,6 +76,7 @@ pub(super) enum ClientAuthDetails {
         certkey: Arc<sign::CertifiedKey>,
         signer: Box<dyn sign::Signer>,
         auth_context_tls13: Option<Vec<u8>>,
+        compressor: Option<&'static dyn compress::CertCompressor>,
     },
 }
 
@@ -85,6 +86,7 @@ impl ClientAuthDetails {
         canames: Option<&[DistinguishedName]>,
         sigschemes: &[SignatureScheme],
         auth_context_tls13: Option<Vec<u8>>,
+        compressor: Option<&'static dyn compress::CertCompressor>,
     ) -> Self {
         let acceptable_issuers = canames
             .unwrap_or_default()
@@ -99,6 +101,7 @@ impl ClientAuthDetails {
                     certkey,
                     signer,
                     auth_context_tls13,
+                    compressor,
                 };
             }
         }
