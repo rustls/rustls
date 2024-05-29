@@ -2005,6 +2005,7 @@ impl Codec<'_> for CertificateRequestPayload {
 pub(crate) enum CertReqExtension {
     SignatureAlgorithms(Vec<SignatureScheme>),
     AuthorityNames(Vec<DistinguishedName>),
+    CertificateCompressionAlgorithms(Vec<CertificateCompressionAlgorithm>),
     Unknown(UnknownExtension),
 }
 
@@ -2013,6 +2014,7 @@ impl CertReqExtension {
         match *self {
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
             Self::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
+            Self::CertificateCompressionAlgorithms(_) => ExtensionType::CompressCertificate,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -2026,6 +2028,7 @@ impl Codec<'_> for CertReqExtension {
         match *self {
             Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
             Self::AuthorityNames(ref r) => r.encode(nested.buf),
+            Self::CertificateCompressionAlgorithms(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -2046,6 +2049,9 @@ impl Codec<'_> for CertReqExtension {
             ExtensionType::CertificateAuthorities => {
                 let cas = Vec::read(&mut sub)?;
                 Self::AuthorityNames(cas)
+            }
+            ExtensionType::CompressCertificate => {
+                Self::CertificateCompressionAlgorithms(Vec::read(&mut sub)?)
             }
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };

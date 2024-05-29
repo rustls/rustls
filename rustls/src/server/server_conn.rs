@@ -220,6 +220,7 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::send_tls13_tickets`]: 4 tickets are sent.
 /// * [`ServerConfig::cert_compressors`]: depends on the crate features, see [`compress::default_cert_compressors()`].
 /// * [`ServerConfig::cert_compression_cache`]: caches the most recently used 4 compressions
+/// * [`ServerConfig::cert_decompressors`]: depends on the crate features, see [`compress::default_cert_decompressors()`].
 ///
 /// [`RootCertStore`]: crate::RootCertStore
 /// [`ServerSessionMemoryCache`]: crate::server::handy::ServerSessionMemoryCache
@@ -357,6 +358,19 @@ pub struct ServerConfig {
     /// This is optional: [`compress::CompressionCache::Disabled`] gives
     /// a cache that does no caching.
     pub cert_compression_cache: Arc<compress::CompressionCache>,
+
+    /// How to decompress the clients's certificate chain.
+    ///
+    /// If this is non-empty, the [RFC8779] certificate compression
+    /// extension is offered when requesting client authentication,
+    /// and any compressed certificates are transparently decompressed
+    /// during the handshake.
+    ///
+    /// This only applies to TLS1.3 connections.  It is ignored for
+    /// TLS1.2 connections.
+    ///
+    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
 }
 
 impl ServerConfig {

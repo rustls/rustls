@@ -578,9 +578,12 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     match opts.install_cert_compression_algs {
         CompressionAlgs::All => {
             cfg.cert_compressors = vec![&ExpandingAlgorithm, &ShrinkingAlgorithm, &RandomAlgorithm];
+            cfg.cert_decompressors =
+                vec![&ExpandingAlgorithm, &ShrinkingAlgorithm, &RandomAlgorithm];
         }
         CompressionAlgs::One(ShrinkingAlgorithm::ALGORITHM) => {
             cfg.cert_compressors = vec![&ShrinkingAlgorithm];
+            cfg.cert_decompressors = vec![&ShrinkingAlgorithm];
         }
         CompressionAlgs::None => {}
         _ => unimplemented!(),
