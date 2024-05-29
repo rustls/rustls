@@ -6700,6 +6700,166 @@ fn test_server_can_opt_out_of_compression_cache() {
     }
 }
 
+#[test]
+fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.cert_compressors = vec![&IdentityCompressor];
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+    client_config.cert_decompressors = vec![&GarbageDecompressor];
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(ErrorFromPeer::Client(Error::InvalidMessage(
+            InvalidMessage::MessageTooShort
+        )))
+    );
+    transfer(&mut client, &mut server);
+    assert_eq!(
+        server.process_new_packets(),
+        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+    );
+}
+
+#[test]
+fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
+    let mut server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048);
+    server_config.cert_decompressors = vec![&GarbageDecompressor];
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048);
+    client_config.cert_compressors = vec![&IdentityCompressor];
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(ErrorFromPeer::Server(Error::InvalidMessage(
+            InvalidMessage::MessageTooShort
+        )))
+    );
+    transfer(&mut server, &mut client);
+    assert_eq!(
+        client.process_new_packets(),
+        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+    );
+}
+
+#[test]
+fn test_cert_decompression_by_server_fails() {
+    let mut server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048);
+    server_config.cert_decompressors = vec![&FailingDecompressor];
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048);
+    client_config.cert_compressors = vec![&IdentityCompressor];
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
+            PeerMisbehaved::InvalidCertCompression
+        )))
+    );
+    transfer(&mut server, &mut client);
+    assert_eq!(
+        client.process_new_packets(),
+        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+    );
+}
+
+#[cfg(feature = "zlib")]
+#[test]
+fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
+    let server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048);
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048);
+
+    let big_cert = CertificateDer::from(vec![0u8; 0xffff]);
+    let key = provider::default_provider()
+        .key_provider
+        .load_private_key(KeyType::Rsa2048.get_client_key())
+        .unwrap();
+    let big_cert_and_key = sign::CertifiedKey::new(vec![big_cert], key);
+    client_config.client_auth_cert_resolver = Arc::new(AlwaysResolves(big_cert_and_key.into()));
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(ErrorFromPeer::Server(Error::InvalidMessage(
+            InvalidMessage::MessageTooLarge
+        )))
+    );
+    transfer(&mut server, &mut client);
+    assert_eq!(
+        client.process_new_packets(),
+        Err(Error::AlertReceived(AlertDescription::BadCertificate))
+    );
+
+    #[derive(Debug)]
+    struct AlwaysResolves(Arc<sign::CertifiedKey>);
+
+    impl ResolvesClientCert for AlwaysResolves {
+        fn resolve(
+            &self,
+            _root_hint_subjects: &[&[u8]],
+            _sigschemes: &[SignatureScheme],
+        ) -> Option<Arc<sign::CertifiedKey>> {
+            Some(self.0.clone())
+        }
+
+        fn has_certs(&self) -> bool {
+            true
+        }
+    }
+}
+
+#[derive(Debug)]
+struct GarbageDecompressor;
+
+impl rustls::compress::CertDecompressor for GarbageDecompressor {
+    fn decompress(
+        &self,
+        _input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), rustls::compress::DecompressionFailed> {
+        output.fill(0xff);
+        Ok(())
+    }
+
+    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+        rustls::CertificateCompressionAlgorithm::Zlib
+    }
+}
+
+#[derive(Debug)]
+struct FailingDecompressor;
+
+impl rustls::compress::CertDecompressor for FailingDecompressor {
+    fn decompress(
+        &self,
+        _input: &[u8],
+        _output: &mut [u8],
+    ) -> Result<(), rustls::compress::DecompressionFailed> {
+        Err(rustls::compress::DecompressionFailed)
+    }
+
+    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+        rustls::CertificateCompressionAlgorithm::Zlib
+    }
+}
+
+#[derive(Debug)]
+struct IdentityCompressor;
+
+impl rustls::compress::CertCompressor for IdentityCompressor {
+    fn compress(
+        &self,
+        input: Vec<u8>,
+        _level: rustls::compress::CompressionLevel,
+    ) -> Result<Vec<u8>, rustls::compress::CompressionFailed> {
+        Ok(input.to_vec())
+    }
+
+    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+        rustls::CertificateCompressionAlgorithm::Zlib
+    }
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {

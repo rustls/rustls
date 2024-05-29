@@ -337,7 +337,7 @@ impl KeyType {
         self.get_crl("end", "expired")
     }
 
-    fn get_client_key(&self) -> PrivateKeyDer<'static> {
+    pub fn get_client_key(&self) -> PrivateKeyDer<'static> {
         PrivateKeyDer::Pkcs8(
             rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
                 self.bytes_for("client.key"),
