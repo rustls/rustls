@@ -722,9 +722,11 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         CompressionAlgs::All => {
             cfg.cert_decompressors =
                 vec![&ExpandingAlgorithm, &ShrinkingAlgorithm, &RandomAlgorithm];
+            cfg.cert_compressors = vec![&ExpandingAlgorithm, &ShrinkingAlgorithm, &RandomAlgorithm];
         }
         CompressionAlgs::One(ShrinkingAlgorithm::ALGORITHM) => {
             cfg.cert_decompressors = vec![&ShrinkingAlgorithm];
+            cfg.cert_compressors = vec![&ShrinkingAlgorithm];
         }
         CompressionAlgs::None => {}
         _ => unimplemented!(),

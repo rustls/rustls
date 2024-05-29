@@ -6609,40 +6609,51 @@ fn test_server_uses_uncompressed_certificate_if_compression_fails() {
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     do_handshake(&mut client, &mut server);
+}
 
-    #[derive(Debug)]
-    struct FailingCompressor;
+#[test]
+fn test_client_uses_uncompressed_certificate_if_compression_fails() {
+    let mut server_config = make_server_config_with_mandatory_client_auth(KeyType::Rsa2048);
+    server_config.cert_decompressors = vec![&NeverDecompressor];
+    let mut client_config = make_client_config_with_auth(KeyType::Rsa2048);
+    client_config.cert_compressors = vec![&FailingCompressor];
 
-    impl rustls::compress::CertCompressor for FailingCompressor {
-        fn compress(
-            &self,
-            _input: Vec<u8>,
-            _level: rustls::compress::CompressionLevel,
-        ) -> Result<Vec<u8>, rustls::compress::CompressionFailed> {
-            println!("compress called but doesn't work");
-            Err(rustls::compress::CompressionFailed)
-        }
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+}
 
-        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-            rustls::CertificateCompressionAlgorithm::Zlib
-        }
+#[derive(Debug)]
+struct FailingCompressor;
+
+impl rustls::compress::CertCompressor for FailingCompressor {
+    fn compress(
+        &self,
+        _input: Vec<u8>,
+        _level: rustls::compress::CompressionLevel,
+    ) -> Result<Vec<u8>, rustls::compress::CompressionFailed> {
+        println!("compress called but doesn't work");
+        Err(rustls::compress::CompressionFailed)
     }
 
-    #[derive(Debug)]
-    struct NeverDecompressor;
+    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+        rustls::CertificateCompressionAlgorithm::Zlib
+    }
+}
 
-    impl rustls::compress::CertDecompressor for NeverDecompressor {
-        fn decompress(
-            &self,
-            _input: &[u8],
-            _output: &mut [u8],
-        ) -> Result<(), rustls::compress::DecompressionFailed> {
-            panic!("NeverDecompressor::decompress should not be called");
-        }
+#[derive(Debug)]
+struct NeverDecompressor;
 
-        fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
-            rustls::CertificateCompressionAlgorithm::Zlib
-        }
+impl rustls::compress::CertDecompressor for NeverDecompressor {
+    fn decompress(
+        &self,
+        _input: &[u8],
+        _output: &mut [u8],
+    ) -> Result<(), rustls::compress::DecompressionFailed> {
+        panic!("NeverDecompressor::decompress should not be called");
+    }
+
+    fn algorithm(&self) -> rustls::CertificateCompressionAlgorithm {
+        rustls::CertificateCompressionAlgorithm::Zlib
     }
 }
 

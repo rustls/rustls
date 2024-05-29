@@ -142,6 +142,8 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
 /// * [`ClientConfig::cert_decompressors`]: depends on the crate features, see [`compress::default_cert_decompressors()`].
+/// * [`ClientConfig::cert_compressors`]: depends on the crate features, see [`compress::default_cert_compressors()`].
+/// * [`ClientConfig::cert_compression_cache`]: caches the most recently used 4 compressions
 ///
 /// [`RootCertStore`]: crate::RootCertStore
 #[derive(Clone, Debug)]
@@ -228,6 +230,24 @@ pub struct ClientConfig {
     ///
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
+
+    /// How to compress the client's certificate chain.
+    ///
+    /// If a server supports this extension, and advertises support
+    /// for one of the compression algorithms included here, the
+    /// client certificate will be compressed according to [RFC8779].
+    ///
+    /// This only applies to TLS1.3 connections.  It is ignored for
+    /// TLS1.2 connections.
+    ///
+    /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
+    pub cert_compressors: Vec<&'static dyn compress::CertCompressor>,
+
+    /// Caching for compressed certificates.
+    ///
+    /// This is optional: [`compress::CompressionCache::Disabled`] gives
+    /// a cache that does no caching.
+    pub cert_compression_cache: Arc<compress::CompressionCache>,
 }
 
 impl ClientConfig {

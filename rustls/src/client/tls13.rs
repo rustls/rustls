@@ -765,6 +765,16 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             ));
         }
 
+        let compat_compressor = certreq
+            .certificate_compression_extension()
+            .and_then(|offered| {
+                self.config
+                    .cert_compressors
+                    .iter()
+                    .find(|compressor| offered.contains(&compressor.algorithm()))
+            })
+            .cloned();
+
         let client_auth = ClientAuthDetails::resolve(
             self.config
                 .client_auth_cert_resolver
@@ -772,6 +782,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             certreq.authorities_extension(),
             &compat_sigschemes,
             Some(certreq.context.0.clone()),
+            compat_compressor,
         );
 
         Ok(if self.offered_cert_compression {
@@ -1075,6 +1086,36 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
     }
 }
 
+fn emit_compressed_certificate_tls13(
+    transcript: &mut HandshakeHash,
+    certkey: &CertifiedKey,
+    auth_context: Option<Vec<u8>>,
+    compressor: &dyn compress::CertCompressor,
+    config: &ClientConfig,
+    common: &mut CommonState,
+) {
+    let mut cert_payload = CertificatePayloadTls13::new(certkey.cert.iter(), None);
+    cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
+
+    let compressed = match config
+        .cert_compression_cache
+        .compression_for(compressor, &cert_payload)
+    {
+        Ok(compressed) => compressed,
+        Err(_) => return emit_certificate_tls13(transcript, Some(certkey), auth_context, common),
+    };
+
+    let m = Message {
+        version: ProtocolVersion::TLSv1_3,
+        payload: MessagePayload::handshake(HandshakeMessagePayload {
+            typ: HandshakeType::CompressedCertificate,
+            payload: HandshakePayload::CompressedCertificate(compressed.compressed_cert_payload()),
+        }),
+    };
+    transcript.add_message(&m);
+    common.send_msg(m, true);
+}
+
 fn emit_certificate_tls13(
     transcript: &mut HandshakeHash,
     certkey: Option<&CertifiedKey>,
@@ -1224,13 +1265,25 @@ impl State<ClientConnectionData> for ExpectFinished {
                     certkey,
                     signer,
                     auth_context_tls13: auth_context,
+                    compressor,
                 } => {
-                    emit_certificate_tls13(
-                        &mut st.transcript,
-                        Some(&certkey),
-                        auth_context,
-                        cx.common,
-                    );
+                    if let Some(compressor) = compressor {
+                        emit_compressed_certificate_tls13(
+                            &mut st.transcript,
+                            &certkey,
+                            auth_context,
+                            compressor,
+                            &st.config,
+                            cx.common,
+                        );
+                    } else {
+                        emit_certificate_tls13(
+                            &mut st.transcript,
+                            Some(&certkey),
+                            auth_context,
+                            cx.common,
+                        );
+                    }
                     emit_certverify_tls13(&mut st.transcript, signer.as_ref(), cx.common)?;
                 }
             }
