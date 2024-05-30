@@ -26,6 +26,8 @@ APIs ([`CryptoProvider`] for example).
 * Extended master secret support ([RFC7627](https://tools.ietf.org/html/rfc7627))
 * Exporters ([RFC5705](https://tools.ietf.org/html/rfc5705))
 * OCSP stapling by servers
+* [RFC8879](https://tools.ietf.org/html/rfc8879) certificate compression by clients
+  and servers `*`
 
 ## Non-features
 

@@ -299,6 +299,10 @@
 //!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
 //!   buffers. Will do nothing on non-Nightly releases.
 //!
+//! - `brotli`: uses the `brotli` crate for RFC8879 certificate compression support.
+//!
+//! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
+//!
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]

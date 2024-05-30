@@ -1,4 +1,36 @@
 //! Certificate compression and decompression support
+//!
+//! This crate supports compression and decompression everywhere
+//! certificates are used, in accordance with [RFC8879][rfc8879].
+//!
+//! Note that this is only supported for TLS1.3 connections.
+//!
+//! # Getting started
+//!
+//! Build this crate with the `brotli` and/or `zlib` crate features.  This
+//! adds dependencies on these crates.  They are used by default if enabled.
+//!
+//! We especially recommend `brotli` as it has the widest deployment so far.
+//!
+//! # Custom compression/decompression implementations
+//!
+//! 1. Implement the [`CertCompressor`] and/or [`CertDecompressor`] traits
+//! 2. Provide those to:
+//!   - [`ClientConfig::cert_compressors`][cc_cc] or [`ServerConfig::cert_compressors`][sc_cc].
+//!   - [`ClientConfig::cert_decompressors`][cc_cd] or [`ServerConfig::cert_decompressors`][sc_cd].
+//!
+//! These are used in these circumstances:
+//!
+//! | Peer | Client authentication | Server authentication |
+//! | ---- | --------------------- | --------------------- |
+//! | *Client* | [`ClientConfig::cert_compressors`][cc_cc] | [`ClientConfig::cert_decompressors`][cc_cd] |
+//! | *Server* | [`ServerConfig::cert_decompressors`][sc_cd] | [`ServerConfig::cert_compressors`][sc_cc] |
+//!
+//! [rfc8879]: https://datatracker.ietf.org/doc/html/rfc8879
+//! [cc_cc]: crate::ClientConfig::cert_compressors
+//! [sc_cc]: crate::ServerConfig::cert_compressors
+//! [cc_cd]: crate::ClientConfig::cert_decompressors
+//! [sc_cd]: crate::ServerConfig::cert_decompressors
 
 #[cfg(feature = "std")]
 use alloc::collections::VecDeque;
