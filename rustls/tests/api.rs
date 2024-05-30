@@ -28,6 +28,16 @@ use rustls::internal::msgs::handshake::{
 };
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+#[cfg(feature = "aws_lc_rs")]
+use rustls::{
+    client::{EchConfig, EchGreaseConfig, EchMode},
+    crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
+    internal::msgs::base::PayloadU16,
+    internal::msgs::handshake::{
+        EchConfigPayload, EchConfigContents, HpkeKeyConfig, HpkeSymmetricCipherSuite,
+    },
+    pki_types::{DnsName, EchConfigListBytes},
+};
 use rustls::{
     sign, AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
@@ -6349,6 +6359,58 @@ fn test_server_fips_service_indicator_includes_require_ems() {
     assert!(server_config.fips());
     server_config.require_ems = false;
     assert!(!server_config.fips());
+}
+
+#[cfg(feature = "aws_lc_rs")]
+#[test]
+fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
+    if !provider_is_fips() {
+        return;
+    }
+
+    for suite in ALL_SUPPORTED_SUITES {
+        let (public_key, _) = suite.generate_key_pair().unwrap();
+
+        let suite_id = suite.suite();
+        let bogus_config = EchConfigPayload::V18(EchConfigContents {
+            key_config: HpkeKeyConfig {
+                config_id: 10,
+                kem_id: suite_id.kem,
+                public_key: PayloadU16(public_key.0.clone()),
+                symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
+                    kdf_id: suite_id.sym.kdf_id,
+                    aead_id: suite_id.sym.aead_id,
+                }],
+            },
+            maximum_name_length: 0,
+            public_name: DnsName::try_from("example.com").unwrap(),
+            extensions: vec![],
+        });
+        let mut bogus_config_bytes = Vec::new();
+        vec![bogus_config].encode(&mut bogus_config_bytes);
+        let ech_config =
+            EchConfig::new(EchConfigListBytes::from(bogus_config_bytes), &[*suite]).unwrap();
+
+        // A ECH client configuration should only be considered FIPS approved if the
+        // ECH HPKE suite is itself FIPS approved.
+        let config = ClientConfig::builder_with_provider(provider::default_provider().into())
+            .with_ech(EchMode::Enable(ech_config))
+            .unwrap();
+        let config = finish_client_config(KeyType::Rsa2048, config);
+        assert_eq!(config.fips(), suite.fips());
+
+        // The same applies if an ECH GREASE client configuration is used.
+        let config = ClientConfig::builder_with_provider(provider::default_provider().into())
+            .with_ech(EchMode::Grease(EchGreaseConfig::new(*suite, public_key)))
+            .unwrap();
+        let config = finish_client_config(KeyType::Rsa2048, config);
+        assert_eq!(config.fips(), suite.fips());
+
+        // And a connection made from a client config should retain the fips status of the
+        // config w.r.t the HPKE suite.
+        let conn = ClientConnection::new(config.into(), ServerName::DnsName(DnsName::try_from("example.org").unwrap())).unwrap();
+        assert_eq!(conn.fips(), suite.fips());
+    }
 }
 
 #[test]

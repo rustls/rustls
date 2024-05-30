@@ -47,6 +47,16 @@ pub enum EchMode {
     Grease(EchGreaseConfig),
 }
 
+impl EchMode {
+    /// Returns true if the ECH mode will use a FIPS approved HPKE suite.
+    pub fn fips(&self) -> bool {
+        match self {
+            Self::Enable(ech_config) => ech_config.suite.fips(),
+            Self::Grease(grease_config) => grease_config.suite.fips(),
+        }
+    }
+}
+
 impl From<EchConfig> for EchMode {
     fn from(config: EchConfig) -> Self {
         Self::Enable(config)

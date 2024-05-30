@@ -348,17 +348,20 @@ impl ClientConfig {
     ///
     /// This is different from [`CryptoProvider::fips()`]: [`CryptoProvider::fips()`]
     /// is concerned only with cryptography, whereas this _also_ covers TLS-level
-    /// configuration that NIST recommends.
+    /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
     pub fn fips(&self) -> bool {
+        let mut is_fips = self.provider.fips();
+
         #[cfg(feature = "tls12")]
         {
-            self.provider.fips() && self.require_ems
+            is_fips = is_fips && self.require_ems
         }
 
-        #[cfg(not(feature = "tls12"))]
-        {
-            self.provider.fips()
+        if let Some(ech_mode) = &self.ech_mode {
+            is_fips = is_fips && ech_mode.fips();
         }
+
+        is_fips
     }
 
     /// Return the crypto provider used to construct this client configuration.
@@ -732,6 +735,15 @@ mod connection {
             self.inner.core.data.ech_status
         }
 
+        /// Return true if the connection was made with a `ClientConfig` that is FIPS compatible.
+        ///
+        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+        pub fn fips(&self) -> bool {
+            self.inner.core.data.fips
+        }
+
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
             self.inner
                 .core
@@ -793,6 +805,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
         let mut data = ClientConnectionData::new();
+        data.fips = config.fips();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -929,6 +942,7 @@ pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
     pub(super) ech_status: EchStatus,
+    pub(super) fips: bool,
 }
 
 impl ClientConnectionData {
@@ -937,6 +951,7 @@ impl ClientConnectionData {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
             ech_status: EchStatus::NotOffered,
+            fips: false,
         }
     }
 }
