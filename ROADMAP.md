@@ -4,9 +4,6 @@
 
 In rough order of priority:
 
-* **OpenSSL API Compatibility Layer**.
-  Add an OpenSSL C API compatibility layer for adoption purposes.
-
 * **Support Encrypted Client Hello (Client Side)**.
   Encrypted Client Hello is an upcoming standard from the TLS WG providing better
   protection for some of the data sent by a client in the initial Client Hello
@@ -30,6 +27,11 @@ In rough order of priority:
   rustls/rustls#755
 
 ## Past priorities
+
+Delivered in [rustls-openssl-compat](https://github.com/rustls/rustls-openssl-compat) 0.1.0:
+
+* **OpenSSL API Compatibility Layer**.
+  Add an OpenSSL C API compatibility layer for adoption purposes.
 
 Delivered in 0.23.2:
 
