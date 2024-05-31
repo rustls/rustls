@@ -827,7 +827,7 @@ fn get_sample_compressed_certificate() -> CompressedCertificatePayload<'static> 
     }
 }
 
-fn get_sample_server_key_exchange_payload_ecdhe() -> ServerKeyExchangePayload {
+fn get_sample_ecdhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Known(ServerKeyExchange {
         params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
             curve_params: EcParameters {
@@ -840,7 +840,7 @@ fn get_sample_server_key_exchange_payload_ecdhe() -> ServerKeyExchangePayload {
     })
 }
 
-fn get_sample_server_key_exchange_payload_dhe() -> ServerKeyExchangePayload {
+fn get_sample_dhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Known(ServerKeyExchange {
         params: ServerKeyExchangeParams::Dh(ServerDhParams {
             dh_p: PayloadU16(vec![1, 2, 3]),
@@ -851,7 +851,7 @@ fn get_sample_server_key_exchange_payload_dhe() -> ServerKeyExchangePayload {
     })
 }
 
-fn get_sample_server_key_exchange_payload_unknown() -> ServerKeyExchangePayload {
+fn get_sample_unknown_server_key_exchange_payload() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Unknown(Payload::Borrowed(&[1, 2, 3]))
 }
 
@@ -934,19 +934,19 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
             payload: HandshakePayload::ServerKeyExchange(
-                get_sample_server_key_exchange_payload_ecdhe(),
+                get_sample_ecdhe_server_key_exchange_payload(),
             ),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
             payload: HandshakePayload::ServerKeyExchange(
-                get_sample_server_key_exchange_payload_dhe(),
+                get_sample_dhe_server_key_exchange_payload(),
             ),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
             payload: HandshakePayload::ServerKeyExchange(
-                get_sample_server_key_exchange_payload_unknown(),
+                get_sample_unknown_server_key_exchange_payload(),
             ),
         },
         HandshakeMessagePayload {
@@ -1083,19 +1083,19 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
             payload: HandshakePayload::ServerKeyExchange(
-                get_sample_server_key_exchange_payload_ecdhe(),
+                get_sample_ecdhe_server_key_exchange_payload(),
             ),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
             payload: HandshakePayload::ServerKeyExchange(
-                get_sample_server_key_exchange_payload_dhe(),
+                get_sample_dhe_server_key_exchange_payload(),
             ),
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
             payload: HandshakePayload::ServerKeyExchange(
-                get_sample_server_key_exchange_payload_unknown(),
+                get_sample_unknown_server_key_exchange_payload(),
             ),
         },
         HandshakeMessagePayload {
