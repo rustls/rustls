@@ -415,7 +415,9 @@ fn can_print_all_client_extensions() {
 
 #[test]
 fn can_clone_all_client_extensions() {
-    let _ = sample_client_hello_payload().extensions;
+    let exts = sample_client_hello_payload().extensions;
+    let exts2 = exts.clone();
+    println!("{exts:?}, {exts2:?}");
 }
 
 #[test]
@@ -781,7 +783,9 @@ fn can_print_all_server_extensions() {
 
 #[test]
 fn can_clone_all_server_extensions() {
-    let _ = sample_server_hello_payload().extensions;
+    let exts = sample_server_hello_payload().extensions;
+    let exts2 = exts.clone();
+    println!("{exts:?}, {exts2:?}");
 }
 
 fn sample_hello_retry_request() -> HelloRetryRequest {
