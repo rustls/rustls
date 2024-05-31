@@ -30,6 +30,7 @@ Specific features, in rough order of priority:
   Encrypted Client Hello is an upcoming standard from the TLS WG providing better
   protection for some of the data sent by a client in the initial Client Hello
   message. Rustls already supports client side ECH, we will add server side support.
+  rustls/rustls#1980
 
 General priorities:
 
