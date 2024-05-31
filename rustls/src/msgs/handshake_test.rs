@@ -415,7 +415,7 @@ fn can_print_all_client_extensions() {
 
 #[test]
 fn can_clone_all_client_extensions() {
-    let _ = get_sample_server_hello_payload().extensions;
+    let _ = get_sample_client_hello_payload().extensions;
 }
 
 #[test]
