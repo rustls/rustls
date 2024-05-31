@@ -363,51 +363,6 @@ fn can_round_trip_single_proto() {
     }
 }
 
-fn sample_client_hello_payload() -> ClientHelloPayload {
-    ClientHelloPayload {
-        client_version: ProtocolVersion::TLSv1_2,
-        random: Random::from([0; 32]),
-        session_id: SessionId::empty(),
-        cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
-        compression_methods: vec![Compression::Null],
-        extensions: vec![
-            ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
-            ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-            ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            ClientExtension::make_sni(&DnsName::try_from("hello").unwrap()),
-            ClientExtension::SessionTicket(ClientSessionTicket::Request),
-            ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload::Borrowed(&[]))),
-            ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
-            ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
-            ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
-            ClientExtension::PresharedKeyModes(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
-            ClientExtension::PresharedKey(PresharedKeyOffer {
-                identities: vec![
-                    PresharedKeyIdentity::new(vec![3, 4, 5], 123456),
-                    PresharedKeyIdentity::new(vec![6, 7, 8], 7891011),
-                ],
-                binders: vec![
-                    PresharedKeyBinder::from(vec![1, 2, 3]),
-                    PresharedKeyBinder::from(vec![3, 4, 5]),
-                ],
-            }),
-            ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
-            ClientExtension::ExtendedMasterSecretRequest,
-            ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
-            ClientExtension::TransportParameters(vec![1, 2, 3]),
-            ClientExtension::EarlyData,
-            ClientExtension::CertificateCompressionAlgorithms(vec![
-                CertificateCompressionAlgorithm::Brotli,
-                CertificateCompressionAlgorithm::Zlib,
-            ]),
-            ClientExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
-                payload: Payload::Borrowed(&[1, 2, 3]),
-            }),
-        ],
-    }
-}
-
 #[test]
 fn can_print_all_client_extensions() {
     println!("client hello {:?}", sample_client_hello_payload());
@@ -498,23 +453,6 @@ fn test_truncated_client_extension_is_detected() {
     }
 }
 
-fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPayload) -> bool) {
-    let mut chp = sample_client_hello_payload();
-    let ext = chp.find_extension(typ).unwrap().clone();
-
-    chp.extensions = vec![];
-    assert!(!getter(&chp));
-
-    chp.extensions = vec![ext];
-    assert!(getter(&chp));
-
-    chp.extensions = vec![ClientExtension::Unknown(UnknownExtension {
-        typ,
-        payload: Payload::Borrowed(&[]),
-    })];
-    assert!(!getter(&chp));
-}
-
 #[test]
 fn client_sni_extension() {
     test_client_extension_getter(ExtensionType::ServerName, |chp| {
@@ -584,6 +522,23 @@ fn client_psk_modes() {
     });
 }
 
+fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPayload) -> bool) {
+    let mut chp = sample_client_hello_payload();
+    let ext = chp.find_extension(typ).unwrap().clone();
+
+    chp.extensions = vec![];
+    assert!(!getter(&chp));
+
+    chp.extensions = vec![ext];
+    assert!(getter(&chp));
+
+    chp.extensions = vec![ClientExtension::Unknown(UnknownExtension {
+        typ,
+        payload: Payload::Borrowed(&[]),
+    })];
+    assert!(!getter(&chp));
+}
+
 #[test]
 fn test_truncated_hello_retry_extension_is_detected() {
     let hrr = sample_hello_retry_request();
@@ -613,23 +568,6 @@ fn test_truncated_hello_retry_extension_is_detected() {
     }
 }
 
-fn test_hello_retry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
-    let mut hrr = sample_hello_retry_request();
-    let mut exts = core::mem::take(&mut hrr.extensions);
-    exts.retain(|ext| ext.ext_type() == typ);
-
-    assert!(!getter(&hrr));
-
-    hrr.extensions = exts;
-    assert!(getter(&hrr));
-
-    hrr.extensions = vec![HelloRetryExtension::Unknown(UnknownExtension {
-        typ,
-        payload: Payload::Borrowed(&[]),
-    })];
-    assert!(!getter(&hrr));
-}
-
 #[test]
 fn hello_retry_requested_key_share_group() {
     test_hello_retry_extension_getter(ExtensionType::KeyShare, |hrr| {
@@ -648,6 +586,23 @@ fn hello_retry_supported_versions() {
     test_hello_retry_extension_getter(ExtensionType::SupportedVersions, |hrr| {
         hrr.supported_versions().is_some()
     });
+}
+
+fn test_hello_retry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
+    let mut hrr = sample_hello_retry_request();
+    let mut exts = core::mem::take(&mut hrr.extensions);
+    exts.retain(|ext| ext.ext_type() == typ);
+
+    assert!(!getter(&hrr));
+
+    hrr.extensions = exts;
+    assert!(getter(&hrr));
+
+    hrr.extensions = vec![HelloRetryExtension::Unknown(UnknownExtension {
+        typ,
+        payload: Payload::Borrowed(&[]),
+    })];
+    assert!(!getter(&hrr));
 }
 
 #[test]
@@ -723,6 +678,13 @@ fn server_supported_versions() {
     });
 }
 
+#[test]
+fn cert_entry_ocsp_response() {
+    test_cert_extension_getter(ExtensionType::StatusRequest, |ce| {
+        ce.ocsp_response().is_some()
+    });
+}
+
 fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) -> bool) {
     let mut ce = sample_certificate_payload_tls13()
         .entries
@@ -743,10 +705,262 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
 }
 
 #[test]
-fn cert_entry_ocsp_response() {
-    test_cert_extension_getter(ExtensionType::StatusRequest, |ce| {
-        ce.ocsp_response().is_some()
-    });
+fn can_print_all_server_extensions() {
+    println!("server hello {:?}", sample_server_hello_payload());
+}
+
+#[test]
+fn can_clone_all_server_extensions() {
+    let exts = sample_server_hello_payload().extensions;
+    let exts2 = exts.clone();
+    println!("{exts:?}, {exts2:?}");
+}
+
+#[test]
+fn can_round_trip_all_tls12_handshake_payloads() {
+    for ref hm in all_tls12_handshake_payloads().iter() {
+        println!("{:?}", hm.typ);
+        let bytes = hm.get_encoding();
+        let mut rd = Reader::init(&bytes);
+        let other = HandshakeMessagePayload::read(&mut rd).unwrap();
+        assert!(!rd.any_left());
+        assert_eq!(hm.get_encoding(), other.get_encoding());
+
+        println!("{:?}", hm);
+        println!("{:?}", other);
+    }
+}
+
+#[test]
+fn can_into_owned_all_tls12_handshake_payloads() {
+    for hm in all_tls12_handshake_payloads().drain(..) {
+        let enc = hm.get_encoding();
+        let debug = format!("{hm:?}");
+        let other = hm.into_owned();
+        assert_eq!(enc, other.get_encoding());
+        assert_eq!(debug, format!("{other:?}"));
+    }
+}
+
+#[test]
+fn can_detect_truncation_of_all_tls12_handshake_payloads() {
+    for hm in all_tls12_handshake_payloads().iter() {
+        let mut enc = hm.get_encoding();
+        println!("test {:?} enc {:?}", hm, enc);
+
+        // outer truncation
+        for l in 0..enc.len() {
+            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_err())
+        }
+
+        // inner truncation
+        for l in 0..enc.len() - 4 {
+            put_u24(l as u32, &mut enc[1..]);
+            println!("  check len {:?} enc {:?}", l, enc);
+
+            match (hm.typ, l) {
+                (HandshakeType::ClientHello, 41)
+                | (HandshakeType::ServerHello, 38)
+                | (HandshakeType::ServerKeyExchange, _)
+                | (HandshakeType::ClientKeyExchange, _)
+                | (HandshakeType::Finished, _)
+                | (HandshakeType::Unknown(_), _) => continue,
+                _ => {}
+            };
+
+            assert!(HandshakeMessagePayload::read_version(
+                &mut Reader::init(&enc),
+                ProtocolVersion::TLSv1_2
+            )
+            .is_err());
+            assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
+        }
+    }
+}
+
+#[test]
+fn can_round_trip_all_tls13_handshake_payloads() {
+    for ref hm in all_tls13_handshake_payloads().iter() {
+        println!("{:?}", hm.typ);
+        let bytes = hm.get_encoding();
+        let mut rd = Reader::init(&bytes);
+
+        let other =
+            HandshakeMessagePayload::read_version(&mut rd, ProtocolVersion::TLSv1_3).unwrap();
+        assert!(!rd.any_left());
+        assert_eq!(hm.get_encoding(), other.get_encoding());
+
+        println!("{:?}", hm);
+        println!("{:?}", other);
+    }
+}
+
+#[test]
+fn can_into_owned_all_tls13_handshake_payloads() {
+    for hm in all_tls13_handshake_payloads().drain(..) {
+        let enc = hm.get_encoding();
+        let debug = format!("{hm:?}");
+        let other = hm.into_owned();
+        assert_eq!(enc, other.get_encoding());
+        assert_eq!(debug, format!("{other:?}"));
+    }
+}
+
+#[test]
+fn can_detect_truncation_of_all_tls13_handshake_payloads() {
+    for hm in all_tls13_handshake_payloads().iter() {
+        let mut enc = hm.get_encoding();
+        println!("test {:?} enc {:?}", hm, enc);
+
+        // outer truncation
+        for l in 0..enc.len() {
+            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_err())
+        }
+
+        // inner truncation
+        for l in 0..enc.len() - 4 {
+            put_u24(l as u32, &mut enc[1..]);
+            println!("  check len {:?} enc {:?}", l, enc);
+
+            match (hm.typ, l) {
+                (HandshakeType::ClientHello, 41)
+                | (HandshakeType::ServerHello, 38)
+                | (HandshakeType::ServerKeyExchange, _)
+                | (HandshakeType::ClientKeyExchange, _)
+                | (HandshakeType::Finished, _)
+                | (HandshakeType::Unknown(_), _) => continue,
+                _ => {}
+            };
+
+            assert!(HandshakeMessagePayload::read_version(
+                &mut Reader::init(&enc),
+                ProtocolVersion::TLSv1_3
+            )
+            .is_err());
+        }
+    }
+}
+
+fn put_u24(u: u32, b: &mut [u8]) {
+    b[0] = (u >> 16) as u8;
+    b[1] = (u >> 8) as u8;
+    b[2] = u as u8;
+}
+
+#[test]
+fn cannot_read_message_hash_from_network() {
+    let mh = HandshakeMessagePayload {
+        typ: HandshakeType::MessageHash,
+        payload: HandshakePayload::MessageHash(Payload::new(vec![1, 2, 3])),
+    };
+    println!("mh {:?}", mh);
+    let enc = mh.get_encoding();
+    assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
+}
+
+#[test]
+fn cannot_decode_huge_certificate() {
+    let mut buf = [0u8; 65 * 1024];
+    // exactly 64KB decodes fine
+    buf[0] = 0x0b;
+    buf[1] = 0x01;
+    buf[2] = 0x00;
+    buf[3] = 0x03;
+    buf[4] = 0x01;
+    buf[5] = 0x00;
+    buf[6] = 0x00;
+    buf[7] = 0x00;
+    buf[8] = 0xff;
+    buf[9] = 0xfd;
+    HandshakeMessagePayload::read_bytes(&buf).unwrap();
+
+    // however 64KB + 1 byte does not
+    buf[1] = 0x01;
+    buf[2] = 0x00;
+    buf[3] = 0x04;
+    buf[4] = 0x01;
+    buf[5] = 0x00;
+    buf[6] = 0x01;
+    assert!(HandshakeMessagePayload::read_bytes(&buf).is_err());
+}
+
+#[test]
+fn can_decode_server_hello_from_api_devicecheck_apple_com() {
+    let data = include_bytes!("hello-api.devicecheck.apple.com.bin");
+    let mut r = Reader::init(data);
+    let hm = HandshakeMessagePayload::read(&mut r).unwrap();
+    println!("msg: {:?}", hm);
+}
+
+#[test]
+fn wrapped_dn_encoding() {
+    let subject = b"subject";
+    let dn = DistinguishedName::in_sequence(&subject[..]);
+    const DER_SEQUENCE_TAG: u8 = 0x30;
+    let expected_prefix = vec![DER_SEQUENCE_TAG, subject.len() as u8];
+    assert_eq!(dn.as_ref(), [expected_prefix, subject.to_vec()].concat());
+}
+
+fn sample_hello_retry_request() -> HelloRetryRequest {
+    HelloRetryRequest {
+        legacy_version: ProtocolVersion::TLSv1_2,
+        session_id: SessionId::empty(),
+        cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
+        extensions: vec![
+            HelloRetryExtension::KeyShare(NamedGroup::X25519),
+            HelloRetryExtension::Cookie(PayloadU16(vec![0])),
+            HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
+            HelloRetryExtension::Unknown(UnknownExtension {
+                typ: ExtensionType::Unknown(12345),
+                payload: Payload::Borrowed(&[1, 2, 3]),
+            }),
+        ],
+    }
+}
+
+fn sample_client_hello_payload() -> ClientHelloPayload {
+    ClientHelloPayload {
+        client_version: ProtocolVersion::TLSv1_2,
+        random: Random::from([0; 32]),
+        session_id: SessionId::empty(),
+        cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
+        compression_methods: vec![Compression::Null],
+        extensions: vec![
+            ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
+            ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
+            ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
+            ClientExtension::make_sni(&DnsName::try_from("hello").unwrap()),
+            ClientExtension::SessionTicket(ClientSessionTicket::Request),
+            ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload::Borrowed(&[]))),
+            ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
+            ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
+            ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
+            ClientExtension::PresharedKeyModes(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
+            ClientExtension::PresharedKey(PresharedKeyOffer {
+                identities: vec![
+                    PresharedKeyIdentity::new(vec![3, 4, 5], 123456),
+                    PresharedKeyIdentity::new(vec![6, 7, 8], 7891011),
+                ],
+                binders: vec![
+                    PresharedKeyBinder::from(vec![1, 2, 3]),
+                    PresharedKeyBinder::from(vec![3, 4, 5]),
+                ],
+            }),
+            ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
+            ClientExtension::ExtendedMasterSecretRequest,
+            ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
+            ClientExtension::TransportParameters(vec![1, 2, 3]),
+            ClientExtension::EarlyData,
+            ClientExtension::CertificateCompressionAlgorithms(vec![
+                CertificateCompressionAlgorithm::Brotli,
+                CertificateCompressionAlgorithm::Zlib,
+            ]),
+            ClientExtension::Unknown(UnknownExtension {
+                typ: ExtensionType::Unknown(12345),
+                payload: Payload::Borrowed(&[1, 2, 3]),
+            }),
+        ],
+    }
 }
 
 fn sample_server_hello_payload() -> ServerHelloPayload {
@@ -776,33 +990,179 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
     }
 }
 
-#[test]
-fn can_print_all_server_extensions() {
-    println!("server hello {:?}", sample_server_hello_payload());
+fn all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
+    vec![
+        HandshakeMessagePayload {
+            typ: HandshakeType::HelloRequest,
+            payload: HandshakePayload::HelloRequest,
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ClientHello,
+            payload: HandshakePayload::ClientHello(sample_client_hello_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerHello,
+            payload: HandshakePayload::ServerHello(sample_server_hello_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::HelloRetryRequest,
+            payload: HandshakePayload::HelloRetryRequest(sample_hello_retry_request()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::Certificate(CertificateChain(vec![CertificateDer::from(
+                vec![1, 2, 3],
+            )])),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(sample_ecdhe_server_key_exchange_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(sample_dhe_server_key_exchange_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(
+                sample_unknown_server_key_exchange_payload(),
+            ),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::CertificateRequest,
+            payload: HandshakePayload::CertificateRequest(sample_certificate_request_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerHelloDone,
+            payload: HandshakePayload::ServerHelloDone,
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ClientKeyExchange,
+            payload: HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[1, 2, 3])),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::NewSessionTicket,
+            payload: HandshakePayload::NewSessionTicket(sample_new_session_ticket_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::EncryptedExtensions,
+            payload: HandshakePayload::EncryptedExtensions(sample_encrypted_extensions()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::KeyUpdate,
+            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::KeyUpdate,
+            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::Finished,
+            payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::CertificateStatus,
+            payload: HandshakePayload::CertificateStatus(sample_certificate_status()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::Unknown(99),
+            payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
+        },
+    ]
 }
 
-#[test]
-fn can_clone_all_server_extensions() {
-    let exts = sample_server_hello_payload().extensions;
-    let exts2 = exts.clone();
-    println!("{exts:?}, {exts2:?}");
-}
-
-fn sample_hello_retry_request() -> HelloRetryRequest {
-    HelloRetryRequest {
-        legacy_version: ProtocolVersion::TLSv1_2,
-        session_id: SessionId::empty(),
-        cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
-        extensions: vec![
-            HelloRetryExtension::KeyShare(NamedGroup::X25519),
-            HelloRetryExtension::Cookie(PayloadU16(vec![0])),
-            HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
-            HelloRetryExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
-                payload: Payload::Borrowed(&[1, 2, 3]),
-            }),
-        ],
-    }
+fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
+    vec![
+        HandshakeMessagePayload {
+            typ: HandshakeType::HelloRequest,
+            payload: HandshakePayload::HelloRequest,
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ClientHello,
+            payload: HandshakePayload::ClientHello(sample_client_hello_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerHello,
+            payload: HandshakePayload::ServerHello(sample_server_hello_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::HelloRetryRequest,
+            payload: HandshakePayload::HelloRetryRequest(sample_hello_retry_request()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::CertificateTls13(sample_certificate_payload_tls13()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::CompressedCertificate,
+            payload: HandshakePayload::CompressedCertificate(sample_compressed_certificate()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(sample_ecdhe_server_key_exchange_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(sample_dhe_server_key_exchange_payload()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(
+                sample_unknown_server_key_exchange_payload(),
+            ),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::CertificateRequest,
+            payload: HandshakePayload::CertificateRequestTls13(
+                sample_certificate_request_payload_tls13(),
+            ),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::CertificateVerify,
+            payload: HandshakePayload::CertificateVerify(DigitallySignedStruct::new(
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                vec![1, 2, 3],
+            )),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ServerHelloDone,
+            payload: HandshakePayload::ServerHelloDone,
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::ClientKeyExchange,
+            payload: HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[1, 2, 3])),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::NewSessionTicket,
+            payload: HandshakePayload::NewSessionTicketTls13(
+                sample_new_session_ticket_payload_tls13(),
+            ),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::EncryptedExtensions,
+            payload: HandshakePayload::EncryptedExtensions(sample_encrypted_extensions()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::KeyUpdate,
+            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::KeyUpdate,
+            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::Finished,
+            payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::CertificateStatus,
+            payload: HandshakePayload::CertificateStatus(sample_certificate_status()),
+        },
+        HandshakeMessagePayload {
+            typ: HandshakeType::Unknown(99),
+            payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
+        },
+    ]
 }
 
 fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
@@ -909,364 +1269,4 @@ fn sample_certificate_status() -> CertificateStatus<'static> {
     CertificateStatus {
         ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
     }
-}
-
-fn all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
-    vec![
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRequest,
-            payload: HandshakePayload::HelloRequest,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(sample_client_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHello,
-            payload: HandshakePayload::ServerHello(sample_server_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRetryRequest,
-            payload: HandshakePayload::HelloRetryRequest(sample_hello_retry_request()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(CertificateChain(vec![CertificateDer::from(
-                vec![1, 2, 3],
-            )])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_ecdhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_dhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(
-                sample_unknown_server_key_exchange_payload(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequest(sample_certificate_request_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHelloDone,
-            payload: HandshakePayload::ServerHelloDone,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientKeyExchange,
-            payload: HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicket(sample_new_session_ticket_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::EncryptedExtensions,
-            payload: HandshakePayload::EncryptedExtensions(sample_encrypted_extensions()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateStatus,
-            payload: HandshakePayload::CertificateStatus(sample_certificate_status()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Unknown(99),
-            payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
-        },
-    ]
-}
-
-#[test]
-fn can_round_trip_all_tls12_handshake_payloads() {
-    for ref hm in all_tls12_handshake_payloads().iter() {
-        println!("{:?}", hm.typ);
-        let bytes = hm.get_encoding();
-        let mut rd = Reader::init(&bytes);
-        let other = HandshakeMessagePayload::read(&mut rd).unwrap();
-        assert!(!rd.any_left());
-        assert_eq!(hm.get_encoding(), other.get_encoding());
-
-        println!("{:?}", hm);
-        println!("{:?}", other);
-    }
-}
-
-#[test]
-fn can_into_owned_all_tls12_handshake_payloads() {
-    for hm in all_tls12_handshake_payloads().drain(..) {
-        let enc = hm.get_encoding();
-        let debug = format!("{hm:?}");
-        let other = hm.into_owned();
-        assert_eq!(enc, other.get_encoding());
-        assert_eq!(debug, format!("{other:?}"));
-    }
-}
-
-#[test]
-fn can_detect_truncation_of_all_tls12_handshake_payloads() {
-    for hm in all_tls12_handshake_payloads().iter() {
-        let mut enc = hm.get_encoding();
-        println!("test {:?} enc {:?}", hm, enc);
-
-        // outer truncation
-        for l in 0..enc.len() {
-            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_err())
-        }
-
-        // inner truncation
-        for l in 0..enc.len() - 4 {
-            put_u24(l as u32, &mut enc[1..]);
-            println!("  check len {:?} enc {:?}", l, enc);
-
-            match (hm.typ, l) {
-                (HandshakeType::ClientHello, 41)
-                | (HandshakeType::ServerHello, 38)
-                | (HandshakeType::ServerKeyExchange, _)
-                | (HandshakeType::ClientKeyExchange, _)
-                | (HandshakeType::Finished, _)
-                | (HandshakeType::Unknown(_), _) => continue,
-                _ => {}
-            };
-
-            assert!(HandshakeMessagePayload::read_version(
-                &mut Reader::init(&enc),
-                ProtocolVersion::TLSv1_2
-            )
-            .is_err());
-            assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
-        }
-    }
-}
-
-fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
-    vec![
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRequest,
-            payload: HandshakePayload::HelloRequest,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(sample_client_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHello,
-            payload: HandshakePayload::ServerHello(sample_server_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRetryRequest,
-            payload: HandshakePayload::HelloRetryRequest(sample_hello_retry_request()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTls13(sample_certificate_payload_tls13()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CompressedCertificate,
-            payload: HandshakePayload::CompressedCertificate(sample_compressed_certificate()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_ecdhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_dhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(
-                sample_unknown_server_key_exchange_payload(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequestTls13(
-                sample_certificate_request_payload_tls13(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateVerify,
-            payload: HandshakePayload::CertificateVerify(DigitallySignedStruct::new(
-                SignatureScheme::ECDSA_NISTP256_SHA256,
-                vec![1, 2, 3],
-            )),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHelloDone,
-            payload: HandshakePayload::ServerHelloDone,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientKeyExchange,
-            payload: HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicketTls13(
-                sample_new_session_ticket_payload_tls13(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::EncryptedExtensions,
-            payload: HandshakePayload::EncryptedExtensions(sample_encrypted_extensions()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateStatus,
-            payload: HandshakePayload::CertificateStatus(sample_certificate_status()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Unknown(99),
-            payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
-        },
-    ]
-}
-
-#[test]
-fn can_round_trip_all_tls13_handshake_payloads() {
-    for ref hm in all_tls13_handshake_payloads().iter() {
-        println!("{:?}", hm.typ);
-        let bytes = hm.get_encoding();
-        let mut rd = Reader::init(&bytes);
-
-        let other =
-            HandshakeMessagePayload::read_version(&mut rd, ProtocolVersion::TLSv1_3).unwrap();
-        assert!(!rd.any_left());
-        assert_eq!(hm.get_encoding(), other.get_encoding());
-
-        println!("{:?}", hm);
-        println!("{:?}", other);
-    }
-}
-
-#[test]
-fn can_into_owned_all_tls13_handshake_payloads() {
-    for hm in all_tls13_handshake_payloads().drain(..) {
-        let enc = hm.get_encoding();
-        let debug = format!("{hm:?}");
-        let other = hm.into_owned();
-        assert_eq!(enc, other.get_encoding());
-        assert_eq!(debug, format!("{other:?}"));
-    }
-}
-
-fn put_u24(u: u32, b: &mut [u8]) {
-    b[0] = (u >> 16) as u8;
-    b[1] = (u >> 8) as u8;
-    b[2] = u as u8;
-}
-
-#[test]
-fn can_detect_truncation_of_all_tls13_handshake_payloads() {
-    for hm in all_tls13_handshake_payloads().iter() {
-        let mut enc = hm.get_encoding();
-        println!("test {:?} enc {:?}", hm, enc);
-
-        // outer truncation
-        for l in 0..enc.len() {
-            assert!(HandshakeMessagePayload::read_bytes(&enc[..l]).is_err())
-        }
-
-        // inner truncation
-        for l in 0..enc.len() - 4 {
-            put_u24(l as u32, &mut enc[1..]);
-            println!("  check len {:?} enc {:?}", l, enc);
-
-            match (hm.typ, l) {
-                (HandshakeType::ClientHello, 41)
-                | (HandshakeType::ServerHello, 38)
-                | (HandshakeType::ServerKeyExchange, _)
-                | (HandshakeType::ClientKeyExchange, _)
-                | (HandshakeType::Finished, _)
-                | (HandshakeType::Unknown(_), _) => continue,
-                _ => {}
-            };
-
-            assert!(HandshakeMessagePayload::read_version(
-                &mut Reader::init(&enc),
-                ProtocolVersion::TLSv1_3
-            )
-            .is_err());
-        }
-    }
-}
-
-#[test]
-fn cannot_read_message_hash_from_network() {
-    let mh = HandshakeMessagePayload {
-        typ: HandshakeType::MessageHash,
-        payload: HandshakePayload::MessageHash(Payload::new(vec![1, 2, 3])),
-    };
-    println!("mh {:?}", mh);
-    let enc = mh.get_encoding();
-    assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
-}
-
-#[test]
-fn cannot_decode_huge_certificate() {
-    let mut buf = [0u8; 65 * 1024];
-    // exactly 64KB decodes fine
-    buf[0] = 0x0b;
-    buf[1] = 0x01;
-    buf[2] = 0x00;
-    buf[3] = 0x03;
-    buf[4] = 0x01;
-    buf[5] = 0x00;
-    buf[6] = 0x00;
-    buf[7] = 0x00;
-    buf[8] = 0xff;
-    buf[9] = 0xfd;
-    HandshakeMessagePayload::read_bytes(&buf).unwrap();
-
-    // however 64KB + 1 byte does not
-    buf[1] = 0x01;
-    buf[2] = 0x00;
-    buf[3] = 0x04;
-    buf[4] = 0x01;
-    buf[5] = 0x00;
-    buf[6] = 0x01;
-    assert!(HandshakeMessagePayload::read_bytes(&buf).is_err());
-}
-
-#[test]
-fn can_decode_server_hello_from_api_devicecheck_apple_com() {
-    let data = include_bytes!("hello-api.devicecheck.apple.com.bin");
-    let mut r = Reader::init(data);
-    let hm = HandshakeMessagePayload::read(&mut r).unwrap();
-    println!("msg: {:?}", hm);
-}
-
-#[test]
-fn wrapped_dn_encoding() {
-    let subject = b"subject";
-    let dn = DistinguishedName::in_sequence(&subject[..]);
-    const DER_SEQUENCE_TAG: u8 = 0x30;
-    let expected_prefix = vec![DER_SEQUENCE_TAG, subject.len() as u8];
-    assert_eq!(dn.as_ref(), [expected_prefix, subject.to_vec()].concat());
 }
