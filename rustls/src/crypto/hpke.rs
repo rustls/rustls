@@ -72,6 +72,12 @@ pub trait Hpke: Debug + Send + Sync {
         secret_key: &HpkePrivateKey,
     ) -> Result<Box<dyn HpkeOpener + 'static>, Error>;
 
+    /// Generate a new public key and private key pair compatible with this HPKE instance.
+    ///
+    /// Key pairs should be encoded as raw big endian fixed length integers sized based
+    /// on the suite's DH KEM algorithm.
+    fn generate_key_pair(&self) -> Result<(HpkePublicKey, HpkePrivateKey), Error>;
+
     /// Return whether the HPKE instance is FIPS compatible.
     fn fips(&self) -> bool {
         false
