@@ -113,24 +113,26 @@ pub(super) fn start_handshake(
         None
     };
 
-    #[cfg_attr(not(feature = "tls12"), allow(unused_mut))]
-    let mut session_id = None;
-    if let Some(_resuming) = &mut resuming {
-        #[cfg(feature = "tls12")]
-        if let ClientSessionValue::Tls12(inner) = &mut _resuming.value {
-            // If we have a ticket, we use the sessionid as a signal that
-            // we're  doing an abbreviated handshake.  See section 3.4 in
-            // RFC5077.
-            if !inner.ticket().is_empty() {
-                inner.session_id = SessionId::random(config.provider.secure_random)?;
-            }
-            session_id = Some(inner.session_id);
-        }
-
+    let session_id = if let Some(_resuming) = &mut resuming {
         debug!("Resuming session");
+
+        match &mut _resuming.value {
+            #[cfg(feature = "tls12")]
+            ClientSessionValue::Tls12(inner) => {
+                // If we have a ticket, we use the sessionid as a signal that
+                // we're  doing an abbreviated handshake.  See section 3.4 in
+                // RFC5077.
+                if !inner.ticket().is_empty() {
+                    inner.session_id = SessionId::random(config.provider.secure_random)?;
+                }
+                Some(inner.session_id)
+            }
+            _ => None,
+        }
     } else {
         debug!("Not resuming any session");
-    }
+        None
+    };
 
     // https://tools.ietf.org/html/rfc8446#appendix-D.4
     // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
