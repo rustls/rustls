@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use hpke_rs_crypto::HpkeCrypto;
 use std::error::Error as StdError;
 
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
@@ -10,7 +11,7 @@ use rustls::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite,
 };
 use rustls::internal::msgs::enums::{
-    HpkeAead as HpkeAeadId, HpkeKdf as HpkeKdfId, HpkeKem as HpkeKemId,
+    HpkeAead as HpkeAeadId, HpkeKdf as HpkeKdfId, HpkeKem as HpkeKemId, HpkeKem,
 };
 use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
 use rustls::{Error, OtherError};
@@ -162,6 +163,25 @@ impl Hpke for HpkeRs {
         }))
     }
 
+    fn generate_key_pair(&self) -> Result<(HpkePublicKey, HpkePrivateKey), Error> {
+        let kem_algorithm = match self.0.kem {
+            HpkeKem::DHKEM_P256_HKDF_SHA256 => KemAlgorithm::DhKemP256,
+            HpkeKem::DHKEM_X25519_HKDF_SHA256 => KemAlgorithm::DhKem25519,
+            _ => {
+                // Safety: we don't expose HpkeRs static instances for unsupported algorithms.
+                unimplemented!()
+            }
+        };
+
+        let secret_key = HpkeRustCrypto::kem_key_gen(kem_algorithm, &mut HpkeRustCrypto::prng())
+            .map_err(other_err)?;
+        let public_key = HpkePublicKey(
+            HpkeRustCrypto::kem_derive_base(kem_algorithm, &secret_key).map_err(other_err)?,
+        );
+
+        Ok((public_key, HpkePrivateKey::from(secret_key)))
+    }
+
     fn suite(&self) -> HpkeSuite {
         self.0
     }
@@ -201,4 +221,76 @@ fn other_err(err: impl StdError + Send + Sync + 'static) -> Error {
 #[cfg(not(feature = "std"))]
 fn other_err(err: impl Send + Sync + 'static) -> Error {
     Error::General(alloc::format!("{}", err));
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::{format, vec};
+
+    use super::*;
+
+    #[test]
+    fn smoke_test() {
+        for suite in ALL_SUPPORTED_SUITES {
+            _ = format!("{suite:?}"); // HpkeRs suites should be Debug.
+
+            // We should be able to generate a random keypair.
+            let (pk, sk) = suite.generate_key_pair().unwrap();
+
+            // Info value corresponds to the first RFC 9180 base mode test vector.
+            let info = &[
+                0x4f, 0x64, 0x65, 0x20, 0x6f, 0x6e, 0x20, 0x61, 0x20, 0x47, 0x72, 0x65, 0x63, 0x69,
+                0x61, 0x6e, 0x20, 0x55, 0x72, 0x6e,
+            ][..];
+
+            // We should be able to set up a sealer.
+            let (enc, mut sealer) = suite.setup_sealer(info, &pk).unwrap();
+
+            _ = format!("{sealer:?}"); // Sealer should be Debug.
+
+            // Setting up a sealer with an invalid public key should fail.
+            let bad_setup_res = suite.setup_sealer(info, &HpkePublicKey(vec![]));
+            assert!(matches!(bad_setup_res.unwrap_err(), Error::Other(_)));
+
+            // We should be able to seal some plaintext.
+            let aad = &[0xC0, 0xFF, 0xEE];
+            let pt = &[0xF0, 0x0D];
+            let ct = sealer.seal(aad, pt).unwrap();
+
+            // We should be able to set up an opener.
+            let mut opener = suite
+                .setup_opener(&enc, info, &sk)
+                .unwrap();
+            _ = format!("{opener:?}"); // Opener should be Debug.
+
+            // Setting up an opener with an invalid private key should fail.
+            let bad_key_res = suite.setup_opener(&enc, info, &HpkePrivateKey::from(vec![]));
+            assert!(matches!(bad_key_res.unwrap_err(), Error::Other(_)));
+
+            // Opening the plaintext should work with the correct opener and aad.
+            let pt_prime = opener.open(aad, &ct).unwrap();
+            assert_eq!(pt_prime, pt);
+
+            // Opening the plaintext with the correct opener and wrong aad should fail.
+            let open_res = opener.open(&[0x0], &ct);
+            assert!(matches!(open_res.unwrap_err(), Error::Other(_)));
+
+            // Opening the plaintext with the wrong opener should fail.
+            let mut sk_rm_prime = sk.secret_bytes().to_vec();
+            sk_rm_prime[10] ^= 0xFF; // Corrupt a byte of the private key.
+            let mut opener_two = suite
+                .setup_opener(&enc, info, &HpkePrivateKey::from(sk_rm_prime))
+                .unwrap();
+            let open_res = opener_two.open(aad, &ct);
+            assert!(matches!(open_res.unwrap_err(), Error::Other(_)));
+        }
+    }
+
+    #[test]
+    fn test_fips() {
+        // None of the rust-crypto backed hpke-rs suites should be considered FIPS approved.
+        assert!(ALL_SUPPORTED_SUITES
+            .iter()
+            .all(|suite| !suite.fips()));
+    }
 }

@@ -10,6 +10,7 @@ use aws_lc_rs::aead::{
 use aws_lc_rs::agreement;
 use aws_lc_rs::cipher::{AES_128_KEY_LEN, AES_256_KEY_LEN};
 use aws_lc_rs::digest::{SHA256_OUTPUT_LEN, SHA384_OUTPUT_LEN, SHA512_OUTPUT_LEN};
+use aws_lc_rs::encoding::{AsBigEndian, Curve25519SeedBin, EcPrivateKeyBin};
 use zeroize::Zeroize;
 
 use crate::crypto::aws_lc_rs::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
@@ -374,6 +375,10 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Hpke for HpkeAwsLcRs<KEY_SIZE
         )
     }
 
+    fn generate_key_pair(&self) -> Result<(HpkePublicKey, HpkePrivateKey), Error> {
+        (self.dh_kem.key_generator)()
+    }
+
     fn suite(&self) -> HpkeSuite {
         self.suite
     }
@@ -513,6 +518,8 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Debug for Opener<KEY_SIZE, KD
 struct DhKem<const KDF_SIZE: usize> {
     id: HpkeKem,
     agreement_algorithm: &'static agreement::Algorithm,
+    key_generator:
+        &'static (dyn Fn() -> Result<(HpkePublicKey, HpkePrivateKey), Error> + Send + Sync),
     hkdf: &'static dyn HkdfPrkExtract,
 }
 
@@ -639,26 +646,84 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
 static DH_KEM_P256_HKDF_SHA256: &DhKem<SHA256_OUTPUT_LEN> = &DhKem {
     id: HpkeKem::DHKEM_P256_HKDF_SHA256,
     agreement_algorithm: &agreement::ECDH_P256,
+    key_generator: &|| generate_p_curve_key_pair(&agreement::ECDH_P256),
     hkdf: RING_HKDF_HMAC_SHA256,
 };
 
 static DH_KEM_P384_HKDF_SHA384: &DhKem<SHA384_OUTPUT_LEN> = &DhKem {
     id: HpkeKem::DHKEM_P384_HKDF_SHA384,
     agreement_algorithm: &agreement::ECDH_P384,
+    key_generator: &|| generate_p_curve_key_pair(&agreement::ECDH_P384),
     hkdf: RING_HKDF_HMAC_SHA384,
 };
 
 static DH_KEM_P521_HKDF_SHA512: &DhKem<SHA512_OUTPUT_LEN> = &DhKem {
     id: HpkeKem::DHKEM_P521_HKDF_SHA512,
     agreement_algorithm: &agreement::ECDH_P521,
+    key_generator: &|| generate_p_curve_key_pair(&agreement::ECDH_P521),
     hkdf: RING_HKDF_HMAC_SHA512,
 };
 
 static DH_KEM_X25519_HKDF_SHA256: &DhKem<SHA256_OUTPUT_LEN> = &DhKem {
     id: HpkeKem::DHKEM_X25519_HKDF_SHA256,
     agreement_algorithm: &agreement::X25519,
+    key_generator: &generate_x25519_key_pair,
     hkdf: RING_HKDF_HMAC_SHA256,
 };
+
+/// Generate a NIST P-256, P-384 or P-512 key pair expressed as a raw big-endian fixed-length
+/// integer.
+///
+/// We must disambiguate the [`AsBigEndian`] trait in-use and this function uses
+/// [`AsBigEndian<EcPrivateKeyBin>`], which does not support [`agreement::X25519`].
+/// For generating X25519 keys see [`generate_x25519_key_pair`].
+fn generate_p_curve_key_pair(
+    alg: &'static agreement::Algorithm,
+) -> Result<(HpkePublicKey, HpkePrivateKey), Error> {
+    // We only initialize DH KEM instances that use this function as a key generator
+    // for non-X25519 algorithms. Debug assert this just in case since `AsBigEndian<EcPrivateKeyBin>`
+    // will panic for this algorithm.
+    debug_assert_ne!(alg, &agreement::X25519);
+    let (public_key, private_key) = generate_key_pair(alg)?;
+    let raw_private_key: EcPrivateKeyBin = private_key
+        .as_be_bytes()
+        .map_err(unspecified_err)?;
+    Ok((
+        public_key,
+        HpkePrivateKey::from(raw_private_key.as_ref().to_vec()),
+    ))
+}
+
+/// Generate a X25519 key pair expressed as a raw big-endian fixed-length
+/// integer.
+///
+/// We must disambiguate the [`AsBigEndian`] trait in-use and this function uses
+/// [`AsBigEndian<Curve25519SeedBin>`], which only supports [`agreement::X25519`].
+/// For generating P-256, P-384 and P-512 keys see [`generate_p_curve_key_pair`].
+fn generate_x25519_key_pair() -> Result<(HpkePublicKey, HpkePrivateKey), Error> {
+    let (public_key, private_key) = generate_key_pair(&agreement::X25519)?;
+    let raw_private_key: Curve25519SeedBin = private_key
+        .as_be_bytes()
+        .map_err(unspecified_err)?;
+    Ok((
+        public_key,
+        HpkePrivateKey::from(raw_private_key.as_ref().to_vec()),
+    ))
+}
+
+fn generate_key_pair(
+    alg: &'static agreement::Algorithm,
+) -> Result<(HpkePublicKey, agreement::PrivateKey), Error> {
+    let private_key = agreement::PrivateKey::generate(alg).map_err(unspecified_err)?;
+    let public_key = HpkePublicKey(
+        private_key
+            .compute_public_key()
+            .map_err(unspecified_err)?
+            .as_ref()
+            .to_vec(),
+    );
+    Ok((public_key, private_key))
+}
 
 /// KeySchedule holds the derived AEAD key, base nonce, and seq number
 /// common to both a [Sealer] and [Opener].
@@ -897,66 +962,59 @@ mod tests {
 
     #[test]
     fn smoke_test() {
-        // Values correspond to the first RFC 9180 base mode test vector.
-        let pk_rm = &[
-            0x39, 0x48, 0xcf, 0xe0, 0xad, 0x1d, 0xdb, 0x69, 0x5d, 0x78, 0xe, 0x59, 0x7, 0x71, 0x95,
-            0xda, 0x6c, 0x56, 0x50, 0x6b, 0x2, 0x73, 0x29, 0x79, 0x4a, 0xb0, 0x2b, 0xca, 0x80,
-            0x81, 0x5c, 0x4d,
-        ][..];
-        let sk_rm = &[
-            0x46, 0x12, 0xc5, 0x50, 0x26, 0x3f, 0xc8, 0xad, 0x58, 0x37, 0x5d, 0xf3, 0xf5, 0x57,
-            0xaa, 0xc5, 0x31, 0xd2, 0x68, 0x50, 0x90, 0x3e, 0x55, 0xa9, 0xf2, 0x3f, 0x21, 0xd8,
-            0x53, 0x4e, 0x8a, 0xc8,
-        ][..];
-        let info = &[
-            0x4f, 0x64, 0x65, 0x20, 0x6f, 0x6e, 0x20, 0x61, 0x20, 0x47, 0x72, 0x65, 0x63, 0x69,
-            0x61, 0x6e, 0x20, 0x55, 0x72, 0x6e,
-        ][..];
-        let suite = DH_KEM_X25519_HKDF_SHA256_AES_128;
-        _ = format!("{suite:?}"); // HpkeAwsLcRs suites should be Debug.
+        for suite in ALL_SUPPORTED_SUITES {
+            _ = format!("{suite:?}"); // HpkeAwsLcRs suites should be Debug.
 
-        // We should be able to set up a sealer.
-        let (enc, mut sealer) = suite
-            .setup_sealer(info, &HpkePublicKey(pk_rm.into()))
-            .unwrap();
+            // We should be able to generate a random keypair.
+            let (pk, sk) = suite.generate_key_pair().unwrap();
 
-        _ = format!("{sealer:?}"); // Sealer should be Debug.
+            // Info value corresponds to the first RFC 9180 base mode test vector.
+            let info = &[
+                0x4f, 0x64, 0x65, 0x20, 0x6f, 0x6e, 0x20, 0x61, 0x20, 0x47, 0x72, 0x65, 0x63, 0x69,
+                0x61, 0x6e, 0x20, 0x55, 0x72, 0x6e,
+            ][..];
 
-        // Setting up a sealer with an invalid public key should fail.
-        let bad_setup_res = suite.setup_sealer(info, &HpkePublicKey(vec![]));
-        assert!(matches!(bad_setup_res.unwrap_err(), Error::Other(_)));
+            // We should be able to set up a sealer.
+            let (enc, mut sealer) = suite.setup_sealer(info, &pk).unwrap();
 
-        // We should be able to seal some plaintext.
-        let aad = &[0xC0, 0xFF, 0xEE];
-        let pt = &[0xF0, 0x0D];
-        let ct = sealer.seal(aad, pt).unwrap();
+            _ = format!("{sealer:?}"); // Sealer should be Debug.
 
-        // We should be able to set up an opener.
-        let mut opener = suite
-            .setup_opener(&enc, info, &HpkePrivateKey::from(sk_rm.to_vec()))
-            .unwrap();
-        _ = format!("{opener:?}"); // Opener should be Debug.
+            // Setting up a sealer with an invalid public key should fail.
+            let bad_setup_res = suite.setup_sealer(info, &HpkePublicKey(vec![]));
+            assert!(matches!(bad_setup_res.unwrap_err(), Error::Other(_)));
 
-        // Setting up an opener with an invalid private key should fail.
-        let bad_key_res = suite.setup_opener(&enc, info, &HpkePrivateKey::from(vec![]));
-        assert!(matches!(bad_key_res.unwrap_err(), Error::Other(_)));
+            // We should be able to seal some plaintext.
+            let aad = &[0xC0, 0xFF, 0xEE];
+            let pt = &[0xF0, 0x0D];
+            let ct = sealer.seal(aad, pt).unwrap();
 
-        // Opening the plaintext should work with the correct opener and aad.
-        let pt_prime = opener.open(aad, &ct).unwrap();
-        assert_eq!(pt_prime, pt);
+            // We should be able to set up an opener.
+            let mut opener = suite
+                .setup_opener(&enc, info, &sk)
+                .unwrap();
+            _ = format!("{opener:?}"); // Opener should be Debug.
 
-        // Opening the plaintext with the correct opener and wrong aad should fail.
-        let open_res = opener.open(&[0x0], &ct);
-        assert!(matches!(open_res.unwrap_err(), Error::Other(_)));
+            // Setting up an opener with an invalid private key should fail.
+            let bad_key_res = suite.setup_opener(&enc, info, &HpkePrivateKey::from(vec![]));
+            assert!(matches!(bad_key_res.unwrap_err(), Error::Other(_)));
 
-        // Opening the plaintext with the wrong opener should fail.
-        let mut sk_rm_prime = sk_rm.to_vec();
-        sk_rm_prime[0] = 0x00;
-        let mut opener_two = suite
-            .setup_opener(&enc, info, &HpkePrivateKey::from(sk_rm_prime))
-            .unwrap();
-        let open_res = opener_two.open(aad, &ct);
-        assert!(matches!(open_res.unwrap_err(), Error::Other(_)));
+            // Opening the plaintext should work with the correct opener and aad.
+            let pt_prime = opener.open(aad, &ct).unwrap();
+            assert_eq!(pt_prime, pt);
+
+            // Opening the plaintext with the correct opener and wrong aad should fail.
+            let open_res = opener.open(&[0x0], &ct);
+            assert!(matches!(open_res.unwrap_err(), Error::Other(_)));
+
+            // Opening the plaintext with the wrong opener should fail.
+            let mut sk_rm_prime = sk.secret_bytes().to_vec();
+            sk_rm_prime[10] ^= 0xFF; // Corrupt a byte of the private key.
+            let mut opener_two = suite
+                .setup_opener(&enc, info, &HpkePrivateKey::from(sk_rm_prime))
+                .unwrap();
+            let open_res = opener_two.open(aad, &ct);
+            assert!(matches!(open_res.unwrap_err(), Error::Other(_)));
+        }
     }
 
     #[cfg(not(feature = "fips"))] // Ensure all supported suites are available to test.
