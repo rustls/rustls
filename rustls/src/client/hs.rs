@@ -45,7 +45,6 @@ fn find_session(
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
 ) -> Option<persist::Retrieved<ClientSessionValue>> {
-    #[allow(clippy::let_and_return, clippy::unnecessary_lazy_evaluations)]
     let found = config
         .resumption
         .store

@@ -324,7 +324,6 @@ impl MessageDeframer {
     }
 
     /// Read some bytes from `rd`, and add them to our internal buffer.
-    #[allow(clippy::comparison_chain)]
     pub fn read(
         &mut self,
         rd: &mut dyn io::Read,
