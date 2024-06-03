@@ -890,8 +890,7 @@ static RING_HKDF_HMAC_SHA512: &HkdfUsingHmac = &HkdfUsingHmac(&HMAC_SHA512);
 
 #[cfg(test)]
 mod tests {
-    use alloc::format;
-    use alloc::vec;
+    use alloc::{format, vec};
 
     use super::*;
 
@@ -987,13 +986,13 @@ mod tests {
 
 #[cfg(test)]
 mod rfc_tests {
-    use super::*;
-
     use alloc::string::String;
     use std::fs::File;
     use std::println;
 
     use serde::Deserialize;
+
+    use super::*;
 
     /// Confirm open/seal operations work using the test vectors from [RFC 9180 Appendix A].
     ///
