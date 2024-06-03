@@ -1,4 +1,3 @@
-#![allow(clippy::upper_case_acronyms)]
 #![allow(missing_docs)]
 
 #[macro_use]

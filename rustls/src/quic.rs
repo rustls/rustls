@@ -875,7 +875,6 @@ impl Keys {
 /// Once the 1-RTT keys have been exchanged, either side may initiate a key update. Progressive
 /// update keys can be obtained from the [`Secrets`] returned in [`KeyChange::OneRtt`]. Note that
 /// only packet keys are updated by key updates; header protection keys remain the same.
-#[allow(clippy::large_enum_variant)]
 pub enum KeyChange {
     /// Keys for the handshake space
     Handshake {

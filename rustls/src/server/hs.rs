@@ -640,7 +640,6 @@ pub(super) fn process_client_hello<'a>(
     Ok((client_hello, sig_schemes.to_owned()))
 }
 
-#[allow(clippy::large_enum_variant)]
 pub(crate) enum HandshakeHashOrBuffer {
     Buffer(HandshakeHashBuffer),
     Hash(HandshakeHash),
