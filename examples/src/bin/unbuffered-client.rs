@@ -11,8 +11,7 @@ use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus, WriteTraffic,
 };
-#[allow(unused_imports)]
-use rustls::version::{TLS12, TLS13};
+use rustls::version::TLS13;
 use rustls::{ClientConfig, RootCertStore};
 
 fn main() -> Result<(), Box<dyn Error>> {
