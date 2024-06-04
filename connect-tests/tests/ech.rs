@@ -1,11 +1,11 @@
 mod ech_config {
-    use hickory_resolver::config::{ResolverConfig, ResolverOpts};
-    use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
-    use hickory_resolver::proto::rr::{RData, RecordType};
-    use hickory_resolver::Resolver;
     use rustls::internal::msgs::codec::{Codec, Reader};
     use rustls::internal::msgs::handshake::EchConfigPayload;
     use rustls::pki_types::EchConfigListBytes;
+    use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+    use trust_dns_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
+    use trust_dns_resolver::proto::rr::{RData, RecordType};
+    use trust_dns_resolver::Resolver;
 
     #[test]
     fn cloudflare() {
@@ -24,8 +24,7 @@ mod ech_config {
 
     /// Lookup the ECH config list for a domain and deserialize it.
     fn test_deserialize_ech_config_list(domain: &str) {
-        let resolver =
-            Resolver::new(ResolverConfig::google_https(), ResolverOpts::default()).unwrap();
+        let resolver = Resolver::new(ResolverConfig::google(), ResolverOpts::default()).unwrap();
         let tls_encoded_list = lookup_ech(&resolver, domain);
         let parsed_configs = Vec::<EchConfigPayload>::read(&mut Reader::init(&tls_encoded_list))
             .expect("failed to deserialize ECH config list");

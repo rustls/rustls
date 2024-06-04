@@ -32,4 +32,4 @@ lto = true
 [patch.crates-io]
 # TODO(XXX): Remove this once 0.25 is released - we want the ECH fixes from
 #            https://github.com/hickory-dns/hickory-dns/pull/2183
-hickory-resolver = { git = "https://github.com/hickory-dns/hickory-dns", rev = "6334a01430088ead8642cafaee592ec7bf49831f" }
+trust-dns-resolver = { git = "https://github.com/cpu/trust-dns", rev = "9888378726ada266c1a6ac6b2630c2249f3f62cf" }
