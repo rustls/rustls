@@ -203,7 +203,7 @@ impl Codec<'_> for u16 {
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
         match r.take(2) {
             Some(&[b1, b2]) => Ok(Self::from_be_bytes([b1, b2])),
-            _ => Err(InvalidMessage::MissingData("u8")),
+            _ => Err(InvalidMessage::MissingData("u16")),
         }
     }
 }
