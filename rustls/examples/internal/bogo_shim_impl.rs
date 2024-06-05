@@ -1376,6 +1376,7 @@ pub fn main() {
             "-expect-no-session" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
+            "-forbid-renegotiation-after-handshake" |
             // internal openssl details:
             "-async" |
             "-implicit-handshake" |
