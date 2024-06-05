@@ -101,7 +101,6 @@
     "FallbackSCSV*": "fallback countermeasure not yet implemented",
     "RequireAnyClientCertificate-TLS12": "we don't send an alert in this case",
     "TooManyKeyUpdates": "no limit implemented",
-    "SendUserCanceledAlerts-TooMany-TLS13": "",
     "ServerBogusVersion": "we ignore legacy_version if there's an extension",
     "Renegotiate-Client-*": "no reneg",
     "Shutdown-Shim-Renegotiate-*": "",

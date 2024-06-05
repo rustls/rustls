@@ -824,6 +824,9 @@ fn handle_err(err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedCipherSuite) => {
             quit(":WRONG_CIPHER_RETURNED:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::TooManyWarningAlertsReceived) => {
+            quit(":TOO_MANY_WARNING_ALERTS:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
