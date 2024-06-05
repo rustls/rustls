@@ -627,6 +627,9 @@ impl CommonState {
         &mut self,
         key_update_request: &KeyUpdateRequest,
     ) -> Result<bool, Error> {
+        self.temper_counters
+            .received_key_update_request()?;
+
         match key_update_request {
             KeyUpdateRequest::UpdateNotRequested => Ok(false),
             KeyUpdateRequest::UpdateRequested => Ok(self.queued_key_update_message.is_none()),
@@ -839,6 +842,7 @@ enum Limit {
 struct TemperCounters {
     allowed_warning_alerts: u8,
     allowed_renegotiation_requests: u8,
+    allowed_key_update_requests: u8,
 }
 
 impl TemperCounters {
@@ -861,6 +865,16 @@ impl TemperCounters {
             }
         }
     }
+
+    fn received_key_update_request(&mut self) -> Result<(), Error> {
+        match self.allowed_key_update_requests {
+            0 => Err(PeerMisbehaved::TooManyKeyUpdateRequests.into()),
+            _ => {
+                self.allowed_key_update_requests -= 1;
+                Ok(())
+            }
+        }
+    }
 }
 
 impl Default for TemperCounters {
@@ -873,6 +887,10 @@ impl Default for TemperCounters {
             // we rebuff renegotiation requests with a `NoRenegotiation` warning alerts.
             // a second request after this is fatal.
             allowed_renegotiation_requests: 1,
+
+            // cf. BoringSSL `kMaxKeyUpdates`
+            // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls13_both.cc#L35-L38>
+            allowed_key_update_requests: 32,
         }
     }
 }
