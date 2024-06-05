@@ -100,7 +100,6 @@
     "Resume-Server-OmitPSKsOnSecondClientHello": "not required by RFC",
     "FallbackSCSV*": "fallback countermeasure not yet implemented",
     "RequireAnyClientCertificate-TLS12": "we don't send an alert in this case",
-    "TooManyKeyUpdates": "no limit implemented",
     "ServerBogusVersion": "we ignore legacy_version if there's an extension",
     "Renegotiate-Client-*": "no reneg",
     "Shutdown-Shim-Renegotiate-*": "",
