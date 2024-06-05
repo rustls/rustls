@@ -173,6 +173,8 @@ impl CommonState {
                 Side::Server => HandshakeType::ClientHello,
             };
             if msg.is_handshake_type(reject_ty) {
+                self.temper_counters
+                    .received_renegotiation_request()?;
                 self.send_warning_alert(AlertDescription::NoRenegotiation);
                 return Ok(state);
             }
@@ -836,6 +838,7 @@ enum Limit {
 /// that we limit to avoid denial-of-service vectors.
 struct TemperCounters {
     allowed_warning_alerts: u8,
+    allowed_renegotiation_requests: u8,
 }
 
 impl TemperCounters {
@@ -848,6 +851,16 @@ impl TemperCounters {
             }
         }
     }
+
+    fn received_renegotiation_request(&mut self) -> Result<(), Error> {
+        match self.allowed_renegotiation_requests {
+            0 => Err(PeerMisbehaved::TooManyRenegotiationRequests.into()),
+            _ => {
+                self.allowed_renegotiation_requests -= 1;
+                Ok(())
+            }
+        }
+    }
 }
 
 impl Default for TemperCounters {
@@ -856,6 +869,10 @@ impl Default for TemperCounters {
             // cf. BoringSSL `kMaxWarningAlerts`
             // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls_record.cc#L137-L139>
             allowed_warning_alerts: 4,
+
+            // we rebuff renegotiation requests with a `NoRenegotiation` warning alerts.
+            // a second request after this is fatal.
+            allowed_renegotiation_requests: 1,
         }
     }
 }
