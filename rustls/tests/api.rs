@@ -21,19 +21,19 @@ use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCe
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::AlertLevel;
+use rustls::internal::msgs::enums::{AlertLevel, Compression};
 use rustls::internal::msgs::handshake::{
-    ClientExtension, HandshakeMessagePayload, HandshakePayload,
-    ServerName as ServerNameExtensionItem,
+    ClientExtension, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, Random,
+    ServerName as ServerNameExtensionItem, SessionId,
 };
-use rustls::internal::msgs::message::{Message, MessagePayload};
+use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
     sign, AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
-    HandshakeKind, InvalidMessage, KeyLog, PeerIncompatible, PeerMisbehaved, ProtocolVersion,
-    ServerConfig, ServerConnection, SideData, SignatureScheme, Stream, StreamOwned,
-    SupportedCipherSuite,
+    HandshakeKind, HandshakeType, InvalidMessage, KeyLog, PeerIncompatible, PeerMisbehaved,
+    ProtocolVersion, ServerConfig, ServerConnection, SideData, SignatureScheme, Stream,
+    StreamOwned, SupportedCipherSuite,
 };
 
 use super::*;
@@ -6890,6 +6890,155 @@ impl<'a> io::Write for FakeStream<'a> {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+#[test]
+fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
+    let client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&rustls::version::TLS13]);
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.enable_secret_extraction = true;
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    let mut raw_server = RawTls::new_server(server);
+
+    let msg = PlainMessage {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: Payload::new(
+            HandshakeMessagePayload {
+                typ: HandshakeType::HelloRequest,
+                payload: HandshakePayload::HelloRequest,
+            }
+            .get_encoding(),
+        ),
+    };
+    raw_server.encrypt_and_send(&msg, &mut client);
+    let err = client
+        .process_new_packets()
+        .unwrap_err();
+    assert_eq!(
+        err,
+        Error::InappropriateHandshakeMessage {
+            expect_types: vec![HandshakeType::NewSessionTicket, HandshakeType::KeyUpdate],
+            got_type: HandshakeType::HelloRequest
+        }
+    );
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
+    let client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&rustls::version::TLS12]);
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.enable_secret_extraction = true;
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    let mut raw_server = RawTls::new_server(server);
+
+    let msg = PlainMessage {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: Payload::new(
+            HandshakeMessagePayload {
+                typ: HandshakeType::HelloRequest,
+                payload: HandshakePayload::HelloRequest,
+            }
+            .get_encoding(),
+        ),
+    };
+
+    // one is allowed (and elicits a warning alert)
+    raw_server.encrypt_and_send(&msg, &mut client);
+    client.process_new_packets().unwrap();
+    raw_server.receive_and_decrypt(&mut client, |m| {
+        assert_eq!(format!("{m:?}"),
+                   "Message { version: TLSv1_2, payload: Alert(AlertMessagePayload { level: Warning, description: NoRenegotiation }) }");
+    });
+
+    // second is fatal
+    raw_server.encrypt_and_send(&msg, &mut client);
+    assert_eq!(
+        client
+            .process_new_packets()
+            .unwrap_err(),
+        Error::PeerMisbehaved(PeerMisbehaved::TooManyRenegotiationRequests)
+    );
+}
+
+#[test]
+fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
+    let mut client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&rustls::version::TLS13]);
+    client_config.enable_secret_extraction = true;
+    let server_config = make_server_config(KeyType::Rsa2048);
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    let mut raw_client = RawTls::new_client(client);
+
+    let msg = PlainMessage {
+        typ: ContentType::Handshake,
+        version: ProtocolVersion::TLSv1_3,
+        payload: Payload::new(
+            HandshakeMessagePayload {
+                typ: HandshakeType::ClientHello,
+                payload: HandshakePayload::ClientHello(ClientHelloPayload {
+                    client_version: ProtocolVersion::TLSv1_2,
+                    random: Random::from([0u8; 32]),
+                    session_id: SessionId::read_bytes(&[0u8]).unwrap(),
+                    cipher_suites: vec![],
+                    compression_methods: vec![Compression::Null],
+                    extensions: vec![ClientExtension::ExtendedMasterSecretRequest],
+                }),
+            }
+            .get_encoding(),
+        ),
+    };
+    raw_client.encrypt_and_send(&msg, &mut server);
+    let err = server
+        .process_new_packets()
+        .unwrap_err();
+    assert_eq!(
+        format!("{err:?}"),
+        "InappropriateHandshakeMessage { expect_types: [KeyUpdate], got_type: ClientHello }"
+    );
+}
+
+#[cfg(feature = "tls12")]
+#[test]
+fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
+    let server_config = make_server_config(KeyType::Rsa2048);
+    let client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&rustls::version::TLS12]);
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+
+    let mut client_hello = vec![];
+    client
+        .write_tls(&mut io::Cursor::new(&mut client_hello))
+        .unwrap();
+
+    server
+        .read_tls(&mut io::Cursor::new(&client_hello))
+        .unwrap();
+    server
+        .read_tls(&mut io::Cursor::new(&client_hello))
+        .unwrap();
+    assert_eq!(
+        server
+            .process_new_packets()
+            .unwrap_err(),
+        Error::InappropriateHandshakeMessage {
+            expect_types: vec![HandshakeType::ClientKeyExchange],
+            got_type: HandshakeType::ClientHello
+        }
+    );
 }
 
 } // test_for_each_provider!
