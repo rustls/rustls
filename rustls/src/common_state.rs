@@ -51,6 +51,7 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     pub(crate) quic: quic::Quic,
     pub(crate) enable_secret_extraction: bool,
+    temper_counters: TemperCounters,
 }
 
 impl CommonState {
@@ -79,6 +80,7 @@ impl CommonState {
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
+            temper_counters: TemperCounters::default(),
         }
     }
 
@@ -441,6 +443,8 @@ impl CommonState {
         // (except, for no good reason, user_cancelled).
         let err = Error::AlertReceived(alert.description);
         if alert.level == AlertLevel::Warning {
+            self.temper_counters
+                .received_warning_alert()?;
             if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
                 return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
             } else {
@@ -826,6 +830,34 @@ enum Limit {
     #[cfg(feature = "std")]
     Yes,
     No,
+}
+
+/// Tracking technically-allowed protocol actions
+/// that we limit to avoid denial-of-service vectors.
+struct TemperCounters {
+    allowed_warning_alerts: u8,
+}
+
+impl TemperCounters {
+    fn received_warning_alert(&mut self) -> Result<(), Error> {
+        match self.allowed_warning_alerts {
+            0 => Err(PeerMisbehaved::TooManyWarningAlertsReceived.into()),
+            _ => {
+                self.allowed_warning_alerts -= 1;
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Default for TemperCounters {
+    fn default() -> Self {
+        Self {
+            // cf. BoringSSL `kMaxWarningAlerts`
+            // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls_record.cc#L137-L139>
+            allowed_warning_alerts: 4,
+        }
+    }
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
