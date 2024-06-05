@@ -26,6 +26,10 @@ pub struct MessageDeframer {
 
     /// If we're in the middle of joining a handshake payload, this is the metadata.
     joining_hs: Option<HandshakePayloadMeta>,
+
+    /// We limit consecutive empty fragments to avoid a route for the peer to send
+    /// us significant but fruitless traffic.
+    seen_consecutive_empty_fragments: u8,
 }
 
 impl MessageDeframer {
@@ -166,6 +170,20 @@ impl MessageDeframer {
                 // records, there MUST NOT be any other records between them."
                 // https://www.rfc-editor.org/rfc/rfc8446#section-5.1
                 return Err(self.set_err(PeerMisbehaved::MessageInterleavedWithHandshakeMessage));
+            }
+
+            match plain_payload_slice.len {
+                0 => {
+                    if self.seen_consecutive_empty_fragments
+                        == ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX
+                    {
+                        return Err(self.set_err(PeerMisbehaved::TooManyEmptyFragments));
+                    }
+                    self.seen_consecutive_empty_fragments += 1;
+                }
+                _ => {
+                    self.seen_consecutive_empty_fragments = 0;
+                }
             }
 
             // If it's not a handshake message, just return it -- no joining necessary.
@@ -704,6 +722,10 @@ const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
 
 #[cfg(feature = "std")]
 const READ_SIZE: usize = 4096;
+
+/// cf. BoringSSL's `kMaxEmptyRecords`
+/// <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls_record.cc#L124-L128>
+const ALLOWED_CONSECUTIVE_EMPTY_FRAGMENTS_MAX: u8 = 32;
 
 #[cfg(feature = "std")]
 #[cfg(test)]

@@ -19,8 +19,6 @@
     "DummyPQPadding-*": "not supported",
     "MTU*": "dtls only",
     "DisableEverything": "not useful",
-    "SendEmptyRecords": "non-standard openssl/boringssl behaviour",
-    "SendEmptyRecords-Async": "",
     "CheckLeafCurve": "",
     "SendWarningAlerts": "",
     "SendWarningAlerts-*": "",
