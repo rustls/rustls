@@ -233,6 +233,7 @@ pub enum PeerMisbehaved {
     ServerNameMustContainOneHostName,
     SignedKxWithWrongAlgorithm,
     SignedHandshakeWithUnadvertisedSigScheme,
+    TooManyEmptyFragments,
     TooManyKeyUpdateRequests,
     TooManyRenegotiationRequests,
     TooManyWarningAlertsReceived,

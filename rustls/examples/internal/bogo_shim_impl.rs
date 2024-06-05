@@ -830,6 +830,9 @@ fn handle_err(err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::TooManyKeyUpdateRequests) => {
             quit(":TOO_MANY_KEY_UPDATES:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::TooManyEmptyFragments) => {
+            quit(":TOO_MANY_EMPTY_FRAGMENTS:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
