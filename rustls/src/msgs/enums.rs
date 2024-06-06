@@ -77,7 +77,7 @@ enum_builder! {
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
     @U16
-    pub(crate) enum ExtensionType {
+    pub enum ExtensionType {
         ServerName => 0x0000,
         MaxFragmentLength => 0x0001,
         ClientCertificateUrl => 0x0002,
@@ -117,6 +117,35 @@ enum_builder! {
         RenegotiationInfo => 0xff01,
         TransportParametersDraft => 0xffa5,
         EncryptedClientHello => 0xfe0d, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.1
+        EncryptedClientHelloOuterExtensions => 0xfd00, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5.1
+    }
+}
+
+impl ExtensionType {
+    /// Returns true if the extension type can be compressed in an "inner" client hello for ECH.
+    ///
+    /// This function should only return true for extension types where the inner hello and outer
+    /// hello extensions values will always be identical. Extensions that may be identical
+    /// sometimes (e.g. server name, cert compression methods), but not always, SHOULD NOT be
+    /// compressed.
+    ///
+    /// See [draft-ietf-esni-18 §5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5)
+    /// and [draft-ietf-esni-18 §10.5](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-10.5)
+    /// for more information.
+    pub(crate) fn ech_compress(&self) -> bool {
+        // We match which extensions we will compress with BoringSSL and Go's stdlib.
+        matches!(
+            self,
+            Self::StatusRequest
+                | Self::EllipticCurves
+                | Self::SignatureAlgorithms
+                | Self::SignatureAlgorithmsCert
+                | Self::ALProtocolNegotiation
+                | Self::SupportedVersions
+                | Self::Cookie
+                | Self::KeyShare
+                | Self::PSKKeyExchangeModes
+        )
     }
 }
 

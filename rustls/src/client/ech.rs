@@ -19,7 +19,7 @@ use crate::msgs::handshake::{
     ClientExtension, ClientHelloPayload, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, HandshakeMessagePayload, HandshakePayload,
     HelloRetryRequest, HpkeKeyConfig, HpkeSymmetricCipherSuite, PresharedKeyBinder,
-    PresharedKeyOffer, Random, ServerHelloPayload, SessionId,
+    PresharedKeyOffer, Random, ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -550,61 +550,109 @@ impl EchState {
         self.inner_hello_transcript = inner_transcript_buffer;
     }
 
+    // 5.1 "Encoding the ClientHelloInner"
     fn encode_inner_hello(
         &mut self,
         outer_hello: &ClientHelloPayload,
         retryreq: Option<&HelloRetryRequest>,
         resuming: &Option<Retrieved<&persist::Tls13ClientSessionValue>>,
     ) -> Vec<u8> {
-        // Start building an inner hello by cloning the initial outer hello.
-        let mut inner_hello = outer_hello.clone();
+        // Start building an inner hello using the outer_hello as a template.
+        let mut inner_hello = ClientHelloPayload {
+            // Some information is copied over as-is.
+            client_version: outer_hello.client_version,
+            session_id: outer_hello.session_id,
+            compression_methods: outer_hello.compression_methods.clone(),
 
-        inner_hello.extensions.retain(|ext| {
-            match ext.ext_type() {
-                // SNI is unconditionally removed - it was copied from the outer hello and
-                // we will conditionally re-add our own SNI for the inner hello later.
-                ExtensionType::ServerName |
-                // We may have copied extensions that are only useful in the context where a TLS 1.3
-                // connection allows TLS 1.2. This isn't the case for ECH and so we must remove these
-                // to satisfy a bogo test.
-                ExtensionType::ExtendedMasterSecret |
-                ExtensionType::SessionTicket |
-                ExtensionType::ECPointFormats => false,
-                // Retain all other extensions.
-                _ => true,
-            }
-        });
+            // We will build up the included extensions ourselves.
+            extensions: vec![],
 
-        // Remove the empty renegotiation info SCSV from the inner hello. Similar to the TLS 1.2
-        // specific extensions we remove above, this is seen as a TLS 1.2 only feature by bogo.
+            // Set the inner hello random to the one we generated when creating the ECH state.
+            // We hold on to the inner_hello_random in the ECH state to use later for confirming
+            // whether ECH was accepted or not.
+            random: self.inner_hello_random,
+
+            // We remove the empty renegotiation info SCSV from the outer hello's ciphersuite.
+            // Similar to the TLS 1.2 specific extensions we will filter out, this is seen as a
+            // TLS 1.2 only feature by bogo.
+            cipher_suites: outer_hello
+                .cipher_suites
+                .iter()
+                .filter(|cs| **cs != TLS_EMPTY_RENEGOTIATION_INFO_SCSV)
+                .cloned()
+                .collect(),
+        };
+
+        // The inner hello will always have an inner variant of the ECH extension added.
+        // See Section 6.1 rule 4.
         inner_hello
-            .cipher_suites
-            .retain(|cs| *cs != TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+            .extensions
+            .push(ClientExtension::EncryptedClientHello(
+                EncryptedClientHello::Inner,
+            ));
 
-        // Add the correct inner SNI - we only do this when the inner name is a DnsName and SNI
-        // is enabled. IP addresses should not be used in an SNI extensions.
-        if self.enable_sni {
-            if let ServerName::DnsName(inner_name) = &self.inner_name {
-                inner_hello
-                    .extensions
-                    .insert(0, ClientExtension::make_sni(&inner_name.borrow()));
+        let inner_sni = match &self.inner_name {
+            // The inner hello only gets a SNI value if enable_sni is true and the inner name
+            // is a domain name (not an IP address).
+            ServerName::DnsName(dns_name) if self.enable_sni => Some(dns_name),
+            _ => None,
+        };
+
+        // Now we consider each of the outer hello's extensions - we can either:
+        // 1. Omit the extension if it isn't appropriate (e.g. is a TLS 1.2 extension).
+        // 2. Add the extension to the inner hello as-is.
+        // 3. Compress the extension, by collecting it into a list of to-be-compressed
+        //    extensions we'll handle separately.
+        let mut compressed_exts = Vec::with_capacity(outer_hello.extensions.len());
+        let mut compressed_ext_types = Vec::with_capacity(outer_hello.extensions.len());
+        for ext in &outer_hello.extensions {
+            // Some outer hello extensions are only useful in the context where a TLS 1.3
+            // connection allows TLS 1.2. This isn't the case for ECH so we skip adding them
+            // to the inner hello.
+            if matches!(
+                ext.ext_type(),
+                ExtensionType::ExtendedMasterSecret
+                    | ExtensionType::SessionTicket
+                    | ExtensionType::ECPointFormats
+            ) {
+                continue;
+            }
+
+            if ext.ext_type() == ExtensionType::ServerName {
+                // We may want to replace the outer hello SNI with our own inner hello specific SNI.
+                if let Some(sni_value) = inner_sni {
+                    inner_hello
+                        .extensions
+                        .push(ClientExtension::make_sni(&sni_value.borrow()));
+                }
+                // We don't want to add, or compress, the SNI from the outer hello.
+                continue;
+            }
+
+            // Compressed extensions need to be put aside to include in one contiguous block.
+            // Uncompressed extensions get added directly to the inner hello.
+            if ext.ext_type().ech_compress() {
+                compressed_exts.push(ext.clone());
+                compressed_ext_types.push(ext.ext_type());
+            } else {
+                inner_hello.extensions.push(ext.clone());
             }
         }
 
-        // Add the inner variant extension to the inner hello.
-        // Section 6.1 rule 4.
-        let inner_ech_ext = ClientExtension::EncryptedClientHello(EncryptedClientHello::Inner);
-        if let Some(ClientExtension::PresharedKey(_)) = inner_hello.extensions.last() {
-            // Insert it before the PSK - this ext always needs to be last.
-            inner_hello
-                .extensions
-                .insert(inner_hello.extensions.len() - 1, inner_ech_ext);
-        } else {
-            // Insert it at the end. No PSK to worry about.
-            inner_hello
-                .extensions
-                .push(inner_ech_ext);
-        }
+        // We've added all the uncompressed extensions. Now we need to add the contiguous
+        // block of to-be-compressed extensions. Where we do this depends on whether the
+        // last uncompressed extension is a PSK for resumption. In this case we must
+        // add the to-be-compressed extensions _before_ the PSK.
+        let compressed_exts_index =
+            if let Some(ClientExtension::PresharedKey(_)) = inner_hello.extensions.last() {
+                inner_hello.extensions.len() - 1
+            } else {
+                inner_hello.extensions.len()
+            };
+        inner_hello.extensions.splice(
+            compressed_exts_index..compressed_exts_index,
+            compressed_exts,
+        );
 
         // Note which extensions we're sending in the inner hello. This may differ from
         // the outer hello (e.g. the inner hello may omit SNI while the outer hello will
@@ -614,11 +662,6 @@ impl EchState {
             .iter()
             .map(|ext| ext.ext_type())
             .collect();
-
-        // Set the inner hello random to the one we generated when creating the ECH state.
-        // We hold on to the inner_hello_random in the ECH state to use later for confirming
-        // whether ECH was accepted or not.
-        inner_hello.random = self.inner_hello_random;
 
         // If we're resuming, we need to update the PSK binder in the inner hello.
         if let Some(resuming) = resuming.as_ref() {
@@ -643,28 +686,12 @@ impl EchState {
             };
         }
 
-        // Repeating large extensions between ClientHelloInner and ClientHelloOuter can lead to excessive
-        // size. To reduce the size impact, the client MAY substitute extensions which it knows will be
-        // duplicated in ClientHelloOuter.
-
-        // TODO(@cpu): Extension compression would be handled here-ish.
-
-        // 5.1 "Encoding the ClientHelloInner"
-
-        // Setting the legacy_session_id field to the empty string.
-        // Preserve these for reuse
-        let original_session_id = inner_hello.session_id;
-
-        // SessionID is required to be empty in the EncodedClientHelloInner.
-        inner_hello.session_id = SessionId::empty();
-
-        // Encode the inner hello with the empty session ID.
-        let mut encoded_hello = inner_hello.get_encoding();
-
-        // Restore session ID.
-        inner_hello.session_id = original_session_id;
-
         trace!("ECH Inner Hello: {:#?}", inner_hello);
+
+        // Encode the inner hello according to the rules required for ECH. This differs
+        // from the standard encoding in several ways. Notably this is where we will
+        // replace the block of contiguous to-be-compressed extensions with a marker.
+        let mut encoded_hello = inner_hello.ech_inner_encoding(compressed_ext_types);
 
         // Calculate padding
         // max_name_len = L
@@ -690,7 +717,7 @@ impl EchState {
 
         // Let L be the length of the EncodedClientHelloInner with all the padding computed so far
         // Let N = 31 - ((L - 1) % 32) and add N bytes of padding.
-        let padding_len = 31 - ((encoded_hello.len() + (padding_len) - 1) % 32);
+        let padding_len = 31 - ((encoded_hello.len() + padding_len - 1) % 32);
         encoded_hello.extend(vec![0; padding_len]);
 
         // Construct the inner hello message that will be used for the transcript.

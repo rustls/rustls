@@ -34,8 +34,6 @@
     "TLS-ECH-*": "ECH test suites use non-FIPS approved algos",
 #else
     "TLS-ECH-Server*": "ECH server support NYI",
-    "TLS-ECH-Client-ExpectECHOuterExtensions": "ECH extension compression NYI",
-    "TLS-ECH-Client-CompressSupportedVersions": "ECH extension compression NYI",
     "TLS-ECH-Client-SelectECHConfig": "TODO(XXX): re-enable after upstream bogo fix",
     "TLS-ECH-Client-NoSupportedConfigs": "TODO(XXX): re-enable after upstream bogo fix",
     "TLS-ECH-Client-SkipInvalidPublicName*": "we allow underscore names, don't fallback on no ECH configs",
