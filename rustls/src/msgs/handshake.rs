@@ -560,6 +560,7 @@ pub enum ClientExtension {
     EarlyData,
     CertificateCompressionAlgorithms(Vec<CertificateCompressionAlgorithm>),
     EncryptedClientHello(EncryptedClientHello),
+    EncryptedClientHelloOuterExtensions(Vec<ExtensionType>),
     Unknown(UnknownExtension),
 }
 
@@ -584,6 +585,9 @@ impl ClientExtension {
             Self::EarlyData => ExtensionType::EarlyData,
             Self::CertificateCompressionAlgorithms(_) => ExtensionType::CompressCertificate,
             Self::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
+            Self::EncryptedClientHelloOuterExtensions(_) => {
+                ExtensionType::EncryptedClientHelloOuterExtensions
+            }
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -615,6 +619,7 @@ impl Codec<'_> for ClientExtension {
             }
             Self::CertificateCompressionAlgorithms(ref r) => r.encode(nested.buf),
             Self::EncryptedClientHello(ref r) => r.encode(nested.buf),
+            Self::EncryptedClientHelloOuterExtensions(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -657,6 +662,9 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::EarlyData if !sub.any_left() => Self::EarlyData,
             ExtensionType::CompressCertificate => {
                 Self::CertificateCompressionAlgorithms(Vec::read(&mut sub)?)
+            }
+            ExtensionType::EncryptedClientHelloOuterExtensions => {
+                Self::EncryptedClientHelloOuterExtensions(Vec::read(&mut sub)?)
             }
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
@@ -823,15 +831,7 @@ pub struct ClientHelloPayload {
 
 impl Codec<'_> for ClientHelloPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.client_version.encode(bytes);
-        self.random.encode(bytes);
-        self.session_id.encode(bytes);
-        self.cipher_suites.encode(bytes);
-        self.compression_methods.encode(bytes);
-
-        if !self.extensions.is_empty() {
-            self.extensions.encode(bytes);
-        }
+        self.payload_encode(bytes, Encoding::Standard)
     }
 
     fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
@@ -868,7 +868,73 @@ impl TlsListElement for ClientExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+impl TlsListElement for ExtensionType {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
+
 impl ClientHelloPayload {
+    pub(crate) fn ech_inner_encoding(&self, to_compress: Vec<ExtensionType>) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.payload_encode(&mut bytes, Encoding::EchInnerHello { to_compress });
+        bytes
+    }
+
+    pub(crate) fn payload_encode(&self, bytes: &mut Vec<u8>, purpose: Encoding) {
+        self.client_version.encode(bytes);
+        self.random.encode(bytes);
+
+        match purpose {
+            // SessionID is required to be empty in the encoded inner client hello.
+            Encoding::EchInnerHello { .. } => SessionId::empty().encode(bytes),
+            _ => self.session_id.encode(bytes),
+        }
+
+        self.cipher_suites.encode(bytes);
+        self.compression_methods.encode(bytes);
+
+        let to_compress = match purpose {
+            // Compressed extensions must be replaced in the encoded inner client hello.
+            Encoding::EchInnerHello { to_compress } if !to_compress.is_empty() => to_compress,
+            _ => {
+                if !self.extensions.is_empty() {
+                    self.extensions.encode(bytes);
+                }
+                return;
+            }
+        };
+
+        // Safety: not empty check in match guard.
+        let first_compressed_type = *to_compress.first().unwrap();
+
+        // Compressed extensions are in a contiguous range and must be replaced
+        // with a marker extension.
+        let compressed_start_idx = self
+            .extensions
+            .iter()
+            .position(|ext| ext.ext_type() == first_compressed_type);
+        let compressed_end_idx = compressed_start_idx.map(|start| start + to_compress.len());
+        let marker_ext = ClientExtension::EncryptedClientHelloOuterExtensions(to_compress);
+
+        let exts = self
+            .extensions
+            .iter()
+            .enumerate()
+            .filter_map(|(i, ext)| {
+                if Some(i) == compressed_start_idx {
+                    Some(&marker_ext)
+                } else if Some(i) > compressed_start_idx && Some(i) < compressed_end_idx {
+                    None
+                } else {
+                    Some(ext)
+                }
+            });
+
+        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        for ext in exts {
+            ext.encode(nested.buf);
+        }
+    }
+
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
@@ -1209,10 +1275,6 @@ impl HelloRetryRequest {
         Compression::Null.encode(bytes);
 
         match purpose {
-            // Standard encoding encodes extensions as they appear.
-            Encoding::Standard => {
-                self.extensions.encode(bytes);
-            }
             // For the purpose of ECH confirmation, the Encrypted Client Hello extension
             // must have its payload replaced by 8 zero bytes.
             //
@@ -1231,6 +1293,9 @@ impl HelloRetryRequest {
                         }
                     }
                 }
+            }
+            _ => {
+                self.extensions.encode(bytes);
             }
         }
     }
@@ -1326,8 +1391,6 @@ impl ServerHelloPayload {
         self.legacy_version.encode(bytes);
 
         match encoding {
-            // Standard encoding encodes the random value as is.
-            Encoding::Standard => self.random.encode(bytes),
             // When encoding a ServerHello for ECH confirmation, the random value
             // has the last 8 bytes zeroed out.
             Encoding::EchConfirmation => {
@@ -1336,6 +1399,7 @@ impl ServerHelloPayload {
                 bytes.extend_from_slice(&rand_vec.as_slice()[..24]);
                 bytes.extend_from_slice(&[0u8; 8]);
             }
+            _ => self.random.encode(bytes),
         }
 
         self.session_id.encode(bytes);
@@ -3005,6 +3069,8 @@ pub(crate) enum Encoding {
     Standard,
     /// Encoding for ECH confirmation.
     EchConfirmation,
+    /// Encoding for ECH inner client hello.
+    EchInnerHello { to_compress: Vec<ExtensionType> },
 }
 
 fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>(iter: I) -> bool {
