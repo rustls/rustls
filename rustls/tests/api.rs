@@ -4392,7 +4392,7 @@ mod test_quic {
         let random = Random::from(random);
 
         let rng = ring::rand::SystemRandom::new();
-        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::X25519, &rng)
+        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::ECDH_P256, &rng)
             .unwrap()
             .compute_public_key()
             .unwrap();
@@ -4407,10 +4407,10 @@ mod test_quic {
                 compression_methods: vec![Compression::Null],
                 extensions: vec![
                     ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
-                    ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
+                    ClientExtension::NamedGroups(vec![NamedGroup::secp256r1]),
                     ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
                     ClientExtension::KeyShare(vec![KeyShareEntry::new(
-                        NamedGroup::X25519,
+                        NamedGroup::secp256r1,
                         kx.as_ref(),
                     )]),
                 ],
@@ -4996,10 +4996,10 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     // common to both client configs
     let shared_storage = Arc::new(ClientStorage::new());
 
-    // first, client sends a x25519 and server agrees. x25519 is inserted
+    // first, client sends a secp-256 share and server agrees. secp-256 is inserted
     //   into kx group cache.
     let mut client_config_1 =
-        make_client_config_with_kx_groups(KeyType::Rsa2048, vec![provider::kx_group::X25519]);
+        make_client_config_with_kx_groups(KeyType::Rsa2048, vec![provider::kx_group::SECP256R1]);
     client_config_1.resumption = Resumption::store(shared_storage.clone());
 
     // second, client only supports secp-384 and so kx group cache
@@ -5019,7 +5019,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     assert_eq!(ops.len(), 9);
     assert!(matches!(
         ops[3],
-        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::X25519)
+        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::secp256r1)
     ));
 
     // second handshake
@@ -5032,7 +5032,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     assert!(matches!(ops[9], ClientStorageOp::TakeTls13Ticket(_, true)));
     assert!(matches!(
         ops[10],
-        ClientStorageOp::GetKxHint(_, Some(rustls::NamedGroup::X25519))
+        ClientStorageOp::GetKxHint(_, Some(rustls::NamedGroup::secp256r1))
     ));
     assert!(matches!(
         ops[11],
@@ -5063,7 +5063,8 @@ fn test_client_sends_share_for_less_preferred_group() {
     );
     client_config_2.resumption = Resumption::store(shared_storage.clone());
 
-    let server_config = make_server_config(KeyType::Rsa2048);
+    let server_config =
+        make_server_config_with_kx_groups(KeyType::Rsa2048, provider::ALL_KX_GROUPS.to_vec());
 
     // first handshake
     let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
@@ -5632,11 +5633,20 @@ fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
         Altered::InPlace
     }
 
-    let client_config = client_config_builder_with_versions(&[&rustls::version::TLS12])
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(MockServerVerifier::accepts_anything()))
-        .with_no_client_auth();
-    let server_config = make_server_config(KeyType::EcdsaP256);
+    let kx_groups = provider::ALL_KX_GROUPS;
+    let client_config = ClientConfig::builder_with_provider(
+        CryptoProvider {
+            kx_groups: kx_groups.to_vec(),
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .with_protocol_versions(&[&rustls::version::TLS12])
+    .unwrap()
+    .dangerous()
+    .with_custom_certificate_verifier(Arc::new(MockServerVerifier::accepts_anything()))
+    .with_no_client_auth();
+    let server_config = make_server_config_with_kx_groups(KeyType::EcdsaP256, kx_groups.to_vec());
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     transfer(&mut client, &mut server);
     server.process_new_packets().unwrap();
