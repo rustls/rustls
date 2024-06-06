@@ -207,6 +207,11 @@ jobs:
         env:
           BOGO_SHIM_PROVIDER: aws-lc-rs
 
+      - name: Run test suite (aws-lc-rs-fips)
+        working-directory: bogo
+        run: ./runme
+        env:
+          BOGO_SHIM_PROVIDER: aws-lc-rs-fips
 
   fuzz:
     name: Smoke-test fuzzing targets

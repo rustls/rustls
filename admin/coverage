@@ -15,8 +15,7 @@ cargo test --locked $(admin/all-features-except zlib-rs rustls)
 cargo test --locked $(admin/all-features-except brotli rustls)
 
 ## bogo
-cargo test --locked --all-features run_bogo_tests_ring -- --ignored
-cargo test --locked --all-features run_bogo_tests_aws_lc_rs -- --ignored
+cargo test --locked --test bogo -- --ignored --test-threads 1
 
 ## provider tests
 cargo test --locked --package rustls-provider-test
