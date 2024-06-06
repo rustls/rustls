@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+#[cfg(feature = "std")]
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
