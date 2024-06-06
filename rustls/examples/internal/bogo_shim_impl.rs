@@ -809,6 +809,9 @@ fn handle_err(err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::OfferedDuplicateCertificateCompressions) => {
             quit(":ERROR_PARSING_EXTENSION:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedCipherSuite) => {
+            quit(":WRONG_CIPHER_RETURNED:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
