@@ -129,6 +129,12 @@
     "Client-VerifyDefault-ECDSA_P521_SHA512-TLS13": "",
     "Client-VerifyDefault-ECDSA_P521_SHA512-TLS12": "",
     "*-HintMismatch-*": "hints are a boringssl-specific feature",
+#if defined(AWS_LC_RS) && defined(FIPS)
+    "Compliance-fips-202205-TLS-Client-ECDSA_P521_SHA512": "these algorithms are fips approved in aws-lc-rs",
+    "Compliance-fips-202205-TLS-Server-ECDSA_P521_SHA512": "",
+    "Compliance-fips-202205-TLS-Client-Ed25519": "",
+    "Compliance-fips-202205-TLS-Server-Ed25519": "",
+#endif
     "*-QUIC-*" :"",
     "QUIC-*": "",
     "*-QUIC": ""

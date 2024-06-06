@@ -87,6 +87,7 @@ struct Options {
     expect_handshake_kind: Option<Vec<HandshakeKind>>,
     expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
     install_cert_compression_algs: CompressionAlgs,
+    provider: CryptoProvider,
 }
 
 impl Options {
@@ -140,6 +141,7 @@ impl Options {
             expect_handshake_kind: None,
             expect_handshake_kind_resumed: Some(vec![HandshakeKind::Resumed]),
             install_cert_compression_algs: CompressionAlgs::None,
+            provider: default_provider(),
         }
     }
 
@@ -168,6 +170,16 @@ impl Options {
             versions.push(&version::TLS13);
         }
         versions
+    }
+}
+
+fn default_provider() -> CryptoProvider {
+    // ensure all suites and kx groups are included (even in fips builds)
+    // as non-fips test cases require them
+    CryptoProvider {
+        kx_groups: provider::ALL_KX_GROUPS.to_vec(),
+        cipher_suites: provider::ALL_CIPHER_SUITES.to_vec(),
+        ..provider::default_provider()
     }
 }
 
@@ -522,13 +534,13 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
             .map(|curveid| lookup_kx_group(*curveid))
             .collect()
     } else {
-        provider::ALL_KX_GROUPS.to_vec()
+        opts.provider.kx_groups.clone()
     };
 
     let mut cfg = ServerConfig::builder_with_provider(
         CryptoProvider {
             kx_groups,
-            ..provider::default_provider()
+            ..opts.provider.clone()
         }
         .into(),
     )
@@ -669,13 +681,13 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
             .map(|curveid| lookup_kx_group(*curveid))
             .collect()
     } else {
-        provider::ALL_KX_GROUPS.to_vec()
+        opts.provider.kx_groups.clone()
     };
 
     let cfg = ClientConfig::builder_with_provider(
         CryptoProvider {
             kx_groups,
-            ..provider::default_provider()
+            ..opts.provider.clone()
         }
         .into(),
     )
@@ -1339,6 +1351,15 @@ pub fn main() {
             "-install-one-cert-compression-alg" => {
                 opts.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
             }
+            #[cfg(feature = "fips")]
+            "-fips-202205" => {
+                opts.provider = rustls::crypto::default_fips_provider();
+            }
+            #[cfg(not(feature = "fips"))]
+            "-fips-202205" => {
+                println!("Not a FIPS build");
+                process::exit(BOGO_NACK);
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -1403,7 +1424,6 @@ pub fn main() {
             "-no-rsa-pss-rsae-certs" |
             "-ignore-tls13-downgrade" |
             "-allow-hint-mismatch" |
-            "-fips-202205" |
             "-wpa-202304" |
             "-srtp-profiles" |
             "-permute-extensions" |

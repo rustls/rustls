@@ -14,6 +14,10 @@ case ${BOGO_SHIM_PROVIDER:-ring} in
       cargo build -p rustls --example bogo_shim $(../admin/all-features-except ring,fips rustls)
       cpp -P -DAWS_LC_RS config.json.in > config.json
       ;;
+  aws-lc-rs-fips)
+      cargo build -p rustls --example bogo_shim $(../admin/all-features-except ring rustls)
+      cpp -P -DAWS_LC_RS -DFIPS config.json.in > config.json
+      ;;
   existing)
       ;;
   *)
