@@ -101,7 +101,7 @@
 //! If you're already using Tokio for an async runtime you may prefer to use [`tokio-rustls`] instead
 //! of interacting with rustls directly.
 //!
-//! [examples]: examples/README.md
+//! [examples]: https://github.com/rustls/rustls/tree/main/examples
 //! [`tokio-rustls`]: https://github.com/rustls/tokio-rustls
 //!
 //! ### Rustls provides encrypted pipes
