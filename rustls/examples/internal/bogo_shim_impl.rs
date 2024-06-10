@@ -102,6 +102,7 @@ struct Options {
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
+    send_key_update: bool,
 }
 
 impl Options {
@@ -163,6 +164,7 @@ impl Options {
             on_resume_expect_ech_accept: false,
             on_initial_expect_ech_accept: false,
             enable_ech_grease: false,
+            send_key_update: false,
         }
     }
 
@@ -996,6 +998,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
     let mut conn = net::TcpStream::connect(&addrs[..]).expect("cannot connect");
     let mut sent_shutdown = false;
     let mut sent_exporter = false;
+    let mut sent_key_update = false;
     let mut quench_writes = false;
 
     conn.write_all(&opts.shim_id.to_le_bytes())
@@ -1075,6 +1078,11 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
                 .write_all(&export)
                 .unwrap();
             sent_exporter = true;
+        }
+
+        if opts.send_key_update && !sent_key_update && !sess.is_handshaking() {
+            sess.refresh_traffic_keys().unwrap();
+            sent_key_update = true;
         }
 
         if !sess.is_handshaking() && opts.only_write_one_byte_after_handshake && !sent_message {
@@ -1302,13 +1310,15 @@ pub fn main() {
             "-expect-no-session-id" |
             "-enable-ed25519" |
             "-on-resume-expect-no-offer-early-data" |
-            "-key-update" | //< we could implement an API for this
             "-expect-tls13-downgrade" |
             "-enable-signed-cert-timestamps" |
             "-expect-session-id" => {
                 println!("not checking {}; NYI", arg);
             }
 
+            "-key-update" => {
+                opts.send_key_update = true;
+            }
             "-expect-hrr" => {
                 opts.expect_handshake_kind = Some(vec![HandshakeKind::FullWithHelloRetryRequest]);
             }
