@@ -134,6 +134,16 @@ mod connection {
                 Self::Server(server) => server.set_buffer_limit(limit),
             }
         }
+
+        /// Sends a TLS1.3 `key_update` message to refresh a connection's keys
+        ///
+        /// See [`ConnectionCommon::refresh_traffic_keys()`] for more information.
+        pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+            match self {
+                Self::Client(client) => client.refresh_traffic_keys(),
+                Self::Server(server) => server.refresh_traffic_keys(),
+            }
+        }
     }
 
     impl Deref for Connection {
@@ -475,6 +485,39 @@ impl<Data> ConnectionCommon<Data> {
     pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.sendable_plaintext.set_limit(limit);
         self.sendable_tls.set_limit(limit);
+    }
+
+    /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
+    ///
+    /// This call refreshes our encryption keys. Once the peer receives the message,
+    /// it refreshes _its_ encryption and decryption keys and sends a response.
+    /// Once we receive that response, we refresh our decryption keys to match.
+    /// At the end of this process, keys in both directions have been refreshed.
+    ///
+    /// Note that this process does not happen synchronously: this call just
+    /// arranges that the `key_update` message will be included in the next
+    /// `write_tls` output.
+    ///
+    /// This fails with `Error::HandshakeNotComplete` if called before the initial
+    /// handshake is complete, or if a version prior to TLS1.3 is negotiated.
+    ///
+    /// # Usage advice
+    /// Note that other implementations (including rustls) may enforce limits on
+    /// the number of `key_update` messages allowed on a given connection to prevent
+    /// denial of service.  Therefore, this should be called sparingly.
+    ///
+    /// rustls implicitly and automatically refreshes traffic keys when needed
+    /// according to the selected cipher suite's cryptographic constraints.  There
+    /// is therefore no need to call this manually to avoid cryptographic keys
+    /// "wearing out".
+    ///
+    /// The main reason to call this manually is to roll keys when it is known
+    /// a connection will be idle for a long period.
+    pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+        match &mut self.core.state {
+            Ok(st) => st.send_key_update_request(&mut self.core.common_state),
+            Err(e) => Err(e.clone()),
+        }
     }
 }
 

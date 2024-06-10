@@ -798,6 +798,10 @@ pub(crate) trait State<Data>: Send + Sync {
         Err(Error::HandshakeNotComplete)
     }
 
+    fn send_key_update_request(&mut self, _common: &mut CommonState) -> Result<(), Error> {
+        Err(Error::HandshakeNotComplete)
+    }
+
     fn handle_decrypt_error(&self) {}
 
     fn into_owned(self: Box<Self>) -> Box<dyn State<Data> + 'static>;

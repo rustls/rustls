@@ -179,6 +179,13 @@ impl Message<'_> {
         }
     }
 
+    pub fn build_key_update_request() -> Self {
+        Self {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(HandshakeMessagePayload::build_key_update_request()),
+        }
+    }
+
     #[cfg(feature = "std")]
     pub(crate) fn into_owned(self) -> Message<'static> {
         let Self { version, payload } = self;
