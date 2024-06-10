@@ -7099,3 +7099,55 @@ fn test_illegal_client_renegotiation_attempt_during_tls12_handshake() {
         }
     );
 }
+
+#[test]
+fn test_refresh_traffic_keys_during_handshake() {
+    let (mut client, mut server) = make_pair(KeyType::Ed25519);
+    assert_eq!(
+        client
+            .refresh_traffic_keys()
+            .unwrap_err(),
+        Error::HandshakeNotComplete
+    );
+    assert_eq!(
+        server
+            .refresh_traffic_keys()
+            .unwrap_err(),
+        Error::HandshakeNotComplete
+    );
+}
+
+#[test]
+fn test_refresh_traffic_keys() {
+    let (mut client, mut server) = make_pair(KeyType::Ed25519);
+    do_handshake(&mut client, &mut server);
+
+    fn check_both_directions(client: &mut ClientConnection, server: &mut ServerConnection) {
+        client
+            .writer()
+            .write_all(b"to-server-1")
+            .unwrap();
+        server
+            .writer()
+            .write_all(b"to-client-1")
+            .unwrap();
+        transfer(client, server);
+        server.process_new_packets().unwrap();
+
+        transfer(server, client);
+        client.process_new_packets().unwrap();
+
+        let mut buf = [0u8; 16];
+        let len = server.reader().read(&mut buf).unwrap();
+        assert_eq!(&buf[..len], b"to-server-1");
+
+        let len = client.reader().read(&mut buf).unwrap();
+        assert_eq!(&buf[..len], b"to-client-1");
+    }
+
+    check_both_directions(&mut client, &mut server);
+    client.refresh_traffic_keys().unwrap();
+    check_both_directions(&mut client, &mut server);
+    server.refresh_traffic_keys().unwrap();
+    check_both_directions(&mut client, &mut server);
+}

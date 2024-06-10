@@ -496,6 +496,11 @@ impl KeyScheduleTraffic {
         self.ks.set_encrypter(&secret, common);
     }
 
+    pub(crate) fn update_encrypter(&mut self, common: &mut CommonState) {
+        let secret = self.next_application_traffic_secret(common.side);
+        self.ks.set_encrypter(&secret, common);
+    }
+
     pub(crate) fn update_decrypter(&mut self, common: &mut CommonState) {
         let secret = self.next_application_traffic_secret(common.side.peer());
         self.ks.set_decrypter(&secret, common);
