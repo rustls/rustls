@@ -96,8 +96,6 @@
     "DelegatedCredentials-*": "not implemented",
     "CECPQ2*": "no PQC experiments",
     "*CECPQ2*": "",
-    "KeyUpdate-FromClient": "not implemented (no API yet)",
-    "KeyUpdate-FromServer": "",
     "ExportTrafficSecrets-*": "",
     "*-InvalidSignature-*-SHA1-*": "no sha1",
     "NoCommonCurves": "nothing to fall back to",
