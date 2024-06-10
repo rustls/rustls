@@ -364,7 +364,14 @@ impl CommonState {
 
     // Put m into sendable_tls for writing.
     fn queue_tls_message(&mut self, m: OutboundOpaqueMessage) {
+        self.perhaps_write_key_update();
         self.sendable_tls.append(m.encode());
+    }
+
+    pub(crate) fn perhaps_write_key_update(&mut self) {
+        if let Some(message) = self.queued_key_update_message.take() {
+            self.sendable_tls.append(message);
+        }
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
@@ -703,12 +710,6 @@ impl CommonState {
         }
 
         self.send_plain_non_buffering(payload, limit)
-    }
-
-    pub(crate) fn perhaps_write_key_update(&mut self) {
-        if let Some(message) = self.queued_key_update_message.take() {
-            self.sendable_tls.append(message);
-        }
     }
 }
 
