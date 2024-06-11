@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use core::cmp::min;
 
 use crate::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
@@ -22,6 +23,7 @@ enum DirectionState {
 pub struct RecordLayer {
     message_encrypter: Box<dyn MessageEncrypter>,
     message_decrypter: Box<dyn MessageDecrypter>,
+    write_seq_max: u64,
     write_seq: u64,
     read_seq: u64,
     has_decrypted: bool,
@@ -40,6 +42,7 @@ impl RecordLayer {
         Self {
             message_encrypter: <dyn MessageEncrypter>::invalid(),
             message_decrypter: <dyn MessageDecrypter>::invalid(),
+            write_seq_max: 0,
             write_seq: 0,
             read_seq: 0,
             has_decrypted: false,
@@ -117,9 +120,14 @@ impl RecordLayer {
 
     /// Prepare to use the given `MessageEncrypter` for future message encryption.
     /// It is not used until you call `start_encrypting`.
-    pub(crate) fn prepare_message_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>) {
+    pub(crate) fn prepare_message_encrypter(
+        &mut self,
+        cipher: Box<dyn MessageEncrypter>,
+        max_messages: u64,
+    ) {
         self.message_encrypter = cipher;
         self.write_seq = 0;
+        self.write_seq_max = min(SEQ_SOFT_LIMIT, max_messages);
         self.encrypt_state = DirectionState::Prepared;
     }
 
@@ -147,8 +155,12 @@ impl RecordLayer {
 
     /// Set and start using the given `MessageEncrypter` for future outgoing
     /// message encryption.
-    pub(crate) fn set_message_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>) {
-        self.prepare_message_encrypter(cipher);
+    pub(crate) fn set_message_encrypter(
+        &mut self,
+        cipher: Box<dyn MessageEncrypter>,
+        max_messages: u64,
+    ) {
+        self.prepare_message_encrypter(cipher, max_messages);
         self.start_encrypting();
     }
 
@@ -187,7 +199,7 @@ impl RecordLayer {
     /// "the next message processed by `encrypt_outgoing`"
     pub(crate) fn pre_encrypt_action(&self, add: u64) -> PreEncryptAction {
         let value = self.write_seq.saturating_add(add);
-        if value == SEQ_SOFT_LIMIT {
+        if value == self.write_seq_max {
             PreEncryptAction::Close
         } else if value >= SEQ_HARD_LIMIT {
             PreEncryptAction::Refuse
