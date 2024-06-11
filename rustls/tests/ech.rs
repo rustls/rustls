@@ -2,11 +2,11 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::DnsName;
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::enums::{EchVersion, HpkeAead, HpkeKdf, HpkeKem};
-use rustls::internal::msgs::handshake::{EchConfig, HpkeKeyConfig, HpkeSymmetricCipherSuite};
+use rustls::internal::msgs::handshake::{EchConfigPayload, HpkeKeyConfig, HpkeSymmetricCipherSuite};
 
 #[test]
 fn test_decode_config_list() {
-    fn assert_config(config: &EchConfig, public_name: impl AsRef<[u8]>, max_len: u8) {
+    fn assert_config(config: &EchConfigPayload, public_name: impl AsRef<[u8]>, max_len: u8) {
         assert_eq!(config.version, EchVersion::V14);
         assert_eq!(config.contents.maximum_name_length, max_len);
         assert_eq!(
@@ -83,7 +83,7 @@ fn test_echconfig_serialization() {
     assert_round_trip_eq(BASE64_ECHCONFIG_LIST_CF);
 }
 
-fn get_ech_config(s: &str) -> Vec<EchConfig> {
+fn get_ech_config(s: &str) -> Vec<EchConfigPayload> {
     let bytes = BASE64_STANDARD.decode(s).unwrap();
     Vec::<_>::read(&mut Reader::init(&bytes)).unwrap()
 }

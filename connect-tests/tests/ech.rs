@@ -5,7 +5,7 @@ mod ech_config {
     use hickory_resolver::Resolver;
     use rustls::internal::msgs::codec::{Codec, Reader};
     use rustls::internal::msgs::enums::EchVersion;
-    use rustls::internal::msgs::handshake::EchConfig;
+    use rustls::internal::msgs::handshake::EchConfigPayload;
 
     #[test]
     fn cloudflare() {
@@ -27,7 +27,7 @@ mod ech_config {
         let resolver =
             Resolver::new(ResolverConfig::google_https(), ResolverOpts::default()).unwrap();
         let raw_value = lookup_ech(&resolver, domain);
-        let parsed_config = EchConfig::read(&mut Reader::init(&raw_value))
+        let parsed_config = EchConfigPayload::read(&mut Reader::init(&raw_value))
             .expect("failed to deserialize ECH config");
         assert_eq!(parsed_config.version, EchVersion::V14);
     }
