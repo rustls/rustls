@@ -5,6 +5,7 @@ use std::io;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
+use once_cell::sync::OnceCell;
 use pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName, UnixTime,
 };
@@ -1039,4 +1040,31 @@ impl RawTls {
 
         f(msg);
     }
+}
+
+pub fn tls13_aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
+    const CONFIDENTIALITY_LIMIT: u64 = 1024;
+
+    // needed to extend lifetime of Tls13CipherSuite to 'static
+    static LIMITED_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
+
+    let limited = LIMITED_SUITE.get_or_init(|| {
+        let tls13 = provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+            .tls13()
+            .unwrap();
+
+        rustls::Tls13CipherSuite {
+            common: rustls::crypto::CipherSuiteCommon {
+                confidentiality_limit: CONFIDENTIALITY_LIMIT,
+                ..tls13.common
+            },
+            ..*tls13
+        }
+    });
+
+    CryptoProvider {
+        cipher_suites: vec![SupportedCipherSuite::Tls13(limited)],
+        ..provider::default_provider()
+    }
+    .into()
 }

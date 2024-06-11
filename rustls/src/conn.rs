@@ -312,10 +312,12 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 
     impl<T> PlaintextSink for ConnectionCommon<T> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            Ok(self
+            let len = self
                 .core
                 .common_state
-                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext))
+                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext);
+            self.core.maybe_refresh_traffic_keys();
+            Ok(len)
         }
 
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
@@ -332,10 +334,12 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
                     OutboundChunks::new(&payload_owner)
                 }
             };
-            Ok(self
+            let len = self
                 .core
                 .common_state
-                .buffer_plaintext(payload, &mut self.sendable_plaintext))
+                .buffer_plaintext(payload, &mut self.sendable_plaintext);
+            self.core.maybe_refresh_traffic_keys();
+            Ok(len)
         }
 
         fn flush(&mut self) -> io::Result<()> {
@@ -514,10 +518,7 @@ impl<Data> ConnectionCommon<Data> {
     /// The main reason to call this manually is to roll keys when it is known
     /// a connection will be idle for a long period.
     pub fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
-        match &mut self.core.state {
-            Ok(st) => st.send_key_update_request(&mut self.core.common_state),
-            Err(e) => Err(e.clone()),
-        }
+        self.core.refresh_traffic_keys()
     }
 }
 
@@ -972,6 +973,25 @@ impl<Data> ConnectionCore<Data> {
             Ok(st) => st
                 .export_keying_material(output.as_mut(), label, context)
                 .map(|_| output),
+            Err(e) => Err(e.clone()),
+        }
+    }
+
+    /// Trigger a `refresh_traffic_keys` if required by `CommonState`.
+    fn maybe_refresh_traffic_keys(&mut self) {
+        if self
+            .common_state
+            .refresh_traffic_keys_pending
+            .take()
+            .is_some()
+        {
+            let _ = self.refresh_traffic_keys();
+        }
+    }
+
+    fn refresh_traffic_keys(&mut self) -> Result<(), Error> {
+        match &mut self.state {
+            Ok(st) => st.send_key_update_request(&mut self.common_state),
             Err(e) => Err(e.clone()),
         }
     }
