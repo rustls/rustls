@@ -213,13 +213,20 @@ impl CommonState {
                 payload.clone(),
             );
 
-        let remaining_encryptions = self
-            .record_layer
-            .remaining_write_seq()
-            .ok_or(EncryptError::EncryptExhausted)?;
-
-        if fragments.len() as u64 > remaining_encryptions.get() {
-            return Err(EncryptError::EncryptExhausted);
+        for f in 0..fragments.len() {
+            match self
+                .record_layer
+                .pre_encrypt_action(f as u64)
+            {
+                record_layer::PreEncryptAction::Nothing => {}
+                record_layer::PreEncryptAction::Close => {
+                    self.eager_send_close_notify(outgoing_tls)?;
+                    return Err(EncryptError::EncryptExhausted);
+                }
+                record_layer::PreEncryptAction::Refuse => {
+                    return Err(EncryptError::EncryptExhausted);
+                }
+            }
         }
 
         self.check_required_size(
@@ -298,20 +305,25 @@ impl CommonState {
     }
 
     fn send_single_fragment(&mut self, m: OutboundPlainMessage) {
-        // Close connection once we start to run out of
-        // sequence space.
-        if self
+        match self
             .record_layer
-            .wants_close_before_encrypt()
+            .next_pre_encrypt_action()
         {
-            self.send_close_notify();
-        }
+            record_layer::PreEncryptAction::Nothing => {}
 
-        // Refuse to wrap counter at all costs.  This
-        // is basically untestable unfortunately.
-        if self.record_layer.encrypt_exhausted() {
-            return;
-        }
+            // Close connection once we start to run out of
+            // sequence space.
+            record_layer::PreEncryptAction::Close => {
+                self.send_close_notify();
+                return;
+            }
+
+            // Refuse to wrap counter at all costs.  This
+            // is basically untestable unfortunately.
+            record_layer::PreEncryptAction::Refuse => {
+                return;
+            }
+        };
 
         let em = self.record_layer.encrypt_outgoing(m);
         self.queue_tls_message(em);
