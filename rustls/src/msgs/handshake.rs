@@ -2690,12 +2690,12 @@ impl Codec<'_> for EchConfigContents {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct EchConfig {
+pub struct EchConfigPayload {
     pub version: EchVersion,
     pub contents: EchConfigContents,
 }
 
-impl Codec<'_> for EchConfig {
+impl Codec<'_> for EchConfigPayload {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.version.encode(bytes);
         let mut contents = Vec::with_capacity(128);
@@ -2716,7 +2716,7 @@ impl Codec<'_> for EchConfig {
     }
 }
 
-impl TlsListElement for EchConfig {
+impl TlsListElement for EchConfigPayload {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
