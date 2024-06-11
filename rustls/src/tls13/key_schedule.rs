@@ -602,7 +602,10 @@ impl KeySchedule {
 
         common
             .record_layer
-            .set_message_encrypter(self.suite.aead_alg.encrypter(key, iv));
+            .set_message_encrypter(
+                self.suite.aead_alg.encrypter(key, iv),
+                self.suite.common.confidentiality_limit,
+            );
     }
 
     fn set_decrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
