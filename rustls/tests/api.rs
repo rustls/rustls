@@ -7151,3 +7151,76 @@ fn test_refresh_traffic_keys() {
     server.refresh_traffic_keys().unwrap();
     check_both_directions(&mut client, &mut server);
 }
+
+#[test]
+fn test_automatic_refresh_traffic_keys() {
+    const fn encrypted_size(body: usize) -> usize {
+        let padding = 1;
+        let header = 5;
+        let tag = 16;
+        header + body + padding + tag
+    }
+
+    const KEY_UPDATE_SIZE: usize = encrypted_size(5);
+    const CONFIDENTIALITY_LIMIT: u64 = 1024;
+    let provider = tls13_aes_128_gcm_with_1024_confidentiality_limit();
+
+    let client_config = finish_client_config(
+        KeyType::Ed25519,
+        ClientConfig::builder_with_provider(provider.clone())
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    );
+    let server_config = finish_server_config(
+        KeyType::Ed25519,
+        ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    );
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    for i in 0..(CONFIDENTIALITY_LIMIT + 16) {
+        let message = format!("{i:08}");
+        client
+            .writer()
+            .write_all(message.as_bytes())
+            .unwrap();
+        let transferred = transfer(&mut client, &mut server);
+        println!(
+            "{}: {} -> {:?}",
+            i,
+            transferred,
+            server.process_new_packets().unwrap()
+        );
+
+        // at CONFIDENTIALITY_LIMIT messages, we also have a key_update message sent
+        assert_eq!(
+            transferred,
+            match i {
+                CONFIDENTIALITY_LIMIT => KEY_UPDATE_SIZE + encrypted_size(message.len()),
+                _ => encrypted_size(message.len()),
+            }
+        );
+
+        let mut buf = [0u8; 32];
+        let recvd = server.reader().read(&mut buf).unwrap();
+        assert_eq!(&buf[..recvd], message.as_bytes());
+    }
+
+    // finally, server writes and pumps its key_update response
+    let message = b"finished";
+    server
+        .writer()
+        .write_all(message)
+        .unwrap();
+    let transferred = transfer(&mut server, &mut client);
+
+    println!(
+        "F: {} -> {:?}",
+        transferred,
+        client.process_new_packets().unwrap()
+    );
+    assert_eq!(transferred, KEY_UPDATE_SIZE + encrypted_size(message.len()));
+}

@@ -200,7 +200,7 @@ impl RecordLayer {
     pub(crate) fn pre_encrypt_action(&self, add: u64) -> PreEncryptAction {
         let value = self.write_seq.saturating_add(add);
         if value == self.write_seq_max {
-            PreEncryptAction::Close
+            PreEncryptAction::RefreshOrClose
         } else if value >= SEQ_HARD_LIMIT {
             PreEncryptAction::Refuse
         } else {
@@ -259,8 +259,11 @@ pub(crate) enum PreEncryptAction {
     /// No action is needed before calling `encrypt_outgoing`
     Nothing,
 
-    /// A `close_notify` alert should be sent ASAP
-    Close,
+    /// A `key_update` request should be sent ASAP.
+    ///
+    /// If that is not possible (for example, the connection is TLS1.2), a `close_notify`
+    /// alert should be sent instead.
+    RefreshOrClose,
 
     /// Do not call `encrypt_outgoing` further, it will panic rather than
     /// over-use the key.

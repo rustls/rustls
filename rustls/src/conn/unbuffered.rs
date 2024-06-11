@@ -400,6 +400,9 @@ impl<Data> WriteTraffic<'_, Data> {
     ) -> Result<usize, EncryptError> {
         self.conn
             .core
+            .maybe_refresh_traffic_keys();
+        self.conn
+            .core
             .common_state
             .write_plaintext(application_data.into(), outgoing_tls)
     }

@@ -51,6 +51,7 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
     pub(crate) enable_secret_extraction: bool,
     temper_counters: TemperCounters,
+    pub(crate) refresh_traffic_keys_pending: Option<()>,
 }
 
 impl CommonState {
@@ -79,6 +80,7 @@ impl CommonState {
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
             temper_counters: TemperCounters::default(),
+            refresh_traffic_keys_pending: None,
         }
     }
 
@@ -219,10 +221,16 @@ impl CommonState {
                 .pre_encrypt_action(f as u64)
             {
                 record_layer::PreEncryptAction::Nothing => {}
-                record_layer::PreEncryptAction::Close => {
-                    self.eager_send_close_notify(outgoing_tls)?;
-                    return Err(EncryptError::EncryptExhausted);
-                }
+                record_layer::PreEncryptAction::RefreshOrClose => match self.negotiated_version {
+                    Some(ProtocolVersion::TLSv1_3) => {
+                        // driven by caller, as we don't have the `State` here
+                        self.refresh_traffic_keys_pending = Some(());
+                    }
+                    _ => {
+                        self.eager_send_close_notify(outgoing_tls)?;
+                        return Err(EncryptError::EncryptExhausted);
+                    }
+                },
                 record_layer::PreEncryptAction::Refuse => {
                     return Err(EncryptError::EncryptExhausted);
                 }
@@ -313,9 +321,17 @@ impl CommonState {
 
             // Close connection once we start to run out of
             // sequence space.
-            record_layer::PreEncryptAction::Close => {
-                self.send_close_notify();
-                return;
+            record_layer::PreEncryptAction::RefreshOrClose => {
+                match self.negotiated_version {
+                    Some(ProtocolVersion::TLSv1_3) => {
+                        // driven by caller, as we don't have the `State` here
+                        self.refresh_traffic_keys_pending = Some(());
+                    }
+                    _ => {
+                        self.send_close_notify();
+                        return;
+                    }
+                }
             }
 
             // Refuse to wrap counter at all costs.  This
