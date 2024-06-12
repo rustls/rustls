@@ -608,10 +608,10 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use crate::client::EchStatus;
     use pki_types::ServerName;
 
     use super::ClientConnectionData;
+    use crate::client::EchStatus;
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
