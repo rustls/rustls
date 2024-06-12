@@ -27,9 +27,25 @@ pub struct CipherSuiteCommon {
     /// from an ideal pseudorandom permutation (PRP).
     ///
     /// This is to be set on the assumption that messages are maximally sized --
-    /// at least 2 ** 14 bytes. It **does not** consider confidentiality limits for
+    /// each is 2<sup>14</sup> bytes. It **does not** consider confidentiality limits for
     /// QUIC connections - see the [`quic::KeyBuilder.confidentiality_limit`] field for
     /// this context.
+    ///
+    /// For AES-GCM implementations, this should be set to 2<sup>24</sup> to limit attack
+    /// probability to one in 2<sup>60</sup>.  See [AEBounds] (Table 1) and [draft-irtf-aead-limits-08]:
+    ///
+    /// ```python
+    /// >>> p = 2 ** -60
+    /// >>> L = (2 ** 14 // 16) + 1
+    /// >>> qlim = (math.sqrt(p) * (2 ** (129 // 2)) - 1) / (L + 1)
+    /// >>> print(int(qlim).bit_length())
+    /// 24
+    /// ```
+    /// [AEBounds]: https://eprint.iacr.org/2024/051.pdf
+    /// [draft-irtf-aead-limits-08]: https://www.ietf.org/archive/id/draft-irtf-cfrg-aead-limits-08.html#section-5.1.1
+    ///
+    /// For chacha20-poly1305 implementations, this should be set to `u64::MAX`:
+    /// see <https://www.ietf.org/archive/id/draft-irtf-cfrg-aead-limits-08.html#section-5.2.1>
     pub confidentiality_limit: u64,
 }
 
