@@ -4,12 +4,6 @@
 
 Specific features, in rough order of priority:
 
-* **Support Encrypted Client Hello (Client Side)**.
-  Encrypted Client Hello is an upcoming standard from the TLS WG providing better
-  protection for some of the data sent by a client in the initial Client Hello
-  message.
-  rustls/rustls#1718
-
 * **Enforce Confidentiality / Integrity Limits**.
   The QUIC use of TLS mandates limited usage of AEAD keys. While TLS 1.3 and 1.2
   do not require this, the same kinds of issues can apply here, and we should
@@ -39,6 +33,14 @@ General priorities:
   Continue to improve the Rustls API. Aim for ease of use, clarity.
 
 ## Past priorities
+
+Delivered in 0.23.10:
+
+* **Support Encrypted Client Hello (Client Side)**.
+  Encrypted Client Hello is an upcoming standard from the TLS WG providing better
+  protection for some of the data sent by a client in the initial Client Hello
+  message.
+  rustls/rustls#1718
 
 Delivered in 0.23.9:
 
