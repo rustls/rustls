@@ -168,6 +168,9 @@ Usage:
   ech-client (--version | -v)
   ech-client (--help | -h)
 
+Example:
+  ech-client --host defo.ie defo.ie www.defo.ie
+
 Options:
     -p, --port PORT       Connect to PORT [default: 443].
     --cafile CAFILE       Read root certificates from CAFILE.
