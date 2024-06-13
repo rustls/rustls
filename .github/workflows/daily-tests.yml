@@ -115,6 +115,11 @@ jobs:
       - name: Check server acceptor
         run: cargo run --locked --bin server_acceptor -- --help
 
+      - name: Check ech-client
+        run: >
+          cargo run --locked --bin ech-client -- --host defo.ie defo.ie www.defo.ie | 
+            grep 'SSL_ECH_STATUS: success'
+
       - name: Check provider-example client
         run: cargo run --locked -p rustls-provider-example --example client
 
