@@ -26,6 +26,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
 use docopt::Docopt;
+use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
@@ -115,7 +116,7 @@ fn main() {
         .unwrap();
 
     for i in 0..args.flag_num_reqs {
-        println!("\nRequest {}", i);
+        trace!("\nRequest {} of {}", i + 1, args.flag_num_reqs);
         let mut conn = rustls::ClientConnection::new(config.clone(), server_name.clone()).unwrap();
         // The "outer" server that we're connecting to.
         let sock_addr = (
