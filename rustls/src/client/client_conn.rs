@@ -135,10 +135,11 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// These must be created via the [`ClientConfig::builder()`] or [`ClientConfig::builder_with_provider()`]
 /// function.
 ///
-/// Note that using [`ClientConfig::with_ech]` will produce a common configuration specific to
-/// the provided [`crate::client::EchConfig`] that may not be appropriate for all connections made
-/// by the program. In this case the configuration should only be shared by connections intended
-/// for domains that offer the provided [`crate::client::EchConfig`] in their DNS zone.
+/// Note that using [`ConfigBuilder<ClientConfig, WantsVersions>::with_ech()`] will produce a common
+/// configuration specific to the provided [`crate::client::EchConfig`] that may not be appropriate
+/// for all connections made by the program. In this case the configuration should only be shared
+/// by connections intended for domains that offer the provided [`crate::client::EchConfig`] in
+/// their DNS zone.
 ///
 /// # Defaults
 ///
