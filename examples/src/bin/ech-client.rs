@@ -6,7 +6,7 @@
 //!
 //! Example usage:
 //! ```
-//! cargo run --package rustls-provider-example --example ech-client -- --host defo.ie defo.ie www.defo.ie
+//! cargo run --package rustls-examples --bin ech-client -- --host defo.ie defo.ie www.defo.ie
 //! ```
 //!
 //! This will perform a DNS-over-HTTPS lookup for the defo.ie ECH config, using it to determine
