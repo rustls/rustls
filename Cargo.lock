@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.9"
+version = "0.23.10"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
@@ -2217,7 +2217,7 @@ dependencies = [
  "fxhash",
  "itertools 0.13.0",
  "rayon",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "tikv-jemallocator",
@@ -2229,7 +2229,7 @@ version = "0.0.1"
 dependencies = [
  "regex",
  "ring 0.17.8",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "trust-dns-resolver",
 ]
 
@@ -2243,7 +2243,7 @@ dependencies = [
  "log",
  "mio",
  "rcgen",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "serde",
@@ -2262,7 +2262,7 @@ dependencies = [
  "num-bigint",
  "once_cell",
  "openssl",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
 ]
@@ -2298,7 +2298,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "env_logger",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "webpki-roots 0.26.2",
 ]
 
@@ -2319,7 +2319,7 @@ dependencies = [
  "rand_core",
  "rcgen",
  "rsa",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-pki-types",
  "rustls-webpki",
  "sha2",
@@ -2333,7 +2333,7 @@ name = "rustls-provider-test"
 version = "0.1.0"
 dependencies = [
  "hex",
- "rustls 0.23.9",
+ "rustls 0.23.10",
  "rustls-provider-example",
  "serde",
  "serde_json",
