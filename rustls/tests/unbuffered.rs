@@ -633,6 +633,84 @@ fn refresh_traffic_keys_manually() {
     };
 }
 
+#[test]
+fn refresh_traffic_keys_automatically() {
+    const fn encrypted_size(body: usize) -> usize {
+        let padding = 1;
+        let header = 5;
+        let tag = 16;
+        header + body + padding + tag
+    }
+
+    const KEY_UPDATE_SIZE: usize = encrypted_size(5);
+    const CONFIDENTIALITY_LIMIT: usize = 1024;
+    const CONFIDENTIALITY_LIMIT_PLUS_ONE: usize = CONFIDENTIALITY_LIMIT + 1;
+
+    let client_config = finish_client_config(
+        KeyType::Rsa2048,
+        ClientConfig::builder_with_provider(tls13_aes_128_gcm_with_1024_confidentiality_limit())
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    );
+
+    let server_config = make_server_config(KeyType::Rsa2048);
+    let mut outcome = run(
+        Arc::new(client_config),
+        &mut NO_ACTIONS.clone(),
+        Arc::new(server_config),
+        &mut NO_ACTIONS.clone(),
+    );
+    let mut server = outcome.server.take().unwrap();
+    let mut client = outcome.client.take().unwrap();
+
+    match client.process_tls_records(&mut []) {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::WriteTraffic(mut wt)),
+        } => {
+            // Must happen on a single `WriteTraffic` instance, to
+            // validate that handshake messages are included
+            // in the TLS records returned by `WriteTraffic::encrypt`
+            for i in 0..(CONFIDENTIALITY_LIMIT + 16) {
+                let message = format!("{i:08}");
+
+                let mut buffer = [0u8; 64];
+                let used = wt
+                    .encrypt(message.as_bytes(), &mut buffer)
+                    .unwrap();
+
+                assert_eq!(
+                    used,
+                    match i {
+                        // The key_update message triggered by write N appears in write N+1
+                        CONFIDENTIALITY_LIMIT_PLUS_ONE =>
+                            KEY_UPDATE_SIZE + encrypted_size(message.len()),
+                        _ => encrypted_size(message.len()),
+                    }
+                );
+
+                match server.process_tls_records(&mut buffer[..used]) {
+                    UnbufferedStatus {
+                        discard: actual_used,
+                        state: Ok(ConnectionState::ReadTraffic(mut rt)),
+                    } => {
+                        assert_eq!(used, actual_used);
+                        let record = rt.next_record().unwrap().unwrap();
+                        assert_eq!(record.payload, message.as_bytes());
+                    }
+                    st => {
+                        panic!("unexpected server state {st:?}");
+                    }
+                };
+                println!("{i}: wrote {used}");
+            }
+        }
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+}
+
 fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
     status: UnbufferedStatus<'_, '_, T>,
     mut f: F,
