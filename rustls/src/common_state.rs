@@ -237,12 +237,9 @@ impl CommonState {
             }
         }
 
-        self.check_required_size(
-            outgoing_tls,
-            self.queued_key_update_message
-                .as_deref(),
-            fragments,
-        )?;
+        self.perhaps_write_key_update();
+
+        self.check_required_size(outgoing_tls, fragments)?;
 
         let fragments = self
             .message_fragmenter
@@ -252,10 +249,7 @@ impl CommonState {
                 payload,
             );
 
-        let opt_msg = self.queued_key_update_message.take();
-        let written = self.write_fragments(outgoing_tls, opt_msg, fragments);
-
-        Ok(written)
+        Ok(self.write_fragments(outgoing_tls, fragments))
     }
 
     // Changing the keys must not span any fragmented handshake
@@ -548,7 +542,7 @@ impl CommonState {
             .message_fragmenter
             .fragment_message(&m);
 
-        self.check_required_size(outgoing_tls, None, iter)?;
+        self.check_required_size(outgoing_tls, iter)?;
 
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
 
@@ -556,7 +550,7 @@ impl CommonState {
             .message_fragmenter
             .fragment_message(&m);
 
-        let written = self.write_fragments(outgoing_tls, None, iter);
+        let written = self.write_fragments(outgoing_tls, iter);
 
         Ok(written)
     }
@@ -569,13 +563,9 @@ impl CommonState {
     fn check_required_size<'a>(
         &self,
         outgoing_tls: &mut [u8],
-        opt_msg: Option<&[u8]>,
         fragments: impl Iterator<Item = OutboundPlainMessage<'a>>,
     ) -> Result<(), EncryptError> {
-        let mut required_size = 0;
-        if let Some(message) = opt_msg {
-            required_size += message.len();
-        }
+        let mut required_size = self.sendable_tls.len();
 
         for m in fragments {
             required_size += m.encoded_len(&self.record_layer);
@@ -593,12 +583,13 @@ impl CommonState {
     fn write_fragments<'a>(
         &mut self,
         outgoing_tls: &mut [u8],
-        opt_msg: Option<Vec<u8>>,
         fragments: impl Iterator<Item = OutboundPlainMessage<'a>>,
     ) -> usize {
         let mut written = 0;
 
-        if let Some(message) = opt_msg {
+        // Any pre-existing encrypted messages in `sendable_tls` must
+        // be output before encrypting any of the `fragments`.
+        while let Some(message) = self.sendable_tls.pop() {
             let len = message.len();
             outgoing_tls[written..written + len].copy_from_slice(&message);
             written += len;
