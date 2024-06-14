@@ -10,7 +10,7 @@ use rustls::unbuffered::{
     UnbufferedStatus, WriteTraffic,
 };
 use rustls::version::TLS13;
-use rustls::{ClientConfig, ServerConfig, SideData};
+use rustls::{ClientConfig, Error, ServerConfig, SideData};
 
 use super::*;
 
@@ -508,6 +508,129 @@ fn queue_close_notify_is_idempotent() {
 
     assert!(len_first.unwrap() > 0);
     assert_eq!(len_second.unwrap(), 0);
+}
+
+#[test]
+fn refresh_traffic_keys_on_tls12_connection() {
+    let mut outcome = handshake(&rustls::version::TLS12);
+    let mut client = outcome.client.take().unwrap();
+
+    match client.process_tls_records(&mut []) {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::WriteTraffic(wt)),
+        } => {
+            assert_eq!(
+                wt.refresh_traffic_keys().unwrap_err(),
+                Error::HandshakeNotComplete,
+            );
+        }
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+}
+
+#[test]
+fn refresh_traffic_keys_manually() {
+    let mut outcome = handshake(&rustls::version::TLS13);
+    let mut client = outcome.client.take().unwrap();
+    let mut server = outcome.server.take().unwrap();
+
+    match client.process_tls_records(&mut []) {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::WriteTraffic(wt)),
+        } => {
+            wt.refresh_traffic_keys().unwrap();
+        }
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+
+    let mut buffer = [0u8; 64];
+    let used = match client.process_tls_records(&mut []) {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::EncodeTlsData(mut etd)),
+        } => {
+            println!("EncodeTlsData");
+            etd.encode(&mut buffer).unwrap()
+        }
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+
+    match client.process_tls_records(&mut []) {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::TransmitTlsData(ttd)),
+        } => {
+            ttd.done();
+        }
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+
+    println!("server WriteTraffic");
+    let used = match server.process_tls_records(&mut buffer[..used]) {
+        UnbufferedStatus {
+            discard: actual_used,
+            state: Ok(ConnectionState::WriteTraffic(mut wt)),
+        } => {
+            assert_eq!(used, actual_used);
+            wt.encrypt(b"hello", &mut buffer)
+                .unwrap()
+        }
+        st => {
+            panic!("unexpected server state {st:?}");
+        }
+    };
+
+    println!("client recv");
+    match client.process_tls_records(&mut buffer[..used]) {
+        UnbufferedStatus {
+            discard: actual_used,
+            state: Ok(ConnectionState::ReadTraffic(mut rt)),
+        } => {
+            assert_eq!(used, actual_used);
+            let app_data = rt.next_record().unwrap().unwrap();
+            assert_eq!(app_data.payload, b"hello");
+        }
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+
+    println!("client reply");
+    let used = match client.process_tls_records(&mut []) {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::WriteTraffic(mut wt)),
+        } => wt
+            .encrypt(b"world", &mut buffer)
+            .unwrap(),
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+
+    match server.process_tls_records(&mut buffer[..used]) {
+        UnbufferedStatus {
+            discard: actual_used,
+            state: Ok(ConnectionState::ReadTraffic(mut rt)),
+        } => {
+            assert_eq!(used, actual_used);
+            let app_data = rt.next_record().unwrap().unwrap();
+            assert_eq!(app_data.payload, b"world");
+        }
+        st => {
+            panic!("unexpected server state {st:?}");
+        }
+    };
 }
 
 fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(

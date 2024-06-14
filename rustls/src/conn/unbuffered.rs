@@ -417,6 +417,21 @@ impl<Data> WriteTraffic<'_, Data> {
             .common_state
             .eager_send_close_notify(outgoing_tls)
     }
+
+    /// Arranges for a TLS1.3 `key_update` to be sent.
+    ///
+    /// This consumes the `WriteTraffic` state:  to actually send the message,
+    /// call [`UnbufferedConnectionCommon::process_tls_records`] again which will
+    /// return a `ConnectionState::EncodeTlsData` that emits the `key_update`
+    /// message.
+    ///
+    /// See [`ConnectionCommon::refresh_traffic_keys()`] for full documentation,
+    /// including why you might call this and in what circumstances it will fail.
+    ///
+    /// [`ConnectionCommon::refresh_traffic_keys()`]: crate::ConnectionCommon::refresh_traffic_keys
+    pub fn refresh_traffic_keys(self) -> Result<(), Error> {
+        self.conn.core.refresh_traffic_keys()
+    }
 }
 
 /// A handshake record must be encoded
