@@ -534,25 +534,9 @@ impl CommonState {
         &mut self,
         outgoing_tls: &mut [u8],
     ) -> Result<usize, EncryptError> {
-        debug_assert!(self.record_layer.is_encrypting());
-
-        let m = Message::build_alert(AlertLevel::Warning, AlertDescription::CloseNotify).into();
-
-        let iter = self
-            .message_fragmenter
-            .fragment_message(&m);
-
-        self.check_required_size(outgoing_tls, iter)?;
-
-        debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-
-        let iter = self
-            .message_fragmenter
-            .fragment_message(&m);
-
-        let written = self.write_fragments(outgoing_tls, iter);
-
-        Ok(written)
+        self.send_close_notify();
+        self.check_required_size(outgoing_tls, [].into_iter())?;
+        Ok(self.write_fragments(outgoing_tls, [].into_iter()))
     }
 
     fn send_warning_alert_no_log(&mut self, desc: AlertDescription) {

@@ -490,10 +490,30 @@ fn junk_after_close_notify_received() {
     assert_eq!(discard, 0);
 }
 
-fn write_traffic<T: SideData, F: FnMut(WriteTraffic<T>) -> Result<usize, EncryptError>>(
+#[test]
+fn queue_close_notify_is_idempotent() {
+    let mut outcome = handshake(&rustls::version::TLS13);
+    let mut client = outcome.client.take().unwrap();
+
+    let mut client_send_buf = [0u8; 128];
+    let (len_first, len_second) = write_traffic(
+        client.process_tls_records(&mut []),
+        |mut wt: WriteTraffic<_>| {
+            (
+                wt.queue_close_notify(&mut client_send_buf),
+                wt.queue_close_notify(&mut client_send_buf),
+            )
+        },
+    );
+
+    assert!(len_first.unwrap() > 0);
+    assert_eq!(len_second.unwrap(), 0);
+}
+
+fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
     status: UnbufferedStatus<'_, '_, T>,
     mut f: F,
-) -> Result<usize, EncryptError> {
+) -> R {
     let UnbufferedStatus { discard, state } = status;
     assert_eq!(discard, 0);
     let state = state.unwrap();
