@@ -27,6 +27,10 @@ use std::sync::Arc;
 
 use docopt::Docopt;
 use log::trace;
+use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
+use hickory_resolver::proto::rr::{RData, RecordType};
+use hickory_resolver::Resolver;
 use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
@@ -34,10 +38,6 @@ use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::ServerName;
 use rustls::RootCertStore;
 use serde_derive::Deserialize;
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-use trust_dns_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
-use trust_dns_resolver::proto::rr::{RData, RecordType};
-use trust_dns_resolver::Resolver;
 
 fn main() {
     let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
@@ -51,7 +51,7 @@ fn main() {
     let resolver_config = if args.flag_cloudflare_dns {
         ResolverConfig::cloudflare_https()
     } else {
-        ResolverConfig::google()
+        ResolverConfig::google_https()
     };
     let resolver = Resolver::new(resolver_config, ResolverOpts::default()).unwrap();
     let server_ech_config = match args.flag_grease {
