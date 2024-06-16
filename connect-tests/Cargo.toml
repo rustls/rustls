@@ -10,6 +10,6 @@ publish = false
 rustls = { path = "../rustls", features = [ "logging" ]}
 
 [dev-dependencies]
-hickory-resolver = { version = "0.24", features = ["dns-over-https-rustls", "webpki-roots"] }
+hickory-resolver = { version = "0.25.0-alpha.1", features = ["dns-over-https-rustls", "webpki-roots"] }
 regex = "1.0"
 ring = "0.17"
