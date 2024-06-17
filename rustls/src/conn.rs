@@ -343,11 +343,6 @@ pub(crate) struct ConnectionRandoms {
     pub(crate) server: [u8; 32],
 }
 
-/// How many ChangeCipherSpec messages we accept and drop in TLS1.3 handshakes.
-/// The spec says 1, but implementations (namely the boringssl test suite) get
-/// this wrong.  BoringSSL itself accepts up to 32.
-static TLS13_MAX_DROPPED_CCS: u8 = 2u8;
-
 impl ConnectionRandoms {
     pub(crate) fn new(client: Random, server: Random) -> Self {
         Self {
@@ -882,9 +877,7 @@ impl<Data> ConnectionCore<Data> {
                 .may_receive_application_data
             && self.common_state.is_tls13()
         {
-            if !msg.is_valid_ccs()
-                || self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS
-            {
+            if !msg.is_valid_ccs() {
                 // "An implementation which receives any other change_cipher_spec value or
                 //  which receives a protected change_cipher_spec record MUST abort the
                 //  handshake with an "unexpected_message" alert."
@@ -892,11 +885,12 @@ impl<Data> ConnectionCore<Data> {
                     AlertDescription::UnexpectedMessage,
                     PeerMisbehaved::IllegalMiddleboxChangeCipherSpec,
                 ));
-            } else {
-                self.common_state.received_middlebox_ccs += 1;
-                trace!("Dropping CCS");
-                return Ok(state);
             }
+
+            self.common_state
+                .received_tls13_change_cipher_spec()?;
+            trace!("Dropping CCS");
+            return Ok(state);
         }
 
         // Now we can fully parse the message payload.
