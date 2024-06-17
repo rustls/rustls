@@ -54,7 +54,7 @@ jobs:
 
       - name: Install ninja-build tool for aws-lc-fips-sys on Windows
         if: runner.os == 'Windows'
-        uses: seanmiddleditch/gha-setup-ninja@v4
+        uses: seanmiddleditch/gha-setup-ninja@v5
 
       - name: Install golang for aws-lc-fips-sys on macos
         if: runner.os == 'MacOS'
