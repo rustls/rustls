@@ -7162,8 +7162,7 @@ fn test_automatic_refresh_traffic_keys() {
     }
 
     const KEY_UPDATE_SIZE: usize = encrypted_size(5);
-    const CONFIDENTIALITY_LIMIT: u64 = 1024;
-    let provider = tls13_aes_128_gcm_with_1024_confidentiality_limit();
+    let provider = aes_128_gcm_with_1024_confidentiality_limit();
 
     let client_config = finish_client_config(
         KeyType::Ed25519,
@@ -7224,3 +7223,50 @@ fn test_automatic_refresh_traffic_keys() {
     );
     assert_eq!(transferred, KEY_UPDATE_SIZE + encrypted_size(message.len()));
 }
+
+#[cfg(feature = "tls12")]
+#[test]
+fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
+    let provider = aes_128_gcm_with_1024_confidentiality_limit();
+
+    let client_config = finish_client_config(
+        KeyType::Ed25519,
+        ClientConfig::builder_with_provider(provider.clone())
+            .with_protocol_versions(&[&rustls::version::TLS12])
+            .unwrap(),
+    );
+    let server_config = finish_server_config(
+        KeyType::Ed25519,
+        ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    );
+
+    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+    do_handshake(&mut client, &mut server);
+
+    for i in 0..CONFIDENTIALITY_LIMIT {
+        let message = format!("{i:08}");
+        client
+            .writer()
+            .write_all(message.as_bytes())
+            .unwrap();
+        let transferred = transfer(&mut client, &mut server);
+        println!(
+            "{}: {} -> {:?}",
+            i,
+            transferred,
+            server.process_new_packets().unwrap()
+        );
+
+        let mut buf = [0u8; 32];
+        let recvd = server.reader().read(&mut buf).unwrap();
+
+        match i {
+            1023 => assert_eq!(recvd, 0),
+            _ => assert_eq!(&buf[..recvd], message.as_bytes()),
+        }
+    }
+}
+
+const CONFIDENTIALITY_LIMIT: u64 = 1024;

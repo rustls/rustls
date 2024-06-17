@@ -648,7 +648,7 @@ fn refresh_traffic_keys_automatically() {
 
     let client_config = finish_client_config(
         KeyType::Rsa2048,
-        ClientConfig::builder_with_provider(tls13_aes_128_gcm_with_1024_confidentiality_limit())
+        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit())
             .with_safe_default_protocol_versions()
             .unwrap(),
     );
