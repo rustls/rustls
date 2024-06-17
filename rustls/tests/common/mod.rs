@@ -1042,13 +1042,14 @@ impl RawTls {
     }
 }
 
-pub fn tls13_aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
+pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
     // needed to extend lifetime of Tls13CipherSuite to 'static
-    static LIMITED_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
+    static TLS13_LIMITED_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
+    static TLS12_LIMITED_SUITE: OnceCell<rustls::Tls12CipherSuite> = OnceCell::new();
 
-    let limited = LIMITED_SUITE.get_or_init(|| {
+    let tls13_limited = TLS13_LIMITED_SUITE.get_or_init(|| {
         let tls13 = provider::cipher_suite::TLS13_AES_128_GCM_SHA256
             .tls13()
             .unwrap();
@@ -1062,8 +1063,26 @@ pub fn tls13_aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider
         }
     });
 
+    let tls12_limited = TLS12_LIMITED_SUITE.get_or_init(|| {
+        let tls12 = match provider::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 {
+            SupportedCipherSuite::Tls12(tls12) => tls12,
+            _ => unreachable!(),
+        };
+
+        rustls::Tls12CipherSuite {
+            common: rustls::crypto::CipherSuiteCommon {
+                confidentiality_limit: CONFIDENTIALITY_LIMIT,
+                ..tls12.common
+            },
+            ..*tls12
+        }
+    });
+
     CryptoProvider {
-        cipher_suites: vec![SupportedCipherSuite::Tls13(limited)],
+        cipher_suites: vec![
+            SupportedCipherSuite::Tls13(tls13_limited),
+            SupportedCipherSuite::Tls12(tls12_limited),
+        ],
         ..provider::default_provider()
     }
     .into()

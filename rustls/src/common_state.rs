@@ -6,7 +6,7 @@ use pki_types::CertificateDer;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "logging")]
-use crate::log::{debug, warn};
+use crate::log::{debug, error, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
@@ -227,6 +227,7 @@ impl CommonState {
                         self.refresh_traffic_keys_pending = Some(());
                     }
                     _ => {
+                        error!("Traffic keys exhausted, closing connection to prevent security failure");
                         self.eager_send_close_notify(outgoing_tls)?;
                         return Err(EncryptError::EncryptExhausted);
                     }
@@ -307,21 +308,32 @@ impl CommonState {
     }
 
     fn send_single_fragment(&mut self, m: OutboundPlainMessage) {
-        match self
-            .record_layer
-            .next_pre_encrypt_action()
-        {
-            record_layer::PreEncryptAction::Nothing => {}
+        match (
+            &m,
+            self.record_layer
+                .next_pre_encrypt_action(),
+        ) {
+            // Alerts are always sendable -- never quashed by a PreEncryptAction.
+            (
+                OutboundPlainMessage {
+                    typ: ContentType::Alert,
+                    ..
+                },
+                _,
+            ) => {}
+
+            (_, record_layer::PreEncryptAction::Nothing) => {}
 
             // Close connection once we start to run out of
             // sequence space.
-            record_layer::PreEncryptAction::RefreshOrClose => {
+            (_, record_layer::PreEncryptAction::RefreshOrClose) => {
                 match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
                         // driven by caller, as we don't have the `State` here
                         self.refresh_traffic_keys_pending = Some(());
                     }
                     _ => {
+                        error!("Traffic keys exhausted, closing connection to prevent security failure");
                         self.send_close_notify();
                         return;
                     }
@@ -330,7 +342,7 @@ impl CommonState {
 
             // Refuse to wrap counter at all costs.  This
             // is basically untestable unfortunately.
-            record_layer::PreEncryptAction::Refuse => {
+            (_, record_layer::PreEncryptAction::Refuse) => {
                 return;
             }
         };
@@ -526,8 +538,8 @@ impl CommonState {
             return;
         }
         debug!("Sending warning alert {:?}", AlertDescription::CloseNotify);
-        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
         self.sent_fatal_alert = true;
+        self.send_warning_alert_no_log(AlertDescription::CloseNotify);
     }
 
     pub(crate) fn eager_send_close_notify(
