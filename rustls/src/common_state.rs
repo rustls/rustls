@@ -40,7 +40,6 @@ pub struct CommonState {
     pub(crate) has_received_close_notify: bool,
     #[cfg(feature = "std")]
     pub(crate) has_seen_eof: bool,
-    pub(crate) received_middlebox_ccs: u8,
     pub(crate) peer_certificates: Option<CertificateChain<'static>>,
     message_fragmenter: MessageFragmenter,
     pub(crate) received_plaintext: ChunkVecBuffer,
@@ -71,7 +70,6 @@ impl CommonState {
             has_received_close_notify: false,
             #[cfg(feature = "std")]
             has_seen_eof: false,
-            received_middlebox_ccs: 0,
             peer_certificates: None,
             message_fragmenter: MessageFragmenter::default(),
             received_plaintext: ChunkVecBuffer::new(Some(DEFAULT_RECEIVED_PLAINTEXT_LIMIT)),
@@ -648,6 +646,11 @@ impl CommonState {
                 .encode(),
         );
     }
+
+    pub(crate) fn received_tls13_change_cipher_spec(&mut self) -> Result<(), Error> {
+        self.temper_counters
+            .received_tls13_change_cipher_spec()
+    }
 }
 
 #[cfg(feature = "std")]
@@ -843,6 +846,7 @@ struct TemperCounters {
     allowed_warning_alerts: u8,
     allowed_renegotiation_requests: u8,
     allowed_key_update_requests: u8,
+    allowed_middlebox_ccs: u8,
 }
 
 impl TemperCounters {
@@ -875,6 +879,16 @@ impl TemperCounters {
             }
         }
     }
+
+    fn received_tls13_change_cipher_spec(&mut self) -> Result<(), Error> {
+        match self.allowed_middlebox_ccs {
+            0 => Err(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec.into()),
+            _ => {
+                self.allowed_middlebox_ccs -= 1;
+                Ok(())
+            }
+        }
+    }
 }
 
 impl Default for TemperCounters {
@@ -891,6 +905,12 @@ impl Default for TemperCounters {
             // cf. BoringSSL `kMaxKeyUpdates`
             // <https://github.com/google/boringssl/blob/dec5989b793c56ad4dd32173bd2d8595ca78b398/ssl/tls13_both.cc#L35-L38>
             allowed_key_update_requests: 32,
+
+            // At most two CCS are allowed: one after each ClientHello (recall a second
+            // ClientHello happens after a HelloRetryRequest).
+            //
+            // note BoringSSL allows up to 32.
+            allowed_middlebox_ccs: 2,
         }
     }
 }
