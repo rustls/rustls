@@ -175,7 +175,7 @@ Options:
     -p, --port PORT       Connect to PORT [default: 443].
     --cafile CAFILE       Read root certificates from CAFILE.
     --path PATH           HTTP GET this PATH [default: ech-check.php].
-    --host HOST           HTTP HOST to use for GET request [default: inner-hostname].
+    --host HOST           HTTP HOST to use for GET request (defaults to value of inner-hostname).
     --google-dns          Use Google DNS for the DNS-over-HTTPS lookup [default].
     --cloudflare-dns      Use Cloudflare DNS for the DNS-over-HTTPS lookup.
     --grease              Skip looking up an ECH config and send a GREASE placeholder.
