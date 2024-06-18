@@ -711,6 +711,77 @@ fn refresh_traffic_keys_automatically() {
     };
 }
 
+#[test]
+fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
+    const CONFIDENTIALITY_LIMIT: usize = 1024;
+
+    let client_config = finish_client_config(
+        KeyType::Ed25519,
+        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit())
+            .with_protocol_versions(&[&rustls::version::TLS12])
+            .unwrap(),
+    );
+
+    let server_config = make_server_config(KeyType::Ed25519);
+    let mut outcome = run(
+        Arc::new(client_config),
+        &mut NO_ACTIONS.clone(),
+        Arc::new(server_config),
+        &mut NO_ACTIONS.clone(),
+    );
+    let mut server = outcome.server.take().unwrap();
+    let mut client = outcome.client.take().unwrap();
+
+    match client.process_tls_records(&mut []) {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::WriteTraffic(mut wt)),
+        } => {
+            for i in 0..CONFIDENTIALITY_LIMIT {
+                let message = format!("{i:08}");
+
+                let mut buffer = [0u8; 64];
+                let used = match wt.encrypt(message.as_bytes(), &mut buffer) {
+                    Ok(used) => used,
+                    Err(EncryptError::EncryptExhausted) if i == CONFIDENTIALITY_LIMIT - 1 => {
+                        break;
+                    }
+                    rc @ Err(_) => rc.unwrap(),
+                };
+
+                match server.process_tls_records(&mut buffer[..used]) {
+                    UnbufferedStatus {
+                        discard: actual_used,
+                        state: Ok(ConnectionState::ReadTraffic(mut rt)),
+                    } => {
+                        assert_eq!(used, actual_used);
+                        let record = rt.next_record().unwrap().unwrap();
+                        assert_eq!(record.payload, message.as_bytes());
+                    }
+                    st => {
+                        panic!("unexpected server state {st:?}");
+                    }
+                };
+                println!("{i}: wrote {used}");
+            }
+        }
+        st => {
+            panic!("unexpected client state {st:?}");
+        }
+    };
+
+    let mut data = encode_tls_data(client.process_tls_records(&mut []));
+    let data_len = data.len();
+
+    match server.process_tls_records(&mut data) {
+        UnbufferedStatus {
+            discard,
+            state: Ok(ConnectionState::Closed),
+        } if discard == data_len => {}
+        st => panic!("unexpected server state {st:?}"),
+    }
+}
+
 fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
     status: UnbufferedStatus<'_, '_, T>,
     mut f: F,
@@ -722,6 +793,28 @@ fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
         f(state)
     } else {
         panic!("unexpected client state {state:?} (wanted WriteTraffic)");
+    }
+}
+
+fn encode_tls_data<T: SideData>(status: UnbufferedStatus<'_, '_, T>) -> Vec<u8> {
+    match status {
+        UnbufferedStatus {
+            discard: 0,
+            state: Ok(ConnectionState::EncodeTlsData(mut etd)),
+        } => {
+            let len = match etd.encode(&mut []) {
+                Err(EncodeError::InsufficientSize(InsufficientSizeError { required_size })) => {
+                    required_size
+                }
+                e => panic!("unexpected encode {e:?}"),
+            };
+            let mut buf = vec![0u8; len];
+            etd.encode(&mut buf).unwrap();
+            buf
+        }
+        _ => {
+            panic!("unexpected state {status:?} (wanted EncodeTlsData)");
+        }
     }
 }
 
