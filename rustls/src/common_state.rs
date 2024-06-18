@@ -228,7 +228,7 @@ impl CommonState {
                     }
                     _ => {
                         error!("Traffic keys exhausted, closing connection to prevent security failure");
-                        self.eager_send_close_notify(outgoing_tls)?;
+                        self.send_close_notify();
                         return Err(EncryptError::EncryptExhausted);
                     }
                 },
