@@ -12,6 +12,7 @@ We recommend new users start by looking at `simpleclient.rs` and `simpleserver.r
 * `simple_0rtt_client.rs` - shows how to make a TLS 1.3 client connection that sends early 0RTT data.
 * `unbuffered-client.rs` - shows an advanced example of using Rustls lower-level APIs to implement a client that does not buffer any data inside Rustls.
 * `unbuffered-async-client.rs` - shows an advanced example of using Rustls lower-level APIs to implement a client that does not buffer any data inside Rustls, and that processes TLS events asynchronously.
+* `ech-client.rs` - shows how to configure Rustls to use encrypted client hello (ECH), including fetching an ECH config list with DNS-over-HTTPS.
 
 ## Server examples
 
