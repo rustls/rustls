@@ -34,7 +34,7 @@ use rustls::{
     crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
     internal::msgs::base::PayloadU16,
     internal::msgs::handshake::{
-        EchConfigPayload, EchConfigContents, HpkeKeyConfig, HpkeSymmetricCipherSuite,
+        EchConfigContents, EchConfigPayload, HpkeKeyConfig, HpkeSymmetricCipherSuite,
     },
     pki_types::{DnsName, EchConfigListBytes},
 };
@@ -6408,7 +6408,11 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
 
         // And a connection made from a client config should retain the fips status of the
         // config w.r.t the HPKE suite.
-        let conn = ClientConnection::new(config.into(), ServerName::DnsName(DnsName::try_from("example.org").unwrap())).unwrap();
+        let conn = ClientConnection::new(
+            config.into(),
+            ServerName::DnsName(DnsName::try_from("example.org").unwrap()),
+        )
+        .unwrap();
         assert_eq!(conn.fips(), suite.fips());
     }
 }
