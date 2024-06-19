@@ -6,8 +6,24 @@ use std::cell::RefCell;
 #[macro_use]
 mod macros;
 
-test_for_each_provider! {
+#[cfg(feature = "ring")]
+#[path = "."]
+mod tests_with_ring {
     use super::*;
+
+    provider_ring!();
+
+    #[path = "../api.rs"]
+    mod tests;
+}
+
+#[cfg(feature = "aws_lc_rs")]
+#[path = "."]
+mod tests_with_aws_lc_rs {
+    use super::*;
+
+    provider_aws_lc_rs!();
+
     #[path = "../api.rs"]
     mod tests;
 }
