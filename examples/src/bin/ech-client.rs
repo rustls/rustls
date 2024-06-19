@@ -47,6 +47,8 @@ fn main() {
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
+    let port = args.flag_port.unwrap_or(443);
+
     // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
     let resolver_config = if args.flag_cloudflare_dns {
         ResolverConfig::cloudflare_https()
@@ -58,7 +60,7 @@ fn main() {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.flag_ech_config {
             Some(path) => Some(read_ech(&path)),
-            None => lookup_ech_configs(&resolver, &args.arg_outer_hostname),
+            None => lookup_ech_configs(&resolver, &args.arg_outer_hostname, port),
         },
     };
 
@@ -119,10 +121,7 @@ fn main() {
         trace!("\nRequest {} of {}", i + 1, args.flag_num_reqs);
         let mut conn = rustls::ClientConnection::new(config.clone(), server_name.clone()).unwrap();
         // The "outer" server that we're connecting to.
-        let sock_addr = (
-            args.arg_outer_hostname.as_str(),
-            args.flag_port.unwrap_or(443),
-        )
+        let sock_addr = (args.arg_outer_hostname.as_str(), port)
             .to_socket_addrs()
             .unwrap()
             .next()
@@ -205,9 +204,17 @@ struct Args {
 fn lookup_ech_configs(
     resolver: &Resolver,
     domain: &str,
+    port: u16,
 ) -> Option<pki_types::EchConfigListBytes<'static>> {
+    // For non-standard ports, lookup the ECHConfig using port-prefix naming
+    // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
+    let qname_to_lookup = match port {
+        443 => domain.to_owned(),
+        port => format!("_{port}._https.{domain}"),
+    };
+
     resolver
-        .lookup(domain, RecordType::HTTPS)
+        .lookup(qname_to_lookup, RecordType::HTTPS)
         .ok()?
         .record_iter()
         .find_map(|r| match r.data() {
