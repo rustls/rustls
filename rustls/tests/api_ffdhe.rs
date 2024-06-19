@@ -1,6 +1,5 @@
 //! This file contains tests that use the test-only FFDHE KX group (defined in submodule `ffdhe`)
 
-#![cfg(feature = "tls12")]
 #![allow(clippy::duplicate_mod)]
 
 mod common;

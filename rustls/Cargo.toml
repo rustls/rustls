@@ -87,6 +87,7 @@ path = "tests/runners/api.rs"
 [[test]]
 name = "api_ffdhe"
 path = "tests/runners/api_ffdhe.rs"
+required-features = ["tls12"]
 
 [[test]]
 name = "bogo"
