@@ -4,8 +4,24 @@ use std::sync::{Mutex, Once};
 #[macro_use]
 mod macros;
 
-test_for_each_provider! {
+#[cfg(feature = "ring")]
+#[path = "."]
+mod tests_with_ring {
     use super::serialized;
+
+    provider_ring!();
+
+    #[path = "../key_log_file_env.rs"]
+    mod tests;
+}
+
+#[cfg(feature = "aws_lc_rs")]
+#[path = "."]
+mod tests_with_aws_lc_rs {
+    use super::serialized;
+
+    provider_aws_lc_rs!();
+
     #[path = "../key_log_file_env.rs"]
     mod tests;
 }
