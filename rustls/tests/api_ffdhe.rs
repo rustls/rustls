@@ -1,11 +1,7 @@
-#![cfg(feature = "tls12")]
-
 //! This file contains tests that use the test-only FFDHE KX group (defined in submodule `ffdhe`)
 
-#[macro_use]
-mod macros;
-
-test_for_each_provider! {
+#![cfg(feature = "tls12")]
+#![allow(clippy::duplicate_mod)]
 
 mod common;
 use common::*;
@@ -16,6 +12,8 @@ use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::version::{TLS12, TLS13};
 use rustls::{CipherSuite, ClientConfig};
+
+use super::*;
 
 #[test]
 fn config_builder_for_client_rejects_cipher_suites_without_compatible_kx_groups() {
@@ -451,5 +449,3 @@ mod ffdhe {
         bytes
     }
 }
-
-} // test_for_each_provider!

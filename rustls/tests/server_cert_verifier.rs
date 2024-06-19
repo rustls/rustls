@@ -1,9 +1,8 @@
 //! Tests for configuring and using a [`ServerCertVerifier`] for a client.
 
-#[macro_use]
-mod macros;
+#![allow(clippy::duplicate_mod)]
 
-test_for_each_provider! {
+use super::*;
 
 mod common;
 use std::sync::Arc;
@@ -153,5 +152,3 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
         }
     }
 }
-
-} // test_for_each_provider!

@@ -21,38 +21,9 @@
 //! file was created successfully, with the right permissions, etc., and that it
 //! contains something like what we expect.
 
+#![allow(clippy::duplicate_mod)]
+
 use std::env;
-use std::sync::{Mutex, Once};
-
-#[macro_use]
-mod macros;
-
-/// Approximates `#[serial]` from the `serial_test` crate.
-///
-/// No attempt is made to recover from a poisoned mutex, which will
-/// happen when `f` panics. In other words, all the tests that use
-/// `serialized` will start failing after one test panics.
-#[allow(dead_code)]
-fn serialized(f: impl FnOnce()) {
-    // Ensure every test is run serialized
-    // TODO: Use `std::sync::Lazy` once that is stable.
-    static mut MUTEX: Option<Mutex<()>> = None;
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| unsafe {
-        MUTEX = Some(Mutex::new(()));
-    });
-    let mutex = unsafe { MUTEX.as_mut() };
-
-    let _guard = mutex.unwrap().get_mut().unwrap();
-
-    // XXX: NOT thread safe.
-    env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
-
-    f()
-}
-
-test_for_each_provider! {
-
 use std::io::Write;
 use std::sync::Arc;
 
@@ -66,7 +37,7 @@ use common::{
 
 #[test]
 fn exercise_key_log_file_for_client() {
-    super::serialized(|| {
+    serialized(|| {
         let server_config = Arc::new(make_server_config(KeyType::Rsa2048));
         env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
 
@@ -88,7 +59,7 @@ fn exercise_key_log_file_for_client() {
 
 #[test]
 fn exercise_key_log_file_for_server() {
-    super::serialized(|| {
+    serialized(|| {
         let mut server_config = make_server_config(KeyType::Rsa2048);
 
         env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
@@ -109,5 +80,3 @@ fn exercise_key_log_file_for_server() {
         }
     })
 }
-
-} // test_for_each_provider!
