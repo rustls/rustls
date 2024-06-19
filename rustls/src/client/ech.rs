@@ -144,8 +144,8 @@ impl EchConfig {
                     .find(|hpke| hpke.suite() == suite)
                 {
                     debug!(
-                        "selected ECH config ID {:?} suite {:?}",
-                        key_config.config_id, suite
+                        "selected ECH config ID {:?} suite {:?} public_name {:?}",
+                        key_config.config_id, suite, contents.public_name
                     );
                     return Ok(Self {
                         config: config.clone(),
