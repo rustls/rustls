@@ -1,9 +1,8 @@
 //! Tests for configuring and using a [`ClientCertVerifier`] for a server.
 
-#[macro_use]
-mod macros;
+#![allow(clippy::duplicate_mod)]
 
-test_for_each_provider! {
+use super::*;
 
 mod common;
 use std::sync::Arc;
@@ -208,5 +207,3 @@ impl ClientCertVerifier for MockClientVerifier {
         }
     }
 }
-
-} // test_for_each_provider!

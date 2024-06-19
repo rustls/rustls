@@ -1,7 +1,4 @@
-#[macro_use]
-mod macros;
-
-test_for_each_provider! {
+#![allow(clippy::duplicate_mod)]
 
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -14,6 +11,8 @@ use rustls::unbuffered::{
 };
 use rustls::version::TLS13;
 use rustls::{ClientConfig, ServerConfig, SideData};
+
+use super::*;
 
 mod common;
 use common::*;
@@ -932,5 +931,3 @@ fn server_receives_incorrect_first_handshake_message() {
         _ => panic!("unexpected alert sending state"),
     };
 }
-
-} // test_for_each_provider!
