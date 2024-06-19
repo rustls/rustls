@@ -1,7 +1,9 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use pki_types::{CertificateDer, ServerName, SignatureVerificationAlgorithm, UnixTime};
+use pki_types::{
+    CertificateDer, ServerName, SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, UnixTime,
+};
 
 use super::anchors::RootCertStore;
 use super::pki_error;
@@ -124,6 +126,13 @@ impl fmt::Debug for WebPkiSupportedAlgorithms {
 ///
 /// This is used in order to avoid parsing twice when specifying custom verification
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
+
+impl<'a> ParsedCertificate<'a> {
+    /// Get the parsed certificate's SubjectPublicKeyInfo (SPKI)
+    pub fn subject_public_key_info(&self) -> SubjectPublicKeyInfoDer<'static> {
+        self.0.subject_public_key_info()
+    }
+}
 
 impl<'a> TryFrom<&'a CertificateDer<'a>> for ParsedCertificate<'a> {
     type Error = Error;
