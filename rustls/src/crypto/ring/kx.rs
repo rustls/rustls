@@ -23,7 +23,7 @@ struct KxGroup {
 
     /// Whether the algorithm is allowed by FIPS
     ///
-    /// `SupportedKxGroup::fips()` is true iff the algorithm is allowed,
+    /// `SupportedKxGroup::fips()` is true if and only if the algorithm is allowed,
     /// _and_ the implementation is FIPS-validated.
     fips_allowed: bool,
 }
