@@ -3,12 +3,13 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
+use std::fs;
 use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{env, fs};
 
+use clap::Parser;
 use pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::client::Resumption;
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
@@ -27,13 +28,131 @@ use rustls::{
 };
 
 pub fn main() {
-    let mut args = std::env::args();
-    if args.len() > 1 {
-        args.next();
-        selected_tests(args);
-    } else {
-        all_tests();
+    let args = Args::parse();
+
+    let options = Options {
+        work_multiplier: args.multiplier,
+    };
+
+    match args.command() {
+        Command::Bulk {
+            cipher_suite,
+            plaintext_size,
+            max_fragment_size,
+        } => {
+            for param in lookup_matching_benches(cipher_suite).iter() {
+                bench_bulk(param, &options, *plaintext_size, *max_fragment_size);
+            }
+        }
+
+        Command::Handshake { cipher_suite }
+        | Command::HandshakeResume { cipher_suite }
+        | Command::HandshakeTicket { cipher_suite } => {
+            let resume = ResumptionParam::from_subcommand(args.command());
+
+            for param in lookup_matching_benches(cipher_suite).iter() {
+                bench_handshake(param, &options, ClientAuth::No, resume);
+            }
+        }
+        Command::Memory {
+            cipher_suite,
+            count,
+        } => {
+            for param in lookup_matching_benches(cipher_suite).iter() {
+                bench_memory(param, *count);
+            }
+        }
+        Command::ListSuites => {
+            for bench in ALL_BENCHMARKS {
+                println!(
+                    "{:?} (key={:?} version={:?})",
+                    bench.ciphersuite, bench.key_type, bench.version
+                );
+            }
+        }
+        Command::AllTests => {
+            all_tests(&options);
+        }
     }
+}
+
+#[derive(Parser, Debug)]
+#[command(version, about = "Runs rustls benchmarks")]
+struct Args {
+    #[arg(
+        long,
+        default_value_t = 1.0,
+        env = "BENCH_MULTIPLIER",
+        help = "Multiplies the length of every test by the given float value"
+    )]
+    multiplier: f64,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+impl Args {
+    fn command(&self) -> &Command {
+        self.command
+            .as_ref()
+            .unwrap_or(&Command::AllTests)
+    }
+}
+
+#[derive(Parser, Debug)]
+enum Command {
+    #[command(about = "Runs bulk data benchmarks")]
+    Bulk {
+        #[arg(help = "Which cipher suite to use; see `list-suites` for possible values.")]
+        cipher_suite: String,
+
+        #[arg(default_value_t = 1048576, help = "The size of each data write")]
+        plaintext_size: u64,
+
+        #[arg(help = "Maximum TLS fragment size")]
+        max_fragment_size: Option<usize>,
+    },
+
+    #[command(about = "Runs full handshake speed benchmarks")]
+    Handshake {
+        #[arg(help = "Which cipher suite to use; see `list-suites` for possible values.")]
+        cipher_suite: String,
+    },
+
+    #[command(about = "Runs stateful resumed handshake speed benchmarks")]
+    HandshakeResume {
+        #[arg(help = "Which cipher suite to use; see `list-suites` for possible values.")]
+        cipher_suite: String,
+    },
+
+    #[command(about = "Runs stateless resumed handshake speed benchmarks")]
+    HandshakeTicket {
+        #[arg(help = "Which cipher suite to use; see `list-suites` for possible values.")]
+        cipher_suite: String,
+    },
+
+    #[command(
+        about = "Runs memory benchmarks",
+        long_about = "This creates `count` connections in parallel (count / 2 clients connected\n\
+                      to count / 2 servers), and then moves them in lock-step though the handshake.\n\
+                      Once the handshake completes the client writes 1KB of data to the server."
+    )]
+    Memory {
+        #[arg(help = "Which cipher suite to use; see `list-suites` for possible values.")]
+        cipher_suite: String,
+
+        #[arg(
+            default_value_t = 1000000,
+            help = "How many connections to create in parallel"
+        )]
+        count: u64,
+    },
+
+    #[command(about = "Lists the supported values for cipher-suite options")]
+    ListSuites,
+
+    #[command(about = "Run all tests (the default subcommand)")]
+    AllTests,
 }
 
 fn duration_nanos(d: Duration) -> f64 {
@@ -131,6 +250,15 @@ enum ResumptionParam {
 }
 
 impl ResumptionParam {
+    fn from_subcommand(cmd: &Command) -> Self {
+        match cmd {
+            Command::Handshake { .. } => Self::No,
+            Command::HandshakeResume { .. } => Self::SessionId,
+            Command::HandshakeTicket { .. } => Self::Tickets,
+            _ => todo!("unhandled subcommand {cmd:?}"),
+        }
+    }
+
     fn label(&self) -> &'static str {
         match *self {
             Self::No => "no-resume",
@@ -281,6 +409,17 @@ impl KeyType {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Options {
+    work_multiplier: f64,
+}
+
+impl Options {
+    fn apply_work_multiplier(&self, work: u64) -> u64 {
+        ((work as f64) * self.work_multiplier).round() as u64
+    }
+}
+
 fn make_server_config(
     params: &BenchmarkParam,
     client_auth: ClientAuth,
@@ -363,24 +502,18 @@ fn make_client_config(
     cfg
 }
 
-fn apply_work_multiplier(work: u64) -> u64 {
-    let mul = match env::var("BENCH_MULTIPLIER") {
-        Ok(val) => val
-            .parse::<f64>()
-            .expect("invalid BENCH_MULTIPLIER value"),
-        Err(_) => 1.,
-    };
-
-    ((work as f64) * mul).round() as u64
-}
-
-fn bench_handshake(params: &BenchmarkParam, clientauth: ClientAuth, resume: ResumptionParam) {
+fn bench_handshake(
+    params: &BenchmarkParam,
+    options: &Options,
+    clientauth: ClientAuth,
+    resume: ResumptionParam,
+) {
     let client_config = Arc::new(make_client_config(params, clientauth, resume));
     let server_config = Arc::new(make_server_config(params, clientauth, resume, None));
 
     assert!(params.ciphersuite.version() == params.version);
 
-    let rounds = apply_work_multiplier(if resume == ResumptionParam::No {
+    let rounds = options.apply_work_multiplier(if resume == ResumptionParam::No {
         512
     } else {
         4096
@@ -449,7 +582,12 @@ fn do_handshake(client: &mut ClientConnection, server: &mut ServerConnection) {
     while do_handshake_step(client, server) {}
 }
 
-fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: Option<usize>) {
+fn bench_bulk(
+    params: &BenchmarkParam,
+    options: &Options,
+    plaintext_size: u64,
+    max_fragment_size: Option<usize>,
+) {
     let client_config = Arc::new(make_client_config(
         params,
         ClientAuth::No,
@@ -471,7 +609,7 @@ fn bench_bulk(params: &BenchmarkParam, plaintext_size: u64, max_fragment_size: O
     do_handshake(&mut client, &mut server);
 
     let buf = vec![0; plaintext_size as usize];
-    let total_data = apply_work_multiplier(if plaintext_size < 8192 {
+    let total_data = options.apply_work_multiplier(if plaintext_size < 8192 {
         64 * 1024 * 1024
     } else {
         1024 * 1024 * 1024
@@ -575,87 +713,16 @@ fn lookup_matching_benches(name: &str) -> Vec<&BenchmarkParam> {
     r
 }
 
-fn selected_tests(mut args: env::Args) {
-    let mode = args
-        .next()
-        .expect("first argument must be mode");
-
-    match mode.as_ref() {
-        "bulk" => match args.next() {
-            Some(suite) => {
-                let len = args
-                    .next()
-                    .map(|arg| {
-                        arg.parse::<u64>()
-                            .expect("3rd arg must be plaintext size integer")
-                    })
-                    .unwrap_or(1048576);
-                let mfs = args.next().map(|arg| {
-                    arg.parse::<usize>()
-                        .expect("4th arg must be max_fragment_size integer")
-                });
-                for param in lookup_matching_benches(&suite).iter() {
-                    bench_bulk(param, len, mfs);
-                }
-            }
-            None => {
-                panic!("bulk needs ciphersuite argument");
-            }
-        },
-
-        "handshake" | "handshake-resume" | "handshake-ticket" => match args.next() {
-            Some(suite) => {
-                let resume = if mode == "handshake" {
-                    ResumptionParam::No
-                } else if mode == "handshake-resume" {
-                    ResumptionParam::SessionId
-                } else {
-                    ResumptionParam::Tickets
-                };
-
-                for param in lookup_matching_benches(&suite).iter() {
-                    bench_handshake(param, ClientAuth::No, resume);
-                }
-            }
-            None => {
-                panic!("handshake* needs ciphersuite argument");
-            }
-        },
-
-        "memory" => match args.next() {
-            Some(suite) => {
-                let count = args
-                    .next()
-                    .map(|arg| {
-                        arg.parse::<u64>()
-                            .expect("3rd arg must be connection count integer")
-                    })
-                    .unwrap_or(1000000);
-                for param in lookup_matching_benches(&suite).iter() {
-                    bench_memory(param, count);
-                }
-            }
-            None => {
-                panic!("memory needs ciphersuite argument");
-            }
-        },
-
-        _ => {
-            panic!("unsupported mode {:?}", mode);
-        }
-    }
-}
-
-fn all_tests() {
+fn all_tests(options: &Options) {
     for test in ALL_BENCHMARKS.iter() {
-        bench_bulk(test, 1024 * 1024, None);
-        bench_bulk(test, 1024 * 1024, Some(10000));
-        bench_handshake(test, ClientAuth::No, ResumptionParam::No);
-        bench_handshake(test, ClientAuth::Yes, ResumptionParam::No);
-        bench_handshake(test, ClientAuth::No, ResumptionParam::SessionId);
-        bench_handshake(test, ClientAuth::Yes, ResumptionParam::SessionId);
-        bench_handshake(test, ClientAuth::No, ResumptionParam::Tickets);
-        bench_handshake(test, ClientAuth::Yes, ResumptionParam::Tickets);
+        bench_bulk(test, options, 1024 * 1024, None);
+        bench_bulk(test, options, 1024 * 1024, Some(10000));
+        bench_handshake(test, options, ClientAuth::No, ResumptionParam::No);
+        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::No);
+        bench_handshake(test, options, ClientAuth::No, ResumptionParam::SessionId);
+        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::SessionId);
+        bench_handshake(test, options, ClientAuth::No, ResumptionParam::Tickets);
+        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::Tickets);
     }
 }
 
