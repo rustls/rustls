@@ -680,7 +680,7 @@ pub trait PacketKey: Send + Sync {
     /// the additional authenticated data; and the `payload`. The authentication tag is returned if
     /// encryption succeeds.
     ///
-    /// Fails iff the payload is longer than allowed by the cipher suite's AEAD algorithm.
+    /// Fails if and only if the payload is longer than allowed by the cipher suite's AEAD algorithm.
     fn encrypt_in_place(
         &self,
         packet_number: u64,

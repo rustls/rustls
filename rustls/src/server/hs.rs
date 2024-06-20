@@ -109,7 +109,7 @@ impl ExtensionProcessing {
             // QUIC has strict ALPN, unlike TLS's more backwards-compatible behavior. RFC 9001
             // says: "The server MUST treat the inability to select a compatible application
             // protocol as a connection error of type 0x0178". We judge that ALPN was desired
-            // (rather than some out-of-band protocol negotiation mechanism) iff any ALPN
+            // (rather than some out-of-band protocol negotiation mechanism) if and only if any ALPN
             // protocols were configured locally or offered by the client. This helps prevent
             // successful establishment of connections between peers that can't understand
             // each other.

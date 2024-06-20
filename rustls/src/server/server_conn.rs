@@ -595,7 +595,7 @@ mod connection {
         ///
         /// Recovered from the prior session's `set_resumption_data`. Integrity is guaranteed by rustls.
         ///
-        /// Returns `Some` iff a valid resumption ticket has been received from the client.
+        /// Returns `Some` if and only if a valid resumption ticket has been received from the client.
         pub fn received_resumption_data(&self) -> Option<&[u8]> {
             self.inner
                 .core
