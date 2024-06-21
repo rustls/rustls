@@ -979,12 +979,11 @@ impl<Data> ConnectionCore<Data> {
 
     /// Trigger a `refresh_traffic_keys` if required by `CommonState`.
     fn maybe_refresh_traffic_keys(&mut self) {
-        if self
-            .common_state
-            .refresh_traffic_keys_pending
-            .take()
-            .is_some()
-        {
+        if mem::take(
+            &mut self
+                .common_state
+                .refresh_traffic_keys_pending,
+        ) {
             let _ = self.refresh_traffic_keys();
         }
     }
