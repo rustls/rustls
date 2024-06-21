@@ -4,8 +4,8 @@ use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::AlertLevel;
-use crate::msgs::handshake::HandshakeMessagePayload;
+use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
+use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 
 mod inbound;
 pub use inbound::{BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage};
@@ -175,14 +175,20 @@ impl Message<'_> {
     pub fn build_key_update_notify() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload::build_key_update_notify()),
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::KeyUpdate,
+                payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
+            }),
         }
     }
 
     pub fn build_key_update_request() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload::build_key_update_request()),
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::KeyUpdate,
+                payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
+            }),
         }
     }
 

@@ -2696,20 +2696,6 @@ impl<'a> HandshakeMessagePayload<'a> {
             .map(|_| Self { typ, payload })
     }
 
-    pub(crate) fn build_key_update_notify() -> Self {
-        Self {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-        }
-    }
-
-    pub(crate) fn build_key_update_request() -> Self {
-        Self {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
-        }
-    }
-
     pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
 
