@@ -50,13 +50,14 @@ fn converse(
     let mut incoming_used = 0;
     let mut outgoing_used = 0;
 
-    let mut open_connection = true;
+    let mut we_closed = false;
+    let mut peer_closed = false;
     let mut sent_request = false;
     let mut received_response = false;
     let mut sent_early_data = false;
 
     let mut iter_count = 0;
-    while open_connection {
+    while !(peer_closed || (we_closed && incoming_used == 0)) {
         let UnbufferedStatus { mut discard, state } =
             conn.process_tls_records(&mut incoming_tls[..incoming_used]);
 
@@ -147,7 +148,7 @@ fn converse(
                     // `TransmitTlsData` state. the server should have already written a
                     // response which we can read out from the socket
                     recv_tls(&mut sock, incoming_tls, &mut incoming_used)?;
-                } else {
+                } else if !we_closed {
                     try_or_resize_and_retry(
                         |out_buffer| may_encrypt.queue_close_notify(out_buffer),
                         |e| {
@@ -161,12 +162,14 @@ fn converse(
                         &mut outgoing_used,
                     )?;
                     send_tls(&mut sock, outgoing_tls, &mut outgoing_used)?;
-                    open_connection = false;
+                    we_closed = true;
+                } else {
+                    recv_tls(&mut sock, incoming_tls, &mut incoming_used)?;
                 }
             }
 
             ConnectionState::Closed => {
-                open_connection = false;
+                peer_closed = true;
             }
 
             // other states are not expected in this example
