@@ -16,6 +16,7 @@ use crate::msgs::message::{
     Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
     PlainMessage,
 };
+use crate::record_layer::PreEncryptAction;
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
@@ -220,8 +221,8 @@ impl CommonState {
                 .record_layer
                 .pre_encrypt_action(f as u64)
             {
-                record_layer::PreEncryptAction::Nothing => {}
-                record_layer::PreEncryptAction::RefreshOrClose => match self.negotiated_version {
+                PreEncryptAction::Nothing => {}
+                PreEncryptAction::RefreshOrClose => match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
                         // driven by caller, as we don't have the `State` here
                         self.refresh_traffic_keys_pending = Some(());
@@ -232,7 +233,7 @@ impl CommonState {
                         return Err(EncryptError::EncryptExhausted);
                     }
                 },
-                record_layer::PreEncryptAction::Refuse => {
+                PreEncryptAction::Refuse => {
                     return Err(EncryptError::EncryptExhausted);
                 }
             }
@@ -322,11 +323,11 @@ impl CommonState {
                 _,
             ) => {}
 
-            (_, record_layer::PreEncryptAction::Nothing) => {}
+            (_, PreEncryptAction::Nothing) => {}
 
             // Close connection once we start to run out of
             // sequence space.
-            (_, record_layer::PreEncryptAction::RefreshOrClose) => {
+            (_, PreEncryptAction::RefreshOrClose) => {
                 match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
                         // driven by caller, as we don't have the `State` here
@@ -342,7 +343,7 @@ impl CommonState {
 
             // Refuse to wrap counter at all costs.  This
             // is basically untestable unfortunately.
-            (_, record_layer::PreEncryptAction::Refuse) => {
+            (_, PreEncryptAction::Refuse) => {
                 return;
             }
         };
