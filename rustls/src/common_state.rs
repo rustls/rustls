@@ -52,7 +52,7 @@ pub struct CommonState {
     pub(crate) quic: quic::Quic,
     pub(crate) enable_secret_extraction: bool,
     temper_counters: TemperCounters,
-    pub(crate) refresh_traffic_keys_pending: Option<()>,
+    pub(crate) refresh_traffic_keys_pending: bool,
 }
 
 impl CommonState {
@@ -81,7 +81,7 @@ impl CommonState {
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
             temper_counters: TemperCounters::default(),
-            refresh_traffic_keys_pending: None,
+            refresh_traffic_keys_pending: false,
         }
     }
 
@@ -225,7 +225,7 @@ impl CommonState {
                 PreEncryptAction::RefreshOrClose => match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
                         // driven by caller, as we don't have the `State` here
-                        self.refresh_traffic_keys_pending = Some(());
+                        self.refresh_traffic_keys_pending = true;
                     }
                     _ => {
                         error!("Traffic keys exhausted, closing connection to prevent security failure");
@@ -331,7 +331,7 @@ impl CommonState {
                 match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
                         // driven by caller, as we don't have the `State` here
-                        self.refresh_traffic_keys_pending = Some(());
+                        self.refresh_traffic_keys_pending = true;
                     }
                     _ => {
                         error!("Traffic keys exhausted, closing connection to prevent security failure");
