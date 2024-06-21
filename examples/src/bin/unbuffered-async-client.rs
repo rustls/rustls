@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Arc::new(config);
 
-    let mut incoming_tls = [0; INCOMING_TLS_BUFSIZE];
+    let mut incoming_tls = vec![0; INCOMING_TLS_BUFSIZE];
     let mut outgoing_tls = vec![0; OUTGOING_TLS_INITIAL_BUFSIZE];
 
     converse(&config, &mut incoming_tls, &mut outgoing_tls).await?;
