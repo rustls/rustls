@@ -228,7 +228,7 @@ impl CommonState {
                         self.refresh_traffic_keys_pending = true;
                     }
                     _ => {
-                        error!("Traffic keys exhausted, closing connection to prevent security failure");
+                        error!("traffic keys exhausted, closing connection to prevent security failure");
                         self.send_close_notify();
                         return Err(EncryptError::EncryptExhausted);
                     }
@@ -334,7 +334,7 @@ impl CommonState {
                         self.refresh_traffic_keys_pending = true;
                     }
                     _ => {
-                        error!("Traffic keys exhausted, closing connection to prevent security failure");
+                        error!("traffic keys exhausted, closing connection to prevent security failure");
                         self.send_close_notify();
                         return;
                     }
