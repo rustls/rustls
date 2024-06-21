@@ -198,13 +198,10 @@ impl RecordLayer {
     /// `add` is added to the current sequence number.  `add` as `0` means
     /// "the next message processed by `encrypt_outgoing`"
     pub(crate) fn pre_encrypt_action(&self, add: u64) -> PreEncryptAction {
-        let value = self.write_seq.saturating_add(add);
-        if value == self.write_seq_max {
-            PreEncryptAction::RefreshOrClose
-        } else if value >= SEQ_HARD_LIMIT {
-            PreEncryptAction::Refuse
-        } else {
-            PreEncryptAction::Nothing
+        match self.write_seq.saturating_add(add) {
+            v if v == self.write_seq_max => PreEncryptAction::RefreshOrClose,
+            SEQ_HARD_LIMIT.. => PreEncryptAction::Refuse,
+            _ => PreEncryptAction::Nothing,
         }
     }
 
