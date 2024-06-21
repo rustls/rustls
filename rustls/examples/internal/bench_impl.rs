@@ -155,351 +155,17 @@ enum Command {
     AllTests,
 }
 
-fn duration_nanos(d: Duration) -> f64 {
-    (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
-}
-
-fn time<F>(mut f: F) -> f64
-where
-    F: FnMut(),
-{
-    let start = Instant::now();
-    f();
-    let end = Instant::now();
-    duration_nanos(end.duration_since(start))
-}
-
-fn transfer<L, R, LS, RS>(left: &mut L, right: &mut R, expect_data: Option<usize>) -> f64
-where
-    L: DerefMut + Deref<Target = ConnectionCommon<LS>>,
-    R: DerefMut + Deref<Target = ConnectionCommon<RS>>,
-    LS: SideData,
-    RS: SideData,
-{
-    let mut tls_buf = [0u8; 262144];
-    let mut read_time = 0f64;
-    let mut data_left = expect_data;
-    let mut data_buf = [0u8; 8192];
-
-    loop {
-        let mut sz = 0;
-
-        while left.wants_write() {
-            let written = left
-                .write_tls(&mut tls_buf[sz..].as_mut())
-                .unwrap();
-            if written == 0 {
-                break;
-            }
-
-            sz += written;
-        }
-
-        if sz == 0 {
-            return read_time;
-        }
-
-        let mut offs = 0;
-        loop {
-            let start = Instant::now();
-            match right.read_tls(&mut tls_buf[offs..sz].as_ref()) {
-                Ok(read) => {
-                    right.process_new_packets().unwrap();
-                    offs += read;
-                }
-                Err(err) => {
-                    panic!("error on transfer {}..{}: {}", offs, sz, err);
-                }
-            }
-
-            if let Some(left) = &mut data_left {
-                loop {
-                    let sz = match right.reader().read(&mut data_buf) {
-                        Ok(sz) => sz,
-                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-                        Err(err) => panic!("failed to read data: {}", err),
-                    };
-
-                    *left -= sz;
-                    if *left == 0 {
-                        break;
-                    }
-                }
-            }
-
-            let end = Instant::now();
-            read_time += duration_nanos(end.duration_since(start));
-            if sz == offs {
-                break;
-            }
-        }
+fn all_tests(options: &Options) {
+    for test in ALL_BENCHMARKS.iter() {
+        bench_bulk(test, options, 1024 * 1024, None);
+        bench_bulk(test, options, 1024 * 1024, Some(10000));
+        bench_handshake(test, options, ClientAuth::No, ResumptionParam::No);
+        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::No);
+        bench_handshake(test, options, ClientAuth::No, ResumptionParam::SessionId);
+        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::SessionId);
+        bench_handshake(test, options, ClientAuth::No, ResumptionParam::Tickets);
+        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::Tickets);
     }
-}
-
-#[derive(PartialEq, Clone, Copy)]
-enum ClientAuth {
-    No,
-    Yes,
-}
-
-#[derive(PartialEq, Clone, Copy)]
-enum ResumptionParam {
-    No,
-    SessionId,
-    Tickets,
-}
-
-impl ResumptionParam {
-    fn from_subcommand(cmd: &Command) -> Self {
-        match cmd {
-            Command::Handshake { .. } => Self::No,
-            Command::HandshakeResume { .. } => Self::SessionId,
-            Command::HandshakeTicket { .. } => Self::Tickets,
-            _ => todo!("unhandled subcommand {cmd:?}"),
-        }
-    }
-
-    fn label(&self) -> &'static str {
-        match *self {
-            Self::No => "no-resume",
-            Self::SessionId => "sessionid",
-            Self::Tickets => "tickets",
-        }
-    }
-}
-
-// copied from tests/api.rs
-#[derive(PartialEq, Clone, Copy, Debug)]
-enum KeyType {
-    Rsa2048,
-    EcdsaP256,
-    EcdsaP384,
-    Ed25519,
-}
-
-struct BenchmarkParam {
-    key_type: KeyType,
-    ciphersuite: rustls::SupportedCipherSuite,
-    version: &'static rustls::SupportedProtocolVersion,
-}
-
-impl BenchmarkParam {
-    const fn new(
-        key_type: KeyType,
-        ciphersuite: rustls::SupportedCipherSuite,
-        version: &'static rustls::SupportedProtocolVersion,
-    ) -> Self {
-        Self {
-            key_type,
-            ciphersuite,
-            version,
-        }
-    }
-}
-
-static ALL_BENCHMARKS: &[BenchmarkParam] = &[
-    #[cfg(all(feature = "tls12", not(feature = "fips")))]
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS12,
-    ),
-    #[cfg(all(feature = "tls12", not(feature = "fips")))]
-    BenchmarkParam::new(
-        KeyType::EcdsaP256,
-        cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS12,
-    ),
-    #[cfg(feature = "tls12")]
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        &rustls::version::TLS12,
-    ),
-    #[cfg(feature = "tls12")]
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
-    ),
-    #[cfg(feature = "tls12")]
-    BenchmarkParam::new(
-        KeyType::EcdsaP256,
-        cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-        &rustls::version::TLS12,
-    ),
-    #[cfg(feature = "tls12")]
-    BenchmarkParam::new(
-        KeyType::EcdsaP384,
-        cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-        &rustls::version::TLS12,
-    ),
-    #[cfg(not(feature = "fips"))]
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        cipher_suite::TLS13_AES_256_GCM_SHA384,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::Rsa2048,
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::EcdsaP256,
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
-    ),
-    BenchmarkParam::new(
-        KeyType::Ed25519,
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        &rustls::version::TLS13,
-    ),
-];
-
-impl KeyType {
-    fn path_for(&self, part: &str) -> String {
-        match self {
-            Self::Rsa2048 => format!("test-ca/rsa-2048/{}", part),
-            Self::EcdsaP256 => format!("test-ca/ecdsa-p256/{}", part),
-            Self::EcdsaP384 => format!("test-ca/ecdsa-p384/{}", part),
-            Self::Ed25519 => format!("test-ca/eddsa/{}", part),
-        }
-    }
-
-    fn get_chain(&self) -> Vec<CertificateDer<'static>> {
-        rustls_pemfile::certs(&mut io::BufReader::new(
-            fs::File::open(self.path_for("end.fullchain")).unwrap(),
-        ))
-        .map(|result| result.unwrap())
-        .collect()
-    }
-
-    fn get_key(&self) -> PrivateKeyDer<'static> {
-        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-            fs::File::open(self.path_for("end.key")).unwrap(),
-        ))
-        .next()
-        .unwrap()
-        .unwrap()
-        .into()
-    }
-
-    fn get_client_chain(&self) -> Vec<CertificateDer<'static>> {
-        rustls_pemfile::certs(&mut io::BufReader::new(
-            fs::File::open(self.path_for("client.fullchain")).unwrap(),
-        ))
-        .map(|result| result.unwrap())
-        .collect()
-    }
-
-    fn get_client_key(&self) -> PrivateKeyDer<'static> {
-        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-            fs::File::open(self.path_for("client.key")).unwrap(),
-        ))
-        .next()
-        .unwrap()
-        .unwrap()
-        .into()
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Options {
-    work_multiplier: f64,
-}
-
-impl Options {
-    fn apply_work_multiplier(&self, work: u64) -> u64 {
-        ((work as f64) * self.work_multiplier).round() as u64
-    }
-}
-
-fn make_server_config(
-    params: &BenchmarkParam,
-    client_auth: ClientAuth,
-    resume: ResumptionParam,
-    max_fragment_size: Option<usize>,
-) -> ServerConfig {
-    let provider = Arc::new(provider::default_provider());
-    let client_auth = match client_auth {
-        ClientAuth::Yes => {
-            let roots = params.key_type.get_chain();
-            let mut client_auth_roots = RootCertStore::empty();
-            for root in roots {
-                client_auth_roots.add(root).unwrap();
-            }
-            WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), provider.clone())
-                .build()
-                .unwrap()
-        }
-        ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
-    };
-
-    let mut cfg = ServerConfig::builder_with_provider(provider)
-        .with_protocol_versions(&[params.version])
-        .unwrap()
-        .with_client_cert_verifier(client_auth)
-        .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
-        .expect("bad certs/private key?");
-
-    if resume == ResumptionParam::SessionId {
-        cfg.session_storage = ServerSessionMemoryCache::new(128);
-    } else if resume == ResumptionParam::Tickets {
-        cfg.ticketer = Ticketer::new().unwrap();
-    } else {
-        cfg.session_storage = Arc::new(NoServerSessionStorage {});
-    }
-
-    cfg.max_fragment_size = max_fragment_size;
-    cfg
-}
-
-fn make_client_config(
-    params: &BenchmarkParam,
-    clientauth: ClientAuth,
-    resume: ResumptionParam,
-) -> ClientConfig {
-    let mut root_store = RootCertStore::empty();
-    let mut rootbuf =
-        io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
-    root_store.add_parsable_certificates(
-        rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
-    );
-
-    let cfg = ClientConfig::builder_with_provider(
-        CryptoProvider {
-            cipher_suites: vec![params.ciphersuite],
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&[params.version])
-    .unwrap()
-    .with_root_certificates(root_store);
-
-    let mut cfg = if clientauth == ClientAuth::Yes {
-        cfg.with_client_auth_cert(
-            params.key_type.get_client_chain(),
-            params.key_type.get_client_key(),
-        )
-        .unwrap()
-    } else {
-        cfg.with_no_client_auth()
-    };
-
-    if resume != ResumptionParam::No {
-        cfg.resumption = Resumption::in_memory_sessions(128);
-    } else {
-        cfg.resumption = Resumption::disabled();
-    }
-
-    cfg
 }
 
 fn bench_handshake(
@@ -566,20 +232,6 @@ fn bench_handshake(
         resume.label(),
         (rounds as f64) / server_time
     );
-}
-
-fn do_handshake_step(client: &mut ClientConnection, server: &mut ServerConnection) -> bool {
-    if server.is_handshaking() || client.is_handshaking() {
-        transfer(client, server, None);
-        transfer(server, client, None);
-        true
-    } else {
-        false
-    }
-}
-
-fn do_handshake(client: &mut ClientConnection, server: &mut ServerConnection) {
-    while do_handshake_step(client, server) {}
 }
 
 fn bench_bulk(
@@ -698,6 +350,88 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     }
 }
 
+fn make_server_config(
+    params: &BenchmarkParam,
+    client_auth: ClientAuth,
+    resume: ResumptionParam,
+    max_fragment_size: Option<usize>,
+) -> ServerConfig {
+    let provider = Arc::new(provider::default_provider());
+    let client_auth = match client_auth {
+        ClientAuth::Yes => {
+            let roots = params.key_type.get_chain();
+            let mut client_auth_roots = RootCertStore::empty();
+            for root in roots {
+                client_auth_roots.add(root).unwrap();
+            }
+            WebPkiClientVerifier::builder_with_provider(client_auth_roots.into(), provider.clone())
+                .build()
+                .unwrap()
+        }
+        ClientAuth::No => WebPkiClientVerifier::no_client_auth(),
+    };
+
+    let mut cfg = ServerConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[params.version])
+        .unwrap()
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
+        .expect("bad certs/private key?");
+
+    if resume == ResumptionParam::SessionId {
+        cfg.session_storage = ServerSessionMemoryCache::new(128);
+    } else if resume == ResumptionParam::Tickets {
+        cfg.ticketer = Ticketer::new().unwrap();
+    } else {
+        cfg.session_storage = Arc::new(NoServerSessionStorage {});
+    }
+
+    cfg.max_fragment_size = max_fragment_size;
+    cfg
+}
+
+fn make_client_config(
+    params: &BenchmarkParam,
+    clientauth: ClientAuth,
+    resume: ResumptionParam,
+) -> ClientConfig {
+    let mut root_store = RootCertStore::empty();
+    let mut rootbuf =
+        io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
+    root_store.add_parsable_certificates(
+        rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
+    );
+
+    let cfg = ClientConfig::builder_with_provider(
+        CryptoProvider {
+            cipher_suites: vec![params.ciphersuite],
+            ..provider::default_provider()
+        }
+        .into(),
+    )
+    .with_protocol_versions(&[params.version])
+    .unwrap()
+    .with_root_certificates(root_store);
+
+    let mut cfg = if clientauth == ClientAuth::Yes {
+        cfg.with_client_auth_cert(
+            params.key_type.get_client_chain(),
+            params.key_type.get_client_key(),
+        )
+        .unwrap()
+    } else {
+        cfg.with_no_client_auth()
+    };
+
+    if resume != ResumptionParam::No {
+        cfg.resumption = Resumption::in_memory_sessions(128);
+    } else {
+        cfg.resumption = Resumption::disabled();
+    }
+
+    cfg
+}
+
 fn lookup_matching_benches(name: &str) -> Vec<&BenchmarkParam> {
     let r: Vec<&BenchmarkParam> = ALL_BENCHMARKS
         .iter()
@@ -713,18 +447,284 @@ fn lookup_matching_benches(name: &str) -> Vec<&BenchmarkParam> {
     r
 }
 
-fn all_tests(options: &Options) {
-    for test in ALL_BENCHMARKS.iter() {
-        bench_bulk(test, options, 1024 * 1024, None);
-        bench_bulk(test, options, 1024 * 1024, Some(10000));
-        bench_handshake(test, options, ClientAuth::No, ResumptionParam::No);
-        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::No);
-        bench_handshake(test, options, ClientAuth::No, ResumptionParam::SessionId);
-        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::SessionId);
-        bench_handshake(test, options, ClientAuth::No, ResumptionParam::Tickets);
-        bench_handshake(test, options, ClientAuth::Yes, ResumptionParam::Tickets);
+#[derive(PartialEq, Clone, Copy)]
+enum ClientAuth {
+    No,
+    Yes,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+enum ResumptionParam {
+    No,
+    SessionId,
+    Tickets,
+}
+
+impl ResumptionParam {
+    fn from_subcommand(cmd: &Command) -> Self {
+        match cmd {
+            Command::Handshake { .. } => Self::No,
+            Command::HandshakeResume { .. } => Self::SessionId,
+            Command::HandshakeTicket { .. } => Self::Tickets,
+            _ => todo!("unhandled subcommand {cmd:?}"),
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match *self {
+            Self::No => "no-resume",
+            Self::SessionId => "sessionid",
+            Self::Tickets => "tickets",
+        }
     }
 }
+
+#[derive(Debug, Clone)]
+struct Options {
+    work_multiplier: f64,
+}
+
+impl Options {
+    fn apply_work_multiplier(&self, work: u64) -> u64 {
+        ((work as f64) * self.work_multiplier).round() as u64
+    }
+}
+
+struct BenchmarkParam {
+    key_type: KeyType,
+    ciphersuite: rustls::SupportedCipherSuite,
+    version: &'static rustls::SupportedProtocolVersion,
+}
+
+impl BenchmarkParam {
+    const fn new(
+        key_type: KeyType,
+        ciphersuite: rustls::SupportedCipherSuite,
+        version: &'static rustls::SupportedProtocolVersion,
+    ) -> Self {
+        Self {
+            key_type,
+            ciphersuite,
+            version,
+        }
+    }
+}
+
+// copied from tests/api.rs
+#[derive(PartialEq, Clone, Copy, Debug)]
+enum KeyType {
+    Rsa2048,
+    EcdsaP256,
+    EcdsaP384,
+    Ed25519,
+}
+
+impl KeyType {
+    fn path_for(&self, part: &str) -> String {
+        match self {
+            Self::Rsa2048 => format!("test-ca/rsa-2048/{}", part),
+            Self::EcdsaP256 => format!("test-ca/ecdsa-p256/{}", part),
+            Self::EcdsaP384 => format!("test-ca/ecdsa-p384/{}", part),
+            Self::Ed25519 => format!("test-ca/eddsa/{}", part),
+        }
+    }
+
+    fn get_chain(&self) -> Vec<CertificateDer<'static>> {
+        rustls_pemfile::certs(&mut io::BufReader::new(
+            fs::File::open(self.path_for("end.fullchain")).unwrap(),
+        ))
+        .map(|result| result.unwrap())
+        .collect()
+    }
+
+    fn get_key(&self) -> PrivateKeyDer<'static> {
+        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+            fs::File::open(self.path_for("end.key")).unwrap(),
+        ))
+        .next()
+        .unwrap()
+        .unwrap()
+        .into()
+    }
+
+    fn get_client_chain(&self) -> Vec<CertificateDer<'static>> {
+        rustls_pemfile::certs(&mut io::BufReader::new(
+            fs::File::open(self.path_for("client.fullchain")).unwrap(),
+        ))
+        .map(|result| result.unwrap())
+        .collect()
+    }
+
+    fn get_client_key(&self) -> PrivateKeyDer<'static> {
+        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
+            fs::File::open(self.path_for("client.key")).unwrap(),
+        ))
+        .next()
+        .unwrap()
+        .unwrap()
+        .into()
+    }
+}
+
+fn do_handshake_step(client: &mut ClientConnection, server: &mut ServerConnection) -> bool {
+    if server.is_handshaking() || client.is_handshaking() {
+        transfer(client, server, None);
+        transfer(server, client, None);
+        true
+    } else {
+        false
+    }
+}
+
+fn do_handshake(client: &mut ClientConnection, server: &mut ServerConnection) {
+    while do_handshake_step(client, server) {}
+}
+
+fn time<F>(mut f: F) -> f64
+where
+    F: FnMut(),
+{
+    let start = Instant::now();
+    f();
+    let end = Instant::now();
+    duration_nanos(end.duration_since(start))
+}
+
+fn transfer<L, R, LS, RS>(left: &mut L, right: &mut R, expect_data: Option<usize>) -> f64
+where
+    L: DerefMut + Deref<Target = ConnectionCommon<LS>>,
+    R: DerefMut + Deref<Target = ConnectionCommon<RS>>,
+    LS: SideData,
+    RS: SideData,
+{
+    let mut tls_buf = [0u8; 262144];
+    let mut read_time = 0f64;
+    let mut data_left = expect_data;
+    let mut data_buf = [0u8; 8192];
+
+    loop {
+        let mut sz = 0;
+
+        while left.wants_write() {
+            let written = left
+                .write_tls(&mut tls_buf[sz..].as_mut())
+                .unwrap();
+            if written == 0 {
+                break;
+            }
+
+            sz += written;
+        }
+
+        if sz == 0 {
+            return read_time;
+        }
+
+        let mut offs = 0;
+        loop {
+            let start = Instant::now();
+            match right.read_tls(&mut tls_buf[offs..sz].as_ref()) {
+                Ok(read) => {
+                    right.process_new_packets().unwrap();
+                    offs += read;
+                }
+                Err(err) => {
+                    panic!("error on transfer {}..{}: {}", offs, sz, err);
+                }
+            }
+
+            if let Some(left) = &mut data_left {
+                loop {
+                    let sz = match right.reader().read(&mut data_buf) {
+                        Ok(sz) => sz,
+                        Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
+                        Err(err) => panic!("failed to read data: {}", err),
+                    };
+
+                    *left -= sz;
+                    if *left == 0 {
+                        break;
+                    }
+                }
+            }
+
+            let end = Instant::now();
+            read_time += duration_nanos(end.duration_since(start));
+            if sz == offs {
+                break;
+            }
+        }
+    }
+}
+
+fn duration_nanos(d: Duration) -> f64 {
+    (d.as_secs() as f64) + f64::from(d.subsec_nanos()) / 1e9
+}
+
+static ALL_BENCHMARKS: &[BenchmarkParam] = &[
+    #[cfg(all(feature = "tls12", not(feature = "fips")))]
+    BenchmarkParam::new(
+        KeyType::Rsa2048,
+        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::version::TLS12,
+    ),
+    #[cfg(all(feature = "tls12", not(feature = "fips")))]
+    BenchmarkParam::new(
+        KeyType::EcdsaP256,
+        cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+        &rustls::version::TLS12,
+    ),
+    #[cfg(feature = "tls12")]
+    BenchmarkParam::new(
+        KeyType::Rsa2048,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        &rustls::version::TLS12,
+    ),
+    #[cfg(feature = "tls12")]
+    BenchmarkParam::new(
+        KeyType::Rsa2048,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        &rustls::version::TLS12,
+    ),
+    #[cfg(feature = "tls12")]
+    BenchmarkParam::new(
+        KeyType::EcdsaP256,
+        cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+        &rustls::version::TLS12,
+    ),
+    #[cfg(feature = "tls12")]
+    BenchmarkParam::new(
+        KeyType::EcdsaP384,
+        cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        &rustls::version::TLS12,
+    ),
+    #[cfg(not(feature = "fips"))]
+    BenchmarkParam::new(
+        KeyType::Rsa2048,
+        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        &rustls::version::TLS13,
+    ),
+    BenchmarkParam::new(
+        KeyType::Rsa2048,
+        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        &rustls::version::TLS13,
+    ),
+    BenchmarkParam::new(
+        KeyType::Rsa2048,
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
+        &rustls::version::TLS13,
+    ),
+    BenchmarkParam::new(
+        KeyType::EcdsaP256,
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
+        &rustls::version::TLS13,
+    ),
+    BenchmarkParam::new(
+        KeyType::Ed25519,
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
+        &rustls::version::TLS13,
+    ),
+];
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
