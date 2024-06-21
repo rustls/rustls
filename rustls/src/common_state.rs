@@ -309,25 +309,22 @@ impl CommonState {
     }
 
     fn send_single_fragment(&mut self, m: OutboundPlainMessage) {
-        match (
-            &m,
-            self.record_layer
-                .next_pre_encrypt_action(),
-        ) {
+        if m.typ == ContentType::Alert {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
-            (
-                OutboundPlainMessage {
-                    typ: ContentType::Alert,
-                    ..
-                },
-                _,
-            ) => {}
+            let em = self.record_layer.encrypt_outgoing(m);
+            self.queue_tls_message(em);
+            return;
+        }
 
-            (_, PreEncryptAction::Nothing) => {}
+        match self
+            .record_layer
+            .next_pre_encrypt_action()
+        {
+            PreEncryptAction::Nothing => {}
 
             // Close connection once we start to run out of
             // sequence space.
-            (_, PreEncryptAction::RefreshOrClose) => {
+            PreEncryptAction::RefreshOrClose => {
                 match self.negotiated_version {
                     Some(ProtocolVersion::TLSv1_3) => {
                         // driven by caller, as we don't have the `State` here
@@ -343,7 +340,7 @@ impl CommonState {
 
             // Refuse to wrap counter at all costs.  This
             // is basically untestable unfortunately.
-            (_, PreEncryptAction::Refuse) => {
+            PreEncryptAction::Refuse => {
                 return;
             }
         };
