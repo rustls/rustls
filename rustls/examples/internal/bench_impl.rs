@@ -252,24 +252,41 @@ fn bench_bulk(
         max_fragment_size,
     ));
 
-    let server_name = "localhost".try_into().unwrap();
-    let mut client = ClientConnection::new(client_config, server_name).unwrap();
-    client.set_buffer_limit(None);
-    let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
-    server.set_buffer_limit(None);
-
-    do_handshake(&mut client, &mut server);
-
-    let buf = vec![0; plaintext_size as usize];
     let total_data = options.apply_work_multiplier(if plaintext_size < 8192 {
         64 * 1024 * 1024
     } else {
         1024 * 1024 * 1024
     });
     let rounds = total_data / plaintext_size;
+
+    report_bulk_result(
+        "bulk",
+        bench_bulk_buffered(client_config, server_config, plaintext_size, rounds),
+        plaintext_size,
+        rounds,
+        max_fragment_size,
+        params,
+    );
+}
+
+fn bench_bulk_buffered(
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+    plaintext_size: u64,
+    rounds: u64,
+) -> (f64, f64) {
+    let server_name = "localhost".try_into().unwrap();
+    let mut client = ClientConnection::new(client_config, server_name).unwrap();
+    client.set_buffer_limit(None);
+    let mut server = ServerConnection::new(server_config).unwrap();
+    server.set_buffer_limit(None);
+
+    do_handshake(&mut client, &mut server);
+
     let mut time_send = 0f64;
     let mut time_recv = 0f64;
 
+    let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
         time_send += time(|| {
             server.writer().write_all(&buf).unwrap();
@@ -278,6 +295,17 @@ fn bench_bulk(
         time_recv += transfer(&mut server, &mut client, Some(buf.len()));
     }
 
+    (time_send, time_recv)
+}
+
+fn report_bulk_result(
+    variant: &str,
+    (time_send, time_recv): (f64, f64),
+    plaintext_size: u64,
+    rounds: u64,
+    max_fragment_size: Option<usize>,
+    params: &BenchmarkParam,
+) {
     let mfs_str = format!(
         "max_fragment_size:{}",
         max_fragment_size
@@ -286,14 +314,16 @@ fn bench_bulk(
     );
     let total_mbs = ((plaintext_size * rounds) as f64) / (1024. * 1024.);
     println!(
-        "bulk\t{:?}\t{:?}\t{}\tsend\t{:.2}\tMB/s",
+        "{}\t{:?}\t{:?}\t{}\tsend\t{:.2}\tMB/s",
+        variant,
         params.version,
         params.ciphersuite.suite(),
         mfs_str,
         total_mbs / time_send
     );
     println!(
-        "bulk\t{:?}\t{:?}\t{}\trecv\t{:.2}\tMB/s",
+        "{}\t{:?}\t{:?}\t{}\trecv\t{:.2}\tMB/s",
+        variant,
         params.version,
         params.ciphersuite.suite(),
         mfs_str,
