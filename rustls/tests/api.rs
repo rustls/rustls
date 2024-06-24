@@ -5344,6 +5344,14 @@ fn connection_types_are_not_huge() {
     // Arbitrary sizes
     assert_lt(mem::size_of::<ServerConnection>(), 1600);
     assert_lt(mem::size_of::<ClientConnection>(), 1600);
+    assert_lt(
+        mem::size_of::<rustls::server::UnbufferedServerConnection>(),
+        1600,
+    );
+    assert_lt(
+        mem::size_of::<rustls::client::UnbufferedClientConnection>(),
+        1600,
+    );
 }
 
 #[test]
