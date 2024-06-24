@@ -290,7 +290,10 @@ impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
         let len = match T::SIZE_LEN {
             ListLength::U8 => usize::from(u8::read(r)?),
             ListLength::U16 => usize::from(u16::read(r)?),
-            ListLength::U24 { max } => Ord::min(usize::from(u24::read(r)?), max),
+            ListLength::U24 { max, error } => match usize::from(u24::read(r)?) {
+                len if len > max => return Err(error),
+                len => len,
+            },
         };
 
         let mut sub = r.sub(len)?;
@@ -317,11 +320,11 @@ pub(crate) trait TlsListElement {
 ///
 /// The types that appear in lists are limited to three kinds of length prefixes:
 /// 1, 2, and 3 bytes. For the latter kind, we require a `TlsListElement` implementer
-/// to specify a maximum length.
+/// to specify a maximum length and error if the actual length is larger.
 pub(crate) enum ListLength {
     U8,
     U16,
-    U24 { max: usize },
+    U24 { max: usize, error: InvalidMessage },
 }
 
 /// Tracks encoding a length-delimited structure in a single pass.

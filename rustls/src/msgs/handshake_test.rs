@@ -884,7 +884,7 @@ fn cannot_decode_huge_certificate() {
     buf[6] = 0x01;
     assert_eq!(
         HandshakeMessagePayload::read_bytes(&buf[..0x10001 + 7]).unwrap_err(),
-        InvalidMessage::TrailingData("HandshakeMessagePayload")
+        InvalidMessage::CertificatePayloadTooLarge
     );
 }
 
