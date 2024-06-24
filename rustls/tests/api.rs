@@ -6788,7 +6788,7 @@ fn test_cert_decompression_by_client_produces_invalid_cert_payload() {
     assert_eq!(
         do_handshake_until_error(&mut client, &mut server),
         Err(ErrorFromPeer::Client(Error::InvalidMessage(
-            InvalidMessage::MessageTooShort
+            InvalidMessage::CertificatePayloadTooLarge
         )))
     );
     transfer(&mut client, &mut server);
@@ -6809,7 +6809,7 @@ fn test_cert_decompression_by_server_produces_invalid_cert_payload() {
     assert_eq!(
         do_handshake_until_error(&mut client, &mut server),
         Err(ErrorFromPeer::Server(Error::InvalidMessage(
-            InvalidMessage::MessageTooShort
+            InvalidMessage::CertificatePayloadTooLarge
         )))
     );
     transfer(&mut server, &mut client);

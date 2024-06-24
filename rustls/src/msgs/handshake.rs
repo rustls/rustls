@@ -1447,6 +1447,7 @@ impl<'a> Deref for CertificateChain<'a> {
 impl TlsListElement for CertificateDer<'_> {
     const SIZE_LEN: ListLength = ListLength::U24 {
         max: CERTIFICATE_MAX_SIZE_LIMIT,
+        error: InvalidMessage::CertificatePayloadTooLarge,
     };
 }
 
@@ -1583,6 +1584,7 @@ impl<'a> CertificateEntry<'a> {
 impl<'a> TlsListElement for CertificateEntry<'a> {
     const SIZE_LEN: ListLength = ListLength::U24 {
         max: CERTIFICATE_MAX_SIZE_LIMIT,
+        error: InvalidMessage::CertificatePayloadTooLarge,
     };
 }
 
@@ -2726,7 +2728,13 @@ impl<'a> HandshakeMessagePayload<'a> {
         }
         .encode(bytes);
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U24 { max: usize::MAX }, bytes);
+        let nested = LengthPrefixedBuffer::new(
+            ListLength::U24 {
+                max: usize::MAX,
+                error: InvalidMessage::MessageTooLarge,
+            },
+            bytes,
+        );
 
         match &self.payload {
             // for Server Hello and HelloRetryRequest payloads we need to encode the payload

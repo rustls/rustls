@@ -112,6 +112,8 @@ pub enum Error {
 #[derive(Debug, Clone, Copy, PartialEq)]
 
 pub enum InvalidMessage {
+    /// A certificate payload exceeded rustls's 64KB limit
+    CertificatePayloadTooLarge,
     /// An advertised message was larger then expected.
     HandshakePayloadTooLarge,
     /// The peer sent us a syntactically incorrect ChangeCipherSpec payload.
