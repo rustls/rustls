@@ -5,11 +5,14 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::fmt::{Debug, Formatter};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use super::ring_like::aead;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
 use super::TICKETER_AEAD;
 use crate::error::Error;
+#[cfg(feature = "logging")]
+use crate::log::debug;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
 
@@ -58,6 +61,7 @@ fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> 
         alg: TICKETER_AEAD,
         key: aead::LessSafeKey::new(key),
         lifetime: 60 * 60 * 12,
+        maximum_ciphertext_len: AtomicUsize::new(0),
     }))
 }
 
@@ -69,6 +73,16 @@ struct AeadTicketer {
     alg: &'static aead::Algorithm,
     key: aead::LessSafeKey,
     lifetime: u32,
+
+    /// Tracks the largest ciphertext produced by `encrypt`, and
+    /// uses it to early-reject `decrypt` queries that are too long.
+    ///
+    /// Accepting excessively long ciphertexts means a "Partitioning
+    /// Oracle Attack" (see <https://eprint.iacr.org/2020/1491.pdf>)
+    /// can be more efficient, though also note that these are thought
+    /// to be cryptographically hard if the key is full-entropy (as it
+    /// is here).
+    maximum_ciphertext_len: AtomicUsize,
 }
 
 impl ProducesTickets for AeadTicketer {
@@ -93,17 +107,32 @@ impl ProducesTickets for AeadTicketer {
             Vec::with_capacity(nonce_buf.len() + message.len() + self.key.algorithm().tag_len());
         ciphertext.extend(nonce_buf);
         ciphertext.extend(message);
-        self.key
+        let ciphertext = self
+            .key
             .seal_in_place_separate_tag(nonce, aad, &mut ciphertext[nonce_buf.len()..])
             .map(|tag| {
                 ciphertext.extend(tag.as_ref());
                 ciphertext
             })
-            .ok()
+            .ok()?;
+
+        self.maximum_ciphertext_len
+            .fetch_max(ciphertext.len(), Ordering::SeqCst);
+        Some(ciphertext)
     }
 
     /// Decrypt `ciphertext` and recover the original message.
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
+        if ciphertext.len()
+            > self
+                .maximum_ciphertext_len
+                .load(Ordering::SeqCst)
+        {
+            #[cfg(debug_assertions)]
+            debug!("rejected over-length ticket");
+            return None;
+        }
+
         // Non-panicking `let (nonce, ciphertext) = ciphertext.split_at(...)`.
         let nonce = ciphertext.get(..self.alg.nonce_len())?;
         let ciphertext = ciphertext.get(nonce.len()..)?;
@@ -149,6 +178,25 @@ mod tests {
         let cipher = t.encrypt(b"hello world").unwrap();
         let plain = t.decrypt(&cipher).unwrap();
         assert_eq!(plain, b"hello world");
+    }
+
+    #[test]
+    fn refuses_decrypt_before_encrypt() {
+        let t = Ticketer::new().unwrap();
+        assert_eq!(t.decrypt(b"hello"), None);
+    }
+
+    #[test]
+    fn refuses_decrypt_larger_than_largest_encryption() {
+        let t = Ticketer::new().unwrap();
+        let mut cipher = t.encrypt(b"hello world").unwrap();
+        assert_eq!(t.decrypt(&cipher), Some(b"hello world".to_vec()));
+
+        // obviously this would never work anyway, but this
+        // and `cannot_decrypt_before_encrypt` exercise the
+        // first branch in `decrypt()`
+        cipher.push(0);
+        assert_eq!(t.decrypt(&cipher), None);
     }
 
     #[test]
