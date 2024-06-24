@@ -7,6 +7,7 @@ use super::handshake::{ServerDhParams, ServerKeyExchange, ServerKeyExchangeParam
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
+use crate::error::InvalidMessage;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
@@ -872,7 +873,7 @@ fn cannot_decode_huge_certificate() {
     buf[7] = 0x00;
     buf[8] = 0xff;
     buf[9] = 0xfd;
-    HandshakeMessagePayload::read_bytes(&buf).unwrap();
+    HandshakeMessagePayload::read_bytes(&buf[..0x10000 + 7]).unwrap();
 
     // however 64KB + 1 byte does not
     buf[1] = 0x01;
@@ -881,7 +882,10 @@ fn cannot_decode_huge_certificate() {
     buf[4] = 0x01;
     buf[5] = 0x00;
     buf[6] = 0x01;
-    assert!(HandshakeMessagePayload::read_bytes(&buf).is_err());
+    assert_eq!(
+        HandshakeMessagePayload::read_bytes(&buf[..0x10001 + 7]).unwrap_err(),
+        InvalidMessage::TrailingData("HandshakeMessagePayload")
+    );
 }
 
 #[test]
