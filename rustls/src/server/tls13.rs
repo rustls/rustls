@@ -1537,11 +1537,8 @@ impl State<ServerConnectionData> for ExpectTraffic {
     }
 
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
-        common.check_aligned_handshake()?;
-        common.send_msg(Message::build_key_update_request(), true);
         self.key_schedule
-            .update_encrypter(common);
-        Ok(())
+            .request_key_update_and_update_encrypter(common)
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
