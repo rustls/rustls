@@ -6,6 +6,7 @@ use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
 use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::crypto::{hash, hmac, SharedSecret};
 use crate::error::Error;
+use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{quic, KeyLog, Tls13CipherSuite};
 
@@ -496,9 +497,15 @@ impl KeyScheduleTraffic {
         self.ks.set_encrypter(&secret, common);
     }
 
-    pub(crate) fn update_encrypter(&mut self, common: &mut CommonState) {
+    pub(crate) fn request_key_update_and_update_encrypter(
+        &mut self,
+        common: &mut CommonState,
+    ) -> Result<(), Error> {
+        common.check_aligned_handshake()?;
+        common.send_msg_encrypt(Message::build_key_update_request().into());
         let secret = self.next_application_traffic_secret(common.side);
         self.ks.set_encrypter(&secret, common);
+        Ok(())
     }
 
     pub(crate) fn update_decrypter(&mut self, common: &mut CommonState) {
