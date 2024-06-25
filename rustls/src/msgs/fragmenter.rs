@@ -113,7 +113,7 @@ mod tests {
     use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
 
     fn msg_eq(
-        m: &OutboundPlainMessage,
+        m: &OutboundPlainMessage<'_>,
         total_len: usize,
         typ: &ContentType,
         version: &ProtocolVersion,

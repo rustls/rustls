@@ -175,7 +175,7 @@ impl OutboundOpaqueMessage {
     ///
     /// `MessageError` allows callers to distinguish between valid prefixes (might
     /// become valid if we read more data) and invalid data.
-    pub fn read(r: &mut Reader) -> Result<Self, MessageError> {
+    pub fn read(r: &mut Reader<'_>) -> Result<Self, MessageError> {
         let (typ, version, len) = read_opaque_message_header(r)?;
 
         let content = r
@@ -225,7 +225,7 @@ impl PrefixedPayload {
         self.0.extend_from_slice(slice)
     }
 
-    pub fn extend_from_chunks(&mut self, chunks: &OutboundChunks) {
+    pub fn extend_from_chunks(&mut self, chunks: &OutboundChunks<'_>) {
         chunks.copy_to_vec(&mut self.0)
     }
 

@@ -133,7 +133,7 @@ impl Codec<'_> for PayloadU16 {
         Self::encode_slice(&self.0, bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = u16::read(r)? as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
@@ -172,7 +172,7 @@ impl Codec<'_> for PayloadU8 {
         bytes.extend_from_slice(&self.0);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = u8::read(r)? as usize;
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();

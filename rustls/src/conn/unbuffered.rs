@@ -296,7 +296,7 @@ impl<'c, 'i, Data> ReadTraffic<'c, 'i, Data> {
 
     /// Decrypts and returns the next available app-data record
     // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
-    pub fn next_record(&mut self) -> Option<Result<AppDataRecord, Error>> {
+    pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {
         if self.taken {
             None
         } else {
@@ -347,7 +347,7 @@ impl<'c, 'i, Data> ReadEarlyData<'c, 'i, Data> {
 impl<'c, 'i> ReadEarlyData<'c, 'i, ServerConnectionData> {
     /// decrypts and returns the next available app-data record
     // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
-    pub fn next_record(&mut self) -> Option<Result<AppDataRecord, Error>> {
+    pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {
         if self.taken {
             None
         } else {
@@ -488,7 +488,7 @@ impl<Data> TransmitTlsData<'_, Data> {
     /// Returns an adapter that allows encrypting application data
     ///
     /// If allowed at this stage of the handshake process
-    pub fn may_encrypt_app_data(&mut self) -> Option<WriteTraffic<Data>> {
+    pub fn may_encrypt_app_data(&mut self) -> Option<WriteTraffic<'_, Data>> {
         if self
             .conn
             .core

@@ -168,7 +168,7 @@ impl InboundPlainMessage<'_> {
 /// the content type, which is returned.  See RFC8446 s5.2.
 ///
 /// ContentType(0) is returned if the message payload is empty or all zeroes.
-fn unpad_tls13_payload(p: &mut BorrowedPayload) -> ContentType {
+fn unpad_tls13_payload(p: &mut BorrowedPayload<'_>) -> ContentType {
     loop {
         match p.pop() {
             Some(0) => {}

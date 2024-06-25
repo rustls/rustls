@@ -62,7 +62,7 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 
 pub(super) fn handle_server_hello(
     config: Arc<ClientConfig>,
-    cx: &mut ClientContext,
+    cx: &mut ClientContext<'_>,
     server_hello: &ServerHelloPayload,
     mut resuming_session: Option<persist::Tls13ClientSessionValue>,
     server_name: ServerName<'static>,
@@ -73,7 +73,7 @@ pub(super) fn handle_server_hello(
     mut hello: ClientHelloDetails,
     our_key_share: Box<dyn ActiveKeyExchange>,
     mut sent_tls13_fake_ccs: bool,
-    server_hello_msg: &Message,
+    server_hello_msg: &Message<'_>,
     ech_state: Option<EchState>,
 ) -> hs::NextStateOrError<'static> {
     validate_server_hello(cx.common, server_hello)?;
@@ -252,7 +252,7 @@ pub(super) fn initial_key_share(
 pub(super) fn fill_in_psk_binder(
     resuming: &persist::Tls13ClientSessionValue,
     transcript: &HandshakeHashBuffer,
-    hmp: &mut HandshakeMessagePayload,
+    hmp: &mut HandshakeMessagePayload<'_>,
 ) -> KeyScheduleEarly {
     // We need to know the hash function of the suite we're trying to resume into.
     let suite = resuming.suite();

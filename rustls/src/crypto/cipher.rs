@@ -150,7 +150,7 @@ pub trait MessageEncrypter: Send + Sync {
     /// `seq` which can be used to derive a unique [`Nonce`].
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage,
+        msg: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error>;
 
@@ -325,7 +325,7 @@ struct InvalidMessageEncrypter {}
 impl MessageEncrypter for InvalidMessageEncrypter {
     fn encrypt(
         &mut self,
-        _m: OutboundPlainMessage,
+        _m: OutboundPlainMessage<'_>,
         _seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error> {
         Err(Error::EncryptError)

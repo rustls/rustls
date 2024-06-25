@@ -685,7 +685,7 @@ fn cert_entry_ocsp_response() {
     });
 }
 
-fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) -> bool) {
+fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry<'_>) -> bool) {
     let mut ce = sample_certificate_payload_tls13()
         .entries
         .remove(0);

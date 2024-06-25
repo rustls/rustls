@@ -668,7 +668,7 @@ mod connection {
     }
 
     impl fmt::Debug for ClientConnection {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("ClientConnection")
                 .finish()
         }
@@ -702,7 +702,7 @@ mod connection {
         /// The server can choose not to accept any sent early data --
         /// in this case the data is lost but the connection continues.  You
         /// can tell this happened using `is_early_data_accepted`.
-        pub fn early_data(&mut self) -> Option<WriteEarlyData> {
+        pub fn early_data(&mut self) -> Option<WriteEarlyData<'_>> {
             if self
                 .inner
                 .core
@@ -861,7 +861,7 @@ impl TransmitTlsData<'_, ClientConnectionData> {
     /// already encoded TLS data
     ///
     /// IF allowed by the protocol
-    pub fn may_encrypt_early_data(&mut self) -> Option<MayEncryptEarlyData> {
+    pub fn may_encrypt_early_data(&mut self) -> Option<MayEncryptEarlyData<'_>> {
         if self
             .conn
             .core

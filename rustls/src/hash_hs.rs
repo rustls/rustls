@@ -34,7 +34,7 @@ impl HandshakeHashBuffer {
     }
 
     /// Hash/buffer a handshake message.
-    pub(crate) fn add_message(&mut self, m: &Message) {
+    pub(crate) fn add_message(&mut self, m: &Message<'_>) {
         if let MessagePayload::Handshake { encoded, .. } = &m.payload {
             self.buffer
                 .extend_from_slice(encoded.bytes());
@@ -97,7 +97,7 @@ impl HandshakeHash {
     }
 
     /// Hash/buffer a handshake message.
-    pub(crate) fn add_message(&mut self, m: &Message) -> &mut Self {
+    pub(crate) fn add_message(&mut self, m: &Message<'_>) -> &mut Self {
         if let MessagePayload::Handshake { encoded, .. } = &m.payload {
             self.update_raw(encoded.bytes());
         }

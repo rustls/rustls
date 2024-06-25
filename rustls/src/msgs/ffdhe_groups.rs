@@ -59,7 +59,7 @@ impl<'a> FfdheGroup<'a> {
 /// FFDHE2048 group defined in [RFC 7919 Appendix A.1]
 ///
 /// [RFC 7919 Appendix A.1]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.1
-pub const FFDHE2048: FfdheGroup = FfdheGroup {
+pub const FFDHE2048: FfdheGroup<'static> = FfdheGroup {
     p: include_bytes!("ffdhe_groups/ffdhe2048-modulus.bin"),
     g: &[2],
 };
@@ -67,7 +67,7 @@ pub const FFDHE2048: FfdheGroup = FfdheGroup {
 /// FFDHE3072 group defined in [RFC 7919 Appendix A.2]
 ///
 /// [RFC 7919 Appendix A.2]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.2
-pub const FFDHE3072: FfdheGroup = FfdheGroup {
+pub const FFDHE3072: FfdheGroup<'static> = FfdheGroup {
     p: include_bytes!("ffdhe_groups/ffdhe3072-modulus.bin"),
     g: &[2],
 };
@@ -75,7 +75,7 @@ pub const FFDHE3072: FfdheGroup = FfdheGroup {
 /// FFDHE4096 group defined in [RFC 7919 Appendix A.3]
 ///
 /// [RFC 7919 Appendix A.3]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.3
-pub const FFDHE4096: FfdheGroup = FfdheGroup {
+pub const FFDHE4096: FfdheGroup<'static> = FfdheGroup {
     p: include_bytes!("ffdhe_groups/ffdhe4096-modulus.bin"),
     g: &[2],
 };
@@ -83,7 +83,7 @@ pub const FFDHE4096: FfdheGroup = FfdheGroup {
 /// FFDHE6144 group defined in [RFC 7919 Appendix A.4]
 ///
 /// [RFC 7919 Appendix A.4]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.4
-pub const FFDHE6144: FfdheGroup = FfdheGroup {
+pub const FFDHE6144: FfdheGroup<'static> = FfdheGroup {
     p: include_bytes!("ffdhe_groups/ffdhe6144-modulus.bin"),
     g: &[2],
 };
@@ -91,7 +91,7 @@ pub const FFDHE6144: FfdheGroup = FfdheGroup {
 /// FFDHE8192 group defined in [RFC 7919 Appendix A.5]
 ///
 /// [RFC 7919 Appendix A.5]: https://datatracker.ietf.org/doc/html/rfc7919#appendix-A.5
-pub const FFDHE8192: FfdheGroup = FfdheGroup {
+pub const FFDHE8192: FfdheGroup<'static> = FfdheGroup {
     p: include_bytes!("ffdhe_groups/ffdhe8192-modulus.bin"),
     g: &[2],
 };

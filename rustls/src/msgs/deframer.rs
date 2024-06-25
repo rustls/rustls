@@ -417,7 +417,7 @@ pub struct DeframerVecBuffer {
 impl DeframerVecBuffer {
     /// Borrows the initialized contents of this buffer and tracks pending discard operations via
     /// the `discard` reference
-    pub fn borrow(&mut self) -> DeframerSliceBuffer {
+    pub fn borrow(&mut self) -> DeframerSliceBuffer<'_> {
         DeframerSliceBuffer::new(&mut self.buf[..self.used])
     }
 

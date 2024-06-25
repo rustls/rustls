@@ -52,7 +52,7 @@ mod server_hello {
     impl CompleteServerHelloHandling {
         pub(in crate::client) fn handle_server_hello(
             mut self,
-            cx: &mut ClientContext,
+            cx: &mut ClientContext<'_>,
             suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
             tls13_supported: bool,

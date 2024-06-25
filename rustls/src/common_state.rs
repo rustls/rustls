@@ -161,7 +161,7 @@ impl CommonState {
 
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
-        msg: Message,
+        msg: Message<'_>,
         mut state: Box<dyn State<Data>>,
         data: &mut Data,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
@@ -308,7 +308,7 @@ impl CommonState {
         len
     }
 
-    fn send_single_fragment(&mut self, m: OutboundPlainMessage) {
+    fn send_single_fragment(&mut self, m: OutboundPlainMessage<'_>) {
         if m.typ == ContentType::Alert {
             // Alerts are always sendable -- never quashed by a PreEncryptAction.
             let em = self.record_layer.encrypt_outgoing(m);
@@ -407,7 +407,7 @@ impl CommonState {
     }
 
     /// Send a raw TLS message, fragmenting it if needed.
-    pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool) {
+    pub(crate) fn send_msg(&mut self, m: Message<'_>, must_encrypt: bool) {
         {
             if let Protocol::Quic = self.protocol {
                 if let MessagePayload::Alert(alert) = m.payload {
@@ -439,7 +439,7 @@ impl CommonState {
         }
     }
 
-    pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
+    pub(crate) fn take_received_plaintext(&mut self, bytes: Payload<'_>) {
         self.received_plaintext
             .append(bytes.into_vec());
     }

@@ -301,7 +301,7 @@ impl MessageDecrypter for GcmMessageDecrypter {
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage,
+        msg: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
@@ -382,7 +382,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage,
+        msg: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());

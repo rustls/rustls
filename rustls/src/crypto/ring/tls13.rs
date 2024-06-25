@@ -203,7 +203,7 @@ struct Tls13MessageDecrypter {
 impl MessageEncrypter for Tls13MessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage,
+        msg: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
