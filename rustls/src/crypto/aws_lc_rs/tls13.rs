@@ -232,7 +232,7 @@ struct AeadMessageDecrypter {
 impl MessageEncrypter for AeadMessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage,
+        msg: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());
@@ -293,7 +293,7 @@ struct GcmMessageEncrypter {
 impl MessageEncrypter for GcmMessageEncrypter {
     fn encrypt(
         &mut self,
-        msg: OutboundPlainMessage,
+        msg: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, Error> {
         let total_len = self.encrypted_payload_len(msg.payload.len());

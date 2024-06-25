@@ -13,7 +13,7 @@ use core::fmt;
 pub(crate) struct BsDebug<'a>(pub(crate) &'a [u8]);
 
 impl<'a> fmt::Debug for BsDebug<'a> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(fmt, "b\"")?;
         for &c in self.0 {
             // https://doc.rust-lang.org/reference.html#byte-escapes

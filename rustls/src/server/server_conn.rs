@@ -119,7 +119,7 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
     /// ClientHello information.
     ///
     /// Return `None` to abort the handshake.
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>>;
+    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>>;
 }
 
 /// A struct representing the received Client Hello
@@ -133,7 +133,7 @@ pub struct ClientHello<'a> {
 impl<'a> ClientHello<'a> {
     /// Creates a new ClientHello
     pub(super) fn new(
-        server_name: &'a Option<DnsName>,
+        server_name: &'a Option<DnsName<'_>>,
         signature_schemes: &'a [SignatureScheme],
         alpn: Option<&'a Vec<ProtocolName>>,
         cipher_suites: &'a [CipherSuite],
@@ -157,7 +157,7 @@ impl<'a> ClientHello<'a> {
     pub fn server_name(&self) -> Option<&str> {
         self.server_name
             .as_ref()
-            .map(<DnsName as AsRef<str>>::as_ref)
+            .map(<DnsName<'_> as AsRef<str>>::as_ref)
     }
 
     /// Get the compatible signature schemes.
@@ -637,7 +637,7 @@ mod connection {
         /// - The client just doesn't support early data.
         /// - The connection doesn't resume an existing session.
         /// - The client hasn't sent a full ClientHello yet.
-        pub fn early_data(&mut self) -> Option<ReadEarlyData> {
+        pub fn early_data(&mut self) -> Option<ReadEarlyData<'_>> {
             let data = &mut self.inner.core.data;
             if data.early_data.was_accepted() {
                 Some(ReadEarlyData::new(&mut data.early_data))
@@ -654,7 +654,7 @@ mod connection {
     }
 
     impl Debug for ServerConnection {
-        fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
             f.debug_struct("ServerConnection")
                 .finish()
         }
@@ -953,7 +953,7 @@ impl Accepted {
         })
     }
 
-    fn client_hello_payload<'a>(message: &'a Message) -> &'a ClientHelloPayload {
+    fn client_hello_payload<'a>(message: &'a Message<'_>) -> &'a ClientHelloPayload {
         match &message.payload {
             crate::msgs::message::MessagePayload::Handshake { parsed, .. } => match &parsed.payload
             {
@@ -1043,7 +1043,7 @@ impl EarlyDataState {
         }
     }
 
-    pub(super) fn take_received_plaintext(&mut self, bytes: Payload) -> bool {
+    pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) -> bool {
         let available = bytes.bytes().len();
         match self {
             Self::Accepted(ref mut received) if received.apply_limit(available) == available => {

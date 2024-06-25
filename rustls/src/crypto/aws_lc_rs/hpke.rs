@@ -685,7 +685,7 @@ fn generate_p_curve_key_pair(
     // will panic for this algorithm.
     debug_assert_ne!(alg, &agreement::X25519);
     let (public_key, private_key) = generate_key_pair(alg)?;
-    let raw_private_key: EcPrivateKeyBin = private_key
+    let raw_private_key: EcPrivateKeyBin<'_> = private_key
         .as_be_bytes()
         .map_err(unspecified_err)?;
     Ok((
@@ -702,7 +702,7 @@ fn generate_p_curve_key_pair(
 /// For generating P-256, P-384 and P-512 keys see [`generate_p_curve_key_pair`].
 fn generate_x25519_key_pair() -> Result<(HpkePublicKey, HpkePrivateKey), Error> {
     let (public_key, private_key) = generate_key_pair(&agreement::X25519)?;
-    let raw_private_key: Curve25519SeedBin = private_key
+    let raw_private_key: Curve25519SeedBin<'_> = private_key
         .as_be_bytes()
         .map_err(unspecified_err)?;
     Ok((
@@ -950,9 +950,9 @@ fn key_rejected_err(_e: aws_lc_rs::error::KeyRejected) -> Error {
 // https://github.com/aws/aws-lc-rs/blob/0186ef7bb1a4d7e140bae8074a9871f49afedf1b/aws-lc-rs/src/cipher/chacha.rs#L13
 const CHACHA_KEY_LEN: usize = 32;
 
-static RING_HKDF_HMAC_SHA256: &HkdfUsingHmac = &HkdfUsingHmac(&HMAC_SHA256);
-static RING_HKDF_HMAC_SHA384: &HkdfUsingHmac = &HkdfUsingHmac(&HMAC_SHA384);
-static RING_HKDF_HMAC_SHA512: &HkdfUsingHmac = &HkdfUsingHmac(&HMAC_SHA512);
+static RING_HKDF_HMAC_SHA256: &HkdfUsingHmac<'static> = &HkdfUsingHmac(&HMAC_SHA256);
+static RING_HKDF_HMAC_SHA384: &HkdfUsingHmac<'static> = &HkdfUsingHmac(&HMAC_SHA384);
+static RING_HKDF_HMAC_SHA512: &HkdfUsingHmac<'static> = &HkdfUsingHmac(&HMAC_SHA512);
 
 #[cfg(test)]
 mod tests {

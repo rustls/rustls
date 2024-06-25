@@ -89,7 +89,7 @@ impl<'a> MessagePayload<'a> {
 }
 
 impl From<Message<'_>> for PlainMessage {
-    fn from(msg: Message) -> Self {
+    fn from(msg: Message<'_>) -> Self {
         let typ = msg.payload.content_type();
         let payload = match msg.payload {
             MessagePayload::ApplicationData(payload) => payload.into_owned(),

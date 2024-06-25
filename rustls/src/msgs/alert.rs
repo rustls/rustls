@@ -17,7 +17,7 @@ impl Codec<'_> for AlertMessagePayload {
         self.description.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let level = AlertLevel::read(r)?;
         let description = AlertDescription::read(r)?;
         r.expect_empty("AlertMessagePayload")

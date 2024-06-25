@@ -514,7 +514,7 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             Self::InappropriateMessage {
                 ref expect_types,
@@ -615,7 +615,7 @@ mod other_error {
     }
 
     impl fmt::Display for OtherError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             #[cfg(feature = "std")]
             {
                 write!(f, "{}", self.0)

@@ -107,7 +107,7 @@ impl RecordLayer {
     /// panics if the requisite keying material hasn't been established yet.
     pub(crate) fn encrypt_outgoing(
         &mut self,
-        plain: OutboundPlainMessage,
+        plain: OutboundPlainMessage<'_>,
     ) -> OutboundOpaqueMessage {
         debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(self.next_pre_encrypt_action() != PreEncryptAction::Refuse);

@@ -537,7 +537,7 @@ impl EchState {
     ///
     /// This will start the in-progress transcript using the given `hash`, convert it into an HRR
     /// buffer, and then add the hello retry message `m`.
-    pub(crate) fn transcript_hrr_update(&mut self, hash: &'static dyn Hash, m: &Message) {
+    pub(crate) fn transcript_hrr_update(&mut self, hash: &'static dyn Hash, m: &Message<'_>) {
         trace!("Updating ECH inner transcript for HRR");
 
         let inner_transcript = self
@@ -779,21 +779,21 @@ impl EchState {
         Ok(())
     }
 
-    fn server_hello_conf(server_hello: &ServerHelloPayload) -> Message {
+    fn server_hello_conf(server_hello: &ServerHelloPayload) -> Message<'_> {
         Self::ech_conf_message(HandshakeMessagePayload {
             typ: HandshakeType::ServerHello,
             payload: HandshakePayload::ServerHello(server_hello.clone()),
         })
     }
 
-    fn hello_retry_request_conf(retry_req: &HelloRetryRequest) -> Message {
+    fn hello_retry_request_conf(retry_req: &HelloRetryRequest) -> Message<'_> {
         Self::ech_conf_message(HandshakeMessagePayload {
             typ: HandshakeType::HelloRetryRequest,
             payload: HandshakePayload::HelloRetryRequest(retry_req.clone()),
         })
     }
 
-    fn ech_conf_message(hmp: HandshakeMessagePayload) -> Message {
+    fn ech_conf_message(hmp: HandshakeMessagePayload<'_>) -> Message<'_> {
         let mut hmp_encoded = Vec::new();
         hmp.payload_encode(&mut hmp_encoded, Encoding::EchConfirmation);
         Message {

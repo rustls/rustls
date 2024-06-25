@@ -11,7 +11,7 @@ impl Codec<'_> for ChangeCipherSpecPayload {
         1u8.encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let typ = u8::read(r)?;
         if typ != 1 {
             return Err(InvalidMessage::InvalidCcs);

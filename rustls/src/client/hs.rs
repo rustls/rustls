@@ -855,7 +855,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
     fn handle_hello_retry_request(
         mut self,
         cx: &mut ClientContext<'_>,
-        m: Message,
+        m: Message<'_>,
     ) -> NextStateOrError<'static> {
         let hrr = require_handshake_msg!(
             m,

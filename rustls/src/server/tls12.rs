@@ -63,8 +63,8 @@ mod client_hello {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey,
-            chm: &Message,
+            server_key: ActiveCertifiedKey<'_>,
+            chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
             sigschemes_ext: Vec<SignatureScheme>,

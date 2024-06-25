@@ -212,7 +212,7 @@ mod connection {
     }
 
     impl Debug for ClientConnection {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("quic::ClientConnection")
                 .finish()
         }
@@ -312,7 +312,7 @@ mod connection {
     }
 
     impl Debug for ServerConnection {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.debug_struct("quic::ServerConnection")
                 .finish()
         }

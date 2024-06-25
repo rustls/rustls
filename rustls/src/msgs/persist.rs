@@ -295,7 +295,7 @@ impl Codec<'_> for ServerSessionValue {
             .encode(bytes);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let has_sni = u8::read(r)?;
         let sni = if has_sni == 1 {
             let dns_name = PayloadU8::read(r)?;

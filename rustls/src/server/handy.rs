@@ -202,7 +202,7 @@ impl AlwaysResolvesChain {
 }
 
 impl server::ResolvesServerCert for AlwaysResolvesChain {
-    fn resolve(&self, _client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, _client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
         Some(Arc::clone(&self.0))
     }
 }
@@ -271,7 +271,7 @@ mod sni_resolver {
     }
 
     impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
-        fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+        fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
             if let Some(name) = client_hello.server_name() {
                 self.by_name.get(name).cloned()
             } else {

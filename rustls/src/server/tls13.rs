@@ -89,7 +89,7 @@ mod client_hello {
         fn check_binder(
             &self,
             suite: &'static Tls13CipherSuite,
-            client_hello: &Message,
+            client_hello: &Message<'_>,
             psk: &[u8],
             binder: &[u8],
         ) -> bool {
@@ -129,8 +129,8 @@ mod client_hello {
         pub(in crate::server) fn handle_client_hello(
             mut self,
             cx: &mut ServerContext<'_>,
-            server_key: ActiveCertifiedKey,
-            chm: &Message,
+            server_key: ActiveCertifiedKey<'_>,
+            chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
             mut sigschemes_ext: Vec<SignatureScheme>,
@@ -1491,7 +1491,7 @@ impl ExpectTraffic {
 impl State<ServerConnectionData> for ExpectTraffic {
     fn handle<'m>(
         mut self: Box<Self>,
-        cx: &mut ServerContext,
+        cx: &mut ServerContext<'_>,
         m: Message<'m>,
     ) -> hs::NextStateOrError<'m>
     where

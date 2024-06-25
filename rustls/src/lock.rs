@@ -61,7 +61,7 @@ mod no_std_lock {
         ///
         /// This will return `None` in the case the mutex is poisoned.
         #[inline]
-        pub fn lock(&self) -> Option<MutexGuard<T>> {
+        pub fn lock(&self) -> Option<MutexGuard<'_, T>> {
             self.inner.lock().ok()
         }
     }
@@ -69,7 +69,7 @@ mod no_std_lock {
     /// A lock protecting shared data.
     pub trait Lock<T>: Debug + Send + Sync {
         /// Acquire the lock.
-        fn lock(&self) -> Result<MutexGuard<T>, Poisoned>;
+        fn lock(&self) -> Result<MutexGuard<'_, T>, Poisoned>;
     }
 
     /// A lock builder.                                                                                     

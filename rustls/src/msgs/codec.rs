@@ -132,7 +132,7 @@ impl<'a> ReaderMut<'a> {
         self.buffer.len()
     }
 
-    pub(crate) fn as_reader<T>(&mut self, f: impl FnOnce(&mut Reader) -> T) -> T {
+    pub(crate) fn as_reader<T>(&mut self, f: impl FnOnce(&mut Reader<'_>) -> T) -> T {
         let mut r = Reader {
             buffer: self.buffer,
             cursor: 0,
@@ -180,7 +180,7 @@ impl Codec<'_> for u8 {
         bytes.push(*self);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         match r.take(1) {
             Some(&[byte]) => Ok(byte),
             _ => Err(InvalidMessage::MissingData("u8")),
@@ -200,7 +200,7 @@ impl Codec<'_> for u16 {
         bytes.extend_from_slice(&b16);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         match r.take(2) {
             Some(&[b1, b2]) => Ok(Self::from_be_bytes([b1, b2])),
             _ => Err(InvalidMessage::MissingData("u16")),
@@ -227,7 +227,7 @@ impl Codec<'_> for u24 {
         bytes.extend_from_slice(&be_bytes[1..]);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         match r.take(3) {
             Some(&[a, b, c]) => Ok(Self(u32::from_be_bytes([0, a, b, c]))),
             _ => Err(InvalidMessage::MissingData("u24")),
@@ -240,7 +240,7 @@ impl Codec<'_> for u32 {
         bytes.extend(Self::to_be_bytes(*self));
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         match r.take(4) {
             Some(&[a, b, c, d]) => Ok(Self::from_be_bytes([a, b, c, d])),
             _ => Err(InvalidMessage::MissingData("u32")),
@@ -260,7 +260,7 @@ impl Codec<'_> for u64 {
         bytes.extend_from_slice(&b64);
     }
 
-    fn read(r: &mut Reader) -> Result<Self, InvalidMessage> {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         match r.take(8) {
             Some(&[a, b, c, d, e, f, g, h]) => Ok(Self::from_be_bytes([a, b, c, d, e, f, g, h])),
             _ => Err(InvalidMessage::MissingData("u64")),
