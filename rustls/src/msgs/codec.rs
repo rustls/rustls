@@ -7,7 +7,7 @@ use crate::error::InvalidMessage;
 /// Wrapper over a slice of bytes that allows reading chunks from
 /// with the current position state held using a cursor.
 ///
-/// A new reader for a sub section of the the buffer can be created
+/// A new reader for a sub section of the buffer can be created
 /// using the `sub` function or a section of a certain length can
 /// be obtained using the `take` function
 pub struct Reader<'a> {
@@ -389,8 +389,8 @@ mod tests {
         let nested = LengthPrefixedBuffer::new(ListLength::U16, &mut buf);
         nested.buf.push(0xaa);
         assert_eq!(nested.buf, &vec![0xff, 0xff, 0xaa]);
-        // <- if the buffer is accidentally read here, there is no possiblity
-        //    that the contents of the length-prefixed buffer are interpretted
+        // <- if the buffer is accidentally read here, there is no possibility
+        //    that the contents of the length-prefixed buffer are interpreted
         //    as a subsequent encoding (perhaps allowing injection of a different
         //    extension)
         drop(nested);
