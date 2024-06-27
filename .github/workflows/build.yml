@@ -407,6 +407,11 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    env:
+      # - we want to be free of any warnings, so deny them
+      # - disable incompatible_msrv as it does not understand that we apply our
+      #   MSRV to the just the core crate.
+      CLIPPY_PARAMS: --deny warnings --allow clippy::incompatible_msrv
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -418,10 +423,10 @@ jobs:
           components: clippy
         # because examples enable rustls' features, `--workspace --no-default-features` is not
         # the same as `--package rustls --no-default-features` so run it separately
-      - run: cargo clippy --locked --package rustls --no-default-features --all-targets -- --deny warnings
-      - run: cargo clippy --locked --workspace --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --package rustls --no-default-features --all-targets -- $CLIPPY_PARAMS
+      - run: cargo clippy --locked --workspace --all-features --all-targets -- $CLIPPY_PARAMS
         # not part of the workspace
-      - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- --deny warnings
+      - run: cargo clippy --locked --manifest-path=fuzz/Cargo.toml --all-features --all-targets -- $CLIPPY_PARAMS
 
   clippy-nightly:
     name: Clippy (Nightly)
