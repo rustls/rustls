@@ -2,7 +2,7 @@
 //!
 //! It uses command line flags to demonstrate configuring a TLS server that may:
 //!  * Specify supported TLS protocol versions
-//!  * Customize ciper suite selection
+//!  * Customize cipher suite selection
 //!  * Perform optional or mandatory client certificate authentication
 //!  * Check client certificates for revocation status with CRLs
 //!  * Support session tickets
