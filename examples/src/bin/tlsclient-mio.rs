@@ -2,7 +2,7 @@
 //!
 //! It uses command line flags to demonstrate configuring a TLS client that may:
 //!  * Specify supported TLS protocol versions
-//!  * Customize ciper suite selection
+//!  * Customize cipher suite selection
 //!  * Perform client certificate authentication
 //!  * Disable session tickets
 //!  * Disable SNI
