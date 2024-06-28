@@ -21,3 +21,7 @@ We recommend new users start by looking at `simpleclient.rs` and `simpleserver.r
 * `simple_0rtt_server.rs` - shows how to make a TLS1.3 that accepts multiple connections and prints early 0RTT data.
 * `server_acceptor.rs` - shows how to use the `Acceptor` API to create a server that generates a unique `ServerConfig` for each client. This example also shows how to use client authentication, CRL revocation checking, and uses `rcgen` to generate its own certificates.
 * `unbuffered-server.rs` - shows an advanced example of using Rustls lower-level APIs to implement a server that does not buffer any data inside Rustls.
+
+## Client-Server examples
+
+* A client-server example using Raw Public Keys (RFC 7250) can be found in [`raw_key_openssl_interop`](../openssl-tests/src/raw_key_openssl_interop.rs).
