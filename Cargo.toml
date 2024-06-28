@@ -31,3 +31,7 @@ resolver = "2"
 [profile.bench]
 codegen-units = 1
 lto = true
+
+[patch.crates-io]
+rustls-webpki = { git = "https://github.com/holodorum/rustls-webpki.git", branch = "rpk_entity" }
+
