@@ -592,9 +592,9 @@ pub mod server {
     pub use builder::WantsServerCert;
     pub use handy::NoServerSessionStorage;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
-    pub use handy::ResolvesServerCertUsingSni;
-    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerSessionMemoryCache;
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
+    pub use handy::ResolvesServerCertUsingSni;
     pub use server_conn::{
         Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
         ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
