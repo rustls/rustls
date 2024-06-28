@@ -8,6 +8,7 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use pki_types::SubjectPublicKeyInfoDer;
 use rcgen::{
     BasicConstraints, CertificateParams, CertificateRevocationListParams, CertifiedKey,
     DistinguishedName, DnType, ExtendedKeyUsagePurpose, Ia5String, IsCa, KeyIdMethod, KeyPair,
@@ -120,6 +121,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         chain_file.write_all(cert.pem().as_bytes())?;
                     }
                 }
+
+                // Write the PEM public key for the end entity and client.
+                let mut raw_public_key_file = File::create(
+                    alg.output_directory()
+                        .join(format!("{}.spki.pem", role.label())),
+                )?;
+                raw_public_key_file.write_all(key_pair.public_key_pem().as_bytes())?;
             }
 
             certified_keys.insert((role, alg.inner), CertifiedKey { cert, key_pair });
