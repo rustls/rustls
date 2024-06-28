@@ -2179,6 +2179,7 @@ dependencies = [
  "once_cell",
  "openssl",
  "rustls 0.23.15",
+ "rustls-pki-types",
 ]
 
 [[package]]
