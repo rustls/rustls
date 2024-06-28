@@ -13,7 +13,7 @@ use super::hs::ClientContext;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::client::common::{ClientAuthDetails, ServerCertDetails};
 use crate::client::{hs, ClientConfig};
-use crate::common_state::{CommonState, HandshakeKind, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -929,6 +929,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                 return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());
             }
         };
+        cx.common.kx_state = KxState::Start(skxg);
         let kx = skxg.start()?;
 
         // 5b.
@@ -955,6 +956,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             st.randoms,
             suite,
         )?;
+        cx.common.kx_state.complete();
 
         st.config.key_log.log(
             "CLIENT_RANDOM",

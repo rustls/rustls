@@ -17,7 +17,7 @@ use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
-use crate::common_state::{CommonState, HandshakeKind, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
@@ -109,7 +109,11 @@ pub(super) fn start_handshake(
     let mut resuming = find_session(&server_name, &config, cx);
 
     let key_share = if config.supports_version(ProtocolVersion::TLSv1_3) {
-        Some(tls13::initial_key_share(&config, &server_name)?)
+        Some(tls13::initial_key_share(
+            &config,
+            &server_name,
+            &mut cx.common.kx_state,
+        )?)
     } else {
         None
     };
@@ -1035,6 +1039,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
                     }
                 };
 
+                cx.common.kx_state = KxState::Start(skxg);
                 skxg.start()?
             }
             _ => offered_key_share,

@@ -52,6 +52,15 @@ fn main() {
         ciphersuite.suite()
     )
     .unwrap();
+    let kx_group = tls
+        .conn
+        .negotiated_key_exchange_group()
+        .unwrap();
+    writeln!(
+        &mut std::io::stderr(),
+        "Current key exchange group: {kx_group:?}",
+    )
+    .unwrap();
     let mut plaintext = Vec::new();
     tls.read_to_end(&mut plaintext).unwrap();
     stdout().write_all(&plaintext).unwrap();
