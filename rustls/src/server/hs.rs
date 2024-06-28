@@ -8,7 +8,7 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
-use crate::common_state::{Protocol, State};
+use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{
@@ -352,6 +352,7 @@ impl ExpectClientHello {
 
         debug!("decided upon suite {:?}", suite);
         cx.common.suite = Some(suite);
+        cx.common.kx_state = KxState::Start(skxg);
 
         // Start handshake hash.
         let starting_hash = suite.hash_provider();

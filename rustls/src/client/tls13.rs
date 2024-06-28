@@ -12,7 +12,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchState, EchStatus};
 use crate::client::{hs, ClientConfig, ClientSessionStore};
-use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{
@@ -147,6 +147,7 @@ pub(super) fn handle_server_hello(
         KeySchedulePreHandshake::new(suite)
     };
 
+    cx.common.kx_state.complete();
     let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
 
     let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
@@ -228,6 +229,7 @@ fn validate_server_hello(
 pub(super) fn initial_key_share(
     config: &ClientConfig,
     server_name: &ServerName<'_>,
+    kx_state: &mut KxState,
 ) -> Result<Box<dyn ActiveKeyExchange>, Error> {
     let group = config
         .resumption
@@ -244,6 +246,7 @@ pub(super) fn initial_key_share(
                 .expect("No kx groups configured")
         });
 
+    *kx_state = KxState::Start(group);
     group.start()
 }
 
