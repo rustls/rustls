@@ -3,10 +3,11 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::CertificateDer;
+use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
 
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
-use crate::error::Error;
+use crate::error::{Error, InconsistentKeys};
+use crate::server::ParsedCertificate;
 
 /// An abstract signing key.
 ///
@@ -59,6 +60,12 @@ pub trait SigningKey: Debug + Send + Sync {
     /// using the chosen scheme.
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
 
+    /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`] if available.
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        // Opt-out by default
+        None
+    }
+
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
 }
@@ -102,6 +109,21 @@ impl CertifiedKey {
             cert,
             key,
             ocsp: None,
+        }
+    }
+
+    /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
+    /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
+    pub fn keys_match(&self) -> Result<(), Error> {
+        let key_spki = match self.key.public_key() {
+            Some(key) => key,
+            None => return Err(InconsistentKeys::Unknown.into()),
+        };
+
+        let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;
+        match key_spki == cert.subject_public_key_info() {
+            true => Ok(()),
+            false => Err(InconsistentKeys::KeyMismatch.into()),
         }
     }
 
