@@ -23,7 +23,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{quic, record_layer};
+use crate::{quic, record_layer, PeerIncompatible};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -271,6 +271,27 @@ impl CommonState {
             );
 
         Ok(self.write_fragments(outgoing_tls, fragments))
+    }
+
+    pub(crate) fn validate_rpk_negotiation(
+        &mut self,
+        local_expects_rpk: bool,
+        peer_supports_rpk: bool,
+    ) -> RpkNegotiationResult {
+        if !local_expects_rpk && peer_supports_rpk {
+            return RpkNegotiationResult::Err(Error::PeerIncompatible(
+                PeerIncompatible::UnexpectedCertificateTypeExtension,
+            ));
+        }
+        if local_expects_rpk && !peer_supports_rpk {
+            return RpkNegotiationResult::Err(Error::PeerIncompatible(
+                PeerIncompatible::IncorrectCertificateTypeExtension,
+            ));
+        }
+        if !local_expects_rpk && !peer_supports_rpk {
+            return RpkNegotiationResult::NotNegotiated;
+        }
+        RpkNegotiationResult::Negotiated
     }
 
     // Changing the keys must not span any fragmented handshake
@@ -881,6 +902,13 @@ enum Limit {
     #[cfg(feature = "std")]
     Yes,
     No,
+}
+
+#[derive(Debug)]
+pub(crate) enum RpkNegotiationResult {
+    Negotiated,
+    NotNegotiated,
+    Err(Error),
 }
 
 /// Tracking technically-allowed protocol actions

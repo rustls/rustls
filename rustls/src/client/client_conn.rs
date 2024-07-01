@@ -121,6 +121,11 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>>;
 
+    /// Return true if the client only supports raw public keys.
+    fn only_raw_public_keys(&self) -> bool {
+        false
+    }
+
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
 }

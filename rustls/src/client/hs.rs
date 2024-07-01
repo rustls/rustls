@@ -17,7 +17,7 @@ use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
-use crate::common_state::{CommonState, HandshakeKind, KxState, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, RpkNegotiationResult, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
@@ -26,7 +26,9 @@ use crate::hash_hs::HandshakeHashBuffer;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode};
+use crate::msgs::enums::{
+    CertificateType, Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode,
+};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
     ConvertProtocolNameList, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
@@ -333,6 +335,24 @@ fn emit_client_hello_for_retry(
     } else {
         false
     };
+
+    if config
+        .client_auth_cert_resolver
+        .only_raw_public_keys()
+    {
+        exts.push(ClientExtension::ClientCertType(vec![
+            CertificateType::RawPublicKey,
+        ]));
+    }
+
+    if config
+        .verifier
+        .requires_raw_public_keys()
+    {
+        exts.push(ClientExtension::ServerCertType(vec![
+            CertificateType::RawPublicKey,
+        ]));
+    }
 
     // Extra extensions must be placed before the PSK extension
     exts.extend(extra_exts.iter().cloned());
@@ -645,6 +665,48 @@ pub(super) fn process_alpn_protocol(
     Ok(())
 }
 
+pub(super) fn process_server_cert_type_extension(
+    common: &mut CommonState,
+    config: &ClientConfig,
+    server_cert_extension: Option<&CertificateType>,
+) -> Result<(), Error> {
+    let requires_server_rpk = config
+        .verifier
+        .requires_raw_public_keys();
+    let server_offers_rpk = server_cert_extension.map_or(false, |cert_type| {
+        *cert_type == CertificateType::RawPublicKey
+    });
+
+    if let RpkNegotiationResult::Err(err) =
+        common.validate_rpk_negotiation(requires_server_rpk, server_offers_rpk)
+    {
+        Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
+    } else {
+        Ok(())
+    }
+}
+
+pub(super) fn process_client_cert_type_extension(
+    common: &mut CommonState,
+    config: &ClientConfig,
+    client_cert_extension: Option<&CertificateType>,
+) -> Result<(), Error> {
+    let requires_client_rpk = config
+        .client_auth_cert_resolver
+        .only_raw_public_keys();
+    let server_allows_rpk = client_cert_extension.map_or(false, |cert_type| {
+        *cert_type == CertificateType::RawPublicKey
+    });
+
+    if let RpkNegotiationResult::Err(err) =
+        common.validate_rpk_negotiation(requires_client_rpk, server_allows_rpk)
+    {
+        Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
+    } else {
+        Ok(())
+    }
+}
+
 impl State<ClientConnectionData> for ExpectServerHello {
     fn handle<'m>(
         mut self: Box<Self>,
@@ -720,6 +782,21 @@ impl State<ClientConnectionData> for ExpectServerHello {
             ));
         }
 
+        cx.common.negotiated_version = Some(version);
+        // Validate server and client cert type extension
+        if !cx.common.is_tls13() {
+            process_server_cert_type_extension(
+                cx.common,
+                config,
+                server_hello.server_certificate_type(),
+            )?;
+            process_client_cert_type_extension(
+                cx.common,
+                config,
+                server_hello.client_certificate_type(),
+            )?;
+        }
+
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
         if self
             .input
@@ -731,8 +808,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 PeerMisbehaved::UnsolicitedServerHelloExtension,
             ));
         }
-
-        cx.common.negotiated_version = Some(version);
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {

@@ -173,6 +173,37 @@ pub fn verify_tls12_signature(
     ))
 }
 
+/// Verify a message signature using a raw public key and any supported scheme.
+///
+/// This function verifies the `dss` signature over `message` using the subject public key from
+/// `cert`. Since TLS 1.2 doesn't provide enough information to map the `dss.scheme` into a single
+/// [`SignatureVerificationAlgorithm`], this function will map to several candidates and try each in
+/// succession until one succeeds or we exhaust all candidates.
+///
+/// See [WebPkiSupportedAlgorithms::mapping] for more information.
+pub fn verify_tls12_signature_with_spki(
+    message: &[u8],
+    cert: &SubjectPublicKeyInfoDer<'_>,
+    dss: &DigitallySignedStruct,
+    supported_schemes: &WebPkiSupportedAlgorithms,
+) -> Result<HandshakeSignatureValid, Error> {
+    let possible_algs = supported_schemes.convert_scheme(dss.scheme)?;
+
+    let cert = webpki::RawPublicKeyEntity::try_from(cert).map_err(pki_error)?;
+
+    for alg in possible_algs {
+        match cert.verify_signature(*alg, message, dss.signature()) {
+            Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
+            Err(e) => return Err(pki_error(e)),
+            Ok(()) => return Ok(HandshakeSignatureValid::assertion()),
+        }
+    }
+
+    Err(pki_error(
+        webpki::Error::UnsupportedSignatureAlgorithmForPublicKey,
+    ))
+}
+
 /// Verify a message signature using the `cert` public key and the first TLS 1.3 compatible
 /// supported scheme.
 ///
@@ -192,6 +223,30 @@ pub fn verify_tls13_signature(
     let alg = supported_schemes.convert_scheme(dss.scheme)?[0];
 
     let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
+
+    cert.verify_signature(alg, msg, dss.signature())
+        .map_err(pki_error)
+        .map(|_| HandshakeSignatureValid::assertion())
+}
+
+/// Verify a message signature using a raw public key and the first TLS 1.3 compatible
+/// supported scheme.
+///
+/// This function verifies the `dss` signature over `message` using the subject public key from
+/// `cert`. Unlike [verify_tls12_signature], this function only tries the first matching scheme. See
+/// [WebPkiSupportedAlgorithms::mapping] for more information.
+pub fn verify_tls13_signature_with_spki(
+    msg: &[u8],
+    spki_cert: &SubjectPublicKeyInfoDer<'_>,
+    dss: &DigitallySignedStruct,
+    supported_schemes: &WebPkiSupportedAlgorithms,
+) -> Result<HandshakeSignatureValid, Error> {
+    if !dss.scheme.supported_in_tls13() {
+        return Err(PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme.into());
+    }
+
+    let cert = webpki::RawPublicKeyEntity::try_from(spki_cert).map_err(pki_error)?;
+    let alg = supported_schemes.convert_scheme(dss.scheme)?[0];
 
     cert.verify_signature(alg, msg, dss.signature())
         .map_err(pki_error)

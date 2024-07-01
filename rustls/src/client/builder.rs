@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
@@ -13,9 +13,8 @@ use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
 use crate::time_provider::TimeProvider;
 use crate::versions::TLS13;
-use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{compress, verify, versions, WantsVersions};
-
+use crate::webpki::{self, RawPublicKeyEntity, WebPkiServerVerifier};
+use crate::{compress, verify, versions, CertificateError, WantsVersions};
 impl ConfigBuilder<ClientConfig, WantsVersions> {
     /// Enable Encrypted Client Hello (ECH) in the given mode.
     ///
@@ -161,6 +160,42 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         let resolver =
             handy::AlwaysResolvesClientCert::new(private_key, CertificateChain(cert_chain))?;
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
+    }
+
+    /// Sets a raw public key and matching private key for use
+    /// in client authentication.
+    ///
+    /// `cert_chain` is a vector of a DER-encoded RPK certificate.
+    /// `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1. The
+    /// `aws-lc-rs` and `ring` [`CryptoProvider`]s support all three encodings,
+    /// but other `CryptoProviders` may not.
+    ///
+    /// This function fails if `key_der` is invalid, or if the public_key cannot be parsed to a RPK cert
+    pub fn with_client_auth_rpk(
+        self,
+        public_key_der: SubjectPublicKeyInfoDer<'static>,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<ClientConfig, Error> {
+        match RawPublicKeyEntity::try_from(&public_key_der) {
+            Ok(_) => {
+                let private_key = self
+                    .state
+                    .provider
+                    .key_provider
+                    .load_private_key(key_der)?;
+
+                let public_key_as_cert = CertificateDer::from(
+                    public_key_der
+                        .into_owned()
+                        .as_ref()
+                        .to_vec(),
+                );
+                let resolver =
+                    handy::AlwaysResolvesClientRawPublicKeys::new(private_key, public_key_as_cert)?;
+                Ok(self.with_client_cert_resolver(Arc::new(resolver)))
+            }
+            Err(_) => Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
+        }
     }
 
     /// Do not support client auth.

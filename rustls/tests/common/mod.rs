@@ -7,7 +7,8 @@ use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
 use pki_types::{
-    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName, UnixTime,
+    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName,
+    SubjectPublicKeyInfoDer, UnixTime,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
@@ -15,11 +16,12 @@ use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncr
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
-    DigitallySignedStruct, Error, NamedGroup, ProtocolVersion, RootCertStore, ServerConfig,
-    ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    DigitallySignedStruct, DistinguishedName, Error, NamedGroup, ProtocolVersion, RootCertStore,
+    ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
 use webpki::anchor_from_trusted_cert;
 
@@ -120,6 +122,8 @@ embed_files! {
     (EDDSA_INTER_CERT, "eddsa", "inter.cert");
     (EDDSA_INTER_KEY, "eddsa", "inter.key");
 
+    (RSA_2048_END_PEM_SPKI, "rsa-2048", "end.spki.pem");
+    (RSA_2048_CLIENT_PEM_SPKI, "rsa-2048", "client.spki.pem");
     (RSA_2048_CA_CERT, "rsa-2048", "ca.cert");
     (RSA_2048_CA_DER, "rsa-2048", "ca.der");
     (RSA_2048_CA_KEY, "rsa-2048", "ca.key");
@@ -308,6 +312,12 @@ impl KeyType {
             .collect()
     }
 
+    pub fn get_spki(&self) -> SubjectPublicKeyInfoDer<'static> {
+        rustls_pemfile::public_key(&mut io::BufReader::new(self.bytes_for("end.spki.pem")))
+            .unwrap()
+            .unwrap()
+    }
+
     pub fn get_key(&self) -> PrivateKeyDer<'static> {
         PrivateKeyDer::Pkcs8(
             rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key")))
@@ -348,6 +358,12 @@ impl KeyType {
             .unwrap()
             .unwrap(),
         )
+    }
+
+    pub fn get_client_spki(&self) -> SubjectPublicKeyInfoDer<'static> {
+        rustls_pemfile::public_key(&mut io::BufReader::new(self.bytes_for("client.spki.pem")))
+            .unwrap()
+            .unwrap()
     }
 
     fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
@@ -520,6 +536,31 @@ pub fn make_server_config_with_client_verifier(
     server_config_builder()
         .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap()
+}
+
+pub fn make_server_config_with_rpk_support_and_version(
+    kt: KeyType,
+    version: &[&'static rustls::SupportedProtocolVersion],
+) -> ServerConfig {
+    let mut client_verifier = MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt);
+    client_verifier.expect_raw_public_keys = true;
+    let client_verifier = Arc::new(client_verifier);
+    server_config_builder_with_versions(version)
+        .with_client_cert_verifier(client_verifier)
+        .with_rpk(kt.get_spki(), kt.get_key())
+        .unwrap()
+}
+
+pub fn make_client_config_with_rpk_support_and_version(
+    kt: KeyType,
+    version: &[&'static rustls::SupportedProtocolVersion],
+) -> ClientConfig {
+    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys());
+    client_config_builder_with_versions(version)
+        .dangerous()
+        .with_custom_certificate_verifier(server_verifier)
+        .with_client_auth_rpk(kt.get_client_spki(), kt.get_client_key())
         .unwrap()
 }
 
@@ -849,6 +890,7 @@ pub struct MockServerVerifier {
     tls13_signature_error: Option<Error>,
     signature_schemes: Vec<SignatureScheme>,
     expected_ocsp_response: Option<Vec<u8>>,
+    requires_raw_public_keys: bool,
 }
 
 impl ServerCertVerifier for MockServerVerifier {
@@ -911,6 +953,10 @@ impl ServerCertVerifier for MockServerVerifier {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.signature_schemes.clone()
     }
+
+    fn requires_raw_public_keys(&self) -> bool {
+        self.requires_raw_public_keys
+    }
 }
 
 impl MockServerVerifier {
@@ -955,6 +1001,13 @@ impl MockServerVerifier {
             ..Default::default()
         }
     }
+
+    pub fn expects_raw_public_keys() -> Self {
+        MockServerVerifier {
+            requires_raw_public_keys: true,
+            ..Default::default()
+        }
+    }
 }
 
 impl Default for MockServerVerifier {
@@ -972,7 +1025,92 @@ impl Default for MockServerVerifier {
                 SignatureScheme::ECDSA_NISTP521_SHA512,
             ],
             expected_ocsp_response: None,
+            requires_raw_public_keys: false,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct MockClientVerifier {
+    parent: Arc<dyn ClientCertVerifier>,
+    pub verified: fn() -> Result<ClientCertVerified, Error>,
+    pub subjects: Vec<DistinguishedName>,
+    pub mandatory: bool,
+    pub offered_schemes: Option<Vec<SignatureScheme>>,
+    pub expect_raw_public_keys: bool,
+}
+
+impl MockClientVerifier {
+    pub fn new(verified: fn() -> Result<ClientCertVerified, Error>, kt: KeyType) -> Self {
+        Self {
+            parent: webpki_client_verifier_builder(get_client_root_store(kt))
+                .build()
+                .unwrap(),
+            verified,
+            subjects: get_client_root_store(kt).subjects(),
+            mandatory: true,
+            offered_schemes: None,
+            expect_raw_public_keys: false,
+        }
+    }
+}
+
+impl ClientCertVerifier for MockClientVerifier {
+    fn client_auth_mandatory(&self) -> bool {
+        self.mandatory
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &self.subjects
+    }
+
+    fn verify_client_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: UnixTime,
+    ) -> Result<ClientCertVerified, Error> {
+        (self.verified)()
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        if self.expect_raw_public_keys {
+            Ok(HandshakeSignatureValid::assertion())
+        } else {
+            self.parent
+                .verify_tls12_signature(message, cert, dss)
+        }
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        if self.expect_raw_public_keys {
+            Ok(HandshakeSignatureValid::assertion())
+        } else {
+            self.parent
+                .verify_tls13_signature(message, cert, dss)
+        }
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        if let Some(schemes) = &self.offered_schemes {
+            schemes.clone()
+        } else {
+            self.parent.supported_verify_schemes()
+        }
+    }
+
+    fn requires_raw_public_keys(&self) -> bool {
+        self.expect_raw_public_keys
     }
 }
 

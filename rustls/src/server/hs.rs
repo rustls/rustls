@@ -8,7 +8,7 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
-use crate::common_state::{KxState, Protocol, State};
+use crate::common_state::{KxState, Protocol, RpkNegotiationResult, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{
@@ -19,7 +19,7 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
-use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
+use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
@@ -156,9 +156,58 @@ impl ExtensionProcessing {
             // Throw away any OCSP response so we don't try to send it later.
             ocsp_response.take();
         }
+        let requires_server_rpk = config
+            .cert_resolver
+            .only_raw_public_keys();
+        let client_allows_rpk = hello
+            .server_certificate_extension()
+            .map_or(false, |cert_type| {
+                cert_type[0] == CertificateType::RawPublicKey
+            });
+        match cx
+            .common
+            .validate_rpk_negotiation(requires_server_rpk, client_allows_rpk)
+        {
+            RpkNegotiationResult::Negotiated => {
+                self.exts
+                    .push(ServerExtension::ServerCertType(
+                        CertificateType::RawPublicKey,
+                    ));
+            }
+            RpkNegotiationResult::Err(err) => {
+                return Err(cx
+                    .common
+                    .send_fatal_alert(AlertDescription::HandshakeFailure, err));
+            }
+            RpkNegotiationResult::NotNegotiated => {}
+        }
+        let requires_client_rpk = config
+            .verifier
+            .requires_raw_public_keys();
+        let client_offers_rpk = hello
+            .client_certificate_extension()
+            .map_or(false, |cert_type| {
+                cert_type[0] == CertificateType::RawPublicKey
+            });
+        match cx
+            .common
+            .validate_rpk_negotiation(requires_client_rpk, client_offers_rpk)
+        {
+            RpkNegotiationResult::Negotiated => {
+                self.exts
+                    .push(ServerExtension::ClientCertType(
+                        CertificateType::RawPublicKey,
+                    ));
+            }
+            RpkNegotiationResult::Err(err) => {
+                return Err(cx
+                    .common
+                    .send_fatal_alert(AlertDescription::HandshakeFailure, err));
+            }
+            RpkNegotiationResult::NotNegotiated => {}
+        }
 
         self.exts.extend(extra_exts);
-
         Ok(())
     }
 
@@ -318,6 +367,8 @@ impl ExpectClientHello {
                 &cx.data.sni,
                 &sig_schemes,
                 client_hello.alpn_extension(),
+                client_hello.server_certificate_extension(),
+                client_hello.client_certificate_extension(),
                 &client_hello.cipher_suites,
             );
 
