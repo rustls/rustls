@@ -2218,6 +2218,7 @@ dependencies = [
  "bencher",
  "brotli",
  "brotli-decompressor",
+ "clap",
  "env_logger",
  "hashbrown",
  "hex",
