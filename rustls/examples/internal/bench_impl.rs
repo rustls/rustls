@@ -217,7 +217,18 @@ fn bench_handshake(
             clientauth,
             resume,
             rounds,
-            bench_handshake_buffered(rounds, client_config, server_config),
+            bench_handshake_buffered(rounds, client_config.clone(), server_config.clone()),
+        );
+    }
+
+    if options.api.use_unbuffered() {
+        report_handshake_result(
+            "handshakes-unbuffered",
+            params,
+            clientauth,
+            resume,
+            rounds,
+            bench_handshake_unbuffered(rounds, client_config, server_config),
         );
     }
 }
@@ -250,6 +261,58 @@ fn bench_handshake_buffered(
         time(&mut timings.client, || {
             transfer(&mut server, &mut client, None);
         });
+
+        // check we reached idle
+        debug_assert!(!client.is_handshaking());
+        debug_assert!(!server.is_handshaking());
+    }
+
+    timings
+}
+
+fn bench_handshake_unbuffered(
+    rounds: u64,
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+) -> Timings {
+    let mut timings = Timings::default();
+
+    for _ in 0..rounds {
+        let client = time(&mut timings.client, || {
+            let server_name = "localhost".try_into().unwrap();
+            UnbufferedClientConnection::new(Arc::clone(&client_config), server_name).unwrap()
+        });
+        let server = time(&mut timings.server, || {
+            UnbufferedServerConnection::new(Arc::clone(&server_config)).unwrap()
+        });
+
+        // nb. buffer allocation is outside the library, so is outside the benchmark scope
+        let mut client = Unbuffered::new_client(client);
+        let mut server = Unbuffered::new_server(server);
+
+        let client_wrote = time(&mut timings.client, || client.communicate());
+        if client_wrote {
+            client.swap_buffers(&mut server);
+        }
+
+        let server_wrote = time(&mut timings.server, || server.communicate());
+        if server_wrote {
+            server.swap_buffers(&mut client);
+        }
+
+        let client_wrote = time(&mut timings.client, || client.communicate());
+        if client_wrote {
+            client.swap_buffers(&mut server);
+        }
+
+        let server_wrote = time(&mut timings.server, || server.communicate());
+        if server_wrote {
+            server.swap_buffers(&mut client);
+        }
+
+        // check we reached idle
+        debug_assert!(!server.communicate());
+        debug_assert!(!client.communicate());
     }
 
     timings
