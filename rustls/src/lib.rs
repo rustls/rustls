@@ -438,7 +438,8 @@ pub mod internal {
         }
         pub mod enums {
             pub use crate::msgs::enums::{
-                AlertLevel, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem, NamedGroup,
+                AlertLevel, CertificateType, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem,
+                NamedGroup,
             };
         }
         pub mod fragmenter {
@@ -448,8 +449,8 @@ pub mod internal {
             pub use crate::msgs::handshake::{
                 CertificateChain, ClientExtension, ClientHelloPayload, DistinguishedName,
                 EchConfigContents, EchConfigPayload, HandshakeMessagePayload, HandshakePayload,
-                HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, ServerName,
-                SessionId,
+                HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, ServerExtension,
+                ServerName, SessionId,
             };
         }
         pub mod message {

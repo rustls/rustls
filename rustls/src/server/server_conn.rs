@@ -24,6 +24,7 @@ use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::base::Payload;
+use crate::msgs::enums::CertificateType;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
 #[cfg(feature = "std")]
@@ -120,6 +121,11 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
     ///
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>>;
+
+    /// Return true when the server only supports raw public keys.
+    fn only_raw_public_keys(&self) -> bool {
+        false
+    }
 }
 
 /// A struct representing the received Client Hello
@@ -127,6 +133,8 @@ pub struct ClientHello<'a> {
     server_name: &'a Option<DnsName<'a>>,
     signature_schemes: &'a [SignatureScheme],
     alpn: Option<&'a Vec<ProtocolName>>,
+    server_cert_type: Option<&'a [CertificateType]>,
+    client_cert_type: Option<&'a [CertificateType]>,
     cipher_suites: &'a [CipherSuite],
 }
 
@@ -136,6 +144,8 @@ impl<'a> ClientHello<'a> {
         server_name: &'a Option<DnsName<'_>>,
         signature_schemes: &'a [SignatureScheme],
         alpn: Option<&'a Vec<ProtocolName>>,
+        server_cert_type: Option<&'a [CertificateType]>,
+        client_cert_type: Option<&'a [CertificateType]>,
         cipher_suites: &'a [CipherSuite],
     ) -> Self {
         trace!("sni {:?}", server_name);
@@ -147,6 +157,8 @@ impl<'a> ClientHello<'a> {
             server_name,
             signature_schemes,
             alpn,
+            server_cert_type,
+            client_cert_type,
             cipher_suites,
         }
     }
@@ -195,6 +207,20 @@ impl<'a> ClientHello<'a> {
     /// Get cipher suites.
     pub fn cipher_suites(&self) -> &[CipherSuite] {
         self.cipher_suites
+    }
+
+    /// Get the server certificate types offered in the ClientHello.
+    ///
+    /// Returns `None` if the client did not include a certificate type extension.
+    pub fn server_cert_types(&self) -> Option<&'a [CertificateType]> {
+        self.server_cert_type
+    }
+
+    /// Get the client certificate types offered in the ClientHello.
+    ///
+    /// Returns `None` if the client did not include a certificate type extension.
+    pub fn client_cert_types(&self) -> Option<&'a [CertificateType]> {
+        self.client_cert_type
     }
 }
 
@@ -913,6 +939,8 @@ impl Accepted {
             &self.connection.core.data.sni,
             &self.sig_schemes,
             payload.alpn_extension(),
+            payload.server_certificate_extension(),
+            payload.client_certificate_extension(),
             &payload.cipher_suites,
         )
     }

@@ -14,10 +14,10 @@ use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCe
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::{AlertLevel, Compression};
+use rustls::internal::msgs::enums::{AlertLevel, CertificateType, Compression};
 use rustls::internal::msgs::handshake::{
     ClientExtension, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, Random,
-    ServerName as ServerNameExtensionItem, SessionId,
+    ServerExtension, ServerName as ServerNameExtensionItem, SessionId,
 };
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
@@ -46,6 +46,216 @@ use common::*;
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
 use rustls::ProtocolVersion::TLSv1_2;
+
+mod test_rpk {
+    use super::*;
+
+    #[test]
+    fn test_certificate_type_extension_errors() {
+        let kt = KeyType::Rsa2048;
+        //TODO this does not work for TLS13 yet because we don't encrypt the extensions and get the following error: Err(PeerMisbehaved(UnexpectedCleartextExtension))
+        for version in [&rustls::version::TLS12] {
+            let client_config_rpk = make_client_config_with_rpk_support_and_version(kt, &[version]);
+            let server_config_rpk = make_server_config_with_rpk_support_and_version(kt, &[version]);
+            test_handshake_incorrectly_altered_client_hello(&client_config_rpk, &server_config_rpk);
+            test_handshake_incorrectly_altered_server_hello(&client_config_rpk, &server_config_rpk);
+
+            let client_config = make_client_config_with_versions(kt, &[version]);
+            let server_config = make_server_config_with_versions(kt, &[version]);
+            test_handshake_unexpected_client_hello(&client_config, &server_config);
+            test_handshake_unexpected_server_hello(&client_config, &server_config);
+        }
+    }
+
+    fn test_handshake_incorrectly_altered_client_hello(
+        client_config: &ClientConfig,
+        server_config: &ServerConfig,
+    ) {
+        //If server requires rpk, client must send rpk
+        //If client sends nothing, x509 or x509 and rpk, server should return IncorrectCertificateTypeExtension
+        let test_cases = vec![
+            vec![CertificateType::X509],
+            vec![CertificateType::X509, CertificateType::RawPublicKey],
+            vec![],
+        ];
+        let expected_result = Err(ErrorFromPeer::Server(Error::PeerIncompatible(
+            PeerIncompatible::IncorrectCertificateTypeExtension,
+        )));
+
+        for test_case in &test_cases {
+            alter_handshake_during_hello(
+                &client_config,
+                &server_config,
+                |msg| alter_client_hello(msg, test_case.clone(), vec![]),
+                &expected_result,
+            );
+
+            alter_handshake_during_hello(
+                &client_config,
+                &server_config,
+                |msg| alter_client_hello(msg, vec![], test_case.clone()),
+                &expected_result,
+            );
+        }
+    }
+
+    fn test_handshake_unexpected_client_hello(
+        client_config: &ClientConfig,
+        server_config: &ServerConfig,
+    ) {
+        let expected_result = Err(ErrorFromPeer::Server(Error::PeerIncompatible(
+            PeerIncompatible::UnexpectedCertificateTypeExtension,
+        )));
+        alter_handshake_during_hello(
+            &client_config,
+            &server_config,
+            |msg| alter_client_hello(msg, vec![], vec![CertificateType::RawPublicKey]),
+            &expected_result,
+        );
+
+        alter_handshake_during_hello(
+            &client_config,
+            &server_config,
+            |msg| alter_client_hello(msg, vec![CertificateType::RawPublicKey], vec![]),
+            &expected_result,
+        );
+    }
+
+    fn test_handshake_incorrectly_altered_server_hello(
+        client_config: &ClientConfig,
+        server_config: &ServerConfig,
+    ) {
+        //If client requires rpk, server must send rpk
+        //If client sends nothing or x509 client should return IncorrectCertificateTypeExtension
+        let test_cases = [Some(CertificateType::X509), None];
+        let expected_result = Err(ErrorFromPeer::Client(Error::PeerIncompatible(
+            PeerIncompatible::IncorrectCertificateTypeExtension,
+        )));
+        for test_case in test_cases {
+            alter_handshake_during_hello(
+                &client_config,
+                &server_config,
+                |msg| alter_server_hello(msg, test_case.clone(), None),
+                &expected_result,
+            );
+            alter_handshake_during_hello(
+                &client_config,
+                &server_config,
+                |msg| alter_server_hello(msg, None, test_case.clone()),
+                &expected_result,
+            );
+        }
+    }
+
+    fn test_handshake_unexpected_server_hello(
+        client_config: &ClientConfig,
+        server_config: &ServerConfig,
+    ) {
+        let expected_result = Err(ErrorFromPeer::Client(Error::PeerIncompatible(
+            PeerIncompatible::UnexpectedCertificateTypeExtension,
+        )));
+        alter_handshake_during_hello(
+            &client_config,
+            &server_config,
+            |msg| alter_server_hello(msg, Some(CertificateType::RawPublicKey), None),
+            &expected_result,
+        );
+        alter_handshake_during_hello(
+            &client_config,
+            &server_config,
+            |msg| alter_server_hello(msg, None, Some(CertificateType::RawPublicKey)),
+            &expected_result,
+        );
+    }
+
+    fn alter_handshake_during_hello(
+        client_config: &ClientConfig,
+        server_config: &ServerConfig,
+        alteration: impl Fn(&mut Message) -> Altered,
+        expected_result: &Result<(), ErrorFromPeer>,
+    ) {
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config.clone(), server_config.clone());
+        match expected_result {
+            Ok(_) => {
+                assert!(false);
+            }
+            Err(ErrorFromPeer::Server(ref err)) => {
+                let (mut client, mut server) = (client.into(), server.into());
+                transfer_altered(&mut client, &alteration, &mut server);
+                assert_eq!(server.process_new_packets(), Err(err.clone()));
+            }
+            Err(ErrorFromPeer::Client(ref err)) => {
+                transfer(&mut client, &mut server);
+                server.process_new_packets().unwrap();
+                let (mut client, mut server) = (client.into(), server.into());
+                transfer_altered(&mut server, &alteration, &mut client);
+                assert_eq!(client.process_new_packets(), Err(err.clone()));
+            }
+        }
+    }
+
+    fn alter_client_hello(
+        msg: &mut Message,
+        server_cert_type: Vec<CertificateType>,
+        client_cert_type: Vec<CertificateType>,
+    ) -> Altered {
+        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
+                ch.extensions.retain(|ext| match ext {
+                    ClientExtension::ServerCertType(_) | ClientExtension::ClientCertType(_) => {
+                        false
+                    }
+                    _ => true,
+                });
+                if !server_cert_type.is_empty() {
+                    ch.extensions
+                        .push(ClientExtension::ServerCertType(server_cert_type));
+                }
+                if !client_cert_type.is_empty() {
+                    ch.extensions
+                        .push(ClientExtension::ClientCertType(client_cert_type));
+                }
+            }
+            *encoded = Payload::new(parsed.get_encoding());
+        }
+        Altered::InPlace
+    }
+
+    fn alter_server_hello(
+        msg: &mut Message,
+        server_cert_type: Option<CertificateType>,
+        client_cert_type: Option<CertificateType>,
+    ) -> Altered {
+        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+            if let HandshakePayload::ServerHello(sh) = &mut parsed.payload {
+                sh.extensions.retain(|ext| match ext {
+                    ServerExtension::ServerCertType(_) | ServerExtension::ClientCertType(_) => {
+                        false
+                    }
+                    _ => true,
+                });
+                match server_cert_type {
+                    Some(ext) => {
+                        sh.extensions
+                            .push(ServerExtension::ServerCertType(ext));
+                    }
+                    None => {}
+                }
+                match client_cert_type {
+                    Some(ext) => {
+                        sh.extensions
+                            .push(ServerExtension::ClientCertType(ext));
+                    }
+                    None => {}
+                }
+            }
+            *encoded = Payload::new(parsed.get_encoding());
+        }
+
+        Altered::InPlace
+    }
+}
 
 fn alpn_test_error(
     server_protos: Vec<Vec<u8>>,

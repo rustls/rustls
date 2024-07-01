@@ -136,6 +136,11 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    /// Return whether or not this verifier requires raw public keys.
+    fn requires_raw_public_keys(&self) -> bool {
+        false
+    }
 }
 
 /// Something that can verify a client certificate chain
@@ -249,6 +254,11 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    /// Return whether or not this verifier requires raw public keys.
+    fn requires_raw_public_keys(&self) -> bool {
+        false
+    }
 }
 
 /// Turns off client authentication. In contrast to using

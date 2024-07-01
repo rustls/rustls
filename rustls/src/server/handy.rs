@@ -1,6 +1,8 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
+use std::vec;
 
 use crate::server::ClientHello;
 use crate::{server, sign};
@@ -199,6 +201,39 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
     }
 }
 
+#[derive(Debug)]
+pub(super) struct AlwaysResolvesServerRawPublicKeys(Arc<sign::CertifiedKey>);
+
+impl AlwaysResolvesServerRawPublicKeys {
+    pub(super) fn new(
+        private_key: Arc<dyn sign::SigningKey>,
+        public_key: SubjectPublicKeyInfoDer<'static>,
+    ) -> Self {
+        // Convert SubjectPublicKeyInfoDer to CertificateDer
+        let public_key_as_cert = CertificateDer::from(
+            public_key
+                .into_owned()
+                .as_ref()
+                .to_vec(),
+        );
+
+        // Ensure the conversion meets the static lifetime requirement
+        Self(Arc::new(sign::CertifiedKey::new(
+            vec![public_key_as_cert],
+            private_key,
+        )))
+    }
+}
+
+impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
+    fn resolve(&self, _client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
+    fn only_raw_public_keys(&self) -> bool {
+        true
+    }
+}
+
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod sni_resolver {
     use alloc::string::{String, ToString};
@@ -282,7 +317,7 @@ mod sni_resolver {
         fn test_resolvesservercertusingsni_requires_sni() {
             let rscsni = ResolvesServerCertUsingSni::new();
             assert!(rscsni
-                .resolve(ClientHello::new(&None, &[], None, &[]))
+                .resolve(ClientHello::new(&None, &[], None, None, None, &[]))
                 .is_none());
         }
 
@@ -293,7 +328,7 @@ mod sni_resolver {
                 .unwrap()
                 .to_owned();
             assert!(rscsni
-                .resolve(ClientHello::new(&Some(name), &[], None, &[]))
+                .resolve(ClientHello::new(&Some(name), &[], None, None, None, &[]))
                 .is_none());
         }
     }
