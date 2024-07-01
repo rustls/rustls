@@ -209,30 +209,59 @@ fn bench_handshake(
     } else {
         4096
     });
-    let mut client_time = 0f64;
-    let mut server_time = 0f64;
+
+    if options.api.use_buffered() {
+        report_handshake_result(
+            "handshakes",
+            params,
+            clientauth,
+            resume,
+            rounds,
+            bench_handshake_buffered(rounds, client_config, server_config),
+        );
+    }
+}
+
+fn bench_handshake_buffered(
+    rounds: u64,
+    client_config: Arc<ClientConfig>,
+    server_config: Arc<ServerConfig>,
+) -> Timings {
+    let mut timings = Timings::default();
 
     for _ in 0..rounds {
         let server_name = "localhost".try_into().unwrap();
         let mut client = ClientConnection::new(Arc::clone(&client_config), server_name).unwrap();
         let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
 
-        server_time += time(|| {
+        timings.server += time(|| {
             transfer(&mut client, &mut server, None);
         });
-        client_time += time(|| {
+        timings.client += time(|| {
             transfer(&mut server, &mut client, None);
         });
-        server_time += time(|| {
+        timings.server += time(|| {
             transfer(&mut client, &mut server, None);
         });
-        client_time += time(|| {
+        timings.client += time(|| {
             transfer(&mut server, &mut client, None);
         });
     }
 
+    timings
+}
+
+fn report_handshake_result(
+    variant: &str,
+    params: &BenchmarkParam,
+    clientauth: ClientAuth,
+    resume: ResumptionParam,
+    rounds: u64,
+    timings: Timings,
+) {
     println!(
-        "handshakes\t{:?}\t{:?}\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
+        "{}\t{:?}\t{:?}\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
+        variant,
         params.version,
         params.key_type,
         params.ciphersuite.suite(),
@@ -242,10 +271,11 @@ fn bench_handshake(
             "server-auth"
         },
         resume.label(),
-        (rounds as f64) / client_time
+        (rounds as f64) / timings.client
     );
     println!(
-        "handshakes\t{:?}\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
+        "{}\t{:?}\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
+        variant,
         params.version,
         params.key_type,
         params.ciphersuite.suite(),
@@ -255,8 +285,14 @@ fn bench_handshake(
             "server-auth"
         },
         resume.label(),
-        (rounds as f64) / server_time
+        (rounds as f64) / timings.server
     );
+}
+
+#[derive(Debug, Default)]
+struct Timings {
+    client: f64,
+    server: f64,
 }
 
 fn bench_bulk(
