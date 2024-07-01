@@ -230,20 +230,24 @@ fn bench_handshake_buffered(
     let mut timings = Timings::default();
 
     for _ in 0..rounds {
-        let server_name = "localhost".try_into().unwrap();
-        let mut client = ClientConnection::new(Arc::clone(&client_config), server_name).unwrap();
-        let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+        let mut client = time(&mut timings.client, || {
+            let server_name = "localhost".try_into().unwrap();
+            ClientConnection::new(Arc::clone(&client_config), server_name).unwrap()
+        });
+        let mut server = time(&mut timings.server, || {
+            ServerConnection::new(Arc::clone(&server_config)).unwrap()
+        });
 
-        timings.server += time(|| {
+        time(&mut timings.server, || {
             transfer(&mut client, &mut server, None);
         });
-        timings.client += time(|| {
+        time(&mut timings.client, || {
             transfer(&mut server, &mut client, None);
         });
-        timings.server += time(|| {
+        time(&mut timings.server, || {
             transfer(&mut client, &mut server, None);
         });
-        timings.client += time(|| {
+        time(&mut timings.client, || {
             transfer(&mut server, &mut client, None);
         });
     }
@@ -367,7 +371,7 @@ fn bench_bulk_buffered(
 
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
-        time_send += time(|| {
+        time(&mut time_send, || {
             server.writer().write_all(&buf).unwrap();
         });
 
@@ -397,13 +401,13 @@ fn bench_bulk_unbuffered(
 
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
-        time_send += time(|| {
+        time(&mut time_send, || {
             server.write(&buf);
         });
 
         server.swap_buffers(&mut client);
 
-        time_recv += time(|| {
+        time(&mut time_recv, || {
             client.read_and_discard(buf.len());
         });
     }
@@ -950,14 +954,15 @@ fn do_handshake(client: &mut ClientConnection, server: &mut ServerConnection) {
     while do_handshake_step(client, server) {}
 }
 
-fn time<F>(mut f: F) -> f64
+fn time<F, T>(time_out: &mut f64, mut f: F) -> T
 where
-    F: FnMut(),
+    F: FnMut() -> T,
 {
     let start = Instant::now();
-    f();
+    let r = f();
     let end = Instant::now();
-    duration_nanos(end.duration_since(start))
+    *time_out += duration_nanos(end.duration_since(start));
+    r
 }
 
 fn transfer<L, R, LS, RS>(left: &mut L, right: &mut R, expect_data: Option<usize>) -> f64
