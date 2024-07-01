@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{fs, mem};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::client::{Resumption, UnbufferedClientConnection};
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
@@ -36,6 +36,7 @@ pub fn main() {
 
     let options = Options {
         work_multiplier: args.multiplier,
+        api: args.api,
     };
 
     match args.command() {
@@ -90,6 +91,9 @@ struct Args {
         help = "Multiplies the length of every test by the given float value"
     )]
     multiplier: f64,
+
+    #[arg(long, value_enum, default_value_t = Api::Both, help = "Choose buffered or unbuffered API")]
+    api: Api,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -157,6 +161,23 @@ enum Command {
 
     #[command(about = "Run all tests (the default subcommand)")]
     AllTests,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum Api {
+    Both,
+    Buffered,
+    Unbuffered,
+}
+
+impl Api {
+    fn use_buffered(&self) -> bool {
+        matches!(*self, Api::Both | Api::Buffered)
+    }
+
+    fn use_unbuffered(&self) -> bool {
+        matches!(*self, Api::Both | Api::Unbuffered)
+    }
 }
 
 fn all_tests(options: &Options) {
@@ -263,28 +284,32 @@ fn bench_bulk(
     });
     let rounds = total_data / plaintext_size;
 
-    report_bulk_result(
-        "bulk",
-        bench_bulk_buffered(
-            client_config.clone(),
-            server_config.clone(),
+    if options.api.use_buffered() {
+        report_bulk_result(
+            "bulk",
+            bench_bulk_buffered(
+                client_config.clone(),
+                server_config.clone(),
+                plaintext_size,
+                rounds,
+            ),
             plaintext_size,
             rounds,
-        ),
-        plaintext_size,
-        rounds,
-        max_fragment_size,
-        params,
-    );
+            max_fragment_size,
+            params,
+        );
+    }
 
-    report_bulk_result(
-        "bulk-unbuffered",
-        bench_bulk_unbuffered(client_config, server_config, plaintext_size, rounds),
-        plaintext_size,
-        rounds,
-        max_fragment_size,
-        params,
-    );
+    if options.api.use_unbuffered() {
+        report_bulk_result(
+            "bulk-unbuffered",
+            bench_bulk_unbuffered(client_config, server_config, plaintext_size, rounds),
+            plaintext_size,
+            rounds,
+            max_fragment_size,
+            params,
+        );
+    }
 }
 
 fn bench_bulk_buffered(
@@ -564,6 +589,7 @@ impl ResumptionParam {
 #[derive(Debug, Clone)]
 struct Options {
     work_multiplier: f64,
+    api: Api,
 }
 
 impl Options {
