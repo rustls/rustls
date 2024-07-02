@@ -351,6 +351,7 @@ mod client_hello {
                 cx.common
                     .handshake_kind
                     .get_or_insert(HandshakeKind::Full);
+                cx.common.kx_state.complete();
             } else {
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
             }

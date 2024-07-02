@@ -34,9 +34,9 @@ use rustls::{
 use rustls::{
     sign, AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
-    HandshakeKind, HandshakeType, InvalidMessage, KeyLog, PeerIncompatible, PeerMisbehaved,
-    ProtocolVersion, ServerConfig, ServerConnection, SideData, SignatureScheme, Stream,
-    StreamOwned, SupportedCipherSuite,
+    HandshakeKind, HandshakeType, InvalidMessage, KeyLog, NamedGroup, PeerIncompatible,
+    PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SideData, SignatureScheme,
+    Stream, StreamOwned, SupportedCipherSuite,
 };
 
 use super::*;
@@ -45,6 +45,7 @@ mod common;
 use common::*;
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
+use rustls::ProtocolVersion::TLSv1_2;
 
 fn alpn_test_error(
     server_protos: Vec<Vec<u8>>,
@@ -505,6 +506,10 @@ fn server_can_get_client_cert_after_resumption() {
 
 #[test]
 fn resumption_combinations() {
+    let expected_kx = match provider_is_fips() {
+        true => NamedGroup::secp256r1,
+        false => NamedGroup::X25519,
+    };
     for kt in ALL_KEY_TYPES {
         let server_config = make_server_config(*kt);
         for version in rustls::ALL_VERSIONS {
@@ -515,6 +520,20 @@ fn resumption_combinations() {
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+            assert_eq!(
+                client
+                    .negotiated_key_exchange_group()
+                    .unwrap()
+                    .name(),
+                expected_kx
+            );
+            assert_eq!(
+                server
+                    .negotiated_key_exchange_group()
+                    .unwrap()
+                    .name(),
+                expected_kx
+            );
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
@@ -522,6 +541,22 @@ fn resumption_combinations() {
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
+            if version.version == TLSv1_2 {
+                assert!(client
+                    .negotiated_key_exchange_group()
+                    .is_none());
+            } else {
+                assert_eq!(
+                    client
+                        .negotiated_key_exchange_group()
+                        .unwrap()
+                        .name(),
+                    expected_kx
+                );
+            }
+            assert!(server
+                .negotiated_key_exchange_group()
+                .is_none());
         }
     }
 }
@@ -3132,11 +3167,16 @@ fn test_ciphersuites() -> Vec<(
 
 #[test]
 fn negotiated_ciphersuite_default() {
+    let expected_kx = match provider_is_fips() {
+        true => NamedGroup::secp256r1,
+        false => NamedGroup::X25519,
+    };
     for kt in ALL_KEY_TYPES {
-        do_suite_test(
+        do_suite_and_kx_test(
             make_client_config(*kt),
             make_server_config(*kt),
             find_suite(CipherSuite::TLS13_AES_256_GCM_SHA384),
+            expected_kx,
             ProtocolVersion::TLSv1_3,
         );
     }
@@ -3152,6 +3192,10 @@ fn all_suites_covered() {
 
 #[test]
 fn negotiated_ciphersuite_client() {
+    let expected_kx = match provider_is_fips() {
+        true => NamedGroup::secp256r1,
+        false => NamedGroup::X25519,
+    };
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let client_config = finish_client_config(
@@ -3167,12 +3211,22 @@ fn negotiated_ciphersuite_client() {
             .unwrap(),
         );
 
-        do_suite_test(client_config, make_server_config(kt), scs, version.version);
+        do_suite_and_kx_test(
+            client_config,
+            make_server_config(kt),
+            scs,
+            expected_kx,
+            version.version,
+        );
     }
 }
 
 #[test]
 fn negotiated_ciphersuite_server() {
+    let expected_kx = match provider_is_fips() {
+        true => NamedGroup::secp256r1,
+        false => NamedGroup::X25519,
+    };
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let server_config = finish_server_config(
@@ -3188,12 +3242,22 @@ fn negotiated_ciphersuite_server() {
             .unwrap(),
         );
 
-        do_suite_test(make_client_config(kt), server_config, scs, version.version);
+        do_suite_and_kx_test(
+            make_client_config(kt),
+            server_config,
+            scs,
+            expected_kx,
+            version.version,
+        );
     }
 }
 
 #[test]
 fn negotiated_ciphersuite_server_ignoring_client_preference() {
+    let expected_kx = match provider_is_fips() {
+        true => NamedGroup::secp256r1,
+        false => NamedGroup::X25519,
+    };
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let scs_other = if scs.suite() == CipherSuite::TLS13_AES_256_GCM_SHA384 {
@@ -3228,7 +3292,13 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
             .unwrap(),
         );
 
-        do_suite_test(client_config, server_config, scs, version.version);
+        do_suite_and_kx_test(
+            client_config,
+            server_config,
+            scs,
+            expected_kx,
+            version.version,
+        );
     }
 }
 

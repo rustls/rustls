@@ -37,6 +37,7 @@ mod client_hello {
     use pki_types::CertificateDer;
 
     use super::*;
+    use crate::common_state::KxState;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
     use crate::msgs::enums::{ClientCertificateType, Compression, ECPointFormat};
@@ -191,6 +192,7 @@ mod client_hello {
                 self.session_id = SessionId::random(self.config.provider.secure_random)?;
             }
 
+            cx.common.kx_state = KxState::Start(selected_kxg);
             cx.common.handshake_kind = Some(HandshakeKind::Full);
 
             self.send_ticket = emit_server_hello(
@@ -613,6 +615,7 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
             self.randoms,
             self.suite,
         )?;
+        cx.common.kx_state.complete();
 
         self.config.key_log.log(
             "CLIENT_RANDOM",
