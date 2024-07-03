@@ -34,9 +34,9 @@ use rustls::{
 use rustls::{
     sign, AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
-    HandshakeKind, HandshakeType, InvalidMessage, KeyLog, NamedGroup, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SideData, SignatureScheme,
-    Stream, StreamOwned, SupportedCipherSuite,
+    HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog, NamedGroup,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SideData,
+    SignatureScheme, Stream, StreamOwned, SupportedCipherSuite,
 };
 
 use super::*;
@@ -2962,6 +2962,67 @@ fn sni_resolver_rejects_bad_certs() {
             sign::CertifiedKey::new(bad_chain, signing_key.clone())
         )
     );
+}
+
+#[test]
+fn test_keys_match() {
+    // Consistent: Both of these should have the same SPKI values
+    let expect_consistent =
+        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeySomeSpki));
+    assert!(matches!(expect_consistent.keys_match(), Ok(())));
+
+    // Inconsistent: These should not have the same SPKI values
+    let expect_inconsistent =
+        sign::CertifiedKey::new(KeyType::EcdsaP256.get_chain(), Arc::new(SigningKeySomeSpki));
+    assert!(matches!(
+        expect_inconsistent.keys_match(),
+        Err(Error::InconsistentKeys(InconsistentKeys::KeyMismatch))
+    ));
+
+    // Unknown: This signing key returns None for its SPKI, so we can't tell if the certified key is consistent
+    let expect_unknown =
+        sign::CertifiedKey::new(KeyType::Rsa2048.get_chain(), Arc::new(SigningKeyNoneSpki));
+    assert!(matches!(
+        expect_unknown.keys_match(),
+        Err(Error::InconsistentKeys(InconsistentKeys::Unknown))
+    ));
+}
+
+/// Represents a SigningKey that returns None for its SPKI via the default impl.
+#[derive(Debug)]
+struct SigningKeyNoneSpki;
+
+impl sign::SigningKey for SigningKeyNoneSpki {
+    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
+        unimplemented!("Not meant to be called during tests")
+    }
+
+    fn algorithm(&self) -> rustls::SignatureAlgorithm {
+        unimplemented!("Not meant to be called during tests")
+    }
+}
+
+/// Represents a SigningKey that returns Some for its SPKI.
+#[derive(Debug)]
+struct SigningKeySomeSpki;
+
+impl sign::SigningKey for SigningKeySomeSpki {
+    fn public_key(&self) -> Option<pki_types::SubjectPublicKeyInfoDer> {
+        let chain = KeyType::Rsa2048.get_chain();
+        let cert = ParsedCertificate::try_from(chain.first().unwrap()).unwrap();
+        Some(
+            cert.subject_public_key_info()
+                .into_owned(),
+        )
+    }
+
+    fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
+        unimplemented!("Not meant to be called during tests")
+    }
+
+    fn algorithm(&self) -> rustls::SignatureAlgorithm {
+        unimplemented!("Not meant to be called during tests")
+    }
 }
 
 fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
