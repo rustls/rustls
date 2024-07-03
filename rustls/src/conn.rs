@@ -772,6 +772,14 @@ impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
     }
 }
 
+impl<T> Deref for UnbufferedConnectionCommon<T> {
+    type Target = CommonState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.core.common_state
+    }
+}
+
 pub(crate) struct ConnectionCore<Data> {
     pub(crate) state: Result<Box<dyn State<Data>>, Error>,
     pub(crate) data: Data,
