@@ -1127,12 +1127,18 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::EcdsaP256,
-        cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+        cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
     #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::EcdsaP384,
+        cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+        &rustls::version::TLS12,
+    ),
+    #[cfg(feature = "tls12")]
+    BenchmarkParam::new(
+        KeyType::Ed25519,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
@@ -1144,6 +1150,16 @@ static ALL_BENCHMARKS: &[BenchmarkParam] = &[
     ),
     BenchmarkParam::new(
         KeyType::Rsa2048,
+        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        &rustls::version::TLS13,
+    ),
+    BenchmarkParam::new(
+        KeyType::EcdsaP256,
+        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        &rustls::version::TLS13,
+    ),
+    BenchmarkParam::new(
+        KeyType::Ed25519,
         cipher_suite::TLS13_AES_256_GCM_SHA384,
         &rustls::version::TLS13,
     ),
