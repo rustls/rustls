@@ -401,6 +401,20 @@ fn run(
         assert!(count <= MAX_ITERATIONS, "handshake was not completed");
     }
 
+    println!("finished with:");
+    println!(
+        "  client: {:?} {:?} {:?}",
+        client.protocol_version(),
+        client.negotiated_cipher_suite(),
+        client.handshake_kind()
+    );
+    println!(
+        "  server: {:?} {:?} {:?}",
+        server.protocol_version(),
+        server.negotiated_cipher_suite(),
+        server.handshake_kind()
+    );
+
     outcome.server = Some(server);
     outcome.client = Some(client);
     outcome
