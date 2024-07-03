@@ -27,7 +27,7 @@ use rustls::server::{
 };
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
 use rustls::{
-    ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
+    ClientConfig, ClientConnection, ConnectionCommon, HandshakeKind, RootCertStore, ServerConfig,
     ServerConnection, SideData,
 };
 
@@ -210,6 +210,14 @@ fn bench_handshake(
         4096
     });
 
+    // warm up, and prime session cache for resumptions
+    bench_handshake_buffered(
+        1,
+        ResumptionParam::No,
+        client_config.clone(),
+        server_config.clone(),
+    );
+
     if options.api.use_buffered() {
         report_handshake_result(
             "handshakes",
@@ -217,7 +225,7 @@ fn bench_handshake(
             clientauth,
             resume,
             rounds,
-            bench_handshake_buffered(rounds, client_config.clone(), server_config.clone()),
+            bench_handshake_buffered(rounds, resume, client_config.clone(), server_config.clone()),
         );
     }
 
@@ -228,13 +236,14 @@ fn bench_handshake(
             clientauth,
             resume,
             rounds,
-            bench_handshake_unbuffered(rounds, client_config, server_config),
+            bench_handshake_unbuffered(rounds, resume, client_config, server_config),
         );
     }
 }
 
 fn bench_handshake_buffered(
     rounds: u64,
+    resume: ResumptionParam,
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> Timings {
@@ -265,6 +274,8 @@ fn bench_handshake_buffered(
         // check we reached idle
         debug_assert!(!client.is_handshaking());
         debug_assert!(!server.is_handshaking());
+        debug_assert_eq!(client.handshake_kind(), Some(resume.as_handshake_kind()));
+        debug_assert_eq!(server.handshake_kind(), Some(resume.as_handshake_kind()));
     }
 
     timings
@@ -272,6 +283,7 @@ fn bench_handshake_buffered(
 
 fn bench_handshake_unbuffered(
     rounds: u64,
+    resume: ResumptionParam,
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> Timings {
@@ -313,6 +325,14 @@ fn bench_handshake_unbuffered(
         // check we reached idle
         debug_assert!(!server.communicate());
         debug_assert!(!client.communicate());
+        debug_assert_eq!(
+            client.conn.handshake_kind(),
+            Some(resume.as_handshake_kind())
+        );
+        debug_assert_eq!(
+            server.conn.handshake_kind(),
+            Some(resume.as_handshake_kind())
+        );
     }
 
     timings
@@ -680,6 +700,13 @@ impl ResumptionParam {
         }
     }
 
+    fn as_handshake_kind(&self) -> HandshakeKind {
+        match *self {
+            Self::No => HandshakeKind::Full,
+            Self::SessionId | Self::Tickets => HandshakeKind::Resumed,
+        }
+    }
+
     fn label(&self) -> &'static str {
         match *self {
             Self::No => "no-resume",
@@ -1000,6 +1027,13 @@ impl UnbufferedConnection {
         }
 
         input_used
+    }
+
+    fn handshake_kind(&self) -> Option<HandshakeKind> {
+        match self {
+            Self::Client(client) => client.handshake_kind(),
+            Self::Server(server) => server.handshake_kind(),
+        }
     }
 }
 
