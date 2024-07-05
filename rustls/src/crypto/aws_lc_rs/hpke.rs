@@ -253,7 +253,7 @@ pub struct HpkeAwsLcRs<const KEY_SIZE: usize, const KDF_SIZE: usize> {
 }
 
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> HpkeAwsLcRs<KEY_SIZE, KDF_SIZE> {
-    /// See RFC 9180 §5.1 "Creating the Encryption Context"[^0].
+    /// See [RFC 9180 §5.1 "Creating the Encryption Context"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.1
     fn key_schedule(
@@ -396,7 +396,7 @@ struct Sealer<const KEY_SIZE: usize, const KDF_SIZE: usize> {
 }
 
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Sealer<KEY_SIZE, KDF_SIZE> {
-    /// See RFC 9180 §5.1.1 "Encryption to a Public Key"[^0].
+    /// See [RFC 9180 §5.1.1 "Encryption to a Public Key"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.1.1
     fn new(
@@ -463,7 +463,7 @@ struct Opener<const KEY_SIZE: usize, const KDF_SIZE: usize> {
 }
 
 impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Opener<KEY_SIZE, KDF_SIZE> {
-    /// See RFC 9180 §5.1.1 "Encryption to a Public Key"[^0].
+    /// See [RFC 9180 §5.1.1 "Encryption to a Public Key"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.1.1
     fn new(
@@ -512,7 +512,7 @@ impl<const KEY_SIZE: usize, const KDF_SIZE: usize> Debug for Opener<KEY_SIZE, KD
 
 /// A Diffie-Hellman (DH) based Key Encapsulation Mechanism (KEM).
 ///
-/// See RFC 9180 §4.1 "DH-Based KEM (DHKEM)"[^0].
+/// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
 ///
 /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
 struct DhKem<const KDF_SIZE: usize> {
@@ -524,7 +524,7 @@ struct DhKem<const KDF_SIZE: usize> {
 }
 
 impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
-    /// See RFC 9180 §4.1 "DH-Based KEM (DHKEM)"[^0].
+    /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
     fn encap(
@@ -586,7 +586,7 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
         ))
     }
 
-    /// See RFC 9180 §4.1 "DH-Based KEM (DHKEM)"[^0].
+    /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
     fn decap(
@@ -623,7 +623,7 @@ impl<const KDF_SIZE: usize> DhKem<KDF_SIZE> {
         Ok(KemSharedSecret(shared_secret))
     }
 
-    /// See RFC 9180 §4.1 "DH-Based KEM (DHKEM)"[^0].
+    /// See [RFC 9180 §4.1 "DH-Based KEM (DHKEM)"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4.1
     fn extract_and_expand(&self, dh: &[u8], kem_context: &[u8]) -> [u8; KDF_SIZE] {
@@ -735,7 +735,7 @@ struct KeySchedule<const KEY_SIZE: usize> {
 }
 
 impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
-    /// See RFC 9180 §5.2 "Encryption and Decryption"[^0].
+    /// See [RFC 9180 §5.2 "Encryption and Decryption"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.2
     fn compute_nonce(&self) -> [u8; NONCE_LEN] {
@@ -757,7 +757,7 @@ impl<const KEY_SIZE: usize> KeySchedule<KEY_SIZE> {
         nonce
     }
 
-    /// See RFC 9180 §5.2 "Encryption and Decryption"[^0].
+    /// See [RFC 9180 §5.2 "Encryption and Decryption"][0].
     ///
     /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-5.2
     fn increment_seq_num(&mut self) -> Result<(), aws_lc_rs::error::Unspecified> {
@@ -789,7 +789,7 @@ impl<const KEY_SIZE: usize> NonceSequence for &mut KeySchedule<KEY_SIZE> {
     }
 }
 
-/// See RFC 9180 §4 "Cryptographic Dependencies"[^0].
+/// See [RFC 9180 §4 "Cryptographic Dependencies"][0].
 ///
 /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4
 fn labeled_extract_for_expand(
@@ -807,7 +807,7 @@ fn labeled_extract_for_expand(
     hkdf.extract_from_secret(salt, &labeled_ikm)
 }
 
-/// See RFC 9180 §4 "Cryptographic Dependencies"[^0].
+/// See [RFC 9180 §4 "Cryptographic Dependencies"][0].
 ///
 /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4
 fn labeled_extract_for_prk(
@@ -825,7 +825,7 @@ fn labeled_extract_for_prk(
     hkdf.extract_prk_from_secret(salt, &labeled_ikm)
 }
 
-/// See RFC 9180 §4 "Cryptographic Dependencies"[^0].
+/// See [RFC 9180 §4 "Cryptographic Dependencies"][0].
 ///
 /// [0]: https://www.rfc-editor.org/rfc/rfc9180.html#section-4
 fn labeled_expand<const L: usize>(
