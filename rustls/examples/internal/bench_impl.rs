@@ -396,11 +396,15 @@ fn bench_bulk(
         max_fragment_size,
     );
 
-    let total_data = options.apply_work_multiplier(if plaintext_size < 8192 {
-        64 * 1024 * 1024
-    } else {
-        1024 * 1024 * 1024
-    });
+    // for small plaintext_sizes and their associated slowness, send
+    // less total data
+    let total_data = options.apply_work_multiplier(
+        1024 * 1024
+            * match plaintext_size {
+                ..=8192 => 64,
+                _ => 1024,
+            },
+    );
     let rounds = total_data / plaintext_size;
 
     if options.api.use_buffered() {
