@@ -199,8 +199,8 @@ fn bench_handshake(
     clientauth: ClientAuth,
     resume: ResumptionParam,
 ) {
-    let client_config = Arc::new(make_client_config(params, clientauth, resume));
-    let server_config = Arc::new(make_server_config(params, clientauth, resume, None));
+    let client_config = make_client_config(params, clientauth, resume);
+    let server_config = make_server_config(params, clientauth, resume, None);
 
     assert!(params.ciphersuite.version() == params.version);
 
@@ -388,17 +388,13 @@ fn bench_bulk(
     plaintext_size: u64,
     max_fragment_size: Option<usize>,
 ) {
-    let client_config = Arc::new(make_client_config(
-        params,
-        ClientAuth::No,
-        ResumptionParam::No,
-    ));
-    let server_config = Arc::new(make_server_config(
+    let client_config = make_client_config(params, ClientAuth::No, ResumptionParam::No);
+    let server_config = make_server_config(
         params,
         ClientAuth::No,
         ResumptionParam::No,
         max_fragment_size,
-    ));
+    );
 
     let total_data = options.apply_work_multiplier(if plaintext_size < 8192 {
         64 * 1024 * 1024
@@ -532,17 +528,8 @@ fn report_bulk_result(
 }
 
 fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
-    let client_config = Arc::new(make_client_config(
-        params,
-        ClientAuth::No,
-        ResumptionParam::No,
-    ));
-    let server_config = Arc::new(make_server_config(
-        params,
-        ClientAuth::No,
-        ResumptionParam::No,
-        None,
-    ));
+    let client_config = make_client_config(params, ClientAuth::No, ResumptionParam::No);
+    let server_config = make_server_config(params, ClientAuth::No, ResumptionParam::No, None);
 
     // The target here is to end up with conn_count post-handshake
     // server and client sessions.
@@ -585,7 +572,7 @@ fn make_server_config(
     client_auth: ClientAuth,
     resume: ResumptionParam,
     max_fragment_size: Option<usize>,
-) -> ServerConfig {
+) -> Arc<ServerConfig> {
     let provider = Arc::new(provider::default_provider());
     let client_auth = match client_auth {
         ClientAuth::Yes => {
@@ -617,14 +604,14 @@ fn make_server_config(
     }
 
     cfg.max_fragment_size = max_fragment_size;
-    cfg
+    Arc::new(cfg)
 }
 
 fn make_client_config(
     params: &BenchmarkParam,
     clientauth: ClientAuth,
     resume: ResumptionParam,
-) -> ClientConfig {
+) -> Arc<ClientConfig> {
     let mut root_store = RootCertStore::empty();
     let mut rootbuf =
         io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
@@ -659,7 +646,7 @@ fn make_client_config(
         cfg.resumption = Resumption::disabled();
     }
 
-    cfg
+    Arc::new(cfg)
 }
 
 fn lookup_matching_benches(name: &str) -> Vec<&BenchmarkParam> {
