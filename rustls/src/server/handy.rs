@@ -2,7 +2,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use crate::msgs::handshake::CertificateChain;
 use crate::server::ClientHello;
 use crate::{server, sign};
 
@@ -172,23 +171,16 @@ impl server::ProducesTickets for NeverProducesTickets {
 pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
 
 impl AlwaysResolvesChain {
-    /// Creates an `AlwaysResolvesChain`, using the supplied key and certificate chain.
-    pub(super) fn new(
-        private_key: Arc<dyn sign::SigningKey>,
-        chain: CertificateChain<'static>,
-    ) -> Self {
-        Self(Arc::new(sign::CertifiedKey::new(chain.0, private_key)))
+    /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey`.
+    pub(super) fn new(certified_key: sign::CertifiedKey) -> Self {
+        Self(Arc::new(certified_key))
     }
 
-    /// Creates an `AlwaysResolvesChain`, using the supplied key, certificate chain and OCSP response.
+    /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey` and OCSP response.
     ///
     /// If non-empty, the given OCSP response is attached.
-    pub(super) fn new_with_extras(
-        private_key: Arc<dyn sign::SigningKey>,
-        chain: CertificateChain<'static>,
-        ocsp: Vec<u8>,
-    ) -> Self {
-        let mut r = Self::new(private_key, chain);
+    pub(super) fn new_with_extras(certified_key: sign::CertifiedKey, ocsp: Vec<u8>) -> Self {
+        let mut r = Self::new(certified_key);
 
         {
             let cert = Arc::make_mut(&mut r.0);
