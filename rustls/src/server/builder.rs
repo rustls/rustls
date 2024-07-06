@@ -11,7 +11,7 @@ use crate::server::{handy, ResolvesServerCert, ServerConfig};
 use crate::sign::CertifiedKey;
 use crate::time_provider::TimeProvider;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
-use crate::{compress, versions, NoKeyLog};
+use crate::{compress, versions, InconsistentKeys, NoKeyLog};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
@@ -63,7 +63,9 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// `aws-lc-rs` and `ring` [`CryptoProvider`]s support all three encodings,
     /// but other `CryptoProviders` may not.
     ///
-    /// This function fails if `key_der` is invalid.
+    /// This function fails if `key_der` is invalid, or if the
+    /// `SubjectPublicKeyInfo` from the private key does not match the public
+    /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert(
         self,
         cert_chain: Vec<CertificateDer<'static>>,
@@ -74,7 +76,14 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             .provider
             .key_provider
             .load_private_key(key_der)?;
+
         let certified_key = CertifiedKey::new(cert_chain, private_key);
+        match certified_key.keys_match() {
+            // Don't treat unknown consistency as an error
+            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => (),
+            Err(err) => return Err(err),
+        }
+
         let resolver = handy::AlwaysResolvesChain::new(certified_key);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
@@ -89,7 +98,9 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// but other `CryptoProviders` may not.
     /// `ocsp` is a DER-encoded OCSP response.  Ignored if zero length.
     ///
-    /// This function fails if `key_der` is invalid.
+    /// This function fails if `key_der` is invalid, or if the
+    /// `SubjectPublicKeyInfo` from the private key does not match the public
+    /// key for the end-entity certificate from the `cert_chain`.
     pub fn with_single_cert_with_ocsp(
         self,
         cert_chain: Vec<CertificateDer<'static>>,
@@ -101,7 +112,14 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             .provider
             .key_provider
             .load_private_key(key_der)?;
+
         let certified_key = CertifiedKey::new(cert_chain, private_key);
+        match certified_key.keys_match() {
+            // Don't treat unknown consistency as an error
+            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => (),
+            Err(err) => return Err(err),
+        }
+
         let resolver = handy::AlwaysResolvesChain::new_with_extras(certified_key, ocsp);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
