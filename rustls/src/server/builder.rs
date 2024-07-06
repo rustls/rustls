@@ -7,8 +7,8 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::CryptoProvider;
 use crate::error::Error;
-use crate::msgs::handshake::CertificateChain;
 use crate::server::{handy, ResolvesServerCert, ServerConfig};
+use crate::sign::CertifiedKey;
 use crate::time_provider::TimeProvider;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
 use crate::{compress, versions, NoKeyLog};
@@ -74,7 +74,8 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             .provider
             .key_provider
             .load_private_key(key_der)?;
-        let resolver = handy::AlwaysResolvesChain::new(private_key, CertificateChain(cert_chain));
+        let certified_key = CertifiedKey::new(cert_chain, private_key);
+        let resolver = handy::AlwaysResolvesChain::new(certified_key);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
@@ -100,11 +101,8 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             .provider
             .key_provider
             .load_private_key(key_der)?;
-        let resolver = handy::AlwaysResolvesChain::new_with_extras(
-            private_key,
-            CertificateChain(cert_chain),
-            ocsp,
-        );
+        let certified_key = CertifiedKey::new(cert_chain, private_key);
+        let resolver = handy::AlwaysResolvesChain::new_with_extras(certified_key, ocsp);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
