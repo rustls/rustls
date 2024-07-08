@@ -2,15 +2,16 @@
 
 use alloc::vec::Vec;
 
-pub(crate) fn asn1_wrap(tag: u8, bytes: &[u8]) -> Vec<u8> {
-    let len = bytes.len();
+pub(crate) fn asn1_wrap(tag: u8, bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
+    let len = bytes_a.len() + bytes_b.len();
 
     if len <= 0x7f {
         // Short form
         let mut ret = Vec::with_capacity(2 + len);
         ret.push(tag);
         ret.push(len as u8);
-        ret.extend_from_slice(bytes);
+        ret.extend_from_slice(bytes_a);
+        ret.extend_from_slice(bytes_b);
         ret
     } else {
         // Long form
@@ -28,17 +29,24 @@ pub(crate) fn asn1_wrap(tag: u8, bytes: &[u8]) -> Vec<u8> {
         ret.push(0x80 + encoded_bytes as u8);
         ret.extend_from_slice(&size[leading_zero_bytes..]);
 
-        ret.extend_from_slice(bytes);
+        ret.extend_from_slice(bytes_a);
+        ret.extend_from_slice(bytes_b);
         ret
     }
 }
 
 /// Prepend stuff to `bytes` to put it in a DER SEQUENCE.
 pub(crate) fn wrap_in_sequence(bytes: &[u8]) -> Vec<u8> {
-    asn1_wrap(DER_SEQUENCE_TAG, bytes)
+    asn1_wrap(DER_SEQUENCE_TAG, bytes, &[])
+}
+
+/// Prepend stuff to `bytes` to put it in a DER BIT STRING.
+pub(crate) fn wrap_in_bit_string(bytes: &[u8]) -> Vec<u8> {
+    asn1_wrap(DER_BIT_STRING_TAG, &[0u8], bytes)
 }
 
 const DER_SEQUENCE_TAG: u8 = 0x30;
+const DER_BIT_STRING_TAG: u8 = 0x03;
 
 #[cfg(test)]
 mod tests {
@@ -108,5 +116,19 @@ mod tests {
             result[..8]
         );
         assert_eq!(result.len(), 0x1000000 + 6);
+    }
+
+    #[test]
+    fn test_wrap_in_bit_string() {
+        // The BIT STRING encoding starts with a single octet on
+        // the front saying how many bits to disregard from the
+        // last octet. So this zero means "no bits" unused, which
+        // is correct because our input is an string of octets.
+        //
+        // So if we encode &[0x55u8] with this function, we should get:
+        //
+        // 0x03    0x02    0x00                0x55
+        // ^ tag   ^ len   ^ no unused bits    ^ value
+        assert_eq!(wrap_in_bit_string(&[0x55u8]), vec![0x03, 0x02, 0x00, 0x55]);
     }
 }

@@ -3,11 +3,12 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::{CertificateDer, SubjectPublicKeyInfoDer};
+use pki_types::{AlgorithmIdentifier, CertificateDer, SubjectPublicKeyInfoDer};
 
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
 use crate::server::ParsedCertificate;
+use crate::x509;
 
 /// An abstract signing key.
 ///
@@ -133,4 +134,29 @@ impl CertifiedKey {
             .first()
             .ok_or(Error::NoCertificatesPresented)
     }
+}
+
+#[cfg_attr(not(any(feature = "aws_lc_rs", feature = "ring")), allow(dead_code))]
+pub(crate) fn public_key_to_spki(
+    alg_id: &AlgorithmIdentifier,
+    public_key: impl AsRef<[u8]>,
+) -> SubjectPublicKeyInfoDer<'static> {
+    // SubjectPublicKeyInfo  ::=  SEQUENCE  {
+    //    algorithm            AlgorithmIdentifier,
+    //    subjectPublicKey     BIT STRING  }
+    //
+    // AlgorithmIdentifier  ::=  SEQUENCE  {
+    //    algorithm               OBJECT IDENTIFIER,
+    //    parameters              ANY DEFINED BY algorithm OPTIONAL  }
+    //
+    // note that the `pki_types::AlgorithmIdentifier` type is the
+    // concatenation of `algorithm` and `parameters`, but misses the
+    // outer `Sequence`.
+
+    let mut spki_inner = x509::wrap_in_sequence(alg_id.as_ref());
+    spki_inner.extend(&x509::wrap_in_bit_string(public_key.as_ref()));
+
+    let spki = x509::wrap_in_sequence(&spki_inner);
+
+    SubjectPublicKeyInfoDer::from(spki)
 }

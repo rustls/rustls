@@ -7,13 +7,14 @@ use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
 
-use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer};
+use webpki::alg_id;
 
 use super::ring_like::rand::SystemRandom;
-use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
+use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
+use crate::crypto::signer::{public_key_to_spki, Signer, SigningKey};
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
-use crate::sign::{Signer, SigningKey};
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
@@ -127,6 +128,13 @@ impl SigningKey for RsaSigningKey {
             .iter()
             .find(|scheme| offered.contains(scheme))
             .map(|scheme| RsaSigner::new(Arc::clone(&self.key), *scheme))
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(public_key_to_spki(
+            &alg_id::RSA_ENCRYPTION,
+            self.key.public_key(),
+        ))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -247,6 +255,17 @@ impl SigningKey for EcdsaSigningKey {
         }
     }
 
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        let id = match self.scheme {
+            SignatureScheme::ECDSA_NISTP256_SHA256 => alg_id::ECDSA_P256,
+            SignatureScheme::ECDSA_NISTP384_SHA384 => alg_id::ECDSA_P384,
+            SignatureScheme::ECDSA_NISTP521_SHA512 => alg_id::ECDSA_P521,
+            _ => unreachable!(),
+        };
+
+        Some(public_key_to_spki(&id, self.key.public_key()))
+    }
+
     fn algorithm(&self) -> SignatureAlgorithm {
         self.scheme.algorithm()
     }
@@ -329,6 +348,10 @@ impl SigningKey for Ed25519SigningKey {
         } else {
             None
         }
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(public_key_to_spki(&alg_id::ED25519, self.key.public_key()))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
