@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-pub(crate) fn asn1_wrap(tag: u8, bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
+fn asn1_wrap(tag: u8, bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
     let len = bytes_a.len() + bytes_b.len();
 
     if len <= 0x7f {
@@ -40,13 +40,26 @@ pub(crate) fn wrap_in_sequence(bytes: &[u8]) -> Vec<u8> {
     asn1_wrap(DER_SEQUENCE_TAG, bytes, &[])
 }
 
+/// Prepend stuff to `bytes_a` + `bytes_b` to put it in a DER SEQUENCE.
+#[cfg_attr(not(feature = "ring"), allow(dead_code))]
+pub(crate) fn wrap_concat_in_sequence(bytes_a: &[u8], bytes_b: &[u8]) -> Vec<u8> {
+    asn1_wrap(DER_SEQUENCE_TAG, bytes_a, bytes_b)
+}
+
 /// Prepend stuff to `bytes` to put it in a DER BIT STRING.
 pub(crate) fn wrap_in_bit_string(bytes: &[u8]) -> Vec<u8> {
     asn1_wrap(DER_BIT_STRING_TAG, &[0u8], bytes)
 }
 
+/// Prepend stuff to `bytes` to put it in a DER OCTET STRING.
+#[cfg_attr(not(feature = "ring"), allow(dead_code))]
+pub(crate) fn wrap_in_octet_string(bytes: &[u8]) -> Vec<u8> {
+    asn1_wrap(DER_OCTET_STRING_TAG, bytes, &[])
+}
+
 const DER_SEQUENCE_TAG: u8 = 0x30;
 const DER_BIT_STRING_TAG: u8 = 0x03;
+const DER_OCTET_STRING_TAG: u8 = 0x04;
 
 #[cfg(test)]
 mod tests {
