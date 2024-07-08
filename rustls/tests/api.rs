@@ -7408,4 +7408,17 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
     }
 }
 
+#[test]
+fn test_keys_match_for_all_signing_key_types() {
+    for kt in ALL_KEY_TYPES {
+        let key = provider::default_provider()
+            .key_provider
+            .load_private_key(kt.get_client_key())
+            .unwrap();
+        let ck = sign::CertifiedKey::new(kt.get_client_chain(), key);
+        ck.keys_match().unwrap();
+        println!("{kt:?} ok");
+    }
+}
+
 const CONFIDENTIALITY_LIMIT: u64 = 1024;

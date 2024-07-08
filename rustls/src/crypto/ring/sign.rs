@@ -7,14 +7,15 @@ use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
 
-use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer};
+use webpki::alg_id;
 
 use super::ring_like::io::der;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
-use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair};
+use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
+use crate::crypto::signer::{public_key_to_spki, Signer, SigningKey};
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
-use crate::sign::{Signer, SigningKey};
 use crate::x509::{asn1_wrap, wrap_in_sequence};
 
 /// Parse `der` as any supported key encoding/type, returning
@@ -121,6 +122,13 @@ impl SigningKey for RsaSigningKey {
             .iter()
             .find(|scheme| offered.contains(scheme))
             .map(|scheme| RsaSigner::new(Arc::clone(&self.key), *scheme))
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(public_key_to_spki(
+            &alg_id::RSA_ENCRYPTION,
+            self.key.public_key(),
+        ))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -243,7 +251,7 @@ impl EcdsaSigningKey {
             _ => unreachable!(), // all callers are in this file
         };
 
-        let sec1_wrap = asn1_wrap(der::Tag::OctetString as u8, maybe_sec1_der);
+        let sec1_wrap = asn1_wrap(der::Tag::OctetString as u8, maybe_sec1_der, &[]);
 
         let mut pkcs8_inner = Vec::with_capacity(pkcs8_prefix.len() + sec1_wrap.len());
         pkcs8_inner.extend_from_slice(pkcs8_prefix);
@@ -283,6 +291,16 @@ impl SigningKey for EcdsaSigningKey {
         } else {
             None
         }
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        let id = match self.scheme {
+            SignatureScheme::ECDSA_NISTP256_SHA256 => alg_id::ECDSA_P256,
+            SignatureScheme::ECDSA_NISTP384_SHA384 => alg_id::ECDSA_P384,
+            _ => unreachable!(),
+        };
+
+        Some(public_key_to_spki(&id, self.key.public_key()))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
@@ -367,6 +385,10 @@ impl SigningKey for Ed25519SigningKey {
         } else {
             None
         }
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(public_key_to_spki(&alg_id::ED25519, self.key.public_key()))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
