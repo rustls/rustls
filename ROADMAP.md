@@ -4,12 +4,6 @@
 
 Specific features, in rough order of priority:
 
-* **Enforce Confidentiality / Integrity Limits**.
-  The QUIC use of TLS mandates limited usage of AEAD keys. While TLS 1.3 and 1.2
-  do not require this, the same kinds of issues can apply here, and we should
-  consider implementing limits for TLS over TCP as well.
-  rustls/rustls#755
-
 * **Address asynchronous handshake interruption**.
   Allow completion of user-provided operations to be deferred.
   rustls/rustls#850
@@ -33,6 +27,14 @@ General priorities:
   Continue to improve the Rustls API. Aim for ease of use, clarity.
 
 ## Past priorities
+
+Delivered in 0.23.11:
+
+* **Enforce Confidentiality / Integrity Limits**.
+  The QUIC use of TLS mandates limited usage of AEAD keys. While TLS 1.3 and 1.2
+  do not require this, the same kinds of issues can apply here, and we should
+  consider implementing limits for TLS over TCP as well.
+  rustls/rustls#755
 
 Delivered in 0.23.10:
 
