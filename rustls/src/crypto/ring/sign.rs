@@ -10,13 +10,12 @@ use core::fmt::{self, Debug, Formatter};
 use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer};
 use webpki::alg_id;
 
-use super::ring_like::io::der;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
 use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
 use crate::crypto::signer::{public_key_to_spki, Signer, SigningKey};
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
-use crate::x509::{asn1_wrap, wrap_in_sequence};
+use crate::x509::{wrap_concat_in_sequence, wrap_in_octet_string};
 
 /// Parse `der` as any supported key encoding/type, returning
 /// the first which works.
@@ -251,13 +250,10 @@ impl EcdsaSigningKey {
             _ => unreachable!(), // all callers are in this file
         };
 
-        let sec1_wrap = asn1_wrap(der::Tag::OctetString as u8, maybe_sec1_der, &[]);
+        let sec1_wrap = wrap_in_octet_string(maybe_sec1_der);
+        let pkcs8 = wrap_concat_in_sequence(pkcs8_prefix, &sec1_wrap);
 
-        let mut pkcs8_inner = Vec::with_capacity(pkcs8_prefix.len() + sec1_wrap.len());
-        pkcs8_inner.extend_from_slice(pkcs8_prefix);
-        pkcs8_inner.extend_from_slice(&sec1_wrap);
-
-        EcdsaKeyPair::from_pkcs8(sigalg, &wrap_in_sequence(&pkcs8_inner), rng).map_err(|_| ())
+        EcdsaKeyPair::from_pkcs8(sigalg, &pkcs8, rng).map_err(|_| ())
     }
 }
 
