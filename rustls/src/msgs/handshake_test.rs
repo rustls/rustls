@@ -8,7 +8,7 @@ use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::InvalidMessage;
-use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
+use crate::msgs::base::{Padding, Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{put_u16, Codec, Reader};
 use crate::msgs::enums::{
     ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
@@ -359,6 +359,24 @@ fn can_round_trip_single_proto() {
             assert_eq!(1, prot.len());
             assert_eq!(vec![b"hi"], prot.to_slices());
             assert_eq!(prot.as_single_slice(), Some(&b"hi"[..]));
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn padding() {
+    let bytes = [0, 0x15, 0, 6, 0, 0, 0, 0, 0, 0];
+
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd).unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.ext_type(), ExtensionType::Padding);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::Padding(p) => {
+            assert_eq!(6, p.0);
         }
         _ => unreachable!(),
     }
@@ -933,6 +951,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
+            ClientExtension::Padding(Padding(100)),
             ClientExtension::make_sni(&DnsName::try_from("hello").unwrap()),
             ClientExtension::SessionTicket(ClientSessionTicket::Request),
             ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload::Borrowed(&[]))),
