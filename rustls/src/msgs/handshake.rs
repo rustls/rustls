@@ -20,7 +20,7 @@ use crate::error::InvalidMessage;
 use crate::ffdhe_groups::FfdheGroup;
 #[cfg(feature = "logging")]
 use crate::log::warn;
-use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24, Padding};
+use crate::msgs::base::{Padding, Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
