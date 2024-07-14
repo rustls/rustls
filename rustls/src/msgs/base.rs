@@ -192,6 +192,31 @@ impl fmt::Debug for PayloadU8 {
     }
 }
 
+// https://datatracker.ietf.org/doc/html/rfc7685
+#[derive(Clone, Eq, PartialEq)]
+pub struct Padding(pub u16);
+
+impl Codec<'_> for Padding {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.0.encode(bytes);
+        let new_len = bytes.len() + usize::from(self.0);
+        bytes.resize(new_len, 0x00);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let len = u16::read(r)?;
+        let _ = r.sub(usize::from(len))?;
+        Ok(Self(len))
+    }
+}
+
+impl fmt::Debug for Padding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:04x}", &self.0)?;
+        Ok(())
+    }
+}
+
 // Format an iterator of u8 into a hex string
 pub(super) fn hex<'a>(
     f: &mut fmt::Formatter<'_>,

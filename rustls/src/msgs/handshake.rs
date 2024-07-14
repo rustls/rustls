@@ -20,7 +20,7 @@ use crate::error::InvalidMessage;
 use crate::ffdhe_groups::FfdheGroup;
 #[cfg(feature = "logging")]
 use crate::log::warn;
-use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
+use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24, Padding};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
@@ -542,16 +542,17 @@ impl TlsListElement for CertificateCompressionAlgorithm {
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
+    ServerName(Vec<ServerName>),
     EcPointFormats(Vec<ECPointFormat>),
     NamedGroups(Vec<NamedGroup>),
     SignatureAlgorithms(Vec<SignatureScheme>),
-    ServerName(Vec<ServerName>),
     SessionTicket(ClientSessionTicket),
     Protocols(Vec<ProtocolName>),
     SupportedVersions(Vec<ProtocolVersion>),
     KeyShare(Vec<KeyShareEntry>),
     PresharedKeyModes(Vec<PSKKeyExchangeMode>),
     PresharedKey(PresharedKeyOffer),
+    Padding(Padding),
     Cookie(PayloadU16),
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest),
@@ -567,16 +568,17 @@ pub enum ClientExtension {
 impl ClientExtension {
     pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
+            Self::ServerName(_) => ExtensionType::ServerName,
             Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
-            Self::ServerName(_) => ExtensionType::ServerName,
             Self::SessionTicket(_) => ExtensionType::SessionTicket,
             Self::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
             Self::KeyShare(_) => ExtensionType::KeyShare,
             Self::PresharedKeyModes(_) => ExtensionType::PSKKeyExchangeModes,
             Self::PresharedKey(_) => ExtensionType::PreSharedKey,
+            Self::Padding(_) => ExtensionType::Padding,
             Self::Cookie(_) => ExtensionType::Cookie,
             Self::ExtendedMasterSecretRequest => ExtensionType::ExtendedMasterSecret,
             Self::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
@@ -599,10 +601,10 @@ impl Codec<'_> for ClientExtension {
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
+            Self::ServerName(ref r) => r.encode(nested.buf),
             Self::EcPointFormats(ref r) => r.encode(nested.buf),
             Self::NamedGroups(ref r) => r.encode(nested.buf),
             Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
-            Self::ServerName(ref r) => r.encode(nested.buf),
             Self::SessionTicket(ClientSessionTicket::Request)
             | Self::ExtendedMasterSecretRequest
             | Self::EarlyData => {}
@@ -612,6 +614,7 @@ impl Codec<'_> for ClientExtension {
             Self::KeyShare(ref r) => r.encode(nested.buf),
             Self::PresharedKeyModes(ref r) => r.encode(nested.buf),
             Self::PresharedKey(ref r) => r.encode(nested.buf),
+            Self::Padding(ref r) => r.encode(nested.buf),
             Self::Cookie(ref r) => r.encode(nested.buf),
             Self::CertificateStatusRequest(ref r) => r.encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
@@ -630,10 +633,10 @@ impl Codec<'_> for ClientExtension {
         let mut sub = r.sub(len)?;
 
         let ext = match typ {
+            ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
             ExtensionType::ECPointFormats => Self::EcPointFormats(Vec::read(&mut sub)?),
             ExtensionType::EllipticCurves => Self::NamedGroups(Vec::read(&mut sub)?),
             ExtensionType::SignatureAlgorithms => Self::SignatureAlgorithms(Vec::read(&mut sub)?),
-            ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
                     let contents = Payload::read(&mut sub).into_owned();
@@ -647,6 +650,7 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::KeyShare => Self::KeyShare(Vec::read(&mut sub)?),
             ExtensionType::PSKKeyExchangeModes => Self::PresharedKeyModes(Vec::read(&mut sub)?),
             ExtensionType::PreSharedKey => Self::PresharedKey(PresharedKeyOffer::read(&mut sub)?),
+            ExtensionType::Padding => Self::Padding(Padding::read(&mut sub)?),
             ExtensionType::Cookie => Self::Cookie(PayloadU16::read(&mut sub)?),
             ExtensionType::ExtendedMasterSecret if !sub.any_left() => {
                 Self::ExtendedMasterSecretRequest
