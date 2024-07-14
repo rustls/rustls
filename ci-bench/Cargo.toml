@@ -19,4 +19,4 @@ rustls = { path = "../rustls", features = ["ring", "aws_lc_rs"] }
 rustls-pemfile = "2"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.5"
+tikv-jemallocator = "0.6"
