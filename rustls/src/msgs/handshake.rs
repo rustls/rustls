@@ -542,10 +542,10 @@ impl TlsListElement for CertificateCompressionAlgorithm {
 
 #[derive(Clone, Debug)]
 pub enum ClientExtension {
-    ServerName(Vec<ServerName>),
     EcPointFormats(Vec<ECPointFormat>),
     NamedGroups(Vec<NamedGroup>),
     SignatureAlgorithms(Vec<SignatureScheme>),
+    ServerName(Vec<ServerName>),
     SessionTicket(ClientSessionTicket),
     Protocols(Vec<ProtocolName>),
     SupportedVersions(Vec<ProtocolVersion>),
@@ -568,10 +568,10 @@ pub enum ClientExtension {
 impl ClientExtension {
     pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
-            Self::ServerName(_) => ExtensionType::ServerName,
             Self::EcPointFormats(_) => ExtensionType::ECPointFormats,
             Self::NamedGroups(_) => ExtensionType::EllipticCurves,
             Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
+            Self::ServerName(_) => ExtensionType::ServerName,
             Self::SessionTicket(_) => ExtensionType::SessionTicket,
             Self::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
@@ -601,10 +601,10 @@ impl Codec<'_> for ClientExtension {
 
         let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
         match *self {
-            Self::ServerName(ref r) => r.encode(nested.buf),
             Self::EcPointFormats(ref r) => r.encode(nested.buf),
             Self::NamedGroups(ref r) => r.encode(nested.buf),
             Self::SignatureAlgorithms(ref r) => r.encode(nested.buf),
+            Self::ServerName(ref r) => r.encode(nested.buf),
             Self::SessionTicket(ClientSessionTicket::Request)
             | Self::ExtendedMasterSecretRequest
             | Self::EarlyData => {}
@@ -633,10 +633,10 @@ impl Codec<'_> for ClientExtension {
         let mut sub = r.sub(len)?;
 
         let ext = match typ {
-            ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
             ExtensionType::ECPointFormats => Self::EcPointFormats(Vec::read(&mut sub)?),
             ExtensionType::EllipticCurves => Self::NamedGroups(Vec::read(&mut sub)?),
             ExtensionType::SignatureAlgorithms => Self::SignatureAlgorithms(Vec::read(&mut sub)?),
+            ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
                     let contents = Payload::read(&mut sub).into_owned();

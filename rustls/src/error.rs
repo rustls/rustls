@@ -159,6 +159,8 @@ pub enum InvalidMessage {
     InvalidEmptyPayload,
     /// A peer sent an unexpected key update request.
     InvalidKeyUpdate,
+    /// The client MUST fill the padding extension completely with zero bytes.
+    InvalidPadding,
     /// A peer's server name could not be decoded
     InvalidServerName,
     /// A TLS message payload was larger then allowed by the specification.
@@ -183,8 +185,6 @@ pub enum InvalidMessage {
     UnsupportedCurveType,
     /// A peer sent an unsupported key exchange algorithm.
     UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
-    /// The client MUST fill the padding extension completely with zero bytes.
-    InvalidPadding,
 }
 
 impl From<InvalidMessage> for Error {
