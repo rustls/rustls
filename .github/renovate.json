@@ -11,6 +11,7 @@
   },
   "prCreation": "not-pending",
   "rangeStrategy": "update-lockfile",
+  "rebaseWhen": "behind-base-branch",
   "github-actions": {
     "fileMatch": [
       "^ci\\/.*/[^/]+\\.ya?ml$"
