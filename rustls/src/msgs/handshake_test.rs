@@ -366,7 +366,7 @@ fn can_round_trip_single_proto() {
 
 #[test]
 fn padding() {
-    let bytes = [0, 0x15, 0, 6, 0, 0, 0, 0, 0, 0];
+    let bytes = [0, 21, 0, 6, 0, 0, 0, 0, 0, 0];
 
     let mut rd = Reader::init(&bytes);
     let ext = ClientExtension::read(&mut rd).unwrap();
@@ -380,6 +380,35 @@ fn padding() {
         }
         _ => unreachable!(),
     }
+}
+
+#[test]
+fn padding_minimal() {
+    let bytes = [0, 21, 0, 0];
+
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd).unwrap();
+    println!("{:?}", ext);
+
+    assert_eq!(ext.ext_type(), ExtensionType::Padding);
+    assert_eq!(bytes.to_vec(), ext.get_encoding());
+    match ext {
+        ClientExtension::Padding(p) => {
+            assert_eq!(0, p.0);
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn padding_bad() {
+    let bytes = [0, 21, 0, 6, 0, 0, 0, 0, 1, 0];
+
+    let mut rd = Reader::init(&bytes);
+    let ext = ClientExtension::read(&mut rd);
+    println!("{:?}", ext);
+
+    assert_eq!(ext.unwrap_err(), InvalidMessage::InvalidPadding);
 }
 
 #[test]

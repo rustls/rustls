@@ -198,13 +198,20 @@ pub struct Padding(pub u16);
 
 impl Codec<'_> for Padding {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        let new_len = bytes.len() + usize::from(self.0);
-        bytes.resize(new_len, 0x00);
+        if self.0 > 0 {
+            let new_len = bytes.len() + usize::from(self.0);
+            bytes.resize(new_len, 0x00);
+        }
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = r.left() as u16;
-        let _ = r.rest();
+        let zeros = r.rest();
+        for &i in zeros {
+            if i != 0x00 {
+                return Err(InvalidMessage::InvalidPadding);
+            }
+        }
         Ok(Self(len))
     }
 }

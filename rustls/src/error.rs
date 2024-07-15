@@ -183,6 +183,8 @@ pub enum InvalidMessage {
     UnsupportedCurveType,
     /// A peer sent an unsupported key exchange algorithm.
     UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
+    /// The client MUST fill the padding extension completely with zero bytes.
+    InvalidPadding,
 }
 
 impl From<InvalidMessage> for Error {
