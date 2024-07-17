@@ -1144,3 +1144,94 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     }
     .into()
 }
+
+pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
+    static TLS13_PLAIN_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
+
+    let tls13 = TLS13_PLAIN_SUITE.get_or_init(|| {
+        let tls13 = provider::cipher_suite::TLS13_AES_256_GCM_SHA384
+            .tls13()
+            .unwrap();
+
+        rustls::Tls13CipherSuite {
+            aead_alg: &plaintext::Aead,
+            common: rustls::crypto::CipherSuiteCommon { ..tls13.common },
+            ..*tls13
+        }
+    });
+
+    CryptoProvider {
+        cipher_suites: vec![SupportedCipherSuite::Tls13(tls13)],
+        ..provider::default_provider()
+    }
+    .into()
+}
+
+mod plaintext {
+    use rustls::crypto::cipher::{
+        AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
+        OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm, UnsupportedOperationError,
+    };
+    use rustls::ConnectionTrafficSecrets;
+
+    use super::*;
+
+    pub(super) struct Aead;
+
+    impl Tls13AeadAlgorithm for Aead {
+        fn encrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageEncrypter> {
+            Box::new(Encrypter)
+        }
+
+        fn decrypter(&self, _key: AeadKey, _iv: Iv) -> Box<dyn MessageDecrypter> {
+            Box::new(Decrypter)
+        }
+
+        fn key_len(&self) -> usize {
+            32
+        }
+
+        fn extract_keys(
+            &self,
+            _key: AeadKey,
+            _iv: Iv,
+        ) -> Result<ConnectionTrafficSecrets, UnsupportedOperationError> {
+            Err(UnsupportedOperationError)
+        }
+    }
+
+    struct Encrypter;
+
+    impl MessageEncrypter for Encrypter {
+        fn encrypt(
+            &mut self,
+            msg: OutboundPlainMessage<'_>,
+            _seq: u64,
+        ) -> Result<OutboundOpaqueMessage, Error> {
+            let mut payload = PrefixedPayload::with_capacity(msg.payload.len());
+            payload.extend_from_chunks(&msg.payload);
+
+            Ok(OutboundOpaqueMessage::new(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                payload,
+            ))
+        }
+
+        fn encrypted_payload_len(&self, payload_len: usize) -> usize {
+            payload_len
+        }
+    }
+
+    struct Decrypter;
+
+    impl MessageDecrypter for Decrypter {
+        fn decrypt<'a>(
+            &mut self,
+            msg: InboundOpaqueMessage<'a>,
+            _seq: u64,
+        ) -> Result<InboundPlainMessage<'a>, Error> {
+            Ok(msg.into_plain_message())
+        }
+    }
+}
