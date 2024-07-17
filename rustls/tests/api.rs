@@ -7421,4 +7421,46 @@ fn test_keys_match_for_all_signing_key_types() {
     }
 }
 
+#[test]
+fn tls13_packed_handshake() {
+    // transcript requires selection of X25519
+    if provider_is_fips() {
+        return;
+    }
+
+    // regression test for https://github.com/rustls/rustls/issues/2040
+    // (did not affect the buffered api)
+    let client_config = finish_client_config(
+        KeyType::Rsa2048,
+        ClientConfig::builder_with_provider(unsafe_plaintext_crypto_provider())
+            .with_safe_default_protocol_versions()
+            .unwrap(),
+    );
+
+    let mut client =
+        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
+
+    let mut hello = Vec::new();
+    client
+        .write_tls(&mut io::Cursor::new(&mut hello))
+        .unwrap();
+
+    let first_flight = include_bytes!("data/bug2040-message-1.bin");
+    client
+        .read_tls(&mut io::Cursor::new(first_flight))
+        .unwrap();
+    client.process_new_packets().unwrap();
+
+    let second_flight = include_bytes!("data/bug2040-message-2.bin");
+    client
+        .read_tls(&mut io::Cursor::new(second_flight))
+        .unwrap();
+    assert_eq!(
+        client
+            .process_new_packets()
+            .unwrap_err(),
+        Error::InvalidCertificate(CertificateError::UnknownIssuer),
+    );
+}
+
 const CONFIDENTIALITY_LIMIT: u64 = 1024;
