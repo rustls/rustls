@@ -158,6 +158,13 @@ impl DeframerVecBuffer {
 
     /// Resize the internal `buf` if necessary for reading more bytes.
     fn prepare_read(&mut self, is_joining_hs: bool) -> Result<(), &'static str> {
+        /// TLS allows for handshake messages of up to 16MB.  We
+        /// restrict that to 64KB to limit potential for denial-of-
+        /// service.
+        const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
+
+        const READ_SIZE: usize = 4096;
+
         // We allow a maximum of 64k of buffered data for handshake messages only. Enforce this
         // by varying the maximum allowed buffer size here based on whether a prefix of a
         // handshake payload is currently being buffered. Given that the first read of such a
@@ -246,14 +253,6 @@ pub fn fuzz_deframer(data: &[u8]) {
 
     assert!(iter.bytes_consumed() <= buf.len());
 }
-
-/// TLS allows for handshake messages of up to 16MB.  We
-/// restrict that to 64KB to limit potential for denial-of-
-/// service.
-const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
-
-#[cfg(feature = "std")]
-const READ_SIZE: usize = 4096;
 
 #[cfg(feature = "std")]
 #[cfg(test)]
