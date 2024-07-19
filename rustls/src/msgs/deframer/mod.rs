@@ -13,6 +13,9 @@ use crate::msgs::message::MAX_WIRE_SIZE;
 use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError};
 use crate::record_layer::{Decrypted, RecordLayer};
 
+pub(crate) mod buffers;
+pub(crate) mod handshake;
+
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
 ///
 /// It buffers incoming data into a `Vec` through `read()`, and returns messages through `pop()`.
