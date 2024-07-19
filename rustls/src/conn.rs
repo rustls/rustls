@@ -12,7 +12,7 @@ use crate::error::{Error, PeerMisbehaved};
 use crate::log::trace;
 use crate::msgs::deframer::buffers::{BufferProgress, Delocator, Locator};
 use crate::msgs::deframer::handshake::HandshakeDeframer;
-use crate::msgs::deframer::{DeframerIter, DeframerVecBuffer, FilledDeframerBuffer};
+use crate::msgs::deframer::{DeframerIter, DeframerVecBuffer};
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::record_layer::Decrypted;
