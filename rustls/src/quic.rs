@@ -32,7 +32,7 @@ mod connection {
     use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
     use crate::error::Error;
     use crate::msgs::deframer::buffers::Locator;
-    use crate::msgs::deframer::{DeframerVecBuffer, FilledDeframerBuffer};
+    use crate::msgs::deframer::DeframerVecBuffer;
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
     use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
@@ -379,9 +379,7 @@ mod connection {
                 InboundPlainMessage {
                     typ: ContentType::Handshake,
                     version: ProtocolVersion::TLSv1_3,
-                    payload: self
-                        .deframer_buffer
-                        .filled_get(range.clone()),
+                    payload: &self.deframer_buffer.filled()[range.clone()],
                 },
                 &Locator::new(self.deframer_buffer.filled()),
                 range.end,

@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::mem;
 #[cfg(feature = "std")]
 use core::ops::Range;
-use core::slice::SliceIndex;
 #[cfg(feature = "std")]
 use std::io;
 
@@ -130,6 +129,14 @@ impl DeframerVecBuffer {
             self.processed = 0;
         }
     }
+
+    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[..self.used]
+    }
+
+    pub(crate) fn filled(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
 }
 
 #[cfg(feature = "std")]
@@ -199,17 +206,6 @@ impl DeframerVecBuffer {
     }
 }
 
-#[cfg(feature = "std")]
-impl FilledDeframerBuffer for DeframerVecBuffer {
-    fn filled_mut(&mut self) -> &mut [u8] {
-        &mut self.buf[..self.used]
-    }
-
-    fn filled(&self) -> &[u8] {
-        &self.buf[..self.used]
-    }
-}
-
 /// A borrowed version of [`DeframerVecBuffer`] that tracks discard operations
 #[derive(Debug)]
 pub(crate) struct DeframerSliceBuffer<'a> {
@@ -232,29 +228,10 @@ impl<'a> DeframerSliceBuffer<'a> {
     pub(crate) fn pending_discard(&self) -> usize {
         self.discard
     }
-}
 
-impl FilledDeframerBuffer for DeframerSliceBuffer<'_> {
-    fn filled_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn filled_mut(&mut self) -> &mut [u8] {
         &mut self.buf[self.discard..]
     }
-
-    fn filled(&self) -> &[u8] {
-        &self.buf[self.discard..]
-    }
-}
-
-pub(crate) trait FilledDeframerBuffer {
-    fn filled_mut(&mut self) -> &mut [u8];
-
-    fn filled_get<I>(&self, index: I) -> &I::Output
-    where
-        I: SliceIndex<[u8]>,
-    {
-        self.filled().get(index).unwrap()
-    }
-
-    fn filled(&self) -> &[u8];
 }
 
 pub fn fuzz_deframer(data: &[u8]) {
