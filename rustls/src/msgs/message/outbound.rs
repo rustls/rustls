@@ -2,9 +2,9 @@ use alloc::vec::Vec;
 
 use super::{MessageError, PlainMessage, HEADER_SIZE, MAX_PAYLOAD};
 use crate::enums::{ContentType, ProtocolVersion};
-use crate::internal::record_layer::RecordLayer;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::{Codec, Reader};
+use crate::record_layer::RecordLayer;
 
 /// A TLS frame, named `TLSPlaintext` in the standard.
 ///
