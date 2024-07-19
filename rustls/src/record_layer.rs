@@ -20,7 +20,7 @@ enum DirectionState {
 }
 
 /// Record layer that tracks decryption and encryption keys.
-pub struct RecordLayer {
+pub(crate) struct RecordLayer {
     message_encrypter: Box<dyn MessageEncrypter>,
     message_decrypter: Box<dyn MessageDecrypter>,
     write_seq_max: u64,
@@ -38,7 +38,7 @@ pub struct RecordLayer {
 
 impl RecordLayer {
     /// Create new record layer with no keys.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             message_encrypter: <dyn MessageEncrypter>::invalid(),
             message_decrypter: <dyn MessageDecrypter>::invalid(),

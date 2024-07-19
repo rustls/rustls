@@ -713,6 +713,37 @@ pub struct Deframed<'a> {
     pub message: InboundPlainMessage<'a>,
 }
 
+pub fn fuzz_deframer(data: &[u8]) {
+    let mut buf = DeframerVecBuffer::default();
+    let mut dfm = MessageDeframer::default();
+    if dfm
+        .read(&mut io::Cursor::new(data), &mut buf)
+        .is_err()
+    {
+        return;
+    }
+    buf.has_pending();
+
+    let mut rl = RecordLayer::new();
+    let mut discard = 0;
+
+    loop {
+        let mut borrowed_buf = buf.borrow();
+        borrowed_buf.queue_discard(discard);
+
+        let res = dfm.pop(&mut rl, None, &mut borrowed_buf);
+        discard = borrowed_buf.pending_discard();
+
+        if let Ok(Some(decrypted)) = res {
+            super::message::Message::try_from(decrypted.message).ok();
+        } else {
+            break;
+        }
+    }
+
+    buf.discard(discard);
+}
+
 const HANDSHAKE_HEADER_SIZE: usize = 1 + 3;
 
 /// TLS allows for handshake messages of up to 16MB.  We
@@ -936,6 +967,14 @@ mod tests {
         assert_len(4096, d.input_bytes(&message));
         assert_len(MAX_WIRE_SIZE - 16_384, d.input_bytes(&message));
         assert!(d.input_bytes(&message).is_err());
+    }
+
+    #[test]
+    fn exercise_fuzz_deframer() {
+        fuzz_deframer(&[0xff, 0xff, 0xff, 0xff, 0xff]);
+        for prefix in 0..7 {
+            fuzz_deframer(&[0x16, 0x03, 0x03, 0x00, 0x01, 0xff][..prefix]);
+        }
     }
 
     fn input_error(d: &mut BufferedDeframer) {

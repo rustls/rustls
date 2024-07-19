@@ -436,9 +436,6 @@ pub mod internal {
         pub mod codec {
             pub use crate::msgs::codec::{Codec, Reader};
         }
-        pub mod deframer {
-            pub use crate::msgs::deframer::{DeframerVecBuffer, MessageDeframer};
-        }
         pub mod enums {
             pub use crate::msgs::enums::{
                 AlertLevel, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem, NamedGroup,
@@ -465,8 +462,8 @@ pub mod internal {
         }
     }
 
-    pub mod record_layer {
-        pub use crate::record_layer::RecordLayer;
+    pub mod fuzzing {
+        pub use crate::msgs::deframer::fuzz_deframer;
     }
 }
 
