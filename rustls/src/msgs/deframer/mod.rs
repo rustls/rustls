@@ -145,7 +145,7 @@ impl DeframerVecBuffer {
         // we do a zero length read.  That looks like an EOF to
         // the next layer up, which is fine.
         let new_bytes = rd.read(&mut self.buf[self.used..])?;
-        self.advance(new_bytes);
+        self.used += new_bytes;
         Ok(new_bytes)
     }
 
@@ -181,10 +181,6 @@ impl DeframerVecBuffer {
         }
 
         Ok(())
-    }
-
-    fn advance(&mut self, num_bytes: usize) {
-        self.used += num_bytes;
     }
 
     /// Append `bytes` to the end of this buffer.
