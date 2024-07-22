@@ -8,7 +8,8 @@ use std::error::Error as StdError;
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
-use crate::msgs::deframer::DeframerSliceBuffer;
+use crate::msgs::deframer::buffers::BufferProgress;
+use crate::msgs::deframer::{DeframerSliceBuffer, FilledDeframerBuffer};
 use crate::server::ServerConnectionData;
 use crate::Error;
 
@@ -46,6 +47,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
         execute: impl FnOnce(&'c mut Self, &'i mut [u8], T) -> ConnectionState<'c, 'i, Data>,
     ) -> UnbufferedStatus<'c, 'i, Data> {
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
+        let mut buffer_progress = BufferProgress::default();
 
         let (discard, state) = loop {
             if let Some(value) = check(self) {
@@ -76,21 +78,27 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 );
             }
 
-            let deframer_output = match self.core.deframe(None, &mut buffer) {
-                Err(err) => {
-                    return UnbufferedStatus {
-                        discard: buffer.pending_discard(),
-                        state: Err(err),
-                    };
-                }
-                Ok(r) => r,
-            };
+            let deframer_output =
+                match self
+                    .core
+                    .deframe(None, buffer.filled_mut(), &mut buffer_progress)
+                {
+                    Err(err) => {
+                        buffer.queue_discard(buffer_progress.take_discard());
+                        return UnbufferedStatus {
+                            discard: buffer.pending_discard(),
+                            state: Err(err),
+                        };
+                    }
+                    Ok(r) => r,
+                };
 
             if let Some(msg) = deframer_output {
                 let mut state =
                     match mem::replace(&mut self.core.state, Err(Error::HandshakeNotComplete)) {
                         Ok(state) => state,
                         Err(e) => {
+                            buffer.queue_discard(buffer_progress.take_discard());
                             self.core.state = Err(e.clone());
                             return UnbufferedStatus {
                                 discard: buffer.pending_discard(),
@@ -103,6 +111,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                     Ok(new) => state = new,
 
                     Err(e) => {
+                        buffer.queue_discard(buffer_progress.take_discard());
                         self.core.state = Err(e.clone());
                         return UnbufferedStatus {
                             discard: buffer.pending_discard(),
@@ -110,6 +119,8 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                         };
                     }
                 }
+
+                buffer.queue_discard(buffer_progress.take_discard());
 
                 self.core.state = Ok(state);
             } else if self.wants_write {
