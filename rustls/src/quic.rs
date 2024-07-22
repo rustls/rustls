@@ -29,10 +29,12 @@ mod connection {
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, Protocol, DEFAULT_BUFFER_LIMIT};
     use crate::conn::{ConnectionCore, SideData};
-    use crate::enums::{AlertDescription, ProtocolVersion};
+    use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
     use crate::error::Error;
-    use crate::msgs::deframer::DeframerVecBuffer;
+    use crate::msgs::deframer::buffers::Locator;
+    use crate::msgs::deframer::{DeframerVecBuffer, FilledDeframerBuffer};
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
+    use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::vecbuf::ChunkVecBuffer;
 
@@ -371,13 +373,31 @@ mod connection {
         ///
         /// Handshake data obtained from separate encryption levels should be supplied in separate calls.
         pub fn read_hs(&mut self, plaintext: &[u8]) -> Result<(), Error> {
-            self.core.message_deframer.push(
-                ProtocolVersion::TLSv1_3,
-                plaintext,
-                &mut self.deframer_buffer,
-            )?;
+            let range = self.deframer_buffer.extend(plaintext);
+
+            self.core.hs_deframer.input_message(
+                InboundPlainMessage {
+                    typ: ContentType::Handshake,
+                    version: ProtocolVersion::TLSv1_3,
+                    payload: self
+                        .deframer_buffer
+                        .filled_get(range.clone()),
+                },
+                &Locator::new(self.deframer_buffer.filled()),
+                range.end,
+            );
+
+            // `core.process_new_packets` should not process any data in `deframer_buffer`;
+            // it is already ready in `hs_deframer`.
+            self.deframer_buffer.processed = range.end;
+
+            self.core
+                .hs_deframer
+                .coalesce(self.deframer_buffer.filled_mut());
+
             self.core
                 .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)?;
+
             Ok(())
         }
 
