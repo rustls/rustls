@@ -17,7 +17,7 @@ build = "build.rs"
 rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
-aws-lc-rs = { version = "1.6", optional = true, default-features = false, features = ["aws-lc-sys"] }
+aws-lc-rs = { version = "1.8.1", optional = true, default-features = false, features = ["aws-lc-sys"] }
 brotli = { version = "6", optional = true, default-features = false, features = ["std"] }
 brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required for panic fix
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
