@@ -160,6 +160,8 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
         webpki_algs::ECDSA_P256_SHA384,
         webpki_algs::ECDSA_P384_SHA256,
         webpki_algs::ECDSA_P384_SHA384,
+        webpki_algs::ECDSA_P521_SHA256,
+        webpki_algs::ECDSA_P521_SHA384,
         webpki_algs::ECDSA_P521_SHA512,
         webpki_algs::ED25519,
         webpki_algs::RSA_PSS_2048_8192_SHA256_LEGACY_KEY,
@@ -177,6 +179,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
             &[
                 webpki_algs::ECDSA_P384_SHA384,
                 webpki_algs::ECDSA_P256_SHA384,
+                webpki_algs::ECDSA_P521_SHA384,
             ],
         ),
         (
@@ -184,6 +187,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
             &[
                 webpki_algs::ECDSA_P256_SHA256,
                 webpki_algs::ECDSA_P384_SHA256,
+                webpki_algs::ECDSA_P521_SHA256,
             ],
         ),
         (
