@@ -1065,16 +1065,18 @@ mod tests {
         assert_eq!(Some(want), got.ok())
     }
 
-    const FIRST_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.1.bin");
-    const SECOND_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-test.2.bin");
+    const FIRST_MESSAGE: &[u8] = include_bytes!("../../testdata/deframer-test.1.bin");
+    const SECOND_MESSAGE: &[u8] = include_bytes!("../../testdata/deframer-test.2.bin");
 
     const EMPTY_APPLICATIONDATA_MESSAGE: &[u8] =
-        include_bytes!("../testdata/deframer-empty-applicationdata.bin");
+        include_bytes!("../../testdata/deframer-empty-applicationdata.bin");
 
-    const INVALID_EMPTY_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-empty.bin");
+    const INVALID_EMPTY_MESSAGE: &[u8] =
+        include_bytes!("../../testdata/deframer-invalid-empty.bin");
     const INVALID_CONTENTTYPE_MESSAGE: &[u8] =
-        include_bytes!("../testdata/deframer-invalid-contenttype.bin");
+        include_bytes!("../../testdata/deframer-invalid-contenttype.bin");
     const INVALID_VERSION_MESSAGE: &[u8] =
-        include_bytes!("../testdata/deframer-invalid-version.bin");
-    const INVALID_LENGTH_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-length.bin");
+        include_bytes!("../../testdata/deframer-invalid-version.bin");
+    const INVALID_LENGTH_MESSAGE: &[u8] =
+        include_bytes!("../../testdata/deframer-invalid-length.bin");
 }
