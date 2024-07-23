@@ -31,8 +31,7 @@ mod connection {
     use crate::conn::{ConnectionCore, SideData};
     use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
     use crate::error::Error;
-    use crate::msgs::deframer::buffers::Locator;
-    use crate::msgs::deframer::DeframerVecBuffer;
+    use crate::msgs::deframer::buffers::{DeframerVecBuffer, Locator};
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
     use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
