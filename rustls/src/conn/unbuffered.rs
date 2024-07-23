@@ -8,8 +8,7 @@ use std::error::Error as StdError;
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
-use crate::msgs::deframer::buffers::BufferProgress;
-use crate::msgs::deframer::DeframerSliceBuffer;
+use crate::msgs::deframer::buffers::{BufferProgress, DeframerSliceBuffer};
 use crate::server::ServerConnectionData;
 use crate::Error;
 
