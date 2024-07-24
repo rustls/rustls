@@ -134,7 +134,7 @@ impl KeyScheduleEarly {
 
 /// Pre-handshake key schedule
 ///
-/// The inner `KeySchedule` is either constructed without any secrets based on ths HKDF algorithm
+/// The inner `KeySchedule` is either constructed without any secrets based on the HKDF algorithm
 /// or is extracted from a `KeyScheduleEarly`. This can then be used to derive the `KeyScheduleHandshakeStart`.
 pub(crate) struct KeySchedulePreHandshake {
     ks: KeySchedule,

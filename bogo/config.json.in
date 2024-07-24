@@ -45,7 +45,7 @@
     "TLS-ECH-GREASE-Client-TLS12-RejectRetryConfigs": "we disable TLS1.2 w/ ECH",
     "TLS-ECH-Client-Reject-EarlyDataRejected-TLS12": "we disable TLS1.2 w/ ECH",
     "TLS-ECH-Client-Reject-NoClientCertificate-TLS12-Async": "we disable TLS1.2 w/ ECH",
-    "TLS-ECH-Client-Reject-ResumeInnerSession-TLS13": "assumes no outter GREASE PSK, we send GREASE PSK",
+    "TLS-ECH-Client-Reject-ResumeInnerSession-TLS13": "assumes no outer GREASE PSK, we send GREASE PSK",
 #endif
     "ALPS-*": "",
     "*Kyber*": "",
