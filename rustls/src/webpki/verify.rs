@@ -15,7 +15,7 @@ use crate::verify::{DigitallySignedStruct, HandshakeSignatureValid};
 /// and chains to at least one of the trust anchors in the `roots` [RootCertStore].
 ///
 /// This function is primarily useful when building a custom certificate verifier. It
-/// performs **no revocation checking**. Implementors must handle this themselves,
+/// performs **no revocation checking**. Implementers must handle this themselves,
 /// along with checking that the server certificate is valid for the subject name
 /// being used (see [`verify_server_name`]).
 ///

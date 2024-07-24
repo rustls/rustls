@@ -3698,7 +3698,7 @@ fn vectored_write_for_client_handshake() {
         let mut pipe = OtherSession::new(&mut server);
         let wrlen = client.write_tls(&mut pipe).unwrap();
         assert_eq!(wrlen, 154);
-        // CCS, finished, then two application datas
+        // CCS, finished, then two application data records
         assert_eq!(pipe.writevs, vec![vec![6, 74, 42, 32]]);
     }
 

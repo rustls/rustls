@@ -36,7 +36,7 @@ mod ech_config {
     }
 
     /// Use `resolver` to make an HTTPS record type query for `domain`, returning the
-    /// first SvcParam EchConfig value found, panicing if none are returned.
+    /// first SvcParam EchConfig value found, panicking if none are returned.
     fn lookup_ech(resolver: &Resolver, domain: &str) -> EchConfigListBytes<'static> {
         resolver
             .lookup(domain, RecordType::HTTPS)

@@ -5,7 +5,7 @@ pub fn verify_openssl3_available() {
     *VERIFIED
 }
 
-/// If OpenSSL 3 is not avaialble, panics with a helpful message
+/// If OpenSSL 3 is not available, panics with a helpful message
 fn verify_openssl3_available_internal() {
     let openssl_output = std::process::Command::new("openssl")
         .args(["version"])
