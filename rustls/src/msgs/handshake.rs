@@ -1783,11 +1783,13 @@ impl KxDecode<'_> for ClientKeyExchangeParams {
     }
 }
 
+#[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientEcdhParams {
     pub(crate) public: PayloadU8,
 }
 
+#[cfg(feature = "tls12")]
 impl Codec<'_> for ClientEcdhParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.public.encode(bytes);
@@ -1799,11 +1801,13 @@ impl Codec<'_> for ClientEcdhParams {
     }
 }
 
+#[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientDhParams {
     pub(crate) public: PayloadU16,
 }
 
+#[cfg(feature = "tls12")]
 impl Codec<'_> for ClientDhParams {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.public.encode(bytes);
