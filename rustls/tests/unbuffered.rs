@@ -10,7 +10,9 @@ use rustls::unbuffered::{
     UnbufferedStatus, WriteTraffic,
 };
 use rustls::version::TLS13;
-use rustls::{CertificateError, ClientConfig, Error, ServerConfig, SideData};
+use rustls::{
+    AlertDescription, CertificateError, ClientConfig, Error, InvalidMessage, ServerConfig, SideData,
+};
 
 use super::*;
 
@@ -827,6 +829,36 @@ fn tls13_packed_handshake() {
         state.unwrap_err(),
         Error::InvalidCertificate(CertificateError::UnknownIssuer)
     );
+}
+
+#[test]
+fn rejects_junk() {
+    let mut server =
+        UnbufferedServerConnection::new(Arc::new(make_server_config(KeyType::Rsa2048))).unwrap();
+
+    let mut buf = [0xff; 5];
+    let UnbufferedStatus { discard, state } = server.process_tls_records(&mut buf);
+    assert_eq!(discard, 0);
+    assert_eq!(
+        state.unwrap_err(),
+        Error::InvalidMessage(InvalidMessage::InvalidContentType)
+    );
+
+    // sends alert
+    let (data, _) = encode_tls_data(server.process_tls_records(&mut []));
+    assert_eq!(
+        data,
+        &[
+            0x15,
+            0x03,
+            0x03,
+            0x00,
+            0x02,
+            0x02,
+            u8::from(AlertDescription::DecodeError)
+        ]
+    );
+    confirm_transmit_tls_data(server.process_tls_records(&mut []));
 }
 
 fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
