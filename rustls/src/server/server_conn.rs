@@ -12,9 +12,9 @@ use pki_types::{DnsName, UnixTime};
 
 use super::hs;
 use crate::builder::ConfigBuilder;
+use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
-use crate::common_state::Protocol;
-use crate::common_state::{CommonState, Side, State};
+use crate::common_state::{Protocol, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -971,8 +971,10 @@ impl Debug for Accepted {
     }
 }
 
+#[cfg(feature = "std")]
 struct Accepting;
 
+#[cfg(feature = "std")]
 impl State<ServerConnectionData> for Accepting {
     fn handle<'m>(
         self: Box<Self>,
