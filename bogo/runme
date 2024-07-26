@@ -18,10 +18,14 @@ case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
       cargo build -p rustls --example bogo_shim $(../admin/all-features-except ring rustls)
       cpp -P -DAWS_LC_RS -DFIPS config.json.in > config.json
       ;;
+  post-quantum)
+      cargo build -p rustls --example bogo_shim $(../admin/all-features-except ring,fips rustls)
+      cpp -P -DAWS_LC_RS -DPOST_QUANTUM config.json.in > config.json
+      ;;
   existing)
       ;;
   *)
-      echo "unsupported BOGO_SHIM_PROVIDER: supported are (ring|aws-lc-rs|existing)"
+      echo "unsupported BOGO_SHIM_PROVIDER: supported are (ring|aws-lc-rs|aws-lc-rs-fips|post-quantum|existing)"
       exit 1
       ;;
 esac

@@ -20,6 +20,12 @@ fn run_bogo_tests_aws_lc_rs_fips() {
     run_bogo_tests("aws-lc-rs-fips");
 }
 
+#[test]
+#[ignore]
+fn run_bogo_tests_post_quantum() {
+    run_bogo_tests("post-quantum");
+}
+
 fn run_bogo_tests(provider: &str) {
     use std::process::Command;
 

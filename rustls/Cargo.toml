@@ -54,6 +54,7 @@ log = "0.4.4"
 num-bigint = "0.4.4"
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 rustls-pemfile = "2"
+rustls-post-quantum = { path = "../rustls-post-quantum" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 time = { version = "0.3.6", default-features = false }

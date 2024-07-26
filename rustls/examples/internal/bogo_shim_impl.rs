@@ -15,7 +15,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
 #[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
 use rustls::crypto::ring as provider;
-use rustls::crypto::CryptoProvider;
+use rustls::crypto::{CryptoProvider, SupportedKxGroup};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
@@ -53,6 +53,7 @@ struct Options {
     resumes: usize,
     verify_peer: bool,
     require_any_client_cert: bool,
+    server_preference: bool,
     root_hint_subjects: Vec<DistinguishedName>,
     offer_no_client_cas: bool,
     tickets: bool,
@@ -129,6 +130,7 @@ impl Options {
             shut_down_after_handshake: false,
             check_close_notify: false,
             require_any_client_cert: false,
+            server_preference: false,
             root_hint_subjects: vec![],
             offer_no_client_cas: false,
             trusted_cert_file: "".to_string(),
@@ -580,6 +582,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     cfg.max_fragment_size = opts.max_fragment;
     cfg.send_tls13_tickets = 1;
     cfg.require_ems = opts.require_ems;
+    cfg.ignore_client_order = opts.server_preference;
 
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
@@ -1489,6 +1492,11 @@ pub fn main() {
             "-curves" => {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
                 opts.groups.get_or_insert(Vec::new()).push(group);
+
+                // if X25519Kyber768Draft00 is requested, insert it from rustls_post_quantum
+                if group == rustls_post_quantum::X25519Kyber768Draft00.name() {
+                    opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519Kyber768Draft00);
+                }
             }
             "-resumption-delay" => {
                 opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
@@ -1543,6 +1551,9 @@ pub fn main() {
             }
             "-enable-ech-grease" => {
                 opts.enable_ech_grease = true;
+            }
+            "-server-preference" => {
+                opts.server_preference = true;
             }
 
             // defaults:
