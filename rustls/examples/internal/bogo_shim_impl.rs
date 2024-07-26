@@ -15,7 +15,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
 #[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
 use rustls::crypto::ring as provider;
-use rustls::crypto::{CryptoProvider, SupportedKxGroup};
+use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
@@ -76,7 +76,7 @@ struct Options {
     max_version: Option<ProtocolVersion>,
     server_ocsp_response: Vec<u8>,
     use_signing_scheme: u16,
-    curves: Option<Vec<u16>>,
+    groups: Option<Vec<NamedGroup>>,
     export_keying_material: usize,
     export_keying_material_label: String,
     export_keying_material_context: String,
@@ -142,7 +142,7 @@ impl Options {
             max_version: None,
             server_ocsp_response: vec![],
             use_signing_scheme: 0,
-            curves: None,
+            groups: None,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
             export_keying_material_context: "".to_string(),
@@ -487,18 +487,6 @@ fn lookup_scheme(scheme: u16) -> SignatureScheme {
     }
 }
 
-fn lookup_kx_group(group: u16) -> &'static dyn SupportedKxGroup {
-    match group {
-        0x001d => provider::kx_group::X25519,
-        0x0017 => provider::kx_group::SECP256R1,
-        0x0018 => provider::kx_group::SECP384R1,
-        _ => {
-            println_err!("Unsupported kx group {:04x}", group);
-            process::exit(BOGO_NACK);
-        }
-    }
-}
-
 #[derive(Debug)]
 struct ServerCacheWithResumptionDelay {
     delay: u32,
@@ -573,27 +561,20 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     let cert = load_cert(&opts.cert_file);
     let key = load_key(&opts.key_file);
 
-    let kx_groups = if let Some(curves) = &opts.curves {
-        curves
-            .iter()
-            .map(|curveid| lookup_kx_group(*curveid))
-            .collect()
-    } else {
-        opts.provider.kx_groups.clone()
-    };
+    let mut provider = opts.provider.clone();
 
-    let mut cfg = ServerConfig::builder_with_provider(
-        CryptoProvider {
-            kx_groups,
-            ..opts.provider.clone()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&opts.supported_versions())
-    .unwrap()
-    .with_client_cert_verifier(client_auth)
-    .with_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone())
-    .unwrap();
+    if let Some(groups) = &opts.groups {
+        provider
+            .kx_groups
+            .retain(|kxg| groups.contains(&kxg.name()));
+    }
+
+    let mut cfg = ServerConfig::builder_with_provider(provider.into())
+        .with_protocol_versions(&opts.supported_versions())
+        .unwrap()
+        .with_client_cert_verifier(client_auth)
+        .with_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone())
+        .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
     cfg.max_fragment_size = opts.max_fragment;
@@ -720,22 +701,15 @@ impl Debug for ClientCacheWithoutKxHints {
 }
 
 fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
-    let kx_groups = if let Some(curves) = &opts.curves {
-        curves
-            .iter()
-            .map(|curveid| lookup_kx_group(*curveid))
-            .collect()
-    } else {
-        opts.provider.kx_groups.clone()
-    };
+    let mut provider = opts.provider.clone();
 
-    let cfg = ClientConfig::builder_with_provider(
-        CryptoProvider {
-            kx_groups,
-            ..opts.provider.clone()
-        }
-        .into(),
-    );
+    if let Some(groups) = &opts.groups {
+        provider
+            .kx_groups
+            .retain(|kxg| groups.contains(&kxg.name()));
+    }
+
+    let cfg = ClientConfig::builder_with_provider(provider.into());
 
     #[cfg(feature = "aws_lc_rs")]
     let cfg = if let Some(ech_config_list) = &opts.ech_config_list {
@@ -1513,12 +1487,8 @@ pub fn main() {
                 opts.expect_version = args.remove(0).parse::<u16>().unwrap();
             }
             "-curves" => {
-                let curve = args.remove(0).parse::<u16>().unwrap();
-                if let Some(mut curves) = opts.curves.take() {
-                    curves.push(curve);
-                } else {
-                    opts.curves = Some(vec![ curve ]);
-                }
+                let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
+                opts.groups.get_or_insert(Vec::new()).push(group);
             }
             "-resumption-delay" => {
                 opts.resumption_delay = args.remove(0).parse::<u32>().unwrap();
