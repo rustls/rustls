@@ -545,6 +545,9 @@ fn resumption_combinations() {
                 assert!(client
                     .negotiated_key_exchange_group()
                     .is_none());
+                assert!(server
+                    .negotiated_key_exchange_group()
+                    .is_none());
             } else {
                 assert_eq!(
                     client
@@ -553,10 +556,14 @@ fn resumption_combinations() {
                         .name(),
                     expected_kx
                 );
+                assert_eq!(
+                    server
+                        .negotiated_key_exchange_group()
+                        .unwrap()
+                        .name(),
+                    expected_kx
+                );
             }
-            assert!(server
-                .negotiated_key_exchange_group()
-                .is_none());
         }
     }
 }
