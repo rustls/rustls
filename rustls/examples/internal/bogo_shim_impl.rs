@@ -1552,10 +1552,12 @@ pub fn main() {
             "-fail-cert-callback" |
             "-install-ddos-callback" |
             "-advertise-npn" |
+            "-advertise-empty-npn" |
             "-verify-fail" |
             "-expect-channel-id" |
             "-send-channel-id" |
             "-select-next-proto" |
+            "-select-empty-next-proto" |
             "-expect-verify-result" |
             "-send-alert" |
             "-digest-prefs" |
