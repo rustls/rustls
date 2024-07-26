@@ -2228,6 +2228,7 @@ dependencies = [
  "ring",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
+ "rustls-post-quantum",
  "rustls-webpki 0.102.6",
  "rustversion",
  "serde",
