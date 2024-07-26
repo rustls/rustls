@@ -65,6 +65,7 @@ struct Options {
     check_close_notify: bool,
     host_name: String,
     use_sni: bool,
+    trusted_cert_file: String,
     key_file: String,
     cert_file: String,
     protocols: Vec<String>,
@@ -127,6 +128,7 @@ impl Options {
             require_any_client_cert: false,
             root_hint_subjects: vec![],
             offer_no_client_cas: false,
+            trusted_cert_file: "".to_string(),
             key_file: "".to_string(),
             cert_file: "".to_string(),
             protocols: vec![],
@@ -224,12 +226,21 @@ fn load_key(filename: &str) -> PrivateKeyDer<'static> {
     keys.pop().unwrap().into()
 }
 
-fn load_root_certs() -> Arc<RootCertStore> {
+fn load_root_certs(filename: &str) -> Arc<RootCertStore> {
     let mut roots = RootCertStore::empty();
 
-    // this is not actually used by the tests, but must be non-empty
-    roots.add_parsable_certificates(load_cert("cert.pem"));
+    // -verify-peer can be used without specifying a root cert,
+    // to test (eg) client auth without actually looking at the certs.
+    //
+    // but WebPkiClientVerifier requires a non-empty set of roots.
+    //
+    // use an unrelated cert we have lying around.
+    let filename = match filename {
+        "" => "../../../../../test-ca/rsa-2048/ca.cert",
+        filename => filename,
+    };
 
+    roots.add_parsable_certificates(load_cert(filename));
     Arc::new(roots)
 }
 
@@ -263,12 +274,16 @@ struct DummyClientAuth {
 }
 
 impl DummyClientAuth {
-    fn new(mandatory: bool, root_hint_subjects: Vec<DistinguishedName>) -> Self {
+    fn new(
+        trusted_cert_file: &str,
+        mandatory: bool,
+        root_hint_subjects: Vec<DistinguishedName>,
+    ) -> Self {
         Self {
             mandatory,
             root_hint_subjects,
             parent: WebPkiClientVerifier::builder_with_provider(
-                load_root_certs(),
+                load_root_certs(trusted_cert_file),
                 provider::default_provider().into(),
             )
             .build()
@@ -330,10 +345,10 @@ struct DummyServerAuth {
 }
 
 impl DummyServerAuth {
-    fn new() -> Self {
+    fn new(trusted_cert_file: &str) -> Self {
         DummyServerAuth {
             parent: WebPkiServerVerifier::builder_with_provider(
-                load_root_certs(),
+                load_root_certs(trusted_cert_file),
                 provider::default_provider().into(),
             )
             .build()
@@ -541,6 +556,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
             Arc::new(DummyClientAuth::new(
+                &opts.trusted_cert_file,
                 opts.require_any_client_cert,
                 opts.root_hint_subjects.clone(),
             ))
@@ -743,7 +759,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     let cfg = cfg
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new()));
+        .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(&opts.trusted_cert_file)));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = load_cert(&opts.cert_file);
@@ -1220,6 +1236,9 @@ pub fn main() {
             }
             "-cert-file" => {
                 opts.cert_file = args.remove(0);
+            }
+            "-trust-cert" => {
+                opts.trusted_cert_file = args.remove(0);
             }
             "-resume-count" => {
                 opts.resumes = args.remove(0).parse::<usize>().unwrap();
