@@ -15,7 +15,7 @@ util/testresult
 EOF
 
 # fix on a tested point of rustls-testing branch
-COMMIT=586adb914834a953d48fcc7a5d22aeed9d7f53c8
+COMMIT=6084f385927435f813d9bafa232bd985a26a7a3d
 git fetch --depth=1 https://github.com/rustls/boringssl.git $COMMIT
 git checkout $COMMIT
 (cd ssl/test/runner && go test -c)
