@@ -1,3 +1,12 @@
+"""
+This script post-processes bogo pass/fail logs to help
+maintain config.json.
+
+Run:
+
+    $ ./runme | python check.py
+"""
+
 import re
 import json
 import fnmatch
@@ -38,6 +47,7 @@ if disabled_tests:
         if not tests_matching_glob:
             print('DisabledTests glob', disabled_glob, 'matches no tests')
 else:
+    # to check DisabledTests, apply patch below to bogo
     print('(DisabledTests unchecked)')
 
 print(len(all_tests), 'total tests')
@@ -49,3 +59,18 @@ if test_error_set:
     print('unknown TestErrorMap keys', list(sorted(test_error_set)))
 if test_local_error_set:
     print('unknown TestLocalErrorMap keys', list(sorted(test_local_error_set)))
+
+MENTION_DISABLED_TESTS_PATCH = """
+diff --git a/ssl/test/runner/runner.go b/ssl/test/runner/runner.go
+index eb6cc53..e51649a 100644
+--- a/ssl/test/runner/runner.go
++++ b/ssl/test/runner/runner.go
+@@ -20830,6 +20830,7 @@ func main() {
+                                }
+
+                                if isDisabled {
++                                       fmt.Printf("DISABLED (%s)\n", testCases[i].name)
+                                        matched = false
+                                        break
+                                }
+"""
