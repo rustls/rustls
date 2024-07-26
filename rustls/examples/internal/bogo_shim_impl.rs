@@ -104,6 +104,9 @@ struct Options {
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
     send_key_update: bool,
+    expect_curve_id: Option<NamedGroup>,
+    on_initial_expect_curve_id: Option<NamedGroup>,
+    on_resume_expect_curve_id: Option<NamedGroup>,
 }
 
 impl Options {
@@ -167,6 +170,9 @@ impl Options {
             on_initial_expect_ech_accept: false,
             enable_ech_grease: false,
             send_key_update: false,
+            expect_curve_id: None,
+            on_initial_expect_curve_id: None,
+            on_resume_expect_curve_id: None,
         }
     }
 
@@ -1149,6 +1155,46 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             );
         }
 
+        if let Some(curve_id) = &opts.expect_curve_id {
+            // unlike openssl/boringssl's API, `negotiated_key_exchange_group`
+            // works for the connection, not session.  this means TLS1.2
+            // resumptions never have a value for `negotiated_key_exchange_group`
+            let tls12_resumed = sess.protocol_version() == Some(ProtocolVersion::TLSv1_2)
+                && sess.handshake_kind() == Some(HandshakeKind::Resumed);
+            let negotiated_key_exchange_group_ready = !(sess.is_handshaking() || tls12_resumed);
+
+            if negotiated_key_exchange_group_ready {
+                let actual = sess
+                    .negotiated_key_exchange_group()
+                    .expect("no kx with -expect-curve-id");
+                assert_eq!(curve_id, &actual.name());
+            }
+        }
+
+        if let Some(curve_id) = &opts.on_initial_expect_curve_id {
+            if !sess.is_handshaking() && count == 0 {
+                assert_eq!(sess.handshake_kind().unwrap(), HandshakeKind::Full);
+                assert_eq!(
+                    sess.negotiated_key_exchange_group()
+                        .expect("no kx with -on-initial-expect-curve-id")
+                        .name(),
+                    *curve_id
+                );
+            }
+        }
+
+        if let Some(curve_id) = &opts.on_resume_expect_curve_id {
+            if !sess.is_handshaking() && count > 0 {
+                assert_eq!(sess.handshake_kind().unwrap(), HandshakeKind::Resumed);
+                assert_eq!(
+                    sess.negotiated_key_exchange_group()
+                        .expect("no kx with -on-resume-expect-curve-id")
+                        .name(),
+                    *curve_id
+                );
+            }
+        }
+
         #[cfg(feature = "aws_lc_rs")]
         {
             let ech_accept_required =
@@ -1297,9 +1343,16 @@ pub fn main() {
             "-verify-prefs" => {
                 lookup_scheme(args.remove(0).parse::<u16>().unwrap());
             }
+            "-expect-curve-id" => {
+                opts.expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+            }
+            "-on-initial-expect-curve-id" => {
+                opts.on_initial_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+            }
+            "-on-resume-expect-curve-id" => {
+                opts.on_resume_expect_curve_id = Some(NamedGroup::from(args.remove(0).parse::<u16>().unwrap()));
+            }
             "-max-cert-list" |
-            "-expect-curve-id" |
-            "-expect-resume-curve-id" |
             "-expect-peer-signature-algorithm" |
             "-expect-peer-verify-pref" |
             "-expect-advertised-alpn" |
@@ -1576,7 +1629,6 @@ pub fn main() {
             "-expect-draft-downgrade" |
             "-allow-unknown-alpn-protos" |
             "-on-initial-tls13-variant" |
-            "-on-initial-expect-curve-id" |
             "-on-resume-export-early-keying-material" |
             "-on-resume-enable-early-data" |
             "-export-early-keying-material" |
