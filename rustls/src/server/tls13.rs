@@ -351,7 +351,6 @@ mod client_hello {
                 cx.common
                     .handshake_kind
                     .get_or_insert(HandshakeKind::Full);
-                cx.common.kx_state.complete();
             } else {
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
             }
@@ -502,6 +501,7 @@ mod client_hello {
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
         let ckx = kxgroup.start_and_complete(&share.payload.0)?;
+        cx.common.kx_state.complete();
 
         extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(
             ckx.group,
