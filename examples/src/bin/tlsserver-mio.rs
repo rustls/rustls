@@ -444,8 +444,8 @@ Options:
                         CRLFILE. May be used multiple times.
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
-    --resumption        Support session resumption.
-    --tickets           Support tickets.
+    --no-resumption     Disable stateful session resumption.
+    --tickets           Support tickets (stateless resumption).
     --protover VERSION  Disable default TLS version list, and use
                         VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
@@ -472,7 +472,7 @@ struct Args {
     flag_ocsp: Option<String>,
     flag_auth: Option<String>,
     flag_require_auth: bool,
-    flag_resumption: bool,
+    flag_no_resumption: bool,
     flag_tickets: bool,
     arg_fport: Option<u16>,
 }
@@ -640,8 +640,8 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-    if args.flag_resumption {
-        config.session_storage = rustls::server::ServerSessionMemoryCache::new(256);
+    if args.flag_no_resumption {
+        config.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
     }
 
     if args.flag_tickets {
