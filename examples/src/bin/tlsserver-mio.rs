@@ -446,6 +446,7 @@ Options:
                         authentication.
     --no-resumption     Disable stateful session resumption.
     --tickets           Support tickets (stateless resumption).
+    --max-early-data BYTES   Support receiving BYTES many bytes with 0RTT
     --protover VERSION  Disable default TLS version list, and use
                         VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
@@ -474,6 +475,7 @@ struct Args {
     flag_require_auth: bool,
     flag_no_resumption: bool,
     flag_tickets: bool,
+    flag_max_early_data: u32,
     arg_fport: Option<u16>,
 }
 
@@ -646,6 +648,19 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
 
     if args.flag_tickets {
         config.ticketer = provider::Ticketer::new().unwrap();
+    }
+
+    if args.flag_max_early_data > 0 {
+        if !versions.contains(&&rustls::version::TLS13) {
+            panic!("Early data is only available for servers supporting TLS1.3");
+        }
+        if args.flag_no_resumption {
+            panic!("Early data requires resumption.");
+        }
+        if args.flag_tickets {
+            panic!("Early data is not supported for stateless resumption (--tickets).");
+        }
+        config.max_early_data_size = args.flag_max_early_data;
     }
 
     config.alpn_protocols = args
