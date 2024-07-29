@@ -1677,6 +1677,13 @@ pub fn main() {
                 process::exit(BOGO_NACK);
             }
 
+            "-print-rustls-provider" => {
+                println!("{}", "*".repeat(66));
+                println!("rustls provider is {:?}", opts.selected_provider);
+                println!("{}", "*".repeat(66));
+                process::exit(0);
+            }
+
             _ => {
                 println!("unhandled option {:?}", arg);
                 process::exit(1);
