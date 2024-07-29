@@ -5,7 +5,7 @@
 
 set -xe
 
-cargo build
+cargo run -- -print-rustls-provider
 
 case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
   ring)
