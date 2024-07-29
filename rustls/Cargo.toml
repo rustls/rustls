@@ -21,7 +21,7 @@ aws-lc-rs = { version = "1.8.1", optional = true, default-features = false, feat
 brotli = { version = "6", optional = true, default-features = false, features = ["std"] }
 brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required for panic fix
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
-log = { version = "0.4.4", optional = true }
+log = { version = "0.4.8", optional = true }
 # remove once our MSRV is >= 1.70
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 ring = { version = "0.17", optional = true }
@@ -50,7 +50,7 @@ bencher = "0.1.5"
 clap = { version = "4", features = ["derive", "env"] }
 env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest features)
 hex = "0.4"
-log = "0.4.4"
+log = "0.4.8"
 num-bigint = "0.4.4"
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 rustls-pemfile = "2"
