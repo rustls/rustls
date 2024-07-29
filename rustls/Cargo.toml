@@ -64,11 +64,6 @@ webpki-roots = "0.26"
 tikv-jemallocator = "0.6"
 
 [[example]]
-name = "bogo_shim"
-path = "examples/internal/bogo_shim.rs"
-required-features = ["tls12"]
-
-[[example]]
 name = "bench"
 path = "examples/internal/bench.rs"
 

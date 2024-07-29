@@ -13,8 +13,6 @@ use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
-#[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
-use rustls::crypto::ring as provider;
 use rustls::crypto::{CryptoProvider, SupportedKxGroup};
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::persist::ServerSessionValue;
@@ -26,7 +24,6 @@ use rustls::{
     InvalidMessage, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore,
     Side, SignatureAlgorithm, SignatureScheme, SupportedProtocolVersion,
 };
-#[cfg(feature = "aws_lc_rs")]
 use rustls::{
     client::{EchConfig, EchGreaseConfig, EchMode, EchStatus},
     crypto::aws_lc_rs as provider,
@@ -714,31 +711,33 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     let cfg = ClientConfig::builder_with_provider(provider.into());
 
-    #[cfg(feature = "aws_lc_rs")]
-    let cfg = if let Some(ech_config_list) = &opts.ech_config_list {
-        let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), hpke::ALL_SUPPORTED_SUITES)
-            .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
-            .into();
+    const PROVIDER_SUPPORTS_ECH: bool = true;
 
-        cfg.with_ech(ech_mode)
-            .expect("invalid ECH config")
-    } else if opts.enable_ech_grease {
-        let ech_mode = EchMode::Grease(EchGreaseConfig::new(
-            GREASE_HPKE_SUITE,
-            HpkePublicKey(GREASE_25519_PUBKEY.to_vec()),
-        ));
+    let cfg = if PROVIDER_SUPPORTS_ECH {
+        if let Some(ech_config_list) = &opts.ech_config_list {
+            let ech_mode: EchMode =
+                EchConfig::new(ech_config_list.clone(), hpke::ALL_SUPPORTED_SUITES)
+                    .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
+                    .into();
 
-        cfg.with_ech(ech_mode)
-            .expect("invalid GREASE ECH config")
+            cfg.with_ech(ech_mode)
+                .expect("invalid ECH config")
+        } else if opts.enable_ech_grease {
+            let ech_mode = EchMode::Grease(EchGreaseConfig::new(
+                GREASE_HPKE_SUITE,
+                HpkePublicKey(GREASE_25519_PUBKEY.to_vec()),
+            ));
+
+            cfg.with_ech(ech_mode)
+                .expect("invalid GREASE ECH config")
+        } else {
+            cfg.with_protocol_versions(&opts.supported_versions())
+                .expect("inconsistent settings")
+        }
     } else {
         cfg.with_protocol_versions(&opts.supported_versions())
             .expect("inconsistent settings")
     };
-
-    #[cfg(not(feature = "aws_lc_rs"))]
-    let cfg = cfg
-        .with_protocol_versions(&opts.supported_versions())
-        .expect("inconsistent settings");
 
     let cfg = cfg
         .dangerous()
@@ -860,7 +859,6 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerIncompatible(PeerIncompatible::ServerRejectedEncryptedClientHello(
             _retry_configs,
         )) => {
-            #[cfg(feature = "aws_lc_rs")]
             if let Some(expected_configs) = &opts.expect_ech_retry_configs {
                 let expected_configs =
                     Vec::<EchConfigPayload>::read(&mut Reader::init(expected_configs)).unwrap();
@@ -1172,7 +1170,6 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             }
         }
 
-        #[cfg(feature = "aws_lc_rs")]
         {
             let ech_accept_required =
                 (count == 0 && opts.on_initial_expect_ech_accept) || opts.expect_ech_accept;
@@ -1511,11 +1508,9 @@ pub fn main() {
             "-install-one-cert-compression-alg" => {
                 opts.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
             }
-            #[cfg(feature = "fips")]
-            "-fips-202205" => {
+            "-fips-202205" if provider::default_provider().fips() => {
                 opts.provider = rustls::crypto::default_fips_provider();
             }
-            #[cfg(not(feature = "fips"))]
             "-fips-202205" => {
                 println!("Not a FIPS build");
                 process::exit(BOGO_NACK);
@@ -1825,10 +1820,8 @@ impl compress::CertCompressor for RandomAlgorithm {
     }
 }
 
-#[cfg(feature = "aws_lc_rs")]
 static GREASE_HPKE_SUITE: &dyn Hpke = hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;
 
-#[cfg(feature = "aws_lc_rs")]
 const GREASE_25519_PUBKEY: &[u8] = &[
     0x67, 0x35, 0xCA, 0x50, 0x21, 0xFC, 0x4F, 0xE6, 0x29, 0x3B, 0x31, 0x2C, 0xB5, 0xE0, 0x97, 0xD8,
     0xD0, 0x58, 0x97, 0xCF, 0x5C, 0x15, 0x12, 0x79, 0x4B, 0xEF, 0x1D, 0x98, 0x52, 0x74, 0xDC, 0x5E,
