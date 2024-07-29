@@ -496,6 +496,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bogo"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "env_logger",
+ "rustls 0.23.12",
+ "rustls-pemfile 2.1.2",
+ "rustls-pki-types",
+ "rustls-post-quantum",
+]
+
+[[package]]
 name = "brotli"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

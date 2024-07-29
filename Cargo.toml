@@ -1,5 +1,7 @@
 [workspace]
 members = [
+  # Bogo test shim
+  "bogo",
   # CI benchmarks
   "ci-bench",
   # Network-based tests
@@ -18,6 +20,7 @@ members = [
   "rustls-provider-test",
 ]
 default-members = [
+  "bogo",
   "examples",
   "rustls",
   "rustls-post-quantum",
