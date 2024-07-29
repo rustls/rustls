@@ -247,13 +247,13 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Smoke-test benchmark program (ring)
-        run: cargo run -p rustls --profile=bench --locked --example bench $(admin/all-features-except aws_lc_rs,aws-lc-rs,fips rustls)
+        run: cargo run -p rustls --profile=bench --locked --example bench $(admin/all-features-except aws_lc_rs,aws-lc-rs,fips rustls) -- --multiplier 0.1
 
       - name: Smoke-test benchmark program (aws-lc-rs)
-        run: cargo run -p rustls --profile=bench --locked --example bench $(admin/all-features-except ring,fips rustls)
+        run: cargo run -p rustls --profile=bench --locked --example bench $(admin/all-features-except ring,fips rustls) -- --multiplier 0.1
 
       - name: Smoke-test benchmark program (fips)
-        run: cargo run -p rustls --profile=bench --locked --example bench $(admin/all-features-except aws_lc_rs,aws-lc-rs,ring rustls)
+        run: cargo run -p rustls --profile=bench --locked --example bench $(admin/all-features-except aws_lc_rs,aws-lc-rs,ring rustls) -- --multiplier 0.1
 
       - name: Run micro-benchmarks
         run: cargo bench --locked --all-features
