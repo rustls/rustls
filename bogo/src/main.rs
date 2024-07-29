@@ -12,25 +12,25 @@ use std::{env, fs, net, process, thread, time};
 use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::client::{ClientConfig, ClientConnection, Resumption, WebPkiServerVerifier};
-use rustls::crypto::{CryptoProvider, SupportedKxGroup};
-use rustls::internal::msgs::codec::Codec;
+use rustls::client::{
+    ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
+    WebPkiServerVerifier,
+};
+use rustls::crypto::aws_lc_rs::hpke;
+use rustls::crypto::hpke::{Hpke, HpkePublicKey};
+use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, SupportedKxGroup};
+use rustls::internal::msgs::codec::{Codec, Reader};
+use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
-use rustls::server::{ClientHello, ServerConfig, ServerConnection, WebPkiClientVerifier};
+use rustls::server::{
+    ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
+};
 use rustls::{
     client, compress, server, sign, version, AlertDescription, CertificateCompressionAlgorithm,
     CertificateError, Connection, DigitallySignedStruct, DistinguishedName, Error, HandshakeKind,
     InvalidMessage, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore,
     Side, SignatureAlgorithm, SignatureScheme, SupportedProtocolVersion,
-};
-use rustls::{
-    client::{EchConfig, EchGreaseConfig, EchMode, EchStatus},
-    crypto::aws_lc_rs as provider,
-    crypto::aws_lc_rs::hpke,
-    crypto::hpke::{Hpke, HpkePublicKey},
-    internal::msgs::codec::Reader,
-    internal::msgs::handshake::EchConfigPayload,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -93,6 +93,7 @@ struct Options {
     expect_handshake_kind: Option<Vec<HandshakeKind>>,
     expect_handshake_kind_resumed: Option<Vec<HandshakeKind>>,
     install_cert_compression_algs: CompressionAlgs,
+    selected_provider: SelectedProvider,
     provider: CryptoProvider,
     ech_config_list: Option<pki_types::EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
@@ -109,6 +110,7 @@ struct Options {
 
 impl Options {
     fn new() -> Self {
+        let selected_provider = SelectedProvider::from_env();
         Options {
             port: 0,
             shim_id: 0,
@@ -160,7 +162,8 @@ impl Options {
             expect_handshake_kind: None,
             expect_handshake_kind_resumed: Some(vec![HandshakeKind::Resumed]),
             install_cert_compression_algs: CompressionAlgs::None,
-            provider: default_provider(),
+            selected_provider,
+            provider: selected_provider.provider(),
             ech_config_list: None,
             expect_ech_accept: false,
             expect_ech_retry_configs: None,
@@ -203,13 +206,60 @@ impl Options {
     }
 }
 
-fn default_provider() -> CryptoProvider {
-    // ensure all suites and kx groups are included (even in fips builds)
-    // as non-fips test cases require them
-    CryptoProvider {
-        kx_groups: provider::ALL_KX_GROUPS.to_vec(),
-        cipher_suites: provider::ALL_CIPHER_SUITES.to_vec(),
-        ..provider::default_provider()
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SelectedProvider {
+    AwsLcRs,
+    AwsLcRsFips,
+    PostQuantum,
+    Ring,
+}
+
+impl SelectedProvider {
+    fn from_env() -> Self {
+        match env::var("BOGO_SHIM_PROVIDER")
+            .ok()
+            .as_deref()
+        {
+            None | Some("aws-lc-rs") => Self::AwsLcRs,
+            Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
+            Some("post-quantum") => Self::PostQuantum,
+            Some("ring") => Self::Ring,
+            Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
+        }
+    }
+
+    fn provider(&self) -> CryptoProvider {
+        match self {
+            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
+                // ensure all suites and kx groups are included (even in fips builds)
+                // as non-fips test cases require them.  runner activates fips mode via -fips-202205 option
+                // this includes rustls-post-quantum, which just returns an altered
+                // version of `aws_lc_rs::default_provider()`
+                CryptoProvider {
+                    kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
+                    cipher_suites: aws_lc_rs::ALL_CIPHER_SUITES.to_vec(),
+                    ..aws_lc_rs::default_provider()
+                }
+            }
+
+            Self::Ring => ring::default_provider(),
+        }
+    }
+
+    fn ticketer(&self) -> Arc<dyn ProducesTickets> {
+        match self {
+            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
+                aws_lc_rs::Ticketer::new().unwrap()
+            }
+            Self::Ring => ring::Ticketer::new().unwrap(),
+        }
+    }
+
+    fn supports_ech(&self) -> bool {
+        match *self {
+            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => true,
+            Self::Ring => false,
+        }
     }
 }
 
@@ -289,7 +339,9 @@ impl DummyClientAuth {
             root_hint_subjects,
             parent: WebPkiClientVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
-                provider::default_provider().into(),
+                SelectedProvider::from_env()
+                    .provider()
+                    .into(),
             )
             .build()
             .unwrap(),
@@ -354,7 +406,9 @@ impl DummyServerAuth {
         DummyServerAuth {
             parent: WebPkiServerVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
-                provider::default_provider().into(),
+                SelectedProvider::from_env()
+                    .provider()
+                    .into(),
             )
             .build()
             .unwrap(),
@@ -590,7 +644,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     }
 
     if opts.tickets {
-        cfg.ticketer = provider::Ticketer::new().unwrap();
+        cfg.ticketer = opts.selected_provider.ticketer();
     } else if opts.resumes == 0 {
         cfg.session_storage = Arc::new(server::NoServerSessionStorage {});
     }
@@ -711,14 +765,11 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     let cfg = ClientConfig::builder_with_provider(provider.into());
 
-    const PROVIDER_SUPPORTS_ECH: bool = true;
-
-    let cfg = if PROVIDER_SUPPORTS_ECH {
+    let cfg = if opts.selected_provider.supports_ech() {
         if let Some(ech_config_list) = &opts.ech_config_list {
-            let ech_mode: EchMode =
-                EchConfig::new(ech_config_list.clone(), hpke::ALL_SUPPORTED_SUITES)
-                    .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
-                    .into();
+            let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)
+                .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
+                .into();
 
             cfg.with_ech(ech_mode)
                 .expect("invalid ECH config")
@@ -1491,7 +1542,7 @@ pub fn main() {
                 opts.groups.get_or_insert(Vec::new()).push(group);
 
                 // if X25519Kyber768Draft00 is requested, insert it from rustls_post_quantum
-                if group == rustls_post_quantum::X25519Kyber768Draft00.name() {
+                if group == rustls_post_quantum::X25519Kyber768Draft00.name() && opts.selected_provider == SelectedProvider::PostQuantum {
                     opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519Kyber768Draft00);
                 }
             }
@@ -1508,7 +1559,7 @@ pub fn main() {
             "-install-one-cert-compression-alg" => {
                 opts.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
             }
-            "-fips-202205" if provider::default_provider().fips() => {
+            "-fips-202205" if opts.selected_provider == SelectedProvider::AwsLcRsFips => {
                 opts.provider = rustls::crypto::default_fips_provider();
             }
             "-fips-202205" => {
@@ -1809,7 +1860,8 @@ impl compress::CertCompressor for RandomAlgorithm {
     ) -> Result<Vec<u8>, compress::CompressionFailed> {
         let random_byte = {
             let mut bytes = [0];
-            provider::default_provider()
+            // nb. provider is irrelevant for this use
+            ring::default_provider()
                 .secure_random
                 .fill(&mut bytes)
                 .unwrap();
@@ -1825,4 +1877,22 @@ static GREASE_HPKE_SUITE: &dyn Hpke = hpke::DH_KEM_X25519_HKDF_SHA256_AES_128;
 const GREASE_25519_PUBKEY: &[u8] = &[
     0x67, 0x35, 0xCA, 0x50, 0x21, 0xFC, 0x4F, 0xE6, 0x29, 0x3B, 0x31, 0x2C, 0xB5, 0xE0, 0x97, 0xD8,
     0xD0, 0x58, 0x97, 0xCF, 0x5C, 0x15, 0x12, 0x79, 0x4B, 0xEF, 0x1D, 0x98, 0x52, 0x74, 0xDC, 0x5E,
+];
+
+// nb. hpke::ALL_SUPPORTED_SUITES omits fips-incompatible options,
+// this includes them. bogo fips tests are activated by -fips-202205
+// (and no ech tests use that option)
+static ALL_HPKE_SUITES: &[&dyn Hpke] = &[
+    hpke::DH_KEM_P256_HKDF_SHA256_AES_128,
+    hpke::DH_KEM_P256_HKDF_SHA256_AES_256,
+    hpke::DH_KEM_P256_HKDF_SHA256_CHACHA20_POLY1305,
+    hpke::DH_KEM_P384_HKDF_SHA384_AES_128,
+    hpke::DH_KEM_P384_HKDF_SHA384_AES_256,
+    hpke::DH_KEM_P384_HKDF_SHA384_CHACHA20_POLY1305,
+    hpke::DH_KEM_P521_HKDF_SHA512_AES_128,
+    hpke::DH_KEM_P521_HKDF_SHA512_AES_256,
+    hpke::DH_KEM_P521_HKDF_SHA512_CHACHA20_POLY1305,
+    hpke::DH_KEM_X25519_HKDF_SHA256_AES_128,
+    hpke::DH_KEM_X25519_HKDF_SHA256_AES_256,
+    hpke::DH_KEM_X25519_HKDF_SHA256_CHACHA20_POLY1305,
 ];
