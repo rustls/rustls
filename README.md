@@ -234,8 +234,9 @@ Options:
                         CRLFILE. May be used multiple times.
     --require-auth      Send a fatal alert if the client does not complete client
                         authentication.
-    --resumption        Support session resumption.
-    --tickets           Support tickets.
+    --no-resumption     Disable stateful session resumption.
+    --tickets           Support tickets (stateless resumption).
+    --max-early-data BYTES   Support receiving BYTES many bytes with 0RTT
     --protover VERSION  Disable default TLS version list, and use
                         VERSION instead.  May be used multiple times.
     --suite SUITE       Disable default cipher suite list, and use
