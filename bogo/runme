@@ -36,7 +36,7 @@ fi
 # Best effort on OS-X
 case $OSTYPE in darwin*) set +e ;; esac
 
-( cd bogo/ssl/test/runner && ./runner.test -shim-path ../../../../../target/debug/examples/bogo_shim \
+( cd bogo/ssl/test/runner && ./runner.test -shim-path ../../../../../target/debug/bogo \
      -shim-config ../../../../config.json \
      -pipe \
      -allow-unimplemented \

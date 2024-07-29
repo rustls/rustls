@@ -10,7 +10,7 @@ You will need golang installed
 
 ```bash
 $ cd bogo # from rustls repo root
-$ ./runme
+$ BOGO_SHIM_PROVIDER=aws-lc-rs ./runme
 ```
 
 ## Running a single test
@@ -33,7 +33,7 @@ function is responsible for mapping errors in combination with the `ErrorMap`
 and `TestErrorMap` data in [`config.json`][config.json]. These will typically
 need updating for new error outputs or changes in error outputs.
 
-[bogo_shim]: ../rustls/examples/internal/bogo_shim.rs
+[bogo_shim]: ../src/main.rs
 [config.json]: ./config.json
 
 ### Unhandled options
