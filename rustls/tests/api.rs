@@ -2357,6 +2357,62 @@ fn server_complete_io_for_write() {
 }
 
 #[test]
+fn server_complete_io_for_write_eof() {
+    for kt in ALL_KEY_TYPES {
+        let (mut client, mut server) = make_pair(*kt);
+
+        do_handshake(&mut client, &mut server);
+
+        // Queue 20 bytes to write.
+        server
+            .writer()
+            .write_all(b"01234567890123456789")
+            .unwrap();
+        {
+            const BYTES_BEFORE_EOF: usize = 5;
+            let mut eof_writer = EofWriter::<BYTES_BEFORE_EOF>::default();
+
+            // Only BYTES_BEFORE_EOF should be written.
+            let (rdlen, wrlen) = server
+                .complete_io(&mut eof_writer)
+                .unwrap();
+            assert_eq!(rdlen, 0);
+            assert_eq!(wrlen, BYTES_BEFORE_EOF);
+
+            // Now nothing should be written.
+            let (rdlen, wrlen) = server
+                .complete_io(&mut eof_writer)
+                .unwrap();
+            assert_eq!(rdlen, 0);
+            assert_eq!(wrlen, 0);
+        }
+    }
+}
+
+#[derive(Default)]
+struct EofWriter<const N: usize> {
+    written: usize,
+}
+
+impl<const N: usize> std::io::Write for EofWriter<N> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let prev = self.written;
+        self.written = N.min(self.written + buf.len());
+        Ok(self.written - prev)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<const N: usize> std::io::Read for EofWriter<N> {
+    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+        panic!() // This is a writer, it should not be read from.
+    }
+}
+
+#[test]
 fn server_complete_io_for_read() {
     for kt in ALL_KEY_TYPES {
         let (mut client, mut server) = make_pair(*kt);
