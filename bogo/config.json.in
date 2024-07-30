@@ -29,7 +29,7 @@
 #else
     "TLS-ECH-Server*": "ECH server support NYI",
     "TLS-ECH-Client-SelectECHConfig": "TODO(XXX): re-enable after upstream bogo fix",
-    "TLS-ECH-Client-NoSupportedConfigs": "TODO(XXX): re-enable after upstream bogo fix",
+    "TLS-ECH-Client-NoSupportedConfigs": "we don't fallback to TLS w/o ECH for no supported configs",
     "TLS-ECH-Client-SkipInvalidPublicName*": "we allow underscore names, don't fallback on no ECH configs",
     "TLS-ECH-Client-NoSupportedConfigs-GREASE": "we don't fallback to GREASE for no ECH configs",
     "TLS-ECH-Client-TLS12-RejectRetryConfigs": "we disable TLS1.2 w/ ECH",
