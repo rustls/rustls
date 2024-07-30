@@ -589,7 +589,13 @@ impl<Data> ConnectionCommon<Data> {
             }
 
             while self.wants_write() {
-                wrlen += self.write_tls(io)?;
+                match self.write_tls(io)? {
+                    0 => {
+                        io.flush()?;
+                        return Ok((rdlen, wrlen)); // EOF.
+                    }
+                    n => wrlen += n,
+                }
             }
             io.flush()?;
 
