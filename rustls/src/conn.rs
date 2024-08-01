@@ -1029,7 +1029,7 @@ impl<Data> ConnectionCore<Data> {
             let message = unborrowed.reborrow(&Delocator::new(buffer));
             self.hs_deframer
                 .input_message(message, &locator, buffer_progress.processed());
-            self.hs_deframer.coalesce(buffer);
+            self.hs_deframer.coalesce(buffer)?;
 
             self.common_state.aligned_handshake = self.hs_deframer.is_aligned();
 
