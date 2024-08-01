@@ -390,7 +390,7 @@ mod connection {
 
             self.core
                 .hs_deframer
-                .coalesce(self.deframer_buffer.filled_mut());
+                .coalesce(self.deframer_buffer.filled_mut())?;
 
             self.core
                 .process_new_packets(&mut self.deframer_buffer, &mut self.sendable_plaintext)?;
