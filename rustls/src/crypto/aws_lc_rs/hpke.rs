@@ -14,6 +14,7 @@ use aws_lc_rs::encoding::{AsBigEndian, Curve25519SeedBin, EcPrivateKeyBin};
 use zeroize::Zeroize;
 
 use crate::crypto::aws_lc_rs::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
+use crate::crypto::aws_lc_rs::unspecified_err;
 use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite,
 };
@@ -921,17 +922,6 @@ struct KemSharedSecret<const KDF_LEN: usize>([u8; KDF_LEN]);
 impl<const KDF_LEN: usize> Drop for KemSharedSecret<KDF_LEN> {
     fn drop(&mut self) {
         self.0.zeroize();
-    }
-}
-
-fn unspecified_err(_e: aws_lc_rs::error::Unspecified) -> Error {
-    #[cfg(feature = "std")]
-    {
-        Error::Other(OtherError(Arc::new(_e)))
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        Error::Other(OtherError())
     }
 }
 
