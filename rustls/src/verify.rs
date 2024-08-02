@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
@@ -62,6 +64,12 @@ impl PeerCertVerified {
 /// signatures made by certificates.
 #[allow(unreachable_pub)]
 pub trait ServerCertVerifier: Debug + Send + Sync {
+    /// XXX: start incremental verification process
+    /// XXX: receiver would ideally be &Arc<Self>, requires `arbitrary_self_types`
+    fn start(&self, verifier: &Arc<dyn ServerCertVerifier>) -> Box<dyn IncrementalVerifier> {
+        Box::new(StoringServerVerifier::new(verifier.clone()))
+    }
+
     /// Verify the end-entity certificate `end_entity` is valid for the
     /// hostname `dns_name` and chains to at least one trust anchor.
     ///
@@ -131,6 +139,29 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+}
+
+pub trait IncrementalVerifier: Debug + Send + Sync {
+    fn add_peer_certificate(
+        &mut self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    );
+    fn add_server_name(&mut self, server_name: &ServerName<'_>);
+    fn add_ocsp_response(&mut self, ocsp_response: &[u8]);
+    fn add_tls12_signature(&mut self, message: &[u8], dss: &DigitallySignedStruct);
+    fn add_tls13_signature(&mut self, message: &[u8], dss: &DigitallySignedStruct);
+
+    /// Should return:
+    ///
+    /// - `Ok(PeerCertVerified)` to finish successfully.
+    /// - `Ok(None)` to keep waiting.
+    /// - `Err(_)` to fail.
+    ///
+    fn take_cert_verified(&mut self) -> Result<Option<PeerCertVerified>, Error>;
+
+    fn take_signature_verified(&mut self) -> Result<Option<HandshakeSignatureValid>, Error>;
 }
 
 /// Something that can verify a client certificate chain
@@ -327,6 +358,95 @@ impl Codec<'_> for DigitallySignedStruct {
         let sig = PayloadU16::read(r)?;
 
         Ok(Self { scheme, sig })
+    }
+}
+
+#[derive(Debug)]
+pub struct StoringServerVerifier {
+    parent: Arc<dyn ServerCertVerifier>,
+
+    // collected input
+    cert: Option<CertificateDer<'static>>,
+    intermediates: Option<Vec<CertificateDer<'static>>>,
+    server_name: Option<ServerName<'static>>,
+    ocsp_response: Option<Vec<u8>>,
+    current_time: Option<UnixTime>,
+
+    // pending output
+    signature_result: Option<Result<HandshakeSignatureValid, Error>>,
+}
+
+impl StoringServerVerifier {
+    pub fn new(parent: Arc<dyn ServerCertVerifier>) -> Self {
+        Self {
+            parent,
+            cert: None,
+            intermediates: None,
+            server_name: None,
+            ocsp_response: None,
+            current_time: None,
+            signature_result: None,
+        }
+    }
+}
+
+impl IncrementalVerifier for StoringServerVerifier {
+    fn add_peer_certificate(
+        &mut self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    ) {
+        self.cert = Some(end_entity.clone().into_owned());
+        self.intermediates = Some(
+            intermediates
+                .into_iter()
+                .map(|c| c.clone().into_owned())
+                .collect(),
+        );
+        self.current_time = Some(now);
+    }
+
+    fn add_server_name(&mut self, server_name: &ServerName<'_>) {
+        self.server_name = Some(server_name.clone().to_owned());
+    }
+
+    fn add_ocsp_response(&mut self, ocsp_response: &[u8]) {
+        self.ocsp_response = Some(ocsp_response.to_vec());
+    }
+
+    fn add_tls12_signature(&mut self, message: &[u8], dss: &DigitallySignedStruct) {
+        self.signature_result = Some(self.parent.verify_tls12_signature(
+            message,
+            self.cert.as_ref().unwrap(),
+            dss,
+        ));
+    }
+
+    fn add_tls13_signature(&mut self, message: &[u8], dss: &DigitallySignedStruct) {
+        self.signature_result = Some(self.parent.verify_tls13_signature(
+            message,
+            self.cert.as_ref().unwrap(),
+            dss,
+        ));
+    }
+
+    fn take_cert_verified(&mut self) -> Result<Option<PeerCertVerified>, Error> {
+        self.parent
+            .verify_server_cert(
+                self.cert.as_ref().unwrap(),
+                self.intermediates.as_ref().unwrap(),
+                self.server_name.as_ref().unwrap(),
+                self.ocsp_response
+                    .as_deref()
+                    .unwrap_or_default(),
+                self.current_time.clone().unwrap(),
+            )
+            .map(Some)
+    }
+
+    fn take_signature_verified(&mut self) -> Result<Option<HandshakeSignatureValid>, Error> {
+        self.signature_result.take().transpose()
     }
 }
 
