@@ -40,24 +40,19 @@ impl FinishedMessageVerified {
 }
 
 /// Zero-sized marker type representing verification of a server cert chain.
-#[allow(unreachable_pub)]
-#[derive(Debug)]
-pub struct ServerCertVerified(());
-
-#[allow(unreachable_pub)]
-impl ServerCertVerified {
-    /// Make a `ServerCertVerified`
-    pub fn assertion() -> Self {
-        Self(())
-    }
-}
+pub type ServerCertVerified = PeerCertVerified;
 
 /// Zero-sized marker type representing verification of a client cert chain.
-#[derive(Debug)]
-pub struct ClientCertVerified(());
+pub type ClientCertVerified = PeerCertVerified;
 
-impl ClientCertVerified {
-    /// Make a `ClientCertVerified`
+/// Zero-sized marker type representing verification of the peer's cert chain.
+#[allow(unreachable_pub)]
+#[derive(Debug)]
+pub struct PeerCertVerified(());
+
+#[allow(unreachable_pub)]
+impl PeerCertVerified {
+    /// Make a `PeerCertVerified`
     pub fn assertion() -> Self {
         Self(())
     }
@@ -341,7 +336,7 @@ fn assertions_are_debug() {
 
     assert_eq!(
         format!("{:?}", ClientCertVerified::assertion()),
-        "ClientCertVerified(())"
+        "PeerCertVerified(())"
     );
     assert_eq!(
         format!("{:?}", HandshakeSignatureValid::assertion()),
@@ -353,6 +348,6 @@ fn assertions_are_debug() {
     );
     assert_eq!(
         format!("{:?}", ServerCertVerified::assertion()),
-        "ServerCertVerified(())"
+        "PeerCertVerified(())"
     );
 }

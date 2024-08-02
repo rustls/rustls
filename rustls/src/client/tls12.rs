@@ -139,7 +139,7 @@ mod server_hello {
                             .into_owned(),
                     );
                     cx.common.handshake_kind = Some(HandshakeKind::Resumed);
-                    let cert_verified = verify::ServerCertVerified::assertion();
+                    let cert_verified = verify::PeerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
                     return if must_issue_new_ticket {
@@ -1028,7 +1028,7 @@ struct ExpectNewTicket {
     using_ems: bool,
     transcript: HandshakeHash,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::PeerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1080,7 +1080,7 @@ struct ExpectCcs {
     transcript: HandshakeHash,
     ticket: Option<NewSessionTicketPayload>,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::PeerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1141,7 +1141,7 @@ struct ExpectFinished {
     ticket: Option<NewSessionTicketPayload>,
     secrets: ConnectionSecrets,
     resuming: bool,
-    cert_verified: verify::ServerCertVerified,
+    cert_verified: verify::PeerCertVerified,
     sig_verified: verify::HandshakeSignatureValid,
 }
 
@@ -1269,7 +1269,7 @@ impl State<ClientConnectionData> for ExpectFinished {
 // -- Traffic transit state --
 struct ExpectTraffic {
     secrets: ConnectionSecrets,
-    _cert_verified: verify::ServerCertVerified,
+    _cert_verified: verify::PeerCertVerified,
     _sig_verified: verify::HandshakeSignatureValid,
     _fin_verified: verify::FinishedMessageVerified,
 }
