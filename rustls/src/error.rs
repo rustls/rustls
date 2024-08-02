@@ -318,6 +318,8 @@ pub enum PeerIncompatible {
     Tls13RequiredForQuic,
     UncompressedEcPointsRequired,
     ServerRejectedEncryptedClientHello(Option<Vec<EchConfigPayload>>),
+    IncorrectCertificateTypeExtension,
+    UnexpectedCertificateTypeExtension,
 }
 
 impl From<PeerIncompatible> for Error {

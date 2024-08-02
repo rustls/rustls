@@ -438,7 +438,8 @@ pub mod internal {
         }
         pub mod enums {
             pub use crate::msgs::enums::{
-                AlertLevel, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem, NamedGroup,
+                AlertLevel, CertificateType, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem,
+                NamedGroup,
             };
         }
         pub mod fragmenter {
@@ -448,8 +449,8 @@ pub mod internal {
             pub use crate::msgs::handshake::{
                 CertificateChain, ClientExtension, ClientHelloPayload, DistinguishedName,
                 EchConfigContents, EchConfigPayload, HandshakeMessagePayload, HandshakePayload,
-                HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, ServerName,
-                SessionId,
+                HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, ServerExtension,
+                ServerName, SessionId,
             };
         }
         pub mod message {
@@ -591,9 +592,9 @@ pub mod server {
     pub use builder::WantsServerCert;
     pub use handy::NoServerSessionStorage;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
-    pub use handy::ResolvesServerCertUsingSni;
-    #[cfg(any(feature = "std", feature = "hashbrown"))]
     pub use handy::ServerSessionMemoryCache;
+    #[cfg(any(feature = "std", feature = "hashbrown"))]
+    pub use handy::ResolvesServerCertUsingSni;
     pub use server_conn::{
         Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
         ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,

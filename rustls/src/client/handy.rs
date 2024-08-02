@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 
-use pki_types::ServerName;
+use alloc::vec;
+use pki_types::{CertificateDer, ServerName};
 
 use crate::enums::SignatureScheme;
 use crate::error::Error;
@@ -234,6 +235,39 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
         _sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
         Some(Arc::clone(&self.0))
+    }
+
+    fn has_certs(&self) -> bool {
+        true
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct AlwaysResolvesClientRawPublicKeys(Arc<sign::CertifiedKey>);
+
+impl AlwaysResolvesClientRawPublicKeys {
+    pub(super) fn new(
+        private_key: Arc<dyn sign::SigningKey>,
+        public_key: CertificateDer<'static>,
+    ) -> Result<Self, Error> {
+        Ok(Self(Arc::new(sign::CertifiedKey::new(
+            CertificateChain(vec![public_key]).0,
+            private_key,
+        ))))
+    }
+}
+
+impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
+    fn resolve(
+        &self,
+        _root_hint_subjects: &[&[u8]],
+        _sigschemes: &[SignatureScheme],
+    ) -> Option<Arc<sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
+
+    fn only_raw_public_keys(&self) -> bool {
+        true
     }
 
     fn has_certs(&self) -> bool {

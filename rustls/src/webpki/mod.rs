@@ -16,12 +16,17 @@ mod verify;
 pub use anchors::RootCertStore;
 pub use client_verifier::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 pub use server_verifier::{ServerCertVerifierBuilder, WebPkiServerVerifier};
+pub(crate) use webpki::RawPublicKeyEntity;
+
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]
 pub use verify::{
     verify_server_cert_signed_by_trust_anchor, verify_server_name, ParsedCertificate,
 };
-pub use verify::{verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms};
+pub use verify::{
+    verify_tls12_signature, verify_tls12_signature_with_spki, verify_tls13_signature,
+    verify_tls13_signature_with_spki, WebPkiSupportedAlgorithms,
+};
 
 /// An error that can occur when building a certificate verifier.
 #[derive(Debug, Clone)]

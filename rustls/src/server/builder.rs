@@ -1,8 +1,9 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+use webpki::RawPublicKeyEntity;
 
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::CryptoProvider;
@@ -11,7 +12,7 @@ use crate::server::{handy, ResolvesServerCert, ServerConfig};
 use crate::sign::CertifiedKey;
 use crate::time_provider::TimeProvider;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
-use crate::{compress, versions, InconsistentKeys, NoKeyLog};
+use crate::{compress, versions, CertificateError, InconsistentKeys, NoKeyLog};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
@@ -86,6 +87,37 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
 
         let resolver = handy::AlwaysResolvesChain::new(certified_key);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
+    }
+
+    /// Set a single raw public key certificate and matching private key. This
+    /// certificate and key is used for all subsequent connections,
+    /// irrespective of things like SNI hostname.
+    ///
+    /// `cert_chain` is a vector of one Raw Public Key certificate.
+    /// `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1. The
+    /// `aws-lc-rs` and `ring` [`CryptoProvider`]s support all three encodings,
+    /// but other `CryptoProviders` may not.
+    ///
+    /// This function fails if `key_der` is invalid or the cert_chain is not of length 1
+    /// TODO: and does not contain a raw public key? (not yet implemented)
+    pub fn with_rpk(
+        self,
+        public_key_der: SubjectPublicKeyInfoDer<'static>,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<ServerConfig, Error> {
+        match RawPublicKeyEntity::try_from(&public_key_der) {
+            Ok(_) => {
+                let private_key = self
+                    .state
+                    .provider
+                    .key_provider
+                    .load_private_key(key_der)?;
+                let resolver =
+                    handy::AlwaysResolvesServerRawPublicKeys::new(private_key, public_key_der);
+                Ok(self.with_cert_resolver(Arc::new(resolver)))
+            }
+            Err(_) => Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
+        }
     }
 
     /// Sets a single certificate chain, matching private key and optional OCSP
