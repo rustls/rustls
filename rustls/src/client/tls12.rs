@@ -17,7 +17,7 @@ use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State, Tran
 use crate::conn::ConnectionRandoms;
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved, PendingOperation};
 use crate::hash_hs::HandshakeHash;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
@@ -219,6 +219,17 @@ impl State<ClientConnectionData> for ExpectCertificate {
             HandshakePayload::Certificate
         )?;
 
+        let (end_entity, intermediates) = server_cert_chain
+            .split_first()
+            .ok_or(Error::NoCertificatesPresented)?;
+
+        let mut cert_verifier = self
+            .config
+            .verifier
+            .start(&self.config.verifier);
+        cert_verifier.add_server_name(&self.server_name);
+        cert_verifier.add_peer_certificate(end_entity, intermediates, self.config.current_time()?);
+
         if self.may_send_cert_status {
             Ok(Transition::Next(Box::new(
                 ExpectCertificateStatusOrServerKx {
@@ -231,6 +242,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                     transcript: self.transcript,
                     suite: self.suite,
                     server_cert_chain,
+                    cert_verifier,
                     must_issue_new_ticket: self.must_issue_new_ticket,
                 },
             )))
@@ -247,6 +259,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 transcript: self.transcript,
                 suite: self.suite,
                 server_cert,
+                cert_verifier,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })))
         }
@@ -267,6 +280,7 @@ struct ExpectCertificateStatusOrServerKx<'m> {
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
     server_cert_chain: CertificateChain<'m>,
+    cert_verifier: Box<dyn verify::IncrementalVerifier>,
     must_issue_new_ticket: bool,
 }
 
@@ -297,6 +311,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
                 transcript: self.transcript,
                 suite: self.suite,
                 server_cert: ServerCertDetails::new(self.server_cert_chain, vec![]),
+                cert_verifier: self.cert_verifier,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
             .handle(cx, m),
@@ -317,6 +332,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
                 transcript: self.transcript,
                 suite: self.suite,
                 server_cert_chain: self.server_cert_chain,
+                cert_verifier: self.cert_verifier,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
             .handle(cx, m),
@@ -342,6 +358,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
             transcript: self.transcript,
             suite: self.suite,
             server_cert_chain: self.server_cert_chain.into_owned(),
+            cert_verifier: self.cert_verifier,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
@@ -357,6 +374,7 @@ struct ExpectCertificateStatus<'a> {
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
     server_cert_chain: CertificateChain<'a>,
+    cert_verifier: Box<dyn verify::IncrementalVerifier>,
     must_issue_new_ticket: bool,
 }
 
@@ -381,6 +399,8 @@ impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
             "Server stapled OCSP response is {:?}",
             &server_cert_ocsp_response
         );
+        self.cert_verifier
+            .add_ocsp_response(&server_cert_ocsp_response);
 
         let server_cert = ServerCertDetails::new(self.server_cert_chain, server_cert_ocsp_response);
 
@@ -394,6 +414,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
             transcript: self.transcript,
             suite: self.suite,
             server_cert,
+            cert_verifier: self.cert_verifier,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })))
     }
@@ -409,6 +430,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
             transcript: self.transcript,
             suite: self.suite,
             server_cert_chain: self.server_cert_chain.into_owned(),
+            cert_verifier: self.cert_verifier,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
@@ -424,6 +446,7 @@ struct ExpectServerKx<'a> {
     transcript: HandshakeHash,
     suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails<'a>,
+    cert_verifier: Box<dyn verify::IncrementalVerifier>,
     must_issue_new_ticket: bool,
 }
 
@@ -452,10 +475,25 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
                 )
             })?;
 
-        // Save the signature and signed parameters for later verification.
-        let mut kx_params = Vec::new();
-        kx.params.encode(&mut kx_params);
-        let server_kx = ServerKxDetails::new(kx_params, kx.dss);
+        // Check the signature is compatible with the ciphersuite.
+        if !SupportedCipherSuite::from(self.suite)
+            .usable_for_signature_algorithm(kx.dss.scheme.algorithm())
+        {
+            warn!(
+                "peer signed kx with wrong algorithm (got {:?} expect {:?})",
+                kx.dss.scheme.algorithm(),
+                self.suite.sign
+            );
+            return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
+        }
+
+        // Pass the signature and signed parameters to begin concurrent verification.
+        let mut message = Vec::new();
+        message.extend_from_slice(&self.randoms.client);
+        message.extend_from_slice(&self.randoms.server);
+        kx.params.encode(&mut message);
+        self.cert_verifier
+            .add_tls12_signature(&message, &kx.dss);
 
         #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
         {
@@ -469,6 +507,10 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             }
         }
 
+        let mut kx_params = Vec::new();
+        kx.params.encode(&mut kx_params);
+        let server_kx = ServerKxDetails::new(kx_params, kx.dss);
+
         Ok(Transition::Next(Box::new(ExpectServerDoneOrCertReq {
             config: self.config,
             resuming_session: self.resuming_session,
@@ -480,6 +522,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             suite: self.suite,
             server_cert: self.server_cert,
             server_kx,
+            cert_verifier: self.cert_verifier,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })))
     }
@@ -495,6 +538,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             transcript: self.transcript,
             suite: self.suite,
             server_cert: self.server_cert.into_owned(),
+            cert_verifier: self.cert_verifier,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
@@ -631,6 +675,7 @@ struct ExpectServerDoneOrCertReq<'a> {
     suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails<'a>,
     server_kx: ServerKxDetails,
+    cert_verifier: Box<dyn verify::IncrementalVerifier>,
     must_issue_new_ticket: bool,
 }
 
@@ -664,13 +709,14 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
                 suite: self.suite,
                 server_cert: self.server_cert,
                 server_kx: self.server_kx,
+                cert_verifier: self.cert_verifier,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
             .handle(cx, m)
         } else {
             self.transcript.abandon_client_auth();
 
-            Box::new(ExpectServerDone {
+            Box::new(AwaitCertVerifyAndExpectServerDone {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
@@ -681,7 +727,10 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
                 suite: self.suite,
                 server_cert: self.server_cert,
                 server_kx: self.server_kx,
+                cert_verifier: self.cert_verifier,
                 client_auth: None,
+                cert_verified_result: None,
+                cert_signature_result: None,
                 must_issue_new_ticket: self.must_issue_new_ticket,
             })
             .handle(cx, m)
@@ -700,6 +749,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
             suite: self.suite,
             server_cert: self.server_cert.into_owned(),
             server_kx: self.server_kx,
+            cert_verifier: self.cert_verifier,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
@@ -716,6 +766,7 @@ struct ExpectCertificateRequest<'a> {
     suite: &'static Tls12CipherSuite,
     server_cert: ServerCertDetails<'a>,
     server_kx: ServerKxDetails,
+    cert_verifier: Box<dyn verify::IncrementalVerifier>,
     must_issue_new_ticket: bool,
 }
 
@@ -754,20 +805,25 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
             no_compression,
         );
 
-        Ok(Transition::Next(Box::new(ExpectServerDone {
-            config: self.config,
-            resuming_session: self.resuming_session,
-            session_id: self.session_id,
-            server_name: self.server_name,
-            randoms: self.randoms,
-            using_ems: self.using_ems,
-            transcript: self.transcript,
-            suite: self.suite,
-            server_cert: self.server_cert,
-            server_kx: self.server_kx,
-            client_auth: Some(client_auth),
-            must_issue_new_ticket: self.must_issue_new_ticket,
-        })))
+        Ok(Transition::Next(Box::new(
+            AwaitCertVerifyAndExpectServerDone {
+                config: self.config,
+                resuming_session: self.resuming_session,
+                session_id: self.session_id,
+                server_name: self.server_name,
+                randoms: self.randoms,
+                using_ems: self.using_ems,
+                transcript: self.transcript,
+                suite: self.suite,
+                server_cert: self.server_cert,
+                server_kx: self.server_kx,
+                client_auth: Some(client_auth),
+                cert_verifier: self.cert_verifier,
+                cert_verified_result: None,
+                cert_signature_result: None,
+                must_issue_new_ticket: self.must_issue_new_ticket,
+            },
+        )))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -782,12 +838,13 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
             suite: self.suite,
             server_cert: self.server_cert.into_owned(),
             server_kx: self.server_kx,
+            cert_verifier: self.cert_verifier,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
 }
 
-struct ExpectServerDone<'a> {
+struct AwaitCertVerifyAndExpectServerDone<'a> {
     config: Arc<ClientConfig>,
     resuming_session: Option<persist::Tls12ClientSessionValue>,
     session_id: SessionId,
@@ -799,18 +856,56 @@ struct ExpectServerDone<'a> {
     server_cert: ServerCertDetails<'a>,
     server_kx: ServerKxDetails,
     client_auth: Option<ClientAuthDetails>,
+    cert_verifier: Box<dyn verify::IncrementalVerifier>,
+    cert_verified_result: Option<Result<verify::PeerCertVerified, Error>>,
+    cert_signature_result: Option<Result<verify::HandshakeSignatureValid, Error>>,
     must_issue_new_ticket: bool,
 }
 
-impl State<ClientConnectionData> for ExpectServerDone<'_> {
+impl State<ClientConnectionData> for AwaitCertVerifyAndExpectServerDone<'_> {
     fn handle<'m>(
-        self: Box<Self>,
+        mut self: Box<Self>,
         cx: &mut ClientContext<'_>,
         m: Message<'m>,
     ) -> hs::NextStateOrError<'m>
     where
         Self: 'm,
     {
+        // await completion of cert + signature verifications
+        let (cert_verified, sig_verified) = {
+            std::println!("AwaitCertVerifyAndExpectServerDone poll called");
+            if self.cert_verified_result.is_none() {
+                self.cert_verified_result = self
+                    .cert_verifier
+                    .take_cert_verified()
+                    .transpose();
+            }
+
+            if self.cert_signature_result.is_none() {
+                self.cert_signature_result = self
+                    .cert_verifier
+                    .take_signature_verified()
+                    .transpose();
+            }
+
+            if self.cert_verified_result.is_some() && self.cert_signature_result.is_some() {
+                (
+                    self.cert_verified_result
+                        .take()
+                        .unwrap(),
+                    self.cert_signature_result
+                        .take()
+                        .unwrap(),
+                )
+            } else {
+                return Ok(Transition::Blocked {
+                    current: self,
+                    message: m,
+                    why: PendingOperation::ServerCertificateVerification,
+                });
+            }
+        };
+
         match m.payload {
             MessagePayload::Handshake {
                 parsed:
@@ -837,76 +932,20 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         trace!("Server cert is {:?}", st.server_cert.cert_chain);
         debug!("Server DNS name is {:?}", st.server_name);
 
-        let suite = st.suite;
-
         // 1. Verify the cert chain.
-        // 2. Verify that the top certificate signed their kx.
-        // 3. If doing client auth, send our Certificate.
-        // 4. Complete the key exchange:
-        //    a) generate our kx pair
-        //    b) emit a ClientKeyExchange containing it
-        //    c) if doing client auth, emit a CertificateVerify
-        //    d) emit a CCS
-        //    e) derive the shared keys, and start encryption
-        // 5. emit a Finished, our first encrypted message under the new keys.
-
-        // 1.
-        let (end_entity, intermediates) = st
-            .server_cert
-            .cert_chain
-            .split_first()
-            .ok_or(Error::NoCertificatesPresented)?;
-
-        let now = st.config.current_time()?;
-
-        let cert_verified = st
-            .config
-            .verifier
-            .verify_server_cert(
-                end_entity,
-                intermediates,
-                &st.server_name,
-                &st.server_cert.ocsp_response,
-                now,
-            )
-            .map_err(|err| {
-                cx.common
-                    .send_cert_verify_error_alert(err)
-            })?;
-
-        // 2.
-        // Build up the contents of the signed message.
-        // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
-        let sig_verified = {
-            let mut message = Vec::new();
-            message.extend_from_slice(&st.randoms.client);
-            message.extend_from_slice(&st.randoms.server);
-            message.extend_from_slice(&st.server_kx.kx_params);
-
-            // Check the signature is compatible with the ciphersuite.
-            let sig = &st.server_kx.kx_sig;
-            if !SupportedCipherSuite::from(suite)
-                .usable_for_signature_algorithm(sig.scheme.algorithm())
-            {
-                warn!(
-                    "peer signed kx with wrong algorithm (got {:?} expect {:?})",
-                    sig.scheme.algorithm(),
-                    suite.sign
-                );
-                return Err(PeerMisbehaved::SignedKxWithWrongAlgorithm.into());
-            }
-
-            st.config
-                .verifier
-                .verify_tls12_signature(&message, end_entity, sig)
-                .map_err(|err| {
-                    cx.common
-                        .send_cert_verify_error_alert(err)
-                })?
-        };
+        let cert_verified = cert_verified.map_err(|err| {
+            cx.common
+                .send_cert_verify_error_alert(err)
+        })?;
         cx.common.peer_certificates = Some(st.server_cert.cert_chain.into_owned());
 
-        // 3.
+        // 2. Verify that the top certificate signed their kx.
+        let sig_verified = sig_verified.map_err(|err| {
+            cx.common
+                .send_cert_verify_error_alert(err)
+        })?;
+
+        // 3. If doing client auth, send our Certificate.
         if let Some(client_auth) = &st.client_auth {
             let certs = match client_auth {
                 ClientAuthDetails::Empty { .. } => CertificateChain::default(),
@@ -914,6 +953,13 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             };
             emit_certificate(&mut st.transcript, certs, cx.common);
         }
+
+        // 4. Complete the key exchange:
+        //    a) generate our kx pair
+        //    b) emit a ClientKeyExchange containing it
+        //    c) if doing client auth, emit a CertificateVerify
+        //    d) emit a CCS
+        //    e) derive the shared keys, and start encryption
 
         // 4a.
         let kx_params = tls12::decode_kx_params::<ServerKeyExchangeParams>(
@@ -955,7 +1001,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             kx_params.pub_key(),
             ems_seed,
             st.randoms,
-            suite,
+            st.suite,
         )?;
         cx.common.kx_state.complete();
 
@@ -970,7 +1016,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             .record_layer
             .start_encrypting();
 
-        // 5.
+        // 5. emit a Finished, our first encrypted message under the new keys.
         emit_finished(&secrets, &mut transcript, cx.common);
 
         if st.must_issue_new_ticket {
@@ -1004,7 +1050,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
-        Box::new(ExpectServerDone {
+        Box::new(AwaitCertVerifyAndExpectServerDone {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
@@ -1016,6 +1062,9 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             server_cert: self.server_cert.into_owned(),
             server_kx: self.server_kx,
             client_auth: self.client_auth,
+            cert_verifier: self.cert_verifier,
+            cert_verified_result: self.cert_verified_result,
+            cert_signature_result: self.cert_signature_result,
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
