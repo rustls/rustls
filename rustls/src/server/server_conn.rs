@@ -564,9 +564,6 @@ mod connection {
         /// Make a new ServerConnection.  `config` controls how
         /// we behave in the TLS protocol.
         pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-            let mut common = CommonState::new(Side::Server);
-            common.set_max_fragment_size(config.max_fragment_size)?;
-            common.enable_secret_extraction = config.enable_secret_extraction;
             Ok(Self {
                 inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
             })
@@ -864,9 +861,6 @@ pub struct UnbufferedServerConnection {
 impl UnbufferedServerConnection {
     /// Make a new ServerConnection. `config` controls how we behave in the TLS protocol.
     pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
-        let mut common = CommonState::new(Side::Server);
-        common.set_max_fragment_size(config.max_fragment_size)?;
-        common.enable_secret_extraction = config.enable_secret_extraction;
         Ok(Self {
             inner: UnbufferedConnectionCommon::from(ConnectionCore::for_server(
                 config,
