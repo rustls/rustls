@@ -15,6 +15,7 @@ use super::TICKETER_AEAD;
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::debug;
+use crate::polyfill::try_split_at;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
 
@@ -198,14 +199,6 @@ impl Debug for AeadTicketer {
             .field("alg", &self.alg)
             .field("lifetime", &self.lifetime)
             .finish()
-    }
-}
-
-/// Non-panicking `let (nonce, ciphertext) = ciphertext.split_at(...)`.
-fn try_split_at(slice: &[u8], mid: usize) -> Option<(&[u8], &[u8])> {
-    match mid > slice.len() {
-        true => None,
-        false => Some(slice.split_at(mid)),
     }
 }
 
