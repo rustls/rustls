@@ -650,6 +650,9 @@ pub mod time_provider;
 /// APIs abstracting over locking primitives.
 pub mod lock;
 
+/// Polyfills for features that are not yet stabilized or available with current MSRV.
+pub(crate) mod polyfill;
+
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod hash_map {
     #[cfg(feature = "std")]
