@@ -8,7 +8,7 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
-use crate::common_state::{KxState, Protocol, State};
+use crate::common_state::{KxState, Protocol, State, Transition};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{
@@ -33,7 +33,7 @@ use crate::server::{tls13, ClientHello, ServerConfig};
 use crate::{suites, SupportedCipherSuite};
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
-pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
+pub(super) type NextStateOrError<'a> = Result<Transition<'a, ServerConnectionData>, Error>;
 pub(super) type ServerContext<'a> = crate::common_state::Context<'a, ServerConnectionData>;
 
 pub(super) fn can_resume(

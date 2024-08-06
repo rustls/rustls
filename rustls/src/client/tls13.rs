@@ -12,7 +12,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchState, EchStatus};
 use crate::client::{hs, ClientConfig, ClientSessionStore};
-use crate::common_state::{CommonState, HandshakeKind, KxState, Protocol, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, Protocol, Side, State, Transition};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{
@@ -198,7 +198,7 @@ pub(super) fn handle_server_hello(
 
     emit_fake_ccs(&mut sent_tls13_fake_ccs, cx.common);
 
-    Ok(Box::new(ExpectEncryptedExtensions {
+    Ok(Transition::Next(Box::new(ExpectEncryptedExtensions {
         config,
         resuming_session,
         server_name,
@@ -207,7 +207,7 @@ pub(super) fn handle_server_hello(
         transcript,
         key_schedule,
         hello,
-    }))
+    })))
 }
 
 fn validate_server_hello(
@@ -478,7 +478,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             // continuation of the previous session in terms of security policy.
             let cert_verified = verify::PeerCertVerified::assertion();
             let sig_verified = verify::HandshakeSignatureValid::assertion();
-            Ok(Box::new(ExpectFinished {
+            Ok(Transition::Next(Box::new(ExpectFinished {
                 config: self.config,
                 server_name: self.server_name,
                 randoms: self.randoms,
@@ -489,7 +489,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 cert_verified,
                 sig_verified,
                 ech_retry_configs,
-            }))
+            })))
         } else {
             if exts.early_data_extension_offered() {
                 return Err(PeerMisbehaved::EarlyDataExtensionWithoutResumption.into());
@@ -498,7 +498,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 .handshake_kind
                 .get_or_insert(HandshakeKind::Full);
 
-            Ok(if self.hello.offered_cert_compression {
+            Ok(Transition::Next(if self.hello.offered_cert_compression {
                 Box::new(ExpectCertificateOrCompressedCertificateOrCertReq {
                     config: self.config,
                     server_name: self.server_name,
@@ -518,7 +518,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     key_schedule: self.key_schedule,
                     ech_retry_configs,
                 })
-            })
+            }))
         }
     }
 
@@ -845,7 +845,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             compat_compressor,
         );
 
-        Ok(if self.offered_cert_compression {
+        Ok(Transition::Next(if self.offered_cert_compression {
             Box::new(ExpectCertificateOrCompressedCertificate {
                 config: self.config,
                 server_name: self.server_name,
@@ -868,7 +868,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
                 message_already_in_transcript: false,
                 ech_retry_configs: self.ech_retry_configs,
             })
-        })
+        }))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1036,7 +1036,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             end_entity_ocsp,
         );
 
-        Ok(Box::new(ExpectCertificateVerify {
+        Ok(Transition::Next(Box::new(ExpectCertificateVerify {
             config: self.config,
             server_name: self.server_name,
             randoms: self.randoms,
@@ -1046,7 +1046,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             server_cert,
             client_auth: self.client_auth,
             ech_retry_configs: self.ech_retry_configs,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1126,7 +1126,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
         cx.common.peer_certificates = Some(self.server_cert.cert_chain.into_owned());
         self.transcript.add_message(&m);
 
-        Ok(Box::new(ExpectFinished {
+        Ok(Transition::Next(Box::new(ExpectFinished {
             config: self.config,
             server_name: self.server_name,
             randoms: self.randoms,
@@ -1137,7 +1137,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             cert_verified,
             sig_verified,
             ech_retry_configs: self.ech_retry_configs,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1410,10 +1410,10 @@ impl State<ClientConnectionData> for ExpectFinished {
             _fin_verified: fin,
         };
 
-        Ok(match cx.common.is_quic() {
+        Ok(Transition::Next(match cx.common.is_quic() {
             true => Box::new(ExpectQuicTraffic(st)),
             false => Box::new(st),
-        })
+        }))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1554,7 +1554,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
             }
         }
 
-        Ok(self)
+        Ok(Transition::Next(self))
     }
 
     fn send_key_update_request(&mut self, common: &mut CommonState) -> Result<(), Error> {
@@ -1600,7 +1600,7 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
         )?;
         self.0
             .handle_new_ticket_tls13(cx, nst)?;
-        Ok(self)
+        Ok(Transition::Next(self))
     }
 
     fn export_keying_material(

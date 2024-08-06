@@ -10,7 +10,7 @@ use subtle::ConstantTimeEq;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State, Transition};
 use crate::conn::ConnectionRandoms;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
@@ -232,14 +232,14 @@ mod client_hello {
                         extra_exts: self.extra_exts,
                     });
 
-                    return if early_data_requested {
-                        Ok(Box::new(ExpectAndSkipRejectedEarlyData {
+                    return Ok(Transition::Next(if early_data_requested {
+                        Box::new(ExpectAndSkipRejectedEarlyData {
                             skip_data_left: skip_early_data,
                             next,
-                        }))
+                        })
                     } else {
-                        Ok(next)
-                    };
+                        next
+                    }));
                 }
             };
 
@@ -444,42 +444,44 @@ mod client_hello {
                     .cert_decompressors
                     .is_empty()
                 {
-                    Ok(Box::new(ExpectCertificate {
+                    Ok(Transition::Next(Box::new(ExpectCertificate {
                         config: self.config,
                         transcript: self.transcript,
                         suite: self.suite,
                         key_schedule: key_schedule_traffic,
                         send_tickets: self.send_tickets,
                         message_already_in_transcript: false,
-                    }))
+                    })))
                 } else {
-                    Ok(Box::new(ExpectCertificateOrCompressedCertificate {
-                        config: self.config,
-                        transcript: self.transcript,
-                        suite: self.suite,
-                        key_schedule: key_schedule_traffic,
-                        send_tickets: self.send_tickets,
-                    }))
+                    Ok(Transition::Next(Box::new(
+                        ExpectCertificateOrCompressedCertificate {
+                            config: self.config,
+                            transcript: self.transcript,
+                            suite: self.suite,
+                            key_schedule: key_schedule_traffic,
+                            send_tickets: self.send_tickets,
+                        },
+                    )))
                 }
             } else if doing_early_data == EarlyDataDecision::Accepted && !cx.common.is_quic() {
                 // Not used for QUIC: RFC 9001 §8.3: Clients MUST NOT send the EndOfEarlyData
                 // message. A server MUST treat receipt of a CRYPTO frame in a 0-RTT packet as a
                 // connection error of type PROTOCOL_VIOLATION.
-                Ok(Box::new(ExpectEarlyData {
+                Ok(Transition::Next(Box::new(ExpectEarlyData {
                     config: self.config,
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: key_schedule_traffic,
                     send_tickets: self.send_tickets,
-                }))
+                })))
             } else {
-                Ok(Box::new(ExpectFinished {
+                Ok(Transition::Next(Box::new(ExpectFinished {
                     config: self.config,
                     transcript: self.transcript,
                     suite: self.suite,
                     key_schedule: key_schedule_traffic,
                     send_tickets: self.send_tickets,
-                }))
+                })))
             }
         }
     }
@@ -897,7 +899,7 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
         if let MessagePayload::ApplicationData(ref skip_data) = m.payload {
             if skip_data.bytes().len() <= self.skip_data_left {
                 self.skip_data_left -= skip_data.bytes().len();
-                return Ok(self);
+                return Ok(Transition::Next(self));
             }
         }
 
@@ -1121,13 +1123,13 @@ impl State<ServerConnectionData> for ExpectCertificate {
                 if !mandatory {
                     debug!("client auth requested but no certificate supplied");
                     self.transcript.abandon_client_auth();
-                    return Ok(Box::new(ExpectFinished {
+                    return Ok(Transition::Next(Box::new(ExpectFinished {
                         config: self.config,
                         suite: self.suite,
                         key_schedule: self.key_schedule,
                         transcript: self.transcript,
                         send_tickets: self.send_tickets,
-                    }));
+                    })));
                 }
 
                 return Err(cx.common.send_fatal_alert(
@@ -1148,14 +1150,14 @@ impl State<ServerConnectionData> for ExpectCertificate {
                     .send_cert_verify_error_alert(err)
             })?;
 
-        Ok(Box::new(ExpectCertificateVerify {
+        Ok(Transition::Next(Box::new(ExpectCertificateVerify {
             config: self.config,
             suite: self.suite,
             transcript: self.transcript,
             key_schedule: self.key_schedule,
             client_cert: client_cert.into_owned(),
             send_tickets: self.send_tickets,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1207,13 +1209,13 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
         cx.common.peer_certificates = Some(self.client_cert);
 
         self.transcript.add_message(&m);
-        Ok(Box::new(ExpectFinished {
+        Ok(Transition::Next(Box::new(ExpectFinished {
             config: self.config,
             suite: self.suite,
             key_schedule: self.key_schedule,
             transcript: self.transcript,
             send_tickets: self.send_tickets,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1248,7 +1250,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                     .early_data
                     .take_received_plaintext(payload)
                 {
-                    true => Ok(self),
+                    true => Ok(Transition::Next(self)),
                     false => Err(cx.common.send_fatal_alert(
                         AlertDescription::UnexpectedMessage,
                         PeerMisbehaved::TooMuchEarlyDataReceived,
@@ -1266,13 +1268,13 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 self.key_schedule
                     .update_decrypter(cx.common);
                 self.transcript.add_message(&m);
-                Ok(Box::new(ExpectFinished {
+                Ok(Transition::Next(Box::new(ExpectFinished {
                     config: self.config,
                     suite: self.suite,
                     key_schedule: self.key_schedule,
                     transcript: self.transcript,
                     send_tickets: self.send_tickets,
-                }))
+                })))
             }
             payload => Err(inappropriate_handshake_message(
                 &payload,
@@ -1439,7 +1441,7 @@ impl State<ServerConnectionData> for ExpectFinished {
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
 
-        Ok(match cx.common.is_quic() {
+        Ok(Transition::Next(match cx.common.is_quic() {
             true => Box::new(ExpectQuicTraffic {
                 key_schedule: key_schedule_traffic,
                 _fin_verified: fin,
@@ -1448,7 +1450,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 key_schedule: key_schedule_traffic,
                 _fin_verified: fin,
             }),
-        })
+        }))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1519,7 +1521,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
             }
         }
 
-        Ok(self)
+        Ok(Transition::Next(self))
     }
 
     fn export_keying_material(

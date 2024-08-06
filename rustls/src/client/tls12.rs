@@ -13,7 +13,7 @@ use super::hs::ClientContext;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::client::common::{ClientAuthDetails, ServerCertDetails};
 use crate::client::{hs, ClientConfig};
-use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, Side, State, Transition};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -143,7 +143,7 @@ mod server_hello {
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
                     return if must_issue_new_ticket {
-                        Ok(Box::new(ExpectNewTicket {
+                        Ok(Transition::Next(Box::new(ExpectNewTicket {
                             config: self.config,
                             secrets,
                             resuming_session: Some(resuming),
@@ -154,9 +154,9 @@ mod server_hello {
                             resuming: true,
                             cert_verified,
                             sig_verified,
-                        }))
+                        })))
                     } else {
-                        Ok(Box::new(ExpectCcs {
+                        Ok(Transition::Next(Box::new(ExpectCcs {
                             config: self.config,
                             secrets,
                             resuming_session: Some(resuming),
@@ -168,13 +168,13 @@ mod server_hello {
                             resuming: true,
                             cert_verified,
                             sig_verified,
-                        }))
+                        })))
                     };
                 }
             }
 
             cx.common.handshake_kind = Some(HandshakeKind::Full);
-            Ok(Box::new(ExpectCertificate {
+            Ok(Transition::Next(Box::new(ExpectCertificate {
                 config: self.config,
                 resuming_session: None,
                 session_id: server_hello.session_id,
@@ -185,7 +185,7 @@ mod server_hello {
                 suite,
                 may_send_cert_status,
                 must_issue_new_ticket,
-            }))
+            })))
         }
     }
 }
@@ -220,22 +220,24 @@ impl State<ClientConnectionData> for ExpectCertificate {
         )?;
 
         if self.may_send_cert_status {
-            Ok(Box::new(ExpectCertificateStatusOrServerKx {
-                config: self.config,
-                resuming_session: self.resuming_session,
-                session_id: self.session_id,
-                server_name: self.server_name,
-                randoms: self.randoms,
-                using_ems: self.using_ems,
-                transcript: self.transcript,
-                suite: self.suite,
-                server_cert_chain,
-                must_issue_new_ticket: self.must_issue_new_ticket,
-            }))
+            Ok(Transition::Next(Box::new(
+                ExpectCertificateStatusOrServerKx {
+                    config: self.config,
+                    resuming_session: self.resuming_session,
+                    session_id: self.session_id,
+                    server_name: self.server_name,
+                    randoms: self.randoms,
+                    using_ems: self.using_ems,
+                    transcript: self.transcript,
+                    suite: self.suite,
+                    server_cert_chain,
+                    must_issue_new_ticket: self.must_issue_new_ticket,
+                },
+            )))
         } else {
             let server_cert = ServerCertDetails::new(server_cert_chain, vec![]);
 
-            Ok(Box::new(ExpectServerKx {
+            Ok(Transition::Next(Box::new(ExpectServerKx {
                 config: self.config,
                 resuming_session: self.resuming_session,
                 session_id: self.session_id,
@@ -246,7 +248,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 suite: self.suite,
                 server_cert,
                 must_issue_new_ticket: self.must_issue_new_ticket,
-            }))
+            })))
         }
     }
 
@@ -382,7 +384,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
 
         let server_cert = ServerCertDetails::new(self.server_cert_chain, server_cert_ocsp_response);
 
-        Ok(Box::new(ExpectServerKx {
+        Ok(Transition::Next(Box::new(ExpectServerKx {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
@@ -393,7 +395,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatus<'_> {
             suite: self.suite,
             server_cert,
             must_issue_new_ticket: self.must_issue_new_ticket,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -467,7 +469,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             }
         }
 
-        Ok(Box::new(ExpectServerDoneOrCertReq {
+        Ok(Transition::Next(Box::new(ExpectServerDoneOrCertReq {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
@@ -479,7 +481,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             server_cert: self.server_cert,
             server_kx,
             must_issue_new_ticket: self.must_issue_new_ticket,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -752,7 +754,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
             no_compression,
         );
 
-        Ok(Box::new(ExpectServerDone {
+        Ok(Transition::Next(Box::new(ExpectServerDone {
             config: self.config,
             resuming_session: self.resuming_session,
             session_id: self.session_id,
@@ -765,7 +767,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
             server_kx: self.server_kx,
             client_auth: Some(client_auth),
             must_issue_new_ticket: self.must_issue_new_ticket,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -972,7 +974,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         emit_finished(&secrets, &mut transcript, cx.common);
 
         if st.must_issue_new_ticket {
-            Ok(Box::new(ExpectNewTicket {
+            Ok(Transition::Next(Box::new(ExpectNewTicket {
                 config: st.config,
                 secrets,
                 resuming_session: st.resuming_session,
@@ -983,9 +985,9 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                 resuming: false,
                 cert_verified,
                 sig_verified,
-            }))
+            })))
         } else {
-            Ok(Box::new(ExpectCcs {
+            Ok(Transition::Next(Box::new(ExpectCcs {
                 config: st.config,
                 secrets,
                 resuming_session: st.resuming_session,
@@ -997,7 +999,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                 resuming: false,
                 cert_verified,
                 sig_verified,
-            }))
+            })))
         }
     }
 
@@ -1049,7 +1051,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             HandshakePayload::NewSessionTicket
         )?;
 
-        Ok(Box::new(ExpectCcs {
+        Ok(Transition::Next(Box::new(ExpectCcs {
             config: self.config,
             secrets: self.secrets,
             resuming_session: self.resuming_session,
@@ -1061,7 +1063,7 @@ impl State<ClientConnectionData> for ExpectNewTicket {
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1111,7 +1113,7 @@ impl State<ClientConnectionData> for ExpectCcs {
             .record_layer
             .start_decrypting();
 
-        Ok(Box::new(ExpectFinished {
+        Ok(Transition::Next(Box::new(ExpectFinished {
             config: self.config,
             secrets: self.secrets,
             resuming_session: self.resuming_session,
@@ -1123,7 +1125,7 @@ impl State<ClientConnectionData> for ExpectCcs {
             resuming: self.resuming,
             cert_verified: self.cert_verified,
             sig_verified: self.sig_verified,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1241,12 +1243,12 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
-        Ok(Box::new(ExpectTraffic {
+        Ok(Transition::Next(Box::new(ExpectTraffic {
             secrets: st.secrets,
             _cert_verified: st.cert_verified,
             _sig_verified: st.sig_verified,
             _fin_verified,
-        }))
+        })))
     }
 
     // we could not decrypt the encrypted handshake message with session resumption
@@ -1294,7 +1296,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
                 ));
             }
         }
-        Ok(self)
+        Ok(Transition::Next(self))
     }
 
     fn export_keying_material(

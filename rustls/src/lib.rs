@@ -514,7 +514,7 @@ pub use crate::enums::{
 };
 pub use crate::error::{
     CertRevocationListError, CertificateError, EncryptedClientHelloError, Error, InconsistentKeys,
-    InvalidMessage, OtherError, PeerIncompatible, PeerMisbehaved,
+    InvalidMessage, OtherError, PeerIncompatible, PeerMisbehaved, PendingOperation,
 };
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
