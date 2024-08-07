@@ -31,7 +31,6 @@ pub(crate) mod kx;
 #[path = "../ring/quic.rs"]
 pub(crate) mod quic;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
-#[path = "../ring/ticketer.rs"]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
 pub(crate) mod tls12;
