@@ -5,11 +5,14 @@ use core::fmt;
 use core::fmt::{Debug, Formatter};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use subtle::ConstantTimeEq;
+use aws_lc_rs::cipher::{
+    DecryptionContext, PaddedBlockDecryptingKey, PaddedBlockEncryptingKey, UnboundCipherKey,
+    AES_256, AES_256_KEY_LEN, AES_CBC_IV_LEN,
+};
+use aws_lc_rs::{hmac, iv};
 
-use super::ring_like::aead;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
-use super::TICKETER_AEAD;
+use super::unspecified_err;
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::debug;
@@ -24,8 +27,10 @@ impl Ticketer {
     /// Make the recommended `Ticketer`.  This produces tickets
     /// with a 12 hour life and randomly generated keys.
     ///
-    /// The encryption mechanism used is injected via `TICKETER_AEAD`;
-    /// it must take a 256-bit key and 96-bit nonce.
+    /// The `Ticketer` uses the [RFC 5077 §4] "Recommended Ticket Construction",
+    /// using AES 256 for encryption and HMAC-SHA256 for ciphertext authentication.
+    ///
+    /// [RFC 5077 §4]: https://www.rfc-editor.org/rfc/rfc5077#section-4
     #[cfg(feature = "std")]
     pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
         Ok(Arc::new(crate::ticketer::TicketSwitcher::new(
@@ -37,8 +42,10 @@ impl Ticketer {
     /// Make the recommended `Ticketer`.  This produces tickets
     /// with a 12 hour life and randomly generated keys.
     ///
-    /// The encryption mechanism used is injected via `TICKETER_AEAD`;
-    /// it must take a 256-bit key and 96-bit nonce.
+    /// The `Ticketer` uses the [RFC 5077 §4] "Recommended Ticket Construction",
+    /// using AES 256 for encryption and HMAC-SHA256 for ciphertext authentication.
+    ///
+    /// [RFC 5077 §4]: https://www.rfc-editor.org/rfc/rfc5077#section-4
     #[cfg(not(feature = "std"))]
     pub fn new<M: crate::lock::MakeMutex>(
         time_provider: &'static dyn TimeProvider,
@@ -52,47 +59,62 @@ impl Ticketer {
 }
 
 fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
-    Ok(Box::new(AeadTicketer::new()?))
+    // NOTE(XXX): Unconditionally mapping errors to `GetRandomFailed` here is slightly
+    //   misleading in some cases (e.g. failure to construct a padded block cipher encrypting key).
+    //   However, we can't change the return type expected from a `TicketSwitcher` `generator`
+    //   without breaking semver.
+    //   Tracking in https://github.com/rustls/rustls/issues/2074
+    Ok(Box::new(
+        Rfc5077Ticketer::new().map_err(|_| GetRandomFailed)?,
+    ))
 }
 
-/// This is a `ProducesTickets` implementation which uses
-/// any *ring* `aead::Algorithm` to encrypt and authentication
-/// the ticket payload.  It does not enforce any lifetime
-/// constraint.
-struct AeadTicketer {
-    alg: &'static aead::Algorithm,
-    key: aead::LessSafeKey,
+/// An RFC 5077 "Recommended Ticket Construction" implementation of a [`Ticketer`].
+struct Rfc5077Ticketer {
+    aes_encrypt_key: PaddedBlockEncryptingKey,
+    aes_decrypt_key: PaddedBlockDecryptingKey,
+    hmac_key: hmac::Key,
     key_name: [u8; 16],
     lifetime: u32,
-
-    /// Tracks the largest ciphertext produced by `encrypt`, and
-    /// uses it to early-reject `decrypt` queries that are too long.
-    ///
-    /// Accepting excessively long ciphertexts means a "Partitioning
-    /// Oracle Attack" (see <https://eprint.iacr.org/2020/1491.pdf>)
-    /// can be more efficient, though also note that these are thought
-    /// to be cryptographically hard if the key is full-entropy (as it
-    /// is here).
     maximum_ciphertext_len: AtomicUsize,
 }
 
-impl AeadTicketer {
-    fn new() -> Result<Self, GetRandomFailed> {
-        let mut key = [0u8; 32];
-        SystemRandom::new()
-            .fill(&mut key)
+impl Rfc5077Ticketer {
+    fn new() -> Result<Self, Error> {
+        let rand = SystemRandom::new();
+
+        // Generate a random AES 256 key to use for AES CBC encryption.
+        let mut aes_key = [0u8; AES_256_KEY_LEN];
+        rand.fill(&mut aes_key)
             .map_err(|_| GetRandomFailed)?;
 
-        let key = aead::UnboundKey::new(TICKETER_AEAD, &key).unwrap();
+        // Convert the raw AES 256 key bytes into encrypting and decrypting keys using CBC mode and
+        // PKCS#7 padding. We don't want to store just the raw key bytes as constructing the
+        // cipher keys has some setup overhead. We can't store just the `UnboundCipherKey` since
+        // constructing the padded encrypt/decrypt specific types consume the `UnboundCipherKey`.
+        let aes_encrypt_key =
+            UnboundCipherKey::new(&AES_256, &aes_key[..]).map_err(unspecified_err)?;
+        let aes_encrypt_key =
+            PaddedBlockEncryptingKey::cbc_pkcs7(aes_encrypt_key).map_err(unspecified_err)?;
 
+        // Convert the raw AES 256 key bytes into a decrypting key using CBC PKCS#7 padding.
+        let aes_decrypt_key =
+            UnboundCipherKey::new(&AES_256, &aes_key[..]).map_err(unspecified_err)?;
+        let aes_decrypt_key =
+            PaddedBlockDecryptingKey::cbc_pkcs7(aes_decrypt_key).map_err(unspecified_err)?;
+
+        // Generate a random HMAC SHA256 key to use for HMAC authentication.
+        let hmac_key = hmac::Key::generate(hmac::HMAC_SHA256, &rand).map_err(unspecified_err)?;
+
+        // Generate a random key name.
         let mut key_name = [0u8; 16];
-        SystemRandom::new()
-            .fill(&mut key_name)
+        rand.fill(&mut key_name)
             .map_err(|_| GetRandomFailed)?;
 
-        Ok(AeadTicketer {
-            alg: TICKETER_AEAD,
-            key: aead::LessSafeKey::new(key),
+        Ok(Self {
+            aes_encrypt_key,
+            aes_decrypt_key,
+            hmac_key,
             key_name,
             lifetime: 60 * 60 * 12,
             maximum_ciphertext_len: AtomicUsize::new(0),
@@ -100,7 +122,7 @@ impl AeadTicketer {
     }
 }
 
-impl ProducesTickets for AeadTicketer {
+impl ProducesTickets for Rfc5077Ticketer {
     fn enabled(&self) -> bool {
         true
     }
@@ -111,45 +133,53 @@ impl ProducesTickets for AeadTicketer {
 
     /// Encrypt `message` and return the ciphertext.
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        // Random nonce, because a counter is a privacy leak.
-        let mut nonce_buf = [0u8; 12];
-        SystemRandom::new()
-            .fill(&mut nonce_buf)
+        // Encrypt the ticket state - the cipher module handles generating a random IV of
+        // appropriate size, returning it in the `DecryptionContext`.
+        let mut encrypted_state = Vec::from(message);
+        let dec_ctx = self
+            .aes_encrypt_key
+            .encrypt(&mut encrypted_state)
             .ok()?;
-        let nonce = aead::Nonce::assume_unique_for_key(nonce_buf);
-        let aad = aead::Aad::from(self.key_name);
+        let iv: &[u8] = (&dec_ctx).try_into().ok()?;
 
-        // ciphertext structure is:
-        // key_name: [u8; 16]
-        // nonce: [u8; 12]
-        // message: [u8, _]
-        // tag: [u8; 16]
-
-        let mut ciphertext = Vec::with_capacity(
-            self.key_name.len() + nonce_buf.len() + message.len() + self.key.algorithm().tag_len(),
+        // Produce the MAC tag over the relevant context & encrypted state.
+        // Quoting RFC 5077:
+        //   "The Message Authentication Code (MAC) is calculated using HMAC-SHA-256 over
+        //    key_name (16 octets) and IV (16 octets), followed by the length of
+        //    the encrypted_state field (2 octets) and its contents (variable
+        //    length)."
+        let mut hmac_data =
+            Vec::with_capacity(self.key_name.len() + iv.len() + 2 + encrypted_state.len());
+        hmac_data.extend(&self.key_name);
+        hmac_data.extend(iv);
+        hmac_data.extend(
+            u16::try_from(encrypted_state.len())
+                .ok()?
+                .to_be_bytes(),
         );
+        hmac_data.extend(&encrypted_state);
+        let tag = hmac::sign(&self.hmac_key, &hmac_data);
+        let tag = tag.as_ref();
+
+        // Combine the context, the encrypted state, and the tag to produce the final ciphertext.
+        // Ciphertext structure is:
+        //   key_name: [u8; 16]
+        //   iv: [u8; 16]
+        //   encrypted_state: [u8, _]
+        //   mac tag: [u8; 32]
+        let mut ciphertext =
+            Vec::with_capacity(self.key_name.len() + iv.len() + encrypted_state.len() + tag.len());
         ciphertext.extend(self.key_name);
-        ciphertext.extend(nonce_buf);
-        ciphertext.extend(message);
-        let ciphertext = self
-            .key
-            .seal_in_place_separate_tag(
-                nonce,
-                aad,
-                &mut ciphertext[self.key_name.len() + nonce_buf.len()..],
-            )
-            .map(|tag| {
-                ciphertext.extend(tag.as_ref());
-                ciphertext
-            })
-            .ok()?;
+        ciphertext.extend(iv);
+        ciphertext.extend(encrypted_state);
+        ciphertext.extend(tag);
 
         self.maximum_ciphertext_len
             .fetch_max(ciphertext.len(), Ordering::SeqCst);
+
         Some(ciphertext)
     }
 
-    /// Decrypt `ciphertext` and recover the original message.
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
         if ciphertext.len()
             > self
@@ -161,48 +191,52 @@ impl ProducesTickets for AeadTicketer {
             return None;
         }
 
+        // Split off the key name from the remaining ciphertext.
         let (alleged_key_name, ciphertext) = try_split_at(ciphertext, self.key_name.len())?;
 
-        let (nonce, ciphertext) = try_split_at(ciphertext, self.alg.nonce_len())?;
+        // Split off the IV from the remaining ciphertext.
+        let (iv, ciphertext) = try_split_at(ciphertext, AES_CBC_IV_LEN)?;
 
-        // checking the key_name is the expected one, *and* then putting it into the
-        // additionally authenticated data is duplicative.  this check quickly rejects
-        // tickets for a different ticketer (see `TicketSwitcher`), while including it
-        // in the AAD ensures it is authenticated independent of that check and that
-        // any attempted attack on the integrity such as [^1] must happen for each
-        // `key_label`, not over a population of potential keys.  this approach
-        // is overall similar to [^2].
-        //
-        // [^1]: https://eprint.iacr.org/2020/1491.pdf
-        // [^2]: "Authenticated Encryption with Key Identification", fig 6
-        //       <https://eprint.iacr.org/2022/1680.pdf>
-        if ConstantTimeEq::ct_ne(&self.key_name[..], alleged_key_name).into() {
-            #[cfg(debug_assertions)]
-            debug!("rejected ticket with wrong ticket_name");
-            return None;
-        }
+        // And finally, split the encrypted state from the tag.
+        let tag_len = self
+            .hmac_key
+            .algorithm()
+            .digest_algorithm()
+            .output_len();
+        let (enc_state, mac) = try_split_at(ciphertext, ciphertext.len() - tag_len)?;
 
-        // This won't fail since `nonce` has the required length.
-        let nonce = aead::Nonce::try_assume_unique_for_key(nonce).ok()?;
+        // Reconstitute the HMAC data to verify the tag.
+        let mut hmac_data =
+            Vec::with_capacity(alleged_key_name.len() + iv.len() + 2 + enc_state.len());
+        hmac_data.extend(alleged_key_name);
+        hmac_data.extend(iv);
+        hmac_data.extend(
+            u16::try_from(enc_state.len())
+                .ok()?
+                .to_be_bytes(),
+        );
+        hmac_data.extend(enc_state);
+        hmac::verify(&self.hmac_key, &hmac_data, mac).ok()?;
 
-        let mut out = Vec::from(ciphertext);
+        // Convert the raw IV back into an appropriate decryption context.
+        let iv = iv::FixedLength::try_from(iv).ok()?;
+        let dec_context = DecryptionContext::Iv128(iv);
 
-        let plain_len = self
-            .key
-            .open_in_place(nonce, aead::Aad::from(alleged_key_name), &mut out)
-            .ok()?
-            .len();
-        out.truncate(plain_len);
+        // And finally, decrypt the encrypted state.
+        let mut out = Vec::from(enc_state);
+        let plaintext = self
+            .aes_decrypt_key
+            .decrypt(&mut out, dec_context)
+            .ok()?;
 
-        Some(out)
+        Some(plaintext.into())
     }
 }
 
-impl Debug for AeadTicketer {
+impl Debug for Rfc5077Ticketer {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // Note: we deliberately omit the key from the debug output.
-        f.debug_struct("AeadTicketer")
-            .field("alg", &self.alg)
+        // Note: we deliberately omit keys from the debug output.
+        f.debug_struct("Rfc5077Ticketer")
             .field("lifetime", &self.lifetime)
             .finish()
     }
@@ -313,8 +347,7 @@ mod tests {
 
         let t = make_ticket_generator().unwrap();
 
-        let expect = format!("AeadTicketer {{ alg: {TICKETER_AEAD:?}, lifetime: 43200 }}");
-        assert_eq!(format!("{:?}", t), expect);
+        assert_eq!(format!("{:?}", t), "Rfc5077Ticketer { lifetime: 43200 }");
         assert!(t.enabled());
         assert_eq!(t.lifetime(), 43200);
     }

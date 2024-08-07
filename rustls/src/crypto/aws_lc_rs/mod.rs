@@ -249,10 +249,6 @@ mod ring_shim {
     }
 }
 
-/// AEAD algorithm that is used by `mod ticketer`.
-#[cfg(any(feature = "std", feature = "hashbrown"))]
-pub(super) static TICKETER_AEAD: &ring_like::aead::Algorithm = &ring_like::aead::AES_256_GCM;
-
 /// Are we in FIPS mode?
 pub(super) fn fips() -> bool {
     aws_lc_rs::try_fips_mode().is_ok()
