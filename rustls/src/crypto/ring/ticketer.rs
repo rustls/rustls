@@ -54,25 +54,7 @@ impl Ticketer {
 }
 
 fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
-    let mut key = [0u8; 32];
-    SystemRandom::new()
-        .fill(&mut key)
-        .map_err(|_| GetRandomFailed)?;
-
-    let key = aead::UnboundKey::new(TICKETER_AEAD, &key).unwrap();
-
-    let mut key_name = [0u8; 16];
-    SystemRandom::new()
-        .fill(&mut key_name)
-        .map_err(|_| GetRandomFailed)?;
-
-    Ok(Box::new(AeadTicketer {
-        alg: TICKETER_AEAD,
-        key: aead::LessSafeKey::new(key),
-        key_name,
-        lifetime: 60 * 60 * 12,
-        maximum_ciphertext_len: AtomicUsize::new(0),
-    }))
+    Ok(Box::new(AeadTicketer::new()?))
 }
 
 /// This is a `ProducesTickets` implementation which uses
@@ -94,6 +76,30 @@ struct AeadTicketer {
     /// to be cryptographically hard if the key is full-entropy (as it
     /// is here).
     maximum_ciphertext_len: AtomicUsize,
+}
+
+impl AeadTicketer {
+    fn new() -> Result<Self, GetRandomFailed> {
+        let mut key = [0u8; 32];
+        SystemRandom::new()
+            .fill(&mut key)
+            .map_err(|_| GetRandomFailed)?;
+
+        let key = aead::UnboundKey::new(TICKETER_AEAD, &key).unwrap();
+
+        let mut key_name = [0u8; 16];
+        SystemRandom::new()
+            .fill(&mut key_name)
+            .map_err(|_| GetRandomFailed)?;
+
+        Ok(Self {
+            alg: TICKETER_AEAD,
+            key: aead::LessSafeKey::new(key),
+            key_name,
+            lifetime: 60 * 60 * 12,
+            maximum_ciphertext_len: AtomicUsize::new(0),
+        })
+    }
 }
 
 impl ProducesTickets for AeadTicketer {
