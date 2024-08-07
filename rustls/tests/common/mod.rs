@@ -9,7 +9,10 @@ use once_cell::sync::OnceCell;
 use pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName, UnixTime,
 };
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::danger::{
+    HandshakeSignatureValid, IncrementalVerifier, PeerCertVerified, ServerCertVerified,
+    ServerCertVerifier, StoringServerVerifier,
+};
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::CryptoProvider;
@@ -849,9 +852,19 @@ pub struct MockServerVerifier {
     tls13_signature_error: Option<Error>,
     signature_schemes: Vec<SignatureScheme>,
     expected_ocsp_response: Option<Vec<u8>>,
+    only_verifies_cert_after_n_tries: usize,
+    only_verifies_sig_after_n_tries: usize,
 }
 
 impl ServerCertVerifier for MockServerVerifier {
+    fn start(&self, verifier: &Arc<dyn ServerCertVerifier>) -> Box<dyn IncrementalVerifier> {
+        Box::new(MockIncrementalVerifier {
+            parent: StoringServerVerifier::new(verifier.clone()),
+            cert_countdown: self.only_verifies_cert_after_n_tries,
+            sig_countdown: self.only_verifies_sig_after_n_tries,
+        })
+    }
+
     fn verify_server_cert(
         &self,
         end_entity: &CertificateDer<'_>,
@@ -955,6 +968,20 @@ impl MockServerVerifier {
             ..Default::default()
         }
     }
+
+    pub fn only_verifies_cert_after_n_tries(n: usize) -> Self {
+        MockServerVerifier {
+            only_verifies_cert_after_n_tries: n,
+            ..Default::default()
+        }
+    }
+
+    pub fn only_verifies_sig_after_n_tries(n: usize) -> Self {
+        MockServerVerifier {
+            only_verifies_sig_after_n_tries: n,
+            ..Default::default()
+        }
+    }
 }
 
 impl Default for MockServerVerifier {
@@ -972,7 +999,66 @@ impl Default for MockServerVerifier {
                 SignatureScheme::ECDSA_NISTP521_SHA512,
             ],
             expected_ocsp_response: None,
+            only_verifies_cert_after_n_tries: 0,
+            only_verifies_sig_after_n_tries: 0,
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct MockIncrementalVerifier {
+    parent: StoringServerVerifier,
+
+    sig_countdown: usize,
+    cert_countdown: usize,
+}
+
+impl IncrementalVerifier for MockIncrementalVerifier {
+    fn add_peer_certificate(
+        &mut self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    ) {
+        self.parent
+            .add_peer_certificate(end_entity, intermediates, now);
+    }
+
+    fn add_server_name(&mut self, server_name: &ServerName<'_>) {
+        self.parent.add_server_name(server_name);
+    }
+
+    fn add_ocsp_response(&mut self, ocsp_response: &[u8]) {
+        self.parent
+            .add_ocsp_response(ocsp_response);
+    }
+
+    fn add_tls12_signature(&mut self, message: &[u8], dss: &DigitallySignedStruct) {
+        self.parent
+            .add_tls12_signature(message, dss);
+    }
+
+    fn add_tls13_signature(&mut self, message: &[u8], dss: &DigitallySignedStruct) {
+        self.parent
+            .add_tls13_signature(message, dss);
+    }
+
+    fn take_cert_verified(&mut self) -> Result<Option<PeerCertVerified>, Error> {
+        if self.cert_countdown == 0 {
+            return self.parent.take_cert_verified();
+        }
+
+        self.cert_countdown = self.cert_countdown.saturating_sub(1);
+        Ok(None)
+    }
+
+    fn take_signature_verified(&mut self) -> Result<Option<HandshakeSignatureValid>, Error> {
+        if self.sig_countdown == 0 {
+            return self.parent.take_signature_verified();
+        }
+
+        self.sig_countdown = self.sig_countdown.saturating_sub(1);
+        Ok(None)
     }
 }
 

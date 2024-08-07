@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use common::{
     do_handshake, do_handshake_until_both_error, make_client_config_with_versions,
-    make_pair_for_arc_configs, make_server_config, ErrorFromPeer, MockServerVerifier,
+    make_pair_for_arc_configs, make_server_config, transfer, ErrorFromPeer, MockServerVerifier,
     ALL_KEY_TYPES,
 };
-use rustls::{AlertDescription, Error, InvalidMessage};
+use rustls::{AlertDescription, Error, InvalidMessage, PendingOperation};
 
 #[test]
 fn client_can_override_certificate_verification() {
@@ -150,5 +150,91 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
                 ])
             );
         }
+    }
+}
+
+#[test]
+fn tmp_client_can_slowly_verify_cert() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let verifier = Arc::new(MockServerVerifier::only_verifies_cert_after_n_tries(3));
+
+        let server_config = Arc::new(make_server_config(*kt));
+
+        let mut client_config = make_client_config_with_versions(*kt, &[&rustls::version::TLS12]);
+        client_config
+            .dangerous()
+            .set_certificate_verifier(verifier.clone());
+
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+        transfer(&mut server, &mut client);
+
+        assert_eq!(
+            client
+                .process_new_packets()
+                .unwrap_err(),
+            Error::PendingOperation(PendingOperation::ServerCertificateVerification)
+        );
+        assert_eq!(
+            client
+                .process_new_packets()
+                .unwrap_err(),
+            Error::PendingOperation(PendingOperation::ServerCertificateVerification)
+        );
+        assert_eq!(
+            client
+                .process_new_packets()
+                .unwrap_err(),
+            Error::PendingOperation(PendingOperation::ServerCertificateVerification)
+        );
+        client.process_new_packets().unwrap();
+
+        do_handshake(&mut client, &mut server);
+    }
+}
+
+#[test]
+fn tmp_client_can_slowly_verify_signature() {
+    for kt in ALL_KEY_TYPES.iter() {
+        let verifier = Arc::new(MockServerVerifier::only_verifies_sig_after_n_tries(3));
+
+        let server_config = Arc::new(make_server_config(*kt));
+
+        let mut client_config = make_client_config_with_versions(*kt, &[&rustls::version::TLS12]);
+        client_config
+            .dangerous()
+            .set_certificate_verifier(verifier.clone());
+
+        let (mut client, mut server) =
+            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
+
+        transfer(&mut client, &mut server);
+        server.process_new_packets().unwrap();
+        transfer(&mut server, &mut client);
+
+        assert_eq!(
+            client
+                .process_new_packets()
+                .unwrap_err(),
+            Error::PendingOperation(PendingOperation::ServerCertificateVerification)
+        );
+        assert_eq!(
+            client
+                .process_new_packets()
+                .unwrap_err(),
+            Error::PendingOperation(PendingOperation::ServerCertificateVerification)
+        );
+        assert_eq!(
+            client
+                .process_new_packets()
+                .unwrap_err(),
+            Error::PendingOperation(PendingOperation::ServerCertificateVerification)
+        );
+        client.process_new_packets().unwrap();
+
+        do_handshake(&mut client, &mut server);
     }
 }
