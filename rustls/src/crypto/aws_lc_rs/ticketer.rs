@@ -90,7 +90,7 @@ impl AeadTicketer {
             .fill(&mut key_name)
             .map_err(|_| GetRandomFailed)?;
 
-        Ok(Self {
+        Ok(AeadTicketer {
             alg: TICKETER_AEAD,
             key: aead::LessSafeKey::new(key),
             key_name,
