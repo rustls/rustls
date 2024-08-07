@@ -100,6 +100,7 @@ impl ProducesTickets for AeadTicketer {
     fn enabled(&self) -> bool {
         true
     }
+
     fn lifetime(&self) -> u32 {
         self.lifetime
     }
