@@ -514,7 +514,7 @@ pub use crate::enums::{
 };
 pub use crate::error::{
     CertRevocationListError, CertificateError, EncryptedClientHelloError, Error, InconsistentKeys,
-    InvalidMessage, OtherError, PeerIncompatible, PeerMisbehaved,
+    InvalidMessage, OtherError, PeerIncompatible, PeerMisbehaved, PendingOperation,
 };
 pub use crate::key_log::{KeyLog, NoKeyLog};
 #[cfg(feature = "std")]
@@ -563,7 +563,10 @@ pub mod client {
     pub mod danger {
         pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
-        pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+        pub use crate::verify::{
+            HandshakeSignatureValid, IncrementalVerifier, PeerCertVerified, ServerCertVerified,
+            ServerCertVerifier, StoringServerVerifier,
+        };
     }
 
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
@@ -608,7 +611,7 @@ pub mod server {
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
-        pub use crate::verify::{ClientCertVerified, ClientCertVerifier};
+        pub use crate::verify::{ClientCertVerified, ClientCertVerifier, PeerCertVerified};
     }
 }
 

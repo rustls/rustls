@@ -5,7 +5,7 @@ use pki_types::CertificateDer;
 
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
-use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::error::{Error, InvalidMessage, PeerMisbehaved, PendingOperation};
 #[cfg(feature = "logging")]
 use crate::log::{debug, error, warn};
 use crate::msgs::alert::AlertMessagePayload;
@@ -181,10 +181,10 @@ impl CommonState {
     pub(crate) fn process_main_protocol<Data>(
         &mut self,
         msg: Message<'_>,
-        mut state: Box<dyn State<Data>>,
+        state: Box<dyn State<Data>>,
         data: &mut Data,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
+    ) -> Result<Transition<'static, Data>, Error> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotiation requests.  These can occur any time.
         if self.may_receive_application_data && !self.is_tls13() {
@@ -196,7 +196,7 @@ impl CommonState {
                 self.temper_counters
                     .received_renegotiation_request()?;
                 self.send_warning_alert(AlertDescription::NoRenegotiation);
-                return Ok(state);
+                return Ok(Transition::Next(state));
             }
         }
 
@@ -206,10 +206,16 @@ impl CommonState {
             sendable_plaintext,
         };
         match state.handle(&mut cx, msg) {
-            Ok(next) => {
-                state = next.into_owned();
-                Ok(state)
-            }
+            Ok(Transition::Next(next)) => Ok(Transition::Next(next.into_owned())),
+            Ok(Transition::Blocked {
+                current,
+                message,
+                why,
+            }) => Ok(Transition::Blocked {
+                current: current.into_owned(),
+                message: message.into_owned(),
+                why,
+            }),
             Err(e @ Error::InappropriateMessage { .. })
             | Err(e @ Error::InappropriateHandshakeMessage { .. }) => {
                 Err(self.send_fatal_alert(AlertDescription::UnexpectedMessage, e))
@@ -382,7 +388,7 @@ impl CommonState {
 
     /// Mark the connection as ready to send application data.
     ///
-    /// Also flush `sendable_plaintext` if it is `Some`.  
+    /// Also flush `sendable_plaintext` if it is `Some`.
     pub(crate) fn start_outgoing_traffic(
         &mut self,
         sendable_plaintext: &mut Option<&mut ChunkVecBuffer>,
@@ -395,7 +401,7 @@ impl CommonState {
 
     /// Mark the connection as ready to send and receive application data.
     ///
-    /// Also flush `sendable_plaintext` if it is `Some`.  
+    /// Also flush `sendable_plaintext` if it is `Some`.
     pub(crate) fn start_traffic(&mut self, sendable_plaintext: &mut Option<&mut ChunkVecBuffer>) {
         self.may_receive_application_data = true;
         self.start_outgoing_traffic(sendable_plaintext);
@@ -815,11 +821,15 @@ impl IoState {
 }
 
 pub(crate) trait State<Data>: Send + Sync {
+    /// Handle the next `message` in the protocol.
+    ///
+    /// Return a [`Transition`] describing what to do next,
+    /// or an `Result::Err` to end the state machine.
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
         message: Message<'m>,
-    ) -> Result<Box<dyn State<Data> + 'm>, Error>
+    ) -> Result<Transition<'m, Data>, Error>
     where
         Self: 'm;
 
@@ -843,6 +853,30 @@ pub(crate) trait State<Data>: Send + Sync {
     fn handle_decrypt_error(&self) {}
 
     fn into_owned(self: Box<Self>) -> Box<dyn State<Data> + 'static>;
+}
+
+/// This is an output of [`State::handle()`]
+///
+/// It contains the next step in the state machine.
+pub(crate) enum Transition<'a, Data> {
+    /// Transition to the next state.
+    ///
+    /// The current state was consumed.
+    Next(Box<dyn State<Data> + 'a>),
+
+    /// The current state is blocked.
+    ///
+    /// `current` is the current state; returned so it is not consumed.
+    /// Likewise, `message` is the current message.
+    /// `why` describes the operation that it is waiting on.
+    ///
+    /// `handle()` should be called again with the same message.  It will
+    /// make progress when possible.
+    Blocked {
+        current: Box<dyn State<Data> + 'a>,
+        message: Message<'a>,
+        why: PendingOperation,
+    },
 }
 
 pub(crate) struct Context<'a, Data> {

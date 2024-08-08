@@ -102,6 +102,12 @@ pub enum Error {
     /// [`keys_match`]: crate::crypto::signer::CertifiedKey::keys_match
     InconsistentKeys(InconsistentKeys),
 
+    /// A asynchronous operation is pending.
+    ///
+    /// Once the relevant operation completes, re-try this call to
+    /// advance the handshake.
+    PendingOperation(PendingOperation),
+
     /// Any other error.
     ///
     /// This variant should only be used when the error is not better described by a more
@@ -110,6 +116,28 @@ pub enum Error {
     ///
     /// Enums holding this variant will never compare equal to each other.
     Other(OtherError),
+}
+
+/// Which operations may complete asynchronously.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PendingOperation {
+    ServerCertificateVerification,
+}
+
+impl From<PendingOperation> for Error {
+    #[inline]
+    fn from(op: PendingOperation) -> Self {
+        Self::PendingOperation(op)
+    }
+}
+
+impl fmt::Display for PendingOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ServerCertificateVerification => write!(f, "server certificate verification"),
+        }
+    }
 }
 
 /// Specific failure cases from [`keys_match`].
@@ -596,6 +624,7 @@ impl fmt::Display for Error {
                 write!(f, "keys may not be consistent: {:?}", why)
             }
             Self::General(ref err) => write!(f, "unexpected error: {}", err),
+            Self::PendingOperation(op) => write!(f, "blocked on asynchronous {op}"),
             Self::Other(ref err) => write!(f, "other error: {}", err),
         }
     }
@@ -676,7 +705,7 @@ mod tests {
     use std::prelude::v1::*;
     use std::{println, vec};
 
-    use super::{Error, InconsistentKeys, InvalidMessage};
+    use super::{Error, InconsistentKeys, InvalidMessage, PendingOperation};
     use crate::error::{CertRevocationListError, OtherError};
 
     #[test]
@@ -766,6 +795,7 @@ mod tests {
             Error::InconsistentKeys(InconsistentKeys::KeyMismatch),
             Error::InconsistentKeys(InconsistentKeys::Unknown),
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
+            Error::PendingOperation(PendingOperation::ServerCertificateVerification),
             Error::Other(OtherError(
                 #[cfg(feature = "std")]
                 alloc::sync::Arc::from(Box::from("")),

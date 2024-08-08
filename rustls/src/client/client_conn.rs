@@ -10,7 +10,7 @@ use super::handy::NoClientSessionStorage;
 use super::hs;
 use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
-use crate::common_state::{CommonState, Protocol, Side};
+use crate::common_state::{CommonState, Protocol, Side, Transition};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -815,7 +815,9 @@ impl ConnectionCore<ClientConnectionData> {
             sendable_plaintext: None,
         };
 
-        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        let state = match hs::start_handshake(name, extra_exts, config, &mut cx)? {
+            Transition::Next(current) | Transition::Blocked { current, .. } => current,
+        };
         Ok(Self::new(state, data, common_state))
     }
 

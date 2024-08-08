@@ -10,11 +10,11 @@ use std::io;
 
 use pki_types::{DnsName, UnixTime};
 
-use super::hs;
+use super::hs::{self, NextStateOrError};
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
-use crate::common_state::{Protocol, State};
+use crate::common_state::{Protocol, State, Transition};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -937,7 +937,7 @@ impl Accepted {
 
         let ch = Self::client_hello_payload(&self.message);
         let new = match state.with_certified_key(self.sig_schemes, ch, &self.message, &mut cx) {
-            Ok(new) => new,
+            Ok(Transition::Next(current) | Transition::Blocked { current, .. }) => current,
             Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
         };
 
@@ -974,7 +974,7 @@ impl State<ServerConnectionData> for Accepting {
         self: Box<Self>,
         _cx: &mut hs::ServerContext<'_>,
         _m: Message<'m>,
-    ) -> Result<Box<dyn State<ServerConnectionData> + 'm>, Error>
+    ) -> NextStateOrError<'m>
     where
         Self: 'm,
     {
