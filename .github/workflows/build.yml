@@ -100,6 +100,9 @@ jobs:
       - name: cargo build (debug; rustls-provider-test)
         run: cargo build --locked -p rustls-provider-test
 
+      - name: cargo package --all-features -p rustls
+        run: cargo package --all-features -p rustls
+
   msrv:
     name: MSRV
     runs-on: ubuntu-latest
