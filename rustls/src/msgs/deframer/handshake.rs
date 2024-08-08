@@ -474,7 +474,7 @@ mod tests {
     #[test]
     fn handshake_flight() {
         // intended to be a realistic example
-        let mut input = include_bytes!("../handshake-test.1.bin").to_vec();
+        let mut input = include_bytes!("../../testdata/handshake-test.1.bin").to_vec();
         let locator = Locator::new(&input);
 
         let mut hs = HandshakeDeframer::default();
