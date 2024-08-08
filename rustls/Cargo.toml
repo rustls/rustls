@@ -11,6 +11,7 @@ repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 autobenches = false
 autotests = false
+exclude = ["src/testdata"]
 build = "build.rs"
 
 [build-dependencies]
