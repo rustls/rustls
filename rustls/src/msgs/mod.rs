@@ -28,7 +28,7 @@ mod tests {
 
     #[test]
     fn smoketest() {
-        let bytes = include_bytes!("handshake-test.1.bin");
+        let bytes = include_bytes!("../testdata/handshake-test.1.bin");
         let mut r = Reader::init(bytes);
 
         while r.any_left() {

@@ -1,5 +1,3 @@
-#![allow(clippy::duplicate_mod)]
-
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -11,10 +9,10 @@ use subtle::ConstantTimeEq;
 
 use super::ring_like::aead;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
-use super::TICKETER_AEAD;
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::debug;
+use crate::polyfill::try_split_at;
 use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
 
@@ -22,11 +20,10 @@ use crate::server::ProducesTickets;
 pub struct Ticketer {}
 
 impl Ticketer {
-    /// Make the recommended Ticketer.  This produces tickets
+    /// Make the recommended `Ticketer`.  This produces tickets
     /// with a 12 hour life and randomly generated keys.
     ///
-    /// The encryption mechanism used is injected via TICKETER_AEAD;
-    /// it must take a 256-bit key and 96-bit nonce.
+    /// The encryption mechanism used is Chacha20Poly1305.
     #[cfg(feature = "std")]
     pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
         Ok(Arc::new(crate::ticketer::TicketSwitcher::new(
@@ -35,7 +32,7 @@ impl Ticketer {
         )?))
     }
 
-    /// Make the recommended Ticketer.  This produces tickets
+    /// Make the recommended `Ticketer`.  This produces tickets
     /// with a 12 hour life and randomly generated keys.
     ///
     /// The encryption mechanism used is Chacha20Poly1305.
@@ -52,25 +49,7 @@ impl Ticketer {
 }
 
 fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
-    let mut key = [0u8; 32];
-    SystemRandom::new()
-        .fill(&mut key)
-        .map_err(|_| GetRandomFailed)?;
-
-    let key = aead::UnboundKey::new(TICKETER_AEAD, &key).unwrap();
-
-    let mut key_name = [0u8; 16];
-    SystemRandom::new()
-        .fill(&mut key_name)
-        .map_err(|_| GetRandomFailed)?;
-
-    Ok(Box::new(AeadTicketer {
-        alg: TICKETER_AEAD,
-        key: aead::LessSafeKey::new(key),
-        key_name,
-        lifetime: 60 * 60 * 12,
-        maximum_ciphertext_len: AtomicUsize::new(0),
-    }))
+    Ok(Box::new(AeadTicketer::new()?))
 }
 
 /// This is a `ProducesTickets` implementation which uses
@@ -94,10 +73,35 @@ struct AeadTicketer {
     maximum_ciphertext_len: AtomicUsize,
 }
 
+impl AeadTicketer {
+    fn new() -> Result<Self, GetRandomFailed> {
+        let mut key = [0u8; 32];
+        SystemRandom::new()
+            .fill(&mut key)
+            .map_err(|_| GetRandomFailed)?;
+
+        let key = aead::UnboundKey::new(TICKETER_AEAD, &key).unwrap();
+
+        let mut key_name = [0u8; 16];
+        SystemRandom::new()
+            .fill(&mut key_name)
+            .map_err(|_| GetRandomFailed)?;
+
+        Ok(Self {
+            alg: TICKETER_AEAD,
+            key: aead::LessSafeKey::new(key),
+            key_name,
+            lifetime: 60 * 60 * 12,
+            maximum_ciphertext_len: AtomicUsize::new(0),
+        })
+    }
+}
+
 impl ProducesTickets for AeadTicketer {
     fn enabled(&self) -> bool {
         true
     }
+
     fn lifetime(&self) -> u32 {
         self.lifetime
     }
@@ -201,13 +205,7 @@ impl Debug for AeadTicketer {
     }
 }
 
-/// Non-panicking `let (nonce, ciphertext) = ciphertext.split_at(...)`.
-fn try_split_at(slice: &[u8], mid: usize) -> Option<(&[u8], &[u8])> {
-    match mid > slice.len() {
-        true => None,
-        false => Some(slice.split_at(mid)),
-    }
-}
+static TICKETER_AEAD: &aead::Algorithm = &aead::CHACHA20_POLY1305;
 
 #[cfg(test)]
 mod tests {

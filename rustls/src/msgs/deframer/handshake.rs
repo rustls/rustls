@@ -3,6 +3,7 @@ use core::mem;
 use core::ops::Range;
 
 use super::buffers::{Coalescer, Delocator, Locator};
+use crate::error::InvalidMessage;
 use crate::msgs::codec::{u24, Codec};
 use crate::msgs::message::InboundPlainMessage;
 use crate::{ContentType, ProtocolVersion};
@@ -155,12 +156,22 @@ impl HandshakeDeframer {
     ///            |
     /// spans = [ { bounds = (5, 18), size = Some(9), .. } ]
     /// ```
-    pub(crate) fn coalesce(&mut self, containing_buffer: &mut [u8]) {
+    pub(crate) fn coalesce(&mut self, containing_buffer: &mut [u8]) -> Result<(), InvalidMessage> {
         // Strategy: while there is work to do, scan `spans`
         // for a pair where the first is not complete.  move
         // the second down towards the first, then reparse the contents.
         while let Some(i) = self.requires_coalesce() {
             self.coalesce_one(i, Coalescer::new(containing_buffer));
+        }
+
+        // check resulting spans pass our imposed length limit
+        match self
+            .spans
+            .iter()
+            .any(|span| span.size.unwrap_or_default() > MAX_HANDSHAKE_SIZE)
+        {
+            true => Err(InvalidMessage::HandshakePayloadTooLarge),
+            false => Ok(()),
         }
     }
 
@@ -354,6 +365,11 @@ impl FragmentSpan {
 
 const HANDSHAKE_HEADER_LEN: usize = 1 + 3;
 
+/// TLS allows for handshake messages of up to 16MB.  We
+/// restrict that to 64KB to limit potential for denial-of-
+/// service.
+const MAX_HANDSHAKE_SIZE: usize = 0xffff;
+
 #[cfg(test)]
 mod tests {
     use std::vec;
@@ -385,7 +401,7 @@ mod tests {
         assert_eq!(hs.requires_coalesce(), Some(0));
 
         std::println!("before: {hs:?}");
-        hs.coalesce(&mut input);
+        hs.coalesce(&mut input).unwrap();
         std::println!("after:  {hs:?}");
 
         let (msg, discard) = hs.iter(&input).next().unwrap();
@@ -407,7 +423,7 @@ mod tests {
         add_bytes(&mut hs, &input[9..14], &input);
         assert_eq!(hs.spans.len(), 2);
 
-        hs.coalesce(&mut input);
+        hs.coalesce(&mut input).unwrap();
         assert_eq!(hs.spans.len(), 1);
 
         let (msg, discard) = std::dbg!(hs.iter(&input).next().unwrap());
@@ -417,6 +433,23 @@ mod tests {
 
         input.drain(..discard);
         assert_eq!(input, &[0]);
+    }
+
+    #[test]
+    fn coalesce_rejects_excess_size_message() {
+        const X: u8 = 0xff;
+        let mut input = vec![0x21, 0x01, 0x00, X, 0x00, 0xab, X];
+        let mut hs = HandshakeDeframer::default();
+
+        // split header over multiple messages, which motivates doing
+        // this check in `coalesce()`
+        add_bytes(&mut hs, &input[0..3], &input);
+        add_bytes(&mut hs, &input[4..6], &input);
+
+        assert_eq!(
+            hs.coalesce(&mut input),
+            Err(InvalidMessage::HandshakePayloadTooLarge)
+        );
     }
 
     #[test]
@@ -441,7 +474,7 @@ mod tests {
     #[test]
     fn handshake_flight() {
         // intended to be a realistic example
-        let mut input = include_bytes!("../handshake-test.1.bin").to_vec();
+        let mut input = include_bytes!("../../testdata/handshake-test.1.bin").to_vec();
         let locator = Locator::new(&input);
 
         let mut hs = HandshakeDeframer::default();
@@ -455,7 +488,7 @@ mod tests {
             hs.input_message(plain, &locator, iter.bytes_consumed());
         }
 
-        hs.coalesce(&mut input[..]);
+        hs.coalesce(&mut input[..]).unwrap();
 
         let mut iter = hs.iter(&input[..]);
         for _ in 0..4 {

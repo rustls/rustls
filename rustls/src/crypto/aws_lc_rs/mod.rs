@@ -15,7 +15,7 @@ use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
 use crate::suites::SupportedCipherSuite;
 use crate::webpki::WebPkiSupportedAlgorithms;
-use crate::Error;
+use crate::{Error, OtherError};
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
@@ -31,7 +31,6 @@ pub(crate) mod kx;
 #[path = "../ring/quic.rs"]
 pub(crate) mod quic;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
-#[path = "../ring/ticketer.rs"]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
 pub(crate) mod tls12;
@@ -250,13 +249,20 @@ mod ring_shim {
     }
 }
 
-/// AEAD algorithm that is used by `mod ticketer`.
-#[cfg(any(feature = "std", feature = "hashbrown"))]
-pub(super) static TICKETER_AEAD: &ring_like::aead::Algorithm = &ring_like::aead::AES_256_GCM;
-
 /// Are we in FIPS mode?
 pub(super) fn fips() -> bool {
     aws_lc_rs::try_fips_mode().is_ok()
+}
+
+pub(super) fn unspecified_err(_e: aws_lc_rs::error::Unspecified) -> Error {
+    #[cfg(feature = "std")]
+    {
+        Error::Other(OtherError(Arc::new(_e)))
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        Error::Other(OtherError())
+    }
 }
 
 #[cfg(test)]

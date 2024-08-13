@@ -890,7 +890,7 @@ fn cannot_decode_huge_certificate() {
 
 #[test]
 fn can_decode_server_hello_from_api_devicecheck_apple_com() {
-    let data = include_bytes!("hello-api.devicecheck.apple.com.bin");
+    let data = include_bytes!("../testdata/hello-api.devicecheck.apple.com.bin");
     let mut r = Reader::init(data);
     let hm = HandshakeMessagePayload::read(&mut r).unwrap();
     println!("msg: {:?}", hm);

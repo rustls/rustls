@@ -48,11 +48,11 @@ jobs:
         if: runner.os == 'Windows'
         uses: seanmiddleditch/gha-setup-ninja@v5
 
-      - name: Build main crate
-        run: cargo build --locked
+      - name: Build example programs
+        run: cargo build --locked -p rustls-examples
 
       - name: Run connect tests
-        run: cargo test --locked --manifest-path=connect-tests/Cargo.toml
+        run: cargo test --locked -p rustls-connect-tests --manifest-path=connect-tests/Cargo.toml
         env:
           RUST_BACKTRACE: 1
 
@@ -93,31 +93,31 @@ jobs:
         uses: seanmiddleditch/gha-setup-ninja@v5
 
       - name: Check simple client
-        run: cargo run --locked --bin simpleclient
+        run: cargo run --locked -p rustls-examples --bin simpleclient
 
       - name: Check limited client
-        run: cargo run --locked --bin limitedclient
+        run: cargo run --locked -p rustls-examples --bin limitedclient
 
       - name: Check simple 0rtt client
-        run: cargo run --locked --bin simple_0rtt_client
+        run: cargo run --locked -p rustls-examples --bin simple_0rtt_client
 
       - name: Check unbuffered client 
-        run: cargo run --locked --bin unbuffered-client
+        run: cargo run --locked -p rustls-examples --bin unbuffered-client
 
       - name: Check unbuffered tokio client 
-        run: cargo run --locked --bin unbuffered-async-client
+        run: cargo run --locked -p rustls-examples --bin unbuffered-async-client
 
       - name: Check unbuffered async-std client 
-        run: cargo run --locked --bin unbuffered-async-client --features=async-std
+        run: cargo run --locked -p rustls-examples --bin unbuffered-async-client --features=async-std
 
       # Test the server_acceptor binary builds - we invoke with --help since it
       # will run a server process that doesn't exit when invoked with no args
       - name: Check server acceptor
-        run: cargo run --locked --bin server_acceptor -- --help
+        run: cargo run --locked -p rustls-examples --bin server_acceptor -- --help
 
       - name: Check ech-client
         run: >
-          cargo run --locked --bin ech-client -- --host defo.ie defo.ie www.defo.ie | 
+          cargo run --locked -p rustls-examples --bin ech-client -- --host defo.ie defo.ie www.defo.ie |
             grep 'SSL_ECH_STATUS: success'
 
       - name: Check provider-example client
