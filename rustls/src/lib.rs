@@ -284,6 +284,9 @@
 //!
 //!   See [manual::_06_fips] for more details.
 //!
+//! - `custom-provider`: disables implicit use of built-in providers (`aws-lc-rs` or `ring`). This forces
+//!    applications to manually install one, for instance, when using a custom `CryptoProvider`.
+//!
 //! - `tls12` (enabled by default): enable support for TLS version 1.2. Note that, due to the
 //!   additive nature of Cargo features and because it is enabled by default, other crates
 //!   in your dependency graph could re-enable it for your application. If you want to disable

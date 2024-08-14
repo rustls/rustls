@@ -40,6 +40,7 @@ aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 ring = ["dep:ring", "webpki/ring"]
+custom-provider = []
 tls12 = []
 read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]

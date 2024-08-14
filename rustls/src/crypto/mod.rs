@@ -90,7 +90,8 @@ pub use crate::suites::CipherSuiteCommon;
 /// - _libraries_ should use [`ClientConfig::builder()`]/[`ServerConfig::builder()`]
 ///   or otherwise rely on the [`CryptoProvider::get_default()`] provider.
 /// - _applications_ should call [`CryptoProvider::install_default()`] early
-///   in their `fn main()`.
+///   in their `fn main()`. If _applications_ uses a custom provider based on the one built-in,
+///   they can activate the `custom-provider` feature to ensure its usage.
 ///
 /// # Using a specific `CryptoProvider`
 ///
@@ -104,6 +105,10 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// - [`client::WebPkiServerVerifier::builder_with_provider()`]
 /// - [`server::WebPkiClientVerifier::builder_with_provider()`]
+///
+/// If you install a custom provider and want to avoid any accidental use of a built-in provider, the feature
+/// `custom-provider` can be activated to ensure your custom provider is used everywhere
+/// and not a built-in one. This will disable any implicit use of a built-in provider.
 ///
 /// # Making a custom `CryptoProvider`
 ///
@@ -265,15 +270,24 @@ impl CryptoProvider {
     /// Returns a provider named unambiguously by rustls crate features.
     ///
     /// This function returns `None` if the crate features are ambiguous (ie, specify two
-    /// providers), or specify no providers.  In both cases the application should
-    /// explicitly specify the provider to use with [`CryptoProvider::install_default`].
+    /// providers), or specify no providers, or the feature `custom-provider` is activated.  
+    /// In all cases the application should explicitly specify the provider to use
+    /// with [`CryptoProvider::install_default`].
     fn from_crate_features() -> Option<Self> {
-        #[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
+        #[cfg(all(
+            feature = "ring",
+            not(feature = "aws_lc_rs"),
+            not(feature = "custom-provider")
+        ))]
         {
             return Some(ring::default_provider());
         }
 
-        #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+        #[cfg(all(
+            feature = "aws_lc_rs",
+            not(feature = "ring"),
+            not(feature = "custom-provider")
+        ))]
         {
             return Some(aws_lc_rs::default_provider());
         }
