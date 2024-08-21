@@ -187,8 +187,8 @@ impl SessionId {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UnknownExtension {
-    pub(crate) typ: ExtensionType,
-    pub(crate) payload: Payload<'static>,
+    pub typ: ExtensionType,
+    pub payload: Payload<'static>,
 }
 
 impl UnknownExtension {
