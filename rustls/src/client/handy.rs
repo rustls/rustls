@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+use crate::alias::Arc;
 
 use pki_types::ServerName;
 

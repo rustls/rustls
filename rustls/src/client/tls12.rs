@@ -1,6 +1,7 @@
+use crate::alias::Arc;
+
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 

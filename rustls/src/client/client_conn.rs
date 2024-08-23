@@ -1,4 +1,5 @@
-use alloc::sync::Arc;
+use crate::alias::Arc;
+
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -31,6 +32,7 @@ use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
 #[cfg(doc)]
 use crate::{crypto, DistinguishedName};
 
+//// XXX TODO FIX API DOC HERE
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
 ///
@@ -41,7 +43,7 @@ use crate::{crypto, DistinguishedName};
 /// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
-pub trait ClientSessionStore: fmt::Debug + Send + Sync {
+pub_api_trait!(ClientSessionStore, {
     /// Remember what `NamedGroup` the given server chose.
     fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup);
 
@@ -91,11 +93,12 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
         &self,
         server_name: &ServerName<'static>,
     ) -> Option<persist::Tls13ClientSessionValue>;
-}
+});
 
+//// XXX TODO FIX API DOC HERE
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
+pub_api_trait!(ResolvesClientCert, {
     /// Resolve a client certificate chain/private key to use as the client's
     /// identity.
     ///
@@ -123,7 +126,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
-}
+});
 
 /// Common configuration for (typically) all connections made by a program.
 ///
@@ -266,6 +269,7 @@ impl ClientConfig {
     /// and safe protocol version defaults.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "defaultproviderenabled")]
     #[cfg(feature = "std")]
     pub fn builder() -> ConfigBuilder<Self, WantsVerifier> {
         Self::builder_with_protocol_versions(versions::DEFAULT_VERSIONS)
@@ -283,6 +287,7 @@ impl ClientConfig {
     ///   the crate features and process default.
     ///
     /// For more information, see the [`ConfigBuilder`] documentation.
+    #[cfg(feature = "defaultproviderenabled")]
     #[cfg(feature = "std")]
     pub fn builder_with_protocol_versions(
         versions: &[&'static versions::SupportedProtocolVersion],
@@ -503,7 +508,7 @@ pub enum Tls12Resumption {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use alloc::sync::Arc;
+    use crate::alias::Arc;
 
     use super::verify::ServerCertVerifier;
     use super::ClientConfig;
@@ -603,7 +608,8 @@ impl EarlyData {
 
 #[cfg(feature = "std")]
 mod connection {
-    use alloc::sync::Arc;
+    use crate::alias::Arc;
+
     use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};

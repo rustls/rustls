@@ -1,5 +1,6 @@
 #[cfg(feature = "std")]
-use alloc::sync::Arc;
+use crate::alias::Arc;
+
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -75,6 +76,7 @@ fn pki_error(error: webpki::Error) -> Error {
         }
 
         _ => CertificateError::Other(OtherError(
+            #[cfg(not(feature = "withrcalias"))]
             #[cfg(feature = "std")]
             Arc::new(error),
         ))
@@ -99,6 +101,7 @@ fn crl_error(e: webpki::Error) -> CertRevocationListError {
         UnsupportedRevocationReason => CertRevocationListError::UnsupportedRevocationReason,
 
         _ => CertRevocationListError::Other(OtherError(
+            #[cfg(not(feature = "withrcalias"))]
             #[cfg(feature = "std")]
             Arc::new(e),
         )),

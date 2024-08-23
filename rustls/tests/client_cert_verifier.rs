@@ -5,6 +5,10 @@
 use super::*;
 
 mod common;
+
+#[cfg(feature = "withrcalias")]
+use std::rc::Rc as Arc;
+#[cfg(not(feature = "withrcalias"))]
 use std::sync::Arc;
 
 use common::{

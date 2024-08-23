@@ -1,4 +1,5 @@
-use alloc::sync::Arc;
+use crate::alias::Arc;
+
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 

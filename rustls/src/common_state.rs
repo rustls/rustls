@@ -814,7 +814,7 @@ impl IoState {
     }
 }
 
-pub(crate) trait State<Data>: Send + Sync {
+internal_generic_state_trait!(State, Data, {
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut Context<'_, Data>,
@@ -843,7 +843,7 @@ pub(crate) trait State<Data>: Send + Sync {
     fn handle_decrypt_error(&self) {}
 
     fn into_owned(self: Box<Self>) -> Box<dyn State<Data> + 'static>;
-}
+});
 
 pub(crate) struct Context<'a, Data> {
     pub(crate) common: &'a mut CommonState,

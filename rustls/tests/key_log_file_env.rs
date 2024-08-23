@@ -25,6 +25,10 @@
 
 use std::env;
 use std::io::Write;
+
+#[cfg(feature = "withrcalias")]
+use std::rc::Rc as Arc;
+#[cfg(not(feature = "withrcalias"))]
 use std::sync::Arc;
 
 use super::*;

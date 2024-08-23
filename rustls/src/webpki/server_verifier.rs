@@ -1,4 +1,5 @@
-use alloc::sync::Arc;
+use crate::alias::Arc;
+
 use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTime};
@@ -151,6 +152,7 @@ impl WebPkiServerVerifier {
     /// Use [`Self::builder_with_provider`] if you wish to specify an explicit provider.
     ///
     /// For more information, see the [`ServerCertVerifierBuilder`] documentation.
+    #[cfg(feature = "defaultproviderenabled")]
     pub fn builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
         Self::builder_with_provider(
             roots,
@@ -302,7 +304,11 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 }
 
 test_for_each_provider! {
+    #[cfg(not(feature = "withrcalias"))]
     use std::sync::Arc;
+    #[cfg(feature = "withrcalias")]
+    use std::rc::Rc as Arc;
+
     use std::{vec, println};
     use std::prelude::v1::*;
 

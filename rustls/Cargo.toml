@@ -36,6 +36,11 @@ zlib-rs = { version = "0.2", optional = true }
 default = ["aws_lc_rs", "logging", "std", "tls12"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
+# XXX TODO NAMING - ADD SEPARATORS
+# XXX TODO ADD THIS TO DEFAULT FEATURES
+defaultproviderenabled = []
+# XXX TODO NAMING - ADD SEPARATORS
+withrcalias = []
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]

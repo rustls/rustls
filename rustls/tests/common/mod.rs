@@ -3,6 +3,10 @@
 
 use std::io;
 use std::ops::DerefMut;
+
+#[cfg(feature = "withrcalias")]
+use std::rc::Rc as Arc;
+#[cfg(not(feature = "withrcalias"))]
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
@@ -387,7 +391,11 @@ impl KeyType {
 pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     // ensure `ServerConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
-    if exactly_one_provider() {
+    if use_default_with_exactly_one_provider() {
+        #[cfg(not(feature = "defaultproviderenabled"))]
+        unreachable!("SHOULD NOT GET HERE WITH FEATURE NOT ENABLED: defaultproviderenabled");
+        // ONLY POSSIBLE to compile the following with feature enabled: defaultproviderenabled
+        #[cfg(feature = "defaultproviderenabled")]
         rustls::ServerConfig::builder()
     } else {
         rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
@@ -399,7 +407,11 @@ pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::Wa
 pub fn server_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    if exactly_one_provider() {
+    if use_default_with_exactly_one_provider() {
+        #[cfg(not(feature = "defaultproviderenabled"))]
+        unreachable!("SHOULD NOT GET HERE WITH FEATURE NOT ENABLED: defaultproviderenabled");
+        // ONLY POSSIBLE to compile the following with feature enabled: defaultproviderenabled
+        #[cfg(feature = "defaultproviderenabled")]
         rustls::ServerConfig::builder_with_protocol_versions(versions)
     } else {
         rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
@@ -411,7 +423,11 @@ pub fn server_config_builder_with_versions(
 pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     // ensure `ClientConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
-    if exactly_one_provider() {
+    if use_default_with_exactly_one_provider() {
+        #[cfg(not(feature = "defaultproviderenabled"))]
+        unreachable!("SHOULD NOT GET HERE WITH FEATURE NOT ENABLED: defaultproviderenabled");
+        // ONLY POSSIBLE to compile the following with feature enabled: defaultproviderenabled
+        #[cfg(feature = "defaultproviderenabled")]
         rustls::ClientConfig::builder()
     } else {
         rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
@@ -423,7 +439,11 @@ pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::Wa
 pub fn client_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    if exactly_one_provider() {
+    if use_default_with_exactly_one_provider() {
+        #[cfg(not(feature = "defaultproviderenabled"))]
+        unreachable!("SHOULD NOT GET HERE WITH FEATURE NOT ENABLED: defaultproviderenabled");
+        // ONLY POSSIBLE to compile the following with feature enabled: defaultproviderenabled
+        #[cfg(feature = "defaultproviderenabled")]
         rustls::ClientConfig::builder_with_protocol_versions(versions)
     } else {
         rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
@@ -604,7 +624,11 @@ pub fn make_client_config_with_verifier(
 }
 
 pub fn webpki_client_verifier_builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
-    if exactly_one_provider() {
+    if use_default_with_exactly_one_provider() {
+        // XXX TODO CLARIFY XXX
+        #[cfg(not(feature = "defaultproviderenabled"))]
+        panic!("NOT EXPECTED TO GET HERE");
+        #[cfg(feature = "defaultproviderenabled")]
         WebPkiClientVerifier::builder(roots)
     } else {
         WebPkiClientVerifier::builder_with_provider(roots, provider::default_provider().into())
@@ -612,7 +636,11 @@ pub fn webpki_client_verifier_builder(roots: Arc<RootCertStore>) -> ClientCertVe
 }
 
 pub fn webpki_server_verifier_builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
-    if exactly_one_provider() {
+    if use_default_with_exactly_one_provider() {
+        // XXX TODO CLARIFY XXX
+        #[cfg(not(feature = "defaultproviderenabled"))]
+        panic!("NOT EXPECTED TO GET HERE");
+        #[cfg(feature = "defaultproviderenabled")]
         WebPkiServerVerifier::builder(roots)
     } else {
         WebPkiServerVerifier::builder_with_provider(roots, provider::default_provider().into())
@@ -835,7 +863,13 @@ pub fn do_suite_and_kx_test(
     );
 }
 
-fn exactly_one_provider() -> bool {
+fn use_default_with_exactly_one_provider() -> bool {
+    // RETURNS true in case of the following conditions:
+    // - defaultproviderenabled feature is enabled
+    // - exactly one built-in provider feature is enabled
+    // OTHERWISE RETURNS false
+    #[cfg(not(feature = "defaultproviderenabled"))]
+    return false;
     cfg!(any(
         all(feature = "ring", not(feature = "aws_lc_rs")),
         all(feature = "aws_lc_rs", not(feature = "ring"))

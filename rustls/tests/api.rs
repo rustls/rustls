@@ -6,8 +6,13 @@ use std::fmt::Debug;
 use std::io::{self, IoSlice, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::{fmt, mem};
+
+#[cfg(feature = "withrcalias")]
+use std::rc::Rc as Arc;
+#[cfg(not(feature = "withrcalias"))]
+use std::sync::Arc;
 
 use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
@@ -1850,6 +1855,7 @@ fn client_flush_does_nothing() {
     assert!(matches!(client.writer().flush(), Ok(())));
 }
 
+#[cfg(not(feature = "withrcalias"))]
 #[allow(clippy::no_effect)]
 #[test]
 fn server_is_send_and_sync() {
@@ -1858,6 +1864,7 @@ fn server_is_send_and_sync() {
     &server as &dyn Sync;
 }
 
+#[cfg(not(feature = "withrcalias"))]
 #[allow(clippy::no_effect)]
 #[test]
 fn client_is_send_and_sync() {
@@ -5324,6 +5331,7 @@ fn test_client_sends_share_for_less_preferred_group() {
     client_2.process_new_packets().unwrap();
 }
 
+#[cfg(not(feature = "withrcalias"))]
 #[cfg(feature = "tls12")]
 #[test]
 fn test_tls13_client_resumption_does_not_reuse_tickets() {

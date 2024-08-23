@@ -1,5 +1,7 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
+
+use crate::alias::Arc;
+
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
@@ -10,6 +12,7 @@ use crate::error::{Error, InconsistentKeys};
 use crate::server::ParsedCertificate;
 use crate::x509;
 
+///// XXX TODO FIX DOC XXX
 /// An abstract signing key.
 ///
 /// This interface is used by rustls to use a private signing key
@@ -54,7 +57,8 @@ use crate::x509;
 /// [`ResolvesServerCertUsingSni`]: crate::server::ResolvesServerCertUsingSni
 /// [`ResolvesServerCert`]: crate::server::ResolvesServerCert
 /// [`ResolvesClientCert`]: crate::client::ResolvesClientCert
-pub trait SigningKey: Debug + Send + Sync {
+/////// XXX TODO FIX DOC XXX
+pub_api_trait!(SigningKey, {
     /// Choose a `SignatureScheme` from those offered.
     ///
     /// Expresses the choice by returning something that implements `Signer`,
@@ -69,10 +73,11 @@ pub trait SigningKey: Debug + Send + Sync {
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
-}
+});
 
+///// XXX TODO XXX XXX DOC XXX XXX
 /// A thing that can sign a message.
-pub trait Signer: Debug + Send + Sync {
+pub_api_trait!(Signer, {
     /// Signs `message` using the selected scheme.
     ///
     /// `message` is not hashed; the implementer must hash it using the hash function
@@ -83,7 +88,7 @@ pub trait Signer: Debug + Send + Sync {
 
     /// Reveals which scheme will be used when you call [`Self::sign()`].
     fn scheme(&self) -> SignatureScheme;
-}
+});
 
 /// A packaged-together certificate chain, matching `SigningKey` and
 /// optional stapled OCSP response.

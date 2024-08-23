@@ -16,20 +16,22 @@ use rustls::ClientConfig;
 mod common;
 use crate::common::*;
 
+#[cfg(feature = "defaultproviderenabled")]
 #[test]
-fn test_process_provider() {
+fn test_default_process_provider() {
     if dbg!(cfg!(all(feature = "ring", feature = "aws_lc_rs"))) {
-        test_explicit_choice_required();
+        test_explicit_choice_required_for_default_provider();
     } else if dbg!(cfg!(all(feature = "ring", not(feature = "aws_lc_rs")))) {
-        test_ring_used_as_implicit_provider();
+        test_ring_used_as_implicit_default_provider();
     } else if dbg!(cfg!(all(feature = "aws_lc_rs", not(feature = "ring")))) {
-        test_aws_lc_rs_used_as_implicit_provider();
+        test_aws_lc_rs_used_as_implicit_default_provider();
     } else {
         panic!("fix feature combinations");
     }
 }
 
-fn test_explicit_choice_required() {
+#[cfg(feature = "defaultproviderenabled")]
+fn test_explicit_choice_required_for_default_provider() {
     assert!(CryptoProvider::get_default().is_none());
     provider::default_provider()
         .install_default()
@@ -44,7 +46,8 @@ fn test_explicit_choice_required() {
     finish_client_config(KeyType::Rsa2048, ClientConfig::builder());
 }
 
-fn test_ring_used_as_implicit_provider() {
+#[cfg(feature = "defaultproviderenabled")]
+fn test_ring_used_as_implicit_default_provider() {
     assert!(CryptoProvider::get_default().is_none());
 
     // implicitly installs ring provider
@@ -57,7 +60,8 @@ fn test_ring_used_as_implicit_provider() {
     .contains("secure_random: Ring"));
 }
 
-fn test_aws_lc_rs_used_as_implicit_provider() {
+#[cfg(feature = "defaultproviderenabled")]
+fn test_aws_lc_rs_used_as_implicit_default_provider() {
     assert!(CryptoProvider::get_default().is_none());
 
     // implicitly installs aws-lc-rs provider
