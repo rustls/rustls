@@ -864,15 +864,10 @@ pub fn do_suite_and_kx_test(
 }
 
 fn use_default_with_exactly_one_provider() -> bool {
-    // RETURNS true in case of the following conditions:
-    // - defaultproviderenabled feature is enabled
-    // - exactly one built-in provider feature is enabled
-    // OTHERWISE RETURNS false
-    #[cfg(not(feature = "defaultproviderenabled"))]
-    return false;
-    cfg!(any(
-        all(feature = "ring", not(feature = "aws_lc_rs")),
-        all(feature = "aws_lc_rs", not(feature = "ring"))
+    cfg!(all(
+        feature = "defaultproviderenabled",
+        any(feature = "aws_lc_rs", feature = "ring"),
+        not(all(feature = "aws_lc_rs", feature = "ring"))
     ))
 }
 
