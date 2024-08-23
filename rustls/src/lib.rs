@@ -442,6 +442,9 @@ mod webpki;
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod internal {
+    pub mod alias {
+        pub use crate::alias::Arc;
+    }
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub mod base {

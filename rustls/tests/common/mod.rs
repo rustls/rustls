@@ -4,11 +4,6 @@
 use std::io;
 use std::ops::DerefMut;
 
-#[cfg(feature = "withrcalias")]
-use std::rc::Rc as Arc;
-#[cfg(not(feature = "withrcalias"))]
-use std::sync::Arc;
-
 use once_cell::sync::OnceCell;
 use pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName, UnixTime,
@@ -17,6 +12,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::CryptoProvider;
+use rustls::internal::alias::Arc;
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};

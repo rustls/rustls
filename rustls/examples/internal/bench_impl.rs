@@ -6,10 +6,7 @@
 use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
 
-#[cfg(feature = "withrcalias")]
-use std::rc::Rc as Arc;
-#[cfg(not(feature = "withrcalias"))]
-use std::sync::Arc;
+use rustls::internal::alias::Arc;
 
 use std::time::{Duration, Instant};
 use std::{fs, mem};

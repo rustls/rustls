@@ -304,6 +304,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 }
 
 test_for_each_provider! {
+    // XXX TODO use internal Arc alias - ???
     #[cfg(not(feature = "withrcalias"))]
     use std::sync::Arc;
     #[cfg(feature = "withrcalias")]

@@ -128,10 +128,7 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// ```
 /// # #[cfg(feature = "aws_lc_rs")] {
-/// # #[cfg(feature = "withrcalias")]
-/// # use std::rc::Rc as Arc;
-/// # #[cfg(not(feature = "withrcalias"))]
-/// # use std::sync::Arc;
+/// # use rustls::internal::alias::Arc;
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
