@@ -19,6 +19,8 @@ jobs:
       matrix:
         rust:
           - stable
+          - beta
+          - nightly
         os:
           - ubuntu-latest
     steps:
