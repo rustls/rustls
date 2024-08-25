@@ -15,7 +15,7 @@ use crate::x509;
 pub_api_trait_with_doc!("\
 An abstract signing key.
 
-This interface is used by rustls to use a private signing key 
+This interface is used by rustls to use a private signing key
 for authentication.  This includes server and client authentication.
 
 Objects of this type are always used within Rustls as
@@ -36,7 +36,7 @@ There are two main ways to get a signing key:
 
 The `KeyProvider` method `load_private_key()` is called under the hood by
 [`ConfigBuilder::with_single_cert()`],
-[`ConfigBuilder::with_client_auth_cert()`], and 
+[`ConfigBuilder::with_client_auth_cert()`], and
 [`ConfigBuilder::with_single_cert_with_ocsp()`].
 
 A signing key created outside of the `KeyProvider` extension trait can be used
