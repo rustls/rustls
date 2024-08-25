@@ -439,18 +439,15 @@ pub(crate) enum AnonymousClientPolicy {
 
 test_for_each_provider! {
     use super::WebPkiClientVerifier;
+
+    use crate::internal::alias::Arc;
+
     use crate::server::VerifierBuilderError;
     use crate::RootCertStore;
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
     use std::prelude::v1::*;
-
-    // XXX TODO use internal Arc alias - ???
-    #[cfg(not(feature = "withrcalias"))]
-    use std::sync::Arc;
-    #[cfg(feature = "withrcalias")]
-    use std::rc::Rc as Arc;
 
     use std::{vec, format, println};
 

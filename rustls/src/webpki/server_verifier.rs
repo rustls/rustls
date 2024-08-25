@@ -304,18 +304,15 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 }
 
 test_for_each_provider! {
-    // XXX TODO use internal Arc alias - ???
-    #[cfg(not(feature = "withrcalias"))]
-    use std::sync::Arc;
-    #[cfg(feature = "withrcalias")]
-    use std::rc::Rc as Arc;
-
     use std::{vec, println};
     use std::prelude::v1::*;
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
     use super::{VerifierBuilderError, WebPkiServerVerifier};
+
+    use crate::internal::alias::Arc;
+
     use crate::RootCertStore;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
