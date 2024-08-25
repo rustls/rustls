@@ -396,7 +396,13 @@ mod log {
 #[macro_use]
 mod test_macros;
 
-mod alias;
+mod alias {
+    #[cfg(not(feature = "withrcalias"))]
+    pub use alloc::sync::Arc;
+
+    #[cfg(feature = "withrcalias")]
+    pub use alloc::rc::Rc as Arc;
+}
 
 #[macro_use]
 mod trait_macros;
