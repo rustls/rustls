@@ -1,4 +1,13 @@
-/// pub trait that includes Send & Sync - supports use with alloc::sync::Arc
+/// pub trait - version with doc - version that includes Send & Sync - supports use with alloc::sync::Arc
+#[cfg(not(feature = "withrcalias"))]
+macro_rules! pub_api_trait_with_doc {
+    ($doc_text: literal, $name:ident, $body:tt) => {
+        #[doc = $doc_text]
+        pub trait $name: core::fmt::Debug + Send + Sync $body
+    }
+}
+
+/// pub trait - version with no doc - version that includes Send & Sync - supports use with alloc::sync::Arc
 #[cfg(not(feature = "withrcalias"))]
 macro_rules! pub_api_trait {
     ($name:ident, $body:tt) => {
@@ -6,7 +15,16 @@ macro_rules! pub_api_trait {
     }
 }
 
-/// pub trait with no Send / Sync - supports use with alloc::rc::Rc
+/// pub trait - version with no doc - version with no Send / Sync - supports use with alloc::rc::Rc
+#[cfg(feature = "withrcalias")]
+macro_rules! pub_api_trait_with_doc {
+    ($doc_text: literal, $name:ident, $body:tt) => {
+        #[doc = $doc_text]
+        pub trait $name: core::fmt::Debug $body
+    }
+}
+
+/// pub trait - version with no doc - version with no Send / Sync - supports use with alloc::rc::Rc
 #[cfg(feature = "withrcalias")]
 macro_rules! pub_api_trait {
     ($name:ident, $body:tt) => {
