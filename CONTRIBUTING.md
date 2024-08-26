@@ -306,7 +306,7 @@ We use 3 blocks of imports in our Rust files:
 
 We believe that this makes it easier to see where a particular import comes from.
 
-Within the import blocks we prefer to separate imports that don't share a parent 
+Within the import blocks we prefer to separate imports that don't share a parent
 module. For example,
 
 ```rust
@@ -330,9 +330,9 @@ prefer to `import std::error::Error as StdError`.
 
 We prefer to export types under a single name, avoiding re-exporting types from
 the top-level `lib.rs`. The exception to this are "paved path" exports that we
-expect every user will need. The canonical example of such types are 
+expect every user will need. The canonical example of such types are
 `client::ClientConfig` and `server::ServerConfig`. In general this sort of type
-is rare and most new types should be exported only from the module in which they 
+is rare and most new types should be exported only from the module in which they
 are defined.
 
 ### Misc

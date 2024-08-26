@@ -72,9 +72,9 @@ mod no_std_lock {
         fn lock(&self) -> Result<MutexGuard<'_, T>, Poisoned>;
     }
 
-    /// A lock builder.                                                                                     
+    /// A lock builder.
     pub trait MakeMutex {
-        /// Create a new mutex.                                                                             
+        /// Create a new mutex.
         fn make_mutex<T>(value: T) -> Arc<dyn Lock<T>>
         where
             T: Send + 'static;

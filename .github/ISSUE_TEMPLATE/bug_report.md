@@ -15,7 +15,7 @@ A clear and concise description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Use one of the examples to connect to `....` 
+1. Use one of the examples to connect to `....`
 2. ...
 3. See error
 
