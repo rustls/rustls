@@ -15,7 +15,7 @@ macro_rules! pub_api_trait {
     }
 }
 
-/// pub trait - version with no doc - version with no Send / Sync - supports use with alloc::rc::Rc
+/// pub trait - version with doc - version with no Send / Sync - supports use with alloc::rc::Rc
 #[cfg(feature = "withrcalias")]
 macro_rules! pub_api_trait_with_doc {
     ($doc_text: literal, $name:ident, $body:tt) => {
