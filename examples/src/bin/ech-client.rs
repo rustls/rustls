@@ -155,7 +155,7 @@ fn main() {
 
 const USAGE: &str = "
 Connects to the TLS server at hostname:PORT.  The default PORT
-is 443. If an ECH config can be fetched for hostname using 
+is 443. If an ECH config can be fetched for hostname using
 DNS-over-HTTPS, ECH is enabled. Otherwise, a placeholder ECH
 extension is sent for anti-ossification testing.
 

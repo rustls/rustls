@@ -8,7 +8,7 @@ assignees: ''
 ---
 
 <!--
-Please note that we are only interested in **semver-incompatible** update requests. Updates to dependencies that are 
+Please note that we are only interested in **semver-incompatible** update requests. Updates to dependencies that are
 semver-compatible can be done in dependent projects without needing changes in this repository.
 
 For example, if you are here because you believe Rustls is bringing in dependency `foo` at version `0.2.1` and

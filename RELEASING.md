@@ -47,7 +47,7 @@
 
 ## Maintenance point releases
 
-When point releases for bug fixes and small backwards compatible changes, but `main` contains unreleased breaking 
+When point releases for bug fixes and small backwards compatible changes, but `main` contains unreleased breaking
 changes we follow a modified release process using a longer-lived maintenance branch.
 
 1. Check if there is an existing release branch, e.g. `rel-0.21` for point releases in the `0.21.x` series.
