@@ -22,7 +22,9 @@ fn test_ffdhe_params_correct(group: NamedGroup) {
     let openssl_params = FfdheGroup::from_params_trimming_leading_zeros(&p, &g);
     #[allow(deprecated)]
     let rustls_params_from_name = FfdheGroup::from_named_group(group).unwrap();
-    assert_eq!(rustls_params_from_name.named_group(), Some(group));
+    #[allow(deprecated)]
+    let round_trip_name = rustls_params_from_name.named_group();
+    assert_eq!(round_trip_name, Some(group));
 
     assert_eq!(rustls_params_from_name, openssl_params);
 }

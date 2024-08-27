@@ -919,13 +919,22 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             cx.common,
             &st.server_kx.kx_params,
         )?;
-        let named_group = match &kx_params {
-            ServerKeyExchangeParams::Ecdh(ecdh) => ecdh.curve_params.named_group,
-            ServerKeyExchangeParams::Dh(dh) => dh
-                .named_group()
-                .ok_or(PeerMisbehaved::SelectedUnofferedKxGroup)?,
+        let maybe_skxg = match &kx_params {
+            ServerKeyExchangeParams::Ecdh(ecdh) => st
+                .config
+                .find_kx_group(ecdh.curve_params.named_group),
+            ServerKeyExchangeParams::Dh(dh) => {
+                let ffdhe_group = dh.as_ffdhe_group();
+
+                st.config
+                    .provider
+                    .kx_groups
+                    .iter()
+                    .find(|kxg| kxg.ffdhe_group() == Some(ffdhe_group))
+                    .copied()
+            }
         };
-        let skxg = match st.config.find_kx_group(named_group) {
+        let skxg = match maybe_skxg {
             Some(skxg) => skxg,
             None => {
                 return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());

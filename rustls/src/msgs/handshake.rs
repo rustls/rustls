@@ -1879,8 +1879,8 @@ impl ServerDhParams {
     }
 
     #[cfg(feature = "tls12")]
-    pub(crate) fn named_group(&self) -> Option<NamedGroup> {
-        FfdheGroup::from_params_trimming_leading_zeros(&self.dh_p.0, &self.dh_g.0).named_group()
+    pub(crate) fn as_ffdhe_group(&self) -> FfdheGroup<'_> {
+        FfdheGroup::from_params_trimming_leading_zeros(&self.dh_p.0, &self.dh_g.0)
     }
 }
 
