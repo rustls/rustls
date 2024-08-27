@@ -354,6 +354,14 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
     }
 }
 
+#[test]
+fn non_ffdhe_kx_does_not_have_ffdhe_group() {
+    let non_ffdhe = provider::kx_group::SECP256R1;
+    assert_eq!(non_ffdhe.ffdhe_group(), None);
+    let active = non_ffdhe.start().unwrap();
+    assert_eq!(active.ffdhe_group(), None);
+}
+
 mod ffdhe {
     use num_bigint::BigUint;
     use rustls::crypto::{
