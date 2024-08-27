@@ -1866,7 +1866,7 @@ pub(crate) struct ServerDhParams {
 impl ServerDhParams {
     #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
-        let params = match FfdheGroup::from_named_group(kx.group()) {
+        let params = match kx.ffdhe_group() {
             Some(params) => params,
             None => panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group()),
         };

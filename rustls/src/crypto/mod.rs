@@ -423,6 +423,7 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     /// `rustls::ffdhe_groups` contains suitable values to return from this,
     /// for example [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        #[allow(deprecated)]
         FfdheGroup::from_named_group(self.name())
     }
 
@@ -517,6 +518,7 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// `rustls::ffdhe_groups` contains suitable values to return from this,
     /// for example [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        #[allow(deprecated)]
         FfdheGroup::from_named_group(self.group())
     }
 

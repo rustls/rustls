@@ -11,7 +11,7 @@ pub static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256);
 
 #[derive(Debug)]
-pub struct FfdheKxGroup(pub NamedGroup);
+pub struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
 
 impl SupportedKxGroup for FfdheKxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, rustls::Error> {
@@ -21,7 +21,7 @@ impl SupportedKxGroup for FfdheKxGroup {
             .fill(&mut x)?;
         let x = BigUint::from_bytes_be(&x);
 
-        let group = FfdheGroup::from_named_group(self.0).unwrap();
+        let group = self.1;
         let p = BigUint::from_bytes_be(group.p);
         let g = BigUint::from_bytes_be(group.g);
 
@@ -35,6 +35,10 @@ impl SupportedKxGroup for FfdheKxGroup {
             group,
             named_group: self.0,
         }))
+    }
+
+    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        Some(self.1)
     }
 
     fn name(&self) -> NamedGroup {
@@ -74,6 +78,10 @@ impl ActiveKeyExchange for ActiveFfdheKx {
 
     fn pub_key(&self) -> &[u8] {
         &self.x_pub
+    }
+
+    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        Some(self.group)
     }
 
     fn group(&self) -> NamedGroup {
