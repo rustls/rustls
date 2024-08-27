@@ -257,7 +257,7 @@ impl CryptoProvider {
     /// Returns a provider named unambiguously by rustls crate features.
     ///
     /// This function returns `None` if the crate features are ambiguous (ie, specify two
-    /// providers), or specify no providers, or the feature `custom-provider` is activated.  
+    /// providers), or specify no providers, or the feature `custom-provider` is activated.
     /// In all cases the application should explicitly specify the provider to use
     /// with [`CryptoProvider::install_default`].
     fn from_crate_features() -> Option<Self> {
