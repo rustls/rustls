@@ -20,10 +20,11 @@ fn ffdhe_params_correct() {
 fn test_ffdhe_params_correct(group: NamedGroup) {
     let (p, g) = get_ffdhe_params_from_openssl(group);
     let openssl_params = FfdheGroup::from_params_trimming_leading_zeros(&p, &g);
-    let rustls_params = FfdheGroup::from_named_group(group).unwrap();
-    assert_eq!(rustls_params.named_group(), Some(group));
+    #[allow(deprecated)]
+    let rustls_params_from_name = FfdheGroup::from_named_group(group).unwrap();
+    assert_eq!(rustls_params_from_name.named_group(), Some(group));
 
-    assert_eq!(rustls_params, openssl_params);
+    assert_eq!(rustls_params_from_name, openssl_params);
 }
 
 /// Get FFDHE parameters `(p, g)` for the given `ffdhe_group` from OpenSSL

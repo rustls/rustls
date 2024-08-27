@@ -211,7 +211,10 @@ fn ffdhe_provider() -> CryptoProvider {
             ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
             provider::cipher_suite::TLS13_AES_128_GCM_SHA256,
         ],
-        kx_groups: vec![&FfdheKxGroup(rustls::NamedGroup::FFDHE2048)],
+        kx_groups: vec![&FfdheKxGroup(
+            rustls::NamedGroup::FFDHE2048,
+            rustls::ffdhe_groups::FFDHE2048,
+        )],
         ..provider::default_provider()
     }
 }
