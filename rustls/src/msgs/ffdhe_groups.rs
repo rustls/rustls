@@ -31,6 +31,10 @@ impl FfdheGroup<'static> {
 
 impl<'a> FfdheGroup<'a> {
     /// Return the `NamedGroup` for the `FfdheGroup` if it represents one.
+    #[deprecated(
+        since = "0.23.13",
+        note = "This function is linker-unfriendly.  Use `SupportedKxGroup::name()` instead"
+    )]
     pub fn named_group(&self) -> Option<NamedGroup> {
         match *self {
             FFDHE2048 => Some(NamedGroup::FFDHE2048),
