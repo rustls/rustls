@@ -1879,7 +1879,7 @@ impl ServerDhParams {
     }
 
     #[cfg(feature = "tls12")]
-    fn named_group(&self) -> Option<NamedGroup> {
+    pub(crate) fn named_group(&self) -> Option<NamedGroup> {
         FfdheGroup::from_params_trimming_leading_zeros(&self.dh_p.0, &self.dh_g.0).named_group()
     }
 }
@@ -1928,14 +1928,6 @@ impl ServerKeyExchangeParams {
         match self {
             Self::Ecdh(ecdh) => ecdh.encode(buf),
             Self::Dh(dh) => dh.encode(buf),
-        }
-    }
-
-    #[cfg(feature = "tls12")]
-    pub(crate) fn named_group(&self) -> Option<NamedGroup> {
-        match self {
-            Self::Ecdh(ecdh) => Some(ecdh.curve_params.named_group),
-            Self::Dh(dh) => dh.named_group(),
         }
     }
 }
