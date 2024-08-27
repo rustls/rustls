@@ -919,9 +919,12 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             cx.common,
             &st.server_kx.kx_params,
         )?;
-        let named_group = kx_params
-            .named_group()
-            .ok_or(PeerMisbehaved::SelectedUnofferedKxGroup)?;
+        let named_group = match &kx_params {
+            ServerKeyExchangeParams::Ecdh(ecdh) => ecdh.curve_params.named_group,
+            ServerKeyExchangeParams::Dh(dh) => dh
+                .named_group()
+                .ok_or(PeerMisbehaved::SelectedUnofferedKxGroup)?,
+        };
         let skxg = match st.config.find_kx_group(named_group) {
             Some(skxg) => skxg,
             None => {
