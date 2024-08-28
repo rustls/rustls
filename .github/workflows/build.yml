@@ -35,7 +35,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
 
       - name: cargo build (debug; defaultproviderenabled feature enabled)
-        run: cargo build --locked -F defaultproviderenabled
+        run: cargo build --locked --features defaultproviderenabled
 
       - name: cargo test (debug; defaultproviderenabled feature enabled)
         run: cargo test --features defaultproviderenabled
@@ -49,10 +49,10 @@ jobs:
         run: cargo test -p rustls
 
       - name: cargo build (debug; rustls package with the withrcalias feature enabled)
-        run: cargo build --locked -p rustls -F withrcalias
+        run: cargo build --locked --features withrcalias -p rustls
 
       - name: cargo test (debug; rustls package with the withrcalias feature enabled)
-        run: cargo test -p rustls -F withrcalias
+        run: cargo test --features withrcalias -p rustls
 
   # XXX FIX & RESTORE:
   # build:
