@@ -351,6 +351,110 @@ don't provide additional type safety. Using the
 [newtype idiom](https://doc.rust-lang.org/rust-by-example/generics/new_types.html)
 is one alternative when an abstraction boundary is worth the added complexity.
 
+## Design and Architecture
+
+Some general concepts about how the library should fit together:
+
+- Linker friendliness
+- Small mandatory API
+- Safe and sensible defaults
+- Separation of mechanism and policy
+
+### Linker friendliness
+
+When a program incorporates rustls, we should try to ensure that parts
+that are not used can be discarded by the linker.
+
+The linker can discard code if it is unreachable by the code that is referenced
+by the downstream program.  This generally means that:
+
+- runtime trait-based or function pointer dynamic dispatch is good,
+- compile-time trait-based generics are good (so long as the same code is
+  not monomorphized multiple times in a typical program),
+- enum-based dispatch is bad.
+
+Here is an example that is less good:
+
+```rust
+enum Algorithm {
+    Aes128,
+    ChaCha20,
+}
+
+fn encrypt(alg: Algorithm, buffer: &mut [u8]) {
+    match alg {
+        Algorithm::Aes128 => encrypt_aes128(buffer),
+        Algorithm::ChaCha20 => encrypt_chacha20(buffer),
+    }
+}
+```
+
+A program that only used `encrypt(Algorithm::ChaCha20, ..)` would end
+up with a copy of AES inside.  (If such a function was
+inlined into its caller, the reference to `encrypt_aes128` could
+theoretically be deleted if the compiler can be certain of the value
+of `alg`.  This is not guaranteed to happen.)
+
+Instead, prefer:
+
+```rust
+trait Algorithm {
+    fn encrypt(&self, buffer: &mut [u8]);
+}
+
+struct Aes128;
+struct ChaCha20;
+
+impl Algorithm for Aes128 {
+    fn encrypt(&self, buffer: &mut [u8]) {
+        encrypt_aes128(buffer)
+    }
+}
+
+impl Algorithm for ChaCha20 {
+    fn encrypt(&self, buffer: &mut [u8]) {
+        encrypt_chacha20(buffer)
+    }
+}
+```
+
+(or a function-pointer equivalent, which would be less idiomatic Rust.)
+
+Some judgement is needed: this is only worth it if a reasonable program
+would not use all the possibilities, and the individual parts are large
+enough to have an impact on the size of a final program.
+
+### Small mandatory API
+
+We should try to keep the API for achieving the most common goals
+as simple as possible.  Good models for this are `simpleclient` and
+`simpleserver`.  The purpose of this is to allow people interacting
+with the library for the first time to make progress.
+
+### Safe and sensible defaults
+
+We should be confident to make decisions on behalf of our users and
+express that in the [library's defaults][defaults].  It is good to
+encode our experience of TLS in this way, and we should not require that
+users are experts in TLS to end up with a result that is working,
+secure, stable, and performant.
+
+[defaults]: https://docs.rs/rustls/latest/rustls/manual/_05_defaults/index.html
+
+### Separation of mechanism and policy
+
+A configuration knob with a good default is preferable to a fixed
+behavior, even if the end result is the same for 99% of users.
+
+With that said, we should take care to avoid overloading users with
+choices, and direct them (with examples, documentation, and simplified
+top-level APIs) away from that complexity.
+
+There is quite a lot of nuance here: configuration should avoid allowing
+bad outcomes (in the cryptographic, memory safety, and "good netizen" senses).
+Where that is not possible we typically include `danger` in API naming to
+assist code reviewers of end-user code.
+
 ## Licensing
 
 Contributions are made under [rustls's licenses](LICENSE).
