@@ -146,7 +146,7 @@ jobs:
         run: >
             cargo hack check
             --package rustls
-            --feature-powerset 
+            --feature-powerset
             --no-dev-deps
             --group-features aws_lc_rs,aws-lc-rs
             --group-features fips,aws_lc_rs
