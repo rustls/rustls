@@ -484,3 +484,77 @@ jobs:
         run: cargo test --locked -- --include-ignored
         env:
           RUST_BACKTRACE: 1
+
+  no-warnings:
+    name: Build+test with no warnings
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install ${{ matrix.rust }} toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: cargo build (debug; default features)
+        run: cargo build --locked
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test (release; all features)
+        run: cargo test --release --locked --all-features
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test --doc (release; all-features)
+        if: ${{ runner.os != 'macOS' && runner.os != 'Windows' }}
+        run: cargo test --release --locked --all-features --doc
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test (debug; aws-lc-rs)
+        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging,std
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo build (debug; no default features; no-std)
+        run: cargo build --locked --no-default-features
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo build (debug; no default features; no-std, hashbrown)
+        run: cargo build --locked --no-default-features --features hashbrown
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test (debug; default features)
+        run: cargo test --locked
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test (debug; no default features)
+        run: cargo test --locked --no-default-features
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test (debug; no default features; aws-lc-rs,tls12)
+        run: cargo test --no-default-features --features aws_lc_rs,tls12,std
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test (debug; no default features; fips,tls12)
+        run: cargo test --no-default-features --features fips,tls12,std
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: cargo test (release; default features)
+        run: cargo test --locked --release
+        env:
+          RUSTFLAGS: -D warnings
