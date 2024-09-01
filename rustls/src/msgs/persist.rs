@@ -117,6 +117,12 @@ impl Tls13ClientSessionValue {
         self.common.epoch -= delta as u64;
     }
 
+    #[doc(hidden)]
+    /// Test only: replace `max_early_data_size` with `new`
+    pub fn _private_set_max_early_data_size(&mut self, new: u32) {
+        self.max_early_data_size = new;
+    }
+
     pub fn set_quic_params(&mut self, quic_params: &[u8]) {
         self.quic_params = PayloadU16(quic_params.to_vec());
     }

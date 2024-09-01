@@ -3881,6 +3881,7 @@ enum ClientStorageOp {
 struct ClientStorage {
     storage: Arc<dyn rustls::client::ClientSessionStore>,
     ops: Mutex<Vec<ClientStorageOp>>,
+    alter_max_early_data_size: Option<(u32, u32)>,
 }
 
 impl ClientStorage {
@@ -3888,7 +3889,12 @@ impl ClientStorage {
         Self {
             storage: Arc::new(rustls::client::ClientSessionMemoryCache::new(1024)),
             ops: Mutex::new(Vec::new()),
+            alter_max_early_data_size: None,
         }
+    }
+
+    fn alter_max_early_data_size(&mut self, expected: u32, altered: u32) {
+        self.alter_max_early_data_size = Some((expected, altered));
     }
 
     #[cfg(feature = "tls12")]
@@ -3967,8 +3973,13 @@ impl rustls::client::ClientSessionStore for ClientStorage {
     fn insert_tls13_ticket(
         &self,
         server_name: ServerName<'static>,
-        value: rustls::client::Tls13ClientSessionValue,
+        mut value: rustls::client::Tls13ClientSessionValue,
     ) {
+        if let Some((expected, desired)) = self.alter_max_early_data_size {
+            assert_eq!(value.max_early_data_size(), expected);
+            value._private_set_max_early_data_size(desired);
+        }
+
         self.ops
             .lock()
             .unwrap()
@@ -4217,6 +4228,159 @@ fn early_data_can_be_rejected_by_server() {
     do_handshake(&mut client, &mut server);
 
     assert!(!client.is_early_data_accepted());
+}
+
+#[test]
+fn early_data_is_limited_on_client() {
+    let (client_config, server_config) = early_data_configs();
+
+    // warm up
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    assert!(client.early_data().is_some());
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .bytes_left(),
+        1234
+    );
+    client
+        .early_data()
+        .unwrap()
+        .flush()
+        .unwrap();
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write(&[0xaa; 1234 + 1])
+            .unwrap(),
+        1234
+    );
+    do_handshake(&mut client, &mut server);
+
+    let mut received_early_data = [0u8; 1234];
+    assert_eq!(
+        server
+            .early_data()
+            .expect("early_data didn't happen")
+            .read(&mut received_early_data)
+            .expect("early_data failed unexpectedly"),
+        1234
+    );
+    assert_eq!(&received_early_data[..], [0xaa; 1234]);
+}
+
+fn early_data_configs_allowing_client_to_send_excess_data() -> (Arc<ClientConfig>, Arc<ServerConfig>)
+{
+    let (client_config, server_config) = early_data_configs();
+
+    // adjust client session storage to corrupt received max_early_data_size
+    let mut client_config = Arc::into_inner(client_config).unwrap();
+    let mut storage = ClientStorage::new();
+    storage.alter_max_early_data_size(1234, 2024);
+    client_config.resumption = Resumption::store(Arc::new(storage));
+    let client_config = Arc::new(client_config);
+
+    // warm up
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    do_handshake(&mut client, &mut server);
+    (client_config, server_config)
+}
+
+#[test]
+fn server_detects_excess_early_data() {
+    let (client_config, server_config) = early_data_configs_allowing_client_to_send_excess_data();
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    assert!(client.early_data().is_some());
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .bytes_left(),
+        2024
+    );
+    client
+        .early_data()
+        .unwrap()
+        .flush()
+        .unwrap();
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write(&[0xaa; 2024])
+            .unwrap(),
+        2024
+    );
+    assert_eq!(
+        do_handshake_until_error(&mut client, &mut server),
+        Err(ErrorFromPeer::Server(Error::PeerMisbehaved(
+            PeerMisbehaved::TooMuchEarlyDataReceived
+        ))),
+    );
+}
+
+// regression test for https://github.com/rustls/rustls/issues/2096
+#[test]
+fn server_detects_excess_streamed_early_data() {
+    let (client_config, server_config) = early_data_configs_allowing_client_to_send_excess_data();
+
+    let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
+    assert!(client.early_data().is_some());
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .bytes_left(),
+        2024
+    );
+    client
+        .early_data()
+        .unwrap()
+        .flush()
+        .unwrap();
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write(&[0xaa; 1024])
+            .unwrap(),
+        1024
+    );
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    let mut received_early_data = [0u8; 1024];
+    assert_eq!(
+        server
+            .early_data()
+            .expect("early_data didn't happen")
+            .read(&mut received_early_data)
+            .expect("early_data failed unexpectedly"),
+        1024
+    );
+    assert_eq!(&received_early_data[..], [0xaa; 1024]);
+
+    assert_eq!(
+        client
+            .early_data()
+            .unwrap()
+            .write(&[0xbb; 1000])
+            .unwrap(),
+        1000
+    );
+    transfer(&mut client, &mut server);
+    assert_eq!(
+        server.process_new_packets(),
+        Err(Error::PeerMisbehaved(
+            PeerMisbehaved::TooMuchEarlyDataReceived
+        ))
+    );
 }
 
 mod test_quic {

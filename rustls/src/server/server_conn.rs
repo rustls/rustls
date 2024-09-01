@@ -995,7 +995,10 @@ impl State<ServerConnectionData> for Accepting {
 
 pub(super) enum EarlyDataState {
     New,
-    Accepted(ChunkVecBuffer),
+    Accepted {
+        received: ChunkVecBuffer,
+        left: usize,
+    },
     Rejected,
 }
 
@@ -1011,12 +1014,15 @@ impl EarlyDataState {
     }
 
     pub(super) fn accept(&mut self, max_size: usize) {
-        *self = Self::Accepted(ChunkVecBuffer::new(Some(max_size)));
+        *self = Self::Accepted {
+            received: ChunkVecBuffer::new(Some(max_size)),
+            left: max_size,
+        };
     }
 
     #[cfg(feature = "std")]
     fn was_accepted(&self) -> bool {
-        matches!(self, Self::Accepted(_))
+        matches!(self, Self::Accepted { .. })
     }
 
     pub(super) fn was_rejected(&self) -> bool {
@@ -1025,7 +1031,9 @@ impl EarlyDataState {
 
     fn pop(&mut self) -> Option<Vec<u8>> {
         match self {
-            Self::Accepted(ref mut received) => received.pop(),
+            Self::Accepted {
+                ref mut received, ..
+            } => received.pop(),
             _ => None,
         }
     }
@@ -1033,7 +1041,9 @@ impl EarlyDataState {
     #[cfg(feature = "std")]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Accepted(ref mut received) => received.read(buf),
+            Self::Accepted {
+                ref mut received, ..
+            } => received.read(buf),
             _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
         }
     }
@@ -1041,7 +1051,9 @@ impl EarlyDataState {
     #[cfg(read_buf)]
     fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
         match self {
-            Self::Accepted(ref mut received) => received.read_buf(cursor),
+            Self::Accepted {
+                ref mut received, ..
+            } => received.read_buf(cursor),
             _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
         }
     }
@@ -1049,8 +1061,12 @@ impl EarlyDataState {
     pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) -> bool {
         let available = bytes.bytes().len();
         match self {
-            Self::Accepted(ref mut received) if received.apply_limit(available) == available => {
+            Self::Accepted {
+                ref mut received,
+                ref mut left,
+            } if received.apply_limit(available) == available && available <= *left => {
                 received.append(bytes.into_vec());
+                *left -= available;
                 true
             }
             _ => false,
@@ -1062,7 +1078,12 @@ impl Debug for EarlyDataState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::New => write!(f, "EarlyDataState::New"),
-            Self::Accepted(buf) => write!(f, "EarlyDataState::Accepted({})", buf.len()),
+            Self::Accepted { received, left } => write!(
+                f,
+                "EarlyDataState::Accepted {{ received: {}, left: {} }}",
+                received.len(),
+                left
+            ),
             Self::Rejected => write!(f, "EarlyDataState::Rejected"),
         }
     }

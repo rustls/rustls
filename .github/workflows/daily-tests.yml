@@ -143,6 +143,15 @@ jobs:
         uses: taiki-e/install-action@cargo-hack
 
       - name: Check feature powerset
-        run: cargo hack check --feature-powerset --no-dev-deps
+        run: >
+            cargo hack check
+            --package rustls
+            --feature-powerset
+            --no-dev-deps
+            --group-features aws_lc_rs,aws-lc-rs
+            --group-features fips,aws_lc_rs
+            --mutually-exclusive-features fips,ring
+            --mutually-exclusive-features custom_provider,aws_lc_rs
+            --mutually-exclusive-features custom_provider,ring
         env:
           RUSTFLAGS: --deny warnings
