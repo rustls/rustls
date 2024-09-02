@@ -197,6 +197,8 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
       # XXX TODO FIND WAY TO GET BUILD WORKING WITH BUILT-IN PROVIDERS
       - run: cross build --no-default-features --features custom-provider,withrcalias --package rustls --target ${{ matrix.target }}
+      # XXX TRY with alloc::sync::Arc - THIS SHOULD FAIL DUE TO LACK OF SUPPORT for thumbv6m:
+      - run: cross build --no-default-features --features custom-provider --package rustls --target ${{ matrix.target }}
       # XXX TBD TRY BUILDING WITH SOME OTHER FEATURES - ???
       # XXX TBD FIND A WAY TO TEST (AS XXX TBD NOTED ABOVE AS WELL)
 
