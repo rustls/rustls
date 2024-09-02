@@ -7,7 +7,6 @@ use std::io;
 use std::io::Write;
 use std::sync::Mutex;
 
-#[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::KeyLog;
 

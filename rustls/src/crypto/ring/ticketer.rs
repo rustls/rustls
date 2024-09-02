@@ -10,7 +10,6 @@ use subtle::ConstantTimeEq;
 use super::ring_like::aead;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
 use crate::error::Error;
-#[cfg(feature = "logging")]
 use crate::log::debug;
 use crate::polyfill::try_split_at;
 use crate::rand::GetRandomFailed;
