@@ -26,7 +26,7 @@ log = { version = "0.4.8", optional = true }
 # XXX TBD ??? ??? - SHOULD KEEP `once_cell` for non-std embedded targets, at least
 # remove once our MSRV is >= 1.70
 # XXX TBD USE COMMIT FROM PROPOSAL VIA GITHUB FOR NOW: https://github.com/matklad/once_cell/pull/259
-once_cell = { git = "https://github.com/brodycj/once_cell", rev = "0ff273f260f2c14b8eed61064584575520c69b3c", default-features = false, features = ["alloc", "critical-section"] }
+once_cell = { git = "https://github.com/brodycj/once_cell", rev = "d6db179af6853bb990fe9a4f9c1eac6d0cd7ad2e", default-features = false, features = ["alloc", "critical-section"] }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.6", features = ["alloc"], default-features = false }

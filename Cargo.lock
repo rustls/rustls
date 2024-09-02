@@ -1733,7 +1733,7 @@ checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 [[package]]
 name = "once_cell"
 version = "1.19.0"
-source = "git+https://github.com/brodycj/once_cell?rev=0ff273f260f2c14b8eed61064584575520c69b3c#0ff273f260f2c14b8eed61064584575520c69b3c"
+source = "git+https://github.com/brodycj/once_cell?rev=d6db179af6853bb990fe9a4f9c1eac6d0cd7ad2e#d6db179af6853bb990fe9a4f9c1eac6d0cd7ad2e"
 dependencies = [
  "critical-section",
  "portable-atomic",
@@ -2245,7 +2245,7 @@ dependencies = [
  "hex",
  "log",
  "num-bigint",
- "once_cell 1.19.0 (git+https://github.com/brodycj/once_cell?rev=0ff273f260f2c14b8eed61064584575520c69b3c)",
+ "once_cell 1.19.0 (git+https://github.com/brodycj/once_cell?rev=d6db179af6853bb990fe9a4f9c1eac6d0cd7ad2e)",
  "rcgen",
  "ring",
  "rustls-pemfile",
