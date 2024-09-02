@@ -1,5 +1,3 @@
-use crate::alias::Arc;
-
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -10,6 +8,8 @@ use subtle::ConstantTimeEq;
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
+
+use crate::alias::Arc;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State};
 use crate::conn::ConnectionRandoms;

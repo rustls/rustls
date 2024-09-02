@@ -34,11 +34,11 @@ mod std_lock {
 
 #[cfg(not(feature = "std"))]
 mod no_std_lock {
-    use crate::alias::Arc;
-
     use alloc::boxed::Box;
     use core::fmt::Debug;
     use core::ops::DerefMut;
+
+    use crate::alias::Arc;
 
     #[derive(Debug)]
     /// A no-std compatible wrapper around [`Lock`].

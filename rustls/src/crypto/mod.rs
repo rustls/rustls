@@ -1,5 +1,3 @@
-use crate::alias::Arc;
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
@@ -7,6 +5,7 @@ use core::fmt::Debug;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+use crate::alias::Arc;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
     verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms,
@@ -592,8 +591,6 @@ pub fn default_fips_provider() -> CryptoProvider {
 }
 
 mod crypto_default_provider {
-    use crate::alias::Arc;
-
     // XXX TBD ???
     // #[cfg(not(feature = "std"))]
     use alloc::boxed::Box;
@@ -603,6 +600,7 @@ mod crypto_default_provider {
     // #[cfg(feature = "std")]
     use once_cell::sync::OnceCell;
 
+    use crate::alias::Arc;
     use crate::crypto::CryptoProvider;
 
     // #[cfg(feature = "std")]

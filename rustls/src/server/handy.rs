@@ -1,8 +1,7 @@
-use crate::alias::Arc;
-
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use crate::alias::Arc;
 use crate::server::ClientHello;
 use crate::{server, sign};
 
@@ -27,11 +26,10 @@ impl server::StoresServerSessions for NoServerSessionStorage {
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod cache {
-    use crate::alias::Arc;
-
     use alloc::vec::Vec;
     use core::fmt::{Debug, Formatter};
 
+    use crate::alias::Arc;
     use crate::lock::Mutex;
     use crate::{limited_cache, server};
 
@@ -203,13 +201,12 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod sni_resolver {
-    use crate::alias::Arc;
-
     use alloc::string::{String, ToString};
     use core::fmt::Debug;
 
     use pki_types::{DnsName, ServerName};
 
+    use crate::alias::Arc;
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;

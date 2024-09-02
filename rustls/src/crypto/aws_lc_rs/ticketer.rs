@@ -1,5 +1,3 @@
-use crate::alias::Arc;
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
@@ -14,6 +12,8 @@ use aws_lc_rs::{hmac, iv};
 
 use super::ring_like::rand::{SecureRandom, SystemRandom};
 use super::unspecified_err;
+
+use crate::alias::Arc;
 use crate::error::Error;
 use crate::log::debug;
 use crate::polyfill::try_split_at;

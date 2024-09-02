@@ -1,5 +1,3 @@
-use crate::alias::Arc;
-
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec;
@@ -12,6 +10,8 @@ use subtle::ConstantTimeEq;
 use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
+
+use crate::alias::Arc;
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;

@@ -1,5 +1,3 @@
-use crate::alias::Arc;
-
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -9,6 +7,8 @@ use pki_types::{ServerName, UnixTime};
 
 use super::handy::NoClientSessionStorage;
 use super::hs;
+
+use crate::alias::Arc;
 use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
@@ -505,10 +505,10 @@ pub enum Tls12Resumption {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use crate::alias::Arc;
-
     use super::verify::ServerCertVerifier;
     use super::ClientConfig;
+
+    use crate::alias::Arc;
 
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
@@ -605,8 +605,6 @@ impl EarlyData {
 
 #[cfg(feature = "std")]
 mod connection {
-    use crate::alias::Arc;
-
     use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
@@ -615,6 +613,8 @@ mod connection {
     use pki_types::ServerName;
 
     use super::ClientConnectionData;
+
+    use crate::alias::Arc;
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};

@@ -1,10 +1,9 @@
-use crate::alias::Arc;
-
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
 
+use crate::alias::Arc;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::crypto::CryptoProvider;
 use crate::error::Error;

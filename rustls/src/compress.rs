@@ -32,8 +32,6 @@
 //! [cc_cd]: crate::ClientConfig::cert_decompressors
 //! [sc_cd]: crate::ServerConfig::cert_decompressors
 
-use crate::alias::Arc;
-
 #[cfg(feature = "std")]
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
@@ -41,6 +39,7 @@ use core::fmt::Debug;
 #[cfg(feature = "std")]
 use std::sync::Mutex;
 
+use crate::alias::Arc;
 use crate::enums::CertificateCompressionAlgorithm;
 use crate::msgs::base::{Payload, PayloadU24};
 use crate::msgs::codec::Codec;

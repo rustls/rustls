@@ -619,13 +619,14 @@ impl From<rand::GetRandomFailed> for Error {
 }
 
 mod other_error {
-    #[cfg(feature = "std")]
-    use crate::alias::Arc;
     use core::fmt;
     #[cfg(feature = "std")]
     use std::error::Error as StdError;
 
     use super::Error;
+
+    #[cfg(feature = "std")]
+    use crate::alias::Arc;
 
     /// Any other error that cannot be expressed by a more specific [`Error`] variant.
     ///
