@@ -4,6 +4,9 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+// XXX SHOULD BE ABLE TO USE THIS NO MATTER WHAT - WANT TO USE THIS IN INTERNAL crypto_default_provider module below:
+use once_cell::sync::OnceCell;
+
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
