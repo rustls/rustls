@@ -48,11 +48,11 @@ jobs:
       - name: cargo test (debug; rustls package with no feature options specified)
         run: cargo test --package rustls
 
-      - name: cargo build (debug; rustls package with the withrcalias feature enabled)
-        run: cargo build --locked --features withrcalias -p rustls
+      - name: cargo build (debug; rustls package with the withrcalias,defaultproviderenabled feature enabled)
+        run: cargo build --locked --features withrcalias,defaultproviderenabled -p rustls
 
-      - name: cargo test (debug; rustls package with the withrcalias feature enabled)
-        run: cargo test --features withrcalias --package rustls
+      - name: cargo test (debug; rustls package with the withrcalias,defaultproviderenabled feature enabled)
+        run: cargo test --features withrcalias,defaultproviderenabled --package rustls
 
   # XXX FIX & RESTORE:
   # build:
@@ -196,7 +196,7 @@ jobs:
       - name: Install cross (cross-rs) from GitHub
         run: cargo install cross --git https://github.com/cross-rs/cross
       # XXX TODO FIND WAY TO GET BUILD WORKING WITH BUILT-IN PROVIDERS
-      - run: cross build --no-default-features --features custom-provider,withrcalias --package rustls --target ${{ matrix.target }}
+      - run: cross build --no-default-features --features custom-provider,withrcalias,defaultproviderenabled --package rustls --target ${{ matrix.target }}
       # XXX TBD TRY BUILDING WITH SOME OTHER FEATURES - ???
       # XXX TBD FIND A WAY TO TEST (AS XXX TBD NOTED ABOVE AS WELL)
 

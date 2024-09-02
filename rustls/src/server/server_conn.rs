@@ -408,9 +408,9 @@ impl ServerConfig {
         // Safety assumptions:
         // 1. that the provider has been installed (explicitly or implicitly)
         // 2. that the process-level default provider is usable with the supplied protocol versions.
-        Self::builder_with_provider(Arc::clone(
-            CryptoProvider::get_default_or_install_from_crate_features(),
-        ))
+        Self::builder_with_provider(
+            CryptoProvider::get_default_or_install_from_crate_features().clone(),
+        )
         .with_protocol_versions(versions)
         .unwrap()
     }
