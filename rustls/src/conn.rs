@@ -5,7 +5,7 @@ use core::ops::{Deref, DerefMut, Range};
 #[cfg(feature = "std")]
 use std::io;
 
-use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
+use crate::common_state::{CommonState, Context, IoState, State, Transition, DEFAULT_BUFFER_LIMIT};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
@@ -795,6 +795,7 @@ impl<T> Deref for UnbufferedConnectionCommon<T> {
 
 pub(crate) struct ConnectionCore<Data> {
     pub(crate) state: Result<Box<dyn State<Data>>, Error>,
+    pub(crate) pending_message: Option<Message<'static>>,
     pub(crate) data: Data,
     pub(crate) common_state: CommonState,
     pub(crate) hs_deframer: HandshakeDeframer,
@@ -808,6 +809,7 @@ impl<Data> ConnectionCore<Data> {
     pub(crate) fn new(state: Box<dyn State<Data>>, data: Data, common_state: CommonState) -> Self {
         Self {
             state: Ok(state),
+            pending_message: None,
             data,
             common_state,
             hs_deframer: HandshakeDeframer::default(),
@@ -832,28 +834,55 @@ impl<Data> ConnectionCore<Data> {
         buffer_progress.add_processed(deframer_buffer.processed);
 
         loop {
-            let res = self.deframe(
-                Some(&*state),
-                deframer_buffer.filled_mut(),
-                &mut buffer_progress,
-            );
+            let state_result = match self.pending_message.take() {
+                // If we have a saved message, the `InboundPlainMessage` -> `Message`
+                // decoding actions have already been taken for it and it can
+                // go straight to `process_main_protocol` for (re-) processing.
+                Some(message) => self.common_state.process_main_protocol(
+                    message,
+                    state,
+                    &mut self.data,
+                    Some(sendable_plaintext),
+                ),
+                // Otherwise, we deframe a new `InboundPlainMessage` and give it to
+                // `process_msg` for decoding, alert handling, etc.
+                None => {
+                    let res = self.deframe(
+                        Some(&*state),
+                        deframer_buffer.filled_mut(),
+                        &mut buffer_progress,
+                    );
 
-            let opt_msg = match res {
-                Ok(opt_msg) => opt_msg,
-                Err(e) => {
-                    self.state = Err(e.clone());
-                    deframer_buffer.discard(buffer_progress.take_discard());
-                    return Err(e);
+                    let opt_msg = match res {
+                        Ok(opt_msg) => opt_msg,
+                        Err(e) => {
+                            self.state = Err(e.clone());
+                            deframer_buffer.discard(buffer_progress.take_discard());
+                            return Err(e);
+                        }
+                    };
+
+                    let msg = match opt_msg {
+                        Some(msg) => msg,
+                        None => break,
+                    };
+
+                    self.process_msg(msg, state, Some(sendable_plaintext))
                 }
             };
 
-            let msg = match opt_msg {
-                Some(msg) => msg,
-                None => break,
-            };
-
-            match self.process_msg(msg, state, Some(sendable_plaintext)) {
-                Ok(new) => state = new,
+            match state_result {
+                Ok(Transition::Next(next)) => state = next,
+                Ok(Transition::Blocked {
+                    current,
+                    message,
+                    why,
+                }) => {
+                    self.state = Ok(current);
+                    self.pending_message = Some(message);
+                    deframer_buffer.discard(buffer_progress.take_discard());
+                    return Err(why.into());
+                }
                 Err(e) => {
                     self.state = Err(e.clone());
                     deframer_buffer.discard(buffer_progress.take_discard());
@@ -1081,7 +1110,7 @@ impl<Data> ConnectionCore<Data> {
         msg: InboundPlainMessage<'_>,
         state: Box<dyn State<Data>>,
         sendable_plaintext: Option<&mut ChunkVecBuffer>,
-    ) -> Result<Box<dyn State<Data>>, Error> {
+    ) -> Result<Transition<'static, Data>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
             && !self
@@ -1102,7 +1131,7 @@ impl<Data> ConnectionCore<Data> {
             self.common_state
                 .received_tls13_change_cipher_spec()?;
             trace!("Dropping CCS");
-            return Ok(state);
+            return Ok(Transition::Next(state));
         }
 
         // Now we can fully parse the message payload.
@@ -1118,7 +1147,7 @@ impl<Data> ConnectionCore<Data> {
         // For alerts, we have separate logic.
         if let MessagePayload::Alert(alert) = &msg.payload {
             self.common_state.process_alert(alert)?;
-            return Ok(state);
+            return Ok(Transition::Next(state));
         }
 
         self.common_state

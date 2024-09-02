@@ -17,7 +17,7 @@ use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
-use crate::common_state::{CommonState, HandshakeKind, KxState, State};
+use crate::common_state::{CommonState, HandshakeKind, KxState, State, Transition};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
@@ -38,7 +38,7 @@ use crate::tls13::key_schedule::KeyScheduleEarly;
 use crate::SupportedCipherSuite;
 
 pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
-pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
+pub(super) type NextStateOrError<'a> = Result<Transition<'a, ClientConnectionData>, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 fn find_session(
@@ -526,11 +526,11 @@ fn emit_client_hello_for_retry(
         ech_state,
     };
 
-    Ok(if support_tls13 && retryreq.is_none() {
+    Ok(Transition::Next(if support_tls13 && retryreq.is_none() {
         Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         Box::new(next)
-    })
+    }))
 }
 
 /// Prepare resumption with the session state retrieved from storage.

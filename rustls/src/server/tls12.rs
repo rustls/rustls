@@ -12,7 +12,7 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
-use crate::common_state::{CommonState, HandshakeKind, Side, State};
+use crate::common_state::{CommonState, HandshakeKind, Side, State, Transition};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -223,8 +223,8 @@ mod client_hello {
             let doing_client_auth = emit_certificate_req(&self.config, &mut self.transcript, cx)?;
             emit_server_hello_done(&mut self.transcript, cx.common);
 
-            if doing_client_auth {
-                Ok(Box::new(ExpectCertificate {
+            Ok(Transition::Next(if doing_client_auth {
+                Box::new(ExpectCertificate {
                     config: self.config,
                     transcript: self.transcript,
                     randoms: self.randoms,
@@ -233,9 +233,9 @@ mod client_hello {
                     using_ems: self.using_ems,
                     server_kx,
                     send_ticket: self.send_ticket,
-                }))
+                })
             } else {
-                Ok(Box::new(ExpectClientKx {
+                Box::new(ExpectClientKx {
                     config: self.config,
                     transcript: self.transcript,
                     randoms: self.randoms,
@@ -245,8 +245,8 @@ mod client_hello {
                     server_kx,
                     client_cert: None,
                     send_ticket: self.send_ticket,
-                }))
-            }
+                })
+            }))
         }
 
         fn start_resumption(
@@ -313,7 +313,7 @@ mod client_hello {
                 .start_encrypting();
             emit_finished(&secrets, &mut self.transcript, cx.common);
 
-            Ok(Box::new(ExpectCcs {
+            Ok(Transition::Next(Box::new(ExpectCcs {
                 config: self.config,
                 secrets,
                 transcript: self.transcript,
@@ -321,7 +321,7 @@ mod client_hello {
                 using_ems: self.using_ems,
                 resuming: true,
                 send_ticket: self.send_ticket,
-            }))
+            })))
         }
     }
 
@@ -551,7 +551,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             }
         };
 
-        Ok(Box::new(ExpectClientKx {
+        Ok(Transition::Next(Box::new(ExpectClientKx {
             config: self.config,
             transcript: self.transcript,
             randoms: self.randoms,
@@ -561,7 +561,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             server_kx: self.server_kx,
             client_cert,
             send_ticket: self.send_ticket,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -625,27 +625,29 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
         cx.common
             .start_encryption_tls12(&secrets, Side::Server);
 
-        if let Some(client_cert) = self.client_cert {
-            Ok(Box::new(ExpectCertificateVerify {
-                config: self.config,
-                secrets,
-                transcript: self.transcript,
-                session_id: self.session_id,
-                using_ems: self.using_ems,
-                client_cert,
-                send_ticket: self.send_ticket,
-            }))
-        } else {
-            Ok(Box::new(ExpectCcs {
-                config: self.config,
-                secrets,
-                transcript: self.transcript,
-                session_id: self.session_id,
-                using_ems: self.using_ems,
-                resuming: false,
-                send_ticket: self.send_ticket,
-            }))
-        }
+        Ok(Transition::Next(
+            if let Some(client_cert) = self.client_cert {
+                Box::new(ExpectCertificateVerify {
+                    config: self.config,
+                    secrets,
+                    transcript: self.transcript,
+                    session_id: self.session_id,
+                    using_ems: self.using_ems,
+                    client_cert,
+                    send_ticket: self.send_ticket,
+                })
+            } else {
+                Box::new(ExpectCcs {
+                    config: self.config,
+                    secrets,
+                    transcript: self.transcript,
+                    session_id: self.session_id,
+                    using_ems: self.using_ems,
+                    resuming: false,
+                    send_ticket: self.send_ticket,
+                })
+            },
+        ))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -723,7 +725,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify<'_> {
         cx.common.peer_certificates = Some(self.client_cert.into_owned());
 
         self.transcript.add_message(&m);
-        Ok(Box::new(ExpectCcs {
+        Ok(Transition::Next(Box::new(ExpectCcs {
             config: self.config,
             secrets: self.secrets,
             transcript: self.transcript,
@@ -731,7 +733,7 @@ impl State<ServerConnectionData> for ExpectCertificateVerify<'_> {
             using_ems: self.using_ems,
             resuming: false,
             send_ticket: self.send_ticket,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -784,7 +786,7 @@ impl State<ServerConnectionData> for ExpectCcs {
         cx.common
             .record_layer
             .start_decrypting();
-        Ok(Box::new(ExpectFinished {
+        Ok(Transition::Next(Box::new(ExpectFinished {
             config: self.config,
             secrets: self.secrets,
             transcript: self.transcript,
@@ -792,7 +794,7 @@ impl State<ServerConnectionData> for ExpectCcs {
             using_ems: self.using_ems,
             resuming: self.resuming,
             send_ticket: self.send_ticket,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -968,10 +970,10 @@ impl State<ServerConnectionData> for ExpectFinished {
 
         cx.common
             .start_traffic(&mut cx.sendable_plaintext);
-        Ok(Box::new(ExpectTraffic {
+        Ok(Transition::Next(Box::new(ExpectTraffic {
             secrets: self.secrets,
             _fin_verified,
-        }))
+        })))
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
@@ -1007,7 +1009,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 ));
             }
         }
-        Ok(self)
+        Ok(Transition::Next(self))
     }
 
     fn export_keying_material(

@@ -8,6 +8,7 @@ use std::error::Error as StdError;
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
+use crate::common_state::Transition;
 use crate::msgs::deframer::buffers::{BufferProgress, DeframerSliceBuffer};
 use crate::server::ServerConnectionData;
 use crate::Error;
@@ -107,7 +108,16 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                     };
 
                 match self.core.process_msg(msg, state, None) {
-                    Ok(new) => state = new,
+                    Ok(Transition::Next(next)) => state = next,
+                    Ok(Transition::Blocked {
+                        current,
+                        message,
+                        why,
+                    }) => {
+                        self.core.pending_message = Some(message);
+                        state = current;
+                        todo!("handle {why:?} error");
+                    }
 
                     Err(e) => {
                         buffer.queue_discard(buffer_progress.take_discard());
