@@ -1960,6 +1960,9 @@ name = "portable-atomic"
 version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da544ee218f0d287a911e9c99a39a8c9bc8fcad3cb8db5959940044ecfc67265"
+dependencies = [
+ "critical-section",
+]
 
 [[package]]
 name = "powerfmt"
@@ -2241,6 +2244,7 @@ dependencies = [
  "log",
  "num-bigint",
  "once_cell",
+ "portable-atomic",
  "rcgen",
  "ring",
  "rustls-pemfile",

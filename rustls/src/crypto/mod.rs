@@ -574,13 +574,15 @@ pub fn default_fips_provider() -> CryptoProvider {
 }
 
 mod static_default {
-    // XXX TBD ???
-    // #[cfg(not(feature = "std"))]
+    #[cfg(any(
+        feature = "withrcalias",
+        not(any(feature = "critical-section", feature = "std"))
+    ))]
     use alloc::boxed::Box;
 
-    // #[cfg(not(feature = "std"))]
-    // use once_cell::race::OnceBox;
-    // #[cfg(feature = "std")]
+    #[cfg(not(any(feature = "critical-section", feature = "std", feature = "withrcalias")))]
+    use once_cell::race::OnceBox;
+    #[cfg(any(feature = "critical-section", feature = "std", feature = "withrcalias"))]
     use once_cell::sync::OnceCell;
 
     use crate::alias::Arc;
@@ -591,7 +593,10 @@ mod static_default {
     #[cfg(feature = "withrcalias")]
     pub(crate) type DefaultRef = Arc<CryptoProvider>;
 
-    #[cfg(not(feature = "withrcalias"))]
+    #[cfg(all(
+        any(feature = "critical-section", feature = "std"),
+        not(feature = "withrcalias")
+    ))]
     pub(crate) fn install_default(
         default_provider: Arc<CryptoProvider>,
     ) -> Result<(), Arc<CryptoProvider>> {
@@ -608,6 +613,16 @@ mod static_default {
         }
     }
 
+    #[cfg(not(any(feature = "critical-section", feature = "std", feature = "withrcalias")))]
+    pub(crate) fn install_default(
+        default_provider: Arc<CryptoProvider>,
+    ) -> Result<(), Arc<CryptoProvider>> {
+        match PROCESS_DEFAULT_PROVIDER.set(Box::new(default_provider)) {
+            Ok(()) => Ok(()),
+            Err(previous) => Err(*previous),
+        }
+    }
+
     #[cfg(not(feature = "withrcalias"))]
     pub(crate) fn get_default() -> Option<DefaultRef> {
         PROCESS_DEFAULT_PROVIDER.get()
@@ -621,10 +636,15 @@ mod static_default {
         }
     }
 
-    #[cfg(not(feature = "withrcalias"))]
+    #[cfg(all(
+        any(feature = "critical-section", feature = "std"),
+        not(feature = "withrcalias")
+    ))]
     type DefaultProviderStore = OnceCell<Arc<CryptoProvider>>;
     #[cfg(feature = "withrcalias")]
     type DefaultProviderStore = OnceCell<Box<CryptoProvider>>;
+    #[cfg(not(any(feature = "critical-section", feature = "std", feature = "withrcalias")))]
+    type DefaultProviderStore = OnceBox<Arc<CryptoProvider>>;
 
     static PROCESS_DEFAULT_PROVIDER: DefaultProviderStore = DefaultProviderStore::new();
 }

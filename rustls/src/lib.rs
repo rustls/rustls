@@ -390,10 +390,6 @@ mod log {
 #[macro_use]
 mod test_macros;
 
-// XXX QUICK SOLUTION TO AVOID SOME EXTRA COMPLEXITY in src/crypto/mod.rs for now:
-#[cfg(not(any(feature = "std", feature = "critical-section")))]
-compile_error!("AT LEAST ONE OF THE FOLLOWING FEATURES MUST BE ENABLED: std, critical-section");
-
 mod alias {
     #[cfg(not(feature = "withrcalias"))]
     pub use alloc::sync::Arc;

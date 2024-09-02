@@ -42,6 +42,12 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+      - name: cargo build (debug; rustls package with only aws-lc-rs feature enabled)
+        run: cargo build --locked --no-default-features --features aws-lc-rs --package rustls
+
+      - name: cargo test (debug; rustls package with only aws-lc-rs,std features enabled)
+        run: cargo test --no-default-features --features aws-lc-rs,std --package rustls
+
       - name: cargo build (debug; rustls package with the critical-section feature enabled)
         run: cargo build --locked --features critical-section --package rustls
 
