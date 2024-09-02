@@ -51,7 +51,7 @@ read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 zlib = ["dep:zlib-rs"]
 # XXX TODO RECONSIDER NAMING OF THIS RC ALIAS OPTION:
-withrcalias = ["critical-section"]
+withrcalias = []
 
 [dev-dependencies]
 base64 = "0.22"

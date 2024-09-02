@@ -580,9 +580,9 @@ mod static_default {
     ))]
     use alloc::boxed::Box;
 
-    #[cfg(not(any(feature = "critical-section", feature = "std", feature = "withrcalias")))]
+    #[cfg(not(any(feature = "critical-section", feature = "std")))]
     use once_cell::race::OnceBox;
-    #[cfg(any(feature = "critical-section", feature = "std", feature = "withrcalias"))]
+    #[cfg(any(feature = "critical-section", feature = "std"))]
     use once_cell::sync::OnceCell;
 
     use crate::alias::Arc;
@@ -641,10 +641,18 @@ mod static_default {
         not(feature = "withrcalias")
     ))]
     type DefaultProviderStore = OnceCell<Arc<CryptoProvider>>;
-    #[cfg(feature = "withrcalias")]
+    #[cfg(all(
+        feature = "withrcalias",
+        any(feature = "critical-section", feature = "std")
+    ))]
     type DefaultProviderStore = OnceCell<Box<CryptoProvider>>;
     #[cfg(not(any(feature = "critical-section", feature = "std", feature = "withrcalias")))]
     type DefaultProviderStore = OnceBox<Arc<CryptoProvider>>;
+    #[cfg(all(
+        feature = "withrcalias",
+        not(any(feature = "critical-section", feature = "std"))
+    ))]
+    type DefaultProviderStore = OnceBox<CryptoProvider>;
 
     static PROCESS_DEFAULT_PROVIDER: DefaultProviderStore = DefaultProviderStore::new();
 }
