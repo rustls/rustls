@@ -1,6 +1,5 @@
 use crate::enums::{ContentType, HandshakeType};
 use crate::error::Error;
-#[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::message::MessagePayload;
 

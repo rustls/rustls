@@ -18,7 +18,6 @@ use crate::enums::{
 use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
-#[cfg(feature = "logging")]
 use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};

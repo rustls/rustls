@@ -379,12 +379,12 @@ use log;
 use crate::crypto::CryptoProvider;
 
 #[cfg(not(feature = "logging"))]
-#[macro_use]
 mod log {
     macro_rules! trace    ( ($($tt:tt)*) => {{}} );
     macro_rules! debug    ( ($($tt:tt)*) => {{}} );
-    macro_rules! warn     ( ($($tt:tt)*) => {{}} );
     macro_rules! error    ( ($($tt:tt)*) => {{}} );
+    macro_rules! _warn    ( ($($tt:tt)*) => {{}} );
+    pub(crate) use {_warn as warn, debug, error, trace};
 }
 
 #[macro_use]

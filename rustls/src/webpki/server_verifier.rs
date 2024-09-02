@@ -5,7 +5,6 @@ use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTi
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
-#[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,

@@ -5,7 +5,6 @@ use pki_types::{CertificateDer, TrustAnchor};
 use webpki::anchor_from_trusted_cert;
 
 use super::pki_error;
-#[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::{DistinguishedName, Error};
 

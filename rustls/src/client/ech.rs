@@ -10,7 +10,6 @@ use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{EncapsulatedSecret, Hpke, HpkePublicKey, HpkeSealer, HpkeSuite};
 use crate::crypto::SecureRandom;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
-#[cfg(feature = "logging")]
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
