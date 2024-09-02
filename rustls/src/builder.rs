@@ -31,10 +31,7 @@ use crate::{ClientConfig, ServerConfig};
 /// supported protocol versions.
 ///
 /// ```
-/// # #[cfg(all(
-/// #   feature = "defaultproviderenabled",
-/// #   feature = "aws_lc_rs"
-/// # ))] {
+/// # #[cfg(feature = "aws_lc_rs")] {
 /// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// use rustls::{ClientConfig, ServerConfig};
 /// ClientConfig::builder()
@@ -50,10 +47,7 @@ use crate::{ClientConfig, ServerConfig};
 /// You may also override the choice of protocol versions:
 ///
 /// ```no_run
-/// # #[cfg(all(
-/// #   feature = "defaultproviderenabled",
-/// #   feature = "aws_lc_rs"
-/// # ))] {
+/// # #[cfg(feature = "aws_lc_rs")] {
 /// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// # use rustls::ServerConfig;
 /// ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
@@ -89,10 +83,7 @@ use crate::{ClientConfig, ServerConfig};
 /// For example:
 ///
 /// ```
-/// # #[cfg(all(
-/// #   feature = "defaultproviderenabled",
-/// #   feature = "aws_lc_rs"
-/// # ))] {
+/// # #[cfg(feature = "aws_lc_rs")] {
 /// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// # use rustls::ClientConfig;
 /// # let root_certs = rustls::RootCertStore::empty();
@@ -116,10 +107,7 @@ use crate::{ClientConfig, ServerConfig};
 /// For example:
 ///
 /// ```no_run
-/// # #[cfg(all(
-/// #   feature = "defaultproviderenabled",
-/// #   feature = "aws_lc_rs"
-/// # ))] {
+/// # #[cfg(feature = "aws_lc_rs")] {
 /// # rustls::crypto::aws_lc_rs::default_provider().install_default();
 /// # use rustls::ServerConfig;
 /// # let certs = vec![];

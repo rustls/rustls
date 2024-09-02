@@ -151,10 +151,7 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,no_run
-//! # #[cfg(all(
-//! #   feature = "defaultproviderenabled",
-//! #   feature = "aws_lc_rs"
-//! # ))] {
+//! # #[cfg(feature = "aws_lc_rs")] {
 //! # let root_store: rustls::RootCertStore = panic!();
 //! let config = rustls::ClientConfig::builder()
 //!     .with_root_certificates(root_store)
@@ -166,10 +163,7 @@
 //! know what to expect to find in the server's certificate.
 //!
 //! ```rust
-//! # #[cfg(all(
-//! #   feature = "defaultproviderenabled",
-//! #   feature = "aws_lc_rs"
-//! # ))] {
+//! # #[cfg(feature = "aws_lc_rs")] {
 //! # use rustls;
 //! # use webpki;
 //! # use rustls::internal::alias::Arc;

@@ -223,7 +223,6 @@ impl CryptoProvider {
     /// Call this early in your process to configure which provider is used for
     /// the provider.  The configuration should happen before any use of
     /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    // #[cfg(feature = "defaultproviderenabled")]
     pub fn install_default(self) -> Result<(), Arc<Self>> {
         crypto_default_provider::install_default_provider(Arc::new(self))
     }
@@ -231,7 +230,6 @@ impl CryptoProvider {
     /// Returns the default `CryptoProvider` for this process.
     ///
     /// This will be `None` if no default has been set yet.
-    // #[cfg(feature = "defaultproviderenabled")]
     #[cfg(not(feature = "withrcalias"))]
     pub fn get_default() -> Option<&'static Arc<Self>> {
         crypto_default_provider::get_default_crypto_provider()
@@ -250,7 +248,6 @@ impl CryptoProvider {
     /// - gets the pre-installed default, or
     /// - installs one `from_crate_features()`, or else
     /// - panics about the need to call [`CryptoProvider::install_default()`]
-    // #[cfg(feature = "defaultproviderenabled")]
     #[cfg(not(feature = "withrcalias"))]
     pub(crate) fn get_default_or_install_from_crate_features() -> &'static Arc<Self> {
         if let Some(provider) = Self::get_default() {
@@ -594,7 +591,6 @@ pub fn default_fips_provider() -> CryptoProvider {
     aws_lc_rs::default_provider()
 }
 
-// #[cfg(feature = "defaultproviderenabled")]
 mod crypto_default_provider {
     use crate::alias::Arc;
 

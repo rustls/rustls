@@ -1,7 +1,6 @@
 #[macro_use]
 mod macros;
 
-#[cfg(feature = "defaultproviderenabled")]
 #[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {
@@ -11,7 +10,6 @@ mod tests_with_ring {
     mod tests;
 }
 
-#[cfg(feature = "defaultproviderenabled")]
 #[cfg(feature = "aws_lc_rs")]
 #[path = "."]
 mod tests_with_aws_lc_rs {
