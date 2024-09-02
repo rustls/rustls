@@ -25,7 +25,6 @@ hashbrown = { version = "0.14", optional = true, default-features = false, featu
 log = { version = "0.4.8", optional = true }
 # XXX TBD ??? ??? - SHOULD KEEP `once_cell` for non-std embedded targets, at least
 # remove once our MSRV is >= 1.70
-# XXX TBD USE COMMIT FROM PROPOSAL VIA GITHUB FOR NOW: https://github.com/matklad/once_cell/pull/259
 once_cell = { version = "1.19", default-features = false, features = ["critical-section"] }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
