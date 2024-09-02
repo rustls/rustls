@@ -603,15 +603,11 @@ mod crypto_default_provider {
     use crate::alias::Arc;
     use crate::crypto::CryptoProvider;
 
-    // #[cfg(feature = "std")]
     #[cfg(not(feature = "withrcalias"))]
     static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();
     #[cfg(feature = "withrcalias")]
     static PROCESS_DEFAULT_PROVIDER: OnceCell<Box<CryptoProvider>> = OnceCell::new();
-    // #[cfg(not(feature = "std"))]
-    // static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
 
-    // #[cfg(feature = "std")]
     #[cfg(not(feature = "withrcalias"))]
     pub(crate) fn install_default_provider(
         default_provider: Arc<CryptoProvider>,
@@ -619,7 +615,6 @@ mod crypto_default_provider {
         PROCESS_DEFAULT_PROVIDER.set(default_provider)
     }
 
-    // #[cfg(not(feature = "std"))]
     #[cfg(feature = "withrcalias")]
     pub(crate) fn install_default_provider(
         default_provider: Arc<CryptoProvider>,

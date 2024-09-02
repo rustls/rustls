@@ -42,6 +42,12 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+      - name: cargo build (debug; rustls package with the critical-section feature enabled)
+        run: cargo build --locked --features critical-section --package rustls
+
+      - name: cargo test (debug; rustls package with the critical-section feature enabled)
+        run: cargo test --features critical-section --package rustls
+
       - name: cargo build (debug; rustls package with the withrcalias feature enabled)
         run: cargo build --locked --features withrcalias --package rustls
 

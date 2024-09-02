@@ -23,9 +23,8 @@ brotli = { version = "6", optional = true, default-features = false, features = 
 brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required for panic fix
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
 log = { version = "0.4.8", optional = true }
-# XXX TBD ??? ??? - SHOULD KEEP `once_cell` for non-std embedded targets, at least
-# remove once our MSRV is >= 1.70
-once_cell = { version = "1.19", default-features = false, features = ["critical-section"] }
+# NOTE: usage of once_cell should be based on which features are selected
+once_cell = { version = "1.19", optional = true, default-features = false }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.6", features = ["alloc"], default-features = false }
@@ -35,19 +34,21 @@ zlib-rs = { version = "0.2", optional = true }
 
 [features]
 default = ["aws_lc_rs", "logging", "std", "tls12"]
+# NOTE: std requirement for once_cell with once_cell/std is to support MSRV < 1.70
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
-# XXX TODO NAMING - ADD SEPARATORS
-withrcalias = []
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 ring = ["dep:ring", "webpki/ring"]
+critical-section = ["once_cell/critical-section"]
 custom-provider = []
 tls12 = []
 read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 zlib = ["dep:zlib-rs"]
+# XXX TODO RECONSIDER NAMING OF THIS RC ALIAS OPTION:
+withrcalias = ["critical-section"]
 
 [dev-dependencies]
 base64 = "0.22"
