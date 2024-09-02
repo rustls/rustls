@@ -175,6 +175,29 @@ jobs:
         run: cargo add --dev --features bindgen aws-lc-sys --package rustls --verbose && cargo install bindgen-cli --verbose
       - run: cross test --package rustls --target ${{ matrix.target }}
 
+  cross-with-rc-alias:
+    # XXX TBD FIND A WAY TO TEST WITH THIS KIND OF EMBEDDED TARGET
+    name: cross-target build testing with RC alias
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          # 32-bit target with no atomic ptr
+          - thumbv6m-none-eabi
+          # XXX TBD other targets to test this build on ???
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cross (cross-rs) from GitHub
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      # XXX TODO FIND WAY TO GET BUILD WORKING WITH BUILT-IN PROVIDERS
+      - run: cross build --no-default-features --features custom-provider,withrcalias --package rustls --target ${{ matrix.target }}
+
   format:
     name: Format
     runs-on: ubuntu-latest

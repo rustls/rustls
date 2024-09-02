@@ -24,7 +24,7 @@ brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required fo
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
 log = { version = "0.4.8", optional = true }
 # remove once our MSRV is >= 1.70
-once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
+once_cell = { version = "1.16", optional = true, default-features = false, features = ["alloc", "race"] }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.6", features = ["alloc"], default-features = false }
@@ -38,7 +38,7 @@ std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
 # XXX TODO NAMING - ADD SEPARATORS
 # XXX TODO ADD THIS TO DEFAULT FEATURES
-defaultproviderenabled = []
+defaultproviderenabled = ["dep:once_cell"]
 # XXX TODO NAMING - ADD SEPARATORS
 withrcalias = []
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
@@ -59,6 +59,7 @@ env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest
 hex = "0.4"
 log = "0.4.8"
 num-bigint = "0.4.4"
+once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 rustls-pemfile = "2"
 rustls-post-quantum = { path = "../rustls-post-quantum" }
