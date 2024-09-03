@@ -366,6 +366,9 @@ extern crate alloc;
 #[cfg(any(feature = "std", test))]
 extern crate std;
 
+#[cfg(doc)]
+use crate::crypto::CryptoProvider;
+
 // Import `test` sysroot crate for `Bencher` definitions.
 #[cfg(bench)]
 #[allow(unused_extern_crates)]
@@ -374,9 +377,6 @@ extern crate test;
 // log for logging (optional).
 #[cfg(feature = "logging")]
 use log;
-
-#[cfg(doc)]
-use crate::crypto::CryptoProvider;
 
 #[cfg(not(feature = "logging"))]
 mod log {
