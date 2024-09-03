@@ -23,7 +23,7 @@ brotli = { version = "6", optional = true, default-features = false, features = 
 brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required for panic fix
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
 log = { version = "0.4.8", optional = true }
-# NOTE: usage of once_cell should be based on which features are selected
+# NOTE: usage of once_cell should be based on which features are selected
 # TRY WITH PROPOSED UPDATE from GitHub - SHOULD NOT NEED to configure use of portable-atomic with critical-section here with this proposed update
 once_cell = { git = "https://github.com/brodycj/once_cell", rev = "f8c6b87f71ecfa8470dcced627fcbfee4329fe46", default-features = false, features = ["alloc"] }
 ring = { version = "0.17", optional = true }
@@ -35,7 +35,7 @@ zlib-rs = { version = "0.2", optional = true }
 
 [features]
 default = ["aws_lc_rs", "logging", "std", "tls12"]
-# NOTE: std requirement for once_cell with once_cell/std is to support MSRV < 1.70
+# NOTE: std requirement for once_cell with once_cell/std is to support MSRV < 1.70
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
