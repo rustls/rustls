@@ -24,8 +24,8 @@ brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required fo
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
 log = { version = "0.4.8", optional = true }
 # NOTE: usage of once_cell should be based on which features are selected
-# TRY WITH PROPOSED UPDATE from GitHub - SHOULD NOT NEED to configure use of portable-atomic with critical-section here with this proposed update
-once_cell = { git = "https://github.com/brodycj/once_cell", rev = "f8c6b87f71ecfa8470dcced627fcbfee4329fe46", default-features = false, features = ["alloc"] }
+# XXX XXX USING once_cell from GITHUB PR PENDING FINAL REVIEW: https://github.com/matklad/once_cell/pull/260
+once_cell = { git = "https://github.com/matklad/once_cell", rev = "e9bbdf0430c0e5f2c024b464eeeb7f3b93853369", default-features = false, features = ["alloc"], version = "1.20.0" }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.6", features = ["alloc"], default-features = false }
