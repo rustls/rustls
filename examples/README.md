@@ -18,5 +18,6 @@ We recommend new users start by looking at `simpleclient.rs` and `simpleserver.r
 
 * `simpleserver.rs` - shows a very minimal server example that accepts a single TLS connection. See `tlsserver-mio.rs` or `server_acceptor.rs` for a more realistic example.
 * `tlsserver-mio.rs` - shows a more complete server example that handles command line flags for customizing TLS options, and uses MIO to handle asynchronous I/O.
+* `simple_0rtt_server.rs` - shows how to make a TLS1.3 that accepts multiple connections and prints early 0RTT data.
 * `server_acceptor.rs` - shows how to use the `Acceptor` API to create a server that generates a unique `ServerConfig` for each client. This example also shows how to use client authentication, CRL revocation checking, and uses `rcgen` to generate its own certificates.
 * `unbuffered-server.rs` - shows an advanced example of using Rustls lower-level APIs to implement a server that does not buffer any data inside Rustls.
