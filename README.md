@@ -97,6 +97,7 @@ cryptography.
 from [`RustCrypto`] for cryptography.
 * [`rustls-post-quantum`]: an experimental provider that adds support for post-quantum
 key exchange to the default aws-lc-rs provider.
+* [`rustls-wolfcrypt-provider`] - a work-in-progress provider that uses [`wolfCrypt`] for cryptography.
 
 [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider
 [`mbedtls`]: https://github.com/Mbed-TLS/mbedtls
@@ -105,6 +106,8 @@ key exchange to the default aws-lc-rs provider.
 [`rustls-rustcrypto`]: https://github.com/RustCrypto/rustls-rustcrypto
 [`RustCrypto`]: https://github.com/RustCrypto
 [`rustls-post-quantum`]: https://crates.io/crates/rustls-post-quantum
+[`rustls-wolfcrypt-provider`]: https://github.com/wolfSSL/rustls-wolfcrypt-provider
+[`wolfCrypt`]: https://www.wolfssl.com/products/wolfcrypt
 
 #### Custom provider
 
