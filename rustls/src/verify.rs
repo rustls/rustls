@@ -251,7 +251,9 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
 }
 
-/// Turns off client authentication. In contrast to using
+/// Turns off client authentication.
+///
+/// In contrast to using
 /// `WebPkiClientVerifier::builder(roots).allow_unauthenticated().build()`, the `NoClientAuth`
 /// `ClientCertVerifier` will not offer client authentication at all, vs offering but not
 /// requiring it.
