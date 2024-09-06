@@ -53,8 +53,6 @@
     "NotJustKyberKeyShare": "we only offer the first kxg in a clienthello",
     "KyberKeyShareIncludedSecond": "^",
     "KyberKeyShareIncludedThird": "^",
-    "KyberNotInTLS12": "our bug: https://github.com/rustls/rustls/issues/2056",
-    "KyberNotAcceptedByTLS12Client": "^",
 #else
     "*Kyber*": "",
 #endif
@@ -193,7 +191,6 @@
     "MissingKeyShare-Server-TLS13": ":INCOMPATIBLE:",
     "EmptyEncryptedExtensions-TLS13": ":BAD_HANDSHAKE_MSG:",
     "NoSupportedCurves": ":INCOMPATIBLE:",
-    "BadECDHECurve": ":PEER_MISBEHAVIOUR:",
     "VersionTooLow": ":INCOMPATIBLE:",
     "ALPNClient-RejectUnknown-TLS-TLS12": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-RejectUnknown-TLS-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -368,7 +365,6 @@
     "Downgrade-TLS12-Client": ":PEER_MISBEHAVIOUR:",
     "Downgrade-TLS10-Client": ":HANDSHAKE_FAILURE:",
     "Downgrade-TLS10-Server": ":INCOMPATIBLE:",
-    "UnsupportedCurve": ":PEER_MISBEHAVIOUR:",
     "ECDSACurveMismatch-Verify-TLS13": ":BAD_SIGNATURE:",
     "SecondServerHelloNoVersion-TLS13": ":PEER_MISBEHAVIOUR:",
     "SecondServerHelloWrongVersion-TLS13": ":INCOMPATIBLE:",

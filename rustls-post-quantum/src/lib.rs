@@ -56,7 +56,7 @@ use rustls::crypto::{
     ActiveKeyExchange, CompletedKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup,
 };
 use rustls::ffdhe_groups::FfdheGroup;
-use rustls::{Error, NamedGroup, PeerMisbehaved};
+use rustls::{Error, NamedGroup, PeerMisbehaved, ProtocolVersion};
 
 /// A `CryptoProvider` which includes `X25519Kyber768Draft00` key exchange.
 pub fn provider() -> CryptoProvider {
@@ -126,6 +126,10 @@ impl SupportedKxGroup for X25519Kyber768Draft00 {
 
     fn name(&self) -> NamedGroup {
         NAMED_GROUP
+    }
+
+    fn usable_for_version(&self, version: ProtocolVersion) -> bool {
+        version == ProtocolVersion::TLSv1_3
     }
 }
 
