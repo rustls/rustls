@@ -403,12 +403,16 @@ impl ClientConfig {
             .find(|&scs| scs.suite() == suite)
     }
 
-    pub(super) fn find_kx_group(&self, group: NamedGroup) -> Option<&'static dyn SupportedKxGroup> {
+    pub(super) fn find_kx_group(
+        &self,
+        group: NamedGroup,
+        version: ProtocolVersion,
+    ) -> Option<&'static dyn SupportedKxGroup> {
         self.provider
             .kx_groups
             .iter()
             .copied()
-            .find(|skxg| skxg.name() == group)
+            .find(|skxg| skxg.usable_for_version(version) && skxg.name() == group)
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {
