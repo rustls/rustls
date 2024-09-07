@@ -43,9 +43,11 @@ mod client_hello {
     use crate::msgs::handshake::{
         CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
         ClientHelloPayload, EncryptedClientHello, HelloRetryExtension, HelloRetryRequest,
-        KeyShareEntry, Random, ServerExtension, ServerHelloPayload, SessionId,
+        KeyShareEntry, Random, ServerEncryptedClientHello, ServerExtension, ServerHelloPayload,
+        SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
+    use crate::server::EchConfig;
     use crate::sign;
     use crate::tls13::key_schedule::{
         server_ech_hrr_confirmation_secret, KeyScheduleEarly, KeyScheduleHandshake,
@@ -62,6 +64,7 @@ mod client_hello {
 
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,
+        pub(in crate::server) ech_configs: Option<Vec<EchConfig>>,
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
@@ -227,6 +230,7 @@ mod client_hello {
 
                     let next = Box::new(hs::ExpectClientHello {
                         config: self.config,
+                        ech_configs: self.ech_configs,
                         transcript: HandshakeHashOrBuffer::Hash(self.transcript),
                         #[cfg(feature = "tls12")]
                         session_id: SessionId::empty(),
@@ -373,6 +377,7 @@ mod client_hello {
                 client_hello,
                 resumedata.as_ref(),
                 self.extra_exts,
+                self.ech_configs,
                 &self.config,
             )?;
 
@@ -748,6 +753,7 @@ mod client_hello {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         extra_exts: Vec<ServerExtension>,
+        ech_configs: Option<Vec<EchConfig>>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
         let mut ep = hs::ExtensionProcessing::new();
@@ -756,6 +762,21 @@ mod client_hello {
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {
             ep.exts.push(ServerExtension::EarlyData);
+        }
+
+        if hello.ech_extension().is_some() {
+            if let Some(ech_configs) = ech_configs {
+                ep.exts
+                    .push(ServerExtension::EncryptedClientHello(
+                        ServerEncryptedClientHello {
+                            retry_configs: ech_configs
+                                .into_iter()
+                                .filter(|config| config.is_retry)
+                                .map(|config| config.config)
+                                .collect(),
+                        },
+                    ))
+            }
         }
 
         let ee = Message {
