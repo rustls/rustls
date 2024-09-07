@@ -22,8 +22,8 @@ use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, HandshakePayload,
-    KeyExchangeAlgorithm, Random, ServerExtension,
+    ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, EncryptedClientHello,
+    HandshakePayload, KeyExchangeAlgorithm, Random, ServerExtension,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -289,6 +289,17 @@ impl ExpectClientHello {
         };
 
         cx.common.negotiated_version = Some(version);
+
+        if self.config.ech_backend
+            && matches!(
+                client_hello.ech_extension(),
+                None | Some(EncryptedClientHello::Outer(_))
+            )
+        {
+            return Err(cx
+                .common
+                .missing_extension(PeerMisbehaved::MissingEch));
+        }
 
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension

@@ -370,6 +370,8 @@ pub struct ServerConfig {
     ///
     /// [RFC8779]: https://datatracker.ietf.org/doc/rfc8879/
     pub cert_decompressors: Vec<&'static dyn compress::CertDecompressor>,
+
+    pub ech_backend: bool,
 }
 
 impl ServerConfig {
