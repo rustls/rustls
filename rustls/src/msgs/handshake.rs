@@ -662,6 +662,9 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::CompressCertificate => {
                 Self::CertificateCompressionAlgorithms(Vec::read(&mut sub)?)
             }
+            ExtensionType::EncryptedClientHello => {
+                Self::EncryptedClientHello(EncryptedClientHello::read(&mut sub)?)
+            }
             ExtensionType::EncryptedClientHelloOuterExtensions => {
                 Self::EncryptedClientHelloOuterExtensions(Vec::read(&mut sub)?)
             }
@@ -942,6 +945,14 @@ impl ClientHelloPayload {
                 .iter()
                 .map(|ext| ext.ext_type()),
         )
+    }
+
+    pub(crate) fn ech_extension(&self) -> Option<&EncryptedClientHello> {
+        let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
+        match *ext {
+            ClientExtension::EncryptedClientHello(ref ech) => Some(ech),
+            _ => None,
+        }
     }
 
     pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {
