@@ -44,6 +44,7 @@ pub fn default_provider() -> CryptoProvider {
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &AwsLcRs,
         key_provider: &AwsLcRs,
+        hpke_suites: ALL_SUPPORTED_SUITES.to_vec(),
     }
 }
 
@@ -228,6 +229,7 @@ pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
 }
 
+use crate::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 pub use kx::ALL_KX_GROUPS;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use ticketer::Ticketer;

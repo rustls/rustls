@@ -10,6 +10,7 @@ use once_cell::sync::OnceCell;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+use crate::crypto::hpke::Hpke;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
@@ -217,6 +218,8 @@ pub struct CryptoProvider {
 
     /// Provider for loading private [SigningKey]s from [PrivateKeyDer].
     pub key_provider: &'static dyn KeyProvider,
+
+    pub hpke_suites: Vec<&'static dyn Hpke>,
 }
 
 impl CryptoProvider {
@@ -310,12 +313,14 @@ impl CryptoProvider {
             signature_verification_algorithms,
             secure_random,
             key_provider,
+            hpke_suites,
         } = self;
         cipher_suites.iter().all(|cs| cs.fips())
             && kx_groups.iter().all(|kx| kx.fips())
             && signature_verification_algorithms.fips()
             && secure_random.fips()
             && key_provider.fips()
+            && hpke_suites.iter().all(|hs| hs.fips())
     }
 }
 
