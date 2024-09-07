@@ -837,24 +837,7 @@ impl Codec<'_> for ClientHelloPayload {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let mut ret = Self {
-            client_version: ProtocolVersion::read(r)?,
-            random: Random::read(r)?,
-            session_id: SessionId::read(r)?,
-            cipher_suites: Vec::read(r)?,
-            compression_methods: Vec::read(r)?,
-            extensions: Vec::new(),
-        };
-
-        if r.any_left() {
-            ret.extensions = Vec::read(r)?;
-        }
-
-        match (r.any_left(), ret.extensions.is_empty()) {
-            (true, _) => Err(InvalidMessage::TrailingData("ClientHelloPayload")),
-            (_, true) => Err(InvalidMessage::MissingData("ClientHelloPayload")),
-            _ => Ok(ret),
-        }
+        Self::payload_decode(r, false)
     }
 }
 
@@ -935,6 +918,45 @@ impl ClientHelloPayload {
         for ext in exts {
             ext.encode(nested.buf);
         }
+    }
+
+    pub(crate) fn payload_decode(
+        r: &mut Reader<'_>,
+        is_ech_inner: bool,
+    ) -> Result<Self, InvalidMessage> {
+        let mut ret = Self {
+            client_version: ProtocolVersion::read(r)?,
+            random: Random::read(r)?,
+            session_id: SessionId::read(r)?,
+            cipher_suites: Vec::read(r)?,
+            compression_methods: Vec::read(r)?,
+            extensions: Vec::new(),
+        };
+
+        if r.any_left() {
+            ret.extensions = Vec::read(r)?;
+        }
+
+        if ret.extensions.is_empty() {
+            return Err(InvalidMessage::MissingData("ClientHelloPayload"));
+        }
+
+        if !is_ech_inner {
+            if r.any_left() {
+                return Err(InvalidMessage::TrailingData("ClientHelloPayload"));
+            }
+
+            return Ok(ret);
+        }
+
+        let rest = r.rest();
+        for byte in rest {
+            if *byte != 0 {
+                return Err(InvalidMessage::TrailingData("ClientHelloPayload"));
+            }
+        }
+
+        Ok(ret)
     }
 
     /// Returns true if there is more than one extension of a given
