@@ -28,7 +28,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::common::ActiveCertifiedKey;
-use crate::server::{tls13, ClientHello, ServerConfig};
+use crate::server::{tls13, ClientHello, EchConfig, ServerConfig};
 use crate::{suites, SupportedCipherSuite};
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
@@ -207,6 +207,7 @@ pub(super) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: Vec<ServerExtension>,
     pub(super) transcript: HandshakeHashOrBuffer,
+    pub(super) ech_configs: Option<Vec<EchConfig>>,
     #[cfg(feature = "tls12")]
     pub(super) session_id: SessionId,
     #[cfg(feature = "tls12")]
@@ -216,7 +217,11 @@ pub(super) struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub(super) fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+    pub(super) fn new(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+        ech_configs: Option<Vec<EchConfig>>,
+    ) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {
@@ -227,6 +232,7 @@ impl ExpectClientHello {
             config,
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
+            ech_configs,
             #[cfg(feature = "tls12")]
             session_id: SessionId::empty(),
             #[cfg(feature = "tls12")]
@@ -389,6 +395,7 @@ impl ExpectClientHello {
         match suite {
             SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
                 config: self.config,
+                ech_configs: self.ech_configs,
                 transcript,
                 suite,
                 randoms,

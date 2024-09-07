@@ -11,6 +11,8 @@ use std::io;
 use pki_types::{DnsName, UnixTime};
 
 use super::hs;
+#[cfg(feature = "std")]
+use super::{EchAccepted, EchConfig, EchStatus};
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
@@ -919,8 +921,62 @@ impl Accepted {
     /// configuration-dependent validation of the received `ClientHello` message fails.
     #[cfg(feature = "std")]
     pub fn into_connection(
+        self,
+        config: Arc<ServerConfig>,
+    ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+        self.into_server_connection(config, None)
+    }
+
+    #[cfg(feature = "std")]
+    pub fn into_ech(
         mut self,
         config: Arc<ServerConfig>,
+        ech_configs: Vec<EchConfig>,
+    ) -> Result<EchStatus, (Error, AcceptedAlert)> {
+        let outer_hello = Self::client_hello_payload(&self.message);
+        let mut cx = hs::ServerContext::from(&mut self.connection);
+
+        let (ech_ext_outer, sni) = match crate::server::ech::parse_ech_ext_outer_and_sni(
+            &mut cx,
+            outer_hello.ech_extension(),
+        ) {
+            Ok(Some(parsed)) => parsed,
+            Ok(None) => {
+                return Ok(EchStatus::Rejected(
+                    self.into_server_connection(config, Some(ech_configs))?,
+                ))
+            }
+            Err(err) => return Err((err, AcceptedAlert::from(self.connection))),
+        };
+
+        match crate::server::ech::handle_ech_outer(
+            &ech_configs,
+            config
+                .crypto_provider()
+                .hpke_suites
+                .as_slice(),
+            &mut cx,
+            outer_hello,
+            ech_ext_outer,
+            &sni,
+        ) {
+            Ok(Some(decode_context)) => Ok(EchStatus::Accepted(EchAccepted::new(
+                decode_context,
+                self.connection,
+                self.sig_schemes,
+            ))),
+            Ok(None) => Ok(EchStatus::Rejected(
+                self.into_server_connection(config, Some(ech_configs))?,
+            )),
+            Err(err) => Err((err, AcceptedAlert::from(self.connection))),
+        }
+    }
+
+    #[cfg(feature = "std")]
+    fn into_server_connection(
+        mut self,
+        config: Arc<ServerConfig>,
+        ech_configs: Option<Vec<EchConfig>>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
         if let Err(err) = self
             .connection
@@ -933,7 +989,7 @@ impl Accepted {
 
         self.connection.enable_secret_extraction = config.enable_secret_extraction;
 
-        let state = hs::ExpectClientHello::new(config, Vec::new());
+        let state = hs::ExpectClientHello::new(config, Vec::new(), ech_configs);
         let mut cx = hs::ServerContext::from(&mut self.connection);
 
         let ch = Self::client_hello_payload(&self.message);
@@ -1092,7 +1148,7 @@ impl ConnectionCore<ServerConnectionData> {
         common.set_max_fragment_size(config.max_fragment_size)?;
         common.enable_secret_extraction = config.enable_secret_extraction;
         Ok(Self::new(
-            Box::new(hs::ExpectClientHello::new(config, extra_exts)),
+            Box::new(hs::ExpectClientHello::new(config, extra_exts, None)),
             ServerConnectionData::default(),
             common,
         ))
