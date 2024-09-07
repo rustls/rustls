@@ -18,7 +18,7 @@ build = "build.rs"
 rustversion = { version = "1.0.6", optional = true }
 
 [dependencies]
-aws-lc-rs = { version = "1.8.1", optional = true, default-features = false, features = ["aws-lc-sys"] }
+aws-lc-rs = { version = "1.9", optional = true, default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
 brotli = { version = "6", optional = true, default-features = false, features = ["std"] }
 brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required for panic fix
 hashbrown = { version = "0.14", optional = true, default-features = false, features = ["ahash", "inline-more"] }
@@ -27,7 +27,7 @@ log = { version = "0.4.8", optional = true }
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }
-webpki = { package = "rustls-webpki", version = "0.102.6", features = ["alloc"], default-features = false }
+webpki = { package = "rustls-webpki", version = "0.102.8", features = ["alloc"], default-features = false }
 pki-types = { package = "rustls-pki-types", version = "1.7", features = ["alloc"] }
 zeroize = "1.7"
 zlib-rs = { version = "0.3", optional = true }
