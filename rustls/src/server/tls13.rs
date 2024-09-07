@@ -219,11 +219,13 @@ mod client_hello {
                         client_hello.session_id,
                         cx.common,
                         selected_kxg.name(),
+                        self.ech_configs.is_some(),
                         client_hello
                             .ech_extension()
                             .filter(|ech| matches!(ech, EncryptedClientHello::Inner))
                             .is_some(),
-                    );
+                        &self.config,
+                    )?;
                     emit_fake_ccs(cx.common);
 
                     let skip_early_data = max_early_data_size(self.config.max_early_data_size);
@@ -627,9 +629,11 @@ mod client_hello {
         session_id: SessionId,
         common: &mut CommonState,
         group: NamedGroup,
+        has_ech_configs: bool,
         // TODO: it really feels like a bug to always accept ECH if the client presents an inner extension. is bogo sure about this?
         ch_has_ech_inner: bool,
-    ) {
+        config: &ServerConfig,
+    ) -> Result<(), Error> {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id,
@@ -644,7 +648,17 @@ mod client_hello {
                 ProtocolVersion::TLSv1_3,
             ));
 
-        if ch_has_ech_inner {
+        if has_ech_configs {
+            let mut buf = vec![0u8; 8];
+            // TODO: is it ok to return errors that aren't done with cx.send_fatal_alert?
+            config
+                .crypto_provider()
+                .secure_random
+                .fill(&mut buf)?;
+
+            req.extensions
+                .push(HelloRetryExtension::EchHelloRetryRequest(buf));
+        } else if ch_has_ech_inner {
             req.extensions
                 .push(HelloRetryExtension::EchHelloRetryRequest(vec![0u8; 8]));
 
@@ -684,6 +698,8 @@ mod client_hello {
         transcript.add_message(&m);
         common.send_msg(m, false);
         common.handshake_kind = Some(HandshakeKind::FullWithHelloRetryRequest);
+
+        Ok(())
     }
 
     fn decide_if_early_data_allowed(
