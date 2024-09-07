@@ -4,27 +4,23 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-use std::fmt::{Debug, Formatter};
-use std::io::{self, BufReader, Read, Write};
-use std::sync::Arc;
-use std::{env, fs, net, process, thread, time};
-
 use base64::prelude::{Engine, BASE64_STANDARD};
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
-    ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
+    ClientConfig, ClientConnection, EchGreaseConfig, EchMode, EchStatus, Resumption,
     WebPkiServerVerifier,
 };
 use rustls::crypto::aws_lc_rs::hpke;
-use rustls::crypto::hpke::{Hpke, HpkePublicKey};
+use rustls::crypto::hpke::{Hpke, HpkePrivateKey, HpkePublicKey};
 use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, SupportedKxGroup};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
-    ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
+    Acceptor, ClientHello, EchAccepted, ProducesTickets, ServerConfig, ServerConnection,
+    WebPkiClientVerifier,
 };
 use rustls::{
     client, compress, server, sign, version, AlertDescription, CertificateCompressionAlgorithm,
@@ -32,6 +28,10 @@ use rustls::{
     InvalidMessage, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore,
     Side, SignatureAlgorithm, SignatureScheme, SupportedProtocolVersion,
 };
+use std::fmt::{Debug, Formatter};
+use std::io::{self, BufReader, Read, Write};
+use std::sync::Arc;
+use std::{env, fs, net, process, thread, time};
 
 static BOGO_NACK: i32 = 89;
 
@@ -102,6 +102,9 @@ struct Options {
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
+    ech_server_configs: Vec<Vec<u8>>,
+    ech_server_keys: Vec<Vec<u8>>,
+    ech_is_retry_configs: Vec<bool>,
     send_key_update: bool,
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
@@ -171,6 +174,9 @@ impl Options {
             on_resume_expect_ech_accept: false,
             on_initial_expect_ech_accept: false,
             enable_ech_grease: false,
+            ech_server_configs: vec![],
+            ech_server_keys: vec![],
+            ech_is_retry_configs: vec![],
             send_key_update: false,
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
@@ -238,6 +244,7 @@ impl SelectedProvider {
                 CryptoProvider {
                     kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
                     cipher_suites: aws_lc_rs::ALL_CIPHER_SUITES.to_vec(),
+                    hpke_suites: ALL_HPKE_SUITES.to_vec(),
                     ..aws_lc_rs::default_provider()
                 }
             }
@@ -767,9 +774,10 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     let cfg = if opts.selected_provider.supports_ech() {
         if let Some(ech_config_list) = &opts.ech_config_list {
-            let ech_mode: EchMode = EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)
-                .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
-                .into();
+            let ech_mode: EchMode =
+                client::EchConfig::new(ech_config_list.clone(), ALL_HPKE_SUITES)
+                    .unwrap_or_else(|_| quit(":INVALID_ECH_CONFIG_LIST:"))
+                    .into();
 
             cfg.with_ech(ech_mode)
                 .expect("invalid ECH config")
@@ -917,10 +925,22 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             }
             quit(":ECH_REJECTED:")
         }
-        Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
-        Error::PeerMisbehaved(PeerMisbehaved::MissingPskModesExtension) => {
-            quit(":MISSING_EXTENSION:")
+        Error::PeerMisbehaved(PeerMisbehaved::OfferedEchWithOldProtocolVersion)
+        | Error::PeerMisbehaved(PeerMisbehaved::OfferedIncorrectEchType) => {
+            quit_err(":INVALID_CLIENT_HELLO_INNER:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::MismatchedEchOuterExtensions)
+        | Error::PeerMisbehaved(PeerMisbehaved::IllegalEchExtensionInEchOuterExtensions) => {
+            quit_err(":INVALID_OUTER_EXTENSION:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::NonZeroClientHelloInnerPadding)
+        | Error::PeerMisbehaved(PeerMisbehaved::InvalidEchExtensionInEchOuterAfterRetry) => {
+            quit_err(":DECODE_ERROR:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::InvalidSecondEch) => quit_err(":DECRYPTION_FAILED:"),
+        Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
+        Error::PeerMisbehaved(PeerMisbehaved::MissingPskModesExtension)
+        | Error::PeerMisbehaved(PeerMisbehaved::MissingEch) => quit(":MISSING_EXTENSION:"),
         Error::PeerMisbehaved(PeerMisbehaved::TooMuchEarlyDataReceived) => {
             quit(":TOO_MUCH_READ_EARLY_DATA:")
         }
@@ -981,9 +1001,32 @@ fn handle_err(opts: &Options, err: Error) -> ! {
     }
 }
 
-fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
+fn flush(
+    opts: &Options,
+    mut ech_accepted: Option<&mut EchAccepted>,
+    sess: &mut Connection,
+    conn: &mut net::TcpStream,
+) {
     while sess.wants_write() {
-        if let Err(err) = sess.write_tls(conn) {
+        let mut buf = Vec::new();
+        sess.write_tls(&mut buf).unwrap();
+
+        if let Some(ech_accepted) = &mut ech_accepted {
+            if ech_accepted.wants_backend_copy() {
+                ech_accepted
+                    .copy_backend_tls(&buf)
+                    .unwrap();
+                if let Err(err) = ech_accepted.process_io() {
+                    ech_accepted
+                        .as_alert()
+                        .write_all(conn)
+                        .unwrap();
+                    handle_err(opts, err);
+                }
+            }
+        }
+
+        if let Err(err) = conn.write_all(&buf) {
             println!("IO error: {:?}", err);
             process::exit(0);
         }
@@ -1004,18 +1047,53 @@ fn server(conn: &mut Connection) -> &mut ServerConnection {
 
 const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 
-fn after_read(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
+fn after_read(
+    opts: &Options,
+    ech_accepted: Option<&mut EchAccepted>,
+    sess: &mut Connection,
+    conn: &mut net::TcpStream,
+) {
     if let Err(err) = sess.process_new_packets() {
-        flush(sess, conn); /* send any alerts before exiting */
+        flush(opts, ech_accepted, sess, conn); /* send any alerts before exiting */
         handle_err(opts, err);
     }
 }
 
-fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream, n: usize) {
+fn read_n_bytes(
+    opts: &Options,
+    mut ech_accepted: Option<&mut EchAccepted>,
+    sess: &mut Connection,
+    conn: &mut net::TcpStream,
+    n: usize,
+) {
     let mut bytes = [0u8; MAX_MESSAGE_SIZE];
     match conn.read(&mut bytes[..n]) {
-        Ok(count) => {
+        Ok(mut count) => {
             println!("read {:?} bytes", count);
+            if let Some(ech_accepted) = &mut ech_accepted {
+                if !ech_accepted.done() {
+                    ech_accepted
+                        .read_frontend_tls(&mut bytes.as_slice())
+                        .unwrap();
+
+                    if let Err(err) = ech_accepted.process_io() {
+                        ech_accepted
+                            .as_alert()
+                            .write_all(conn)
+                            .unwrap();
+                        handle_err(opts, err);
+                    }
+
+                    if ech_accepted.wants_backend_write() {
+                        count = ech_accepted
+                            .write_backend_tls(&mut io::Cursor::new(bytes.as_mut_slice()))
+                            .unwrap();
+                    } else {
+                        count = 0;
+                    }
+                }
+            }
+
             sess.read_tls(&mut io::Cursor::new(&mut bytes[..count]))
                 .expect("read_tls not expected to fail reading from buffer");
         }
@@ -1023,20 +1101,85 @@ fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream
         Err(err) => panic!("invalid read: {}", err),
     };
 
-    after_read(opts, sess, conn);
+    after_read(opts, ech_accepted, sess, conn);
 }
 
-fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
-    match sess.read_tls(conn) {
+fn read_all_bytes(
+    opts: &Options,
+    mut ech_accepted: Option<&mut EchAccepted>,
+    sess: &mut Connection,
+    conn: &mut net::TcpStream,
+) {
+    // TODO making this buffer large makes it fail tests. why?
+    let mut buf = [0; 1024];
+    let mut count = conn.read(buf.as_mut_slice()).unwrap();
+
+    if let Some(ech_accepted) = &mut ech_accepted {
+        if !ech_accepted.done() {
+            ech_accepted
+                .read_frontend_tls(&mut io::Cursor::new(&mut buf[..count]))
+                .unwrap();
+
+            if let Err(err) = ech_accepted.process_io() {
+                ech_accepted
+                    .as_alert()
+                    .write_all(conn)
+                    .unwrap();
+                handle_err(opts, err);
+            }
+
+            if ech_accepted.wants_backend_write() {
+                count = ech_accepted
+                    .write_backend_tls(&mut io::Cursor::new(buf.as_mut_slice()))
+                    .unwrap();
+            } else {
+                count = 0;
+            }
+        }
+    }
+
+    match sess.read_tls(&mut io::Cursor::new(&mut buf[..count])) {
         Ok(_) => {}
         Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => {}
         Err(err) => panic!("invalid read: {}", err),
     };
 
-    after_read(opts, sess, conn);
+    after_read(opts, ech_accepted, sess, conn);
 }
 
-fn exec(opts: &Options, mut sess: Connection, count: usize) {
+fn exec(
+    opts: &Options,
+    server_cfg: &Option<Arc<ServerConfig>>,
+    client_cfg: &Option<Arc<ClientConfig>>,
+    count: usize,
+) {
+    fn make_session(
+        opts: &Options,
+        scfg: &Option<Arc<ServerConfig>>,
+        ccfg: &Option<Arc<ClientConfig>>,
+    ) -> Connection {
+        assert!(opts.quic_transport_params.is_empty());
+        assert!(opts
+            .expect_quic_transport_params
+            .is_empty());
+
+        if opts.side == Side::Server {
+            let scfg = Arc::clone(scfg.as_ref().unwrap());
+            ServerConnection::new(scfg)
+                .unwrap()
+                .into()
+        } else {
+            let server_name = ServerName::try_from(opts.host_name.as_str())
+                .unwrap()
+                .to_owned();
+            let ccfg = Arc::clone(ccfg.as_ref().unwrap());
+
+            ClientConnection::new(ccfg, server_name)
+                .unwrap()
+                .into()
+        }
+    }
+
     let mut sent_message = false;
 
     let addrs = [
@@ -1052,15 +1195,78 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
     conn.write_all(&opts.shim_id.to_le_bytes())
         .unwrap();
 
+    let (mut sess, mut ech_accepted) = if !opts.ech_server_keys.is_empty() {
+        let mut acceptor = Acceptor::default();
+        acceptor.read_tls(&mut conn).unwrap();
+        let accepted = acceptor.accept().unwrap().unwrap();
+
+        let ech_configs = opts
+            .ech_server_keys
+            .iter()
+            .zip(opts.ech_server_configs.iter())
+            .zip(opts.ech_is_retry_configs.iter())
+            .map(|((key, payload), is_retry)| server::EchConfig {
+                private_key: HpkePrivateKey::from(key.to_vec()),
+                config: EchConfigPayload::read_bytes(payload).unwrap(),
+                is_retry: *is_retry,
+            })
+            .collect();
+
+        let ech_status = match accepted.into_ech(server_cfg.as_ref().unwrap().clone(), ech_configs)
+        {
+            Ok(ech_status) => ech_status,
+            Err((error, mut alert)) => {
+                alert.write_all(&mut conn).unwrap();
+                handle_err(opts, error);
+            }
+        };
+        let (sess, ech_accepted) = match ech_status {
+            server::EchStatus::Accepted(mut ech_accepted) => {
+                let mut scfg = server_cfg
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .clone();
+                scfg.ech_backend = true;
+
+                let mut sess = ServerConnection::new(Arc::new(scfg)).unwrap();
+
+                if ech_accepted.wants_backend_write() && sess.wants_read() {
+                    let mut buf = Vec::new();
+                    ech_accepted
+                        .write_backend_tls(&mut buf)
+                        .unwrap();
+
+                    sess.read_tls(&mut buf.as_slice())
+                        .unwrap();
+                    sess.process_new_packets().unwrap();
+                }
+
+                (sess, Some(ech_accepted))
+            }
+            server::EchStatus::Rejected(sess) => (sess, None),
+        };
+
+        (Connection::Server(sess), ech_accepted)
+    } else {
+        (make_session(opts, server_cfg, client_cfg), None)
+    };
+
     loop {
         if !sent_message && (opts.queue_data || (opts.queue_data_on_resume && count > 0)) {
             if !opts
                 .queue_early_data_after_received_messages
                 .is_empty()
             {
-                flush(&mut sess, &mut conn);
+                flush(opts, ech_accepted.as_mut(), &mut sess, &mut conn);
                 for message_size_estimate in &opts.queue_early_data_after_received_messages {
-                    read_n_bytes(opts, &mut sess, &mut conn, *message_size_estimate);
+                    read_n_bytes(
+                        opts,
+                        ech_accepted.as_mut(),
+                        &mut sess,
+                        &mut conn,
+                        *message_size_estimate,
+                    );
                 }
                 println!("now ready for early data");
             }
@@ -1082,11 +1288,11 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
         }
 
         if !quench_writes {
-            flush(&mut sess, &mut conn);
+            flush(opts, ech_accepted.as_mut(), &mut sess, &mut conn);
         }
 
         if sess.wants_read() {
-            read_all_bytes(opts, &mut sess, &mut conn);
+            read_all_bytes(opts, ech_accepted.as_mut(), &mut sess, &mut conn);
         }
 
         if opts.side == Side::Server && opts.enable_early_data {
@@ -1135,7 +1341,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
 
         if !sess.is_handshaking() && opts.only_write_one_byte_after_handshake && !sent_message {
             println!("writing message and then only one byte of its tls frame");
-            flush(&mut sess, &mut conn);
+            flush(opts, ech_accepted.as_mut(), &mut sess, &mut conn);
 
             sess.writer()
                 .write_all(b"hello")
@@ -1224,11 +1430,14 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
         {
             let ech_accept_required =
                 (count == 0 && opts.on_initial_expect_ech_accept) || opts.expect_ech_accept;
-            if ech_accept_required
-                && !sess.is_handshaking()
-                && client(&mut sess).ech_status() != EchStatus::Accepted
-            {
-                quit_err("ECH was not accepted, but we expect the opposite");
+            if ech_accept_required && !sess.is_handshaking() {
+                let did_accept = match opts.side {
+                    Side::Client => client(&mut sess).ech_status() == EchStatus::Accepted,
+                    Side::Server => ech_accepted.is_some(),
+                };
+                if !did_accept {
+                    quit_err("ECH was not accepted, but we expect the opposite");
+                }
             }
         }
 
@@ -1598,6 +1807,19 @@ pub fn main() {
             "-enable-ech-grease" => {
                 opts.enable_ech_grease = true;
             }
+            "-ech-server-config" => {
+                opts.ech_server_configs.push(BASE64_STANDARD.decode(args.remove(0).as_bytes()).expect("invalid ECH config base64"))
+            }
+            "-ech-server-key" => {
+                opts.ech_server_keys.push(BASE64_STANDARD.decode(args.remove(0).as_bytes()).expect("invalid ECH server key base64"));
+            }
+            "-ech-is-retry-config" => {
+                opts.ech_is_retry_configs.push(match args.remove(0).as_str() {
+                    "0" => false,
+                    "1" => true,
+                    _ => panic!("invalid -ech-is-retry-config")
+                })
+            }
             "-server-preference" => {
                 opts.server_preference = true;
             }
@@ -1629,6 +1851,7 @@ pub fn main() {
             "-false-start" |
             "-fallback-scsv" |
             "-fail-early-callback" |
+            "-fail-early-callback-ech-rewind" |
             "-fail-cert-callback" |
             "-install-ddos-callback" |
             "-advertise-npn" |
@@ -1698,36 +1921,8 @@ pub fn main() {
         Side::Server => (None, Some(make_server_cfg(&opts))),
     };
 
-    fn make_session(
-        opts: &Options,
-        scfg: &Option<Arc<ServerConfig>>,
-        ccfg: &Option<Arc<ClientConfig>>,
-    ) -> Connection {
-        assert!(opts.quic_transport_params.is_empty());
-        assert!(opts
-            .expect_quic_transport_params
-            .is_empty());
-
-        if opts.side == Side::Server {
-            let scfg = Arc::clone(scfg.as_ref().unwrap());
-            ServerConnection::new(scfg)
-                .unwrap()
-                .into()
-        } else {
-            let server_name = ServerName::try_from(opts.host_name.as_str())
-                .unwrap()
-                .to_owned();
-            let ccfg = Arc::clone(ccfg.as_ref().unwrap());
-
-            ClientConnection::new(ccfg, server_name)
-                .unwrap()
-                .into()
-        }
-    }
-
     for i in 0..opts.resumes + 1 {
-        let sess = make_session(&opts, &server_cfg, &client_cfg);
-        exec(&opts, sess, i);
+        exec(&opts, &server_cfg, &client_cfg, i);
         if opts.resume_with_tickets_disabled {
             opts.tickets = false;
             server_cfg = Some(make_server_cfg(&opts));

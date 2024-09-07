@@ -27,7 +27,6 @@
 #elif defined(AWS_LC_RS) && defined(FIPS)
     "TLS-ECH-*": "ECH test suites use non-FIPS approved algos",
 #else
-    "TLS-ECH-Server*": "ECH server support NYI",
     "TLS-ECH-Client-NoSupportedConfigs": "we don't fallback to TLS w/o ECH for no supported configs",
     "TLS-ECH-Client-SkipInvalidPublicName*": "we allow underscore names, don't fallback on no ECH configs",
     "TLS-ECH-Client-NoSupportedConfigs-GREASE": "we don't fallback to GREASE for no ECH configs",
