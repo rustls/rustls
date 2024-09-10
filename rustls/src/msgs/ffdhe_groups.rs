@@ -13,6 +13,10 @@ pub struct FfdheGroup<'a> {
 impl FfdheGroup<'static> {
     /// Return the `FfdheGroup` corresponding to the provided `NamedGroup`
     /// if it is indeed an FFDHE group
+    #[deprecated(
+        since = "0.23.13",
+        note = "This function is linker-unfriendly.  Use `SupportedKxGroup::ffdhe_group()` instead"
+    )]
     pub fn from_named_group(named_group: NamedGroup) -> Option<Self> {
         match named_group {
             NamedGroup::FFDHE2048 => Some(FFDHE2048),
@@ -27,6 +31,10 @@ impl FfdheGroup<'static> {
 
 impl<'a> FfdheGroup<'a> {
     /// Return the `NamedGroup` for the `FfdheGroup` if it represents one.
+    #[deprecated(
+        since = "0.23.13",
+        note = "This function is linker-unfriendly.  Use `SupportedKxGroup::name()` instead"
+    )]
     pub fn named_group(&self) -> Option<NamedGroup> {
         match *self {
             FFDHE2048 => Some(NamedGroup::FFDHE2048),
@@ -306,11 +314,10 @@ fn named_group_ffdhe_group_roundtrip() {
     use NamedGroup::*;
     let ffdhe_groups = [FFDHE2048, FFDHE3072, FFDHE4096, FFDHE6144, FFDHE8192];
     for g in ffdhe_groups {
-        assert_eq!(
-            FfdheGroup::from_named_group(g)
-                .unwrap()
-                .named_group(),
-            Some(g)
-        );
+        #[allow(deprecated)]
+        let roundtrip = FfdheGroup::from_named_group(g)
+            .unwrap()
+            .named_group();
+        assert_eq!(roundtrip, Some(g));
     }
 }

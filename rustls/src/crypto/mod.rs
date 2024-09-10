@@ -6,6 +6,7 @@ use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
 use crate::alias::Arc;
+use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
     verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms,
@@ -396,6 +397,21 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
         })
     }
 
+    /// FFDHE group the `SupportedKxGroup` operates in.
+    ///
+    /// Return `None` if this group is not a FFDHE one.
+    ///
+    /// The default implementation calls `FfdheGroup::from_named_group`: this function
+    /// is extremely linker-unfriendly so it is recommended all key exchange implementers
+    /// provide this function.
+    ///
+    /// `rustls::ffdhe_groups` contains suitable values to return from this,
+    /// for example [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
+    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        #[allow(deprecated)]
+        FfdheGroup::from_named_group(self.name())
+    }
+
     /// Named group the SupportedKxGroup operates in.
     ///
     /// If the `NamedGroup` enum does not have a name for the algorithm you are implementing,
@@ -475,6 +491,21 @@ pub trait ActiveKeyExchange: Send + Sync {
     /// For FFDHE, the encoding required is defined in
     /// [RFC8446 section 4.2.8.1](https://www.rfc-editor.org/rfc/rfc8446#section-4.2.8.1).
     fn pub_key(&self) -> &[u8];
+
+    /// FFDHE group the `ActiveKeyExchange` is operating in.
+    ///
+    /// Return `None` if this group is not a FFDHE one.
+    ///
+    /// The default implementation calls `FfdheGroup::from_named_group`: this function
+    /// is extremely linker-unfriendly so it is recommended all key exchange implementers
+    /// provide this function.
+    ///
+    /// `rustls::ffdhe_groups` contains suitable values to return from this,
+    /// for example [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
+    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        #[allow(deprecated)]
+        FfdheGroup::from_named_group(self.group())
+    }
 
     /// Return the group being used.
     fn group(&self) -> NamedGroup;

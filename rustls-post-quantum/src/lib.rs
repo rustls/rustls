@@ -55,6 +55,7 @@ use rustls::crypto::aws_lc_rs::{default_provider, kx_group};
 use rustls::crypto::{
     ActiveKeyExchange, CompletedKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup,
 };
+use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{Error, NamedGroup, PeerMisbehaved};
 
 /// A `CryptoProvider` which includes `X25519Kyber768Draft00` key exchange.
@@ -119,6 +120,10 @@ impl SupportedKxGroup for X25519Kyber768Draft00 {
         })
     }
 
+    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        None
+    }
+
     fn name(&self) -> NamedGroup {
         NAMED_GROUP
     }
@@ -151,6 +156,10 @@ impl ActiveKeyExchange for Active {
 
     fn pub_key(&self) -> &[u8] {
         &self.combined_pub_key
+    }
+
+    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+        None
     }
 
     fn group(&self) -> NamedGroup {

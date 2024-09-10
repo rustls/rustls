@@ -1,6 +1,6 @@
 use base64::prelude::*;
 use rustls::ffdhe_groups::FfdheGroup;
-use rustls::NamedGroup;
+use rustls::{ffdhe_groups, NamedGroup};
 
 use crate::utils::verify_openssl3_available;
 
@@ -10,20 +10,29 @@ fn ffdhe_params_correct() {
 
     verify_openssl3_available();
 
-    let groups = [FFDHE2048, FFDHE3072, FFDHE4096, FFDHE6144, FFDHE8192];
-    for group in groups {
-        println!("testing {group:?}");
-        test_ffdhe_params_correct(group);
+    for (name, group) in [
+        (FFDHE2048, ffdhe_groups::FFDHE2048),
+        (FFDHE3072, ffdhe_groups::FFDHE3072),
+        (FFDHE4096, ffdhe_groups::FFDHE4096),
+        (FFDHE6144, ffdhe_groups::FFDHE6144),
+        (FFDHE8192, ffdhe_groups::FFDHE8192),
+    ] {
+        println!("testing {name:?}");
+        test_ffdhe_params_correct(name, group);
     }
 }
 
-fn test_ffdhe_params_correct(group: NamedGroup) {
-    let (p, g) = get_ffdhe_params_from_openssl(group);
+fn test_ffdhe_params_correct(name: NamedGroup, group: FfdheGroup<'static>) {
+    let (p, g) = get_ffdhe_params_from_openssl(name);
     let openssl_params = FfdheGroup::from_params_trimming_leading_zeros(&p, &g);
-    let rustls_params = FfdheGroup::from_named_group(group).unwrap();
-    assert_eq!(rustls_params.named_group(), Some(group));
+    #[allow(deprecated)]
+    let rustls_params_from_name = FfdheGroup::from_named_group(name).unwrap();
+    #[allow(deprecated)]
+    let round_trip_name = rustls_params_from_name.named_group();
+    assert_eq!(round_trip_name, Some(name));
 
-    assert_eq!(rustls_params, openssl_params);
+    assert_eq!(rustls_params_from_name, openssl_params);
+    assert_eq!(group, openssl_params);
 }
 
 /// Get FFDHE parameters `(p, g)` for the given `ffdhe_group` from OpenSSL

@@ -1866,7 +1866,7 @@ pub(crate) struct ServerDhParams {
 impl ServerDhParams {
     #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
-        let params = match FfdheGroup::from_named_group(kx.group()) {
+        let params = match kx.ffdhe_group() {
             Some(params) => params,
             None => panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group()),
         };
@@ -1879,8 +1879,8 @@ impl ServerDhParams {
     }
 
     #[cfg(feature = "tls12")]
-    fn named_group(&self) -> Option<NamedGroup> {
-        FfdheGroup::from_params_trimming_leading_zeros(&self.dh_p.0, &self.dh_g.0).named_group()
+    pub(crate) fn as_ffdhe_group(&self) -> FfdheGroup<'_> {
+        FfdheGroup::from_params_trimming_leading_zeros(&self.dh_p.0, &self.dh_g.0)
     }
 }
 
@@ -1928,14 +1928,6 @@ impl ServerKeyExchangeParams {
         match self {
             Self::Ecdh(ecdh) => ecdh.encode(buf),
             Self::Dh(dh) => dh.encode(buf),
-        }
-    }
-
-    #[cfg(feature = "tls12")]
-    pub(crate) fn named_group(&self) -> Option<NamedGroup> {
-        match self {
-            Self::Ecdh(ecdh) => Some(ecdh.curve_params.named_group),
-            Self::Dh(dh) => dh.named_group(),
         }
     }
 }

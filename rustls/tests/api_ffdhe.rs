@@ -150,10 +150,7 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
                     ffdhe::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
                     provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                 ],
-                kx_groups: vec![
-                    &ffdhe::FfdheKxGroup(NamedGroup::FFDHE4096),
-                    provider::kx_group::SECP256R1,
-                ],
+                kx_groups: vec![&ffdhe::FFDHE4096_KX_GROUP, provider::kx_group::SECP256R1],
                 ..provider::default_provider()
             }
             .into(),
@@ -354,6 +351,14 @@ fn server_avoids_cipher_suite_with_no_common_kx_groups() {
     }
 }
 
+#[test]
+fn non_ffdhe_kx_does_not_have_ffdhe_group() {
+    let non_ffdhe = provider::kx_group::SECP256R1;
+    assert_eq!(non_ffdhe.ffdhe_group(), None);
+    let active = non_ffdhe.start().unwrap();
+    assert_eq!(active.ffdhe_group(), None);
+}
+
 mod ffdhe {
     use num_bigint::BigUint;
     use rustls::crypto::{
@@ -361,7 +366,7 @@ mod ffdhe {
         SupportedKxGroup,
     };
     use rustls::ffdhe_groups::FfdheGroup;
-    use rustls::{CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite};
+    use rustls::{ffdhe_groups, CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite};
 
     use super::provider;
 
@@ -376,8 +381,12 @@ mod ffdhe {
 
     static FFDHE_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&FFDHE2048_KX_GROUP, &FFDHE3072_KX_GROUP];
 
-    pub const FFDHE2048_KX_GROUP: FfdheKxGroup = FfdheKxGroup(NamedGroup::FFDHE2048);
-    pub const FFDHE3072_KX_GROUP: FfdheKxGroup = FfdheKxGroup(NamedGroup::FFDHE3072);
+    pub const FFDHE2048_KX_GROUP: FfdheKxGroup =
+        FfdheKxGroup(NamedGroup::FFDHE2048, ffdhe_groups::FFDHE2048);
+    pub const FFDHE3072_KX_GROUP: FfdheKxGroup =
+        FfdheKxGroup(NamedGroup::FFDHE3072, ffdhe_groups::FFDHE3072);
+    pub const FFDHE4096_KX_GROUP: FfdheKxGroup =
+        FfdheKxGroup(NamedGroup::FFDHE4096, ffdhe_groups::FFDHE4096);
 
     static FFDHE_CIPHER_SUITES: &[rustls::SupportedCipherSuite] = &[
         TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -402,7 +411,7 @@ mod ffdhe {
         };
 
     #[derive(Debug)]
-    pub struct FfdheKxGroup(pub NamedGroup);
+    pub struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
 
     impl SupportedKxGroup for FfdheKxGroup {
         fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, rustls::Error> {
@@ -412,20 +421,23 @@ mod ffdhe {
                 .fill(&mut x)?;
             let x = BigUint::from_bytes_be(&x);
 
-            let group = FfdheGroup::from_named_group(self.0).unwrap();
-            let p = BigUint::from_bytes_be(group.p);
-            let g = BigUint::from_bytes_be(group.g);
+            let p = BigUint::from_bytes_be(self.1.p);
+            let g = BigUint::from_bytes_be(self.1.g);
 
             let x_pub = g.modpow(&x, &p);
-            let x_pub = to_bytes_be_with_len(x_pub, group.p.len());
+            let x_pub = to_bytes_be_with_len(x_pub, self.1.p.len());
 
             Ok(Box::new(ActiveFfdheKx {
                 x_pub,
                 x,
                 p,
-                group,
+                group: self.1,
                 named_group: self.0,
             }))
+        }
+
+        fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+            Some(self.1)
         }
 
         fn name(&self) -> NamedGroup {
@@ -452,6 +464,10 @@ mod ffdhe {
 
         fn pub_key(&self) -> &[u8] {
             &self.x_pub
+        }
+
+        fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+            Some(self.group)
         }
 
         fn group(&self) -> NamedGroup {
