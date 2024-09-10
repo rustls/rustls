@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::fmt::{Debug, Formatter};
@@ -11,6 +10,8 @@ use std::io;
 use pki_types::{DnsName, UnixTime};
 
 use super::hs;
+
+use crate::alias::Arc;
 use crate::builder::ConfigBuilder;
 use crate::common_state::{CommonState, Side};
 #[cfg(feature = "std")]
@@ -51,7 +52,7 @@ use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
 /// in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common
 /// choice.
-pub trait StoresServerSessions: Debug + Send + Sync {
+pub_api_trait!(StoresServerSessions, {
     /// Store session secrets encoded in `value` against `key`,
     /// overwrites any existing value against `key`.  Returns `true`
     /// if the value was stored.
@@ -69,7 +70,7 @@ pub trait StoresServerSessions: Debug + Send + Sync {
     /// whether their session can be resumed; the implementation is not required to remember
     /// a session even if it returns `true` here.
     fn can_cache(&self) -> bool;
-}
+});
 
 /// A trait for the ability to encrypt and decrypt tickets.
 pub trait ProducesTickets: Debug + Send + Sync {
@@ -104,6 +105,7 @@ pub trait ProducesTickets: Debug + Send + Sync {
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 }
 
+////// XXX TODO DOC XXX
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
 ///
@@ -113,13 +115,14 @@ pub trait ProducesTickets: Debug + Send + Sync {
 /// For applications that use async I/O and need to do I/O to choose
 /// a certificate (for instance, fetching a certificate from a data store),
 /// the [`Acceptor`] interface is more suitable.
-pub trait ResolvesServerCert: Debug + Send + Sync {
+////// XXX TODO DOC XXX
+pub_api_trait!(ResolvesServerCert, {
     /// Choose a certificate chain and matching key given simplified
     /// ClientHello information.
     ///
     /// Return `None` to abort the handshake.
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>>;
-}
+});
 
 /// A struct representing the received Client Hello
 pub struct ClientHello<'a> {
@@ -402,9 +405,9 @@ impl ServerConfig {
         // Safety assumptions:
         // 1. that the provider has been installed (explicitly or implicitly)
         // 2. that the process-level default provider is usable with the supplied protocol versions.
-        Self::builder_with_provider(Arc::clone(
-            CryptoProvider::get_default_or_install_from_crate_features(),
-        ))
+        Self::builder_with_provider(
+            CryptoProvider::get_default_or_install_from_crate_features().clone(),
+        )
         .with_protocol_versions(versions)
         .unwrap()
     }
@@ -510,7 +513,6 @@ impl ServerConfig {
 #[cfg(feature = "std")]
 mod connection {
     use alloc::boxed::Box;
-    use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt;
     use core::fmt::{Debug, Formatter};
@@ -518,6 +520,8 @@ mod connection {
     use std::io;
 
     use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
+
+    use crate::alias::Arc;
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
@@ -692,9 +696,10 @@ mod connection {
     ///
     /// ```no_run
     /// # #[cfg(feature = "aws_lc_rs")] {
+    /// # use rustls::internal::alias::Arc;
     /// # fn choose_server_config(
     /// #     _: rustls::server::ClientHello,
-    /// # ) -> std::sync::Arc<rustls::ServerConfig> {
+    /// # ) -> Arc<rustls::ServerConfig> {
     /// #     unimplemented!();
     /// # }
     /// # #[allow(unused_variables)]

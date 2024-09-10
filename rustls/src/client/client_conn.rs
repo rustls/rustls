@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -8,6 +7,8 @@ use pki_types::{ServerName, UnixTime};
 
 use super::handy::NoClientSessionStorage;
 use super::hs;
+
+use crate::alias::Arc;
 use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
@@ -30,6 +31,7 @@ use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
 #[cfg(doc)]
 use crate::{crypto, DistinguishedName};
 
+//// XXX TODO FIX API DOC HERE
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
 ///
@@ -40,7 +42,7 @@ use crate::{crypto, DistinguishedName};
 /// `set_`, `insert_`, `remove_` and `take_` operations are mutating; this isn't
 /// expressed in the type system to allow implementations freedom in
 /// how to achieve interior mutability.  `Mutex` is a common choice.
-pub trait ClientSessionStore: fmt::Debug + Send + Sync {
+pub_api_trait!(ClientSessionStore, {
     /// Remember what `NamedGroup` the given server chose.
     fn set_kx_hint(&self, server_name: ServerName<'static>, group: NamedGroup);
 
@@ -90,11 +92,12 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
         &self,
         server_name: &ServerName<'static>,
     ) -> Option<persist::Tls13ClientSessionValue>;
-}
+});
 
+//// XXX TODO FIX API DOC HERE
 /// A trait for the ability to choose a certificate chain and
 /// private key for the purposes of client authentication.
-pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
+pub_api_trait!(ResolvesClientCert, {
     /// Resolve a client certificate chain/private key to use as the client's
     /// identity.
     ///
@@ -122,7 +125,7 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
-}
+});
 
 /// Common configuration for (typically) all connections made by a program.
 ///
@@ -289,9 +292,9 @@ impl ClientConfig {
         // Safety assumptions:
         // 1. that the provider has been installed (explicitly or implicitly)
         // 2. that the process-level default provider is usable with the supplied protocol versions.
-        Self::builder_with_provider(Arc::clone(
-            CryptoProvider::get_default_or_install_from_crate_features(),
-        ))
+        Self::builder_with_provider(
+            CryptoProvider::get_default_or_install_from_crate_features().clone(),
+        )
         .with_protocol_versions(versions)
         .unwrap()
     }
@@ -502,10 +505,10 @@ pub enum Tls12Resumption {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use alloc::sync::Arc;
-
     use super::verify::ServerCertVerifier;
     use super::ClientConfig;
+
+    use crate::alias::Arc;
 
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
@@ -602,7 +605,6 @@ impl EarlyData {
 
 #[cfg(feature = "std")]
 mod connection {
-    use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
@@ -611,6 +613,8 @@ mod connection {
     use pki_types::ServerName;
 
     use super::ClientConnectionData;
+
+    use crate::alias::Arc;
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};

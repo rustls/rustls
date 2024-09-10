@@ -1,6 +1,5 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -10,6 +9,8 @@ use pki_types::ServerName;
 #[cfg(feature = "tls12")]
 use super::tls12;
 use super::Tls12Resumption;
+
+use crate::alias::Arc;
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;

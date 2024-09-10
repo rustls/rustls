@@ -1,6 +1,5 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pki_types::DnsName;
@@ -8,6 +7,8 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
+
+use crate::alias::Arc;
 use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;

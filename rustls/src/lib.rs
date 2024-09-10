@@ -169,7 +169,7 @@
 //! # #[cfg(feature = "aws_lc_rs")] {
 //! # use rustls;
 //! # use webpki;
-//! # use std::sync::Arc;
+//! # use rustls::internal::alias::Arc;
 //! # rustls::crypto::aws_lc_rs::default_provider().install_default();
 //! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
@@ -393,6 +393,17 @@ mod log {
 #[macro_use]
 mod test_macros;
 
+mod alias {
+    #[cfg(not(feature = "withrcalias"))]
+    pub use alloc::sync::Arc;
+
+    #[cfg(feature = "withrcalias")]
+    pub use alloc::rc::Rc as Arc;
+}
+
+#[macro_use]
+mod trait_macros;
+
 #[macro_use]
 mod msgs;
 mod common_state;
@@ -434,6 +445,9 @@ mod webpki;
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod internal {
+    pub mod alias {
+        pub use crate::alias::Arc;
+    }
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub mod base {

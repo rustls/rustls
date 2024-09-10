@@ -1,7 +1,6 @@
-use alloc::sync::Arc;
-
 use pki_types::ServerName;
 
+use crate::alias::Arc;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::msgs::handshake::CertificateChain;

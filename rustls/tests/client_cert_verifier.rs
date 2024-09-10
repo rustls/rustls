@@ -5,7 +5,6 @@
 use super::*;
 
 mod common;
-use std::sync::Arc;
 
 use common::{
     do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,
@@ -13,8 +12,11 @@ use common::{
     make_pair_for_arc_configs, server_config_builder, server_name, webpki_client_verifier_builder,
     ErrorFromPeer, KeyType, ALL_KEY_TYPES,
 };
+
 use pki_types::{CertificateDer, UnixTime};
+
 use rustls::client::danger::HandshakeSignatureValid;
+use rustls::internal::alias::Arc;
 use rustls::internal::msgs::handshake::DistinguishedName;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
