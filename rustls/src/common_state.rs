@@ -1014,6 +1014,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
 }
 
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
+pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
 pub(crate) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;

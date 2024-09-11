@@ -10,7 +10,9 @@ use subtle::ConstantTimeEq;
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
-use crate::common_state::{CommonState, HandshakeKind, Protocol, Side, State};
+use crate::common_state::{
+    CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
@@ -355,8 +357,9 @@ mod client_hello {
             }
 
             let mut ocsp_response = server_key.get_ocsp();
+            let mut flight = HandshakeFlightTls13::new(&mut self.transcript);
             let doing_early_data = emit_encrypted_extensions(
-                &mut self.transcript,
+                &mut flight,
                 self.suite,
                 cx,
                 &mut ocsp_response,
@@ -367,28 +370,21 @@ mod client_hello {
             )?;
 
             let doing_client_auth = if full_handshake {
-                let client_auth =
-                    emit_certificate_req_tls13(&mut self.transcript, cx, &self.config)?;
+                let client_auth = emit_certificate_req_tls13(&mut flight, &self.config)?;
 
                 if let Some(compressor) = cert_compressor {
                     emit_compressed_certificate_tls13(
-                        &mut self.transcript,
-                        cx.common,
+                        &mut flight,
                         &self.config,
                         server_key.get_cert(),
                         ocsp_response,
                         compressor,
                     );
                 } else {
-                    emit_certificate_tls13(
-                        &mut self.transcript,
-                        cx.common,
-                        server_key.get_cert(),
-                        ocsp_response,
-                    );
+                    emit_certificate_tls13(&mut flight, server_key.get_cert(), ocsp_response);
                 }
                 emit_certificate_verify_tls13(
-                    &mut self.transcript,
+                    &mut flight,
                     cx.common,
                     server_key.get_key(),
                     &sigschemes_ext,
@@ -421,13 +417,8 @@ mod client_hello {
             }
 
             cx.common.check_aligned_handshake()?;
-            let key_schedule_traffic = emit_finished_tls13(
-                &mut self.transcript,
-                &self.randoms,
-                cx,
-                key_schedule,
-                &self.config,
-            );
+            let key_schedule_traffic =
+                emit_finished_tls13(flight, &self.randoms, cx, key_schedule, &self.config);
 
             if !doing_client_auth && self.config.send_half_rtt_data {
                 // Application data can be sent immediately after Finished, in one
@@ -671,7 +662,7 @@ mod client_hello {
     }
 
     fn emit_encrypted_extensions(
-        transcript: &mut HandshakeHash,
+        flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
@@ -688,23 +679,18 @@ mod client_hello {
             ep.exts.push(ServerExtension::EarlyData);
         }
 
-        let ee = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::EncryptedExtensions,
-                payload: HandshakePayload::EncryptedExtensions(ep.exts),
-            }),
+        let ee = HandshakeMessagePayload {
+            typ: HandshakeType::EncryptedExtensions,
+            payload: HandshakePayload::EncryptedExtensions(ep.exts),
         };
 
         trace!("sending encrypted extensions {:?}", ee);
-        transcript.add_message(&ee);
-        cx.common.send_msg(ee, true);
+        flight.add(ee);
         Ok(early_data)
     }
 
     fn emit_certificate_req_tls13(
-        transcript: &mut HandshakeHash,
-        cx: &mut ServerContext<'_>,
+        flight: &mut HandshakeFlightTls13<'_>,
         config: &ServerConfig,
     ) -> Result<bool, Error> {
         if !config.verifier.offer_client_auth() {
@@ -739,43 +725,35 @@ mod client_hello {
                 .push(CertReqExtension::AuthorityNames(authorities.to_vec()));
         }
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateRequest,
-                payload: HandshakePayload::CertificateRequestTls13(cr),
-            }),
+        let creq = HandshakeMessagePayload {
+            typ: HandshakeType::CertificateRequest,
+            payload: HandshakePayload::CertificateRequestTls13(cr),
         };
 
-        trace!("Sending CertificateRequest {:?}", m);
-        transcript.add_message(&m);
-        cx.common.send_msg(m, true);
+        trace!("Sending CertificateRequest {:?}", creq);
+        flight.add(creq);
         Ok(true)
     }
 
     fn emit_certificate_tls13(
-        transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        flight: &mut HandshakeFlightTls13<'_>,
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
     ) {
-        let cert_body = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
-        let c = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::CertificateTls13(cert_body),
-            }),
+        let cert = HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::CertificateTls13(CertificatePayloadTls13::new(
+                cert_chain.iter(),
+                ocsp_response,
+            )),
         };
 
-        trace!("sending certificate {:?}", c);
-        transcript.add_message(&c);
-        common.send_msg(c, true);
+        trace!("sending certificate {:?}", cert);
+        flight.add(cert);
     }
 
     fn emit_compressed_certificate_tls13(
-        transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        flight: &mut HandshakeFlightTls13<'_>,
         config: &ServerConfig,
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
@@ -788,29 +766,25 @@ mod client_hello {
             .compression_for(cert_compressor, &payload)
         {
             Ok(entry) => entry,
-            Err(_) => return emit_certificate_tls13(transcript, common, cert_chain, ocsp_response),
+            Err(_) => return emit_certificate_tls13(flight, cert_chain, ocsp_response),
         };
 
-        let c = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CompressedCertificate,
-                payload: HandshakePayload::CompressedCertificate(entry.compressed_cert_payload()),
-            }),
+        let c = HandshakeMessagePayload {
+            typ: HandshakeType::CompressedCertificate,
+            payload: HandshakePayload::CompressedCertificate(entry.compressed_cert_payload()),
         };
 
         trace!("sending compressed certificate {:?}", c);
-        transcript.add_message(&c);
-        common.send_msg(c, true);
+        flight.add(c);
     }
 
     fn emit_certificate_verify_tls13(
-        transcript: &mut HandshakeHash,
+        flight: &mut HandshakeFlightTls13<'_>,
         common: &mut CommonState,
         signing_key: &dyn sign::SigningKey,
         schemes: &[SignatureScheme],
     ) -> Result<(), Error> {
-        let message = construct_server_verify_message(&transcript.current_hash());
+        let message = construct_server_verify_message(&flight.transcript.current_hash());
 
         let signer = signing_key
             .choose_scheme(schemes)
@@ -826,43 +800,36 @@ mod client_hello {
 
         let cv = DigitallySignedStruct::new(scheme, sig);
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateVerify,
-                payload: HandshakePayload::CertificateVerify(cv),
-            }),
+        let cv = HandshakeMessagePayload {
+            typ: HandshakeType::CertificateVerify,
+            payload: HandshakePayload::CertificateVerify(cv),
         };
 
-        trace!("sending certificate-verify {:?}", m);
-        transcript.add_message(&m);
-        common.send_msg(m, true);
+        trace!("sending certificate-verify {:?}", cv);
+        flight.add(cv);
         Ok(())
     }
 
     fn emit_finished_tls13(
-        transcript: &mut HandshakeHash,
+        mut flight: HandshakeFlightTls13<'_>,
         randoms: &ConnectionRandoms,
         cx: &mut ServerContext<'_>,
         key_schedule: KeyScheduleHandshake,
         config: &ServerConfig,
     ) -> KeyScheduleTrafficWithClientFinishedPending {
-        let handshake_hash = transcript.current_hash();
+        let handshake_hash = flight.transcript.current_hash();
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Finished,
-                payload: HandshakePayload::Finished(verify_data_payload),
-            }),
+        let fin = HandshakeMessagePayload {
+            typ: HandshakeType::Finished,
+            payload: HandshakePayload::Finished(verify_data_payload),
         };
 
-        trace!("sending finished {:?}", m);
-        transcript.add_message(&m);
-        let hash_at_server_fin = transcript.current_hash();
-        cx.common.send_msg(m, true);
+        trace!("sending finished {:?}", fin);
+        flight.add(fin);
+        let hash_at_server_fin = flight.transcript.current_hash();
+        flight.finish(cx.common);
 
         // Now move to application data keys.  Read key change is deferred until
         // the Finish message is received & validated.
