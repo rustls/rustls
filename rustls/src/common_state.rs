@@ -6,12 +6,14 @@ use pki_types::CertificateDer;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
+use crate::hash_hs::HandshakeHash;
 use crate::log::{debug, error, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
+use crate::msgs::codec::Codec;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
-use crate::msgs::handshake::CertificateChain;
+use crate::msgs::handshake::{CertificateChain, HandshakeMessagePayload};
 use crate::msgs::message::{
     Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
     PlainMessage,
@@ -432,7 +434,10 @@ impl CommonState {
                     self.quic.alert = Some(alert.description);
                 } else {
                     debug_assert!(
-                        matches!(m.payload, MessagePayload::Handshake { .. }),
+                        matches!(
+                            m.payload,
+                            MessagePayload::Handshake { .. } | MessagePayload::HandshakeFlight(_)
+                        ),
                         "QUIC uses TLS for the cryptographic handshake only"
                     );
                     let mut bytes = Vec::new();
@@ -973,6 +978,42 @@ impl KxState {
         }
     }
 }
+
+pub(crate) struct HandshakeFlight<'a, const TLS13: bool> {
+    pub(crate) transcript: &'a mut HandshakeHash,
+    body: Vec<u8>,
+}
+
+impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
+    pub(crate) fn new(transcript: &'a mut HandshakeHash) -> Self {
+        Self {
+            transcript,
+            body: Vec::new(),
+        }
+    }
+
+    pub(crate) fn add(&mut self, hs: HandshakeMessagePayload<'_>) {
+        let start_len = self.body.len();
+        hs.encode(&mut self.body);
+        self.transcript
+            .add(&self.body[start_len..]);
+    }
+
+    pub(crate) fn finish(self, common: &mut CommonState) {
+        common.send_msg(
+            Message {
+                version: match TLS13 {
+                    true => ProtocolVersion::TLSv1_3,
+                    false => ProtocolVersion::TLSv1_2,
+                },
+                payload: MessagePayload::HandshakeFlight(Payload::new(self.body)),
+            },
+            TLS13,
+        );
+    }
+}
+
+pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;
 pub(crate) const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;

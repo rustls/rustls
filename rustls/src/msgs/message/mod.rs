@@ -19,10 +19,13 @@ pub use outbound::{OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, 
 #[derive(Debug)]
 pub enum MessagePayload<'a> {
     Alert(AlertMessagePayload),
+    // one handshake message, parsed
     Handshake {
         parsed: HandshakeMessagePayload<'a>,
         encoded: Payload<'a>,
     },
+    // (potentially) multiple handshake messages, unparsed
+    HandshakeFlight(Payload<'a>),
     ChangeCipherSpec(ChangeCipherSpecPayload),
     ApplicationData(Payload<'a>),
 }
@@ -32,6 +35,7 @@ impl<'a> MessagePayload<'a> {
         match self {
             Self::Alert(x) => x.encode(bytes),
             Self::Handshake { encoded, .. } => bytes.extend(encoded.bytes()),
+            Self::HandshakeFlight(x) => bytes.extend(x.bytes()),
             Self::ChangeCipherSpec(x) => x.encode(bytes),
             Self::ApplicationData(x) => x.encode(bytes),
         }
@@ -69,7 +73,7 @@ impl<'a> MessagePayload<'a> {
     pub fn content_type(&self) -> ContentType {
         match self {
             Self::Alert(_) => ContentType::Alert,
-            Self::Handshake { .. } => ContentType::Handshake,
+            Self::Handshake { .. } | Self::HandshakeFlight(_) => ContentType::Handshake,
             Self::ChangeCipherSpec(_) => ContentType::ChangeCipherSpec,
             Self::ApplicationData(_) => ContentType::ApplicationData,
         }
@@ -83,6 +87,7 @@ impl<'a> MessagePayload<'a> {
                 parsed: parsed.into_owned(),
                 encoded: encoded.into_owned(),
             },
+            HandshakeFlight(x) => HandshakeFlight(x.into_owned()),
             ChangeCipherSpec(x) => ChangeCipherSpec(x),
             ApplicationData(x) => ApplicationData(x.into_owned()),
         }
