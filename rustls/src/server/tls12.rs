@@ -12,7 +12,7 @@ use super::common::ActiveCertifiedKey;
 use super::hs::{self, ServerContext};
 use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
-use crate::common_state::{CommonState, HandshakeKind, Side, State};
+use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -194,9 +194,11 @@ mod client_hello {
             cx.common.kx_state = KxState::Start(selected_kxg);
             cx.common.handshake_kind = Some(HandshakeKind::Full);
 
+            let mut flight = HandshakeFlightTls12::new(&mut self.transcript);
+
             self.send_ticket = emit_server_hello(
+                &mut flight,
                 &self.config,
-                &mut self.transcript,
                 cx,
                 self.session_id,
                 self.suite,
@@ -207,20 +209,21 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
-            emit_certificate(&mut self.transcript, cx.common, server_key.get_cert());
+            emit_certificate(&mut flight, server_key.get_cert());
             if let Some(ocsp_response) = ocsp_response {
-                emit_cert_status(&mut self.transcript, cx.common, ocsp_response);
+                emit_cert_status(&mut flight, ocsp_response);
             }
             let server_kx = emit_server_kx(
-                &mut self.transcript,
-                cx.common,
+                &mut flight,
                 sigschemes,
                 selected_kxg,
                 server_key.get_key(),
                 &self.randoms,
             )?;
-            let doing_client_auth = emit_certificate_req(&self.config, &mut self.transcript, cx)?;
-            emit_server_hello_done(&mut self.transcript, cx.common);
+            let doing_client_auth = emit_certificate_req(&mut flight, &self.config)?;
+            emit_server_hello_done(&mut flight);
+
+            flight.finish(cx.common);
 
             if doing_client_auth {
                 Ok(Box::new(ExpectCertificate {
@@ -265,9 +268,10 @@ mod client_hello {
             }
 
             self.session_id = *id;
+            let mut flight = HandshakeFlightTls12::new(&mut self.transcript);
             self.send_ticket = emit_server_hello(
+                &mut flight,
                 &self.config,
-                &mut self.transcript,
                 cx,
                 self.session_id,
                 self.suite,
@@ -278,6 +282,7 @@ mod client_hello {
                 &self.randoms,
                 self.extra_exts,
             )?;
+            flight.finish(cx.common);
 
             let secrets = ConnectionSecrets::new_resume(
                 self.randoms,
@@ -325,8 +330,8 @@ mod client_hello {
     }
 
     fn emit_server_hello(
+        flight: &mut HandshakeFlightTls12<'_>,
         config: &ServerConfig,
-        transcript: &mut HandshakeHash,
         cx: &mut ServerContext<'_>,
         session_id: SessionId,
         suite: &'static Tls12CipherSuite,
@@ -341,60 +346,42 @@ mod client_hello {
         ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;
         ep.process_tls12(config, hello, using_ems);
 
-        let sh = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from(randoms.server),
-                    session_id,
-                    cipher_suite: suite.common.suite,
-                    compression_method: Compression::Null,
-                    extensions: ep.exts,
-                }),
+        let sh = HandshakeMessagePayload {
+            typ: HandshakeType::ServerHello,
+            payload: HandshakePayload::ServerHello(ServerHelloPayload {
+                legacy_version: ProtocolVersion::TLSv1_2,
+                random: Random::from(randoms.server),
+                session_id,
+                cipher_suite: suite.common.suite,
+                compression_method: Compression::Null,
+                extensions: ep.exts,
             }),
         };
-
         trace!("sending server hello {:?}", sh);
-        transcript.add_message(&sh);
-        cx.common.send_msg(sh, false);
+        flight.add(sh);
+
         Ok(ep.send_ticket)
     }
 
     fn emit_certificate(
-        transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        flight: &mut HandshakeFlightTls12<'_>,
         cert_chain: &[CertificateDer<'static>],
     ) {
-        let c = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(CertificateChain(cert_chain.to_vec())),
-            }),
-        };
-
-        transcript.add_message(&c);
-        common.send_msg(c, false);
+        flight.add(HandshakeMessagePayload {
+            typ: HandshakeType::Certificate,
+            payload: HandshakePayload::Certificate(CertificateChain(cert_chain.to_vec())),
+        });
     }
 
-    fn emit_cert_status(transcript: &mut HandshakeHash, common: &mut CommonState, ocsp: &[u8]) {
-        let c = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateStatus,
-                payload: HandshakePayload::CertificateStatus(CertificateStatus::new(ocsp)),
-            }),
-        };
-
-        transcript.add_message(&c);
-        common.send_msg(c, false);
+    fn emit_cert_status(flight: &mut HandshakeFlightTls12<'_>, ocsp: &[u8]) {
+        flight.add(HandshakeMessagePayload {
+            typ: HandshakeType::CertificateStatus,
+            payload: HandshakePayload::CertificateStatus(CertificateStatus::new(ocsp)),
+        });
     }
 
     fn emit_server_kx(
-        transcript: &mut HandshakeHash,
-        common: &mut CommonState,
+        flight: &mut HandshakeFlightTls12<'_>,
         sigschemes: Vec<SignatureScheme>,
         selected_group: &'static dyn SupportedKxGroup,
         signing_key: &dyn sign::SigningKey,
@@ -419,23 +406,16 @@ mod client_hello {
             dss: DigitallySignedStruct::new(sigscheme, sig),
         });
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerKeyExchange,
-                payload: HandshakePayload::ServerKeyExchange(skx),
-            }),
-        };
-
-        transcript.add_message(&m);
-        common.send_msg(m, false);
+        flight.add(HandshakeMessagePayload {
+            typ: HandshakeType::ServerKeyExchange,
+            payload: HandshakePayload::ServerKeyExchange(skx),
+        });
         Ok(kx)
     }
 
     fn emit_certificate_req(
+        flight: &mut HandshakeFlightTls12<'_>,
         config: &ServerConfig,
-        transcript: &mut HandshakeHash,
-        cx: &mut ServerContext<'_>,
     ) -> Result<bool, Error> {
         let client_auth = &config.verifier;
 
@@ -459,31 +439,21 @@ mod client_hello {
             canames: names,
         };
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::CertificateRequest,
-                payload: HandshakePayload::CertificateRequest(cr),
-            }),
+        let creq = HandshakeMessagePayload {
+            typ: HandshakeType::CertificateRequest,
+            payload: HandshakePayload::CertificateRequest(cr),
         };
 
-        trace!("Sending CertificateRequest {:?}", m);
-        transcript.add_message(&m);
-        cx.common.send_msg(m, false);
+        trace!("Sending CertificateRequest {:?}", creq);
+        flight.add(creq);
         Ok(true)
     }
 
-    fn emit_server_hello_done(transcript: &mut HandshakeHash, common: &mut CommonState) {
-        let m = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHelloDone,
-                payload: HandshakePayload::ServerHelloDone,
-            }),
-        };
-
-        transcript.add_message(&m);
-        common.send_msg(m, false);
+    fn emit_server_hello_done(flight: &mut HandshakeFlightTls12<'_>) {
+        flight.add(HandshakeMessagePayload {
+            typ: HandshakeType::ServerHelloDone,
+            payload: HandshakePayload::ServerHelloDone,
+        });
     }
 }
 
