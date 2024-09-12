@@ -1,3 +1,4 @@
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cmp;
 #[cfg(feature = "tls12")]
@@ -213,7 +214,7 @@ pub struct ClientSessionCommon {
     secret: Zeroizing<PayloadU8>,
     epoch: u64,
     lifetime_secs: u32,
-    server_cert_chain: CertificateChain<'static>,
+    server_cert_chain: Arc<CertificateChain<'static>>,
 }
 
 impl ClientSessionCommon {
@@ -229,7 +230,7 @@ impl ClientSessionCommon {
             secret: Zeroizing::new(PayloadU8(secret.to_vec())),
             epoch: time_now.as_secs(),
             lifetime_secs: cmp::min(lifetime_secs, MAX_TICKET_LIFETIME),
-            server_cert_chain,
+            server_cert_chain: Arc::new(server_cert_chain),
         }
     }
 
