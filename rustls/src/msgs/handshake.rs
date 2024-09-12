@@ -1,6 +1,7 @@
 use alloc::collections::BTreeSet;
 #[cfg(feature = "logging")]
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -2263,7 +2264,10 @@ impl CertificateRequestPayloadTls13 {
 #[derive(Debug)]
 pub struct NewSessionTicketPayload {
     pub(crate) lifetime_hint: u32,
-    pub(crate) ticket: PayloadU16,
+    // Tickets can be large (KB), so we deserialise this straight
+    // into an Arc, so it can be passed directly into the client's
+    // session object without copying.
+    pub(crate) ticket: Arc<PayloadU16>,
 }
 
 impl NewSessionTicketPayload {
@@ -2271,7 +2275,7 @@ impl NewSessionTicketPayload {
     pub(crate) fn new(lifetime_hint: u32, ticket: Vec<u8>) -> Self {
         Self {
             lifetime_hint,
-            ticket: PayloadU16::new(ticket),
+            ticket: Arc::new(PayloadU16::new(ticket)),
         }
     }
 }
@@ -2284,7 +2288,7 @@ impl Codec<'_> for NewSessionTicketPayload {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let lifetime = u32::read(r)?;
-        let ticket = PayloadU16::read(r)?;
+        let ticket = Arc::new(PayloadU16::read(r)?);
 
         Ok(Self {
             lifetime_hint: lifetime,
@@ -2344,7 +2348,7 @@ pub struct NewSessionTicketPayloadTls13 {
     pub(crate) lifetime: u32,
     pub(crate) age_add: u32,
     pub(crate) nonce: PayloadU8,
-    pub(crate) ticket: PayloadU16,
+    pub(crate) ticket: Arc<PayloadU16>,
     pub(crate) exts: Vec<NewSessionTicketExtension>,
 }
 
@@ -2354,7 +2358,7 @@ impl NewSessionTicketPayloadTls13 {
             lifetime,
             age_add,
             nonce: PayloadU8::new(nonce),
-            ticket: PayloadU16::new(ticket),
+            ticket: Arc::new(PayloadU16::new(ticket)),
             exts: vec![],
         }
     }
@@ -2395,7 +2399,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         let lifetime = u32::read(r)?;
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
-        let ticket = PayloadU16::read(r)?;
+        let ticket = Arc::new(PayloadU16::read(r)?);
         let exts = Vec::read(r)?;
 
         Ok(Self {

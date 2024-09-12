@@ -1428,7 +1428,7 @@ impl ExpectTraffic {
         #[allow(unused_mut)]
         let mut value = persist::Tls13ClientSessionValue::new(
             self.suite,
-            nst.ticket.0.clone(),
+            Arc::clone(&nst.ticket),
             secret.as_ref(),
             cx.common
                 .peer_certificates
