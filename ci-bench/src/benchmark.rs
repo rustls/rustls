@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use itertools::Itertools;
 
 use crate::callgrind::InstructionCounts;
@@ -12,7 +12,6 @@ use crate::Side;
 /// Benchmarks can be invalid because of the following reasons:
 ///
 /// - Re-using an already defined benchmark name.
-/// - Referencing a non-existing benchmark in [`ReportingMode::AllInstructionsExceptSetup`].
 pub fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
     // Detect duplicate definitions
     let duplicate_names: Vec<_> = benchmarks
@@ -27,40 +26,7 @@ pub fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
         );
     }
 
-    // Detect dangling benchmark references
-    let all_names: FxHashSet<_> = benchmarks
-        .iter()
-        .map(|b| b.name.as_str())
-        .collect();
-    let referenced_names: FxHashSet<_> = benchmarks
-        .iter()
-        .flat_map(|b| match &b.reporting_mode {
-            ReportingMode::AllInstructions => None,
-            ReportingMode::AllInstructionsExceptSetup(name) => Some(name.as_str()),
-        })
-        .collect();
-
-    let undefined_names: Vec<_> = referenced_names
-        .difference(&all_names)
-        .cloned()
-        .collect();
-    if !undefined_names.is_empty() {
-        anyhow::bail!("The following benchmark names are referenced, but have no corresponding benchmarks: {}",
-            undefined_names.join(", "));
-    }
-
     Ok(())
-}
-
-/// Specifies how the results of a particular benchmark should be reported
-pub enum ReportingMode {
-    /// All instructions are reported
-    AllInstructions,
-    /// All instructions are reported, after subtracting the instructions of the setup code
-    ///
-    /// The instruction count of the setup code is obtained by running a benchmark containing only
-    /// that code. The string parameter corresponds to the name of that benchmark.
-    AllInstructionsExceptSetup(String),
 }
 
 /// Get the reported instruction counts for the provided benchmark
@@ -68,14 +34,7 @@ pub fn get_reported_instr_count(
     bench: &Benchmark,
     results: &FxHashMap<&str, InstructionCounts>,
 ) -> InstructionCounts {
-    match bench.reporting_mode() {
-        ReportingMode::AllInstructions => results[&bench.name()],
-        ReportingMode::AllInstructionsExceptSetup(setup_name) => {
-            let bench_results = results[&bench.name()];
-            let setup_results = results[setup_name.as_str()];
-            bench_results - setup_results
-        }
-    }
+    results[&bench.name()]
 }
 
 /// Specifies which functionality is being benchmarked
@@ -167,26 +126,12 @@ pub struct Benchmark {
     pub kind: BenchmarkKind,
     /// The benchmark's parameters
     pub params: BenchmarkParams,
-    /// The way instruction counts should be reported for this benchmark
-    pub reporting_mode: ReportingMode,
 }
 
 impl Benchmark {
     /// Create a new benchmark
     pub fn new(name: String, kind: BenchmarkKind, params: BenchmarkParams) -> Self {
-        Self {
-            name,
-            kind,
-            params,
-            reporting_mode: ReportingMode::AllInstructions,
-        }
-    }
-
-    /// Configure this benchmark to subtract the instruction count of the referenced benchmark when
-    /// reporting results
-    pub fn exclude_setup_instructions(mut self, name: String) -> Self {
-        self.reporting_mode = ReportingMode::AllInstructionsExceptSetup(name);
-        self
+        Self { name, kind, params }
     }
 
     /// Returns the benchmark's unique name
@@ -197,10 +142,5 @@ impl Benchmark {
     /// Returns the benchmark's unique name with the side appended to it
     pub fn name_with_side(&self, side: Side) -> String {
         format!("{}_{}", self.name, side.as_str())
-    }
-
-    /// Returns the benchmark's reporting mode
-    pub fn reporting_mode(&self) -> &ReportingMode {
-        &self.reporting_mode
     }
 }
