@@ -420,27 +420,15 @@ fn add_benchmark_group(benchmarks: &mut Vec<Benchmark>, params: BenchmarkParams)
             params.clone(),
         );
 
-        let handshake_bench = if resumption_param != ResumptionKind::No {
-            // Since resumed handshakes include a first non-resumed handshake, we need to subtract
-            // the non-resumed handshake's instructions
-            handshake_bench
-                .exclude_setup_instructions(format!("handshake_no_resume_{params_label}"))
-        } else {
-            handshake_bench
-        };
-
         benchmarks.push(handshake_bench);
     }
 
     // Benchmark data transfer
-    benchmarks.push(
-        Benchmark::new(
-            format!("transfer_no_resume_{params_label}"),
-            BenchmarkKind::Transfer,
-            params.clone(),
-        )
-        .exclude_setup_instructions(format!("handshake_no_resume_{params_label}")),
-    );
+    benchmarks.push(Benchmark::new(
+        format!("transfer_no_resume_{params_label}"),
+        BenchmarkKind::Transfer,
+        params.clone(),
+    ));
 }
 
 /// Run all the provided benches under callgrind to retrieve their instruction count
