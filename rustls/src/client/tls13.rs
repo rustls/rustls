@@ -12,7 +12,9 @@ use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchState, EchStatus};
 use crate::client::{hs, ClientConfig, ClientSessionStore};
-use crate::common_state::{CommonState, HandshakeKind, KxState, Protocol, Side, State};
+use crate::common_state::{
+    CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{
@@ -1155,12 +1157,11 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
 }
 
 fn emit_compressed_certificate_tls13(
-    transcript: &mut HandshakeHash,
+    flight: &mut HandshakeFlightTls13<'_>,
     certkey: &CertifiedKey,
     auth_context: Option<Vec<u8>>,
     compressor: &dyn compress::CertCompressor,
     config: &ClientConfig,
-    common: &mut CommonState,
 ) {
     let mut cert_payload = CertificatePayloadTls13::new(certkey.cert.iter(), None);
     cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
@@ -1170,25 +1171,19 @@ fn emit_compressed_certificate_tls13(
         .compression_for(compressor, &cert_payload)
     {
         Ok(compressed) => compressed,
-        Err(_) => return emit_certificate_tls13(transcript, Some(certkey), auth_context, common),
+        Err(_) => return emit_certificate_tls13(flight, Some(certkey), auth_context),
     };
 
-    let m = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::CompressedCertificate,
-            payload: HandshakePayload::CompressedCertificate(compressed.compressed_cert_payload()),
-        }),
-    };
-    transcript.add_message(&m);
-    common.send_msg(m, true);
+    flight.add(HandshakeMessagePayload {
+        typ: HandshakeType::CompressedCertificate,
+        payload: HandshakePayload::CompressedCertificate(compressed.compressed_cert_payload()),
+    });
 }
 
 fn emit_certificate_tls13(
-    transcript: &mut HandshakeHash,
+    flight: &mut HandshakeFlightTls13<'_>,
     certkey: Option<&CertifiedKey>,
     auth_context: Option<Vec<u8>>,
-    common: &mut CommonState,
 ) {
     let certs = certkey
         .map(|ck| ck.cert.as_ref())
@@ -1196,58 +1191,36 @@ fn emit_certificate_tls13(
     let mut cert_payload = CertificatePayloadTls13::new(certs.iter(), None);
     cert_payload.context = PayloadU8::new(auth_context.unwrap_or_default());
 
-    let m = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTls13(cert_payload),
-        }),
-    };
-    transcript.add_message(&m);
-    common.send_msg(m, true);
+    flight.add(HandshakeMessagePayload {
+        typ: HandshakeType::Certificate,
+        payload: HandshakePayload::CertificateTls13(cert_payload),
+    });
 }
 
 fn emit_certverify_tls13(
-    transcript: &mut HandshakeHash,
+    flight: &mut HandshakeFlightTls13<'_>,
     signer: &dyn Signer,
-    common: &mut CommonState,
 ) -> Result<(), Error> {
-    let message = construct_client_verify_message(&transcript.current_hash());
+    let message = construct_client_verify_message(&flight.transcript.current_hash());
 
     let scheme = signer.scheme();
     let sig = signer.sign(&message)?;
     let dss = DigitallySignedStruct::new(scheme, sig);
 
-    let m = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::CertificateVerify,
-            payload: HandshakePayload::CertificateVerify(dss),
-        }),
-    };
-
-    transcript.add_message(&m);
-    common.send_msg(m, true);
+    flight.add(HandshakeMessagePayload {
+        typ: HandshakeType::CertificateVerify,
+        payload: HandshakePayload::CertificateVerify(dss),
+    });
     Ok(())
 }
 
-fn emit_finished_tls13(
-    transcript: &mut HandshakeHash,
-    verify_data: &crypto::hmac::Tag,
-    common: &mut CommonState,
-) {
+fn emit_finished_tls13(flight: &mut HandshakeFlightTls13<'_>, verify_data: &crypto::hmac::Tag) {
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
-    let m = Message {
-        version: ProtocolVersion::TLSv1_3,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        }),
-    };
-
-    transcript.add_message(&m);
-    common.send_msg(m, true);
+    flight.add(HandshakeMessagePayload {
+        typ: HandshakeType::Finished,
+        payload: HandshakePayload::Finished(verify_data_payload),
+    });
 }
 
 fn emit_end_of_early_data_tls13(transcript: &mut HandshakeHash, common: &mut CommonState) {
@@ -1321,6 +1294,8 @@ impl State<ClientConnectionData> for ExpectFinished {
                 .set_handshake_encrypter(cx.common);
         }
 
+        let mut flight = HandshakeFlightTls13::new(&mut st.transcript);
+
         /* Send our authentication/finished messages.  These are still encrypted
          * with our handshake keys. */
         if let Some(client_auth) = st.client_auth {
@@ -1328,7 +1303,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 ClientAuthDetails::Empty {
                     auth_context_tls13: auth_context,
                 } => {
-                    emit_certificate_tls13(&mut st.transcript, None, auth_context, cx.common);
+                    emit_certificate_tls13(&mut flight, None, auth_context);
                 }
                 ClientAuthDetails::Verify {
                     auth_context_tls13: auth_context,
@@ -1336,7 +1311,7 @@ impl State<ClientConnectionData> for ExpectFinished {
                 } if cx.data.ech_status == EchStatus::Rejected => {
                     // If ECH was offered, and rejected, we MUST respond with
                     // an empty certificate message.
-                    emit_certificate_tls13(&mut st.transcript, None, auth_context, cx.common);
+                    emit_certificate_tls13(&mut flight, None, auth_context);
                 }
                 ClientAuthDetails::Verify {
                     certkey,
@@ -1346,22 +1321,16 @@ impl State<ClientConnectionData> for ExpectFinished {
                 } => {
                     if let Some(compressor) = compressor {
                         emit_compressed_certificate_tls13(
-                            &mut st.transcript,
+                            &mut flight,
                             &certkey,
                             auth_context,
                             compressor,
                             &st.config,
-                            cx.common,
                         );
                     } else {
-                        emit_certificate_tls13(
-                            &mut st.transcript,
-                            Some(&certkey),
-                            auth_context,
-                            cx.common,
-                        );
+                        emit_certificate_tls13(&mut flight, Some(&certkey), auth_context);
                     }
-                    emit_certverify_tls13(&mut st.transcript, signer.as_ref(), cx.common)?;
+                    emit_certverify_tls13(&mut flight, signer.as_ref())?;
                 }
             }
         }
@@ -1370,12 +1339,13 @@ impl State<ClientConnectionData> for ExpectFinished {
             .key_schedule
             .into_pre_finished_client_traffic(
                 hash_after_handshake,
-                st.transcript.current_hash(),
+                flight.transcript.current_hash(),
                 &*st.config.key_log,
                 &st.randoms.client,
             );
 
-        emit_finished_tls13(&mut st.transcript, &verify_data, cx.common);
+        emit_finished_tls13(&mut flight, &verify_data);
+        flight.finish(cx.common);
 
         /* We're now sure this server supports TLS1.3.  But if we run out of TLS1.3 tickets
          * when connecting to it again, we definitely don't want to attempt a TLS1.2 resumption. */
