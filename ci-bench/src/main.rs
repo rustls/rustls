@@ -16,7 +16,7 @@ use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use rustls::client::Resumption;
-use rustls::crypto::{aws_lc_rs, ring};
+use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, GetRandomFailed, SecureRandom};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ProtocolVersion, RootCertStore, ServerConfig,
@@ -297,13 +297,13 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
 
     for (provider, suites, ticketer, provider_name) in [
         (
-            ring::default_provider(),
+            derandomize(ring::default_provider()),
             ring::ALL_CIPHER_SUITES,
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
         ),
         (
-            aws_lc_rs::default_provider(),
+            derandomize(aws_lc_rs::default_provider()),
             aws_lc_rs::ALL_CIPHER_SUITES,
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
@@ -382,6 +382,23 @@ fn ring_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
 
 fn aws_lc_rs_ticketer() -> Arc<dyn rustls::server::ProducesTickets> {
     aws_lc_rs::Ticketer::new().unwrap()
+}
+
+fn derandomize(base: CryptoProvider) -> CryptoProvider {
+    CryptoProvider {
+        secure_random: &NotRandom,
+        ..base
+    }
+}
+
+#[derive(Debug)]
+struct NotRandom;
+
+impl SecureRandom for NotRandom {
+    fn fill(&self, buf: &mut [u8]) -> Result<(), GetRandomFailed> {
+        buf.fill(0x5a);
+        Ok(())
+    }
 }
 
 /// Adds a group of benchmarks for the specified parameters
@@ -503,7 +520,7 @@ impl ClientSideStepper<'_> {
         );
 
         let mut cfg = ClientConfig::builder_with_provider(
-            rustls::crypto::CryptoProvider {
+            CryptoProvider {
                 cipher_suites: vec![params.ciphersuite],
                 ..params.provider.clone()
             }
