@@ -2,7 +2,7 @@
 
 This crate is meant for CI benchmarking. It has two modes of operation:
 
-1. Measure CPU instructions using `cachegrind`.
+1. Measure CPU instructions using `callgrind`.
 2. Measure wall-time (runs each benchmark multiple times, leaving it to the caller to do statistical
    analysis).
 
@@ -35,10 +35,10 @@ handshake_no_resume_1.3_rsa_aes_client,4212770
 ...
 ```
 
-In the `cachegrind` subdirectory you will find output files emitted by the `cachegrind` tool, which
+In the `callgrind` subdirectory you will find output files emitted by the `callgrind` tool, which
 are useful to report detailed instruction count differences when comparing two benchmark runs. This
-subdirectory also contains log information from cachegrind itself (in `.log` files), which can be
-used to diagnose unexpected cachegrind crashes.
+subdirectory also contains log information from callgrind itself (in `.log` files), which can be
+used to diagnose unexpected callgrind crashes.
 
 ### Running all benchmarks in wall-time mode
 
@@ -86,14 +86,14 @@ here are some high-level considerations that can help you hack on the crate.
 ### Environment configuration
 
 An important goal of this benchmarking setup is that it should run with minimal noise. Measuring CPU
-instructions using `cachegrind` yields excellent results, regardless of your environment. The
+instructions using `callgrind` yields excellent results, regardless of your environment. The
 wall-time benchmarks, however, require a more elaborate benchmarking environment: running them on a
 laptop is too noisy, but running them on a carefully configured bare-metal server yields accurate
 measurements (up to 1% resolution, according to our tests).
 
 ### Instruction count mode
 
-Using `cachegrind` has some architectural consequences because it operates at the process level
+Using `callgrind` has some architectural consequences because it operates at the process level
 (i.e. it can count CPU instructions for a whole process, but not for a single function). The most
 important consequences when running in instruction count mode are:
 

@@ -27,7 +27,7 @@ use crate::benchmark::{
     get_reported_instr_count, validate_benchmarks, Benchmark, BenchmarkKind, BenchmarkParams,
     ResumptionKind,
 };
-use crate::cachegrind::CachegrindRunner;
+use crate::callgrind::CallgrindRunner;
 use crate::util::async_io::{self, AsyncRead, AsyncWrite};
 use crate::util::transport::{
     read_handshake_message, read_plaintext_to_end_bounded, send_handshake_message,
@@ -36,7 +36,7 @@ use crate::util::transport::{
 use crate::util::KeyType;
 
 mod benchmark;
-mod cachegrind;
+mod callgrind;
 mod util;
 
 /// The size in bytes of the plaintext sent in the transfer benchmark
@@ -443,18 +443,18 @@ fn add_benchmark_group(benchmarks: &mut Vec<Benchmark>, params: BenchmarkParams)
     );
 }
 
-/// Run all the provided benches under cachegrind to retrieve their instruction count
+/// Run all the provided benches under callgrind to retrieve their instruction count
 pub fn run_all(
     executable: String,
     output_dir: PathBuf,
     benches: &[Benchmark],
 ) -> anyhow::Result<Vec<(String, u64)>> {
     // Run the benchmarks in parallel
-    let cachegrind = CachegrindRunner::new(executable, output_dir)?;
+    let runner = CallgrindRunner::new(executable, output_dir)?;
     let results: Vec<_> = benches
         .par_iter()
         .enumerate()
-        .map(|(i, bench)| (bench, cachegrind.run_bench(i as u32, bench)))
+        .map(|(i, bench)| (bench, runner.run_bench(i as u32, bench)))
         .collect();
 
     // Report possible errors
@@ -681,7 +681,7 @@ async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyh
 struct CompareResult {
     /// Results for benchmark scenarios we know are fairly deterministic.
     ///
-    /// The string is a detailed diff between the instruction counts obtained from cachegrind.
+    /// The string is a detailed diff between the instruction counts obtained from callgrind.
     diffs: Vec<(Diff, String)>,
     /// Results for benchmark scenarios we know are extremely non-deterministic
     known_noisy: Vec<Diff>,
@@ -768,14 +768,14 @@ fn compare_results(
             .total_cmp(&diff1.diff_ratio.abs())
     });
 
-    let mut diffs_with_cachegrind_diff = Vec::new();
+    let mut diffs_with_callgrind_diff = Vec::new();
     for diff in diffs {
-        let detailed_diff = cachegrind::diff(baseline_dir, candidate_dir, &diff.scenario)?;
-        diffs_with_cachegrind_diff.push((diff, detailed_diff));
+        let detailed_diff = callgrind::diff(baseline_dir, candidate_dir, &diff.scenario)?;
+        diffs_with_callgrind_diff.push((diff, detailed_diff));
     }
 
     Ok(CompareResult {
-        diffs: diffs_with_cachegrind_diff,
+        diffs: diffs_with_callgrind_diff,
         missing_in_baseline: missing,
         known_noisy,
     })

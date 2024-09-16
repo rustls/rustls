@@ -3,7 +3,7 @@ use std::sync::Arc;
 use fxhash::{FxHashMap, FxHashSet};
 use itertools::Itertools;
 
-use crate::cachegrind::InstructionCounts;
+use crate::callgrind::InstructionCounts;
 use crate::util::KeyType;
 use crate::Side;
 

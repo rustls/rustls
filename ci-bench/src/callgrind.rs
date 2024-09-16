@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::ops::Sub;
 use std::path::{Path, PathBuf};
@@ -9,16 +9,16 @@ use anyhow::Context;
 use crate::benchmark::Benchmark;
 use crate::Side;
 
-/// The subdirectory in which the cachegrind output should be stored
-const CACHEGRIND_OUTPUT_SUBDIR: &str = "cachegrind";
+/// The subdirectory in which the callgrind output should be stored
+const CALLGRIND_OUTPUT_SUBDIR: &str = "callgrind";
 
-/// A cachegrind-based benchmark runner
-pub struct CachegrindRunner {
+/// A callgrind-based benchmark runner
+pub struct CallgrindRunner {
     /// The path to the ci-bench executable
     ///
-    /// This is necessary because the cachegrind runner works by spawning child processes
+    /// This is necessary because the callgrind runner works by spawning child processes
     executable: String,
-    /// The directory where the cachegrind output will be stored
+    /// The directory where the callgrind output will be stored
     output_dir: PathBuf,
     /// The amount of instructions that are executed upon startup of the child process, before
     /// actually running one of the benchmarks
@@ -27,14 +27,14 @@ pub struct CachegrindRunner {
     overhead_instructions: u64,
 }
 
-impl CachegrindRunner {
-    /// Returns a new cachegrind-based benchmark runner
+impl CallgrindRunner {
+    /// Returns a new callgrind-based benchmark runner
     pub fn new(executable: String, output_dir: PathBuf) -> anyhow::Result<Self> {
-        Self::ensure_cachegrind_available()?;
+        Self::ensure_callgrind_available()?;
 
-        let cachegrind_output_dir = output_dir.join(CACHEGRIND_OUTPUT_SUBDIR);
-        std::fs::create_dir_all(&cachegrind_output_dir)
-            .context("Failed to create cachegrind output directory")?;
+        let callgrind_output_dir = output_dir.join(CALLGRIND_OUTPUT_SUBDIR);
+        std::fs::create_dir_all(&callgrind_output_dir)
+            .context("Failed to create callgrind output directory")?;
 
         // We don't care about the side here, so let's use `Server` just to choose something
         let overhead_instructions = Self::run_bench_side(
@@ -44,14 +44,14 @@ impl CachegrindRunner {
             "calibration",
             Stdio::piped(),
             Stdio::piped(),
-            &cachegrind_output_dir,
+            &callgrind_output_dir,
         )?
         .wait_and_get_instr_count()
         .context("Unable to count overhead instructions")?;
 
-        Ok(CachegrindRunner {
+        Ok(CallgrindRunner {
             executable,
-            output_dir: cachegrind_output_dir,
+            output_dir: callgrind_output_dir,
             overhead_instructions,
         })
     }
@@ -100,22 +100,22 @@ impl CachegrindRunner {
         Ok(counts - overhead_counts)
     }
 
-    /// Returns an error if cachegrind is not available
-    fn ensure_cachegrind_available() -> anyhow::Result<()> {
+    /// Returns an error if callgrind is not available
+    fn ensure_callgrind_available() -> anyhow::Result<()> {
         let result = Command::new("valgrind")
-            .arg("--tool=cachegrind")
+            .arg("--tool=callgrind")
             .arg("--version")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();
 
         match result {
-            Err(e) => anyhow::bail!("Unexpected error while launching cachegrind. Error: {}", e),
+            Err(e) => anyhow::bail!("Unexpected error while launching callgrind. Error: {}", e),
             Ok(status) => {
                 if status.success() {
                     Ok(())
                 } else {
-                    anyhow::bail!("Failed to launch cachegrind. Error: {}. Please ensure that valgrind is installed and on the $PATH.", status)
+                    anyhow::bail!("Failed to launch callgrind. Error: {}. Please ensure that valgrind is installed and on the $PATH.", status)
                 }
             }
         }
@@ -131,24 +131,24 @@ impl CachegrindRunner {
         stdout: Stdio,
         output_dir: &Path,
     ) -> anyhow::Result<BenchSubprocess> {
-        let cachegrind_output_file = output_dir.join(name);
-        let cachegrind_log_file = output_dir.join(format!("{name}.log"));
+        let callgrind_output_file = output_dir.join(name);
+        let callgrind_log_file = output_dir.join(format!("{name}.log"));
 
         // Run under setarch to disable ASLR, to reduce noise
         let mut cmd = Command::new("setarch");
         let child = cmd
             .arg("-R")
             .arg("valgrind")
-            .arg("--tool=cachegrind")
+            .arg("--tool=callgrind")
             // Disable the cache simulation, since we are only interested in instruction counts
             .arg("--cache-sim=no")
-            // Save cachegrind's logs, which would otherwise be printed to stderr (we want to
+            // Save callgrind's logs, which would otherwise be printed to stderr (we want to
             // keep stderr free of noise, to see any errors from the child process)
-            .arg(format!("--log-file={}", cachegrind_log_file.display()))
+            .arg(format!("--log-file={}", callgrind_log_file.display()))
             // The file where the instruction counts will be stored
             .arg(format!(
-                "--cachegrind-out-file={}",
-                cachegrind_output_file.display()
+                "--callgrind-out-file={}",
+                callgrind_output_file.display()
             ))
             .arg(executable)
             .arg("run-single")
@@ -158,21 +158,21 @@ impl CachegrindRunner {
             .stdout(stdout)
             .stderr(Stdio::inherit())
             .spawn()
-            .context("Failed to run benchmark in cachegrind")?;
+            .context("Failed to run benchmark in callgrind")?;
 
         Ok(BenchSubprocess {
             process: child,
-            cachegrind_output_file,
+            callgrind_output_file,
         })
     }
 }
 
 /// A running subprocess for one of the sides of the benchmark (client or server)
 struct BenchSubprocess {
-    /// The benchmark's child process, running under cachegrind
+    /// The benchmark's child process, running under callgrind
     process: Child,
-    /// Cachegrind's output file for this benchmark
-    cachegrind_output_file: PathBuf,
+    /// Callgrind's output file for this benchmark
+    callgrind_output_file: PathBuf,
 }
 
 impl BenchSubprocess {
@@ -181,36 +181,36 @@ impl BenchSubprocess {
         let status = self
             .process
             .wait()
-            .context("Failed to run benchmark in cachegrind")?;
+            .context("Failed to run benchmark in callgrind")?;
         if !status.success() {
             anyhow::bail!(
-                "Failed to run benchmark in cachegrind. Exit code: {:?}",
+                "Failed to run benchmark in callgrind. Exit code: {:?}",
                 status.code()
             );
         }
 
-        let instruction_count = parse_cachegrind_output(&self.cachegrind_output_file)?;
+        let instruction_count = parse_callgrind_output(&self.callgrind_output_file)?;
         Ok(instruction_count)
     }
 }
 
-/// Returns the instruction count, extracted from the cachegrind output file at the provided path
-fn parse_cachegrind_output(file: &Path) -> anyhow::Result<u64> {
-    let file_in = File::open(file).context("Unable to open cachegrind output file")?;
+/// Returns the instruction count, extracted from the callgrind output file at the provided path
+fn parse_callgrind_output(file: &Path) -> anyhow::Result<u64> {
+    let file_in = File::open(file).context("Unable to open callgrind output file")?;
 
     for line in BufReader::new(file_in).lines() {
-        let line = line.context("Error reading cachegrind output file")?;
+        let line = line.context("Error reading callgrind output file")?;
         if let Some(line) = line.strip_prefix("summary: ") {
             let instr_count = line
                 .trim()
                 .parse()
-                .context("Unable to parse instruction counts from cachegrind output file")?;
+                .context("Unable to parse instruction counts from callgrind output file")?;
 
             return Ok(instr_count);
         }
     }
 
-    anyhow::bail!("`summary` section not found in cachegrind output file")
+    anyhow::bail!("`summary` section not found in callgrind output file")
 }
 
 /// The instruction counts, for each side, after running a benchmark
@@ -233,61 +233,58 @@ impl Sub for InstructionCounts {
 
 /// Returns the detailed instruction diff between the baseline and the candidate
 pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result<String> {
-    // The latest version of valgrind has deprecated cg_diff, which has been superseded by
-    // cg_annotate. Many systems are running older versions, though, so we are sticking with cg_diff
-    // for the time being.
-
-    let tmp_path = Path::new("ci-bench-tmp");
-    let tmp = File::create(tmp_path).context("cannot create temp file for cg_diff")?;
-
-    // cg_diff generates a diff between two cachegrind output files in a custom format that is not
-    // user-friendly
-    let cg_diff = Command::new("cg_diff")
-        // remove per-compilation uniqueness in symbols, eg
-        // _ZN9hashbrown3raw21RawTable$LT$T$C$A$GT$14reserve_rehash17hc60392f3f3eac4b2E.llvm.9716880419886440089 ->
-        // _ZN9hashbrown3raw21RawTable$LT$T$C$A$GT$14reserve_rehashE
-        .arg("--mod-funcname=s/17h[0-9a-f]+E\\.llvm\\.\\d+/E/")
+    // callgrind_annotate formats the callgrind output file, suitable for comparison with
+    // callgrind_differ
+    let callgrind_annotate_base = Command::new("callgrind_annotate")
         .arg(
             baseline
-                .join(CACHEGRIND_OUTPUT_SUBDIR)
+                .join(CALLGRIND_OUTPUT_SUBDIR)
                 .join(scenario),
         )
-        .arg(
-            candidate
-                .join(CACHEGRIND_OUTPUT_SUBDIR)
-                .join(scenario),
-        )
-        .stdout(Stdio::from(tmp))
-        .spawn()
-        .context("cannot spawn cg_diff subprocess")?
-        .wait()
-        .context("error waiting for cg_diff to finish")?;
-
-    if !cg_diff.success() {
-        anyhow::bail!(
-            "cg_diff finished with an error (code = {:?})",
-            cg_diff.code()
-        )
-    }
-
-    // cg_annotate transforms the output of cg_diff into something a user can understand
-    let cg_annotate = Command::new("cg_annotate")
-        .arg(tmp_path)
+        // do not annotate source, to keep output compact
         .arg("--auto=no")
         .output()
-        .context("error waiting for cg_annotate to finish")?;
+        .context("error waiting for callgrind_annotate to finish")?;
 
-    if !cg_annotate.status.success() {
+    let callgrind_annotate_candidate = Command::new("callgrind_annotate")
+        .arg(
+            candidate
+                .join(CALLGRIND_OUTPUT_SUBDIR)
+                .join(scenario),
+        )
+        // do not annotate source, to keep output compact
+        .arg("--auto=no")
+        .output()
+        .context("error waiting for callgrind_annotate to finish")?;
+
+    if !callgrind_annotate_base.status.success() {
         anyhow::bail!(
-            "cg_annotate finished with an error (code = {:?})",
-            cg_annotate.status.code()
+            "callgrind_annotate for base finished with an error (code = {:?})",
+            callgrind_annotate_base.status.code()
         )
     }
 
-    let diff =
-        String::from_utf8(cg_annotate.stdout).context("cg_annotate produced invalid UTF8")?;
+    if !callgrind_annotate_candidate
+        .status
+        .success()
+    {
+        anyhow::bail!(
+            "callgrind_annotate for candidate finished with an error (code = {:?})",
+            callgrind_annotate_candidate
+                .status
+                .code()
+        )
+    }
 
-    fs::remove_file(tmp_path).ok();
+    let string_base = String::from_utf8(callgrind_annotate_base.stdout)
+        .context("callgrind_annotate produced invalid UTF8")?;
+    let string_candidate = String::from_utf8(callgrind_annotate_candidate.stdout)
+        .context("callgrind_annotate produced invalid UTF8")?;
 
-    Ok(diff)
+    // TODO: reinstate actual diffing, using `callgrind_differ` crate
+    Ok(format!(
+        "Base output:\n{string_base}\n\
+         =====\n\n\
+         Candidate output:\n{string_candidate}\n"
+    ))
 }
