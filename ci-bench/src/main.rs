@@ -689,8 +689,6 @@ struct CompareResult {
     ///
     /// The string is a detailed diff between the instruction counts obtained from callgrind.
     diffs: Vec<(Diff, String)>,
-    /// Results for benchmark scenarios we know are extremely non-deterministic
-    known_noisy: Vec<Diff>,
     /// Benchmark scenarios present in the candidate but missing in the baseline
     missing_in_baseline: Vec<String>,
 }
@@ -743,7 +741,6 @@ fn compare_results(
 ) -> anyhow::Result<CompareResult> {
     let mut diffs = Vec::new();
     let mut missing = Vec::new();
-    let mut known_noisy = Vec::new();
 
     for (scenario, &instr_count) in candidate {
         let Some(&baseline_instr_count) = baseline.get(scenario) else {
@@ -761,10 +758,7 @@ fn compare_results(
             diff_ratio,
         };
 
-        match is_known_noisy(scenario) {
-            true => known_noisy.push(diff),
-            false => diffs.push(diff),
-        };
+        diffs.push(diff);
     }
 
     diffs.sort_by(|diff1, diff2| {
@@ -783,24 +777,7 @@ fn compare_results(
     Ok(CompareResult {
         diffs: diffs_with_callgrind_diff,
         missing_in_baseline: missing,
-        known_noisy,
     })
-}
-
-fn is_known_noisy(scenario_name: &str) -> bool {
-    // aws-lc-rs RSA key validation is non-deterministic, and expensive in relative terms for
-    // "cheaper" tests, and only done for server-side tests.  Exclude these tests
-    // from comparison.
-    //
-    // Better solutions for this include:
-    // - https://github.com/rustls/rustls/issues/1494: exclude key validation in these tests.
-    //   Key validation is benchmarked separately elsewhere, and mostly amortised into
-    //   insignificance in real-world scenarios.
-    // - Find a way to make aws-lc-rs deterministic, such as by replacing its RNG with a
-    //   test-only one.
-    scenario_name.contains("_aws_lc_rs_")
-        && scenario_name.contains("_rsa_")
-        && scenario_name.ends_with("_server")
 }
 
 /// Prints a report of the comparison to stdout, using GitHub-flavored markdown
@@ -836,14 +813,6 @@ fn print_report(result: &CompareResult) {
             println!("{detailed_diff}");
             println!("```");
         }
-        println!("</details>\n")
-    }
-
-    if !result.known_noisy.is_empty() {
-        println!("### ‼️ Caution: ignored noisy benchmarks");
-        println!("<details>");
-        println!("<summary>Click to expand</summary>\n");
-        table(result.known_noisy.iter(), false);
         println!("</details>\n")
     }
 }
