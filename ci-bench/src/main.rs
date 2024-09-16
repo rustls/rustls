@@ -19,8 +19,8 @@ use rustls::client::Resumption;
 use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, GetRandomFailed, SecureRandom};
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
-    CipherSuite, ClientConfig, ClientConnection, ProtocolVersion, RootCertStore, ServerConfig,
-    ServerConnection,
+    CipherSuite, ClientConfig, ClientConnection, HandshakeKind, ProtocolVersion, RootCertStore,
+    ServerConfig, ServerConnection,
 };
 
 use crate::benchmark::{
@@ -481,6 +481,7 @@ trait BenchStepper {
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint>;
     async fn sync_before_resumed_handshake(&mut self) -> anyhow::Result<()>;
     async fn transmit_data(&mut self, endpoint: &mut Self::Endpoint) -> anyhow::Result<()>;
+    fn handshake_kind(&self, endpoint: &Self::Endpoint) -> HandshakeKind;
 }
 
 /// Stepper fields necessary for IO
@@ -571,6 +572,10 @@ impl BenchStepper for ClientSideStepper<'_> {
         assert_eq!(total_plaintext_read, TRANSFER_PLAINTEXT_SIZE);
         Ok(())
     }
+
+    fn handshake_kind(&self, endpoint: &Self::Endpoint) -> HandshakeKind {
+        endpoint.handshake_kind().unwrap()
+    }
 }
 
 /// A benchmark stepper for the server-side of the connection
@@ -629,6 +634,10 @@ impl BenchStepper for ServerSideStepper<'_> {
         write_all_plaintext_bounded(endpoint, self.io.writer, TRANSFER_PLAINTEXT_SIZE).await?;
         Ok(())
     }
+
+    fn handshake_kind(&self, endpoint: &Self::Endpoint) -> HandshakeKind {
+        endpoint.handshake_kind().unwrap()
+    }
 }
 
 /// Runs the benchmark using the provided stepper
@@ -655,7 +664,8 @@ async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyh
                 stepper
                     .sync_before_resumed_handshake()
                     .await?;
-                stepper.handshake().await?;
+                let endpoint = stepper.handshake().await?;
+                assert_eq!(stepper.handshake_kind(&endpoint), HandshakeKind::Resumed);
             }
         }
         BenchmarkKind::Transfer => {
