@@ -25,6 +25,7 @@ pub fn provider() -> CryptoProvider {
         signature_verification_algorithms: verify::ALGORITHMS,
         secure_random: &Provider,
         key_provider: &Provider,
+        hpke_suites: alloc::vec::Vec::new(),
     }
 }
 

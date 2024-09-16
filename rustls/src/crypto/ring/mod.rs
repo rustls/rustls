@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
@@ -36,6 +37,7 @@ pub fn default_provider() -> CryptoProvider {
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &Ring,
         key_provider: &Ring,
+        hpke_suites: Vec::new(),
     }
 }
 

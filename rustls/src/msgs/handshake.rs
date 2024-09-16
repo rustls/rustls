@@ -662,6 +662,9 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::CompressCertificate => {
                 Self::CertificateCompressionAlgorithms(Vec::read(&mut sub)?)
             }
+            ExtensionType::EncryptedClientHello => {
+                Self::EncryptedClientHello(EncryptedClientHello::read(&mut sub)?)
+            }
             ExtensionType::EncryptedClientHelloOuterExtensions => {
                 Self::EncryptedClientHelloOuterExtensions(Vec::read(&mut sub)?)
             }
@@ -834,24 +837,7 @@ impl Codec<'_> for ClientHelloPayload {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let mut ret = Self {
-            client_version: ProtocolVersion::read(r)?,
-            random: Random::read(r)?,
-            session_id: SessionId::read(r)?,
-            cipher_suites: Vec::read(r)?,
-            compression_methods: Vec::read(r)?,
-            extensions: Vec::new(),
-        };
-
-        if r.any_left() {
-            ret.extensions = Vec::read(r)?;
-        }
-
-        match (r.any_left(), ret.extensions.is_empty()) {
-            (true, _) => Err(InvalidMessage::TrailingData("ClientHelloPayload")),
-            (_, true) => Err(InvalidMessage::MissingData("ClientHelloPayload")),
-            _ => Ok(ret),
-        }
+        Self::payload_decode(r, false)
     }
 }
 
@@ -934,6 +920,45 @@ impl ClientHelloPayload {
         }
     }
 
+    pub(crate) fn payload_decode(
+        r: &mut Reader<'_>,
+        is_ech_inner: bool,
+    ) -> Result<Self, InvalidMessage> {
+        let mut ret = Self {
+            client_version: ProtocolVersion::read(r)?,
+            random: Random::read(r)?,
+            session_id: SessionId::read(r)?,
+            cipher_suites: Vec::read(r)?,
+            compression_methods: Vec::read(r)?,
+            extensions: Vec::new(),
+        };
+
+        if r.any_left() {
+            ret.extensions = Vec::read(r)?;
+        }
+
+        if ret.extensions.is_empty() {
+            return Err(InvalidMessage::MissingData("ClientHelloPayload"));
+        }
+
+        if !is_ech_inner {
+            if r.any_left() {
+                return Err(InvalidMessage::TrailingData("ClientHelloPayload"));
+            }
+
+            return Ok(ret);
+        }
+
+        let rest = r.rest();
+        for byte in rest {
+            if *byte != 0 {
+                return Err(InvalidMessage::TrailingData("ClientHelloPayload"));
+            }
+        }
+
+        Ok(ret)
+    }
+
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
@@ -942,6 +967,14 @@ impl ClientHelloPayload {
                 .iter()
                 .map(|ext| ext.ext_type()),
         )
+    }
+
+    pub(crate) fn ech_extension(&self) -> Option<&EncryptedClientHello> {
+        let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
+        match *ext {
+            ClientExtension::EncryptedClientHello(ref ech) => Some(ech),
+            _ => None,
+        }
     }
 
     pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&ClientExtension> {

@@ -22,13 +22,13 @@ use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, HandshakePayload,
-    KeyExchangeAlgorithm, Random, ServerExtension,
+    ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, EncryptedClientHello,
+    HandshakePayload, KeyExchangeAlgorithm, Random, ServerExtension,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::server::common::ActiveCertifiedKey;
-use crate::server::{tls13, ClientHello, ServerConfig};
+use crate::server::{tls13, ClientHello, EchConfig, ServerConfig};
 use crate::{suites, SupportedCipherSuite};
 
 pub(super) type NextState<'a> = Box<dyn State<ServerConnectionData> + 'a>;
@@ -207,6 +207,7 @@ pub(super) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
     pub(super) extra_exts: Vec<ServerExtension>,
     pub(super) transcript: HandshakeHashOrBuffer,
+    pub(super) ech_configs: Option<Vec<EchConfig>>,
     #[cfg(feature = "tls12")]
     pub(super) session_id: SessionId,
     #[cfg(feature = "tls12")]
@@ -216,7 +217,11 @@ pub(super) struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub(super) fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+    pub(super) fn new(
+        config: Arc<ServerConfig>,
+        extra_exts: Vec<ServerExtension>,
+        ech_configs: Option<Vec<EchConfig>>,
+    ) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {
@@ -227,6 +232,7 @@ impl ExpectClientHello {
             config,
             extra_exts,
             transcript: HandshakeHashOrBuffer::Buffer(transcript_buffer),
+            ech_configs,
             #[cfg(feature = "tls12")]
             session_id: SessionId::empty(),
             #[cfg(feature = "tls12")]
@@ -289,6 +295,17 @@ impl ExpectClientHello {
         };
 
         cx.common.negotiated_version = Some(version);
+
+        if self.config.ech_backend
+            && matches!(
+                client_hello.ech_extension(),
+                None | Some(EncryptedClientHello::Outer(_))
+            )
+        {
+            return Err(cx
+                .common
+                .missing_extension(PeerMisbehaved::MissingEch));
+        }
 
         // We communicate to the upper layer what kind of key they should choose
         // via the sigschemes value.  Clients tend to treat this extension
@@ -378,6 +395,7 @@ impl ExpectClientHello {
         match suite {
             SupportedCipherSuite::Tls13(suite) => tls13::CompleteClientHelloHandling {
                 config: self.config,
+                ech_configs: self.ech_configs,
                 transcript,
                 suite,
                 randoms,

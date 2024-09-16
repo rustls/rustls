@@ -369,7 +369,7 @@ impl ConnectionRandoms {
 /// Interface shared by client and server connections.
 pub struct ConnectionCommon<Data> {
     pub(crate) core: ConnectionCore<Data>,
-    deframer_buffer: DeframerVecBuffer,
+    pub(crate) deframer_buffer: DeframerVecBuffer,
     sendable_plaintext: ChunkVecBuffer,
 }
 

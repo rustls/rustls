@@ -42,13 +42,16 @@ mod client_hello {
     use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
     use crate::msgs::handshake::{
         CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
-        ClientHelloPayload, HelloRetryExtension, HelloRetryRequest, KeyShareEntry, Random,
-        ServerExtension, ServerHelloPayload, SessionId,
+        ClientHelloPayload, EncryptedClientHello, HelloRetryExtension, HelloRetryRequest,
+        KeyShareEntry, Random, ServerEncryptedClientHello, ServerExtension, ServerHelloPayload,
+        SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
+    use crate::server::EchConfig;
     use crate::sign;
     use crate::tls13::key_schedule::{
-        KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
+        server_ech_hrr_confirmation_secret, KeyScheduleEarly, KeyScheduleHandshake,
+        KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
 
@@ -61,6 +64,7 @@ mod client_hello {
 
     pub(in crate::server) struct CompleteClientHelloHandling {
         pub(in crate::server) config: Arc<ServerConfig>,
+        pub(in crate::server) ech_configs: Option<Vec<EchConfig>>,
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
@@ -210,17 +214,25 @@ mod client_hello {
 
                     emit_hello_retry_request(
                         &mut self.transcript,
+                        &self.randoms,
                         self.suite,
                         client_hello.session_id,
                         cx.common,
                         selected_kxg.name(),
-                    );
+                        self.ech_configs.is_some(),
+                        client_hello
+                            .ech_extension()
+                            .filter(|ech| matches!(ech, EncryptedClientHello::Inner))
+                            .is_some(),
+                        &self.config,
+                    )?;
                     emit_fake_ccs(cx.common);
 
                     let skip_early_data = max_early_data_size(self.config.max_early_data_size);
 
                     let next = Box::new(hs::ExpectClientHello {
                         config: self.config,
+                        ech_configs: self.ech_configs,
                         transcript: HandshakeHashOrBuffer::Hash(self.transcript),
                         #[cfg(feature = "tls12")]
                         session_id: SessionId::empty(),
@@ -331,7 +343,7 @@ mod client_hello {
             self.transcript.add_message(chm);
             let key_schedule = emit_server_hello(
                 &mut self.transcript,
-                &self.randoms,
+                &mut self.randoms,
                 self.suite,
                 cx,
                 &client_hello.session_id,
@@ -340,6 +352,10 @@ mod client_hello {
                 resumedata
                     .as_ref()
                     .map(|x| &x.master_secret.0[..]),
+                client_hello
+                    .ech_extension()
+                    .filter(|ech| matches!(ech, EncryptedClientHello::Inner))
+                    .is_some(),
                 &self.config,
             )?;
             if !self.done_retry {
@@ -363,6 +379,7 @@ mod client_hello {
                 client_hello,
                 resumedata.as_ref(),
                 self.extra_exts,
+                self.ech_configs,
                 &self.config,
             )?;
 
@@ -485,13 +502,14 @@ mod client_hello {
 
     fn emit_server_hello(
         transcript: &mut HandshakeHash,
-        randoms: &ConnectionRandoms,
+        randoms: &mut ConnectionRandoms,
         suite: &'static Tls13CipherSuite,
         cx: &mut ServerContext<'_>,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
         chosen_psk_idx: Option<usize>,
         resuming_psk: Option<&[u8]>,
+        ch_has_ech_inner: bool,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
         let mut extensions = Vec::new();
@@ -512,28 +530,9 @@ mod client_hello {
             extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
         }
 
-        let sh = Message {
-            version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
-                    legacy_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from(randoms.server),
-                    session_id: *session_id,
-                    cipher_suite: suite.common.suite,
-                    compression_method: Compression::Null,
-                    extensions,
-                }),
-            }),
-        };
-
         cx.common.check_aligned_handshake()?;
 
         let client_hello_hash = transcript.hash_given(&[]);
-
-        trace!("sending server hello {:?}", sh);
-        transcript.add_message(&sh);
-        cx.common.send_msg(sh, false);
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
@@ -551,7 +550,55 @@ mod client_hello {
         };
 
         // Do key exchange
-        let key_schedule = key_schedule_pre_handshake.into_handshake(ckx.secret);
+        let mut key_schedule = key_schedule_pre_handshake.into_handshake(ckx.secret);
+
+        if ch_has_ech_inner {
+            // TODO: better method?
+            randoms.server[24..].copy_from_slice(&[0u8; 8]);
+        }
+
+        let mut shp = ServerHelloPayload {
+            legacy_version: ProtocolVersion::TLSv1_2,
+            random: Random::from(randoms.server),
+            session_id: *session_id,
+            cipher_suite: suite.common.suite,
+            compression_method: Compression::Null,
+            extensions,
+        };
+
+        if ch_has_ech_inner {
+            let sh = Message {
+                version: ProtocolVersion::TLSv1_2,
+                payload: MessagePayload::handshake(HandshakeMessagePayload {
+                    typ: HandshakeType::ServerHello,
+                    payload: HandshakePayload::ServerHello(shp.clone()),
+                }),
+            };
+
+            let mut confirmation_transcript = transcript.clone();
+
+            confirmation_transcript.add_message(&sh);
+
+            let derived = key_schedule.server_ech_confirmation_secret(
+                &randoms.client,
+                confirmation_transcript.current_hash(),
+            );
+            randoms.server[24..].copy_from_slice(&derived);
+
+            shp.random = Random::from(randoms.server);
+        }
+
+        let sh = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::ServerHello,
+                payload: HandshakePayload::ServerHello(shp),
+            }),
+        };
+
+        trace!("sending server hello {:?}", sh);
+        transcript.add_message(&sh);
+        cx.common.send_msg(sh, false);
 
         let handshake_hash = transcript.current_hash();
         let key_schedule = key_schedule.derive_server_handshake_secrets(
@@ -577,11 +624,16 @@ mod client_hello {
 
     fn emit_hello_retry_request(
         transcript: &mut HandshakeHash,
+        randoms: &ConnectionRandoms,
         suite: &'static Tls13CipherSuite,
         session_id: SessionId,
         common: &mut CommonState,
         group: NamedGroup,
-    ) {
+        has_ech_configs: bool,
+        // TODO: it really feels like a bug to always accept ECH if the client presents an inner extension. is bogo sure about this?
+        ch_has_ech_inner: bool,
+        config: &ServerConfig,
+    ) -> Result<(), Error> {
         let mut req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id,
@@ -596,6 +648,43 @@ mod client_hello {
                 ProtocolVersion::TLSv1_3,
             ));
 
+        if has_ech_configs {
+            let mut buf = vec![0u8; 8];
+            // TODO: is it ok to return errors that aren't done with cx.send_fatal_alert?
+            config
+                .crypto_provider()
+                .secure_random
+                .fill(&mut buf)?;
+
+            req.extensions
+                .push(HelloRetryExtension::EchHelloRetryRequest(buf));
+        } else if ch_has_ech_inner {
+            req.extensions
+                .push(HelloRetryExtension::EchHelloRetryRequest(vec![0u8; 8]));
+
+            let m = Message {
+                version: ProtocolVersion::TLSv1_2,
+                payload: MessagePayload::handshake(HandshakeMessagePayload {
+                    typ: HandshakeType::HelloRetryRequest,
+                    payload: HandshakePayload::HelloRetryRequest(req.clone()),
+                }),
+            };
+
+            let mut confirmation_transcript = transcript.clone();
+            confirmation_transcript.rollup_for_hrr();
+            confirmation_transcript.add_message(&m);
+
+            let derived = server_ech_hrr_confirmation_secret(
+                suite.hkdf_provider,
+                &randoms.client,
+                confirmation_transcript.current_hash(),
+            );
+
+            // Safety: exists
+            *req.extensions.last_mut().unwrap() =
+                HelloRetryExtension::EchHelloRetryRequest(derived.to_vec());
+        }
+
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
@@ -609,6 +698,8 @@ mod client_hello {
         transcript.add_message(&m);
         common.send_msg(m, false);
         common.handshake_kind = Some(HandshakeKind::FullWithHelloRetryRequest);
+
+        Ok(())
     }
 
     fn decide_if_early_data_allowed(
@@ -678,6 +769,7 @@ mod client_hello {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         extra_exts: Vec<ServerExtension>,
+        ech_configs: Option<Vec<EchConfig>>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
         let mut ep = hs::ExtensionProcessing::new();
@@ -686,6 +778,21 @@ mod client_hello {
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {
             ep.exts.push(ServerExtension::EarlyData);
+        }
+
+        if hello.ech_extension().is_some() {
+            if let Some(ech_configs) = ech_configs {
+                ep.exts
+                    .push(ServerExtension::EncryptedClientHello(
+                        ServerEncryptedClientHello {
+                            retry_configs: ech_configs
+                                .into_iter()
+                                .filter(|config| config.is_retry)
+                                .map(|config| config.config)
+                                .collect(),
+                        },
+                    ))
+            }
         }
 
         let ee = Message {
