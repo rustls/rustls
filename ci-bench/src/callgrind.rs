@@ -140,6 +140,8 @@ impl CallgrindRunner {
             .arg("-R")
             .arg("valgrind")
             .arg("--tool=callgrind")
+            // Do not count instructions from the start, instead this is controlled by `CountInstructions`
+            .arg("--collect-atstart=no")
             // Disable the cache simulation, since we are only interested in instruction counts
             .arg("--cache-sim=no")
             // Save callgrind's logs, which would otherwise be printed to stderr (we want to
@@ -287,4 +289,26 @@ pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result
          =====\n\n\
          Candidate output:\n{string_candidate}\n"
     ))
+}
+
+/// A RAII-like object for enabling callgrind instruction counting.
+///
+/// Warning: must not be nested.
+///
+/// Instructions outside the scope of these objects are not counted.
+pub(crate) struct CountInstructions;
+
+impl CountInstructions {
+    pub(crate) fn start() -> Self {
+        #[cfg(target_os = "linux")]
+        crabgrind::callgrind::toggle_collect();
+        CountInstructions
+    }
+}
+
+impl Drop for CountInstructions {
+    fn drop(&mut self) {
+        #[cfg(target_os = "linux")]
+        crabgrind::callgrind::toggle_collect();
+    }
 }

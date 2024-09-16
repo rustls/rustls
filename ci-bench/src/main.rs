@@ -27,7 +27,7 @@ use crate::benchmark::{
     get_reported_instr_count, validate_benchmarks, Benchmark, BenchmarkKind, BenchmarkParams,
     ResumptionKind,
 };
-use crate::callgrind::CallgrindRunner;
+use crate::callgrind::{CallgrindRunner, CountInstructions};
 use crate::util::async_io::{self, AsyncRead, AsyncWrite};
 use crate::util::transport::{
     read_handshake_message, read_plaintext_to_end_bounded, send_handshake_message,
@@ -645,17 +645,20 @@ impl BenchStepper for ServerSideStepper<'_> {
 
 /// Runs the benchmark using the provided stepper
 async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyhow::Result<()> {
-    let mut endpoint = stepper.handshake().await?;
-
     match kind {
         BenchmarkKind::Handshake(ResumptionKind::No) => {
-            // Nothing else to do here, since the handshake already happened
-            black_box(endpoint);
+            // Just count instructions for one handshake.
+            let _count = CountInstructions::start();
+            black_box(stepper.handshake().await?);
         }
         BenchmarkKind::Handshake(_) => {
-            // The handshake performed above was non-resumed, because the client didn't have a
-            // session ID / ticket; from now on we can perform resumed handshakes. We do it multiple
+            // The first handshake performed is non-resumed, because the client didn't have a
+            // session ID / ticket.  This is not measured.
+            stepper.handshake().await?;
+
+            // From now on we can perform resumed handshakes. We do it multiple
             // times, for reasons explained in the comments to `RESUMED_HANDSHAKE_RUNS`.
+            let _count = CountInstructions::start();
             for _ in 0..RESUMED_HANDSHAKE_RUNS {
                 // Wait for the endpoints to sync (i.e. the server must have discarded the previous
                 // connection and be ready for a new handshake, otherwise the client will start a
@@ -668,6 +671,9 @@ async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyh
             }
         }
         BenchmarkKind::Transfer => {
+            // Measurement includes the transfer, but not the handshake.
+            let mut endpoint = stepper.handshake().await?;
+            let _count = CountInstructions::start();
             stepper
                 .transmit_data(&mut endpoint)
                 .await?;
