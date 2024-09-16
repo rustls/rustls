@@ -439,6 +439,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Install valgrind
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -458,6 +463,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Install valgrind
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:

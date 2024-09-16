@@ -20,3 +20,6 @@ rustls-pemfile = "2"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+crabgrind = "=0.1.9" # compatible with valgrind package on GHA ubuntu-latest
