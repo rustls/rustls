@@ -93,20 +93,16 @@ measurements (up to 1% resolution, according to our tests).
 
 ### Instruction count mode
 
-Using `callgrind` has some architectural consequences because it operates at the process level
-(i.e. it can count CPU instructions for a whole process, but not for a single function). The most
-important consequences when running in instruction count mode are:
+Instruction counting is done with `callgrind`, and is precise in the sense that only operations
+we want to measure are included.  We tell `callgrind` to start with collection disabled,
+with `--collect-atstart=no`.  Then we use
+[client requests](https://valgrind.org/docs/manual/cl-manual.html#cl-manual.clientrequests) via
+the [crabgrind crate](https://docs.rs/crabgrind/latest/crabgrind/) to enable and disable collection
+(see `callgrind::CountInstructions`).
 
-- Since we want to measure server and client instruction counts separately, the benchmark runner
-  spawns two child processes for each benchmark (one for the client, one for the server) and pipes
-  their stdio to each other for communication (i.e. stdio acts as the transport layer).
-- There is a no-op "benchmark" that measures the overhead of starting up the child process, so
-  we can subtract it from the instruction count of the real benchmarks and reduce noise.
-- Since we want to measure individual portions of code (e.g. data transfer after the handshake),
-  there is a mechanism to subtract the instructions that are part of a benchmark's setup.
-  Specifically, a benchmark can be configured to have another benchmark's instruction count
-  subtracted from it. We are currently using this to subtract the handshake instructions from the
-  data transfer benchmark.
+Since we want to measure server and client instruction counts separately, the benchmark runner
+spawns two child processes for each benchmark (one for the client, one for the server) and pipes
+their stdio to each other for communication (i.e. stdio acts as the transport layer).
 
 If you need to debug benchmarks in instruction count mode, here are a few tricks that might help:
 
