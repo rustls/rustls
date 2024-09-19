@@ -1013,6 +1013,7 @@ impl<'a, const TLS13: bool> HandshakeFlight<'a, TLS13> {
     }
 }
 
+#[cfg(feature = "tls12")]
 pub(crate) type HandshakeFlightTls12<'a> = HandshakeFlight<'a, false>;
 pub(crate) type HandshakeFlightTls13<'a> = HandshakeFlight<'a, true>;
 
