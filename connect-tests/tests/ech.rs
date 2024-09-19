@@ -9,7 +9,7 @@ mod ech_config {
 
     #[test]
     fn cloudflare() {
-        test_deserialize_ech_config_list("crypto.cloudflare.com");
+        test_deserialize_ech_config_list("research.cloudflare.com");
     }
 
     #[test]
