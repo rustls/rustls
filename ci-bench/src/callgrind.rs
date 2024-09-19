@@ -20,11 +20,6 @@ pub struct CallgrindRunner {
     executable: String,
     /// The directory where the callgrind output will be stored
     output_dir: PathBuf,
-    /// The amount of instructions that are executed upon startup of the child process, before
-    /// actually running one of the benchmarks
-    ///
-    /// This count is subtracted from benchmark results, to reduce noise
-    overhead_instructions: u64,
 }
 
 impl CallgrindRunner {
@@ -36,23 +31,9 @@ impl CallgrindRunner {
         std::fs::create_dir_all(&callgrind_output_dir)
             .context("Failed to create callgrind output directory")?;
 
-        // We don't care about the side here, so let's use `Server` just to choose something
-        let overhead_instructions = Self::run_bench_side(
-            &executable,
-            u32::MAX,
-            Side::Server,
-            "calibration",
-            Stdio::piped(),
-            Stdio::piped(),
-            &callgrind_output_dir,
-        )?
-        .wait_and_get_instr_count()
-        .context("Unable to count overhead instructions")?;
-
         Ok(CallgrindRunner {
             executable,
             output_dir: callgrind_output_dir,
-            overhead_instructions,
         })
     }
 
@@ -87,17 +68,10 @@ impl CallgrindRunner {
         )
         .context("client side bench crashed")?;
 
-        let counts = InstructionCounts {
+        Ok(InstructionCounts {
             server: server.wait_and_get_instr_count()?,
             client: client.wait_and_get_instr_count()?,
-        };
-
-        let overhead_counts = InstructionCounts {
-            server: self.overhead_instructions,
-            client: self.overhead_instructions,
-        };
-
-        Ok(counts - overhead_counts)
+        })
     }
 
     /// Returns an error if callgrind is not available
