@@ -21,6 +21,7 @@
 
 use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fs, net};
 
@@ -443,26 +444,26 @@ struct Args {
     suite: Vec<String>,
     /// Negotiate the given protocols using ALPN.
     #[clap(long)]
-    proto: Vec<String>,
+    proto: Vec<Vec<u8>>,
     /// Read server certificates from the given file. This should contain PEM-format certificates
     /// in the right order (the first certificate should certify the end entity, matching the
     /// private key, the last should be a root CA).
     #[clap(long)]
-    certs: String,
+    certs: PathBuf,
     /// Perform client certificate revocation checking using the DER-encoded CRLs from the given
     /// files.
     #[clap(long)]
-    crl: Vec<String>,
+    crl: Vec<PathBuf>,
     /// Read private key from the given file. This should be a private key in PEM format.
     #[clap(long)]
-    key: String,
+    key: PathBuf,
     /// Read DER-encoded OCSP response from the given file and staple to certificate.
     #[clap(long)]
-    ocsp: Option<String>,
+    ocsp: Option<PathBuf>,
     /// Enable client authentication, and accept certificates signed by those roots provided in
     /// the given file.
     #[clap(long)]
-    auth: Option<String>,
+    auth: Option<PathBuf>,
     /// Send a fatal alert if the client does not complete client authentication.
     #[clap(long)]
     require_auth: bool,
@@ -522,7 +523,7 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
     out
 }
 
-fn load_certs(filename: &str) -> Vec<CertificateDer<'static>> {
+fn load_certs(filename: &Path) -> Vec<CertificateDer<'static>> {
     let certfile = fs::File::open(filename).expect("cannot open certificate file");
     let mut reader = BufReader::new(certfile);
     rustls_pemfile::certs(&mut reader)
@@ -530,7 +531,7 @@ fn load_certs(filename: &str) -> Vec<CertificateDer<'static>> {
         .collect()
 }
 
-fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
+fn load_private_key(filename: &Path) -> PrivateKeyDer<'static> {
     let keyfile = fs::File::open(filename).expect("cannot open private key file");
     let mut reader = BufReader::new(keyfile);
 
@@ -550,7 +551,7 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
     );
 }
 
-fn load_ocsp(filename: &Option<String>) -> Vec<u8> {
+fn load_ocsp(filename: Option<&Path>) -> Vec<u8> {
     let mut ret = Vec::new();
 
     if let Some(name) = filename {
@@ -563,9 +564,10 @@ fn load_ocsp(filename: &Option<String>) -> Vec<u8> {
     ret
 }
 
-fn load_crls(filenames: &[String]) -> Vec<CertificateRevocationListDer<'static>> {
+fn load_crls(
+    filenames: impl Iterator<Item = impl AsRef<Path>>,
+) -> Vec<CertificateRevocationListDer<'static>> {
     filenames
-        .iter()
         .map(|filename| {
             let mut der = Vec::new();
             fs::File::open(filename)
@@ -584,7 +586,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         for root in roots {
             client_auth_roots.add(root).unwrap();
         }
-        let crls = load_crls(&args.crl);
+        let crls = load_crls(args.crl.iter());
         if args.require_auth {
             WebPkiClientVerifier::builder(client_auth_roots.into())
                 .with_crls(crls)
@@ -615,7 +617,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
 
     let certs = load_certs(&args.certs);
     let privkey = load_private_key(&args.key);
-    let ocsp = load_ocsp(&args.ocsp);
+    let ocsp = load_ocsp(args.ocsp.as_deref());
 
     let mut config = rustls::ServerConfig::builder_with_provider(
         CryptoProvider {
@@ -653,11 +655,7 @@ fn make_config(args: &Args) -> Arc<rustls::ServerConfig> {
         config.max_early_data_size = args.max_early_data;
     }
 
-    config.alpn_protocols = args
-        .proto
-        .iter()
-        .map(|proto| proto.as_bytes().to_owned())
-        .collect();
+    config.alpn_protocols = args.proto.clone();
 
     Arc::new(config)
 }
