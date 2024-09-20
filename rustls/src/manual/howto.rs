@@ -17,21 +17,21 @@ It's a TODO to make these and other extension points async.)
 
 Once you have these two pieces, configuring a server to use them involves, briefly:
 
-- packaging your `sign::SigningKey` with the matching certificate chain into a [`sign::CertifiedKey`][certified_key]
-- making a [`ResolvesServerCertUsingSni`][cert_using_sni] and feeding in your `sign::CertifiedKey` for all SNI hostnames you want to use it for,
+- packaging your [`sign::SigningKey`][signing_key] with the matching certificate chain into a [`sign::CertifiedKey`][certified_key]
+- making a [`ResolvesServerCertUsingSni`][cert_using_sni] and feeding in your [`sign::CertifiedKey`][certified_key] for all SNI hostnames you want to use it for,
 - setting that as your `ServerConfig`'s [`cert_resolver`][cert_resolver]
 
-For a complete example of implementing a custom `sign::SigningKey` and `sign::Signer` see
-the [rustls-cng] crate.
+For a complete example of implementing a custom [`sign::SigningKey`][signing_key]
+and [`sign::Signer`][signer] see the [rustls-cng] crate.
 
-[signing_key]: ../../sign/trait.SigningKey.html
-[choose_scheme]: ../../sign/trait.SigningKey.html#tymethod.choose_scheme
-[sig_scheme]: ../../enum.SignatureScheme.html
-[signer]: ../../sign/trait.Signer.html
-[sign_method]: ../../sign/trait.Signer.html#tymethod.sign
-[certified_key]: ../../sign/struct.CertifiedKey.html
-[cert_using_sni]: ../../struct.ResolvesServerCertUsingSni.html
-[cert_resolver]: ../../struct.ServerConfig.html#structfield.cert_resolver
+[signing_key]: crate::crypto::signer::SigningKey
+[choose_scheme]: crate::crypto::signer::SigningKey.choose_scheme()
+[sig_scheme]: crate::SignatureScheme
+[signer]: crate::crypto::signer::Signer
+[sign_method]: crate::crypto::Signer.sign()
+[certified_key]: crate::crypto::signer::CertifiedKey
+[cert_using_sni]: crate::server::ResolvesServerCertUsingSni
+[cert_resolver]: crate::ServerConfig::cert_resolver
 [rustls-cng]: https://github.com/rustls/rustls-cng/blob/dev/src/signer.rs
 
 [^1]: For PKCS#8 it does not support password encryption -- there's not a meaningful threat
