@@ -389,9 +389,7 @@ impl OpenConnection {
             .unwrap();
 
         if let Some(back) = self.back.as_mut() {
-            registry
-                .deregister(back)
-                .unwrap();
+            registry.deregister(back).unwrap();
         }
     }
 

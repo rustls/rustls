@@ -1170,7 +1170,9 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             }
         }
 
-        if let (Some(expected_options), false) = (opts.expect_handshake_kind.as_ref(), sess.is_handshaking()) {
+        if let (Some(expected_options), false) =
+            (opts.expect_handshake_kind.as_ref(), sess.is_handshaking())
+        {
             let actual = sess.handshake_kind().unwrap();
             assert!(
                 expected_options.contains(&actual),
