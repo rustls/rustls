@@ -116,9 +116,9 @@ impl TlsClient {
             args.push("--http");
         }
 
-        if self.cache.is_some() {
+        if let Some(cache) = self.cache.as_ref() {
             args.push("--cache");
-            args.push(self.cache.as_ref().unwrap());
+            args.push(cache);
         }
 
         if self.no_sni {
@@ -129,15 +129,9 @@ impl TlsClient {
             args.push("--insecure");
         }
 
-        if self.cafile.is_some() {
+        if let Some(cafile) = self.cafile.as_ref() {
             args.push("--cafile");
-            args.push(
-                self.cafile
-                    .as_ref()
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-            );
+            args.push(cafile.to_str().unwrap());
         }
 
         for suite in &self.suites {
@@ -149,12 +143,9 @@ impl TlsClient {
             args.push("--verbose");
         }
 
-        if self.max_fragment_size.is_some() {
+        if let Some(max_fragment_size) = self.max_fragment_size {
             args.push("--max-frag-size");
-            fragstring = self
-                .max_fragment_size
-                .unwrap()
-                .to_string();
+            fragstring = max_fragment_size.to_string();
             args.push(&fragstring);
         }
 
@@ -186,7 +177,7 @@ impl TlsClient {
         }
 
         if self.expect_fails {
-            assert!(output.status.code().unwrap() != 0);
+            assert_ne!(output.status.code().unwrap(), 0);
         } else {
             assert!(output.status.success());
         }
