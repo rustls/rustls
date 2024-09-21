@@ -209,12 +209,10 @@ impl OpenConnection {
 
     /// Close the backend connection for forwarded sessions.
     fn close_back(&mut self) {
-        if self.back.is_some() {
-            let back = self.back.as_mut().unwrap();
+        if let Some(back) = self.back.take() {
             back.shutdown(net::Shutdown::Both)
                 .unwrap();
         }
-        self.back = None;
     }
 
     fn do_tls_read(&mut self) {
@@ -390,10 +388,8 @@ impl OpenConnection {
             .deregister(&mut self.socket)
             .unwrap();
 
-        if self.back.is_some() {
-            registry
-                .deregister(self.back.as_mut().unwrap())
-                .unwrap();
+        if let Some(back) = self.back.as_mut() {
+            registry.deregister(back).unwrap();
         }
     }
 
