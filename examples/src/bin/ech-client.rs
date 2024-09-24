@@ -25,7 +25,7 @@ use std::io::{stdout, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
-use docopt::Docopt;
+use clap::Parser;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
@@ -37,30 +37,22 @@ use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::ServerName;
 use rustls::RootCertStore;
-use serde_derive::Deserialize;
 
 fn main() {
-    let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
-    let args: Args = Docopt::new(USAGE)
-        .map(|d| d.help(true))
-        .map(|d| d.version(Some(version)))
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit());
-
-    let port = args.flag_port.unwrap_or(443);
+    let args = Args::parse();
 
     // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
-    let resolver_config = if args.flag_cloudflare_dns {
+    let resolver_config = if args.use_cloudflare_dns {
         ResolverConfig::cloudflare_https()
     } else {
         ResolverConfig::google_https()
     };
     let resolver = Resolver::new(resolver_config, ResolverOpts::default()).unwrap();
-    let server_ech_config = match args.flag_grease {
+    let server_ech_config = match args.grease {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
-        false => match args.flag_ech_config {
+        false => match args.ech_config {
             Some(path) => Some(read_ech(&path)),
-            None => lookup_ech_configs(&resolver, &args.arg_outer_hostname, port),
+            None => lookup_ech_configs(&resolver, &args.outer_hostname, args.port),
         },
     };
 
@@ -83,7 +75,7 @@ fn main() {
         }
     };
 
-    let root_store = match args.flag_cafile {
+    let root_store = match args.cafile {
         Some(file) => {
             let mut root_store = RootCertStore::empty();
             let certfile = fs::File::open(file).expect("Cannot open CA file");
@@ -112,16 +104,16 @@ fn main() {
 
     // The "inner" SNI that we're really trying to reach.
     let server_name: ServerName<'static> = args
-        .arg_inner_hostname
+        .inner_hostname
         .clone()
         .try_into()
         .unwrap();
 
-    for i in 0..args.flag_num_reqs {
-        trace!("\nRequest {} of {}", i + 1, args.flag_num_reqs);
+    for i in 0..args.num_reqs {
+        trace!("\nRequest {} of {}", i + 1, args.num_reqs);
         let mut conn = rustls::ClientConnection::new(config.clone(), server_name.clone()).unwrap();
         // The "outer" server that we're connecting to.
-        let sock_addr = (args.arg_outer_hostname.as_str(), port)
+        let sock_addr = (args.outer_hostname.as_str(), args.port)
             .to_socket_addrs()
             .unwrap()
             .next()
@@ -132,9 +124,8 @@ fn main() {
         let request =
             format!(
                 "GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
-                args.flag_path.clone()
-                    .unwrap_or("ech-check.php".to_owned()),
-                args.flag_host.as_ref().unwrap_or(&args.arg_inner_hostname),
+                args.path,
+                args.host.as_ref().unwrap_or(&args.inner_hostname),
             );
         dbg!(&request);
         tls.write_all(request.as_bytes())
@@ -142,7 +133,7 @@ fn main() {
         assert!(!tls.conn.is_handshaking());
         assert_eq!(
             tls.conn.ech_status(),
-            match args.flag_grease {
+            match args.grease {
                 true => EchStatus::Grease,
                 false => EchStatus::Accepted,
             }
@@ -153,51 +144,59 @@ fn main() {
     }
 }
 
-const USAGE: &str = "
-Connects to the TLS server at hostname:PORT.  The default PORT
-is 443. If an ECH config can be fetched for hostname using
-DNS-over-HTTPS, ECH is enabled. Otherwise, a placeholder ECH
-extension is sent for anti-ossification testing.
-
-If --cafile is not supplied, a built-in set of CA certificates
-are used from the webpki-roots crate.
-
-Usage:
-  ech-client [options] <outer-hostname> <inner-hostname>
-  ech-client (--version | -v)
-  ech-client (--help | -h)
-
-Example:
-  ech-client --host defo.ie defo.ie www.defo.ie
-
-Options:
-    -p, --port PORT       Connect to PORT [default: 443].
-    --cafile CAFILE       Read root certificates from CAFILE.
-    --path PATH           HTTP GET this PATH [default: ech-check.php].
-    --host HOST           HTTP HOST to use for GET request (defaults to value of inner-hostname).
-    --google-dns          Use Google DNS for the DNS-over-HTTPS lookup [default].
-    --cloudflare-dns      Use Cloudflare DNS for the DNS-over-HTTPS lookup.
-    --grease              Skip looking up an ECH config and send a GREASE placeholder.
-    --ech-config ECHFILE  Skip looking up an ECH config and read it from the provided file (in binary TLS encoding).
-    --num-reqs NUM        Number of requests to make [default: 1].
-    --version, -v         Show tool version.
-    --help, -h            Show this screen.
-";
-
-#[derive(Debug, Deserialize)]
+/// Connects to the TLS server at hostname:PORT.  The default PORT
+/// is 443. If an ECH config can be fetched for hostname using
+/// DNS-over-HTTPS, ECH is enabled. Otherwise, a placeholder ECH
+/// extension is sent for anti-ossification testing.
+///
+/// Example:
+///   ech-client --host defo.ie defo.ie www.defo.ie
+#[derive(Debug, Parser)]
+#[clap(version)]
 struct Args {
-    flag_port: Option<u16>,
-    flag_cafile: Option<String>,
-    flag_path: Option<String>,
-    flag_host: Option<String>,
-    #[allow(dead_code)] // implied default
-    flag_google_dns: bool,
-    flag_cloudflare_dns: bool,
-    flag_grease: bool,
-    flag_ech_config: Option<String>,
-    flag_num_reqs: usize,
-    arg_outer_hostname: String,
-    arg_inner_hostname: String,
+    /// Connect to this TCP port.
+    #[clap(short, long, default_value = "443")]
+    port: u16,
+
+    /// Read root certificates from this file.
+    ///
+    /// If --cafile is not supplied, a built-in set of CA certificates
+    /// are used from the webpki-roots crate.
+    #[clap(long)]
+    cafile: Option<String>,
+
+    /// HTTP GET this PATH [default: ech-check.php].
+    #[clap(long, default_value = "ech-check.php")]
+    path: String,
+
+    /// HTTP HOST to use for GET request (defaults to value of inner-hostname).
+    #[clap(long)]
+    host: Option<String>,
+
+    /// Use Google DNS for the DNS-over-HTTPS lookup [default].
+    #[clap(long, group = "dns")]
+    use_google_dns: bool,
+    /// Use Cloudflare DNS for the DNS-over-HTTPS lookup.
+    #[clap(long, group = "dns")]
+    use_cloudflare_dns: bool,
+
+    /// Skip looking up an ECH config and send a GREASE placeholder.
+    #[clap(long)]
+    grease: bool,
+
+    /// Skip looking up an ECH config and read it from the provided file (in binary TLS encoding).
+    #[clap(long)]
+    ech_config: Option<String>,
+
+    /// Number of requests to make.
+    #[clap(long, default_value = "1")]
+    num_reqs: usize,
+
+    /// Outer hostname.
+    outer_hostname: String,
+
+    /// Inner hostname.
+    inner_hostname: String,
 }
 
 // TODO(@cpu): consider upstreaming to hickory-dns
