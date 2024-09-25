@@ -798,7 +798,6 @@ impl<T> DerefMut for UnbufferedConnectionCommon<T> {
     }
 }
 
-
 pub(crate) struct ConnectionCore<Data> {
     pub(crate) state: Result<Box<dyn State<Data>>, Error>,
     pub(crate) data: Data,
