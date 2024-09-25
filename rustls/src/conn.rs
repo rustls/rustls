@@ -792,6 +792,13 @@ impl<T> Deref for UnbufferedConnectionCommon<T> {
     }
 }
 
+impl<T> DerefMut for UnbufferedConnectionCommon<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.core.common_state
+    }
+}
+
+
 pub(crate) struct ConnectionCore<Data> {
     pub(crate) state: Result<Box<dyn State<Data>>, Error>,
     pub(crate) data: Data,
