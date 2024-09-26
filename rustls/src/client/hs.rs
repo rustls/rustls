@@ -304,8 +304,26 @@ fn emit_client_hello_for_retry(
 
     if let Some(key_share) = &key_share {
         debug_assert!(support_tls13);
-        let key_share = KeyShareEntry::new(key_share.group(), key_share.pub_key());
-        exts.push(ClientExtension::KeyShare(vec![key_share]));
+        let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
+
+        if retryreq.is_none() {
+            // Only for the initial client hello, see if we can send a second KeyShare
+            // for "free".  We only do this if the same algorithm is also supported
+            // separately by our provider for this version (`find_kx_group` looks that up).
+            if let Some((component_group, component_share)) =
+                key_share
+                    .hybrid_component()
+                    .filter(|(group, _)| {
+                        config
+                            .find_kx_group(*group, ProtocolVersion::TLSv1_3)
+                            .is_some()
+                    })
+            {
+                shares.push(KeyShareEntry::new(component_group, component_share));
+            }
+        }
+
+        exts.push(ClientExtension::KeyShare(shares));
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::cookie) {
