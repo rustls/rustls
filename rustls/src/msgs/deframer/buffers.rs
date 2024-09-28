@@ -1,8 +1,8 @@
+use crate::compat::io;
+use crate::msgs::message::MAX_WIRE_SIZE;
 use alloc::vec::Vec;
 use core::mem;
 use core::ops::Range;
-use crate::compat::io;
-use crate::msgs::message::MAX_WIRE_SIZE;
 
 /// Conversion from a slice within a larger buffer into
 /// a `Range` offset within.

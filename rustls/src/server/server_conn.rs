@@ -10,8 +10,8 @@ use pki_types::{DnsName, UnixTime};
 
 use super::hs;
 use crate::builder::ConfigBuilder;
-use crate::compat::io;
 use crate::common_state::{CommonState, Protocol, Side, State};
+use crate::compat::io;
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -513,13 +513,13 @@ mod connection {
 
     use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
     use crate::common_state::{CommonState, Context, Side};
+    use crate::compat::io;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
     use crate::server::hs;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
-    use crate::compat::io;
-    
+
     /// Allows reading of early data in resumed TLS1.3 connections.
     ///
     /// "Early data" is also known as "0-RTT data".

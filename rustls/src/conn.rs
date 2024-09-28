@@ -3,8 +3,8 @@ use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut, Range};
 
-use crate::compat::io;
 use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
+use crate::compat::io;
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::log::trace;
@@ -26,11 +26,11 @@ mod connection {
     use core::ops::{Deref, DerefMut};
 
     use crate::common_state::{CommonState, IoState};
+    use crate::compat::io;
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
     use crate::ConnectionCommon;
-    use crate::compat::io;
 
     #[cfg(feature = "std")]
     use crate::msgs::message::OutboundChunks;

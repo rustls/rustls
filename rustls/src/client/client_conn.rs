@@ -613,11 +613,11 @@ mod connection {
     use super::ClientConnectionData;
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
+    use crate::compat::io;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::ClientConfig;
-    use crate::compat::io;
 
     /// Stub that implements io::Write and dispatches to `write_early_data`.
     pub struct WriteEarlyData<'a> {
