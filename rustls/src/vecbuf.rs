@@ -162,7 +162,10 @@ impl ChunkVecBuffer {
 
         let mut used = 0;
         for chunk in self.chunks.iter() {
-            used += wr.write(&chunk)?;
+            let len = chunk.len();
+            wr.write_all(&chunk)?;
+            // SAFETY: Either we consume this entire chunk (guaranteed by write_all), or it returns an I/O error
+            used += len;
         }
 
         self.consume(used);
