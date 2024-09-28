@@ -638,6 +638,7 @@ impl<Data> ConnectionCommon<Data> {
 
                         #[cfg(not(feature = "std"))]
                         {
+                            drop(e);
                             "io processing error"
                         }
                     };
