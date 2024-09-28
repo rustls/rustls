@@ -1,3 +1,4 @@
+use alloc::sync::Arc;
 use std::prelude::v1::*;
 use std::{format, println, vec};
 
@@ -1248,7 +1249,7 @@ fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 
 fn sample_new_session_ticket_payload() -> NewSessionTicketPayload {
     NewSessionTicketPayload {
         lifetime_hint: 1234,
-        ticket: PayloadU16(vec![1, 2, 3]),
+        ticket: Arc::new(PayloadU16(vec![1, 2, 3])),
     }
 }
 
@@ -1257,7 +1258,7 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
         lifetime: 123,
         age_add: 1234,
         nonce: PayloadU8(vec![1, 2, 3]),
-        ticket: PayloadU16(vec![4, 5, 6]),
+        ticket: Arc::new(PayloadU16(vec![4, 5, 6])),
         exts: vec![NewSessionTicketExtension::Unknown(UnknownExtension {
             typ: ExtensionType::Unknown(12345),
             payload: Payload::Borrowed(&[1, 2, 3]),

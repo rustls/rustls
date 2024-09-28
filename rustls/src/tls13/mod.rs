@@ -1,4 +1,3 @@
-use alloc::vec::Vec;
 use core::fmt;
 
 use crate::crypto;
@@ -87,22 +86,40 @@ impl fmt::Debug for Tls13CipherSuite {
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_client_verify_message(handshake_hash: &hash::Output) -> Vec<u8> {
-    construct_verify_message(handshake_hash, b"TLS 1.3, client CertificateVerify\x00")
+pub(crate) fn construct_client_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
+    VerifyMessage::new(handshake_hash, CLIENT_CONSTANT)
 }
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
-pub(crate) fn construct_server_verify_message(handshake_hash: &hash::Output) -> Vec<u8> {
-    construct_verify_message(handshake_hash, b"TLS 1.3, server CertificateVerify\x00")
+pub(crate) fn construct_server_verify_message(handshake_hash: &hash::Output) -> VerifyMessage {
+    VerifyMessage::new(handshake_hash, SERVER_CONSTANT)
 }
 
-fn construct_verify_message(
-    handshake_hash: &hash::Output,
-    context_string_with_0: &[u8],
-) -> Vec<u8> {
-    let mut msg = Vec::new();
-    msg.resize(64, 0x20u8);
-    msg.extend_from_slice(context_string_with_0);
-    msg.extend_from_slice(handshake_hash.as_ref());
-    msg
+pub(crate) struct VerifyMessage {
+    buf: [u8; MAX_VERIFY_MSG],
+    used: usize,
 }
+
+impl VerifyMessage {
+    fn new(handshake_hash: &hash::Output, context_string_with_0: &[u8; 34]) -> Self {
+        let used = 64 + context_string_with_0.len() + handshake_hash.as_ref().len();
+        let mut buf = [0x20u8; MAX_VERIFY_MSG];
+
+        let (_spaces, context) = buf.split_at_mut(64);
+        let (context, hash) = context.split_at_mut(34);
+        context.copy_from_slice(context_string_with_0);
+        hash[..handshake_hash.as_ref().len()].copy_from_slice(handshake_hash.as_ref());
+
+        Self { buf, used }
+    }
+}
+
+impl AsRef<[u8]> for VerifyMessage {
+    fn as_ref(&self) -> &[u8] {
+        &self.buf[..self.used]
+    }
+}
+
+const SERVER_CONSTANT: &[u8; 34] = b"TLS 1.3, server CertificateVerify\x00";
+const CLIENT_CONSTANT: &[u8; 34] = b"TLS 1.3, client CertificateVerify\x00";
+const MAX_VERIFY_MSG: usize = 64 + CLIENT_CONSTANT.len() + hash::Output::MAX_LEN;

@@ -1115,7 +1115,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             .config
             .verifier
             .verify_tls13_signature(
-                &construct_server_verify_message(&handshake_hash),
+                construct_server_verify_message(&handshake_hash).as_ref(),
                 end_entity,
                 cert_verify,
             )
@@ -1204,7 +1204,7 @@ fn emit_certverify_tls13(
     let message = construct_client_verify_message(&flight.transcript.current_hash());
 
     let scheme = signer.scheme();
-    let sig = signer.sign(&message)?;
+    let sig = signer.sign(message.as_ref())?;
     let dss = DigitallySignedStruct::new(scheme, sig);
 
     flight.add(HandshakeMessagePayload {
@@ -1428,7 +1428,7 @@ impl ExpectTraffic {
         #[allow(unused_mut)]
         let mut value = persist::Tls13ClientSessionValue::new(
             self.suite,
-            nst.ticket.0.clone(),
+            Arc::clone(&nst.ticket),
             secret.as_ref(),
             cx.common
                 .peer_certificates
