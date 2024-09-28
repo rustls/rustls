@@ -153,7 +153,7 @@ impl ChunkVecBuffer {
     }
 
     /// Fallback implementation of write_to that does not depend on Vectored I/O
-    /// however, it consumes all the available chunks
+    /// however, it consumes all the available chunks as much as possible until an I/O error occurs
     #[cfg(not(feature = "std"))]
     pub(crate) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         if self.is_empty() {
