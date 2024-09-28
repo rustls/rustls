@@ -666,9 +666,11 @@ mod hash_map {
 }
 
 pub(crate) mod compat {
-    #[cfg(feature = "std")]
-    pub(crate) use std::io;
+    pub(crate) mod io {
+        #[cfg(feature = "std")]
+        pub(crate) use std::io::{Error, ErrorKind, IoSlice, Read, Result, Write};
 
-    #[cfg(all(not(feature = "std"), feature = "no_std_io"))]
-    pub(crate) use no_std_io::io;
+        #[cfg(all(not(feature = "std"), feature = "no_std_io"))]
+        pub(crate) use no_std_io::io::{Error, ErrorKind, Read, Result, Write};
+    }
 }
