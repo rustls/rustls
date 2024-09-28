@@ -387,7 +387,6 @@ impl ClientConfig {
                 .any(|cs| cs.version().version == v)
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
         self.provider
             .cipher_suites
@@ -553,7 +552,6 @@ impl EarlyData {
         matches!(self.state, EarlyDataState::Ready | EarlyDataState::Accepted)
     }
 
-    #[cfg(feature = "std")]
     fn is_accepted(&self) -> bool {
         matches!(
             self.state,
@@ -604,13 +602,11 @@ impl EarlyData {
     }
 }
 
-#[cfg(feature = "std")]
 mod connection {
     use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
-    use std::io;
 
     use pki_types::ServerName;
 
@@ -621,6 +617,7 @@ mod connection {
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::ClientConfig;
+    use crate::compat::io;
 
     /// Stub that implements io::Write and dispatches to `write_early_data`.
     pub struct WriteEarlyData<'a> {
@@ -794,7 +791,7 @@ mod connection {
         }
     }
 }
-#[cfg(feature = "std")]
+
 pub use connection::{ClientConnection, WriteEarlyData};
 
 impl ConnectionCore<ClientConnectionData> {
@@ -822,7 +819,6 @@ impl ConnectionCore<ClientConnectionData> {
         Ok(Self::new(state, data, common_state))
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn is_early_data_accepted(&self) -> bool {
         self.data.early_data.is_accepted()
     }

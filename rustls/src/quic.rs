@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-#[cfg(feature = "std")]
 use core::fmt::Debug;
 
 /// This module contains optional APIs for implementing QUIC TLS.
@@ -15,7 +14,6 @@ use crate::tls13::key_schedule::{
 };
 use crate::tls13::Tls13CipherSuite;
 
-#[cfg(feature = "std")]
 mod connection {
     use alloc::sync::Arc;
     use alloc::vec;
@@ -441,7 +439,6 @@ mod connection {
     }
 }
 
-#[cfg(feature = "std")]
 pub use connection::{ClientConnection, Connection, ConnectionCommon, ServerConnection};
 
 #[derive(Default)]
@@ -454,12 +451,10 @@ pub(crate) struct Quic {
     pub(crate) hs_secrets: Option<Secrets>,
     pub(crate) traffic_secrets: Option<Secrets>,
     /// Whether keys derived from traffic_secrets have been passed to the QUIC implementation
-    #[cfg(feature = "std")]
     pub(crate) returned_traffic_keys: bool,
     pub(crate) version: Version,
 }
 
-#[cfg(feature = "std")]
 impl Quic {
     pub(crate) fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
         while let Some((_, msg)) = self.hs_queue.pop_front() {

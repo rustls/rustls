@@ -2,9 +2,8 @@ use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut, Range};
-#[cfg(feature = "std")]
-use std::io;
 
+use crate::compat::io;
 use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
@@ -20,19 +19,21 @@ use crate::vecbuf::ChunkVecBuffer;
 
 pub(crate) mod unbuffered;
 
-#[cfg(feature = "std")]
 mod connection {
+    #[cfg(feature = "std")]
     use alloc::vec::Vec;
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
-    use std::io;
 
     use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
-    use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
     use crate::ConnectionCommon;
+    use crate::compat::io;
+
+    #[cfg(feature = "std")]
+    use crate::msgs::message::OutboundChunks;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -290,6 +291,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             self.sink.write(buf)
         }
 
+        #[cfg(feature = "std")]
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
             self.sink.write_vectored(bufs)
         }
@@ -306,6 +308,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     /// [`ClientConnection`]: crate::ClientConnection
     pub(crate) trait PlaintextSink {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+        #[cfg(feature = "std")]
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize>;
         fn flush(&mut self) -> io::Result<()>;
     }
@@ -320,6 +323,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             Ok(len)
         }
 
+        #[cfg(feature = "std")]
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
             let payload_owner: Vec<&[u8]>;
             let payload = match bufs.len() {
@@ -348,7 +352,6 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     }
 }
 
-#[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
 
 #[derive(Debug)]
@@ -522,7 +525,6 @@ impl<Data> ConnectionCommon<Data> {
     }
 }
 
-#[cfg(feature = "std")]
 impl<Data> ConnectionCommon<Data> {
     /// Returns an object that allows reading plaintext.
     pub fn reader(&mut self) -> Reader<'_> {
@@ -628,6 +630,17 @@ impl<Data> ConnectionCommon<Data> {
                     // error.
                     let _ignored = self.write_tls(io);
                     let _ignored = io.flush();
+                    let e = {
+                        #[cfg(feature = "std")]
+                        {
+                            e
+                        }
+
+                        #[cfg(not(feature = "std"))]
+                        {
+                            "io processing error"
+                        }
+                    };
 
                     return Err(io::Error::new(io::ErrorKind::InvalidData, e));
                 }

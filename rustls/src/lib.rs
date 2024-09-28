@@ -406,7 +406,6 @@ mod hash_hs;
 mod limited_cache;
 mod rand;
 mod record_layer;
-#[cfg(feature = "std")]
 mod stream;
 #[cfg(feature = "tls12")]
 mod tls12;
@@ -511,7 +510,6 @@ pub mod unbuffered {
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier, WantsVersions};
 pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
-#[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, SideData};
 pub use crate::enums::{
@@ -528,7 +526,6 @@ pub use crate::key_log_file::KeyLogFile;
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::ffdhe_groups;
 pub use crate::msgs::handshake::DistinguishedName;
-#[cfg(feature = "std")]
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
@@ -559,7 +556,6 @@ pub mod client {
         ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
         Resumption, Tls12Resumption, UnbufferedClientConnection,
     };
-    #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
     pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
     #[cfg(any(feature = "std", feature = "hashbrown"))]
@@ -580,7 +576,6 @@ pub mod client {
 }
 
 pub use client::ClientConfig;
-#[cfg(feature = "std")]
 pub use client::ClientConnection;
 
 /// Items for use in a server.
@@ -604,7 +599,6 @@ pub mod server {
         Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
         ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
     };
-    #[cfg(feature = "std")]
     pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
     pub use crate::verify::NoClientAuth;
@@ -619,7 +613,6 @@ pub mod server {
 }
 
 pub use server::ServerConfig;
-#[cfg(feature = "std")]
 pub use server::ServerConnection;
 
 /// All defined protocol versions appear in this module.
@@ -670,4 +663,12 @@ mod hash_map {
     pub(crate) use hashbrown::hash_map::Entry;
     #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
     pub(crate) use hashbrown::HashMap;
+}
+
+pub(crate) mod compat {
+    #[cfg(feature = "std")]
+    pub(crate) use std::io;
+
+    #[cfg(all(not(feature = "std"), feature = "no_std_io"))]
+    pub(crate) use no_std_io::io;
 }

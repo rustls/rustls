@@ -31,10 +31,11 @@ webpki = { package = "rustls-webpki", version = "0.102.8", features = ["alloc"],
 pki-types = { package = "rustls-pki-types", version = "1.7", features = ["alloc"] }
 zeroize = "1.7"
 zlib-rs = { version = "0.3", optional = true }
+no_std_io = { version = "0.6.0", default-features = false, optional = true, features = ["alloc"] }
 
 [features]
 default = ["aws_lc_rs", "logging", "std", "tls12"]
-std = ["webpki/std", "pki-types/std", "once_cell/std"]
+std = ["webpki/std", "pki-types/std", "once_cell/std", "no_std_io?/std"]
 logging = ["log"]
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
@@ -45,6 +46,7 @@ tls12 = []
 read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 zlib = ["dep:zlib-rs"]
+no_std_io = ["dep:no_std_io"]
 
 [dev-dependencies]
 base64 = "0.22"

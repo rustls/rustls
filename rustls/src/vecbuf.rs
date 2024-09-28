@@ -1,12 +1,9 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::cmp;
-#[cfg(feature = "std")]
-use std::io;
-#[cfg(feature = "std")]
-use std::io::Read;
 
-#[cfg(feature = "std")]
+use crate::compat::io;
+use crate::compat::io::Read;
 use crate::msgs::message::OutboundChunks;
 
 /// This is a byte buffer that is built from a vector
@@ -94,7 +91,6 @@ impl ChunkVecBuffer {
     }
 }
 
-#[cfg(feature = "std")]
 impl ChunkVecBuffer {
     pub(crate) fn is_full(&self) -> bool {
         self.limit
@@ -140,6 +136,7 @@ impl ChunkVecBuffer {
     }
 
     /// Read data out of this object, passing it `wr`
+    #[cfg(feature = "std")]
     pub(crate) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
         if self.is_empty() {
             return Ok(0);
@@ -151,6 +148,23 @@ impl ChunkVecBuffer {
         }
         let len = cmp::min(bufs.len(), self.chunks.len());
         let used = wr.write_vectored(&bufs[..len])?;
+        self.consume(used);
+        Ok(used)
+    }
+
+    /// Fallback implementation of write_to that does not depend on Vectored I/O
+    /// however, it consumes all the available chunks
+    #[cfg(not(feature = "std"))]
+    pub(crate) fn write_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
+        if self.is_empty() {
+            return Ok(0);
+        }
+
+        let mut used = 0;
+        for chunk in self.chunks.iter() {
+            used += wr.write(&chunk)?;
+        }
+
         self.consume(used);
         Ok(used)
     }
