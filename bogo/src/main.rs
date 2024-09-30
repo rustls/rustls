@@ -5,11 +5,12 @@
 //
 
 use std::fmt::{Debug, Formatter};
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::sync::Arc;
-use std::{env, fs, net, process, thread, time};
+use std::{env, net, process, thread, time};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
+use pki_types::pem::PemObject;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
@@ -263,24 +264,6 @@ impl SelectedProvider {
     }
 }
 
-fn load_cert(filename: &str) -> Vec<CertificateDer<'static>> {
-    let certfile = fs::File::open(filename).expect("cannot open certificate file");
-    let mut reader = BufReader::new(certfile);
-    rustls_pemfile::certs(&mut reader)
-        .map(|result| result.unwrap())
-        .collect()
-}
-
-fn load_key(filename: &str) -> PrivateKeyDer<'static> {
-    let keyfile = fs::File::open(filename).expect("cannot open private key file");
-    let mut reader = BufReader::new(keyfile);
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
-        .map(|result| result.unwrap())
-        .collect::<Vec<_>>();
-    assert!(keys.len() == 1);
-    keys.pop().unwrap().into()
-}
-
 fn load_root_certs(filename: &str) -> Arc<RootCertStore> {
     let mut roots = RootCertStore::empty();
 
@@ -295,7 +278,11 @@ fn load_root_certs(filename: &str) -> Arc<RootCertStore> {
         filename => filename,
     };
 
-    roots.add_parsable_certificates(load_cert(filename));
+    roots.add_parsable_certificates(
+        CertificateDer::pem_file_iter(filename)
+            .unwrap()
+            .map(|item| item.unwrap()),
+    );
     Arc::new(roots)
 }
 
@@ -611,8 +598,11 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
             server::WebPkiClientVerifier::no_client_auth()
         };
 
-    let cert = load_cert(&opts.cert_file);
-    let key = load_key(&opts.key_file);
+    let cert = CertificateDer::pem_file_iter(&opts.cert_file)
+        .unwrap()
+        .map(|cert| cert.unwrap())
+        .collect::<Vec<_>>();
+    let key = PrivateKeyDer::from_pem_file(&opts.key_file).unwrap();
 
     let mut provider = opts.provider.clone();
 
@@ -795,8 +785,11 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(&opts.trusted_cert_file)));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
-        let cert = load_cert(&opts.cert_file);
-        let key = load_key(&opts.key_file);
+        let cert = CertificateDer::pem_file_iter(&opts.cert_file)
+            .unwrap()
+            .map(|item| item.unwrap())
+            .collect();
+        let key = PrivateKeyDer::from_pem_file(&opts.key_file).unwrap();
         cfg.with_client_auth_cert(cert, key)
             .unwrap()
     } else {
