@@ -17,11 +17,12 @@ use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncr
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
-    DigitallySignedStruct, Error, NamedGroup, ProtocolVersion, RootCertStore, ServerConfig,
-    ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    DigitallySignedStruct, DistinguishedName, Error, NamedGroup, ProtocolVersion, RootCertStore,
+    ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
 use webpki::anchor_from_trusted_cert;
 
@@ -961,6 +962,76 @@ impl Default for MockServerVerifier {
                 SignatureScheme::ECDSA_NISTP521_SHA512,
             ],
             expected_ocsp_response: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct MockClientVerifier {
+    pub verified: fn() -> Result<ClientCertVerified, Error>,
+    pub subjects: Vec<DistinguishedName>,
+    pub mandatory: bool,
+    pub offered_schemes: Option<Vec<SignatureScheme>>,
+    parent: Arc<dyn ClientCertVerifier>,
+}
+
+impl MockClientVerifier {
+    pub fn new(verified: fn() -> Result<ClientCertVerified, Error>, kt: KeyType) -> Self {
+        Self {
+            parent: webpki_client_verifier_builder(get_client_root_store(kt))
+                .build()
+                .unwrap(),
+            verified,
+            subjects: get_client_root_store(kt).subjects(),
+            mandatory: true,
+            offered_schemes: None,
+        }
+    }
+}
+
+impl ClientCertVerifier for MockClientVerifier {
+    fn client_auth_mandatory(&self) -> bool {
+        self.mandatory
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        &self.subjects
+    }
+
+    fn verify_client_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: UnixTime,
+    ) -> Result<ClientCertVerified, Error> {
+        (self.verified)()
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+            self.parent
+                .verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+            self.parent
+                .verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        if let Some(schemes) = &self.offered_schemes {
+            schemes.clone()
+        } else {
+            self.parent.supported_verify_schemes()
         }
     }
 }
