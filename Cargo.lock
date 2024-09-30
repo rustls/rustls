@@ -2153,7 +2153,6 @@ dependencies = [
  "itertools 0.13.0",
  "rayon",
  "rustls 0.23.13",
- "rustls-pemfile",
  "rustls-pki-types",
  "tikv-jemallocator",
 ]
