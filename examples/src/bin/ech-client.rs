@@ -35,7 +35,8 @@ use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
-use rustls::pki_types::ServerName;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, ServerName};
 use rustls::RootCertStore;
 
 fn main() {
@@ -78,10 +79,10 @@ fn main() {
     let root_store = match args.cafile {
         Some(file) => {
             let mut root_store = RootCertStore::empty();
-            let certfile = fs::File::open(file).expect("Cannot open CA file");
-            let mut reader = BufReader::new(certfile);
             root_store.add_parsable_certificates(
-                rustls_pemfile::certs(&mut reader).map(|result| result.unwrap()),
+                CertificateDer::pem_file_iter(file)
+                    .expect("Cannot open CA file")
+                    .map(|result| result.unwrap()),
             );
             root_store
         }
