@@ -433,6 +433,7 @@ test_for_each_provider! {
     use crate::server::VerifierBuilderError;
     use crate::RootCertStore;
 
+    use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
     use std::prelude::v1::*;
@@ -442,12 +443,7 @@ test_for_each_provider! {
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der
             .iter()
-            .map(|pem_bytes| {
-                rustls_pemfile::crls(&mut &pem_bytes[..])
-                    .next()
-                    .unwrap()
-                    .unwrap()
-            })
+            .map(|pem_bytes| CertificateRevocationListDer::from_pem_slice(pem_bytes).unwrap())
             .collect()
     }
 

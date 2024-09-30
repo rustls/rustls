@@ -6,8 +6,10 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 
 use once_cell::sync::OnceCell;
+use pki_types::pem::PemObject;
 use pki_types::{
-    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName, UnixTime,
+    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
+    UnixTime,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
@@ -303,22 +305,19 @@ impl KeyType {
     }
 
     pub fn get_chain(&self) -> Vec<CertificateDer<'static>> {
-        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain")))
+        CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
             .map(|result| result.unwrap())
             .collect()
     }
 
     pub fn get_key(&self) -> PrivateKeyDer<'static> {
-        PrivateKeyDer::Pkcs8(
-            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(self.bytes_for("end.key")))
-                .next()
-                .unwrap()
-                .unwrap(),
-        )
+        PrivatePkcs8KeyDer::from_pem_slice(self.bytes_for("end.key"))
+            .unwrap()
+            .into()
     }
 
     pub fn get_client_chain(&self) -> Vec<CertificateDer<'static>> {
-        rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("client.fullchain")))
+        CertificateDer::pem_slice_iter(self.bytes_for("client.fullchain"))
             .map(|result| result.unwrap())
             .collect()
     }
@@ -340,22 +339,15 @@ impl KeyType {
     }
 
     pub fn get_client_key(&self) -> PrivateKeyDer<'static> {
-        PrivateKeyDer::Pkcs8(
-            rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-                self.bytes_for("client.key"),
-            ))
-            .next()
+        PrivatePkcs8KeyDer::from_pem_slice(self.bytes_for("client.key"))
             .unwrap()
-            .unwrap(),
-        )
+            .into()
     }
 
     fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
-        rustls_pemfile::crls(&mut io::BufReader::new(
+        CertificateRevocationListDer::from_pem_slice(
             self.bytes_for(&format!("{role}.{type}.crl.pem")),
-        ))
-        .map(|result| result.unwrap())
-        .next() // We only expect one CRL.
+        )
         .unwrap()
     }
 
@@ -528,9 +520,8 @@ pub fn finish_client_config(
     config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
 ) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
-    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
     root_store.add_parsable_certificates(
-        rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
+        CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
     );
 
     config
@@ -543,10 +534,8 @@ pub fn finish_client_config_with_creds(
     config: rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier>,
 ) -> ClientConfig {
     let mut root_store = RootCertStore::empty();
-    let mut rootbuf = io::BufReader::new(kt.bytes_for("ca.cert"));
-    // Passing a reference here just for testing.
     root_store.add_parsable_certificates(
-        rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
+        CertificateDer::pem_slice_iter(kt.bytes_for("ca.cert")).map(|result| result.unwrap()),
     );
 
     config

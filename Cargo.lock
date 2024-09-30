@@ -2111,7 +2111,6 @@ dependencies = [
  "once_cell",
  "rcgen",
  "ring",
- "rustls-pemfile",
  "rustls-pki-types",
  "rustls-post-quantum",
  "rustls-webpki",

@@ -4,13 +4,14 @@
 // etc. because it's unstable at the time of writing.
 
 use std::io::{self, Read, Write};
+use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{fs, mem};
 
 use clap::{Parser, ValueEnum};
-use pki_types::{CertificateDer, PrivateKeyDer};
+use pki_types::pem::PemObject;
+use pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::client::{Resumption, UnbufferedClientConnection};
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
 use rustls::crypto::aws_lc_rs as provider;
@@ -617,10 +618,10 @@ fn make_client_config(
     resume: ResumptionParam,
 ) -> Arc<ClientConfig> {
     let mut root_store = RootCertStore::empty();
-    let mut rootbuf =
-        io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
     root_store.add_parsable_certificates(
-        rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
+        CertificateDer::pem_file_iter(params.key_type.path_for("ca.cert"))
+            .unwrap()
+            .map(|result| result.unwrap()),
     );
 
     let cfg = ClientConfig::builder_with_provider(
@@ -759,39 +760,29 @@ impl KeyType {
     }
 
     fn get_chain(&self) -> Vec<CertificateDer<'static>> {
-        rustls_pemfile::certs(&mut io::BufReader::new(
-            fs::File::open(self.path_for("end.fullchain")).unwrap(),
-        ))
-        .map(|result| result.unwrap())
-        .collect()
+        CertificateDer::pem_file_iter(self.path_for("end.fullchain"))
+            .unwrap()
+            .map(|result| result.unwrap())
+            .collect()
     }
 
     fn get_key(&self) -> PrivateKeyDer<'static> {
-        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-            fs::File::open(self.path_for("end.key")).unwrap(),
-        ))
-        .next()
-        .unwrap()
-        .unwrap()
-        .into()
+        PrivatePkcs8KeyDer::from_pem_file(self.path_for("end.key"))
+            .unwrap()
+            .into()
     }
 
     fn get_client_chain(&self) -> Vec<CertificateDer<'static>> {
-        rustls_pemfile::certs(&mut io::BufReader::new(
-            fs::File::open(self.path_for("client.fullchain")).unwrap(),
-        ))
-        .map(|result| result.unwrap())
-        .collect()
+        CertificateDer::pem_file_iter(self.path_for("client.fullchain"))
+            .unwrap()
+            .map(|result| result.unwrap())
+            .collect()
     }
 
     fn get_client_key(&self) -> PrivateKeyDer<'static> {
-        rustls_pemfile::pkcs8_private_keys(&mut io::BufReader::new(
-            fs::File::open(self.path_for("client.key")).unwrap(),
-        ))
-        .next()
-        .unwrap()
-        .unwrap()
-        .into()
+        PrivatePkcs8KeyDer::from_pem_file(self.path_for("client.key"))
+            .unwrap()
+            .into()
     }
 }
 
