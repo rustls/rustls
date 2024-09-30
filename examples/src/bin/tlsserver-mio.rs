@@ -20,7 +20,7 @@
 //! [mio]: https://docs.rs/mio/latest/mio/
 
 use std::collections::HashMap;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::{fs, net};
@@ -29,6 +29,7 @@ use clap::{Parser, Subcommand};
 use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
 use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
 use rustls::RootCertStore;
@@ -520,31 +521,14 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
 }
 
 fn load_certs(filename: &Path) -> Vec<CertificateDer<'static>> {
-    let certfile = fs::File::open(filename).expect("cannot open certificate file");
-    let mut reader = BufReader::new(certfile);
-    rustls_pemfile::certs(&mut reader)
+    CertificateDer::pem_file_iter(filename)
+        .expect("cannot open certificate file")
         .map(|result| result.unwrap())
         .collect()
 }
 
 fn load_private_key(filename: &Path) -> PrivateKeyDer<'static> {
-    let keyfile = fs::File::open(filename).expect("cannot open private key file");
-    let mut reader = BufReader::new(keyfile);
-
-    loop {
-        match rustls_pemfile::read_one(&mut reader).expect("cannot parse private key .pem file") {
-            Some(rustls_pemfile::Item::Pkcs1Key(key)) => return key.into(),
-            Some(rustls_pemfile::Item::Pkcs8Key(key)) => return key.into(),
-            Some(rustls_pemfile::Item::Sec1Key(key)) => return key.into(),
-            None => break,
-            _ => {}
-        }
-    }
-
-    panic!(
-        "no keys found in {:?} (encrypted keys not supported)",
-        filename
-    );
+    PrivateKeyDer::from_pem_file(filename).expect("cannot read private key file")
 }
 
 fn load_ocsp(filename: Option<&Path>) -> Vec<u8> {
@@ -565,12 +549,7 @@ fn load_crls(
 ) -> Vec<CertificateRevocationListDer<'static>> {
     filenames
         .map(|filename| {
-            let mut der = Vec::new();
-            fs::File::open(filename)
-                .expect("cannot open CRL file")
-                .read_to_end(&mut der)
-                .unwrap();
-            CertificateRevocationListDer::from(der)
+            CertificateRevocationListDer::from_pem_file(filename).expect("cannot read CRL file")
         })
         .collect()
 }

@@ -9,10 +9,12 @@
 
 use std::env;
 use std::error::Error as StdError;
-use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
+
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
@@ -24,11 +26,11 @@ fn main() -> Result<(), Box<dyn StdError>> {
         .next()
         .expect("missing private key file argument");
 
-    let certs = rustls_pemfile::certs(&mut BufReader::new(&mut File::open(cert_file)?))
-        .collect::<Result<Vec<_>, _>>()?;
-    let private_key =
-        rustls_pemfile::private_key(&mut BufReader::new(&mut File::open(private_key_file)?))?
-            .unwrap();
+    let certs = CertificateDer::pem_file_iter(cert_file)
+        .unwrap()
+        .map(|cert| cert.unwrap())
+        .collect();
+    let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
     let config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, private_key)?;
