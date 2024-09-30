@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fs::{self, File};
+use std::fs::File;
 use std::hint::black_box;
 use std::io::{self, BufRead, BufReader, Write};
 use std::mem;
@@ -17,6 +17,8 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustls::client::Resumption;
 use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, GetRandomFailed, SecureRandom};
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::CertificateDer;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, HandshakeKind, ProtocolVersion, RootCertStore,
@@ -502,10 +504,10 @@ impl ClientSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
         let mut root_store = RootCertStore::empty();
-        let mut rootbuf =
-            io::BufReader::new(fs::File::open(params.key_type.path_for("ca.cert")).unwrap());
         root_store.add_parsable_certificates(
-            rustls_pemfile::certs(&mut rootbuf).map(|result| result.unwrap()),
+            CertificateDer::pem_file_iter(params.key_type.path_for("ca.cert"))
+                .unwrap()
+                .map(|result| result.unwrap()),
         );
 
         let mut cfg = ClientConfig::builder_with_provider(
