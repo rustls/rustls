@@ -504,6 +504,15 @@ jobs:
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
+  
+      - name: Install pixi
+        run: | 
+          curl -fsSL https://pixi.sh/install.sh | bash
+          echo "$HOME/.pixi/bin" >> $GITHUB_PATH
+
+      - name: Install OpenSSL 3.2 with pixi
+        run: |
+          pixi global install openssl==3.2
 
       - name: openssl version
         run: openssl version
@@ -513,3 +522,4 @@ jobs:
         run: cargo test --locked -- --include-ignored
         env:
           RUST_BACKTRACE: 1
+          
