@@ -173,7 +173,7 @@ impl ChunkVecBuffer {
     }
 }
 
-#[cfg(all(test, feature = "std"))]
+#[cfg(test)]
 mod tests {
     use super::ChunkVecBuffer;
 

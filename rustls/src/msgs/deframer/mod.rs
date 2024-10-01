@@ -95,11 +95,9 @@ pub fn fuzz_deframer(data: &[u8]) {
     assert!(iter.bytes_consumed() <= buf.len());
 }
 
-#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use alloc::vec::Vec;
-    use std::prelude::v1::*;
 
     use super::*;
     use crate::ContentType;

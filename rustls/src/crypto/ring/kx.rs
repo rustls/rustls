@@ -159,7 +159,7 @@ impl ActiveKeyExchange for KeyExchange {
 
 #[cfg(test)]
 mod tests {
-    use std::format;
+    use alloc::format;
 
     #[test]
     fn kxgroup_fmt_yields_name() {

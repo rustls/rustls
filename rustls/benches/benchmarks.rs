@@ -6,7 +6,7 @@ use rustls::crypto::ring as provider;
 
 #[path = "../tests/common/mod.rs"]
 mod test_utils;
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 use rustls::ServerConnection;
 use test_utils::*;

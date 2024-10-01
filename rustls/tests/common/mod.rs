@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 #![allow(clippy::duplicate_mod)]
 
-use std::ops::DerefMut;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use core::ops::DerefMut;
 
 use once_cell::sync::OnceCell;
 use pki_types::{

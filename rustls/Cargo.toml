@@ -33,7 +33,7 @@ zeroize = "1.7"
 zlib-rs = { version = "0.3", optional = true }
 
 [features]
-default = ["aws_lc_rs", "logging", "std", "tls12"]
+default = ["aws_lc_rs", "logging", "tls12"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
@@ -126,7 +126,7 @@ required-features = ["std"]
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["read_buf", "ring"]
+features = ["read_buf", "ring", "std"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo_check_external_types]

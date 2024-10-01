@@ -63,7 +63,7 @@ const DER_OCTET_STRING_TAG: u8 = 0x04;
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use alloc::vec;
 
     use super::*;
 

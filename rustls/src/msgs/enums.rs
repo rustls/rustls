@@ -391,8 +391,7 @@ enum_builder! {
 pub(crate) mod tests {
     // These tests are intended to provide coverage and
     // check panic-safety of relatively unused values.
-
-    use std::prelude::v1::*;
+    use alloc::vec::Vec;
 
     use super::*;
 

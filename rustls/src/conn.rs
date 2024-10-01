@@ -20,8 +20,6 @@ use crate::vecbuf::ChunkVecBuffer;
 pub(crate) mod unbuffered;
 
 mod connection {
-    #[cfg(feature = "std")]
-    use alloc::vec::Vec;
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
 
@@ -31,9 +29,6 @@ mod connection {
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
     use crate::ConnectionCommon;
-
-    #[cfg(feature = "std")]
-    use crate::msgs::message::OutboundChunks;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -325,6 +320,9 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 
         #[cfg(feature = "std")]
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+            use crate::msgs::message::OutboundChunks;
+            use alloc::vec::Vec;
+
             let payload_owner: Vec<&[u8]>;
             let payload = match bufs.len() {
                 0 => return Ok(0),

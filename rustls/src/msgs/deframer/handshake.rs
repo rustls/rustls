@@ -372,7 +372,7 @@ const MAX_HANDSHAKE_SIZE: usize = 0xffff;
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use alloc::vec;
 
     use super::*;
     use crate::msgs::deframer::DeframerIter;

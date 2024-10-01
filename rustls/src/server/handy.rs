@@ -97,7 +97,7 @@ mod cache {
 
     #[cfg(test)]
     mod tests {
-        use std::vec;
+        use alloc::vec;
 
         use super::*;
         use crate::server::StoresServerSessions;
@@ -304,7 +304,7 @@ pub use sni_resolver::ResolvesServerCertUsingSni;
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
+    use alloc::vec;
 
     use super::*;
     use crate::server::{ProducesTickets, StoresServerSessions};

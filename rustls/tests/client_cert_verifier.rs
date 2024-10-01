@@ -5,7 +5,7 @@
 use super::*;
 
 mod common;
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 use common::{
     do_handshake_until_both_error, do_handshake_until_error, get_client_root_store,

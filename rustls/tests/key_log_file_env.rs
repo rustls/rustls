@@ -23,8 +23,8 @@
 
 #![allow(clippy::duplicate_mod)]
 
+use alloc::sync::Arc;
 use std::env;
-use std::sync::Arc;
 
 use super::*;
 

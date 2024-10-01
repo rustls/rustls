@@ -977,10 +977,9 @@ impl Default for Version {
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
-
     use super::PacketKey;
     use crate::quic::HeaderProtectionKey;
+    use alloc::boxed::Box;
 
     #[test]
     fn auto_traits() {

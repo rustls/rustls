@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
-use std::prelude::v1::*;
-use std::{format, println, vec};
+use alloc::{format, vec, vec::Vec};
+
+use std::println;
 
 use pki_types::{CertificateDer, DnsName};
 

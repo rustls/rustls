@@ -32,18 +32,19 @@
 //! [cc_cd]: crate::ClientConfig::cert_decompressors
 //! [sc_cd]: crate::ServerConfig::cert_decompressors
 
-#[cfg(feature = "std")]
-use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
-#[cfg(feature = "std")]
-use std::sync::Mutex;
 
 use crate::enums::CertificateCompressionAlgorithm;
 use crate::msgs::base::{Payload, PayloadU24};
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
+
+#[cfg(feature = "std")]
+use alloc::collections::VecDeque;
+#[cfg(feature = "std")]
+use std::sync::Mutex;
 
 /// Returns the supported `CertDecompressor` implementations enabled
 /// by crate features.
@@ -446,7 +447,8 @@ impl CompressionCacheEntry {
 
 #[cfg(all(test, any(feature = "brotli", feature = "zlib")))]
 pub mod tests {
-    use std::{println, vec};
+    use alloc::vec;
+    use std::println;
 
     use super::*;
 

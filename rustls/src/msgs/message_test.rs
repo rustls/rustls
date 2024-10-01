@@ -1,28 +1,27 @@
-use std::prelude::v1::*;
-use std::{format, println, vec};
+use alloc::{format, vec};
 
 use super::base::Payload;
-use super::codec::Reader;
 use super::enums::AlertLevel;
-use super::message::{Message, OutboundOpaqueMessage};
+use super::message::Message;
 use crate::enums::{AlertDescription, HandshakeType};
 use crate::msgs::base::{PayloadU16, PayloadU24, PayloadU8};
 
 #[cfg(feature = "std")]
-use std::path::{Path, PathBuf};
-
-#[cfg(feature = "std")]
-use std::fs;
-
-#[cfg(feature = "std")]
-use super::message::PlainMessage;
+use super::message::OutboundOpaqueMessage;
 
 #[cfg(feature = "std")]
 use crate::compat::io::Read;
 
+#[cfg(feature = "std")]
+use super::codec::Reader;
+
 #[test]
 #[cfg(feature = "std")]
 fn test_read_fuzz_corpus() {
+    use super::message::PlainMessage;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
     fn corpus_dir() -> PathBuf {
         let from_subcrate = Path::new("../fuzz/corpus/message");
         let from_root = Path::new("fuzz/corpus/message");
@@ -59,6 +58,7 @@ fn test_read_fuzz_corpus() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
     let _ = env_logger::Builder::new()
         .filter(None, log::LevelFilter::Trace)
@@ -93,6 +93,7 @@ fn alert_is_not_handshake() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn construct_all_types() {
     let samples = [
         &b"\x14\x03\x04\x00\x01\x01"[..],

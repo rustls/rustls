@@ -326,7 +326,9 @@
     unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
-    unused_qualifications
+    unused_qualifications,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core
 )]
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
@@ -698,10 +700,17 @@ pub mod compat {
                 }
             }
 
-            #[derive(Debug)]
             pub struct Error {
                 kind: ErrorKind,
                 error: Option<Box<dyn core::error::Error + Send + Sync>>,
+            }
+
+            impl core::fmt::Debug for Error {
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.debug_tuple("Kind")
+                        .field(&self.kind)
+                        .finish()
+                }
             }
 
             impl Error {

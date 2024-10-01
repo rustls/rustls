@@ -3,10 +3,11 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use alloc::sync::Arc;
+use core::mem;
+use core::ops::{Deref, DerefMut};
+use std::fs;
 use std::time::{Duration, Instant};
-use std::{fs, mem};
 
 use clap::{Parser, ValueEnum};
 use pki_types::{CertificateDer, PrivateKeyDer};

@@ -1114,10 +1114,9 @@ impl ServerConnectionData {
 
 impl crate::conn::SideData for ServerConnectionData {}
 
-#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
-    use std::format;
+    use alloc::format;
 
     use super::*;
 

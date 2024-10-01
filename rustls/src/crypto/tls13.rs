@@ -264,8 +264,6 @@ pub struct OutputLengthError;
 
 #[cfg(all(test, feature = "ring"))]
 mod tests {
-    use std::prelude::v1::*;
-
     use super::{expand, Hkdf, HkdfUsingHmac};
     // nb: crypto::aws_lc_rs provider doesn't provide (or need) hmac,
     // so cannot be used for this test.
