@@ -2,6 +2,8 @@
 
 #![allow(clippy::duplicate_mod)]
 
+extern crate alloc;
+
 use super::*;
 
 mod common;

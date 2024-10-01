@@ -120,6 +120,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+
     type Test = super::LimitedCache<String, usize>;
 
     #[test]

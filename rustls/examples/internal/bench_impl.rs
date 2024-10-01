@@ -3,6 +3,8 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
+extern crate alloc;
+
 use alloc::sync::Arc;
 use core::mem;
 use core::ops::{Deref, DerefMut};

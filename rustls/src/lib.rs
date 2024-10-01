@@ -693,12 +693,20 @@ pub mod compat {
                 ConnectionAborted,
             }
 
+            impl core::fmt::Display for ErrorKind {
+                fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    write!(fmt, "{:?}", self)
+                }
+            }
+
             impl From<ErrorKind> for Error {
                 #[inline]
                 fn from(kind: ErrorKind) -> Self {
                     Self { kind, error: None }
                 }
             }
+
+            impl core::error::Error for ErrorKind {}
 
             pub struct Error {
                 kind: ErrorKind,
@@ -713,6 +721,14 @@ pub mod compat {
                 }
             }
 
+            impl core::fmt::Display for Error {
+                fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    write!(fmt, "{:?}", self.kind)
+                }
+            }
+
+            impl core::error::Error for Error {}
+
             impl Error {
                 #[inline]
                 pub fn new<E>(kind: ErrorKind, error: E) -> Self
@@ -726,8 +742,11 @@ pub mod compat {
                 }
 
                 #[inline]
-                pub fn new_no_error(kind: ErrorKind) -> Self {
-                    Self { kind, error: None }
+                pub fn other<E>(error: E) -> Self
+                where
+                    E: Into<Box<dyn core::error::Error + Send + Sync>>,
+                {
+                    Self::new(ErrorKind::Other, error)
                 }
 
                 #[inline]

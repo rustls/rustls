@@ -1,5 +1,7 @@
 #![allow(clippy::duplicate_mod)]
 
+extern crate alloc;
+
 use alloc::sync::Arc;
 use core::num::NonZeroUsize;
 

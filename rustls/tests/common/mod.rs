@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 #![allow(clippy::duplicate_mod)]
 
+extern crate alloc;
+
 use alloc::sync::Arc;
 use core::ops::DerefMut;
 

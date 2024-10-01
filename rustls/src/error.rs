@@ -677,6 +677,7 @@ mod tests {
     use alloc::vec;
 
     use std::println;
+    use std::boxed::Box;
 
     use super::{Error, InconsistentKeys, InvalidMessage};
     use crate::error::{CertRevocationListError, OtherError};
