@@ -794,12 +794,14 @@ fn tls13_packed_handshake() {
     }
 
     // regression test for https://github.com/rustls/rustls/issues/2040
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        ClientConfig::builder_with_provider(unsafe_plaintext_crypto_provider())
-            .with_safe_default_protocol_versions()
-            .unwrap(),
-    );
+    let client_config = ClientConfig::builder_with_provider(unsafe_plaintext_crypto_provider())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(MockServerVerifier::rejects_certificate(
+            CertificateError::UnknownIssuer.into(),
+        )))
+        .with_no_client_auth();
 
     let mut client =
         UnbufferedClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
