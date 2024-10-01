@@ -1303,12 +1303,12 @@ impl HelloRetryRequest {
 
 #[derive(Clone, Debug)]
 pub struct ServerHelloPayload {
+    pub extensions: Vec<ServerExtension>,
     pub(crate) legacy_version: ProtocolVersion,
     pub(crate) random: Random,
     pub(crate) session_id: SessionId,
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) compression_method: Compression,
-    pub(crate) extensions: Vec<ServerExtension>,
 }
 
 impl Codec<'_> for ServerHelloPayload {
