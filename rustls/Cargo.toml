@@ -33,7 +33,7 @@ zeroize = "1.7"
 zlib-rs = { version = "0.3", optional = true }
 
 [features]
-default = ["aws_lc_rs", "logging", "tls12"]
+default = ["aws_lc_rs", "logging", "std", "tls12"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
