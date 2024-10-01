@@ -770,6 +770,21 @@ impl KeySchedule {
     }
 }
 
+/// [HKDF-Expand-Label] where the output is an AEAD key.
+///
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
+pub(crate) fn derive_traffic_key(expander: &dyn HkdfExpander, aead_key_len: usize) -> AeadKey {
+    hkdf_expand_label_aead_key(expander, aead_key_len, b"key", &[])
+}
+
+/// [HKDF-Expand-Label] where the output is an IV.
+///
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
+pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
+    hkdf_expand_label(expander, b"iv", &[])
+}
+
+
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
 /// it is infallible.
 ///
@@ -843,13 +858,6 @@ pub(crate) fn server_ech_hrr_confirmation_secret(
     )
 }
 
-pub(crate) fn derive_traffic_key(expander: &dyn HkdfExpander, aead_key_len: usize) -> AeadKey {
-    hkdf_expand_label_aead_key(expander, aead_key_len, b"key", &[])
-}
-
-pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
-    hkdf_expand_label(expander, b"iv", &[])
-}
 
 fn hkdf_expand_label_inner<F, T>(
     expander: &dyn HkdfExpander,
