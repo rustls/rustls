@@ -668,7 +668,11 @@ mod hash_map {
 pub mod compat {
     pub mod io {
         #[cfg(feature = "std")]
-        pub use std::io::{BufReader, Error, ErrorKind, IoSlice, Read, Result, Write};
+        pub use std::io::{Error, ErrorKind, IoSlice, Read, Result, Write};
+
+        // Unfortunately, there doesn't seems to have a good way to only for tests and benches cfg
+        #[cfg(any(test, bench, feature = "std"))]
+        pub use std::io::{BufReader, Cursor};
 
         #[cfg(not(feature = "std"))]
         pub mod custom {

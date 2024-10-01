@@ -39,6 +39,9 @@ use rustls::{
     SignatureScheme, Stream, StreamOwned, SupportedCipherSuite,
 };
 
+#[cfg(feature = "std")]
+use rustls::compat::io::IoSlice;
+
 use super::*;
 
 mod common;
