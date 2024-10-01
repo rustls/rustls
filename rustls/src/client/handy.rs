@@ -242,7 +242,6 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
 }
 
 test_for_each_provider! {
-    use std::prelude::v1::*;
     use alloc::sync::Arc;
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;

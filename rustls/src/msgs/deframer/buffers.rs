@@ -1,11 +1,8 @@
+use crate::compat::io;
+use crate::msgs::message::MAX_WIRE_SIZE;
 use alloc::vec::Vec;
 use core::mem;
 use core::ops::Range;
-#[cfg(feature = "std")]
-use std::io;
-
-#[cfg(feature = "std")]
-use crate::msgs::message::MAX_WIRE_SIZE;
 
 /// Conversion from a slice within a larger buffer into
 /// a `Range` offset within.
@@ -190,7 +187,6 @@ impl DeframerVecBuffer {
     }
 }
 
-#[cfg(feature = "std")]
 impl DeframerVecBuffer {
     /// Read some bytes from `rd`, and add them to the buffer.
     pub(crate) fn read(&mut self, rd: &mut dyn io::Read, in_handshake: bool) -> io::Result<usize> {

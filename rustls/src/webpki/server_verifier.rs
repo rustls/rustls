@@ -301,14 +301,14 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 }
 
 test_for_each_provider! {
-    use std::sync::Arc;
-    use std::{vec, println};
-    use std::prelude::v1::*;
+    use alloc::{vec, vec::Vec, sync::Arc};
 
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
     use super::{VerifierBuilderError, WebPkiServerVerifier};
     use crate::RootCertStore;
+
+    use std::println;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der

@@ -237,7 +237,7 @@ pub(crate) fn verify_server_cert_signed_by_trust_anchor_impl(
 
 #[cfg(test)]
 mod tests {
-    use std::format;
+    use alloc::format;
 
     use super::*;
 

@@ -326,7 +326,9 @@
     unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
-    unused_qualifications
+    unused_qualifications,
+    clippy::std_instead_of_alloc,
+    clippy::std_instead_of_core
 )]
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
@@ -406,7 +408,6 @@ mod hash_hs;
 mod limited_cache;
 mod rand;
 mod record_layer;
-#[cfg(feature = "std")]
 mod stream;
 #[cfg(feature = "tls12")]
 mod tls12;
@@ -511,7 +512,6 @@ pub mod unbuffered {
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier, WantsVersions};
 pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
-#[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};
 pub use crate::conn::{ConnectionCommon, SideData};
 pub use crate::enums::{
@@ -528,7 +528,6 @@ pub use crate::key_log_file::KeyLogFile;
 pub use crate::msgs::enums::NamedGroup;
 pub use crate::msgs::ffdhe_groups;
 pub use crate::msgs::handshake::DistinguishedName;
-#[cfg(feature = "std")]
 pub use crate::stream::{Stream, StreamOwned};
 pub use crate::suites::{
     CipherSuiteCommon, ConnectionTrafficSecrets, ExtractedSecrets, SupportedCipherSuite,
@@ -559,7 +558,6 @@ pub mod client {
         ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
         Resumption, Tls12Resumption, UnbufferedClientConnection,
     };
-    #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
     pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
     #[cfg(any(feature = "std", feature = "hashbrown"))]
@@ -580,7 +578,6 @@ pub mod client {
 }
 
 pub use client::ClientConfig;
-#[cfg(feature = "std")]
 pub use client::ClientConnection;
 
 /// Items for use in a server.
@@ -604,7 +601,6 @@ pub mod server {
         Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
         ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
     };
-    #[cfg(feature = "std")]
     pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
     pub use crate::verify::NoClientAuth;
@@ -619,7 +615,6 @@ pub mod server {
 }
 
 pub use server::ServerConfig;
-#[cfg(feature = "std")]
 pub use server::ServerConnection;
 
 /// All defined protocol versions appear in this module.
@@ -670,4 +665,196 @@ mod hash_map {
     pub(crate) use hashbrown::hash_map::Entry;
     #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
     pub(crate) use hashbrown::HashMap;
+}
+
+pub mod compat {
+    pub mod io {
+        #[cfg(feature = "std")]
+        pub use std::io::{Error, ErrorKind, IoSlice, Read, Result, Write};
+
+        // Unfortunately, there doesn't seems to have a good way to only for tests and benches cfg
+        #[cfg(any(test, bench, feature = "std"))]
+        pub use std::io::{BufReader, Cursor};
+
+        #[cfg(not(feature = "std"))]
+        pub mod custom {
+            use alloc::boxed::Box;
+
+            #[derive(PartialEq, Eq, Clone, Copy, Debug)]
+            pub enum ErrorKind {
+                BrokenPipe,
+                Interrupted,
+                InvalidData,
+                InvalidInput,
+                Other,
+                UnexpectedEof,
+                WouldBlock,
+                WriteZero,
+                ConnectionAborted,
+            }
+
+            impl core::fmt::Display for ErrorKind {
+                fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    write!(fmt, "{:?}", self)
+                }
+            }
+
+            impl From<ErrorKind> for Error {
+                #[inline]
+                fn from(kind: ErrorKind) -> Self {
+                    Self { kind, error: None }
+                }
+            }
+
+            impl core::error::Error for ErrorKind {}
+
+            pub struct Error {
+                kind: ErrorKind,
+                error: Option<Box<dyn core::error::Error + Send + Sync>>,
+            }
+
+            impl core::fmt::Debug for Error {
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.debug_tuple("Kind")
+                        .field(&self.kind)
+                        .finish()
+                }
+            }
+
+            impl core::fmt::Display for Error {
+                fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    write!(fmt, "{:?}", self.kind)
+                }
+            }
+
+            impl core::error::Error for Error {}
+
+            impl Error {
+                #[inline]
+                pub fn new<E>(kind: ErrorKind, error: E) -> Self
+                where
+                    E: Into<Box<dyn core::error::Error + Send + Sync>>,
+                {
+                    Self {
+                        kind,
+                        error: Some(error.into()),
+                    }
+                }
+
+                #[inline]
+                pub fn other<E>(error: E) -> Self
+                where
+                    E: Into<Box<dyn core::error::Error + Send + Sync>>,
+                {
+                    Self::new(ErrorKind::Other, error)
+                }
+
+                #[inline]
+                pub fn kind(&self) -> ErrorKind {
+                    self.kind
+                }
+
+                #[inline]
+                pub fn error(&self) -> Option<&Box<dyn core::error::Error + Send + Sync>> {
+                    self.error.as_ref()
+                }
+            }
+
+            pub trait Read {
+                fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+
+                #[inline]
+                fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
+                    while !buf.is_empty() {
+                        match self.read(buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                let tmp = buf;
+                                buf = &mut tmp[n..];
+                            }
+                            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    if !buf.is_empty() {
+                        Err(Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "failed to fill whole buffer",
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
+
+            impl Read for &[u8] {
+                #[inline]
+                fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+                    let amt = core::cmp::min(buf.len(), self.len());
+                    let (a, b) = self.split_at(amt);
+
+                    // First check if the amount of bytes we want to read is small:
+                    // `copy_from_slice` will generally expand to a call to `memcpy`, and
+                    // for a single byte the overhead is significant.
+                    if amt == 1 {
+                        buf[0] = a[0];
+                    } else {
+                        buf[..amt].copy_from_slice(a);
+                    }
+
+                    *self = b;
+                    Ok(amt)
+                }
+
+                #[inline]
+                fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+                    if buf.len() > self.len() {
+                        return Err(Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "failed to fill whole buffer",
+                        ));
+                    }
+                    let (a, b) = self.split_at(buf.len());
+
+                    // First check if the amount of bytes we want to read is small:
+                    // `copy_from_slice` will generally expand to a call to `memcpy`, and
+                    // for a single byte the overhead is significant.
+                    if buf.len() == 1 {
+                        buf[0] = a[0];
+                    } else {
+                        buf.copy_from_slice(a);
+                    }
+
+                    *self = b;
+                    Ok(())
+                }
+            }
+
+            pub trait Write {
+                // Required methods
+                fn write(&mut self, buf: &[u8]) -> Result<usize>;
+                fn flush(&mut self) -> Result<()>;
+
+                #[inline]
+                fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
+                    while !buf.is_empty() {
+                        match self.write(buf) {
+                            Ok(0) => {
+                                return Err(ErrorKind::WriteZero.into());
+                            }
+                            Ok(n) => buf = &buf[n..],
+                            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    Ok(())
+                }
+            }
+
+            pub type Result<T> = core::result::Result<T, Error>;
+        }
+
+        #[cfg(not(feature = "std"))]
+        pub use custom::{Error, ErrorKind, Read, Result, Write};
+    }
 }

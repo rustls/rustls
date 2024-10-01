@@ -104,8 +104,8 @@ impl<'a> ExactSizeIterator for Chunker<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
-    use std::vec;
+    use alloc::vec;
+    use alloc::vec::Vec;
 
     use super::{MessageFragmenter, PACKET_OVERHEAD};
     use crate::enums::{ContentType, ProtocolVersion};

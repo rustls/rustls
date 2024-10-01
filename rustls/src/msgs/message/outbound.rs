@@ -94,7 +94,7 @@ impl<'a> OutboundChunks<'a> {
                     if size <= start || psize >= end {
                         continue;
                     }
-                    let start = if psize < start { start - psize } else { 0 };
+                    let start = start.saturating_sub(psize);
                     let end = if end - psize < len { end - psize } else { len };
                     vec.extend_from_slice(&chunk[start..end]);
                 }
@@ -308,7 +308,9 @@ pub(crate) fn read_opaque_message_header(
 
 #[cfg(test)]
 mod tests {
-    use std::{println, vec};
+    use alloc::vec;
+
+    use std::println;
 
     use super::*;
 
