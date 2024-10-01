@@ -241,6 +241,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
     }
 }
 
+#[cfg(feature = "std")]
 test_for_each_provider! {
     use std::prelude::v1::*;
     use alloc::sync::Arc;

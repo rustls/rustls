@@ -3,7 +3,6 @@
 #![allow(clippy::duplicate_mod)]
 
 use std::fmt::Debug;
-use std::io::{self, IoSlice, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -11,6 +10,7 @@ use std::{fmt, mem};
 
 use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
+use rustls::compat::io::{self, Read, Write};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
@@ -2394,7 +2394,7 @@ struct EofWriter<const N: usize> {
     written: usize,
 }
 
-impl<const N: usize> std::io::Write for EofWriter<N> {
+impl<const N: usize> rustls::compat::io::Write for EofWriter<N> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let prev = self.written;
         self.written = N.min(self.written + buf.len());
@@ -2406,7 +2406,7 @@ impl<const N: usize> std::io::Write for EofWriter<N> {
     }
 }
 
-impl<const N: usize> std::io::Read for EofWriter<N> {
+impl<const N: usize> rustls::compat::io::Read for EofWriter<N> {
     fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
         panic!() // This is a writer, it should not be read from.
     }

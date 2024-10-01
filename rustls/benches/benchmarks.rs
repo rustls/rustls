@@ -1,11 +1,11 @@
 #![cfg(feature = "ring")]
 
 use bencher::{benchmark_group, benchmark_main, Bencher};
+use rustls::compat::io;
 use rustls::crypto::ring as provider;
 
 #[path = "../tests/common/mod.rs"]
 mod test_utils;
-use std::io;
 use std::sync::Arc;
 
 use rustls::ServerConnection;

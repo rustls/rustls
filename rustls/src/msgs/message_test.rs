@@ -1,16 +1,27 @@
-use std::io::Read;
-use std::path::{Path, PathBuf};
 use std::prelude::v1::*;
-use std::{format, fs, println, vec};
+use std::{format, println, vec};
 
 use super::base::Payload;
 use super::codec::Reader;
 use super::enums::AlertLevel;
-use super::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use super::message::{Message, OutboundOpaqueMessage};
 use crate::enums::{AlertDescription, HandshakeType};
 use crate::msgs::base::{PayloadU16, PayloadU24, PayloadU8};
 
+#[cfg(feature = "std")]
+use std::path::{Path, PathBuf};
+
+#[cfg(feature = "std")]
+use std::fs;
+
+#[cfg(feature = "std")]
+use super::message::PlainMessage;
+
+#[cfg(feature = "std")]
+use crate::compat::io::Read;
+
 #[test]
+#[cfg(feature = "std")]
 fn test_read_fuzz_corpus() {
     fn corpus_dir() -> PathBuf {
         let from_subcrate = Path::new("../fuzz/corpus/message");

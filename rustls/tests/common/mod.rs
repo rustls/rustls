@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 #![allow(clippy::duplicate_mod)]
 
-use std::io;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
@@ -11,6 +10,7 @@ use pki_types::{
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
+use rustls::compat::io;
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::{Codec, Reader};

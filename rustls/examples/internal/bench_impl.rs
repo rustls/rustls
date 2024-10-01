@@ -3,7 +3,6 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
-use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -12,6 +11,7 @@ use std::{fs, mem};
 use clap::{Parser, ValueEnum};
 use pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::client::{Resumption, UnbufferedClientConnection};
+use rustls::compat::io::{self, Read, Write};
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
 use rustls::crypto::aws_lc_rs as provider;
 #[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
