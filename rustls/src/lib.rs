@@ -665,14 +665,164 @@ mod hash_map {
     pub(crate) use hashbrown::HashMap;
 }
 
-pub(crate) mod compat {
-    pub(crate) mod io {
+pub mod compat {
+    pub mod io {
         #[cfg(feature = "std")]
-        pub(crate) use std::io::{Error, ErrorKind, IoSlice, Read, Write};
+        pub use std::io::{BufReader, Error, ErrorKind, IoSlice, Read, Result, Write};
 
-        #[cfg(all(not(feature = "std"), feature = "no_std_io"))]
-        pub(crate) use no_std_io::io::{Error, ErrorKind, Read, Write};
+        #[cfg(not(feature = "std"))]
+        pub mod custom {
+            use alloc::boxed::Box;
 
-        pub(crate) type Result<T> = core::result::Result<T, Error>;
+            #[derive(PartialEq, Eq, Clone, Copy, Debug)]
+            pub enum ErrorKind {
+                BrokenPipe,
+                Interrupted,
+                InvalidData,
+                InvalidInput,
+                Other,
+                UnexpectedEof,
+                WouldBlock,
+                WriteZero,
+                ConnectionAborted,
+            }
+
+            impl From<ErrorKind> for Error {
+                #[inline]
+                fn from(kind: ErrorKind) -> Self {
+                    Self { kind, error: None }
+                }
+            }
+
+            #[derive(Debug)]
+            pub struct Error {
+                kind: ErrorKind,
+                error: Option<Box<dyn core::error::Error + Send + Sync>>,
+            }
+
+            impl Error {
+                #[inline]
+                pub fn new<E>(kind: ErrorKind, error: E) -> Self
+                where
+                    E: Into<Box<dyn core::error::Error + Send + Sync>>,
+                {
+                    Self {
+                        kind,
+                        error: Some(error.into()),
+                    }
+                }
+
+                #[inline]
+                pub fn new_no_error(kind: ErrorKind) -> Self {
+                    Self { kind, error: None }
+                }
+
+                #[inline]
+                pub fn kind(&self) -> ErrorKind {
+                    self.kind
+                }
+
+                #[inline]
+                pub fn error(&self) -> Option<&Box<dyn core::error::Error + Send + Sync>> {
+                    self.error.as_ref()
+                }
+            }
+
+            pub trait Read {
+                fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+
+                #[inline]
+                fn read_exact(&mut self, mut buf: &mut [u8]) -> Result<()> {
+                    while !buf.is_empty() {
+                        match self.read(buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                let tmp = buf;
+                                buf = &mut tmp[n..];
+                            }
+                            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    if !buf.is_empty() {
+                        Err(Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "failed to fill whole buffer",
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
+
+            impl Read for &[u8] {
+                #[inline]
+                fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+                    let amt = core::cmp::min(buf.len(), self.len());
+                    let (a, b) = self.split_at(amt);
+
+                    // First check if the amount of bytes we want to read is small:
+                    // `copy_from_slice` will generally expand to a call to `memcpy`, and
+                    // for a single byte the overhead is significant.
+                    if amt == 1 {
+                        buf[0] = a[0];
+                    } else {
+                        buf[..amt].copy_from_slice(a);
+                    }
+
+                    *self = b;
+                    Ok(amt)
+                }
+
+                #[inline]
+                fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+                    if buf.len() > self.len() {
+                        return Err(Error::new(
+                            ErrorKind::UnexpectedEof,
+                            "failed to fill whole buffer",
+                        ));
+                    }
+                    let (a, b) = self.split_at(buf.len());
+
+                    // First check if the amount of bytes we want to read is small:
+                    // `copy_from_slice` will generally expand to a call to `memcpy`, and
+                    // for a single byte the overhead is significant.
+                    if buf.len() == 1 {
+                        buf[0] = a[0];
+                    } else {
+                        buf.copy_from_slice(a);
+                    }
+
+                    *self = b;
+                    Ok(())
+                }
+            }
+
+            pub trait Write {
+                // Required methods
+                fn write(&mut self, buf: &[u8]) -> Result<usize>;
+                fn flush(&mut self) -> Result<()>;
+
+                #[inline]
+                fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
+                    while !buf.is_empty() {
+                        match self.write(buf) {
+                            Ok(0) => {
+                                return Err(ErrorKind::WriteZero.into());
+                            }
+                            Ok(n) => buf = &buf[n..],
+                            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    Ok(())
+                }
+            }
+
+            pub type Result<T> = core::result::Result<T, Error>;
+        }
+
+        #[cfg(not(feature = "std"))]
+        pub use custom::{Error, ErrorKind, Read, Result, Write};
     }
 }
