@@ -32,19 +32,16 @@
 //! [cc_cd]: crate::ClientConfig::cert_decompressors
 //! [sc_cd]: crate::ServerConfig::cert_decompressors
 
+use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use crate::enums::CertificateCompressionAlgorithm;
+use crate::lock::Mutex;
 use crate::msgs::base::{Payload, PayloadU24};
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
-
-#[cfg(feature = "std")]
-use alloc::collections::VecDeque;
-#[cfg(feature = "std")]
-use std::sync::Mutex;
 
 /// Returns the supported `CertDecompressor` implementations enabled
 /// by crate features.
@@ -279,14 +276,12 @@ pub enum CompressionCache {
     Disabled,
 
     /// Compressions are stored in an LRU cache.
-    #[cfg(feature = "std")]
     Enabled(CompressionCacheInner),
 }
 
 /// Innards of an enabled CompressionCache.
 ///
 /// You cannot make one of these directly. Use [`CompressionCache::new`].
-#[cfg(feature = "std")]
 #[derive(Debug)]
 pub struct CompressionCacheInner {
     /// Maximum size of underlying storage.
@@ -313,6 +308,20 @@ impl CompressionCache {
         })
     }
 
+    /// Make a `CompressionCache` that stores up to `size` compressed
+    /// certificate messages.
+    #[cfg(not(feature = "std"))]
+    pub fn new<M: crate::lock::MakeMutex>(size: usize) -> Self {
+        if size == 0 {
+            return Self::Disabled;
+        }
+
+        Self::Enabled(CompressionCacheInner {
+            size,
+            entries: Mutex::new::<M>(VecDeque::with_capacity(size)),
+        })
+    }
+
     /// Return a `CompressionCacheEntry`, which is an owning
     /// wrapper for a `CompressedCertificatePayload`.
     ///
@@ -325,13 +334,10 @@ impl CompressionCache {
     ) -> Result<Arc<CompressionCacheEntry>, CompressionFailed> {
         match self {
             Self::Disabled => Self::uncached_compression(compressor, original),
-
-            #[cfg(feature = "std")]
             Self::Enabled(_) => self.compression_for_impl(compressor, original),
         }
     }
 
-    #[cfg(feature = "std")]
     fn compression_for_impl(
         &self,
         compressor: &dyn CertCompressor,
@@ -354,7 +360,7 @@ impl CompressionCache {
 
         let mut cache = entries
             .lock()
-            .map_err(|_| CompressionFailed)?;
+            .ok_or(CompressionFailed)?;
         for (i, item) in cache.iter().enumerate() {
             if item.algorithm == algorithm && item.original == encoding {
                 // this item is now MRU
@@ -381,7 +387,7 @@ impl CompressionCache {
         // insert into cache
         let mut cache = entries
             .lock()
-            .map_err(|_| CompressionFailed)?;
+            .ok_or(CompressionFailed)?;
         if cache.len() == max_size {
             cache.pop_front();
         }
