@@ -120,6 +120,13 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>>;
 
+    /// Return true if the client only supports raw public keys.  
+    ///  
+    /// See [RFC 7250](https://www.rfc-editor.org/rfc/rfc7250).  
+    fn only_raw_public_keys(&self) -> bool {
+        false
+    }
+
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
 }

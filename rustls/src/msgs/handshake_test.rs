@@ -4,6 +4,7 @@ use std::{format, println, vec};
 
 use pki_types::{CertificateDer, DnsName};
 
+use super::enums::CertificateType;
 use super::handshake::{ServerDhParams, ServerKeyExchange, ServerKeyExchangeParams};
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -492,6 +493,22 @@ fn client_alpn_extension() {
 }
 
 #[test]
+fn client_client_certificate_extension() {
+    test_client_extension_getter(ExtensionType::ClientCertificateType, |chp| {
+        chp.client_certificate_extension()
+            .is_some()
+    });
+}
+
+#[test]
+fn client_server_certificate_extension() {
+    test_client_extension_getter(ExtensionType::ServerCertificateType, |chp| {
+        chp.server_certificate_extension()
+            .is_some()
+    });
+}
+
+#[test]
 fn client_quic_params_extension() {
     test_client_extension_getter(ExtensionType::TransportParameters, |chp| {
         chp.quic_params_extension().is_some()
@@ -677,6 +694,20 @@ fn server_ecpoints_extension() {
 fn server_supported_versions() {
     test_server_extension_getter(ExtensionType::SupportedVersions, |shp| {
         shp.supported_versions().is_some()
+    });
+}
+
+#[test]
+fn server_client_certificate_type_extension() {
+    test_server_extension_getter(ExtensionType::ClientCertificateType, |shp| {
+        shp.client_cert_type().is_some()
+    });
+}
+
+#[test]
+fn server_server_certificate_type_extension() {
+    test_server_extension_getter(ExtensionType::ServerCertificateType, |shp| {
+        shp.server_cert_type().is_some()
     });
 }
 
@@ -954,6 +985,8 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
+            ClientExtension::ServerCertTypes(vec![CertificateType::RawPublicKey]),
+            ClientExtension::ClientCertTypes(vec![CertificateType::RawPublicKey]),
             ClientExtension::TransportParameters(vec![1, 2, 3]),
             ClientExtension::EarlyData,
             ClientExtension::CertificateCompressionAlgorithms(vec![
@@ -991,6 +1024,8 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
             }),
+            ServerExtension::ClientCertType(CertificateType::RawPublicKey),
+            ServerExtension::ServerCertType(CertificateType::RawPublicKey),
         ],
     }
 }
