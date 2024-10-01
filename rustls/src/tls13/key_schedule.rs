@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 
 use crate::common_state::{CommonState, Side};
-use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
+use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::crypto::{hash, hmac, SharedSecret};
 use crate::error::Error;
@@ -604,7 +604,7 @@ impl KeySchedule {
             .suite
             .hkdf_provider
             .expander_for_okm(secret);
-        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref());
 
         common
@@ -626,7 +626,7 @@ impl KeySchedule {
             .suite
             .hkdf_provider
             .expander_for_okm(secret);
-        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref());
         self.suite.aead_alg.decrypter(key, iv)
     }
@@ -773,17 +773,19 @@ impl KeySchedule {
 /// [HKDF-Expand-Label] where the output is an AEAD key.
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
-pub(crate) fn derive_traffic_key(expander: &dyn HkdfExpander, aead_key_len: usize) -> AeadKey {
-    hkdf_expand_label_aead_key(expander, aead_key_len, b"key", &[])
+pub fn derive_traffic_key(
+    expander: &dyn HkdfExpander,
+    aead_alg: &dyn Tls13AeadAlgorithm,
+) -> AeadKey {
+    hkdf_expand_label_aead_key(expander, aead_alg.key_len(), b"key", &[])
 }
 
 /// [HKDF-Expand-Label] where the output is an IV.
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
-pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
+pub fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
     hkdf_expand_label(expander, b"iv", &[])
 }
-
 
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
 /// it is infallible.
@@ -857,7 +859,6 @@ pub(crate) fn server_ech_hrr_confirmation_secret(
         hs_hash.as_ref(),
     )
 }
-
 
 fn hkdf_expand_label_inner<F, T>(
     expander: &dyn HkdfExpander,
@@ -1045,7 +1046,7 @@ test_for_each_provider! {
         let expander = TLS13_AES_128_GCM_SHA256_INTERNAL
             .hkdf_provider
             .expander_for_okm(&traffic_secret);
-        let key = derive_traffic_key(expander.as_ref(), aead_alg.key_len());
+        let key = derive_traffic_key(expander.as_ref(), TLS13_AES_128_GCM_SHA256_INTERNAL.aead_alg);
         let key = aead::UnboundKey::new(aead_alg, key.as_ref()).unwrap();
         let seal_output = seal_zeroes(key);
         let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();
@@ -1095,8 +1096,7 @@ bench_for_each_provider! {
             test::black_box(derive_traffic_key(
                 traffic_secret_expander.as_ref(),
                 TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
-                    .aead_alg
-                    .key_len(),
+                    .aead_alg,
             ));
             test::black_box(derive_traffic_iv(traffic_secret_expander.as_ref()));
         }

@@ -14,10 +14,10 @@ use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCe
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::{AlertLevel, Compression};
+use rustls::internal::msgs::enums::{AlertLevel, CertificateType, Compression};
 use rustls::internal::msgs::handshake::{
     ClientExtension, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, Random,
-    ServerName as ServerNameExtensionItem, SessionId,
+    ServerExtension, ServerName as ServerNameExtensionItem, SessionId,
 };
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
@@ -46,6 +46,403 @@ use common::*;
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
 use rustls::ProtocolVersion::TLSv1_2;
+
+mod test_raw_keys {
+    use super::*;
+    use rustls::crypto::cipher::{
+        InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundChunks,
+        OutboundPlainMessage,
+    };
+    use rustls::crypto::tls13::OkmBlock;
+    use rustls::internal::{derive_traffic_iv, derive_traffic_key};
+    use rustls::{Connection, Tls13CipherSuite};
+
+    #[test]
+    fn successful_raw_key_connection_and_correct_peer_certificates() {
+        for kt in ALL_KEY_TYPES {
+            let client_config = make_client_config_with_raw_key_support(*kt);
+            let server_config = make_server_config_with_raw_key_support(*kt);
+
+            let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+            do_handshake(&mut client, &mut server);
+
+            // Test that the client peer certificate is the server's public key
+            match client.peer_certificates() {
+                Some(certificates) => {
+                    assert_eq!(certificates.len(), 1);
+                    let cert: CertificateDer<'_> = certificates[0].clone();
+                    assert_eq!(cert.as_ref(), kt.get_spki().as_ref());
+                }
+                None => {
+                    unreachable!("Client should have received a certificate")
+                }
+            }
+
+            // Test that the server peer certificate is the client's public key
+            match server.peer_certificates() {
+                Some(certificates) => {
+                    assert_eq!(certificates.len(), 1);
+                    let cert = certificates[0].clone();
+                    assert_eq!(cert.as_ref(), kt.get_client_spki().as_ref());
+                }
+                None => {
+                    unreachable!("Server should have received a certificate")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn correct_certificate_type_extensions_from_client_hello() {
+        for kt in ALL_KEY_TYPES {
+            let client_config = make_client_config_with_raw_key_support(*kt);
+            let mut server_config = make_server_config_with_raw_key_support(*kt);
+
+            server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+                expected_client_cert_types: Some(vec![CertificateType::RawPublicKey]),
+                expected_server_cert_types: Some(vec![CertificateType::RawPublicKey]),
+                ..Default::default()
+            });
+
+            let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+            let err = do_handshake_until_error(&mut client, &mut server);
+            assert!(err.is_err());
+        }
+    }
+
+    #[test]
+    fn only_client_supports_raw_keys() {
+        for kt in ALL_KEY_TYPES {
+            let client_config_rpk = make_client_config_with_raw_key_support(*kt);
+            let server_config = make_server_config(*kt);
+
+            let (mut client_rpk, mut server) =
+                make_pair_for_configs(client_config_rpk, server_config);
+
+            // The client
+            match do_handshake_until_error(&mut client_rpk, &mut server) {
+                Err(err) => {
+                    assert_eq!(
+                        err,
+                        ErrorFromPeer::Server(Error::PeerIncompatible(
+                            PeerIncompatible::UnsolicitedCertificateTypeExtension
+                        ))
+                    )
+                }
+                _ => {
+                    unreachable!("Expected error because client is incorrectly configured")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn only_server_supports_raw_keys() {
+        for kt in ALL_KEY_TYPES {
+            let client_config = make_client_config_with_versions(*kt, &[&rustls::version::TLS13]);
+            let server_config_rpk = make_server_config_with_raw_key_support(*kt);
+
+            let (mut client, mut server_rpk) =
+                make_pair_for_configs(client_config, server_config_rpk);
+
+            match do_handshake_until_error(&mut client, &mut server_rpk) {
+                Err(err) => {
+                    assert_eq!(
+                        err,
+                        ErrorFromPeer::Server(Error::PeerIncompatible(
+                            PeerIncompatible::IncorrectCertificateTypeExtension
+                        ))
+                    )
+                }
+                _ => {
+                    unreachable!("Expected error because client is incorrectly configured")
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn incorrectly_alter_client_hello() {
+        for kt in ALL_KEY_TYPES {
+            let client_config = Arc::new(make_client_config(*kt));
+            let server_config_rpk = Arc::new(make_server_config_with_raw_key_support(*kt));
+
+            // Alter Client Hello client certificate extension
+            let (client, server) = make_pair_for_arc_configs(&client_config, &server_config_rpk);
+            let server_cert_altered = do_handshake_altered(
+                client,
+                |_: &mut Message| -> Altered { Altered::InPlace },
+                |msg: &mut Message| {
+                    alter_client_hello_message(msg, Some(&vec![CertificateType::X509]), None)
+                },
+                server,
+            );
+            match server_cert_altered {
+                Ok(_) => unreachable!("Expected error because server cert is altered"),
+                Err(err) => assert_eq!(
+                    err,
+                    ErrorFromPeer::Server(Error::PeerIncompatible(
+                        PeerIncompatible::IncorrectCertificateTypeExtension
+                    ))
+                ),
+            }
+
+            // Alter Server Hello server certificate extension
+            let (client, server) = make_pair_for_arc_configs(&client_config, &server_config_rpk);
+            let client_cert_altered = do_handshake_altered(
+                client,
+                |_: &mut Message| -> Altered { Altered::InPlace },
+                |msg: &mut Message| {
+                    alter_client_hello_message(msg, None, Some(&vec![CertificateType::X509]))
+                },
+                server,
+            );
+            match client_cert_altered {
+                Ok(_) => unreachable!("Expected error because server cert is altered"),
+                Err(err) => assert_eq!(
+                    err,
+                    ErrorFromPeer::Server(Error::PeerIncompatible(
+                        PeerIncompatible::IncorrectCertificateTypeExtension
+                    ))
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn incorrectly_alter_server_hello() {
+        for kt in ALL_KEY_TYPES {
+            let supported_suite = cipher_suite::TLS13_AES_256_GCM_SHA384;
+
+            // Alter Server Hello server certificate extension and expect IncorrectCertificateTypeExtension error
+            let client_config_rpk = make_client_config_with_raw_key_support(*kt);
+            let server_config_rpk = make_server_config_with_raw_key_support(*kt);
+            add_keylog_and_do_altered_handshake(
+                client_config_rpk,
+                server_config_rpk,
+                supported_suite,
+                Some(&CertificateType::X509),
+                None,
+                Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+            );
+
+            // Alter Server Hello client certificate extension and expect IncorrectCertificateTypeExtension error
+            let client_config_rpk = make_client_config_with_raw_key_support(*kt);
+            let server_config_rpk = make_server_config_with_raw_key_support(*kt);
+            add_keylog_and_do_altered_handshake(
+                client_config_rpk,
+                server_config_rpk,
+                supported_suite,
+                None,
+                Some(&CertificateType::X509),
+                Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+            );
+
+            // Alter Server Hello server certificate extension and expect UnexpectedCertificateTypeExtension error
+            let client_config = make_client_config(*kt);
+            let server_config_rpk = make_server_config(*kt);
+            add_keylog_and_do_altered_handshake(
+                client_config,
+                server_config_rpk,
+                supported_suite,
+                Some(&CertificateType::X509),
+                None,
+                Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension),
+            );
+
+            // Alter Server Hello client certificate extension and expect UnexpectedCertificateTypeExtension error
+            let client_config = make_client_config(*kt);
+            let server_config_rpk = make_server_config(*kt);
+            add_keylog_and_do_altered_handshake(
+                client_config,
+                server_config_rpk,
+                supported_suite,
+                None,
+                Some(&CertificateType::X509),
+                Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension),
+            );
+        }
+    }
+
+    fn add_keylog_and_do_altered_handshake(
+        client_config: ClientConfig,
+        mut server_config: ServerConfig,
+        supported_suite: SupportedCipherSuite,
+        server_cert_type: Option<&CertificateType>,
+        client_cert_type: Option<&CertificateType>,
+        expected_error: Error,
+    ) {
+        let keylog_to_vec = Arc::new(KeyLogToVec::new("server"));
+        server_config.key_log = keylog_to_vec.clone();
+
+        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+
+        // Client -> Server (Client Hello)
+        transfer(&mut client, &mut server);
+        server
+            .process_new_packets()
+            .map_err(ErrorFromPeer::Server)
+            .unwrap();
+
+        // Server -> Client (Server Hello, Server Change Cipher Spec, Server Encrypted Extensions, etc)
+        let mut server = Connection::Server(server);
+        let mut client = Connection::Client(client);
+        transfer_altered(
+            &mut server,
+            |msg| {
+                alter_server_hello_message(
+                    msg,
+                    server_cert_type,
+                    client_cert_type,
+                    supported_suite,
+                    &keylog_to_vec,
+                )
+            },
+            &mut client,
+        );
+
+        match client.process_new_packets() {
+            Ok(_) => unreachable!("Expected error because server cert is altered"),
+            Err(err) => assert_eq!(err, expected_error),
+        }
+    }
+
+    fn alter_client_hello_message(
+        msg: &mut Message,
+        server_cert_types: Option<&Vec<CertificateType>>,
+        client_cert_types: Option<&Vec<CertificateType>>,
+    ) -> Altered {
+        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
+                for extension in ch.extensions.iter_mut() {
+                    if let ClientExtension::ClientCertTypes(cert_type) = extension {
+                        if let Some(client_cert_types) = client_cert_types {
+                            cert_type.clear();
+                            if !client_cert_types.is_empty() {
+                                cert_type.extend_from_slice(client_cert_types)
+                            }
+                        }
+                    };
+                    if let ClientExtension::ServerCertTypes(cert_type) = extension {
+                        if let Some(server_cert_types) = server_cert_types {
+                            cert_type.clear();
+                            if !server_cert_types.is_empty() {
+                                cert_type.extend_from_slice(server_cert_types)
+                            }
+                        }
+                    };
+                }
+            }
+            *encoded = Payload::new(parsed.get_encoding());
+        }
+        Altered::InPlace
+    }
+
+    fn alter_server_hello_message(
+        msg: &mut Message,
+        server_cert_type: Option<&CertificateType>,
+        client_cert_type: Option<&CertificateType>,
+        cipher_suite: SupportedCipherSuite,
+        keylog_to_vec: &Arc<KeyLogToVec>,
+    ) -> Altered {
+        if msg.payload.content_type() != ContentType::ApplicationData {
+            // transfer_altered will forward multiple messages, but we are only interested in
+            // application data, which contains the server's encrypted extensions
+            return Altered::InPlace;
+        }
+
+        // Derive Encrypter and Decrypter from the keylog and cipher suite
+        let (mut encrypter, mut decrypter) =
+            derive_message_encrypter_and_decrypter(cipher_suite.tls13().unwrap(), keylog_to_vec);
+
+        // Decrypt raw payload
+        let mut raw_payload = Vec::new();
+        msg.payload.encode(&mut raw_payload);
+        let mut bytes = raw_payload.clone();
+        let incoming = InboundOpaqueMessage::new(
+            ContentType::ApplicationData,
+            ProtocolVersion::TLSv1_3,
+            &mut bytes,
+        );
+        let decrypted_msg = decrypter.decrypt(incoming, 0).unwrap();
+
+        // Manipulate Message
+        let mut msg = Message::try_from(decrypted_msg).unwrap();
+
+        let encoded = if let MessagePayload::Handshake { parsed, .. } = &mut msg.payload {
+            if let HandshakePayload::EncryptedExtensions(enc_ext) = &mut parsed.payload {
+                let mut sct_present = false;
+                let mut cct_present = false;
+                for extension in enc_ext.iter_mut() {
+                    if let ServerExtension::ClientCertType(cert_type) = extension {
+                        if let Some(cct) = client_cert_type {
+                            *cert_type = *cct;
+                        }
+                        cct_present = true;
+                    };
+                    if let ServerExtension::ServerCertType(cert_type) = extension {
+                        if let Some(sct) = server_cert_type {
+                            *cert_type = *sct;
+                        }
+                        sct_present = true;
+                    };
+                }
+                if !sct_present {
+                    if let Some(sct) = server_cert_type {
+                        enc_ext.push(ServerExtension::ServerCertType(*sct));
+                    }
+                }
+                if !cct_present {
+                    if let Some(cct) = client_cert_type {
+                        enc_ext.push(ServerExtension::ClientCertType(*cct));
+                    }
+                }
+            }
+            Payload::new(parsed.get_encoding())
+        } else {
+            panic!("Expected to succesfully encode handshake message");
+        };
+
+        // // Re-encrypt
+        let outgoing = OutboundPlainMessage {
+            typ: ContentType::Handshake,
+            version: ProtocolVersion::TLSv1_3,
+            payload: OutboundChunks::Single(encoded.bytes()),
+        };
+        Altered::Raw(
+            encrypter
+                .encrypt(outgoing, 0)
+                .unwrap()
+                .encode(),
+        )
+    }
+
+    fn derive_message_encrypter_and_decrypter(
+        cipher_suite: &Tls13CipherSuite,
+        keylog_to_vec: &Arc<KeyLogToVec>,
+    ) -> (Box<dyn MessageEncrypter>, Box<dyn MessageDecrypter>) {
+        let keylog_vec = keylog_to_vec.take();
+        let keylog_item = keylog_vec
+            .iter()
+            .find(|item| item.label == "SERVER_HANDSHAKE_TRAFFIC_SECRET")
+            .unwrap();
+        let expander = cipher_suite
+            .hkdf_provider
+            .expander_for_okm(&OkmBlock::new(&keylog_item.secret));
+
+        // Derive Encrypter
+        let key = derive_traffic_key(expander.as_ref(), cipher_suite.aead_alg);
+        let iv = derive_traffic_iv(expander.as_ref());
+        let encrypter = cipher_suite.aead_alg.encrypter(key, iv);
+
+        // Derive Decrypter
+        let key = derive_traffic_key(expander.as_ref(), cipher_suite.aead_alg);
+        let iv = derive_traffic_iv(expander.as_ref());
+        let decrypter = cipher_suite.aead_alg.decrypter(key, iv);
+
+        (encrypter, decrypter)
+    }
+}
 
 fn alpn_test_error(
     server_protos: Vec<Vec<u8>>,
@@ -899,6 +1296,8 @@ struct ServerCheckCertResolve {
     expected_sigalgs: Option<Vec<SignatureScheme>>,
     expected_alpn: Option<Vec<Vec<u8>>>,
     expected_cipher_suites: Option<Vec<CipherSuite>>,
+    expected_server_cert_types: Option<Vec<CertificateType>>,
+    expected_client_cert_types: Option<Vec<CertificateType>>,
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
@@ -946,6 +1345,26 @@ impl ResolvesServerCert for ServerCheckCertResolve {
                 expected_cipher_suites,
                 client_hello.cipher_suites(),
                 "unexpected cipher suites"
+            );
+        }
+
+        if let Some(expected_server_cert) = &self.expected_server_cert_types {
+            assert_eq!(
+                expected_server_cert,
+                client_hello
+                    .server_cert_types()
+                    .expect("Server cert types not present"),
+                "unexpected server cert"
+            );
+        }
+
+        if let Some(expected_client_cert) = &self.expected_client_cert_types {
+            assert_eq!(
+                expected_client_cert,
+                client_hello
+                    .client_cert_types()
+                    .expect("Client cert types not present"),
+                "unexpected client cert"
             );
         }
 

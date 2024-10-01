@@ -241,6 +241,41 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
     }
 }
 
+/// An exemplar `ResolvesClientCert` implementation that always resolves to a single
+/// [RFC 7250] raw public key.  
+///
+/// [RFC 7250]: https://tools.ietf.org/html/rfc7250  
+#[derive(Clone, Debug)]
+pub struct AlwaysResolvesClientRawPublicKeys(Arc<sign::CertifiedKey>);
+impl AlwaysResolvesClientRawPublicKeys {
+    /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
+    pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
+        Self(certified_key)
+    }
+}
+
+impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
+    fn resolve(
+        &self,
+        _root_hint_subjects: &[&[u8]],
+        _sigschemes: &[SignatureScheme],
+    ) -> Option<Arc<sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
+
+    fn only_raw_public_keys(&self) -> bool {
+        true
+    }
+
+    /// Returns true if the resolver is ready to present an identity.
+    ///
+    /// Even though the function is called `has_certs`, it returns true  
+    /// although only an RPK (Raw Public Key) is available, not an actual certificate.  
+    fn has_certs(&self) -> bool {
+        true
+    }
+}
+
 test_for_each_provider! {
     use std::prelude::v1::*;
     use alloc::sync::Arc;

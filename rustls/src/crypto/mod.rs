@@ -9,7 +9,8 @@ use zeroize::Zeroize;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
-    verify_tls12_signature, verify_tls13_signature, WebPkiSupportedAlgorithms,
+    verify_tls12_signature, verify_tls13_signature, verify_tls13_signature_with_raw_key,
+    WebPkiSupportedAlgorithms,
 };
 #[cfg(all(doc, feature = "tls12"))]
 use crate::Tls12CipherSuite;

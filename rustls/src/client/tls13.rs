@@ -427,6 +427,8 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
         hs::process_alpn_protocol(cx.common, &self.config, exts.alpn_protocol())?;
+        hs::process_client_cert_type_extension(cx.common, &self.config, exts.client_cert_type())?;
+        hs::process_server_cert_type_extension(cx.common, &self.config, exts.server_cert_type())?;
 
         let ech_retry_configs = match (cx.data.ech_status, exts.server_ech_extension()) {
             // If we didn't offer ECH, or ECH was accepted, but the server sent an ECH encrypted

@@ -87,9 +87,15 @@ pub trait Signer: Debug + Send + Sync {
 
 /// A packaged-together certificate chain, matching `SigningKey` and
 /// optional stapled OCSP response.
+///
+/// Note: this struct is also used to represent an [RFC 7250] raw public key,
+/// when the client/server is configured to use raw public keys instead of
+/// certificates.  
+///
+/// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Clone, Debug)]
 pub struct CertifiedKey {
-    /// The certificate chain.
+    /// The certificate chain or raw public key.
     pub cert: Vec<CertificateDer<'static>>,
 
     /// The certified key.

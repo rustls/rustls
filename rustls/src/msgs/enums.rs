@@ -96,6 +96,8 @@ enum_builder! {
         Heartbeat => 0x000f,
         ALProtocolNegotiation => 0x0010,
         SCT => 0x0012,
+        ClientCertificateType => 0x0013,
+        ServerCertificateType => 0x0014,
         Padding => 0x0015,
         ExtendedMasterSecret => 0x0017,
         CompressCertificate => 0x001b,
@@ -306,6 +308,19 @@ enum_builder! {
 }
 
 enum_builder! {
+    /// The `CertificateType` enum sent in the cert_type extensions.
+    /// Values in this enum are taken from the various RFCs covering TLS, and are listed by IANA.
+    ///
+    /// [RFC 6091 Section 5]: <https://datatracker.ietf.org/doc/html/rfc6091#section-5>
+    /// [RFC 7250 Section 7]: <https://datatracker.ietf.org/doc/html/rfc7250#section-7>
+    @U8
+    pub enum CertificateType {
+        X509 => 0x00,
+        RawPublicKey => 0x02,
+    }
+}
+
+enum_builder! {
     /// The Key Encapsulation Mechanism (`Kem`) type for HPKE operations.
     /// Listed by IANA, as specified in [RFC 9180 Section 7.1]
     ///
@@ -437,6 +452,7 @@ pub(crate) mod tests {
             CertificateStatusType::OCSP,
             CertificateStatusType::OCSP,
         );
+        test_enum8::<CertificateType>(CertificateType::X509, CertificateType::RawPublicKey);
     }
 
     pub(crate) fn test_enum8<T: for<'a> Codec<'a>>(first: T, last: T) {
