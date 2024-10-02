@@ -92,6 +92,7 @@ rsa = { version = "0.9", features = ["sha2"], default-features = false }
 rustc-hash = "2"
 rustls-fuzzing-provider = { path = "rustls-fuzzing-provider/" }
 rustls-graviola = { version = "0.3" }
+rustls-provider-test = { path = "rustls-provider-test/" }
 rustls-test = { path = "rustls-test/", default-features = false }
 rustls-util = { path = "rustls-util/" }
 serde = { version = "1", features = ["derive"] }
