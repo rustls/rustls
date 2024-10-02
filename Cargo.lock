@@ -1832,6 +1832,7 @@ dependencies = [
  "hex",
  "rustls 0.24.0-dev.0",
  "rustls-pki-types",
+ "rustls-provider-test",
  "rustls-test",
  "serde",
  "serde_json",
@@ -1975,6 +1976,7 @@ dependencies = [
  "ring",
  "rustls 0.24.0-dev.0",
  "rustls-pki-types",
+ "rustls-provider-test",
  "rustls-test",
  "subtle",
 ]
