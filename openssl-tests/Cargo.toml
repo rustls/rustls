@@ -12,6 +12,5 @@ base64 = "0.22"
 num-bigint = "0.4.4"
 once_cell = "1.19"
 rustls = {path = "../rustls"}
-rustls-pemfile = "2"
-rustls-pki-types = "1.0"
+rustls-pki-types = "1.9"
 openssl = "0.10"

@@ -1163,17 +1163,17 @@ impl ExpectFinished {
         // Save a ticket.  If we got a new ticket, save that.  Otherwise, save the
         // original ticket again.
         let (mut ticket, lifetime) = match self.ticket.take() {
-            Some(nst) => (nst.ticket.0, nst.lifetime_hint),
-            None => (Vec::new(), 0),
+            Some(nst) => (nst.ticket, nst.lifetime_hint),
+            None => (Arc::new(PayloadU16::empty()), 0),
         };
 
-        if ticket.is_empty() {
+        if ticket.0.is_empty() {
             if let Some(resuming_session) = &mut self.resuming_session {
-                ticket = resuming_session.take_ticket();
+                ticket = resuming_session.ticket();
             }
         }
 
-        if self.session_id.is_empty() && ticket.is_empty() {
+        if self.session_id.is_empty() && ticket.0.is_empty() {
             debug!("Session not saved: server didn't allocate id or ticket");
             return;
         }

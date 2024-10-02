@@ -13,10 +13,9 @@ env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest
 hickory-resolver = { version = "0.25.0-alpha.1", features = ["dns-over-https-rustls", "webpki-roots"] }
 log = { version = "0.4.4" }
 mio = { version = "0.8", features = ["net", "os-poll"] }
-pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
+pki-types = { package = "rustls-pki-types", version = "1.9", features = ["std"] }
 rcgen = { version = "0.13", features = ["pem", "aws_lc_rs"], default-features = false }
 rustls = { path = "../rustls", features = [ "logging" ]}
-rustls-pemfile = "2"
 serde = "1.0"
 serde_derive = "1.0"
 tokio = { version = "1.34.0", features = ["io-util", "macros", "net", "rt"]}

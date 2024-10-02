@@ -8,7 +8,7 @@
 //!  * Disable SNI
 //!  * Disable certificate validation (insecure)
 //!
-//! See [`USAGE`] for more details.
+//! See `--help` output for more details.
 //!
 //! You may set the `SSLKEYLOGFILE` env var when using this example to write a
 //! log file with key material (insecure) for debugging purposes. See [`rustls::KeyLog`]
@@ -19,14 +19,15 @@
 //!
 //! [mio]: https://docs.rs/mio/latest/mio/
 
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::net::ToSocketAddrs;
 use std::sync::Arc;
-use std::{fs, process, str};
+use std::{process, str};
 
 use clap::Parser;
 use mio::net::TcpStream;
 use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::RootCertStore;
 
@@ -317,31 +318,14 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
 }
 
 fn load_certs(filename: &str) -> Vec<CertificateDer<'static>> {
-    let certfile = fs::File::open(filename).expect("cannot open certificate file");
-    let mut reader = BufReader::new(certfile);
-    rustls_pemfile::certs(&mut reader)
+    CertificateDer::pem_file_iter(filename)
+        .expect("cannot open certificate file")
         .map(|result| result.unwrap())
         .collect()
 }
 
 fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
-    let keyfile = fs::File::open(filename).expect("cannot open private key file");
-    let mut reader = BufReader::new(keyfile);
-
-    loop {
-        match rustls_pemfile::read_one(&mut reader).expect("cannot parse private key .pem file") {
-            Some(rustls_pemfile::Item::Pkcs1Key(key)) => return key.into(),
-            Some(rustls_pemfile::Item::Pkcs8Key(key)) => return key.into(),
-            Some(rustls_pemfile::Item::Sec1Key(key)) => return key.into(),
-            None => break,
-            _ => {}
-        }
-    }
-
-    panic!(
-        "no keys found in {:?} (encrypted keys not supported)",
-        filename
-    );
+    PrivateKeyDer::from_pem_file(filename).expect("cannot read private key file")
 }
 
 mod danger {
@@ -412,10 +396,10 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     let mut root_store = RootCertStore::empty();
 
     if let Some(cafile) = args.cafile.as_ref() {
-        let certfile = fs::File::open(cafile).expect("Cannot open CA file");
-        let mut reader = BufReader::new(certfile);
         root_store.add_parsable_certificates(
-            rustls_pemfile::certs(&mut reader).map(|result| result.unwrap()),
+            CertificateDer::pem_file_iter(cafile)
+                .expect("Cannot open CA file")
+                .map(|result| result.unwrap()),
         );
     } else {
         root_store.extend(
