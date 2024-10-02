@@ -166,7 +166,7 @@ struct Args {
     #[clap(long)]
     cafile: Option<String>,
 
-    /// HTTP GET this PATH [default: ech-check.php].
+    /// HTTP GET this PATH.
     #[clap(long, default_value = "ech-check.php")]
     path: String,
 
@@ -174,7 +174,7 @@ struct Args {
     #[clap(long)]
     host: Option<String>,
 
-    /// Use Google DNS for the DNS-over-HTTPS lookup [default].
+    /// Use Google DNS for the DNS-over-HTTPS lookup (default).
     #[clap(long, group = "dns")]
     use_google_dns: bool,
     /// Use Cloudflare DNS for the DNS-over-HTTPS lookup.
