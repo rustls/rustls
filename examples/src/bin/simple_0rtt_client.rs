@@ -1,6 +1,10 @@
 //! This is an example client that uses rustls for TLS, and sends early 0-RTT data.
 //!
-//! Usage: cargo r --bin simple_0rtt_client --package rustls-examples [domain name] [port] [path/to/ca.cert]
+//! Usage:
+//!
+//! ```
+//! cargo r --bin simple_0rtt_client --package rustls-examples [domain name] [port] [path/to/ca.cert]
+//! ```
 //!
 //! You may set the `SSLKEYLOGFILE` env var when using this example to write a
 //! log file with key material (insecure) for debugging purposes. See [`rustls::KeyLog`]

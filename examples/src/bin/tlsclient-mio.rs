@@ -8,7 +8,7 @@
 //!  * Disable SNI
 //!  * Disable certificate validation (insecure)
 //!
-//! See [`USAGE`] for more details.
+//! See `--help` output for more details.
 //!
 //! You may set the `SSLKEYLOGFILE` env var when using this example to write a
 //! log file with key material (insecure) for debugging purposes. See [`rustls::KeyLog`]
