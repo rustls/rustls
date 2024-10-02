@@ -3,10 +3,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-#[cfg(not(feature = "std"))]
-use once_cell::race::OnceBox;
-#[cfg(feature = "std")]
-use once_cell::sync::OnceCell;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
@@ -227,28 +223,15 @@ impl CryptoProvider {
     /// Call this early in your process to configure which provider is used for
     /// the provider.  The configuration should happen before any use of
     /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    #[cfg(feature = "std")]
     pub fn install_default(self) -> Result<(), Arc<Self>> {
-        PROCESS_DEFAULT_PROVIDER.set(Arc::new(self))
-    }
-
-    /// Sets this `CryptoProvider` as the default for this process.
-    ///
-    /// This can be called successfully at most once in any process execution.
-    ///
-    /// Call this early in your process to configure which provider is used for
-    /// the provider.  The configuration should happen before any use of
-    /// [`ClientConfig::builder()`] or [`ServerConfig::builder()`].
-    #[cfg(not(feature = "std"))]
-    pub fn install_default(self) -> Result<(), Box<Arc<Self>>> {
-        PROCESS_DEFAULT_PROVIDER.set(Box::new(Arc::new(self)))
+        static_default::install_default(self)
     }
 
     /// Returns the default `CryptoProvider` for this process.
     ///
     /// This will be `None` if no default has been set yet.
     pub fn get_default() -> Option<&'static Arc<Self>> {
-        PROCESS_DEFAULT_PROVIDER.get()
+        static_default::get_default()
     }
 
     /// An internal function that:
@@ -318,11 +301,6 @@ impl CryptoProvider {
             && key_provider.fips()
     }
 }
-
-#[cfg(feature = "std")]
-static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();
-#[cfg(not(feature = "std"))]
-static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
 
 /// A source of cryptographically secure randomness.
 pub trait SecureRandom: Send + Sync + Debug {
@@ -624,6 +602,44 @@ impl From<&[u8]> for SharedSecret {
 #[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
 pub fn default_fips_provider() -> CryptoProvider {
     aws_lc_rs::default_provider()
+}
+
+mod static_default {
+    #[cfg(not(feature = "std"))]
+    use alloc::boxed::Box;
+    use alloc::sync::Arc;
+
+    #[cfg(not(feature = "std"))]
+    use once_cell::race::OnceBox;
+    #[cfg(feature = "std")]
+    use once_cell::sync::OnceCell;
+
+    use super::CryptoProvider;
+
+    #[cfg(feature = "std")]
+    pub(crate) fn install_default(
+        default_provider: CryptoProvider,
+    ) -> Result<(), Arc<CryptoProvider>> {
+        PROCESS_DEFAULT_PROVIDER.set(Arc::new(default_provider))
+    }
+
+    #[cfg(not(feature = "std"))]
+    pub(crate) fn install_default(
+        default_provider: CryptoProvider,
+    ) -> Result<(), Arc<CryptoProvider>> {
+        PROCESS_DEFAULT_PROVIDER
+            .set(Box::new(Arc::new(default_provider)))
+            .map_err(|e| *e)
+    }
+
+    pub(crate) fn get_default() -> Option<&'static Arc<CryptoProvider>> {
+        PROCESS_DEFAULT_PROVIDER.get()
+    }
+
+    #[cfg(feature = "std")]
+    static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();
+    #[cfg(not(feature = "std"))]
+    static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
 }
 
 #[cfg(test)]
