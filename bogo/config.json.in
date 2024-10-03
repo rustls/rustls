@@ -56,6 +56,7 @@
 #else
     "*Kyber*": "",
 #endif
+    "*MLKEM*": "NYI",
     "ExtraClientEncryptedExtension-*": "we don't implement ALPS",
     "Server-JDK11*": "workarounds for oracle engineering quality",
     "Client-RejectJDK11DowngradeRandom": "",
@@ -85,14 +86,7 @@
 #ifdef RING
     "*-ECDSA_P521_SHA512-*": "no p521 signatures/verification",
 #endif
-    "CurveTest-Client-P-521-TLS12": "no p521 key exchange",
-    "CurveTest-Server-P-521-TLS12": "",
-    "CurveTest-Client-Compressed-P-521-TLS12": "",
-    "CurveTest-Server-Compressed-P-521-TLS12": "",
-    "CurveTest-Client-P-521-TLS13": "",
-    "CurveTest-Server-P-521-TLS13": "",
-    "CurveTest-Client-Compressed-P-521-TLS13": "",
-    "CurveTest-Server-Compressed-P-521-TLS13": "",
+    "CurveTest-*-P-521-*": "no p521 key exchange",
     "GREASE-*": "not implemented",
     "LargeMessage-Reject": "",
     "DelegatedCredentials-*": "not implemented",
