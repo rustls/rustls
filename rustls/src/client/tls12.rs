@@ -844,8 +844,9 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         //    a) generate our kx pair
         //    b) emit a ClientKeyExchange containing it
         //    c) if doing client auth, emit a CertificateVerify
-        //    d) emit a CCS
-        //    e) derive the shared keys, and start encryption
+        //    d) derive the shared keys
+        //    e) emit a CCS
+        //    f) use the derived keys to start encryption
         // 6. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
@@ -956,19 +957,26 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             emit_certverify(&mut transcript, signer.as_ref(), cx.common)?;
         }
 
-        // 5d.
-        emit_ccs(cx.common);
-
-        // 5e. Now commit secrets.
+        // 5d. Derive secrets.
+        // An alert at this point will be sent in plaintext.  That must happen
+        // prior to the CCS, or else the peer will try to decrypt it.
         let secrets = ConnectionSecrets::from_key_exchange(
             kx,
             kx_params.pub_key(),
             ems_seed,
             st.randoms,
             suite,
-        )?;
+        )
+        .map_err(|err| {
+            cx.common
+                .send_fatal_alert(AlertDescription::IllegalParameter, err)
+        })?;
         cx.common.kx_state.complete();
 
+        // 5e. CCS. We are definitely going to switch on encryption.
+        emit_ccs(cx.common);
+
+        // 5f. Now commit secrets.
         st.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,

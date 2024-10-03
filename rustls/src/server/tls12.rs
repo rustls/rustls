@@ -583,7 +583,11 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
             ems_seed,
             self.randoms,
             self.suite,
-        )?;
+        )
+        .map_err(|err| {
+            cx.common
+                .send_fatal_alert(AlertDescription::IllegalParameter, err)
+        })?;
         cx.common.kx_state.complete();
 
         self.config.key_log.log(

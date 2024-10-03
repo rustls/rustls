@@ -149,7 +149,12 @@ pub(super) fn handle_server_hello(
     };
 
     cx.common.kx_state.complete();
-    let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
+    let shared_secret = our_key_share
+        .complete(&their_key_share.payload.0)
+        .map_err(|err| {
+            cx.common
+                .send_fatal_alert(AlertDescription::IllegalParameter, err)
+        })?;
 
     let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
