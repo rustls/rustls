@@ -938,7 +938,10 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let skxg = match maybe_skxg {
             Some(skxg) => skxg,
             None => {
-                return Err(PeerMisbehaved::SelectedUnofferedKxGroup.into());
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::SelectedUnofferedKxGroup,
+                ));
             }
         };
         cx.common.kx_state = KxState::Start(skxg);
