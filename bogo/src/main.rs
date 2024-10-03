@@ -956,6 +956,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":UNEXPECTED_EXTENSION:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedKxGroup) => quit(":WRONG_CURVE:"),
+        Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare) => quit(":BAD_ECPOINT:"),
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
@@ -1660,6 +1661,7 @@ pub fn main() {
             "-ignore-tls13-downgrade" |
             "-allow-hint-mismatch" |
             "-wpa-202304" |
+            "-cnsa-202407" |
             "-srtp-profiles" |
             "-permute-extensions" |
             "-signed-cert-timestamps" |
