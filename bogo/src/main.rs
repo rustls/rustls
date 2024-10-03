@@ -1534,9 +1534,9 @@ pub fn main() {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
                 opts.groups.get_or_insert(Vec::new()).push(group);
 
-                // if X25519Kyber768Draft00 is requested, insert it from rustls_post_quantum
-                if group == rustls_post_quantum::X25519Kyber768Draft00.name() && opts.selected_provider == SelectedProvider::PostQuantum {
-                    opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519Kyber768Draft00);
+                // if X25519MLKEM768 is requested, insert it from rustls_post_quantum
+                if group == rustls_post_quantum::X25519MLKEM768.name() && opts.selected_provider == SelectedProvider::PostQuantum {
+                    opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519MLKEM768);
                 }
             }
             "-resumption-delay" => {
