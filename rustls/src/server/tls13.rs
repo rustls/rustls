@@ -490,7 +490,12 @@ mod client_hello {
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
-        let ckx = kxgroup.start_and_complete(&share.payload.0)?;
+        let ckx = kxgroup
+            .start_and_complete(&share.payload.0)
+            .map_err(|err| {
+                cx.common
+                    .send_fatal_alert(AlertDescription::IllegalParameter, err)
+            })?;
         cx.common.kx_state.complete();
 
         extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(
