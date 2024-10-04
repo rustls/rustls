@@ -226,6 +226,7 @@ impl CombinedShare {
 }
 
 fn kyber768_r3() -> &'static kem::Algorithm<AlgorithmId> {
+    #[allow(deprecated)]
     get_algorithm(AlgorithmId::Kyber768_R3).expect("Kyber768_R3 not available")
 }
 
