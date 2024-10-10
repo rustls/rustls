@@ -20,7 +20,7 @@ use crate::error::TLSError;
 use crate::check::check_message;
 
 use crate::client::common::{ServerCertDetails, ServerKXDetails, HandshakeDetails};
-use crate::client::common::{ReceivedTicketDetails, ClientAuthDetails};
+use crate::client::common::{ReceivedTicketDetails, ClientAuthDetails, ClientHelloDetails};
 use crate::client::hs;
 
 use std::mem;
@@ -191,7 +191,7 @@ fn emit_certificate(handshake: &mut HandshakeDetails,
     };
 
     handshake.transcript.add_message(&cert);
-    sess.common.send_msg(cert, false);
+    sess.common.send_msg(cert, sess.is_renego);
 }
 
 fn emit_clientkx(handshake: &mut HandshakeDetails,
@@ -212,7 +212,7 @@ fn emit_clientkx(handshake: &mut HandshakeDetails,
     };
 
     handshake.transcript.add_message(&ckx);
-    sess.common.send_msg(ckx, false);
+    sess.common.send_msg(ckx, sess.is_renego);
 }
 
 fn emit_certverify(handshake: &mut HandshakeDetails,
@@ -240,7 +240,7 @@ fn emit_certverify(handshake: &mut HandshakeDetails,
     };
 
     handshake.transcript.add_message(&m);
-    sess.common.send_msg(m, false);
+    sess.common.send_msg(m, sess.is_renego);
     Ok(())
 }
 
@@ -251,7 +251,7 @@ fn emit_ccs(sess: &mut ClientSessionImpl) {
         payload: MessagePayload::ChangeCipherSpec(ChangeCipherSpecPayload {}),
     };
 
-    sess.common.send_msg(ccs, false);
+    sess.common.send_msg(ccs, sess.is_renego);
 }
 
 fn emit_finished(secrets: &SessionSecrets,
@@ -260,6 +260,8 @@ fn emit_finished(secrets: &SessionSecrets,
     let vh = handshake.transcript.get_current_hash();
     let verify_data = secrets.client_verify_data(&vh);
     let verify_data_payload = Payload::new(verify_data);
+    // Store verify_data for case of renego to put it in the RenegotiationInfo extension
+    sess.verify_data = Some(verify_data.clone());
 
     let f = Message {
         typ: ContentType::Handshake,
@@ -526,7 +528,11 @@ impl hs::State for ExpectServerDone {
         sess.config.key_log.log("CLIENT_RANDOM",
                                 &secrets.randoms.client,
                                 &secrets.master_secret);
-        sess.common.start_encryption_tls12(&secrets);
+        if sess.is_renego {
+            sess.common.start_encryption_only_tls12(&secrets);
+        } else {
+            sess.common.start_encryption_tls12(&secrets);
+        }
         sess.common
             .record_layer
             .start_encrypting();
@@ -571,6 +577,11 @@ impl hs::State for ExpectCCS {
         // CCS should not be received interleaved with fragmented handshake-level
         // message.
         hs::check_aligned_handshake(sess)?;
+
+        if sess.is_renego {
+            sess.common
+                .start_decryption_only_tls12(&self.secrets);
+        }
 
         // nb. msgs layer validates trivial contents of CCS
         sess.common
@@ -669,6 +680,7 @@ impl ExpectFinished {
     fn into_expect_traffic(self, fin: verify::FinishedMessageVerified) -> hs::NextState {
         Box::new(ExpectTraffic {
             secrets: self.secrets,
+            handshake: self.handshake,
             _cert_verified: self.cert_verified,
             _sig_verified: self.sig_verified,
             _fin_verified: fin,
@@ -720,6 +732,7 @@ impl hs::State for ExpectFinished {
 
 // -- Traffic transit state --
 struct ExpectTraffic {
+    handshake: HandshakeDetails,
     secrets: SessionSecrets,
     _cert_verified: verify::ServerCertVerified,
     _sig_verified: verify::HandshakeSignatureValid,
@@ -728,9 +741,25 @@ struct ExpectTraffic {
 
 impl hs::State for ExpectTraffic {
     fn handle(self: Box<Self>, sess: &mut ClientSessionImpl, mut m: Message) -> hs::NextStateOrError {
-        check_message(&m, &[ContentType::ApplicationData], &[])?;
-        sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
-        Ok(self)
+        let mut st = *self;
+        //Case of renego ask from server
+        if m.is_handshake_type(HandshakeType::HelloRequest) {
+            sess.common.stop_traffic();
+
+            st.handshake = HandshakeDetails::new(st.handshake.dns_name.clone(), st.handshake.extra_exts.clone());
+
+            let hello_details = ClientHelloDetails::new();
+            st.handshake.transcript.set_client_auth_enabled();
+            Ok(hs::emit_client_hello_for_retry(sess,
+                                               st.handshake,
+                                               hello_details,
+                                               None))
+
+        } else {
+            check_message(&m, &[ContentType::ApplicationData], &[])?;
+            sess.common.take_received_plaintext(m.take_opaque_payload().unwrap());
+            Ok(Box::new(st))
+        }
     }
 
     fn export_keying_material(&self,

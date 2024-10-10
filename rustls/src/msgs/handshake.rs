@@ -571,6 +571,7 @@ pub enum ClientExtension {
     PresharedKey(PresharedKeyOffer),
     Cookie(PayloadU16),
     ExtendedMasterSecretRequest,
+    RenegotiationInfo(PayloadU8),
     CertificateStatusRequest(CertificateStatusRequest),
     SignedCertificateTimestampRequest,
     TransportParameters(Vec<u8>),
@@ -598,6 +599,7 @@ impl ClientExtension {
             ClientExtension::SignedCertificateTimestampRequest => ExtensionType::SCT,
             ClientExtension::TransportParameters(_) => ExtensionType::TransportParameters,
             ClientExtension::EarlyData => ExtensionType::EarlyData,
+            ClientExtension::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
             ClientExtension::Unknown(ref r) => r.typ,
         }
     }
@@ -618,6 +620,7 @@ impl Codec for ClientExtension {
                 ClientExtension::SignedCertificateTimestampRequest |
                 ClientExtension::EarlyData => (),
             ClientExtension::SessionTicketOffer(ref r) => r.encode(&mut sub),
+            ClientExtension::RenegotiationInfo(ref r) => r.encode(&mut sub),
             ClientExtension::Protocols(ref r) => r.encode(&mut sub),
             ClientExtension::SupportedVersions(ref r) => r.encode(&mut sub),
             ClientExtension::KeyShare(ref r) => r.encode(&mut sub),

@@ -231,7 +231,8 @@ mod stream;
 mod pemfile;
 mod x509;
 mod anchors;
-mod verify;
+#[allow(missing_docs)]
+pub mod verify;
 #[cfg(test)]
 mod verifybench;
 #[macro_use]
@@ -239,8 +240,10 @@ mod check;
 mod suites;
 mod ticketer;
 mod server;
-mod client;
-mod key;
+#[allow(missing_docs)]
+pub mod client;
+#[allow(missing_docs)]
+pub mod key;
 mod bs_debug;
 mod keylog;
 

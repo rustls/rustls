@@ -20,6 +20,7 @@ use crate::suites;
 use crate::verify;
 use crate::rand;
 use crate::ticketer;
+use crate::msgs::base::PayloadU8;
 #[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::check::check_message;
@@ -163,7 +164,7 @@ pub fn compatible_suite(sess: &ClientSessionImpl,
     }
 }
 
-fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
+pub fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
                                mut handshake: HandshakeDetails,
                                mut hello: ClientHelloDetails,
                                retryreq: Option<&HelloRetryRequest>) -> NextState {
@@ -208,6 +209,12 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     exts.push(ClientExtension::SignatureAlgorithms(sess.config.get_verifier().supported_verify_schemes()));
     exts.push(ClientExtension::ExtendedMasterSecretRequest);
     exts.push(ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()));
+
+    if let Some(verify_data) = &sess.verify_data {
+        trace!("Use stored verify_data for RenegotiationInfo");
+        exts.push(ClientExtension::RenegotiationInfo(PayloadU8::new(verify_data.clone())));
+        sess.is_renego = true;
+    }
 
     if sess.config.ct_logs.is_some() {
         exts.push(ClientExtension::SignedCertificateTimestampRequest);
@@ -285,7 +292,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
         // "This value MUST be set to 0x0303 for all records generated
         //  by a TLS 1.3 implementation other than an initial ClientHello
         //  (i.e., one not generated after a HelloRetryRequest)"
-        version: if retryreq.is_some() {
+        version: if retryreq.is_some() || sess.is_renego {
             ProtocolVersion::TLSv1_2
         } else {
             ProtocolVersion::TLSv1_0
@@ -302,7 +309,7 @@ fn emit_client_hello_for_retry(sess: &mut ClientSessionImpl,
     trace!("Sending ClientHello {:#?}", ch);
 
     handshake.transcript.add_message(&ch);
-    sess.common.send_msg(ch, false);
+    sess.common.send_msg(ch, sess.is_renego);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     if sess.early_data.is_enabled() {

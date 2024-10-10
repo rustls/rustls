@@ -17,7 +17,7 @@ use crate::rand;
 use crate::quic;
 use crate::record_layer;
 #[cfg(feature = "logging")]
-use crate::log::{warn, debug, error};
+use crate::log::{warn, debug, error, trace};
 
 use std::io;
 use std::collections::VecDeque;
@@ -635,6 +635,10 @@ impl SessionCommon {
         self.flush_plaintext();
     }
 
+    pub fn stop_traffic(&mut self) {
+        self.traffic = false;
+    }
+
     /// Send any buffered plaintext.  Plaintext is buffered if
     /// written during handshake.
     pub fn flush_plaintext(&mut self) {
@@ -671,6 +675,7 @@ impl SessionCommon {
                 return;
             }
         }
+        trace!("send msg : {:?}", m);
         if !must_encrypt {
             let mut to_send = VecDeque::new();
             self.message_fragmenter.fragment(m, &mut to_send);
@@ -700,6 +705,16 @@ impl SessionCommon {
     pub fn start_encryption_tls12(&mut self, secrets: &SessionSecrets) {
         let (dec, enc) = cipher::new_tls12(self.get_suite_assert(), secrets);
         self.record_layer.prepare_message_encrypter(enc);
+        self.record_layer.prepare_message_decrypter(dec);
+    }
+
+    pub fn start_encryption_only_tls12(&mut self, secrets: &SessionSecrets) {
+        let (_dec, enc) = cipher::new_tls12(self.get_suite_assert(), secrets);
+        self.record_layer.prepare_message_encrypter(enc);
+    }
+
+    pub fn start_decryption_only_tls12(&mut self, secrets: &SessionSecrets) {
+        let (dec, _enc) = cipher::new_tls12(self.get_suite_assert(), secrets);
         self.record_layer.prepare_message_decrypter(dec);
     }
 

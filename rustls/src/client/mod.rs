@@ -124,7 +124,7 @@ pub struct ClientConfig {
     pub enable_sni: bool,
 
     /// How to verify the server certificate chain.
-    verifier: Arc<dyn verify::ServerCertVerifier>,
+    pub verifier: Arc<dyn verify::ServerCertVerifier>,
 
     /// How to output key material for debugging.  The default
     /// does nothing.
@@ -369,12 +369,14 @@ impl<'a> io::Write for WriteEarlyData<'a> {
 pub struct ClientSessionImpl {
     pub config: Arc<ClientConfig>,
     pub alpn_protocol: Option<Vec<u8>>,
+    pub verify_data: Option<Vec<u8>>,
     pub common: SessionCommon,
     pub error: Option<TLSError>,
     pub state: Option<hs::NextState>,
     pub server_cert_chain: CertificatePayload,
     pub early_data: EarlyData,
     pub resumption_ciphersuite: Option<&'static SupportedCipherSuite>,
+    pub is_renego: bool,
 }
 
 impl fmt::Debug for ClientSessionImpl {
@@ -388,12 +390,14 @@ impl ClientSessionImpl {
         ClientSessionImpl {
             config: config.clone(),
             alpn_protocol: None,
+            verify_data: None,
             common: SessionCommon::new(config.mtu, true),
             error: None,
             state: None,
             server_cert_chain: Vec::new(),
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
+            is_renego: false,
         }
     }
 
@@ -408,8 +412,10 @@ impl ClientSessionImpl {
             ret.push(cs.suite);
         }
 
-        // We don't do renegotation at all, in fact.
-        ret.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+        if (!self.is_renego) {
+            // We don't do renegotation at all, in fact.
+            ret.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+        }
 
         ret
     }
@@ -521,11 +527,12 @@ impl ClientSessionImpl {
     fn process_main_protocol(&mut self, msg: Message) -> Result<(), TLSError> {
         // For TLS1.2, outside of the handshake, send rejection alerts for
         // renegotation requests.  These can occur any time.
-        if msg.is_handshake_type(HandshakeType::HelloRequest) &&
+        /*if msg.is_handshake_type(HandshakeType::HelloRequest) &&
             !self.common.is_tls13() &&
             !self.is_handshaking() {
             return self.reject_renegotiation_attempt();
-        }
+        }*/
+        trace!("Process message : {:?}", msg);
 
         let state = self.state.take().unwrap();
         let maybe_next_state = state.handle(self, msg);
