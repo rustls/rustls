@@ -9,10 +9,10 @@ use std::io::Read;
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
 
-/// This is a byte buffer that is built from a vector
-/// of byte vectors.  This avoids extra copies when
-/// appending a new byte vector, at the expense of
-/// more complexity when reading out.
+/// This is a byte buffer that is built from a deque of byte vectors.
+///
+/// This avoids extra copies when appending a new byte vector,
+/// at the expense of more complexity when reading out.
 pub(crate) struct ChunkVecBuffer {
     chunks: VecDeque<Vec<u8>>,
     limit: Option<usize>,
@@ -74,8 +74,9 @@ impl ChunkVecBuffer {
         len
     }
 
-    /// Take one of the chunks from this object.  This
-    /// function panics if the object `is_empty`.
+    /// Take one of the chunks from this object.
+    ///
+    /// This function returns `None` if the object `is_empty`.
     pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
         self.chunks.pop_front()
     }
