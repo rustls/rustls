@@ -445,7 +445,7 @@ impl CompressionCacheEntry {
 }
 
 #[cfg(all(test, any(feature = "brotli", feature = "zlib")))]
-pub mod tests {
+mod tests {
     use std::{println, vec};
 
     use super::*;
