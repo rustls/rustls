@@ -173,7 +173,7 @@ mod connection {
         pub(super) has_seen_eof: bool,
     }
 
-    impl<'a> Reader<'a> {
+    impl Reader<'_> {
         /// Check the connection's state if no bytes are available for reading.
         fn check_no_bytes_state(&self) -> io::Result<()> {
             match (self.has_received_close_notify, self.has_seen_eof) {
@@ -191,7 +191,7 @@ mod connection {
         }
     }
 
-    impl<'a> io::Read for Reader<'a> {
+    impl io::Read for Reader<'_> {
         /// Obtain plaintext data received from the peer over this TLS connection.
         ///
         /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
@@ -276,7 +276,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
         }
     }
 
-    impl<'a> io::Write for Writer<'a> {
+    impl io::Write for Writer<'_> {
         /// Send the plaintext `buf` to the peer, encrypting
         /// and authenticating it.  Once this function succeeds
         /// you should call [`Connection::write_tls`] which will output the

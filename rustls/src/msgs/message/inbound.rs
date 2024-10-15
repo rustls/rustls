@@ -73,7 +73,7 @@ impl Deref for BorrowedPayload<'_> {
     }
 }
 
-impl<'a> DerefMut for BorrowedPayload<'a> {
+impl DerefMut for BorrowedPayload<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }

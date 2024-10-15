@@ -128,7 +128,7 @@ impl fmt::Debug for WebPkiSupportedAlgorithms {
 /// This is used in order to avoid parsing twice when specifying custom verification
 pub struct ParsedCertificate<'a>(pub(crate) webpki::EndEntityCert<'a>);
 
-impl<'a> ParsedCertificate<'a> {
+impl ParsedCertificate<'_> {
     /// Get the parsed certificate's SubjectPublicKeyInfo (SPKI)
     pub fn subject_public_key_info(&self) -> SubjectPublicKeyInfoDer<'static> {
         self.0.subject_public_key_info()

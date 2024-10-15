@@ -245,13 +245,13 @@ impl<'c, 'i, Data> From<ReadEarlyData<'c, 'i, Data>> for ConnectionState<'c, 'i,
     }
 }
 
-impl<'c, 'i, Data> From<EncodeTlsData<'c, Data>> for ConnectionState<'c, 'i, Data> {
+impl<'c, Data> From<EncodeTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
     fn from(v: EncodeTlsData<'c, Data>) -> Self {
         Self::EncodeTlsData(v)
     }
 }
 
-impl<'c, 'i, Data> From<TransmitTlsData<'c, Data>> for ConnectionState<'c, 'i, Data> {
+impl<'c, Data> From<TransmitTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
     fn from(v: TransmitTlsData<'c, Data>) -> Self {
         Self::TransmitTlsData(v)
     }
@@ -354,7 +354,7 @@ impl<'c, 'i, Data> ReadEarlyData<'c, 'i, Data> {
     }
 }
 
-impl<'c, 'i> ReadEarlyData<'c, 'i, ServerConnectionData> {
+impl ReadEarlyData<'_, '_, ServerConnectionData> {
     /// decrypts and returns the next available app-data record
     // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
     pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {

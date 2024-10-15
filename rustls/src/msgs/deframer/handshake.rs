@@ -298,7 +298,7 @@ pub(crate) struct HandshakeIter<'a, 'b> {
     index: usize,
 }
 
-impl<'a, 'b> Iterator for HandshakeIter<'a, 'b> {
+impl<'b> Iterator for HandshakeIter<'_, 'b> {
     type Item = (InboundPlainMessage<'b>, usize);
 
     fn next(&mut self) -> Option<Self::Item> {
