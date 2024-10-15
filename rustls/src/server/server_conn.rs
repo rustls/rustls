@@ -716,7 +716,7 @@ mod connection {
     ///     let conn = accepted
     ///         .into_connection(config)
     ///         .unwrap();
-
+    ///
     ///     // Proceed with handling the ServerConnection.
     /// }
     /// # }
