@@ -1,3 +1,5 @@
+//! Key schedule maintenance for TLS1.3
+
 use alloc::boxed::Box;
 use alloc::string::ToString;
 
@@ -9,8 +11,6 @@ use crate::error::Error;
 use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{quic, KeyLog, Tls13CipherSuite};
-
-/// Key schedule maintenance for TLS1.3
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -1,4 +1,4 @@
-/// Macros used for unit testing.
+//! Macros used for unit testing.
 
 /// Instantiate the given test functions once for each built-in provider.
 ///
