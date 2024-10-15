@@ -44,11 +44,9 @@ impl ChunkVecBuffer {
 
     /// How many bytes we're storing
     pub(crate) fn len(&self) -> usize {
-        let mut len = 0;
-        for ch in &self.chunks {
-            len += ch.len();
-        }
-        len
+        self.chunks
+            .iter()
+            .fold(0usize, |acc, chunk| acc + chunk.len())
     }
 
     /// For a proposed append of `len` bytes, how many
