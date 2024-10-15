@@ -2108,7 +2108,7 @@ where
     }
 }
 
-impl<'a, C, S> io::Read for OtherSession<'a, C, S>
+impl<C, S> io::Read for OtherSession<'_, C, S>
 where
     C: DerefMut + Deref<Target = ConnectionCommon<S>>,
     S: SideData,
@@ -2119,7 +2119,7 @@ where
     }
 }
 
-impl<'a, C, S> io::Write for OtherSession<'a, C, S>
+impl<C, S> io::Write for OtherSession<'_, C, S>
 where
     C: DerefMut + Deref<Target = ConnectionCommon<S>>,
     S: SideData,
@@ -7297,7 +7297,7 @@ impl rustls::compress::CertCompressor for IdentityCompressor {
 
 struct FakeStream<'a>(&'a [u8]);
 
-impl<'a> io::Read for FakeStream<'a> {
+impl io::Read for FakeStream<'_> {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         let take = core::cmp::min(b.len(), self.0.len());
         let (taken, remain) = self.0.split_at(take);
@@ -7307,7 +7307,7 @@ impl<'a> io::Read for FakeStream<'a> {
     }
 }
 
-impl<'a> io::Write for FakeStream<'a> {
+impl io::Write for FakeStream<'_> {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         Ok(b.len())
     }

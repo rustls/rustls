@@ -1464,7 +1464,7 @@ pub(crate) enum CertificateExtension<'a> {
     Unknown(UnknownExtension),
 }
 
-impl<'a> CertificateExtension<'a> {
+impl CertificateExtension<'_> {
     pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::CertificateStatus(_) => ExtensionType::StatusRequest,
@@ -1516,7 +1516,7 @@ impl<'a> Codec<'a> for CertificateExtension<'a> {
     }
 }
 
-impl<'a> TlsListElement for CertificateExtension<'a> {
+impl TlsListElement for CertificateExtension<'_> {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
@@ -1581,7 +1581,7 @@ impl<'a> CertificateEntry<'a> {
     }
 }
 
-impl<'a> TlsListElement for CertificateEntry<'a> {
+impl TlsListElement for CertificateEntry<'_> {
     const SIZE_LEN: ListLength = ListLength::U24 {
         max: CERTIFICATE_MAX_SIZE_LIMIT,
         error: InvalidMessage::CertificatePayloadTooLarge,

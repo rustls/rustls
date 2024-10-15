@@ -540,7 +540,7 @@ mod connection {
         }
     }
 
-    impl<'a> io::Read for ReadEarlyData<'a> {
+    impl io::Read for ReadEarlyData<'_> {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.early_data.read(buf)
         }

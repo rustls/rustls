@@ -518,7 +518,7 @@ pub(super) mod danger {
         pub cfg: &'a mut ClientConfig,
     }
 
-    impl<'a> DangerousClientConfig<'a> {
+    impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
@@ -644,7 +644,7 @@ mod connection {
         }
     }
 
-    impl<'a> io::Write for WriteEarlyData<'a> {
+    impl io::Write for WriteEarlyData<'_> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             self.sess.write_early_data(buf)
         }

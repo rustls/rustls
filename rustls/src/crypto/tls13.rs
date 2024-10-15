@@ -51,7 +51,7 @@ impl HkdfExpander for HkdfExpanderUsingHmac {
 /// Implementation of `Hkdf` (and thence `HkdfExpander`) via `hmac::Hmac`.
 pub struct HkdfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
 
-impl<'a> Hkdf for HkdfUsingHmac<'a> {
+impl Hkdf for HkdfUsingHmac<'_> {
     fn extract_from_zero_ikm(&self, salt: Option<&[u8]>) -> Box<dyn HkdfExpander> {
         let zeroes = [0u8; hmac::Tag::MAX_LEN];
         Box::new(HkdfExpanderUsingHmac(self.0.with_key(
@@ -77,7 +77,7 @@ impl<'a> Hkdf for HkdfUsingHmac<'a> {
     }
 }
 
-impl<'a> HkdfPrkExtract for HkdfUsingHmac<'a> {
+impl HkdfPrkExtract for HkdfUsingHmac<'_> {
     fn extract_prk_from_secret(&self, salt: Option<&[u8]>, secret: &[u8]) -> Vec<u8> {
         let zeroes = [0u8; hmac::Tag::MAX_LEN];
         let salt = match salt {
