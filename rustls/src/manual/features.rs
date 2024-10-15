@@ -28,6 +28,8 @@ APIs ([`CryptoProvider`] for example).
 * OCSP stapling by servers
 * [RFC8879](https://tools.ietf.org/html/rfc8879) certificate compression by clients
   and servers `*`
+* Client-side Encrypted client hello (ECH)
+   ([draft-ietf-tls-esni](https://datatracker.ietf.org/doc/draft-ietf-tls-esni/)).
 
 ## Non-features
 
