@@ -390,7 +390,6 @@ version = "0.0.1"
 dependencies = [
  "libfuzzer-sys",
  "rustls",
- "rustls-pki-types",
 ]
 
 [[package]]

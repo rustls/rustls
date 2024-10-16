@@ -36,7 +36,7 @@ use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, ServerName};
+use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::RootCertStore;
 
 fn main() {
@@ -205,7 +205,7 @@ fn lookup_ech_configs(
     resolver: &Resolver,
     domain: &str,
     port: u16,
-) -> Option<pki_types::EchConfigListBytes<'static>> {
+) -> Option<EchConfigListBytes<'static>> {
     // For non-standard ports, lookup the ECHConfig using port-prefix naming
     // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
     let qname_to_lookup = match port {
@@ -232,7 +232,7 @@ fn lookup_ech_configs(
         .map(Into::into)
 }
 
-fn read_ech(path: &str) -> pki_types::EchConfigListBytes<'static> {
+fn read_ech(path: &str) -> EchConfigListBytes<'static> {
     let file = fs::File::open(path).unwrap_or_else(|_| panic!("Cannot open ECH file: {path}"));
     let mut reader = BufReader::new(file);
     let mut bytes = Vec::new();

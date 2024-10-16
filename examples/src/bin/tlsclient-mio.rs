@@ -329,9 +329,9 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 }
 
 mod danger {
-    use pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
+    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::DigitallySignedStruct;
 
     #[derive(Debug)]

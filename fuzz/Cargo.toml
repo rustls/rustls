@@ -10,7 +10,6 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = { git = "https://github.com/rust-fuzz/libfuzzer-sys.git" }
-pki-types = { package = "rustls-pki-types", version = "1" }
 rustls = { path = "../rustls" }
 
 # Prevent this from interfering with workspaces
