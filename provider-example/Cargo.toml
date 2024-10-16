@@ -16,7 +16,6 @@ hpke-rs-crypto = "0.2"
 hpke-rs-rust-crypto = "0.2"
 p256 = { version = "0.13.2", default-features = false, features = ["alloc", "ecdsa", "pkcs8"] }
 pkcs8 = "0.10.2"
-pki-types = { package = "rustls-pki-types", version = "1" }
 rand_core = { version = "0.6", features = ["getrandom"] }
 rustls = { path = "../rustls", default-features = false, features = ["logging", "tls12"] }
 rsa = { version = "0.9", features = ["sha2"], default-features = false }

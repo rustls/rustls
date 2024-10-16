@@ -10,8 +10,6 @@ use std::sync::Arc;
 use std::{env, net, process, thread, time};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use pki_types::pem::PemObject;
-use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
@@ -23,6 +21,8 @@ use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, SupportedKxGroup};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, UnixTime};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
@@ -96,10 +96,10 @@ struct Options {
     install_cert_compression_algs: CompressionAlgs,
     selected_provider: SelectedProvider,
     provider: CryptoProvider,
-    ech_config_list: Option<pki_types::EchConfigListBytes<'static>>,
+    ech_config_list: Option<EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
-    expect_ech_retry_configs: Option<pki_types::EchConfigListBytes<'static>>,
-    on_resume_ech_config_list: Option<pki_types::EchConfigListBytes<'static>>,
+    expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
+    on_resume_ech_config_list: Option<EchConfigListBytes<'static>>,
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,

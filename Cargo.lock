@@ -450,7 +450,6 @@ dependencies = [
  "base64",
  "env_logger",
  "rustls 0.23.14",
- "rustls-pki-types",
  "rustls-post-quantum",
 ]
 
@@ -2139,7 +2138,6 @@ dependencies = [
  "itertools 0.13.0",
  "rayon",
  "rustls 0.23.14",
- "rustls-pki-types",
  "tikv-jemallocator",
 ]
 
@@ -2165,7 +2163,6 @@ dependencies = [
  "mio 0.8.11",
  "rcgen",
  "rustls 0.23.14",
- "rustls-pki-types",
  "serde",
  "serde_derive",
  "tokio",
@@ -2182,7 +2179,6 @@ dependencies = [
  "once_cell",
  "openssl",
  "rustls 0.23.14",
- "rustls-pki-types",
 ]
 
 [[package]]
@@ -2228,7 +2224,6 @@ dependencies = [
  "rcgen",
  "rsa",
  "rustls 0.23.14",
- "rustls-pki-types",
  "rustls-webpki",
  "sha2",
  "signature",
