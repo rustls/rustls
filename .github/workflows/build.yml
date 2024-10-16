@@ -289,6 +289,7 @@ jobs:
   coverage:
     name: Measure coverage
     runs-on: ubuntu-latest
+    if: github.event_name != 'merge_group'
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -339,6 +340,7 @@ jobs:
   cross:
     name: cross-target testing
     runs-on: ubuntu-latest
+    if: github.event_name != 'merge_group'
     strategy:
       matrix:
         target:
