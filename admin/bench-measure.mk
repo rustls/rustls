@@ -50,7 +50,7 @@ clean:
 	rm -f perf-*.svg
 	cargo clean
 
-$(BENCH):
+$(BENCH): .FORCE
 	cargo build --profile=bench -p rustls --example bench
 
-
+.FORCE:
