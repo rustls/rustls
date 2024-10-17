@@ -524,18 +524,6 @@ impl KeyScheduleTraffic {
         secret
     }
 
-    pub(crate) fn resumption_master_secret_and_derive_ticket_psk(
-        &self,
-        hs_hash: &hash::Output,
-        nonce: &[u8],
-    ) -> OkmBlock {
-        let resumption_master_secret = self
-            .ks
-            .derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref());
-        self.ks
-            .derive_ticket_psk(&resumption_master_secret, nonce)
-    }
-
     pub(crate) fn export_keying_material(
         &self,
         out: &mut [u8],
@@ -586,6 +574,28 @@ impl KeyScheduleTraffic {
             Side::Server => (server_secrets, client_secrets),
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
+    }
+}
+
+pub(crate) struct ResumptionSecret<'a> {
+    kst: &'a KeyScheduleTraffic,
+    resumption_master_secret: OkmBlock,
+}
+
+impl<'a> ResumptionSecret<'a> {
+    pub(crate) fn new(kst: &'a KeyScheduleTraffic, hs_hash: &hash::Output) -> Self {
+        ResumptionSecret {
+            kst,
+            resumption_master_secret: kst
+                .ks
+                .derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref()),
+        }
+    }
+
+    pub(crate) fn derive_ticket_psk(&self, nonce: &[u8]) -> OkmBlock {
+        self.kst
+            .ks
+            .derive_ticket_psk(&self.resumption_master_secret, nonce)
     }
 }
 

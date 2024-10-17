@@ -38,6 +38,7 @@ use crate::sign::{CertifiedKey, Signer};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleTraffic,
+    ResumptionSecret,
 };
 use crate::tls13::{
     construct_client_verify_message, construct_server_verify_message, Tls13CipherSuite,
@@ -1426,9 +1427,8 @@ impl ExpectTraffic {
         }
 
         let handshake_hash = self.transcript.current_hash();
-        let secret = self
-            .key_schedule
-            .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
+        let secret = ResumptionSecret::new(&self.key_schedule, &handshake_hash)
+            .derive_ticket_psk(&nst.nonce.0);
 
         let now = self.config.current_time()?;
 
