@@ -72,9 +72,6 @@ fn tls13_handshake() {
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
             "Ok(WriteTraffic)"
         ],
         "client transcript mismatch"
@@ -88,9 +85,6 @@ fn tls13_handshake() {
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)"
@@ -219,9 +213,6 @@ fn early_data() {
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
             "Ok(WriteTraffic)"
         ]
     );
@@ -235,9 +226,6 @@ fn early_data() {
             "Ok(ReadEarlyData)",
             "Ok(TransmitTlsData)",
             "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)"

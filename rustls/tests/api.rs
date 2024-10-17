@@ -4082,9 +4082,9 @@ fn vectored_write_for_server_handshake_with_half_rtt_data() {
     {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
-        // 4 tickets
-        assert_eq!(wrlen, 103 * 4);
-        assert_eq!(pipe.writevs, vec![vec![103, 103, 103, 103]]);
+        // 4 tickets (in one flight)
+        assert_eq!(wrlen, 346);
+        assert_eq!(pipe.writevs, vec![vec![346]]);
     }
 
     assert!(!server.is_handshaking());
@@ -4129,8 +4129,8 @@ fn check_half_rtt_does_not_work(server_config: ServerConfig) {
     {
         let mut pipe = OtherSession::new(&mut client);
         let wrlen = server.write_tls(&mut pipe).unwrap();
-        assert_eq!(wrlen, 486);
-        assert_eq!(pipe.writevs, vec![vec![103, 103, 103, 103, 42, 32]]);
+        assert_eq!(wrlen, 420);
+        assert_eq!(pipe.writevs, vec![vec![346, 42, 32]]);
     }
 
     assert!(!server.is_handshaking());
