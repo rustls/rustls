@@ -837,17 +837,16 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let suite = st.suite;
 
         // 1. Verify the cert chain.
-        // 2. Verify any SCTs provided with the certificate.
-        // 3. Verify that the top certificate signed their kx.
-        // 4. If doing client auth, send our Certificate.
-        // 5. Complete the key exchange:
+        // 2. Verify that the top certificate signed their kx.
+        // 3. If doing client auth, send our Certificate.
+        // 4. Complete the key exchange:
         //    a) generate our kx pair
         //    b) emit a ClientKeyExchange containing it
         //    c) if doing client auth, emit a CertificateVerify
         //    d) derive the shared keys
         //    e) emit a CCS
         //    f) use the derived keys to start encryption
-        // 6. emit a Finished, our first encrypted message under the new keys.
+        // 5. emit a Finished, our first encrypted message under the new keys.
 
         // 1.
         let (end_entity, intermediates) = st
@@ -873,7 +872,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                     .send_cert_verify_error_alert(err)
             })?;
 
-        // 3.
+        // 2.
         // Build up the contents of the signed message.
         // It's ClientHello.random || ServerHello.random || ServerKeyExchange.params
         let sig_verified = {
@@ -905,7 +904,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         };
         cx.common.peer_certificates = Some(st.server_cert.cert_chain.into_owned());
 
-        // 4.
+        // 3.
         if let Some(client_auth) = &st.client_auth {
             let certs = match client_auth {
                 ClientAuthDetails::Empty { .. } => CertificateChain::default(),
@@ -914,7 +913,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             emit_certificate(&mut st.transcript, certs, cx.common);
         }
 
-        // 5a.
+        // 4a.
         let kx_params = tls12::decode_kx_params::<ServerKeyExchangeParams>(
             st.suite.kx,
             cx.common,
@@ -947,7 +946,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         cx.common.kx_state = KxState::Start(skxg);
         let kx = skxg.start()?;
 
-        // 5b.
+        // 4b.
         let mut transcript = st.transcript;
         emit_client_kx(&mut transcript, st.suite.kx, cx.common, kx.pub_key());
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
@@ -955,12 +954,12 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             .using_ems
             .then(|| transcript.current_hash());
 
-        // 5c.
+        // 4c.
         if let Some(ClientAuthDetails::Verify { signer, .. }) = &st.client_auth {
             emit_certverify(&mut transcript, signer.as_ref(), cx.common)?;
         }
 
-        // 5d. Derive secrets.
+        // 4d. Derive secrets.
         // An alert at this point will be sent in plaintext.  That must happen
         // prior to the CCS, or else the peer will try to decrypt it.
         let secrets = ConnectionSecrets::from_key_exchange(
@@ -976,10 +975,10 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         })?;
         cx.common.kx_state.complete();
 
-        // 5e. CCS. We are definitely going to switch on encryption.
+        // 4e. CCS. We are definitely going to switch on encryption.
         emit_ccs(cx.common);
 
-        // 5f. Now commit secrets.
+        // 4f. Now commit secrets.
         st.config.key_log.log(
             "CLIENT_RANDOM",
             &secrets.randoms.client,
@@ -991,7 +990,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             .record_layer
             .start_encrypting();
 
-        // 6.
+        // 5.
         emit_finished(&secrets, &mut transcript, cx.common);
 
         if st.must_issue_new_ticket {
