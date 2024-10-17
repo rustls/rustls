@@ -120,11 +120,10 @@ jobs:
           cargo run --locked -p rustls-examples --bin ech-client -- research.cloudflare.com cloudflare.com --path /cdn-cgi/trace |
             grep 'sni=encrypted'
 
-      # TOOD(@cpu): Restore when defo.ie misconfiguration is addressed.
-      #- name: Check ech-client (defo.ie)
-      #  run: >
-      #    cargo run --locked -p rustls-examples --bin ech-client -- --host defo.ie defo.ie www.defo.ie |
-      #      grep 'SSL_ECH_STATUS: success'
+      - name: Check ech-client (defo.ie)
+        run: >
+          cargo run --locked -p rustls-examples --bin ech-client -- --host defo.ie defo.ie www.defo.ie |
+            grep 'SSL_ECH_STATUS: success'
 
       - name: Check provider-example client
         run: cargo run --locked -p rustls-provider-example --example client
