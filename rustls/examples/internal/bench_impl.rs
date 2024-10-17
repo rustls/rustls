@@ -611,6 +611,7 @@ fn make_server_config(
         cfg.session_storage = Arc::new(NoServerSessionStorage {});
     }
 
+    cfg.send_tls13_tickets = 2; // matches BoringSSL/OpenSSL default
     cfg.max_fragment_size = max_fragment_size;
     Arc::new(cfg)
 }
