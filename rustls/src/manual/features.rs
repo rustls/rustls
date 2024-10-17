@@ -59,4 +59,40 @@ and will not support:
   path building. While dangerous, all authentication can be turned off if required --
   see the [example code](https://github.com/rustls/rustls/blob/992e2364a006b2e84a8cf6a7c3eaf0bdb773c9de/examples/src/bin/tlsclient-mio.rs#L318)_ `*`
 
+### About "custom extensions"
+
+OpenSSL allows an application to add arbitrary TLS extensions (via
+the `SSL_CTX_add_custom_ext` function and associated APIs).  We don't
+support this, with the following rationale:
+
+Such an API is limited to extensions that are quite narrow in scope:
+they cannot change the meaning of standard messages, or introduce new
+messages, or make any changes to the connection's cryptography.
+
+However, there is no reasonable way to technically limit that API to
+that set of extensions.  That makes the API pretty unsafe (in the
+TLS and cryptography sense, not memory safety sense).  This could
+cause security or interop failures.
+
+Instead, we suggest that potential users of that API consider:
+
+- whether their use can fit in standard extensions such as ALPN,
+  or [ALPS][alps][^2].
+- if not, whether they can fit in a more general extension, and define
+  and standardize that in the [IETF TLSWG][tlswg].
+
+Note the above is not a guarantee or offer that rustls will implement
+any specific extensions that are standardized by the IETF TLSWG.
+It is a non-goal of this project to implement absolutely everything.
+
+For experimentation and pre-standardization testing, we suggest
+forking rustls.
+
+See also: [Go's position on such an API][golang].
+
+[alps]: https://datatracker.ietf.org/doc/html/draft-vvv-tls-alps
+[golang]: https://github.com/golang/go/issues/51497
+[tlswg]: https://datatracker.ietf.org/wg/tls/charter/
+[^2]: rustls does not currently implement ALPS, but it is something we
+  would consider once standardised and deployed.
 */
