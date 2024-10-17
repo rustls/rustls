@@ -1296,8 +1296,9 @@ struct ExpectFinished {
 
 impl ExpectFinished {
     fn emit_ticket(
+        flight: &mut HandshakeFlightTls13<'_>,
         suite: &'static Tls13CipherSuite,
-        cx: &mut ServerContext<'_>,
+        cx: &ServerContext<'_>,
         secret: &ResumptionSecret<'_>,
         config: &ServerConfig,
     ) -> Result<(), Error> {
@@ -1346,16 +1347,13 @@ impl ExpectFinished {
             }
         }
 
-        let m = Message {
-            version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::NewSessionTicket,
-                payload: HandshakePayload::NewSessionTicketTls13(payload),
-            }),
+        let t = HandshakeMessagePayload {
+            typ: HandshakeType::NewSessionTicket,
+            payload: HandshakePayload::NewSessionTicketTls13(payload),
         };
+        trace!("sending new ticket {:?} (stateless: {})", t, stateless);
+        flight.add(t);
 
-        trace!("sending new ticket {:?} (stateless: {})", m, stateless);
-        cx.common.send_msg(m, true);
         Ok(())
     }
 }
@@ -1396,9 +1394,11 @@ impl State<ServerConnectionData> for ExpectFinished {
         let handshake_hash = self.transcript.current_hash();
         let resumption = ResumptionSecret::new(&key_schedule_traffic, &handshake_hash);
 
+        let mut flight = HandshakeFlightTls13::new(&mut self.transcript);
         for _ in 0..self.send_tickets {
-            Self::emit_ticket(self.suite, cx, &resumption, &self.config)?;
+            Self::emit_ticket(&mut flight, self.suite, cx, &resumption, &self.config)?;
         }
+        flight.finish(cx.common);
 
         // Application data may now flow, even if we have client auth enabled.
         cx.common
