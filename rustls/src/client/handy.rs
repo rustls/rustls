@@ -277,20 +277,21 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
 }
 
 test_for_each_provider! {
-    use std::prelude::v1::*;
     use alloc::sync::Arc;
+    use std::prelude::v1::*;
+
+    use pki_types::{ServerName, UnixTime};
+    use provider::cipher_suite;
+
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
+    use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
     use crate::msgs::handshake::CertificateChain;
     #[cfg(feature = "tls12")]
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
-    use crate::msgs::base::PayloadU16;
-    use provider::cipher_suite;
-
-    use pki_types::{ServerName, UnixTime};
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
