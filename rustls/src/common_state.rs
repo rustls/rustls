@@ -56,6 +56,7 @@ pub struct CommonState {
     pub(crate) enable_secret_extraction: bool,
     temper_counters: TemperCounters,
     pub(crate) refresh_traffic_keys_pending: bool,
+    pub(crate) fips: bool,
 }
 
 impl CommonState {
@@ -86,6 +87,7 @@ impl CommonState {
             enable_secret_extraction: false,
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
+            fips: false,
         }
     }
 

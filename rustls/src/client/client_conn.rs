@@ -752,7 +752,7 @@ mod connection {
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
         pub fn fips(&self) -> bool {
-            self.inner.core.data.fips
+            self.inner.core.common_state.fips
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
@@ -815,8 +815,8 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
+        common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
-        data.fips = config.fips();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -953,7 +953,6 @@ pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
     pub(super) ech_status: EchStatus,
-    pub(super) fips: bool,
 }
 
 impl ClientConnectionData {
@@ -962,7 +961,6 @@ impl ClientConnectionData {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
             ech_status: EchStatus::NotOffered,
-            fips: false,
         }
     }
 }

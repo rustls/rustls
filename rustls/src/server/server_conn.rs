@@ -670,6 +670,15 @@ mod connection {
             }
         }
 
+        /// Return true if the connection was made with a `ServerConfig` that is FIPS compatible.
+        ///
+        /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
+        /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
+        /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
+        pub fn fips(&self) -> bool {
+            self.inner.core.common_state.fips
+        }
+
         /// Extract secrets, so they can be used when configuring kTLS, for example.
         /// Should be used with care as it exposes secret key material.
         pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
@@ -1119,6 +1128,7 @@ impl ConnectionCore<ServerConnectionData> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
         common.enable_secret_extraction = config.enable_secret_extraction;
+        common.fips = config.fips();
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts)),
             ServerConnectionData::default(),
