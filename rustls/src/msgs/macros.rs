@@ -1,18 +1,12 @@
 /// A macro which defines an enum type.
 macro_rules! enum_builder {
-    ($(#[$comment:meta])* @U8 $($enum:tt)+) => {
-        enum_builder!(u8: $(#[$comment])* $($enum)+);
-    };
-    ($(#[$comment:meta])* @U16 $($enum:tt)+) => {
-        enum_builder!(u16: $(#[$comment])* $($enum)+);
-    };
     (
-        $uint:ty:
-        $(#[$comment:meta])*
+        $(#[doc = $comment:literal])*
+        #[repr($uint:ty)]
         $enum_vis:vis enum $enum_name:ident
         { $( $enum_var: ident => $enum_val: expr ),* $(,)? }
     ) => {
-        $(#[$comment])*
+        $(#[doc = $comment])*
         #[non_exhaustive]
         #[derive(Debug, PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
