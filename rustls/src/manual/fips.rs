@@ -42,8 +42,8 @@ or health-check strategy better than panicking.
 
 # aws-lc-rs FIPS approval status
 
-This is covered by [FIPS 140-3 certificate #4816](cert-4816).
-See [the security policy](policy-4816) for precisely which
+This is covered by [FIPS 140-3 certificate #4816][cert-4816].
+See [the security policy][policy-4816] for precisely which
 environments and functions this certificate covers.
 
 Later releases of aws-lc-rs may be covered by later certificates,
