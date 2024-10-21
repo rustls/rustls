@@ -48,7 +48,6 @@ use provider::sign::RsaSigningKey;
 use rustls::ProtocolVersion::TLSv1_2;
 
 mod test_raw_keys {
-    use super::*;
     use rustls::crypto::cipher::{
         InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundChunks,
         OutboundPlainMessage,
@@ -56,6 +55,8 @@ mod test_raw_keys {
     use rustls::crypto::tls13::OkmBlock;
     use rustls::internal::{derive_traffic_iv, derive_traffic_key};
     use rustls::{Connection, Tls13CipherSuite};
+
+    use super::*;
 
     #[test]
     fn successful_raw_key_connection_and_correct_peer_certificates() {
