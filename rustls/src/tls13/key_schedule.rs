@@ -900,14 +900,15 @@ where
 
 test_for_each_provider! {
     use core::fmt::Debug;
-    use std::vec;
     use std::prelude::v1::*;
+    use std::vec;
 
-    use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
     use provider::ring_like::aead;
     use provider::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
+
+    use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
     use crate::KeyLog;
 
     #[test]
@@ -1056,7 +1057,10 @@ test_for_each_provider! {
         let expander = TLS13_AES_128_GCM_SHA256_INTERNAL
             .hkdf_provider
             .expander_for_okm(&traffic_secret);
-        let key = derive_traffic_key(expander.as_ref(), TLS13_AES_128_GCM_SHA256_INTERNAL.aead_alg);
+        let key = derive_traffic_key(
+            expander.as_ref(),
+            TLS13_AES_128_GCM_SHA256_INTERNAL.aead_alg,
+        );
         let key = aead::UnboundKey::new(aead_alg, key.as_ref()).unwrap();
         let seal_output = seal_zeroes(key);
         let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();

@@ -301,9 +301,9 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 }
 
 test_for_each_provider! {
-    use std::sync::Arc;
-    use std::{vec, println};
     use std::prelude::v1::*;
+    use std::sync::Arc;
+    use std::{println, vec};
 
     use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};
