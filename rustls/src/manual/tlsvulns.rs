@@ -5,8 +5,8 @@
 Back in 2000 [Bellare and Namprempre](https://eprint.iacr.org/2000/025) discussed how to make authenticated
 encryption by composing separate encryption and authentication primitives.  That paper included this table:
 
-| Composition Method | Privacy || Integrity ||
-|--------------------|---------||-----------||
+| Composition Method | Privacy | | | Integrity | |
+|--------------------|---------|-|-|-----------|-|
 || IND-CPA | IND-CCA | NM-CPA | INT-PTXT | INT-CTXT |
 | Encrypt-and-MAC | insecure | insecure | insecure | secure | insecure |
 | MAC-then-encrypt | secure | insecure | insecure | secure | insecure |
