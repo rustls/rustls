@@ -7116,6 +7116,17 @@ fn test_server_fips_service_indicator() {
 }
 
 #[test]
+fn test_connection_fips_service_indicator() {
+    let client_config = Arc::new(make_client_config(KeyType::Rsa2048));
+    let server_config = Arc::new(make_server_config(KeyType::Rsa2048));
+    let conn_pair = make_pair_for_arc_configs(&client_config, &server_config);
+    // Each connection's FIPS status should reflect the FIPS status of the config it was created
+    // from.
+    assert_eq!(client_config.fips(), conn_pair.0.fips());
+    assert_eq!(server_config.fips(), conn_pair.1.fips());
+}
+
+#[test]
 fn test_client_fips_service_indicator_includes_require_ems() {
     if !provider_is_fips() {
         return;
