@@ -8,7 +8,7 @@ macro_rules! enum_builder {
     ) => {
         $(#[doc = $comment])*
         #[non_exhaustive]
-        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        #[derive(PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
             $( $enum_var),*
             ,Unknown($uint)
@@ -60,6 +60,15 @@ macro_rules! enum_builder {
                 match value {
                     $( $enum_name::$enum_var => $enum_val),*
                     ,$enum_name::Unknown(x) => x
+                }
+            }
+        }
+
+        impl core::fmt::Debug for $enum_name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                match self {
+                    $( $enum_name::$enum_var => f.write_str(stringify!($enum_var)), )*
+                    _ => write!(f, "{}(0x{:x?})", stringify!($enum_name), <$uint>::from(*self)),
                 }
             }
         }
