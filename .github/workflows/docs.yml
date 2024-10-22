@@ -48,7 +48,7 @@ jobs:
           restore-keys: cache-lychee-
 
       - name: Check links
-        uses: lycheeverse/lychee-action@v2.0.0
+        uses: lycheeverse/lychee-action@v2
         with:
           args: >
             --cache
