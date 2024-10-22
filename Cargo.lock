@@ -2112,7 +2112,6 @@ dependencies = [
  "rcgen",
  "ring",
  "rustls-pki-types",
- "rustls-post-quantum",
  "rustls-webpki",
  "rustversion",
  "serde",
@@ -2202,9 +2201,7 @@ name = "rustls-post-quantum"
 version = "0.2.0"
 dependencies = [
  "aws-lc-rs",
- "env_logger",
  "rustls 0.23.15",
- "webpki-roots",
 ]
 
 [[package]]

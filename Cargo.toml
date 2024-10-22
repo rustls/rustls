@@ -14,18 +14,23 @@ members = [
   "provider-example",
   # the main library and tests
   "rustls",
-  # experimental post-quantum algorithm support
-  "rustls-post-quantum",
   # rustls cryptography provider integration tests
   "rustls-provider-test",
 ]
-default-members = [
-  "bogo",
-  "examples",
-  "rustls",
+
+## Deliberately not included in `members`:
+exclude = [
+  # `cargo fuzz` integration (requires nightly)
+  "fuzz",
+  # experimental post-quantum algorithm support
+  # (conflicting feature requirements with `rustls`)
   "rustls-post-quantum",
 ]
-exclude = ["admin/rustfmt"]
+
+default-members = [
+  "examples",
+  "rustls",
+]
 resolver = "2"
 
 [profile.bench]

@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+
+"""
+Usage: admin/all-workspace-members
+
+Prints the set of all workspace members by package name, suitable
+for passing to cargo with the `-p`/`--package` option.
+
+"Workspace members" are computed by cargo, and included as
+the `workspace_members` item returned from `cargo metadata`.
+See
+<https://doc.rust-lang.org/cargo/reference/workspaces.html#the-members-and-exclude-fields>
+for documentation on what makes a package a workspace member
+or not.
+"""
+
+import subprocess
+import argparse
+import json
+
+
+def workspace_packages():
+    js = json.loads(
+        subprocess.check_output(
+            ["cargo", "metadata", "--no-deps", "--format-version=1"]
+        )
+    )
+    members = js["workspace_members"]
+    packages = [p for p in js["packages"] if p["id"] in members]
+    return packages
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__)
+    opts = ap.parse_args()
+
+    for p in workspace_packages():
+        print(p["name"])
