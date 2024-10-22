@@ -61,8 +61,8 @@ jobs:
             --verbose
             --cache
             --max-cache-age 1d
-            '**.md'
-            'target/doc/**'
+            '**/*.md'
+            'target/doc/**/*.html'
           fail: true
 
       - name: Package and upload artifact
