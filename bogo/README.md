@@ -30,11 +30,11 @@ are often two major categories to diagnose:
 Often the upstream will change expected error outputs (e.g. changing from
 `:DECODE_ERROR:` to `:NO_CERTS:`). The [`bogo_shim`][bogo_shim] `handle_err`
 function is responsible for mapping errors in combination with the `ErrorMap`
-and `TestErrorMap` data in [`config.json`][config.json]. These will typically
-need updating for new error outputs or changes in error outputs.
+and `TestErrorMap` data in [`config.json.in`][config.json.in]. These
+will typically need updating for new error outputs or changes in error outputs.
 
-[bogo_shim]: ../src/main.rs
-[config.json]: ./config.json
+[bogo_shim]: ./src/main.rs
+[config.json.in]: ./config.json.in
 
 ### Unhandled options
 
