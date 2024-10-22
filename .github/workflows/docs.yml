@@ -40,13 +40,6 @@ jobs:
         env:
           RUSTDOCFLAGS: -Dwarnings --cfg=docsrs --html-after-content tag.html
 
-      - name: Massage rustdoc output
-        run: |
-          # lockfile causes deployment step to go wrong, due to permissions
-          rm -f target/doc/.lock
-          # make resulting url be more sensible
-          mv target/doc/rustls target/doc/prerelease
-
       - name: Restore lychee cache
         uses: actions/cache@v4
         with:
@@ -58,12 +51,18 @@ jobs:
         uses: lycheeverse/lychee-action@v2.0.0
         with:
           args: >
-            --verbose
             --cache
             --max-cache-age 1d
             '**/*.md'
             'target/doc/**/*.html'
           fail: true
+
+      - name: Massage rustdoc output
+        run: |
+          # lockfile causes deployment step to go wrong, due to permissions
+          rm -f target/doc/.lock
+          # make resulting url be more sensible
+          mv target/doc/rustls target/doc/prerelease
 
       - name: Package and upload artifact
         uses: actions/upload-pages-artifact@v3
