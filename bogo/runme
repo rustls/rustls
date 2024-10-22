@@ -5,20 +5,22 @@
 
 set -xe
 
-cargo run -- -print-rustls-provider
-
 case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
   ring)
       cpp -P -DRING config.json.in > config.json
+      cargo run -- -print-rustls-provider
       ;;
   aws-lc-rs)
       cpp -P -DAWS_LC_RS config.json.in > config.json
+      cargo run -- -print-rustls-provider
       ;;
   aws-lc-rs-fips)
       cpp -P -DAWS_LC_RS -DFIPS config.json.in > config.json
+      cargo run --features fips -- -print-rustls-provider
       ;;
   post-quantum)
       cpp -P -DAWS_LC_RS -DPOST_QUANTUM config.json.in > config.json
+      cargo run --features post-quantum -- -print-rustls-provider
       ;;
   existing)
       ;;

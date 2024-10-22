@@ -17,7 +17,9 @@ use rustls::client::{
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, SupportedKxGroup};
+#[cfg(feature = "post-quantum")]
+use rustls::crypto::SupportedKxGroup;
+use rustls::crypto::{aws_lc_rs, ring, CryptoProvider};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
@@ -210,7 +212,9 @@ impl Options {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum SelectedProvider {
     AwsLcRs,
+    #[cfg_attr(not(feature = "fips"), allow(dead_code))]
     AwsLcRsFips,
+    #[cfg_attr(not(feature = "post-quantum"), allow(dead_code))]
     PostQuantum,
     Ring,
 }
@@ -222,7 +226,9 @@ impl SelectedProvider {
             .as_deref()
         {
             None | Some("aws-lc-rs") => Self::AwsLcRs,
+            #[cfg(feature = "fips")]
             Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
+            #[cfg(feature = "post-quantum")]
             Some("post-quantum") => Self::PostQuantum,
             Some("ring") => Self::Ring,
             Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
@@ -1535,6 +1541,7 @@ pub fn main() {
                 opts.groups.get_or_insert(Vec::new()).push(group);
 
                 // if X25519MLKEM768 is requested, insert it from rustls_post_quantum
+                #[cfg(feature = "post-quantum")]
                 if group == rustls_post_quantum::X25519MLKEM768.name() && opts.selected_provider == SelectedProvider::PostQuantum {
                     opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519MLKEM768);
                 }
@@ -1552,6 +1559,7 @@ pub fn main() {
             "-install-one-cert-compression-alg" => {
                 opts.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
             }
+            #[cfg(feature = "fips")]
             "-fips-202205" if opts.selected_provider == SelectedProvider::AwsLcRsFips => {
                 opts.provider = rustls::crypto::default_fips_provider();
             }
