@@ -158,6 +158,18 @@ impl ActiveKeyExchange for Active {
         Ok(SharedSecret::from(&combined.0[..]))
     }
 
+    /// Allow the X25519 computation to be offered and selected separately.
+    fn hybrid_component(&self) -> Option<(NamedGroup, &[u8])> {
+        Some((self.x25519.group(), self.x25519.pub_key()))
+    }
+
+    fn complete_hybrid_component(
+        self: Box<Self>,
+        peer_pub_key: &[u8],
+    ) -> Result<SharedSecret, Error> {
+        self.x25519.complete(peer_pub_key)
+    }
+
     fn pub_key(&self) -> &[u8] {
         &self.combined_pub_key
     }

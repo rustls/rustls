@@ -50,8 +50,7 @@
     "*-RSA_PKCS1_SHA256_LEGACY-*": "NYI on our side https://datatracker.ietf.org/doc/draft-ietf-tls-tls13-pkcs1/01/",
     "NoCommonSignatureAlgorithms-TLS12-Fallback": "requires TLS_RSA_WITH_AES_128_GCM_SHA256",
 #if defined(POST_QUANTUM)
-    "NotJustKyberKeyShare": "we only offer the first kxg in a clienthello",
-    "KyberKeyShareIncludedSecond": "^",
+    "KyberKeyShareIncludedSecond": "we only include a share for the first configured group",
     "KyberKeyShareIncludedThird": "^",
 #else
     "*Kyber*": "",
