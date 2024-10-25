@@ -168,6 +168,13 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) side: PhantomData<Side>,
 }
 
+impl<Side: ConfigSide, State> ConfigBuilder<Side, State> {
+    /// Return the crypto provider used to construct this builder.
+    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+        &self.provider
+    }
+}
+
 impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let side_name = core::any::type_name::<Side>();
