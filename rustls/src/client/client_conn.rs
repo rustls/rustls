@@ -120,9 +120,9 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>>;
 
-    /// Return true if the client only supports raw public keys.  
-    ///  
-    /// See [RFC 7250](https://www.rfc-editor.org/rfc/rfc7250).  
+    /// Return true if the client only supports raw public keys.
+    ///
+    /// See [RFC 7250](https://www.rfc-editor.org/rfc/rfc7250).
     fn only_raw_public_keys(&self) -> bool {
         false
     }
@@ -316,10 +316,9 @@ impl ClientConfig {
         provider: Arc<CryptoProvider>,
     ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsVersions {
-                provider,
-                time_provider: Arc::new(DefaultTimeProvider),
-            },
+            state: WantsVersions {},
+            provider,
+            time_provider: Arc::new(DefaultTimeProvider),
             side: PhantomData,
         }
     }
@@ -342,10 +341,9 @@ impl ClientConfig {
         time_provider: Arc<dyn TimeProvider>,
     ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsVersions {
-                provider,
-                time_provider,
-            },
+            state: WantsVersions {},
+            provider,
+            time_provider,
             side: PhantomData,
         }
     }
