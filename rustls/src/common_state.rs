@@ -523,10 +523,15 @@ impl CommonState {
                 .received_warning_alert()?;
             if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
                 return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
-            } else {
-                warn!("TLS alert warning received: {:?}", alert);
-                return Ok(());
             }
+
+            // Some implementations send pointless `user_canceled` alerts, don't log them
+            // in release mode (https://bugs.openjdk.org/browse/JDK-8323517).
+            if alert.description != AlertDescription::UserCanceled || cfg!(debug_assertions) {
+                warn!("TLS alert warning received: {alert:?}");
+            }
+
+            return Ok(());
         }
 
         Err(err)
