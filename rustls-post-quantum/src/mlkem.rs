@@ -8,8 +8,6 @@ use rustls::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, Supp
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{Error, NamedGroup, PeerMisbehaved, ProtocolVersion};
 
-use crate::MLKEM768_ENCAP_LEN;
-
 /// This is the [MLKEM] key exchange.
 ///
 /// [MLKEM]: https://datatracker.ietf.org/doc/draft-connolly-tls-mlkem-key-agreement

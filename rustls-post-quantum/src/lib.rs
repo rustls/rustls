@@ -63,7 +63,7 @@ use rustls::{Error, NamedGroup, PeerMisbehaved, ProtocolVersion};
 
 mod mlkem;
 
-use crate::mlkem::MLKEM768;
+pub use mlkem::MLKEM768;
 
 /// A `CryptoProvider` which includes `X25519MLKEM768`, `MLKEM512`,
 /// `MLKEM768`, and `MLKEM1024` key exchanges.
@@ -74,7 +74,9 @@ pub fn provider() -> CryptoProvider {
         .kx_groups
         .insert(0, &X25519MLKEM768);
 
-    parent.kx_groups.insert(1, &MLKEM768);
+    parent
+        .kx_groups
+        .insert(1, &crate::mlkem::MLKEM768);
 
     parent
 }
