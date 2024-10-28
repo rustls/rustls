@@ -10,7 +10,7 @@ APIs ([`CryptoProvider`] for example).
 
 * TLS1.2 and TLS1.3
 * ECDSA, Ed25519 or RSA server authentication by clients `*`
-* ECDSA, Ed25519 or RSA server authentication by servers `*`
+* ECDSA, Ed25519[^1] or RSA server authentication by servers `*`
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves `*`
 * AES128-GCM and AES256-GCM bulk encryption, with safe nonces `*`
 * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)) `*`
@@ -31,6 +31,11 @@ APIs ([`CryptoProvider`] for example).
   and servers `*`
 * Client-side Encrypted client hello (ECH)
    ([draft-ietf-tls-esni](https://datatracker.ietf.org/doc/draft-ietf-tls-esni/)).
+
+[^1]: Note that, at the time of writing, Ed25519 does not have wide support
+      in browsers.  It is also not supported by the WebPKI, because the
+      CA/Browser Forum Baseline Requirements do not support it for publicly
+      trusted certificates.
 
 ## Non-features
 
