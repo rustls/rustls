@@ -1,83 +1,11 @@
-//! This crate provides a [`rustls::crypto::CryptoProvider`] that includes a
-//! hybrid[^1], post-quantum-secure[^2] key exchange algorithm --
-//! specifically [X25519MLKEM768], as well as a non-hybrid
-//! post-quantum-secure key exchange algorithm, via three parameter sets.
-//!
-//! X25519MLKEM768 is pre-standardization, so you should treat
-//! this as experimental.  You may see unexpected interop failures, and
-//! the algorithm implemented here may not be the one that eventually
-//! becomes widely deployed.
-//!
-//! However, the two components of this key exchange are well regarded:
-//! X25519 alone is already used by default by rustls, and tends to have
-//! higher quality implementations than other elliptic curves.
-//! ML-KEM-768 was standardized by NIST in [FIPS203].
-//!
-//! [^1]: meaning: a construction that runs a classical and post-quantum
-//!       key exchange, and uses the output of both together.  This is a hedge
-//!       against the post-quantum half being broken.
-//!
-//! [^2]: a "post-quantum-secure" algorithm is one posited to be invulnerable
-//!       to attack using a cryptographically-relevant quantum computer.  In contrast,
-//!       classical algorithms would be broken by such a computer.  Note that such computers
-//!       do not currently exist, and may never exist, but current traffic could be captured
-//!       now and attacked later.
-//!
-//! [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/>
-//! [FIPS203]: <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.203.pdf>
-//!
-//! # How to use this crate
-//!
-//! There are a few options:
-//!
-//! **To use this as the rustls default provider**: include this code early in your program:
-//!
-//! ```rust
-//! rustls_post_quantum::provider().install_default().unwrap();
-//! ```
-//!
-//! **To incorporate just the key exchange algorithm(s) in a custom [`rustls::crypto::CryptoProvider`]**:
-//!
-//! ```rust
-//! use rustls::crypto::{aws_lc_rs, CryptoProvider};
-//! let parent = aws_lc_rs::default_provider();
-//! let my_provider = CryptoProvider {
-//!     kx_groups: vec![
-//!         &rustls_post_quantum::X25519MLKEM768,
-//!         aws_lc_rs::kx_group::X25519,
-//!         &rustls_post_quantum::MLKEM768,
-//!     ],
-//!     ..parent
-//! };
-//! ```
-//!
-
 use aws_lc_rs::kem;
-use aws_lc_rs::unstable::kem::ML_KEM_768;
+use aws_lc_rs::unstable::kem::{ML_KEM_1024, ML_KEM_512, ML_KEM_768};
 use rustls::crypto::aws_lc_rs::{default_provider, kx_group};
 use rustls::crypto::{
     ActiveKeyExchange, CompletedKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup,
 };
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{Error, NamedGroup, PeerMisbehaved, ProtocolVersion};
-
-mod mlkem;
-
-use crate::mlkem::MLKEM768;
-
-/// A `CryptoProvider` which includes `X25519MLKEM768`, `MLKEM512`,
-/// `MLKEM768`, and `MLKEM1024` key exchanges.
-pub fn provider() -> CryptoProvider {
-    let mut parent = default_provider();
-
-    parent
-        .kx_groups
-        .insert(0, &X25519MLKEM768);
-
-    parent.kx_groups.insert(1, &MLKEM768);
-
-    parent
-}
 
 /// This is the [X25519MLKEM768] key exchange.
 ///
@@ -108,8 +36,9 @@ impl SupportedKxGroup for X25519MLKEM768 {
     }
 
     fn start_and_complete(&self, client_share: &[u8]) -> Result<CompletedKeyExchange, Error> {
-        let Some(share) = ReceivedShare::new(client_share) else {
-            return Err(INVALID_KEY_SHARE);
+        let share = match ReceivedShare::new(client_share) {
+            Some(share) => share,
+            None => return Err(INVALID_KEY_SHARE),
         };
 
         let x25519 = kx_group::X25519.start_and_complete(share.x25519)?;
@@ -152,8 +81,11 @@ struct Active {
 
 impl ActiveKeyExchange for Active {
     fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
-        let Some(ciphertext) = ReceivedCiphertext::new(peer_pub_key) else {
-            return Err(INVALID_KEY_SHARE);
+        let ciphertext = match ReceivedCiphertext::new(peer_pub_key) {
+            Some(ct) => ct,
+            None => {
+                return Err(INVALID_KEY_SHARE);
+            }
         };
 
         let combined = CombinedSecret::combine(
@@ -164,18 +96,6 @@ impl ActiveKeyExchange for Active {
                 .map_err(|_| INVALID_KEY_SHARE)?,
         );
         Ok(SharedSecret::from(&combined.0[..]))
-    }
-
-    /// Allow the X25519 computation to be offered and selected separately.
-    fn hybrid_component(&self) -> Option<(NamedGroup, &[u8])> {
-        Some((self.x25519.group(), self.x25519.pub_key()))
-    }
-
-    fn complete_hybrid_component(
-        self: Box<Self>,
-        peer_pub_key: &[u8],
-    ) -> Result<SharedSecret, Error> {
-        self.x25519.complete(peer_pub_key)
     }
 
     fn pub_key(&self) -> &[u8] {
