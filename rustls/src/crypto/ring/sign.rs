@@ -66,6 +66,11 @@ pub fn any_ecdsa_type(der: &PrivateKeyDer<'_>) -> Result<Arc<dyn SigningKey>, Er
 }
 
 /// Parse `der` as any EdDSA key type, returning the first which works.
+///
+/// Note that, at the time of writing, Ed25519 does not have wide support
+/// in browsers.  It is also not supported by the WebPKI, because the
+/// CA/Browser Forum Baseline Requirements do not support it for publicly
+/// trusted certificates.
 pub fn any_eddsa_type(der: &PrivatePkcs8KeyDer<'_>) -> Result<Arc<dyn SigningKey>, Error> {
     // TODO: Add support for Ed448
     Ok(Arc::new(Ed25519SigningKey::new(
