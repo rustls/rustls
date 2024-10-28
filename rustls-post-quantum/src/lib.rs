@@ -1,6 +1,7 @@
 //! This crate provides a [`rustls::crypto::CryptoProvider`] that includes
 //! a hybrid[^1], post-quantum-secure[^2] key exchange algorithm --
-//! specifically [X25519MLKEM768].
+//! specifically [X25519MLKEM768], as well as a non-hybrid
+//! post-quantum-secure key exchange algorithm.
 //!
 //! X25519MLKEM768 is pre-standardization, so you should treat
 //! this as experimental.  You may see unexpected interop failures, and
@@ -35,7 +36,7 @@
 //! rustls_post_quantum::provider().install_default().unwrap();
 //! ```
 //!
-//! **To incorporate just the key exchange algorithm in a custom [`rustls::crypto::CryptoProvider`]**:
+//! **To incorporate just the key exchange algorithm(s) in a custom [`rustls::crypto::CryptoProvider`]**:
 //!
 //! ```rust
 //! use rustls::crypto::{aws_lc_rs, CryptoProvider};
@@ -44,6 +45,7 @@
 //!     kx_groups: vec![
 //!         &rustls_post_quantum::X25519MLKEM768,
 //!         aws_lc_rs::kx_group::X25519,
+//!         rustls_post_quantum::MLKEM768,
 //!     ],
 //!     ..parent
 //! };
@@ -59,14 +61,24 @@ use rustls::crypto::{
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{Error, NamedGroup, PeerMisbehaved, ProtocolVersion};
 
-/// A `CryptoProvider` which includes `X25519MLKEM768` key exchange.
+mod mlkem;
+
+/// A `CryptoProvider` which includes `X25519MLKEM768` and `MLKEM768`
+/// key exchanges.
 pub fn provider() -> CryptoProvider {
     let mut parent = default_provider();
+
     parent
         .kx_groups
-        .insert(0, &X25519MLKEM768);
+        .splice(0..0, [&X25519MLKEM768, MLKEM768]);
+
     parent
 }
+
+/// This is the [MLKEM] key exchange.
+///
+/// [MLKEM]: https://datatracker.ietf.org/doc/draft-connolly-tls-mlkem-key-agreement
+pub static MLKEM768: &dyn SupportedKxGroup = &mlkem::MlKem768;
 
 /// This is the [X25519MLKEM768] key exchange.
 ///
