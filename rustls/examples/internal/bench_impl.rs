@@ -259,7 +259,7 @@ fn bench_handshake(
 }
 
 fn bench_handshake_buffered(
-    rounds: u64,
+    mut rounds: u64,
     resume: ResumptionParam,
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
@@ -267,52 +267,70 @@ fn bench_handshake_buffered(
     let mut timings = Timings::default();
     let mut buffers = TempBuffers::new();
 
-    for _ in 0..rounds {
-        let mut client = time(&mut timings.client, || {
+    while rounds > 0 {
+        let mut client_time = 0f64;
+        let mut server_time = 0f64;
+
+        let mut client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
             ClientConnection::new(Arc::clone(&client_config), server_name).unwrap()
         });
-        let mut server = time(&mut timings.server, || {
+        let mut server = time(&mut server_time, || {
             ServerConnection::new(Arc::clone(&server_config)).unwrap()
         });
 
-        time(&mut timings.server, || {
+        time(&mut server_time, || {
             transfer(&mut buffers, &mut client, &mut server, None);
         });
-        time(&mut timings.client, || {
+        time(&mut client_time, || {
             transfer(&mut buffers, &mut server, &mut client, None);
         });
-        time(&mut timings.server, || {
+        time(&mut server_time, || {
             transfer(&mut buffers, &mut client, &mut server, None);
         });
-        time(&mut timings.client, || {
+        time(&mut client_time, || {
             transfer(&mut buffers, &mut server, &mut client, None);
         });
 
         // check we reached idle
         assert!(!client.is_handshaking());
         assert!(!server.is_handshaking());
-        assert_eq!(client.handshake_kind(), Some(resume.as_handshake_kind()));
-        assert_eq!(server.handshake_kind(), Some(resume.as_handshake_kind()));
+
+        // if we achieved the desired handshake shape, count this handshake.
+        if client.handshake_kind() == Some(resume.as_handshake_kind())
+            && server.handshake_kind() == Some(resume.as_handshake_kind())
+        {
+            timings.client += client_time;
+            timings.server += server_time;
+            rounds -= 1;
+        } else {
+            // otherwise, this handshake is ignored against the quota for this thread,
+            // and serves just to refresh the session cache.  that is mainly
+            // necessary for TLS1.3, where tickets are single-use and limited to
+            // 8 per server.
+        }
     }
 
     timings
 }
 
 fn bench_handshake_unbuffered(
-    rounds: u64,
+    mut rounds: u64,
     resume: ResumptionParam,
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 ) -> Timings {
     let mut timings = Timings::default();
 
-    for _ in 0..rounds {
-        let client = time(&mut timings.client, || {
+    while rounds > 0 {
+        let mut client_time = 0f64;
+        let mut server_time = 0f64;
+
+        let client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
             UnbufferedClientConnection::new(Arc::clone(&client_config), server_name).unwrap()
         });
-        let server = time(&mut timings.server, || {
+        let server = time(&mut server_time, || {
             UnbufferedServerConnection::new(Arc::clone(&server_config)).unwrap()
         });
 
@@ -320,22 +338,22 @@ fn bench_handshake_unbuffered(
         let mut client = Unbuffered::new_client(client);
         let mut server = Unbuffered::new_server(server);
 
-        let client_wrote = time(&mut timings.client, || client.communicate());
+        let client_wrote = time(&mut client_time, || client.communicate());
         if client_wrote {
             client.swap_buffers(&mut server);
         }
 
-        let server_wrote = time(&mut timings.server, || server.communicate());
+        let server_wrote = time(&mut server_time, || server.communicate());
         if server_wrote {
             server.swap_buffers(&mut client);
         }
 
-        let client_wrote = time(&mut timings.client, || client.communicate());
+        let client_wrote = time(&mut client_time, || client.communicate());
         if client_wrote {
             client.swap_buffers(&mut server);
         }
 
-        let server_wrote = time(&mut timings.server, || server.communicate());
+        let server_wrote = time(&mut server_time, || server.communicate());
         if server_wrote {
             server.swap_buffers(&mut client);
         }
@@ -343,14 +361,20 @@ fn bench_handshake_unbuffered(
         // check we reached idle
         assert!(!server.communicate());
         assert!(!client.communicate());
-        assert_eq!(
-            client.conn.handshake_kind(),
-            Some(resume.as_handshake_kind())
-        );
-        assert_eq!(
-            server.conn.handshake_kind(),
-            Some(resume.as_handshake_kind())
-        );
+
+        // if we achieved the desired handshake shape, count this handshake.
+        if client.conn.handshake_kind() == Some(resume.as_handshake_kind())
+            && server.conn.handshake_kind() == Some(resume.as_handshake_kind())
+        {
+            timings.client += client_time;
+            timings.server += server_time;
+            rounds -= 1;
+        } else {
+            // otherwise, this handshake is ignored against the quota for this thread,
+            // and serves just to refresh the session cache.  that is mainly
+            // necessary for TLS1.3, where tickets are single-use and limited to
+            // 8 per server.
+        }
     }
 
     timings
