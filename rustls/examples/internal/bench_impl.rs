@@ -4,10 +4,11 @@
 // etc. because it's unstable at the time of writing.
 
 use std::io::{self, Read, Write};
-use std::mem;
+use std::num::NonZeroUsize;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{mem, thread};
 
 use clap::{Parser, ValueEnum};
 use pki_types::pem::PemObject;
@@ -38,6 +39,7 @@ pub fn main() {
     let options = Options {
         work_multiplier: args.multiplier,
         api: args.api,
+        threads: args.threads,
     };
 
     match args.command() {
@@ -92,6 +94,9 @@ struct Args {
         help = "Multiplies the length of every test by the given float value"
     )]
     multiplier: f64,
+
+    #[arg(long, default_value = "1", help = "Number of threads to use")]
+    threads: NonZeroUsize,
 
     #[arg(long, value_enum, default_value_t = Api::Both, help = "Choose buffered or unbuffered API")]
     api: Api,
@@ -220,24 +225,35 @@ fn bench_handshake(
     );
 
     if options.api.use_buffered() {
-        report_handshake_result(
-            "handshakes",
-            params,
-            clientauth,
-            resume,
-            rounds,
-            bench_handshake_buffered(rounds, resume, client_config.clone(), server_config.clone()),
+        let results = multithreaded(
+            options.threads,
+            &client_config,
+            &server_config,
+            move |client_config, server_config| {
+                bench_handshake_buffered(rounds, resume, client_config, server_config)
+            },
         );
+
+        report_handshake_result("handshakes", params, clientauth, resume, rounds, results);
     }
 
     if options.api.use_unbuffered() {
+        let results = multithreaded(
+            options.threads,
+            &client_config,
+            &server_config,
+            move |client_config, server_config| {
+                bench_handshake_unbuffered(rounds, resume, client_config, server_config)
+            },
+        );
+
         report_handshake_result(
             "handshakes-unbuffered",
             params,
             clientauth,
             resume,
             rounds,
-            bench_handshake_unbuffered(rounds, resume, client_config, server_config),
+            results,
         );
     }
 }
@@ -340,16 +356,42 @@ fn bench_handshake_unbuffered(
     timings
 }
 
+/// Run `f` on `count` threads, and then return the timings produced
+/// by each thread.
+///
+/// `client_config` and `server_config` are cloned into each thread fn.
+fn multithreaded(
+    count: NonZeroUsize,
+    client_config: &Arc<ClientConfig>,
+    server_config: &Arc<ServerConfig>,
+    f: impl Fn(Arc<ClientConfig>, Arc<ServerConfig>) -> Timings + Send + Sync,
+) -> Vec<Timings> {
+    thread::scope(|s| {
+        let threads = (0..count.into())
+            .map(|_| {
+                let client_config = client_config.clone();
+                let server_config = server_config.clone();
+                s.spawn(|| f(client_config, server_config))
+            })
+            .collect::<Vec<_>>();
+
+        threads
+            .into_iter()
+            .map(|thr| thr.join().unwrap())
+            .collect::<Vec<Timings>>()
+    })
+}
+
 fn report_handshake_result(
     variant: &str,
     params: &BenchmarkParam,
     clientauth: ClientAuth,
     resume: ResumptionParam,
     rounds: u64,
-    timings: Timings,
+    timings: Vec<Timings>,
 ) {
-    println!(
-        "{}\t{:?}\t{:?}\t{:?}\tclient\t{}\t{}\t{:.2}\thandshake/s",
+    print!(
+        "{}\t{:?}\t{:?}\t{:?}\tclient\t{}\t{}\t",
         variant,
         params.version,
         params.key_type,
@@ -360,10 +402,11 @@ fn report_handshake_result(
             "server-auth"
         },
         resume.label(),
-        (rounds as f64) / timings.client
     );
-    println!(
-        "{}\t{:?}\t{:?}\t{:?}\tserver\t{}\t{}\t{:.2}\thandshake/s",
+
+    report_timings("handshakes/s", &timings, rounds as f64, |t| t.client);
+    print!(
+        "{}\t{:?}\t{:?}\t{:?}\tserver\t{}\t{}\t",
         variant,
         params.version,
         params.key_type,
@@ -374,11 +417,41 @@ fn report_handshake_result(
             "server-auth"
         },
         resume.label(),
-        (rounds as f64) / timings.server
+    );
+
+    report_timings("handshakes/s", &timings, rounds as f64, |t| t.server);
+}
+
+fn report_timings(
+    units: &str,
+    thread_timings: &[Timings],
+    work_per_thread: f64,
+    which: impl Fn(&Timings) -> f64,
+) {
+    // maintain old output for --threads=1
+    if let &[timing] = thread_timings {
+        println!("{:.2}\t{}", work_per_thread / which(&timing), units);
+        return;
+    }
+
+    let mut total_rate = 0.;
+    print!("threads\t{}\t", thread_timings.len());
+
+    for t in thread_timings.iter() {
+        let rate = work_per_thread / which(t);
+        total_rate += rate;
+        print!("{:.2}\t", rate);
+    }
+
+    println!(
+        "total\t{:.2}\tper-thread\t{:.2}\t{}",
+        total_rate,
+        total_rate / (thread_timings.len() as f64),
+        units,
     );
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 struct Timings {
     client: f64,
     server: f64,
@@ -716,6 +789,7 @@ impl ResumptionParam {
 struct Options {
     work_multiplier: f64,
     api: Api,
+    threads: NonZeroUsize,
 }
 
 impl Options {
