@@ -46,6 +46,15 @@ memory: $(BENCH)
 	$(MEMUSAGE) $^ memory TLS13_AES_256_GCM_SHA384 1000
 	$(MEMUSAGE) $^ memory TLS13_AES_256_GCM_SHA384 5000
 
+threads: $(BENCH)
+	for thr in $(shell admin/threads-seq.rs) ; do \
+	  $^ --threads $$thr handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$thr handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$thr handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$thr handshake TLS13_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$thr handshake-ticket TLS13_AES_256_GCM_SHA384 ; \
+	done
+
 clean:
 	rm -f perf-*.svg
 	cargo clean
