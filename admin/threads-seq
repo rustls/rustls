@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+
+# admin/thread-seq N
+#
+# This program prints a sequence of N integers for multithreaded
+# performance testing.  The integers are numbers of threads to
+# be sampled in a test.  The goal is to assist in graphing
+# how per-thread throughput relates to concurrency.
+#
+# The sequence is (at most) length N, starts at 2, includes the
+# number of CPU cores, and ends at 1.5 the number of CPU cores.
+# It does not have repeated items.
+#
+# We exceed the number of cores specifically to see the
+# "elbow" in the graph, when the number of threads tested
+# exceeds the number of cores.  (This is good because otherwise
+# -- assuming the software under test is perfectly scalable --
+# the graph would be a straight line parallel with the x axis.)
+
+import os, sys, math, itertools
+
+def equally_spaced(a, b, n):
+    diff = max(1, math.ceil((b - a) / n))
+    return list(range(a, b, diff))
+
+count = int(sys.argv[-1]) if len(sys.argv) > 1 else 16
+cpus = int(os.environ.get('CPU_COUNT', os.cpu_count()))
+end = int(cpus * 1.5)
+
+# more samples before cpu count than after
+before_count = int(count * 0.75)
+after_count = count - before_count
+
+before = range(2, cpus, max(1, cpus // before_count))
+after = range(cpus, end, (end - cpus) // after_count)
+
+print(" ".join(str(x) for x in itertools.chain(before, after)))
+
