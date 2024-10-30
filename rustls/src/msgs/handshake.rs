@@ -145,7 +145,7 @@ impl Codec<'_> for SessionId {
     fn encode(&self, bytes: &mut Vec<u8>) {
         debug_assert!(self.len <= 32);
         bytes.push(self.len as u8);
-        bytes.extend_from_slice(&self.data[..self.len]);
+        bytes.extend_from_slice(self.as_ref());
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
@@ -182,6 +182,12 @@ impl SessionId {
     #[cfg(feature = "tls12")]
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
+    }
+}
+
+impl AsRef<[u8]> for SessionId {
+    fn as_ref(&self) -> &[u8] {
+        &self.data[..self.len]
     }
 }
 

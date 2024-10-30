@@ -38,6 +38,10 @@ use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
 ///
 /// The keys and values are opaque.
 ///
+/// Inserted keys are randomly chosen by the library and have
+/// no internal structure (in other words, you may rely on all
+/// bits being uniformly random).  Queried keys are untrusted data.
+///
 /// Both the keys and values should be treated as
 /// **highly sensitive data**, containing enough key material
 /// to break all security of the corresponding sessions.
