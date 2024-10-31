@@ -26,7 +26,7 @@ impl Ticketer {
     /// The encryption mechanism used is Chacha20Poly1305.
     #[cfg(feature = "std")]
     pub fn new() -> Result<Arc<dyn ProducesTickets>, Error> {
-        Ok(Arc::new(crate::ticketer::TicketSwitcher::new(
+        Ok(Arc::new(crate::ticketer::TicketRotator::new(
             6 * 60 * 60,
             make_ticket_generator,
         )?))
@@ -244,7 +244,68 @@ mod tests {
     }
 
     #[test]
+    fn ticketrotator_switching_test() {
+        let t = Arc::new(crate::ticketer::TicketRotator::new(1, make_ticket_generator).unwrap());
+        let now = UnixTime::now();
+        let cipher1 = t.encrypt(b"ticket 1").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        {
+            // Trigger new ticketer
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 10,
+            )));
+        }
+        let cipher2 = t.encrypt(b"ticket 2").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+        {
+            // Trigger new ticketer
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 20,
+            )));
+        }
+        let cipher3 = t.encrypt(b"ticket 3").unwrap();
+        assert!(t.decrypt(&cipher1).is_none());
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+        assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
+    }
+
+    #[test]
+    fn ticketrotator_remains_usable_over_temporary_ticketer_creation_failure() {
+        let mut t = crate::ticketer::TicketRotator::new(1, make_ticket_generator).unwrap();
+        let now = UnixTime::now();
+        let cipher1 = t.encrypt(b"ticket 1").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        t.generator = fail_generator;
+        {
+            // Failed new ticketer; this means we still need to
+            // rotate.
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 10,
+            )));
+        }
+
+        // check post-failure encryption/decryption still works
+        let cipher2 = t.encrypt(b"ticket 2").unwrap();
+        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+
+        // do the rotation for real
+        t.generator = make_ticket_generator;
+        {
+            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
+                now.as_secs() + 20,
+            )));
+        }
+        let cipher3 = t.encrypt(b"ticket 3").unwrap();
+        assert!(t.decrypt(&cipher1).is_some());
+        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+        assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
+    }
+
+    #[test]
     fn ticketswitcher_switching_test() {
+        #[expect(deprecated)]
         let t = Arc::new(crate::ticketer::TicketSwitcher::new(1, make_ticket_generator).unwrap());
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
@@ -270,13 +331,9 @@ mod tests {
         assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
     }
 
-    #[cfg(test)]
-    fn fail_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
-        Err(GetRandomFailed)
-    }
-
     #[test]
     fn ticketswitcher_recover_test() {
+        #[expect(deprecated)]
         let mut t = crate::ticketer::TicketSwitcher::new(1, make_ticket_generator).unwrap();
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
@@ -316,5 +373,9 @@ mod tests {
         assert_eq!(format!("{:?}", t), expect);
         assert!(t.enabled());
         assert_eq!(t.lifetime(), 43200);
+    }
+
+    fn fail_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
+        Err(GetRandomFailed)
     }
 }
