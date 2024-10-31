@@ -6,8 +6,6 @@ use pki_types::UnixTime;
 
 use crate::lock::{Mutex, MutexGuard};
 use crate::server::ProducesTickets;
-#[cfg(not(feature = "std"))]
-use crate::time_provider::TimeProvider;
 use crate::{rand, Error};
 
 #[derive(Debug)]
@@ -21,13 +19,11 @@ pub(crate) struct TicketSwitcherState {
 /// A ticketer that has a 'current' sub-ticketer and a single
 /// 'previous' ticketer.  It creates a new ticketer every so
 /// often, demoting the current ticketer.
-#[cfg_attr(feature = "std", derive(Debug))]
+#[derive(Debug)]
 pub struct TicketSwitcher {
     pub(crate) generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
     lifetime: u32,
     state: Mutex<TicketSwitcherState>,
-    #[cfg(not(feature = "std"))]
-    time_provider: &'static dyn TimeProvider,
 }
 
 impl TicketSwitcher {
@@ -54,36 +50,6 @@ impl TicketSwitcher {
                     .as_secs()
                     .saturating_add(u64::from(lifetime)),
             }),
-        })
-    }
-
-    /// Creates a new `TicketSwitcher`, which rotates through sub-ticketers
-    /// based on the passage of time.
-    ///
-    /// `lifetime` is in seconds, and is how long the current ticketer
-    /// is used to generate new tickets.  Tickets are accepted for no
-    /// longer than twice this duration.  `generator` produces a new
-    /// `ProducesTickets` implementation.
-    #[cfg(not(feature = "std"))]
-    pub fn new<M: crate::lock::MakeMutex>(
-        lifetime: u32,
-        generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
-        time_provider: &'static dyn TimeProvider,
-    ) -> Result<Self, Error> {
-        Ok(Self {
-            generator,
-            lifetime,
-            state: Mutex::new::<M>(TicketSwitcherState {
-                next: Some(generator()?),
-                current: generator()?,
-                previous: None,
-                next_switch_time: time_provider
-                    .current_time()
-                    .unwrap()
-                    .as_secs()
-                    .saturating_add(u64::from(lifetime)),
-            }),
-            time_provider,
         })
     }
 
@@ -178,13 +144,7 @@ impl ProducesTickets for TicketSwitcher {
     }
 
     fn encrypt(&self, message: &[u8]) -> Option<Vec<u8>> {
-        #[cfg(feature = "std")]
         let now = UnixTime::now();
-        #[cfg(not(feature = "std"))]
-        let now = self
-            .time_provider
-            .current_time()
-            .unwrap();
 
         self.maybe_roll(now)?
             .current
@@ -192,13 +152,7 @@ impl ProducesTickets for TicketSwitcher {
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Option<Vec<u8>> {
-        #[cfg(feature = "std")]
         let now = UnixTime::now();
-        #[cfg(not(feature = "std"))]
-        let now = self
-            .time_provider
-            .current_time()
-            .unwrap();
 
         let state = self.maybe_roll(now)?;
 
@@ -212,16 +166,5 @@ impl ProducesTickets for TicketSwitcher {
                     .as_ref()
                     .and_then(|previous| previous.decrypt(ciphertext))
             })
-    }
-}
-
-#[cfg(not(feature = "std"))]
-impl core::fmt::Debug for TicketSwitcher {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("TicketSwitcher")
-            .field("generator", &self.generator)
-            .field("lifetime", &self.lifetime)
-            .field("state", &**self.state.lock().unwrap())
-            .finish()
     }
 }
