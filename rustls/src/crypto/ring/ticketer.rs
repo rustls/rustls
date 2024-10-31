@@ -255,36 +255,39 @@ mod tests {
         assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
     }
 
-    #[cfg(test)]
     fn fail_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
         Err(GetRandomFailed)
     }
 
     #[test]
-    fn ticketswitcher_recover_test() {
+    fn ticketswitcher_remains_usable_over_temporary_ticketer_creation_failure() {
         let mut t = crate::ticketer::TicketSwitcher::new(1, make_ticket_generator).unwrap();
         let now = UnixTime::now();
         let cipher1 = t.encrypt(b"ticket 1").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
         t.generator = fail_generator;
         {
-            // Failed new ticketer
+            // Failed new ticketer; this means we still need to
+            // rotate.
             t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
                 now.as_secs() + 10,
             )));
         }
-        t.generator = make_ticket_generator;
+
+        // check post-failure encryption/decryption still works
         let cipher2 = t.encrypt(b"ticket 2").unwrap();
         assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
         assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
+
+        // do the rotation for real
+        t.generator = make_ticket_generator;
         {
-            // recover
             t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
                 now.as_secs() + 20,
             )));
         }
         let cipher3 = t.encrypt(b"ticket 3").unwrap();
-        assert!(t.decrypt(&cipher1).is_none());
+        assert!(t.decrypt(&cipher1).is_some());
         assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
         assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
     }
