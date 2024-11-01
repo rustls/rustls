@@ -53,6 +53,8 @@ threads: $(BENCH)
 	  $^ --threads $$thr handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
 	  $^ --threads $$thr handshake TLS13_AES_256_GCM_SHA384 ; \
 	  $^ --threads $$thr handshake-ticket TLS13_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$thr bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
+	  $^ --threads $$thr bulk TLS13_AES_256_GCM_SHA384 ; \
 	done
 
 clean:
