@@ -507,14 +507,18 @@ fn bench_bulk(
     let rounds = total_data / plaintext_size;
 
     if options.api.use_buffered() {
+        let results = multithreaded(
+            options.threads,
+            &client_config,
+            &server_config,
+            move |client_config, server_config| {
+                bench_bulk_buffered(client_config, server_config, plaintext_size, rounds)
+            },
+        );
+
         report_bulk_result(
             "bulk",
-            bench_bulk_buffered(
-                client_config.clone(),
-                server_config.clone(),
-                plaintext_size,
-                rounds,
-            ),
+            results,
             plaintext_size,
             rounds,
             max_fragment_size,
@@ -523,9 +527,18 @@ fn bench_bulk(
     }
 
     if options.api.use_unbuffered() {
+        let results = multithreaded(
+            options.threads,
+            &client_config,
+            &server_config,
+            move |client_config, server_config| {
+                bench_bulk_unbuffered(client_config, server_config, plaintext_size, rounds)
+            },
+        );
+
         report_bulk_result(
             "bulk-unbuffered",
-            bench_bulk_unbuffered(client_config, server_config, plaintext_size, rounds),
+            results,
             plaintext_size,
             rounds,
             max_fragment_size,
@@ -539,29 +552,27 @@ fn bench_bulk_buffered(
     server_config: Arc<ServerConfig>,
     plaintext_size: u64,
     rounds: u64,
-) -> (f64, f64) {
+) -> Timings {
     let server_name = "localhost".try_into().unwrap();
     let mut client = ClientConnection::new(client_config, server_name).unwrap();
     client.set_buffer_limit(None);
     let mut server = ServerConnection::new(server_config).unwrap();
     server.set_buffer_limit(None);
 
+    let mut timings = Timings::default();
     let mut buffers = TempBuffers::new();
     do_handshake(&mut buffers, &mut client, &mut server);
 
-    let mut time_send = 0f64;
-    let mut time_recv = 0f64;
-
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
-        time(&mut time_send, || {
+        time(&mut timings.server, || {
             server.writer().write_all(&buf).unwrap();
         });
 
-        time_recv += transfer(&mut buffers, &mut server, &mut client, Some(buf.len()));
+        timings.client += transfer(&mut buffers, &mut server, &mut client, Some(buf.len()));
     }
 
-    (time_send, time_recv)
+    timings
 }
 
 fn bench_bulk_unbuffered(
@@ -569,7 +580,7 @@ fn bench_bulk_unbuffered(
     server_config: Arc<ServerConfig>,
     plaintext_size: u64,
     rounds: u64,
-) -> (f64, f64) {
+) -> Timings {
     let server_name = "localhost".try_into().unwrap();
     let mut client = Unbuffered::new_client(
         UnbufferedClientConnection::new(client_config, server_name).unwrap(),
@@ -579,28 +590,27 @@ fn bench_bulk_unbuffered(
 
     client.handshake(&mut server);
 
-    let mut time_send = 0f64;
-    let mut time_recv = 0f64;
+    let mut timings = Timings::default();
 
     let buf = vec![0; plaintext_size as usize];
     for _ in 0..rounds {
-        time(&mut time_send, || {
+        time(&mut timings.server, || {
             server.write(&buf);
         });
 
         server.swap_buffers(&mut client);
 
-        time(&mut time_recv, || {
+        time(&mut timings.client, || {
             client.read_and_discard(buf.len());
         });
     }
 
-    (time_send, time_recv)
+    timings
 }
 
 fn report_bulk_result(
     variant: &str,
-    (time_send, time_recv): (f64, f64),
+    timings: Vec<Timings>,
     plaintext_size: u64,
     rounds: u64,
     max_fragment_size: Option<usize>,
@@ -613,22 +623,23 @@ fn report_bulk_result(
             .unwrap_or_else(|| "default".to_string())
     );
     let total_mbs = ((plaintext_size * rounds) as f64) / (1024. * 1024.);
-    println!(
-        "{}\t{:?}\t{:?}\t{}\tsend\t{:.2}\tMB/s",
+    print!(
+        "{}\t{:?}\t{:?}\t{}\tsend\t",
         variant,
         params.version,
         params.ciphersuite.suite(),
         mfs_str,
-        total_mbs / time_send
     );
-    println!(
-        "{}\t{:?}\t{:?}\t{}\trecv\t{:.2}\tMB/s",
+    report_timings("MB/s", &timings, total_mbs, |t| t.server);
+
+    print!(
+        "{}\t{:?}\t{:?}\t{}\trecv\t",
         variant,
         params.version,
         params.ciphersuite.suite(),
         mfs_str,
-        total_mbs / time_recv
     );
+    report_timings("MB/s", &timings, total_mbs, |t| t.client);
 }
 
 fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
