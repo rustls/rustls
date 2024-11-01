@@ -486,7 +486,7 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2024-05-01
+          toolchain: nightly-2024-06-30
           # ^ sync with https://github.com/awslabs/cargo-check-external-types/blob/main/rust-toolchain.toml
       - run: cargo install --locked cargo-check-external-types
       - name: run cargo-check-external-types for rustls/
