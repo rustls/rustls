@@ -22,6 +22,7 @@ If you'd like to help out, please see [CONTRIBUTING.md](CONTRIBUTING.md).
 [![Documentation](https://docs.rs/rustls/badge.svg)](https://docs.rs/rustls/)
 [![Chat](https://img.shields.io/discord/976380008299917365?logo=discord)](https://discord.gg/MCSB76RU96)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/9034/badge)](https://www.bestpractices.dev/projects/9034)
+[![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20Rustls%20Guru-006BFF)](https://gurubase.io/g/rustls)
 
 ## Changelog
 
