@@ -30,7 +30,7 @@ pub(crate) mod hmac;
 pub(crate) mod kx;
 #[path = "../ring/quic.rs"]
 pub(crate) mod quic;
-#[cfg(any(feature = "std", feature = "hashbrown"))]
+#[cfg(feature = "std")]
 pub(crate) mod ticketer;
 #[cfg(feature = "tls12")]
 pub(crate) mod tls12;
@@ -229,7 +229,7 @@ pub mod kx_group {
 }
 
 pub use kx::ALL_KX_GROUPS;
-#[cfg(any(feature = "std", feature = "hashbrown"))]
+#[cfg(feature = "std")]
 pub use ticketer::Ticketer;
 
 use super::SupportedKxGroup;
