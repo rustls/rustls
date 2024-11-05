@@ -91,10 +91,10 @@ impl ActiveKeyExchange for Active {
     }
 }
 
-// IANA TLS Supported Group value 262, 0x106
+// IANA TLS Supported Group value 513, 0x0201
 //
 // https://www.iana.org/assignments/tls-para≈1meters/tls-parameters.xhtml#tls-parameters-8
-const NAMED_GROUP: NamedGroup = NamedGroup::Unknown(0x106);
+const NAMED_GROUP: NamedGroup = NamedGroup::Unknown(0x0201);
 
 const INVALID_KEY_SHARE: Error = Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare);
 
