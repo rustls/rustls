@@ -26,6 +26,11 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
+      - name: Install zola
+        uses: taiki-e/install-action@v2
+        with:
+          tool: zola@0.19.1
+
       - name: Generate version information
         run: |
           echo >tag.html \
@@ -39,6 +44,10 @@ jobs:
         run: cargo doc --locked --features read_buf,ring --no-deps --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings --cfg=docsrs --html-after-content tag.html
+
+      - name: Generate other pages
+        run: |
+          cd website && zola build --output-dir ../target/website/
 
       - name: Restore lychee cache
         uses: actions/cache@v4
@@ -61,13 +70,13 @@ jobs:
         run: |
           # lockfile causes deployment step to go wrong, due to permissions
           rm -f target/doc/.lock
-          # make resulting url be more sensible
-          mv target/doc/rustls target/doc/prerelease
+          # move the result into website root
+          mv target/doc/rustls target/website/docs
 
       - name: Package and upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./target/doc/
+          path: ./target/website/
 
   deploy:
     name: Deploy
@@ -76,7 +85,7 @@ jobs:
     needs: generate
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}prerelease/
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
