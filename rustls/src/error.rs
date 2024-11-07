@@ -678,8 +678,7 @@ mod tests {
     use std::prelude::v1::*;
     use std::{println, vec};
 
-    use super::{Error, InconsistentKeys, InvalidMessage};
-    use crate::error::{CertRevocationListError, OtherError};
+    use super::{CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError};
 
     #[test]
     fn certificate_error_equality() {

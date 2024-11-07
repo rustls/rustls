@@ -4,19 +4,13 @@ use std::{format, println, vec};
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::enums::CertificateType;
-use super::handshake::{ServerDhParams, ServerKeyExchange, ServerKeyExchangeParams};
-use crate::enums::{
-    CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
-};
-use crate::error::InvalidMessage;
-use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
-use crate::msgs::codec::{put_u16, Codec, Reader};
-use crate::msgs::enums::{
-    ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
+use super::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
+use super::codec::{put_u16, Codec, Reader};
+use super::enums::{
+    CertificateType, ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
-use crate::msgs::handshake::{
+use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
@@ -25,9 +19,13 @@ use crate::msgs::handshake::{
     HandshakePayload, HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
     NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
     PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
-    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId,
-    UnknownExtension,
+    ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
+    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
+use crate::enums::{
+    CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
+};
+use crate::error::InvalidMessage;
 use crate::verify::DigitallySignedStruct;
 
 #[test]
