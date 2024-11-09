@@ -6199,6 +6199,35 @@ fn test_server_rejects_clients_without_any_kx_groups() {
     );
 }
 
+/// Tests that session_ticket(35) extension
+/// is not sent if the client does not support TLS 1.2.
+#[test]
+fn test_no_session_ticket_request_on_tls_1_3() {
+    /// Panics if TLS 1.2 session_ticket(35) extension is detected.
+    ///
+    /// Does not actually alter the payload.
+    fn panic_on_session_ticket(msg: &mut Message) -> Altered {
+        if let MessagePayload::Handshake { parsed, encoded: _ } = &msg.payload {
+            if let HandshakePayload::ClientHello(ch) = &parsed.payload {
+                for ext in &ch.extensions {
+                    if matches!(ext, ClientExtension::SessionTicket(_)) {
+                        panic!("TLS 1.2 session_ticket extension in TLS 1.3 handshake detected.");
+                    }
+                }
+            }
+        }
+        Altered::InPlace
+    }
+
+    let client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&rustls::version::TLS13]);
+    let server_config = make_server_config(KeyType::Rsa2048);
+
+    let (client, server) = make_pair_for_configs(client_config, server_config);
+    let (mut client, mut server) = (client.into(), server.into());
+    transfer_altered(&mut client, panic_on_session_ticket, &mut server);
+}
+
 #[test]
 fn test_server_rejects_clients_without_any_kx_group_overlap() {
     for version in rustls::ALL_VERSIONS {

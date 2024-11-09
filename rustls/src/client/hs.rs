@@ -584,8 +584,8 @@ fn prepare_resumption<'a>(
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
         _ => {
-            if config.supports_version(ProtocolVersion::TLSv1_3)
-                || config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
+            if config.supports_version(ProtocolVersion::TLSv1_2)
+                && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
             {
                 // If we don't have a ticket, request one.
                 exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
