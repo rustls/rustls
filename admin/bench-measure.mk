@@ -3,7 +3,8 @@
 RECORD=perf record -F2000 --call-graph dwarf,16000 --
 FLAMEGRAPH=perf script | ~/FlameGraph/stackcollapse-perf.pl | ~/FlameGraph/flamegraph.pl >
 MEMUSAGE=/usr/bin/env time -f %M
-BENCH:=./target/release/examples/bench
+BENCH:=./target/release/rustls-bench
+PROVIDER:=aws-lc-rs
 
 perf: $(BENCH)
 	$(RECORD) $(BENCH) bulk TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
@@ -62,6 +63,6 @@ clean:
 	cargo clean
 
 $(BENCH): .FORCE
-	cargo build --profile=bench -p rustls-bench
+	cargo build --profile=bench -p rustls-bench --features $(PROVIDER)
 
 .FORCE:
