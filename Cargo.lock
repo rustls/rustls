@@ -2101,7 +2101,6 @@ dependencies = [
  "bencher",
  "brotli",
  "brotli-decompressor",
- "clap",
  "env_logger",
  "hashbrown",
  "hex",
@@ -2116,11 +2115,19 @@ dependencies = [
  "serde",
  "serde_json",
  "subtle",
- "tikv-jemallocator",
  "time",
  "webpki-roots",
  "zeroize",
  "zlib-rs",
+]
+
+[[package]]
+name = "rustls-bench"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "rustls 0.23.17",
+ "tikv-jemallocator",
 ]
 
 [[package]]

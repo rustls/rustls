@@ -11,18 +11,18 @@ use std::time::{Duration, Instant};
 use std::{mem, thread};
 
 use clap::{Parser, ValueEnum};
-use pki_types::pem::PemObject;
-use pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::client::{Resumption, UnbufferedClientConnection};
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+#[cfg(all(not(feature = "ring"), feature = "aws-lc-rs"))]
 use rustls::crypto::aws_lc_rs as provider;
-#[cfg(all(not(feature = "ring"), feature = "aws_lc_rs"))]
+#[cfg(all(not(feature = "ring"), feature = "aws-lc-rs"))]
 use rustls::crypto::aws_lc_rs::{cipher_suite, Ticketer};
 #[cfg(feature = "ring")]
 use rustls::crypto::ring as provider;
 #[cfg(feature = "ring")]
 use rustls::crypto::ring::{cipher_suite, Ticketer};
 use rustls::crypto::CryptoProvider;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::{
     NoServerSessionStorage, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
@@ -1252,43 +1252,38 @@ fn duration_nanos(d: Duration) -> f64 {
 }
 
 static ALL_BENCHMARKS: &[BenchmarkParam] = &[
-    #[cfg(all(feature = "tls12", not(feature = "fips")))]
+    #[cfg(not(feature = "fips"))]
     BenchmarkParam::new(
         KeyType::Rsa2048,
         cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
-    #[cfg(all(feature = "tls12", not(feature = "fips")))]
+    #[cfg(not(feature = "fips"))]
     BenchmarkParam::new(
         KeyType::EcdsaP256,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
         &rustls::version::TLS12,
     ),
-    #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::Rsa2048,
         cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         &rustls::version::TLS12,
     ),
-    #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::Rsa2048,
         cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
-    #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::EcdsaP256,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
-    #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::EcdsaP384,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
         &rustls::version::TLS12,
     ),
-    #[cfg(feature = "tls12")]
     BenchmarkParam::new(
         KeyType::Ed25519,
         cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,

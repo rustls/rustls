@@ -62,6 +62,6 @@ clean:
 	cargo clean
 
 $(BENCH): .FORCE
-	cargo build --profile=bench -p rustls --example bench
+	cargo build --profile=bench -p rustls-bench
 
 .FORCE:

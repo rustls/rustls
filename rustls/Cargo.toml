@@ -49,7 +49,6 @@ zlib = ["dep:zlib-rs"]
 [dev-dependencies]
 base64 = "0.22"
 bencher = "0.1.5"
-clap = { version = "4", features = ["derive", "env"] }
 env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest features)
 hex = "0.4"
 log = "0.4.8"
@@ -59,13 +58,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 time = { version = "0.3.6", default-features = false }
 webpki-roots = "0.26"
-
-[target.'cfg(not(target_env = "msvc"))'.dev-dependencies]
-tikv-jemallocator = "0.6"
-
-[[example]]
-name = "bench"
-path = "examples/internal/bench.rs"
 
 [[bench]]
 name = "benchmarks"
