@@ -30,7 +30,7 @@ subtle = { version = "2.5.0", default-features = false }
 webpki = { package = "rustls-webpki", version = "0.102.8", features = ["alloc"], default-features = false }
 pki-types = { package = "rustls-pki-types", version = "1.10", features = ["alloc"] }
 zeroize = "1.7"
-zlib-rs = { version = "0.3", optional = true }
+zlib-rs = { version = "0.4", optional = true }
 
 [features]
 default = ["aws_lc_rs", "logging", "std", "tls12"]
