@@ -29,7 +29,7 @@ use clap::Parser;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
-use hickory_resolver::Resolver;
+use hickory_resolver::{Resolver, TokioResolver};
 use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
 use rustls::crypto::aws_lc_rs;
@@ -39,7 +39,8 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::RootCertStore;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
 
     // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
@@ -48,12 +49,12 @@ fn main() {
     } else {
         ResolverConfig::google_https()
     };
-    let resolver = Resolver::new(resolver_config, ResolverOpts::default()).unwrap();
+    let resolver = Resolver::tokio(resolver_config, ResolverOpts::default());
     let server_ech_config = match args.grease {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.ech_config {
             Some(path) => Some(read_ech(&path)),
-            None => lookup_ech_configs(&resolver, &args.outer_hostname, args.port),
+            None => lookup_ech_configs(&resolver, &args.outer_hostname, args.port).await,
         },
     };
 
@@ -201,8 +202,8 @@ struct Args {
 }
 
 // TODO(@cpu): consider upstreaming to hickory-dns
-fn lookup_ech_configs(
-    resolver: &Resolver,
+async fn lookup_ech_configs(
+    resolver: &TokioResolver,
     domain: &str,
     port: u16,
 ) -> Option<EchConfigListBytes<'static>> {
@@ -215,6 +216,7 @@ fn lookup_ech_configs(
 
     resolver
         .lookup(qname_to_lookup, RecordType::HTTPS)
+        .await
         .ok()?
         .record_iter()
         .find_map(|r| match r.data() {

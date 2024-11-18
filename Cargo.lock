@@ -1138,9 +1138,9 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hickory-proto"
-version = "0.25.0-alpha.2"
+version = "0.25.0-alpha.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8270a1857fb962b9914aafd46a89a187a4e63d0eb4190c327e7c7b8256a2d055"
+checksum = "993f9d675890080b3bab88e475e6a0db4fe96b39b2fbd42a72eb315dc9009798"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -1158,9 +1158,7 @@ dependencies = [
  "once_cell",
  "rand",
  "rustls 0.23.14",
- "rustls-pemfile",
  "thiserror",
- "time",
  "tinyvec",
  "tokio",
  "tokio-rustls",
@@ -1171,9 +1169,9 @@ dependencies = [
 
 [[package]]
 name = "hickory-resolver"
-version = "0.25.0-alpha.2"
+version = "0.25.0-alpha.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46c110355b5703070d9e29c344d79818a7cde3de9c27fc35750defea6074b0ad"
+checksum = "0eec9ac701a9b34a77c8ccbe39d589db876290f6bdc6e05ac118fd114cb1ad26"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -2148,6 +2146,7 @@ dependencies = [
  "regex",
  "ring",
  "rustls 0.23.17",
+ "tokio",
 ]
 
 [[package]]
@@ -2178,15 +2177,6 @@ dependencies = [
  "once_cell",
  "openssl",
  "rustls 0.23.17",
- "rustls-pki-types",
-]
-
-[[package]]
-name = "rustls-pemfile"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
-dependencies = [
  "rustls-pki-types",
 ]
 
