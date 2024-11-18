@@ -2,31 +2,30 @@ mod ech_config {
     use hickory_resolver::config::{ResolverConfig, ResolverOpts};
     use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
     use hickory_resolver::proto::rr::{RData, RecordType};
-    use hickory_resolver::Resolver;
+    use hickory_resolver::{Resolver, TokioResolver};
     use rustls::internal::msgs::codec::{Codec, Reader};
     use rustls::internal::msgs::handshake::EchConfigPayload;
     use rustls::pki_types::EchConfigListBytes;
 
-    #[test]
-    fn cloudflare() {
-        test_deserialize_ech_config_list("research.cloudflare.com");
+    #[tokio::test]
+    async fn cloudflare() {
+        test_deserialize_ech_config_list("research.cloudflare.com").await;
     }
 
-    #[test]
-    fn defo_ie() {
-        test_deserialize_ech_config_list("defo.ie");
+    #[tokio::test]
+    async fn defo_ie() {
+        test_deserialize_ech_config_list("defo.ie").await;
     }
 
-    #[test]
-    fn tls_ech_dev() {
-        test_deserialize_ech_config_list("tls-ech.dev");
+    #[tokio::test]
+    async fn tls_ech_dev() {
+        test_deserialize_ech_config_list("tls-ech.dev").await;
     }
 
     /// Lookup the ECH config list for a domain and deserialize it.
-    fn test_deserialize_ech_config_list(domain: &str) {
-        let resolver =
-            Resolver::new(ResolverConfig::google_https(), ResolverOpts::default()).unwrap();
-        let tls_encoded_list = lookup_ech(&resolver, domain);
+    async fn test_deserialize_ech_config_list(domain: &str) {
+        let resolver = Resolver::tokio(ResolverConfig::google_https(), ResolverOpts::default());
+        let tls_encoded_list = lookup_ech(&resolver, domain).await;
         let parsed_configs = Vec::<EchConfigPayload>::read(&mut Reader::init(&tls_encoded_list))
             .expect("failed to deserialize ECH config list");
         assert!(!parsed_configs.is_empty());
@@ -37,9 +36,10 @@ mod ech_config {
 
     /// Use `resolver` to make an HTTPS record type query for `domain`, returning the
     /// first SvcParam EchConfig value found, panicking if none are returned.
-    fn lookup_ech(resolver: &Resolver, domain: &str) -> EchConfigListBytes<'static> {
+    async fn lookup_ech(resolver: &TokioResolver, domain: &str) -> EchConfigListBytes<'static> {
         resolver
             .lookup(domain, RecordType::HTTPS)
+            .await
             .expect("failed to lookup HTTPS record type")
             .record_iter()
             .find_map(|r| match r.data() {
