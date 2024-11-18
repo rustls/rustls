@@ -463,9 +463,8 @@ impl<'c, Data> EncodeTlsData<'c, Data> {
     /// Returns the number of bytes that were written into `outgoing_tls`, or an error if
     /// the provided buffer is too small. In the error case, `outgoing_tls` is not modified
     pub fn encode(&mut self, outgoing_tls: &mut [u8]) -> Result<usize, EncodeError> {
-        let chunk = match self.chunk.take() {
-            Some(chunk) => chunk,
-            None => return Err(EncodeError::AlreadyEncoded),
+        let Some(chunk) = self.chunk.take() else {
+            return Err(EncodeError::AlreadyEncoded);
         };
 
         let required_size = chunk.len();
