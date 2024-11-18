@@ -846,9 +846,8 @@ impl<Data> ConnectionCore<Data> {
                 }
             };
 
-            let msg = match opt_msg {
-                Some(msg) => msg,
-                None => break,
+            let Some(msg) = opt_msg else {
+                break;
             };
 
             match self.process_msg(msg, state, Some(sendable_plaintext)) {

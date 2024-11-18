@@ -122,9 +122,8 @@ impl CertifiedKey {
     /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
     /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
     pub fn keys_match(&self) -> Result<(), Error> {
-        let key_spki = match self.key.public_key() {
-            Some(key) => key,
-            None => return Err(InconsistentKeys::Unknown.into()),
+        let Some(key_spki) = self.key.public_key() else {
+            return Err(InconsistentKeys::Unknown.into());
         };
 
         let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;
