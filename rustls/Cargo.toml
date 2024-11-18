@@ -23,7 +23,7 @@ brotli = { version = "7", optional = true, default-features = false, features = 
 brotli-decompressor = { version = "4.0.1", optional = true } # 4.0.1 required for panic fix
 hashbrown = { version = "0.15", optional = true, default-features = false, features = ["default-hasher", "inline-more"] }
 log = { version = "0.4.8", optional = true }
-# remove once our MSRV is >= 1.70
+# only required for no-std
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
 ring = { version = "0.17", optional = true }
 subtle = { version = "2.5.0", default-features = false }

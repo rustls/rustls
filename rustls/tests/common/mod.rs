@@ -3,9 +3,8 @@
 
 use std::io;
 use std::ops::DerefMut;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use once_cell::sync::OnceCell;
 use pki_types::pem::PemObject;
 use pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
@@ -1329,8 +1328,8 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
     // needed to extend lifetime of Tls13CipherSuite to 'static
-    static TLS13_LIMITED_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
-    static TLS12_LIMITED_SUITE: OnceCell<rustls::Tls12CipherSuite> = OnceCell::new();
+    static TLS13_LIMITED_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
+    static TLS12_LIMITED_SUITE: OnceLock<rustls::Tls12CipherSuite> = OnceLock::new();
 
     let tls13_limited = TLS13_LIMITED_SUITE.get_or_init(|| {
         let tls13 = provider::cipher_suite::TLS13_AES_128_GCM_SHA256
@@ -1372,7 +1371,7 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
 }
 
 pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
-    static TLS13_PLAIN_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
+    static TLS13_PLAIN_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
 
     let tls13 = TLS13_PLAIN_SUITE.get_or_init(|| {
         let tls13 = provider::cipher_suite::TLS13_AES_256_GCM_SHA384
