@@ -88,9 +88,8 @@ impl Codec<'_> for Random {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let bytes = match r.take(32) {
-            Some(bytes) => bytes,
-            None => return Err(InvalidMessage::MissingData("Random")),
+        let Some(bytes) = r.take(32) else {
+            return Err(InvalidMessage::MissingData("Random"));
         };
 
         let mut opaque = [0; 32];
@@ -154,9 +153,8 @@ impl Codec<'_> for SessionId {
             return Err(InvalidMessage::TrailingData("SessionID"));
         }
 
-        let bytes = match r.take(len) {
-            Some(bytes) => bytes,
-            None => return Err(InvalidMessage::MissingData("SessionID")),
+        let Some(bytes) = r.take(len) else {
+            return Err(InvalidMessage::MissingData("SessionID"));
         };
 
         let mut out = [0u8; 32];
@@ -1913,9 +1911,8 @@ pub(crate) struct ServerDhParams {
 impl ServerDhParams {
     #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
-        let params = match kx.ffdhe_group() {
-            Some(params) => params,
-            None => panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group()),
+        let Some(params) = kx.ffdhe_group() else {
+            panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group());
         };
 
         Self {
