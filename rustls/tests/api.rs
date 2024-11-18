@@ -1514,9 +1514,8 @@ fn check_sni_error(alteration: impl Fn(&mut Message) -> Altered, expected_error:
         transfer_altered(&mut client, &alteration, &mut server);
         assert_eq!(server.process_new_packets(), Err(expected_error.clone()),);
 
-        let server_inner = match server {
-            rustls::Connection::Server(server) => server,
-            _ => unreachable!(),
+        let rustls::Connection::Server(server_inner) = server else {
+            unreachable!();
         };
         assert_eq!(None, server_inner.server_name());
     }
@@ -5018,11 +5017,18 @@ mod test_quic {
 
         // Key updates
 
-        let (mut client_secrets, mut server_secrets) = match (client_1rtt, server_1rtt) {
-            (quic::KeyChange::OneRtt { next: c, .. }, quic::KeyChange::OneRtt { next: s, .. }) => {
-                (c, s)
-            }
-            _ => unreachable!(),
+        let (
+            quic::KeyChange::OneRtt {
+                next: mut client_secrets,
+                ..
+            },
+            quic::KeyChange::OneRtt {
+                next: mut server_secrets,
+                ..
+            },
+        ) = (client_1rtt, server_1rtt)
+        else {
+            unreachable!();
         };
 
         let mut client_next = client_secrets.next_packet_keys();
