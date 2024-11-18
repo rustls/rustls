@@ -810,14 +810,11 @@ mod connection {
         /// application should call `alert.write()` to send the alert to the client. It should
         /// not call `accept()` again.
         pub fn accept(&mut self) -> Result<Option<Accepted>, (Error, AcceptedAlert)> {
-            let mut connection = match self.inner.take() {
-                Some(conn) => conn,
-                None => {
-                    return Err((
-                        Error::General("Acceptor polled after completion".into()),
-                        AcceptedAlert::empty(),
-                    ));
-                }
+            let Some(mut connection) = self.inner.take() else {
+                return Err((
+                    Error::General("Acceptor polled after completion".into()),
+                    AcceptedAlert::empty(),
+                ));
             };
 
             let message = match connection.first_handshake_message() {
