@@ -14,5 +14,5 @@ rustls = { version = "0.23.2", features = ["aws_lc_rs"], path = "../rustls" }
 aws-lc-rs = { version = "1.9", features = ["non-fips", "unstable"], default-features = false }
 
 [dev-dependencies]
-env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest features)
+env_logger = "0.11"
 webpki-roots = "0.26"

@@ -49,7 +49,7 @@ zlib = ["dep:zlib-rs"]
 [dev-dependencies]
 base64 = "0.22"
 bencher = "0.1.5"
-env_logger = "0.10" # 0.11 requires 1.71 MSRV even as a dev-dep (due to manifest features)
+env_logger = "0.11"
 hex = "0.4"
 log = "0.4.8"
 num-bigint = "0.4.4"
