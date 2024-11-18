@@ -97,9 +97,8 @@ impl SupportedKxGroup for X25519MLKEM768 {
     }
 
     fn start_and_complete(&self, client_share: &[u8]) -> Result<CompletedKeyExchange, Error> {
-        let share = match ReceivedShare::new(client_share) {
-            Some(share) => share,
-            None => return Err(INVALID_KEY_SHARE),
+        let Some(share) = ReceivedShare::new(client_share) else {
+            return Err(INVALID_KEY_SHARE);
         };
 
         let x25519 = kx_group::X25519.start_and_complete(share.x25519)?;
@@ -142,11 +141,8 @@ struct Active {
 
 impl ActiveKeyExchange for Active {
     fn complete(self: Box<Self>, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
-        let ciphertext = match ReceivedCiphertext::new(peer_pub_key) {
-            Some(ct) => ct,
-            None => {
-                return Err(INVALID_KEY_SHARE);
-            }
+        let Some(ciphertext) = ReceivedCiphertext::new(peer_pub_key) else {
+            return Err(INVALID_KEY_SHARE);
         };
 
         let combined = CombinedSecret::combine(
