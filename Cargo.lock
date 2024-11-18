@@ -133,18 +133,19 @@ checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
 name = "asn1"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3522623dbb7db59b34439c022ab0445a0257a62ad20d499da3a3507394708559"
+checksum = "18d97d0d2e60ad0595a73b82264dcd46c2f96769b0f555ae71c14122f0679f65"
 dependencies = [
  "asn1_derive",
+ "itoa",
 ]
 
 [[package]]
 name = "asn1_derive"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da79157fc864ed738b596d622929466c68ed48371f17a5f05e329880420a160d"
+checksum = "00cec5ab4e9217b82bdd194bf6a4c74890a7e6d530159546bd83684f42211b8a"
 dependencies = [
  "proc-macro2",
  "quote",
