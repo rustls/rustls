@@ -609,11 +609,11 @@ mod static_default {
     #[cfg(not(feature = "std"))]
     use alloc::boxed::Box;
     use alloc::sync::Arc;
+    #[cfg(feature = "std")]
+    use std::sync::OnceLock;
 
     #[cfg(not(feature = "std"))]
     use once_cell::race::OnceBox;
-    #[cfg(feature = "std")]
-    use once_cell::sync::OnceCell;
 
     use super::CryptoProvider;
 
@@ -638,7 +638,7 @@ mod static_default {
     }
 
     #[cfg(feature = "std")]
-    static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();
+    static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
     #[cfg(not(feature = "std"))]
     static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
 }
