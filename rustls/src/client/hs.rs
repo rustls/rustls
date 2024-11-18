@@ -594,19 +594,16 @@ fn prepare_resumption<'a>(
         }
     };
 
-    let tls13 = match resuming.map(|csv| csv.tls13()) {
-        Some(tls13) => tls13,
-        None => {
-            // TLS 1.2; send the ticket if we have support this protocol version
-            if config.supports_version(ProtocolVersion::TLSv1_2)
-                && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
-            {
-                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                    Payload::new(resuming.ticket()),
-                )));
-            }
-            return None; // TLS 1.2, so nothing to return here
+    let Some(tls13) = resuming.map(|csv| csv.tls13()) else {
+        // TLS 1.2; send the ticket if we have support this protocol version
+        if config.supports_version(ProtocolVersion::TLSv1_2)
+            && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
+        {
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+                Payload::new(resuming.ticket()),
+            )));
         }
+        return None; // TLS 1.2, so nothing to return here
     };
 
     if !config.supports_version(ProtocolVersion::TLSv1_3) {
@@ -1039,16 +1036,13 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks us to use a ciphersuite we didn't offer.
         let config = &self.next.input.config;
-        let cs = match config.find_cipher_suite(hrr.cipher_suite) {
-            Some(cs) => cs,
-            None => {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
-                    )
-                });
-            }
+        let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
+            return Err({
+                cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
+                )
+            });
         };
 
         // Or offers ECH related extensions when we didn't offer ECH.
@@ -1102,14 +1096,11 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                let skxg = match config.find_kx_group(group, ProtocolVersion::TLSv1_3) {
-                    Some(skxg) => skxg,
-                    None => {
-                        return Err(cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
-                        ));
-                    }
+                let Some(skxg) = config.find_kx_group(group, ProtocolVersion::TLSv1_3) else {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
+                    ));
                 };
 
                 cx.common.kx_state = KxState::Start(skxg);

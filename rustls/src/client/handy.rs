@@ -328,11 +328,8 @@ test_for_each_provider! {
             c.remove_tls12_session(&name);
         }
 
-        #[cfg_attr(not(feature = "tls12"), allow(clippy::infallible_destructuring_match))]
-        let tls13_suite = match cipher_suite::TLS13_AES_256_GCM_SHA384 {
-            SupportedCipherSuite::Tls13(inner) => inner,
-            #[cfg(feature = "tls12")]
-            _ => unreachable!(),
+        let SupportedCipherSuite::Tls13(tls13_suite) = cipher_suite::TLS13_AES_256_GCM_SHA384 else {
+            unreachable!();
         };
         c.insert_tls13_ticket(
             name.clone(),

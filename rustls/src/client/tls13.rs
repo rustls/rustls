@@ -102,16 +102,13 @@ pub(super) fn handle_server_hello(
         (server_hello.psk_index(), early_key_schedule)
     {
         if let Some(ref resuming) = resuming_session {
-            let resuming_suite = match suite.can_resume_from(resuming.suite()) {
-                Some(resuming) => resuming,
-                None => {
-                    return Err({
-                        cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
-                        )
-                    });
-                }
+            let Some(resuming_suite) = suite.can_resume_from(resuming.suite()) else {
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
+                    )
+                });
             };
 
             // If the server varies the suite here, we will have encrypted early data with
@@ -912,19 +909,16 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             HandshakePayload::CompressedCertificate
         )?;
 
-        let decompressor = match self
+        let Some(decompressor) = self
             .config
             .cert_decompressors
             .iter()
             .find(|item| item.algorithm() == compressed_cert.alg)
-        {
-            Some(dec) => dec,
-            None => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::BadCertificate,
-                    PeerMisbehaved::SelectedUnofferedCertCompression,
-                ));
-            }
+        else {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::BadCertificate,
+                PeerMisbehaved::SelectedUnofferedCertCompression,
+            ));
         };
 
         if compressed_cert.uncompressed_len as usize > CERTIFICATE_MAX_SIZE_LIMIT {
@@ -1174,12 +1168,11 @@ fn emit_compressed_certificate_tls13(
     let mut cert_payload = CertificatePayloadTls13::new(certkey.cert.iter(), None);
     cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
 
-    let compressed = match config
+    let Ok(compressed) = config
         .cert_compression_cache
         .compression_for(compressor, &cert_payload)
-    {
-        Ok(compressed) => compressed,
-        Err(_) => return emit_certificate_tls13(flight, Some(certkey), auth_context),
+    else {
+        return emit_certificate_tls13(flight, Some(certkey), auth_context);
     };
 
     flight.add(HandshakeMessagePayload {
