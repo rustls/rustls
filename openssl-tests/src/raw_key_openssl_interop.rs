@@ -14,15 +14,15 @@ mod client {
     use rustls::crypto::{
         aws_lc_rs as provider, verify_tls13_signature_with_raw_key, WebPkiSupportedAlgorithms,
     };
+    use rustls::pki_types::pem::PemObject;
+    use rustls::pki_types::{
+        CertificateDer, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime,
+    };
     use rustls::sign::CertifiedKey;
     use rustls::version::TLS13;
     use rustls::{
         CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct, Error,
         InconsistentKeys, PeerIncompatible, SignatureScheme, Stream,
-    };
-    use rustls_pki_types::pem::PemObject;
-    use rustls_pki_types::{
-        CertificateDer, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer, UnixTime,
     };
 
     /// Build a `ClientConfig` with the given client private key and a server public key to trust.
@@ -164,6 +164,8 @@ mod server {
     use rustls::crypto::{
         aws_lc_rs as provider, verify_tls13_signature_with_raw_key, WebPkiSupportedAlgorithms,
     };
+    use rustls::pki_types::pem::PemObject;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer, UnixTime};
     use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
     use rustls::sign::CertifiedKey;
@@ -172,8 +174,6 @@ mod server {
         CertificateError, DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys,
         PeerIncompatible, ServerConfig, ServerConnection, SignatureScheme,
     };
-    use rustls_pki_types::pem::PemObject;
-    use rustls_pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer, UnixTime};
 
     /// Build a `ServerConfig` with the given server private key and a client public key to trust.
     pub(super) fn make_config(server_private_key: &str, client_pub_key: &str) -> ServerConfig {
