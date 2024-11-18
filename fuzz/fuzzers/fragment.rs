@@ -10,14 +10,12 @@ use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessa
 
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);
-    let msg = match OutboundOpaqueMessage::read(&mut rdr) {
-        Ok(msg) => msg,
-        Err(_) => return,
+    let Ok(msg) = OutboundOpaqueMessage::read(&mut rdr) else {
+        return;
     };
 
-    let msg = match Message::try_from(msg.into_plain_message()) {
-        Ok(msg) => msg,
-        Err(_) => return,
+    let Ok(msg) = Message::try_from(msg.into_plain_message()) else {
+        return;
     };
 
     let mut frg = MessageFragmenter::default();
