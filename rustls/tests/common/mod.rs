@@ -1346,9 +1346,10 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     });
 
     let tls12_limited = TLS12_LIMITED_SUITE.get_or_init(|| {
-        let tls12 = match provider::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 {
-            SupportedCipherSuite::Tls12(tls12) => tls12,
-            _ => unreachable!(),
+        let SupportedCipherSuite::Tls12(tls12) =
+            provider::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        else {
+            unreachable!();
         };
 
         rustls::Tls12CipherSuite {
