@@ -909,12 +909,13 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             HandshakePayload::CompressedCertificate
         )?;
 
-        let Some(decompressor) = self
+        let selected_decompressor = self
             .config
             .cert_decompressors
             .iter()
-            .find(|item| item.algorithm() == compressed_cert.alg)
-        else {
+            .find(|item| item.algorithm() == compressed_cert.alg);
+
+        let Some(decompressor) = selected_decompressor else {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::BadCertificate,
                 PeerMisbehaved::SelectedUnofferedCertCompression,

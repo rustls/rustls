@@ -279,18 +279,19 @@ mod client_hello {
                     ));
                 }
 
-                for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                    let now = self.config.current_time()?;
+                let now = self.config.current_time()?;
 
-                    let Some(resume) = self
+                for (i, psk_id) in psk_offer.identities.iter().enumerate() {
+                    let maybe_resume_data = self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .map(|resumedata| {
                             resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
                         })
                         .filter(|resumedata| {
                             hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
-                        })
-                    else {
+                        });
+
+                    let Some(resume) = maybe_resume_data else {
                         continue;
                     };
 
@@ -966,12 +967,13 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             HandshakePayload::CompressedCertificate
         )?;
 
-        let Some(decompressor) = self
+        let selected_decompressor = self
             .config
             .cert_decompressors
             .iter()
-            .find(|item| item.algorithm() == compressed_cert.alg)
-        else {
+            .find(|item| item.algorithm() == compressed_cert.alg);
+
+        let Some(decompressor) = selected_decompressor else {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::BadCertificate,
                 PeerMisbehaved::SelectedUnofferedCertCompression,
