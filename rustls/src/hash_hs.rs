@@ -183,9 +183,10 @@ impl Clone for HandshakeHash {
     }
 }
 
-test_for_each_provider! {
-    use provider::hash::SHA256;
-
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
+    use super::provider::hash::SHA256;
     use super::*;
     use crate::crypto::hash::Hash;
     use crate::enums::{HandshakeType, ProtocolVersion};

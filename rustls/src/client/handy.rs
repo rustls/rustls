@@ -276,13 +276,15 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
     }
 }
 
-test_for_each_provider! {
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use alloc::sync::Arc;
     use std::prelude::v1::*;
 
     use pki_types::{ServerName, UnixTime};
-    use provider::cipher_suite;
 
+    use super::provider::cipher_suite;
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
     use crate::msgs::base::PayloadU16;
@@ -328,7 +330,8 @@ test_for_each_provider! {
             c.remove_tls12_session(&name);
         }
 
-        let SupportedCipherSuite::Tls13(tls13_suite) = cipher_suite::TLS13_AES_256_GCM_SHA384 else {
+        let SupportedCipherSuite::Tls13(tls13_suite) = cipher_suite::TLS13_AES_256_GCM_SHA384
+        else {
             unreachable!();
         };
         c.insert_tls13_ticket(

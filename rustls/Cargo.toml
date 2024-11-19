@@ -52,6 +52,7 @@ bencher = { workspace = true }
 env_logger = { workspace = true }
 hex = { workspace = true }
 log = { workspace = true }
+macro_rules_attribute = { workspace = true }
 num-bigint = { workspace = true }
 rcgen = { workspace = true }
 serde = { workspace = true }

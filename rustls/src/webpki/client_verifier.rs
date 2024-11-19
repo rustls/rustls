@@ -428,7 +428,9 @@ pub(crate) enum AnonymousClientPolicy {
     Deny,
 }
 
-test_for_each_provider! {
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use std::prelude::v1::*;
     use std::sync::Arc;
     use std::{format, println, vec};
@@ -436,7 +438,7 @@ test_for_each_provider! {
     use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
-    use super::WebPkiClientVerifier;
+    use super::{provider, WebPkiClientVerifier};
     use crate::server::VerifierBuilderError;
     use crate::RootCertStore;
 
