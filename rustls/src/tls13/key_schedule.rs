@@ -898,16 +898,17 @@ where
     f(expander, info)
 }
 
-test_for_each_provider! {
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use core::fmt::Debug;
     use std::prelude::v1::*;
     use std::vec;
 
-    use provider::ring_like::aead;
-    use provider::tls13::{
+    use super::provider::ring_like::aead;
+    use super::provider::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
-
     use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
     use crate::KeyLog;
 
@@ -1085,13 +1086,15 @@ test_for_each_provider! {
     }
 }
 
-bench_for_each_provider! {
+#[cfg(all(test, bench))]
+#[macro_rules_attribute::apply(bench_for_each_provider)]
+mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use core::fmt::Debug;
 
+        use super::provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-        use provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::KeyLog;
 
         fn extract_traffic_secret(ks: &KeySchedule, kind: SecretKind) {
@@ -1109,8 +1112,7 @@ bench_for_each_provider! {
                 .expander_for_okm(&traffic_secret);
             test::black_box(derive_traffic_key(
                 traffic_secret_expander.as_ref(),
-                TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
-                    .aead_alg,
+                TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.aead_alg,
             ));
             test::black_box(derive_traffic_iv(traffic_secret_expander.as_ref()));
         }

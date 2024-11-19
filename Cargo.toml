@@ -62,6 +62,7 @@ hpke-rs-crypto = "0.2"
 hpke-rs-rust-crypto = "0.2"
 itertools = "0.13"
 log = { version = "0.4.8" }
+macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
 num-bigint = "0.4.4"
 once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }

@@ -391,6 +391,7 @@ mod log {
     pub(crate) use {_warn as warn, debug, error, trace};
 }
 
+#[cfg(test)]
 #[macro_use]
 mod test_macros;
 
