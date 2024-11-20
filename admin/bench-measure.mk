@@ -59,10 +59,10 @@ threads: $(BENCH)
 	done
 
 thread-latency: $(BENCH)
-	$^ --threads $$(nproc) --api buffered --latency-prefix latency-fullhs-tls12 handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-	$^ --threads $$(nproc) --api buffered --latency-prefix latency-fullhs-tls13 handshake TLS13_AES_256_GCM_SHA384
-	$^ --threads $$(nproc) --api buffered --latency-prefix latency-resume-tls12 handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-	$^ --threads $$(nproc) --api buffered --latency-prefix latency-resume-tls13 handshake-ticket TLS13_AES_256_GCM_SHA384
+	$^ --threads $$(nproc) --api buffered --key-type rsa2048 --latency-prefix latency-fullhs-tls12 handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	$^ --threads $$(nproc) --api buffered --key-type rsa2048 --latency-prefix latency-fullhs-tls13 handshake TLS13_AES_256_GCM_SHA384
+	$^ --threads $$(nproc) --api buffered --key-type rsa2048 --latency-prefix latency-resume-tls12 handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+	$^ --threads $$(nproc) --api buffered --key-type rsa2048 --latency-prefix latency-resume-tls13 handshake-ticket TLS13_AES_256_GCM_SHA384
 
 clean:
 	rm -f perf-*.svg

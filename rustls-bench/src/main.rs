@@ -35,7 +35,7 @@ pub fn main() {
             plaintext_size,
             max_fragment_size,
         } => {
-            for bench in lookup_matching_benches(cipher_suite).iter() {
+            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
                 bench_bulk(
                     &Parameters::new(bench, &args)
                         .with_plaintext_size(*plaintext_size)
@@ -49,7 +49,7 @@ pub fn main() {
         | Command::HandshakeTicket { cipher_suite } => {
             let resume = ResumptionParam::from_subcommand(args.command());
 
-            for bench in lookup_matching_benches(cipher_suite).iter() {
+            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
                 bench_handshake(
                     &Parameters::new(bench, &args)
                         .with_client_auth(ClientAuth::No)
@@ -61,7 +61,7 @@ pub fn main() {
             cipher_suite,
             count,
         } => {
-            for bench in lookup_matching_benches(cipher_suite).iter() {
+            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
                 let params = Parameters::new(bench, &args);
                 let client_config = params.client_config();
                 let server_config = params.server_config();
@@ -106,6 +106,12 @@ struct Args {
         help = "Writes individual handshake latency into files starting with this string.  The files are named by appending a role (client/server), a thread id, and 'latency.tsv' to the given string."
     )]
     latency_prefix: Option<String>,
+
+    #[arg(
+        long,
+        help = "Which key type to use for server and client authentication.  The default is to run tests once for each key type."
+    )]
+    key_type: Option<KeyType>,
 
     #[arg(long, help = "Which provider to test")]
     provider: Option<Provider>,
@@ -661,12 +667,17 @@ fn bench_memory(
     }
 }
 
-fn lookup_matching_benches(ciphersuite_name: &str) -> Vec<&BenchmarkParam> {
-    let r: Vec<&BenchmarkParam> = ALL_BENCHMARKS
+fn lookup_matching_benches(
+    ciphersuite_name: &str,
+    key_type: Option<KeyType>,
+) -> Vec<BenchmarkParam> {
+    let r: Vec<BenchmarkParam> = ALL_BENCHMARKS
         .iter()
         .filter(|params| {
             format!("{:?}", params.ciphersuite).to_lowercase() == ciphersuite_name.to_lowercase()
+                && (key_type.is_none() || Some(params.key_type) == key_type)
         })
+        .cloned()
         .collect();
 
     if r.is_empty() {
@@ -1016,7 +1027,7 @@ impl BenchmarkParam {
 }
 
 // copied from tests/api.rs
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, ValueEnum)]
 enum KeyType {
     Rsa2048,
     EcdsaP256,
