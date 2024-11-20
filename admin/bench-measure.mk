@@ -30,7 +30,7 @@ measure: $(BENCH)
 	$^ bulk TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
 	$^ bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 	$^ bulk TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-	$^ bulk TLS13_AES_256_GCM_SHA384
+	$^ --key-type rsa2048 bulk TLS13_AES_256_GCM_SHA384
 	$^ handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
 	$^ handshake TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
 	$^ handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
@@ -52,10 +52,10 @@ threads: $(BENCH)
 	  $^ --threads $$thr handshake TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
 	  $^ --threads $$thr handshake-resume TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
 	  $^ --threads $$thr handshake-ticket TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
-	  $^ --threads $$thr handshake TLS13_AES_256_GCM_SHA384 ; \
+	  $^ --key-type rsa2048 --threads $$thr handshake TLS13_AES_256_GCM_SHA384 ; \
 	  $^ --threads $$thr handshake-ticket TLS13_AES_256_GCM_SHA384 ; \
 	  $^ --threads $$thr bulk TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 ; \
-	  $^ --threads $$thr bulk TLS13_AES_256_GCM_SHA384 ; \
+	  $^ --key-type rsa2048 --threads $$thr bulk TLS13_AES_256_GCM_SHA384 ; \
 	done
 
 thread-latency: $(BENCH)
