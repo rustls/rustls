@@ -3,11 +3,12 @@
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
 
+use std::fs::File;
 use std::io::{self, Read, Write};
 use std::num::NonZeroUsize;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{mem, thread};
 
 use clap::{Parser, ValueEnum};
@@ -98,6 +99,13 @@ struct Args {
         help = "Multiplies the length of every test by the given float value"
     )]
     multiplier: f64,
+
+    #[arg(
+        long,
+        env = "BENCH_LATENCY",
+        help = "Writes individual handshake latency into files starting with this string.  The files are named by appending a role (client/server), a thread id, and 'latency.tsv' to the given string."
+    )]
+    latency_prefix: Option<String>,
 
     #[arg(long, help = "Which provider to test")]
     provider: Option<Provider>,
@@ -238,6 +246,7 @@ fn bench_handshake(params: &Parameters) {
         ResumptionParam::No,
         client_config.clone(),
         server_config.clone(),
+        &params.without_latency_measurement(),
     );
 
     if params.api.use_buffered() {
@@ -246,7 +255,13 @@ fn bench_handshake(params: &Parameters) {
             &client_config,
             &server_config,
             move |client_config, server_config| {
-                bench_handshake_buffered(rounds, params.resume, client_config, server_config)
+                bench_handshake_buffered(
+                    rounds,
+                    params.resume,
+                    client_config,
+                    server_config,
+                    params,
+                )
             },
         );
 
@@ -272,9 +287,12 @@ fn bench_handshake_buffered(
     resume: ResumptionParam,
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
+    params: &Parameters,
 ) -> Timings {
     let mut timings = Timings::default();
     let mut buffers = TempBuffers::new();
+    let mut client_latency = params.open_latency_file("client");
+    let mut server_latency = params.open_latency_file("server");
 
     while rounds > 0 {
         let mut client_time = 0f64;
@@ -309,6 +327,8 @@ fn bench_handshake_buffered(
         if client.handshake_kind() == Some(resume.as_handshake_kind())
             && server.handshake_kind() == Some(resume.as_handshake_kind())
         {
+            client_latency.sample(client_time);
+            server_latency.sample(server_time);
             timings.client += client_time;
             timings.server += server_time;
             rounds -= 1;
@@ -661,6 +681,7 @@ fn lookup_matching_benches(ciphersuite_name: &str) -> Vec<&BenchmarkParam> {
 struct Parameters {
     /// Set by the user.
     work_multiplier: f64,
+    latency_prefix: Option<String>,
     provider: Provider,
     api: Api,
     threads: NonZeroUsize,
@@ -685,6 +706,7 @@ impl Parameters {
     fn new(bench: &BenchmarkParam, args: &Args) -> Self {
         Self {
             work_multiplier: args.multiplier,
+            latency_prefix: args.latency_prefix.clone(),
             provider: args
                 .provider
                 .unwrap_or_else(Provider::choose_default),
@@ -719,6 +741,12 @@ impl Parameters {
     fn with_resume(&self, resume: ResumptionParam) -> Self {
         let mut s = self.clone();
         s.resume = resume;
+        s
+    }
+
+    fn without_latency_measurement(&self) -> Self {
+        let mut s = self.clone();
+        s.latency_prefix = None;
         s
     }
 
@@ -808,6 +836,32 @@ impl Parameters {
 
     fn apply_work_multiplier(&self, work: u64) -> u64 {
         ((work as f64) * self.work_multiplier).round() as u64
+    }
+
+    fn open_latency_file(&self, role: &str) -> LatencyOutput {
+        LatencyOutput::new(&self.latency_prefix, role)
+    }
+}
+
+struct LatencyOutput {
+    output: Option<File>,
+}
+
+impl LatencyOutput {
+    fn new(prefix: &Option<String>, role: &str) -> Self {
+        let thread_id = thread::current().id();
+        let output = prefix.as_ref().map(|prefix| {
+            let file_name = format!("{prefix}-{role}-{thread_id:?}-latency.tsv");
+            File::create(&file_name).expect("cannot open latency output file")
+        });
+
+        Self { output }
+    }
+
+    fn sample(&mut self, secs: f64) {
+        if let Some(file) = &mut self.output {
+            writeln!(file, "{:.8}\t{:.8}", wall_time(), secs * 1e6).unwrap();
+        }
     }
 }
 
@@ -1354,6 +1408,14 @@ impl TempBuffers {
             tls: vec![0u8; 262_144],
         }
     }
+}
+
+fn wall_time() -> f64 {
+    duration_nanos(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap(),
+    )
 }
 
 fn duration_nanos(d: Duration) -> f64 {
