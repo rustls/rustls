@@ -6213,15 +6213,20 @@ fn test_no_session_ticket_request_on_tls_1_3() {
     ///
     /// Does not actually alter the payload.
     fn panic_on_session_ticket(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded: _ } = &msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &parsed.payload {
-                for ext in &ch.extensions {
-                    if matches!(ext, ClientExtension::SessionTicket(_)) {
-                        panic!("TLS 1.2 session_ticket extension in TLS 1.3 handshake detected.");
-                    }
-                }
+        let MessagePayload::Handshake { parsed, encoded: _ } = &msg.payload else {
+            return Altered::InPlace;
+        };
+
+        let HandshakePayload::ClientHello(ch) = &parsed.payload else {
+            return Altered::InPlace;
+        };
+
+        for ext in &ch.extensions {
+            if matches!(ext, ClientExtension::SessionTicket(_)) {
+                panic!("TLS 1.2 session_ticket extension in TLS 1.3 handshake detected.");
             }
         }
+
         Altered::InPlace
     }
 
