@@ -1096,6 +1096,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "graviola"
+version = "0.2.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b8b4b23a412df8669f016f9ad06e03453075293fe6d3a292df1bf0f9ea09769"
+dependencies = [
+ "cfg-if",
+ "getrandom",
+]
+
+[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1179,7 +1189,7 @@ dependencies = [
  "ipnet",
  "once_cell",
  "rand",
- "rustls 0.23.17",
+ "rustls 0.23.19",
  "thiserror",
  "tinyvec",
  "tokio",
@@ -1204,7 +1214,7 @@ dependencies = [
  "parking_lot",
  "rand",
  "resolv-conf",
- "rustls 0.23.17",
+ "rustls 0.23.19",
  "smallvec",
  "thiserror",
  "tokio",
@@ -2238,21 +2248,6 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f1a745511c54ba6d4465e8d5dfbd81b45791756de28d4981af70d6dca128f1e"
-dependencies = [
- "log",
- "once_cell",
- "ring",
- "rustls-pki-types",
- "rustls-webpki",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "rustls"
 version = "0.23.18"
 dependencies = [
  "aws-lc-rs",
@@ -2282,11 +2277,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls"
+version = "0.23.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "934b404430bb06b3fae2cba809eb45a1ab1aecd64491213d7c3301b88393f8d1"
+dependencies = [
+ "aws-lc-rs",
+ "log",
+ "once_cell",
+ "ring",
+ "rustls-pki-types",
+ "rustls-webpki",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "rustls-bench"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rustls 0.23.18",
+ "rustls 0.23.19",
+ "rustls-graviola",
  "tikv-jemallocator",
 ]
 
@@ -2332,6 +2344,17 @@ dependencies = [
  "serde",
  "tokio",
  "webpki-roots",
+]
+
+[[package]]
+name = "rustls-graviola"
+version = "0.2.0-alpha.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52f55e7656edba0f739802a5b7479c6c781084a1ff6c3f97e6d7410f7374686d"
+dependencies = [
+ "graviola",
+ "rustls 0.23.19",
+ "rustls-webpki",
 ]
 
 [[package]]
@@ -2714,7 +2737,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.17",
+ "rustls 0.23.19",
  "rustls-pki-types",
  "tokio",
 ]
