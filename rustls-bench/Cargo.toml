@@ -5,12 +5,14 @@ edition = "2021"
 
 [dependencies]
 clap = { workspace = true }
-rustls = { path = "../rustls" }
+rustls = { workspace = true }
+rustls-graviola = { workspace = true, optional = true }
 
 [features]
 default = []
 aws-lc-rs = ["rustls/aws-lc-rs"]
 fips = ["rustls/fips", "aws-lc-rs"]
+graviola = ["dep:rustls-graviola"]
 ring = ["rustls/ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

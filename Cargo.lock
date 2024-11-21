@@ -1095,6 +1095,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "graviola"
+version = "0.2.0-alpha.2"
+source = "git+https://github.com/ctz/graviola#b136d1976d4150fbf75865fc8c07aef359907a2a"
+dependencies = [
+ "cfg-if",
+ "getrandom",
+]
+
+[[package]]
 name = "group"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2249,6 +2258,7 @@ version = "0.23.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "934b404430bb06b3fae2cba809eb45a1ab1aecd64491213d7c3301b88393f8d1"
 dependencies = [
+ "aws-lc-rs",
  "log",
  "once_cell",
  "ring",
@@ -2263,7 +2273,8 @@ name = "rustls-bench"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rustls 0.23.19",
+ "rustls 0.23.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls-graviola",
  "tikv-jemallocator",
 ]
 
@@ -2309,6 +2320,16 @@ dependencies = [
  "serde",
  "tokio",
  "webpki-roots",
+]
+
+[[package]]
+name = "rustls-graviola"
+version = "0.2.0-alpha.2"
+source = "git+https://github.com/ctz/graviola#b136d1976d4150fbf75865fc8c07aef359907a2a"
+dependencies = [
+ "graviola",
+ "rustls 0.23.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls-webpki",
 ]
 
 [[package]]
