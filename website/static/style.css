@@ -88,6 +88,61 @@ div.headline > h1 {
   margin-top: 0em;
   text-align: center;
 }
+section.perf h1 {
+  font-size: 4em;
+  margin-bottom: 0em;
+}
+section.perf h1 footer {
+  font-size: 0.33em;
+}
+section.perf h2 footer {
+  font-size: 0.45em;
+  font-weight: normal;
+}
+footer em {
+  display: block;
+  font-weight: normal;
+  font-size: 0.6em;
+  font-style: normal;
+}
+div.worse, div.better {
+  text-align: left;
+  padding-left: 0.3em;
+  font-size: 0.4em;
+  vertical-align: baseline;
+  line-height: 1em;
+  display: inline-block;
+  color: rgba(255, 255, 255, 0.5);
+}
+span.measure {
+  font-size: 1.25em;
+}
+section.perf div.split {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 0.5em;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+section.perf div.comp {
+  flex: 1 1 2em;
+}
+section.perf p {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8em;
+  filter: drop-shadow(0px 2px 1px rgba(0, 0, 0, 0.5));
+  text-align: center;
+  margin-top: auto;
+}
+div.comp h2 {
+  text-align: center;
+  margin: 0.1em;
+}
+svg.speedo {
+  width: 100%;
+  max-height: 10em;
+  margin-left: auto;
+  margin-right: auto;
+}
 span.icon {
   font-size: 1.5em;
   vertical-align: middle;
