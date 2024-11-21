@@ -81,6 +81,7 @@ rcgen = { version = "0.13", features = ["pem", "aws_lc_rs"], default-features = 
 regex = "1"
 ring = "0.17"
 rsa = { version = "0.9", features = ["sha2"], default-features = false }
+rustls-graviola = { version = "0.2" }
 rustls-test = { path = "rustls-test/" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -100,3 +101,8 @@ zlib-rs = "0.5"
 [profile.bench]
 codegen-units = 1
 lto = true
+
+# ensure all our tests are against the local copy, never
+# against the latest _published_ copy.
+[patch.crates-io]
+rustls = { path = "rustls" }

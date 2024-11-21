@@ -954,6 +954,8 @@ enum Provider {
     AwsLcRs,
     #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
     AwsLcRsFips,
+    #[cfg(feature = "graviola")]
+    Graviola,
     #[cfg(feature = "post-quantum")]
     PostQuantum,
     #[cfg(feature = "ring")]
@@ -969,6 +971,8 @@ impl Provider {
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
             Self::AwsLcRsFips => rustls::crypto::default_fips_provider(),
+            #[cfg(feature = "graviola")]
+            Self::Graviola => rustls_graviola::default_provider(),
             #[cfg(feature = "post-quantum")]
             Self::PostQuantum => rustls_post_quantum::provider(),
             #[cfg(feature = "ring")]
@@ -983,6 +987,8 @@ impl Provider {
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
             Self::AwsLcRsFips => rustls::crypto::aws_lc_rs::Ticketer::new(),
+            #[cfg(feature = "graviola")]
+            Self::Graviola => rustls_graviola::Ticketer::new(),
             #[cfg(feature = "post-quantum")]
             Self::PostQuantum => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(feature = "ring")]
@@ -1007,8 +1013,12 @@ impl Provider {
     }
 
     fn supports_key_type(&self, _key_type: KeyType) -> bool {
-        // currently all providers support all key types
-        true
+        match self {
+            #[cfg(feature = "graviola")]
+            Self::Graviola => !matches!(_key_type, KeyType::Ed25519),
+            // all other providers support all key types
+            _ => true,
+        }
     }
 
     fn choose_default() -> Self {
@@ -1020,6 +1030,9 @@ impl Provider {
 
         #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
         available.push(Self::AwsLcRsFips);
+
+        #[cfg(feature = "graviola")]
+        available.push(Self::Graviola);
 
         #[cfg(feature = "post-quantum")]
         available.push(Self::PostQuantum);
