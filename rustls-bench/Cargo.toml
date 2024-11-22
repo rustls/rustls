@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "4", features = ["derive", "env"] }
+clap = { workspace = true }
 rustls = { path = "../rustls" }
 
 [features]
@@ -14,4 +14,4 @@ fips = ["rustls/fips", "aws-lc-rs"]
 ring = ["rustls/ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
+tikv-jemallocator = { workspace = true }
