@@ -8155,4 +8155,32 @@ fn tls13_packed_handshake() {
     );
 }
 
+#[test]
+fn large_client_hello() {
+    let (_, mut server) = make_pair(KeyType::Rsa2048);
+    let hello = include_bytes!("data/bug2227-clienthello.bin");
+    let mut cursor = io::Cursor::new(hello);
+    loop {
+        if server.read_tls(&mut cursor).unwrap() == 0 {
+            break;
+        }
+        server.process_new_packets().unwrap();
+    }
+}
+
+#[test]
+fn large_client_hello_acceptor() {
+    let mut acceptor = rustls::server::Acceptor::default();
+    let hello = include_bytes!("data/bug2227-clienthello.bin");
+    let mut cursor = io::Cursor::new(hello);
+    loop {
+        acceptor.read_tls(&mut cursor).unwrap();
+
+        if let Some(accepted) = acceptor.accept().unwrap() {
+            println!("{accepted:?}");
+            break;
+        }
+    }
+}
+
 const CONFIDENTIALITY_LIMIT: u64 = 1024;
