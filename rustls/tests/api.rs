@@ -5893,6 +5893,33 @@ fn test_complete_io_with_no_io_needed() {
     );
 }
 
+#[test]
+fn large_client_hello() {
+    let (_, mut server) = make_pair(KeyType::Rsa);
+    let hello = include_bytes!("data/bug2227-clienthello.bin");
+    let mut cursor = io::Cursor::new(hello);
+    loop {
+        if server.read_tls(&mut cursor).unwrap() == 0 {
+            break;
+        }
+        server.process_new_packets().unwrap();
+    }
+}
+
+#[test]
+fn large_client_hello_acceptor() {
+    let mut acceptor = rustls::server::Acceptor::default();
+    let hello = include_bytes!("data/bug2227-clienthello.bin");
+    let mut cursor = io::Cursor::new(hello);
+    loop {
+        acceptor.read_tls(&mut cursor).unwrap();
+
+        if let Some(_accepted) = acceptor.accept().unwrap() {
+            break;
+        }
+    }
+}
+
 struct FakeStream<'a>(&'a [u8]);
 
 impl<'a> io::Read for FakeStream<'a> {
