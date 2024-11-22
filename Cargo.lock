@@ -2098,7 +2098,6 @@ checksum = "54077e1872c46788540de1ea3d7f4ccb1983d12f9aa909b234468676c1a36779"
 dependencies = [
  "aws-lc-rs",
  "pem",
- "ring",
  "rustls-pki-types",
  "time",
  "yasna",
@@ -2325,7 +2324,6 @@ dependencies = [
  "rcgen",
  "rustls 0.23.17",
  "serde",
- "serde_derive",
  "tokio",
  "webpki-roots",
 ]
