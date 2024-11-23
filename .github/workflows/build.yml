@@ -324,7 +324,7 @@ jobs:
       - name: Report to codecov.io
         uses: codecov/codecov-action@v5
         with:
-          file: final.info
+          files: final.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
