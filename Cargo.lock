@@ -450,7 +450,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "env_logger",
- "rustls 0.23.18",
+ "rustls 0.23.19",
  "rustls-post-quantum",
 ]
 
@@ -2253,7 +2253,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.18"
+version = "0.23.19"
 dependencies = [
  "aws-lc-rs",
  "base64",
@@ -2286,7 +2286,7 @@ name = "rustls-bench"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rustls 0.23.18",
+ "rustls 0.23.19",
  "tikv-jemallocator",
 ]
 
@@ -2302,7 +2302,7 @@ dependencies = [
  "fxhash",
  "itertools 0.13.0",
  "rayon",
- "rustls 0.23.18",
+ "rustls 0.23.19",
  "tikv-jemallocator",
 ]
 
@@ -2313,7 +2313,7 @@ dependencies = [
  "hickory-resolver",
  "regex",
  "ring",
- "rustls 0.23.18",
+ "rustls 0.23.19",
  "tokio",
 ]
 
@@ -2328,7 +2328,7 @@ dependencies = [
  "log",
  "mio",
  "rcgen",
- "rustls 0.23.18",
+ "rustls 0.23.19",
  "serde",
  "tokio",
  "webpki-roots",
@@ -2343,7 +2343,7 @@ dependencies = [
  "num-bigint",
  "once_cell",
  "openssl",
- "rustls 0.23.18",
+ "rustls 0.23.19",
 ]
 
 [[package]]
@@ -2357,7 +2357,7 @@ name = "rustls-post-quantum"
 version = "0.2.0"
 dependencies = [
  "aws-lc-rs",
- "rustls 0.23.18",
+ "rustls 0.23.19",
 ]
 
 [[package]]
@@ -2377,7 +2377,7 @@ dependencies = [
  "rand_core",
  "rcgen",
  "rsa",
- "rustls 0.23.18",
+ "rustls 0.23.19",
  "rustls-webpki",
  "sha2",
  "signature",
@@ -2390,7 +2390,7 @@ name = "rustls-provider-test"
 version = "0.1.0"
 dependencies = [
  "hex",
- "rustls 0.23.18",
+ "rustls 0.23.19",
  "rustls-provider-example",
  "serde",
  "serde_json",
