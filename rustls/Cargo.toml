@@ -23,8 +23,7 @@ brotli = { workspace = true, optional = true }
 brotli-decompressor = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
-# only required for no-std
-once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
+once_cell = { workspace = true, default-features = false, features = ["alloc", "race"] } # only required for no-std
 ring = { workspace = true, optional = true }
 subtle = { workspace = true }
 webpki = { workspace = true }
