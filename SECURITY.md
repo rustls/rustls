@@ -20,6 +20,42 @@ _Note: We use the date of `crates.io` publication when evaluating the security
 policy. For example, while the Rustls 0.20.0 GitHub release note was created
 Jul, 2023 the actual release in `crates.io` was published in Sept. 2021._
 
+### Minimum Supported Rust Version
+
+From time to time we will update our minimum supported Rust version (MSRV)
+in the course of normal development, subject to these constraints:
+
+- Our MSRV will be no more recent than 9 versions old, or approximately 12 months.
+
+> [!TIP]
+> At the time of writing, the most recent Rust release is 1.82.0.  That means
+> our MSRV could be as recent as 1.73.0. As it happens, it is 1.71.0.
+
+- Our MSRV policy only covers the core library crate: it does not cover tests
+  or example code, and is not binding on our dependencies.
+
+- We do not consider MSRV changes to be breaking for the purposes of semver.
+
+- Once we reach 1.0.0, we will not make MSRV changes in patch releases.
+  (Prior to reaching 1.0.0, cargo does not support patch releases.)
+
+- We will not make MSRV changes to security maintenance branches.
+
+> [!NOTE]
+> For the avoidance of doubt: security maintenance branches exist for each
+> release line _that is not the latest_: so (at the time of writing) 0.22
+> and 0.21 have maintenance branches, but 0.23 does not and is released from
+> the `main` branch.
+
+#### MSRV of new dependencies
+
+We may take _non-default_ optional new dependencies on a crate with a later
+MSRV than this policy.
+
+> [!NOTE]
+> This is currently the case for our optional dependency on `zlib-rs`, which
+> has a current MSRV of 1.75.0.
+
 ## Reporting a Vulnerability
 
 Please report security bugs [via github](https://github.com/rustls/rustls/security/advisories/new).
