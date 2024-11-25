@@ -394,7 +394,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.18"
+version = "0.23.19"
 dependencies = [
  "aws-lc-rs",
  "log",
