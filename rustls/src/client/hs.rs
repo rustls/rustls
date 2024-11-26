@@ -16,7 +16,7 @@ use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
-use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
+use crate::client::{tls13, BrowserEmulator, ClientConfig, EchMode, EchStatus};
 use crate::common_state::{
     CommonState, HandshakeKind, KxState, RawKeyNegotationResult, RawKeyNegotiationParams, State,
 };
@@ -26,7 +26,7 @@ use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, Pr
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
-use crate::msgs::base::Payload;
+use crate::msgs::base::{Payload, PayloadU16, PayloadU8};
 use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode,
 };
@@ -38,7 +38,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::SupportedCipherSuite;
+use crate::{NamedGroup, SupportedCipherSuite};
 
 pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
@@ -247,7 +247,7 @@ fn emit_client_hello_for_retry(
     assert!(!supported_versions.is_empty());
 
     // offer groups which are usable for any offered version
-    let offered_groups = config
+    let mut offered_groups: Vec<NamedGroup> = config
         .provider
         .kx_groups
         .iter()
@@ -258,6 +258,14 @@ fn emit_client_hello_for_retry(
         })
         .map(|skxg| skxg.name())
         .collect();
+
+    match config.browser_emulation {
+        Some(BrowserEmulator::Chrome) => {
+            offered_groups.push(NamedGroup::GREASE);
+            offered_groups.push(NamedGroup::CHROME_UNKNOWN);
+        },
+        _ => {},
+    }
 
     let mut exts = vec![
         ClientExtension::SupportedVersions(supported_versions),
@@ -270,6 +278,19 @@ fn emit_client_hello_for_retry(
         ClientExtension::ExtendedMasterSecretRequest,
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
+
+    match config.browser_emulation {
+        Some(BrowserEmulator::Chrome) => {
+            // TODO: needs to actually use the data - u8-length-prefixed list of ALPN protocols
+            let application_settings: PayloadU16 = PayloadU16::new(vec![0x02, 0x68, 0x32]);
+
+            exts.push(ClientExtension::ReservedGrease());
+            exts.push(ClientExtension::SignedCertificateTimestamp());
+            exts.push(ClientExtension::ApplicationSettings(application_settings));
+            exts.push(ClientExtension::RenegotiationInfo(PayloadU8::empty()));
+        },
+        _ => {},
+    }
 
     // Send the ECPointFormat extension only if we are proposing ECDHE
     if config
@@ -406,8 +427,15 @@ fn emit_client_hello_for_retry(
             false => None,
         })
         .collect();
-    // We don't do renegotiation at all, in fact.
-    cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+
+    match config.browser_emulation {
+        // Chrome doesn't send this cipher suite.
+        Some(BrowserEmulator::Chrome) => {}
+        None => {
+            // We don't do renegotiation at all, in fact.
+            cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+        }
+    }
 
     let mut chp_payload = ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
