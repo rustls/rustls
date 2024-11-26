@@ -16,9 +16,10 @@ For example, as of 2024-04-18 the latest release is 0.23.4.
 Therefore 0.23.x, 0.22.x and 0.21.x will be updated, while 0.20.x and 0.19.x
 will not be.
 
-_Note: We use the date of `crates.io` publication when evaluating the security
-policy. For example, while the Rustls 0.20.0 GitHub release note was created
-Jul, 2023 the actual release in `crates.io` was published in Sept. 2021._
+> [!NOTE]
+> We use the date of `crates.io` publication when evaluating the security
+> policy. For example, while the Rustls 0.20.0 GitHub release note was created
+> Jul, 2023 the actual release in `crates.io` was published in Sept. 2021.
 
 ### Minimum Supported Rust Version
 
