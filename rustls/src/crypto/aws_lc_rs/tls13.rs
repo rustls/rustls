@@ -17,6 +17,40 @@ use crate::msgs::message::{
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tls13::Tls13CipherSuite;
 
+macro_rules! fake_cipher_suite {
+    ( $name:ident, $internal_name:ident, $suite:expr  ) => {
+        /// The TLS1.3 GREASE bogus ciphersuite
+        pub static $name: SupportedCipherSuite = SupportedCipherSuite::Tls13($internal_name);
+
+        pub(crate) static $internal_name: &Tls13CipherSuite = &Tls13CipherSuite {
+            common: CipherSuiteCommon {
+                suite: $suite,
+                hash_provider: &super::hash::SHA256,
+                // ref: <https://www.ietf.org/archive/id/draft-irtf-cfrg-aead-limits-08.html#section-5.2.1>
+                confidentiality_limit: u64::MAX,
+            },
+            hkdf_provider: &AwsLcHkdf(hkdf::HKDF_SHA256, hmac::HMAC_SHA256),
+            aead_alg: &Chacha20Poly1305Aead(AeadAlgorithm(&aead::CHACHA20_POLY1305)),
+            quic: Some(&super::quic::KeyBuilder {
+                packet_alg: &aead::CHACHA20_POLY1305,
+                header_alg: &aead::quic::CHACHA20,
+                // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-6.6>
+                confidentiality_limit: u64::MAX,
+                // ref: <https://datatracker.ietf.org/doc/html/rfc9001#section-6.6>
+                integrity_limit: 1 << 36,
+            }),
+        };
+    };
+}
+
+fake_cipher_suite!(TLS13_RESERVED_GREASE, TLS13_RESERVED_GREASE_INTERNAL, CipherSuite::TLS_RESERVED_GREASE);
+fake_cipher_suite!(TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA, TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA_INTERNAL, CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA);
+fake_cipher_suite!(TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA, TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA_INTERNAL, CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA);
+fake_cipher_suite!(TLS_RSA_WITH_AES_128_GCM_SHA256, TLS_RSA_WITH_AES_128_GCM_SHA256_INTERNAL, CipherSuite::TLS_RSA_WITH_AES_128_GCM_SHA256);
+fake_cipher_suite!(TLS_RSA_WITH_AES_256_GCM_SHA384, TLS_RSA_WITH_AES_256_GCM_SHA384_INTERNAL, CipherSuite::TLS_RSA_WITH_AES_256_GCM_SHA384);
+fake_cipher_suite!(TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_128_CBC_SHA_INTERNAL, CipherSuite::TLS_RSA_WITH_AES_128_CBC_SHA);
+fake_cipher_suite!(TLS_RSA_WITH_AES_256_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA_INTERNAL, CipherSuite::TLS_RSA_WITH_AES_256_CBC_SHA);
+
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(TLS13_CHACHA20_POLY1305_SHA256_INTERNAL);

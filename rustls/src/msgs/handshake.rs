@@ -573,6 +573,10 @@ pub enum ClientExtension {
     CertificateCompressionAlgorithms(Vec<CertificateCompressionAlgorithm>),
     EncryptedClientHello(EncryptedClientHello),
     EncryptedClientHelloOuterExtensions(Vec<ExtensionType>),
+    ReservedGrease(),
+    SignedCertificateTimestamp(),
+    ApplicationSettings(PayloadU16),
+    RenegotiationInfo(PayloadU8),
     Unknown(UnknownExtension),
 }
 
@@ -602,6 +606,10 @@ impl ClientExtension {
             Self::EncryptedClientHelloOuterExtensions(_) => {
                 ExtensionType::EncryptedClientHelloOuterExtensions
             }
+            Self::ReservedGrease() => ExtensionType::ReservedGrease,
+            Self::SignedCertificateTimestamp() => ExtensionType::SignedCertificateTimestamp,
+            Self::ApplicationSettings(_) => ExtensionType::ApplicationSettings,
+            Self::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -636,6 +644,10 @@ impl Codec<'_> for ClientExtension {
             Self::CertificateCompressionAlgorithms(ref r) => r.encode(nested.buf),
             Self::EncryptedClientHello(ref r) => r.encode(nested.buf),
             Self::EncryptedClientHelloOuterExtensions(ref r) => r.encode(nested.buf),
+            Self::ReservedGrease() => {},
+            Self::SignedCertificateTimestamp() => {},
+            Self::ApplicationSettings(ref r) => r.encode(nested.buf),
+            Self::RenegotiationInfo(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }

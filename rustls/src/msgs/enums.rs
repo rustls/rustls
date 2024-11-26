@@ -120,6 +120,9 @@ enum_builder! {
         TransportParametersDraft => 0xffa5,
         EncryptedClientHello => 0xfe0d, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.1
         EncryptedClientHelloOuterExtensions => 0xfd00, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5.1
+        ReservedGrease => 0xbaba, 
+        SignedCertificateTimestamp => 0x0012,
+        ApplicationSettings => 0x4469, 
     }
 }
 
@@ -223,6 +226,8 @@ enum_builder! {
         FFDHE4096 => 0x0102,
         FFDHE6144 => 0x0103,
         FFDHE8192 => 0x0104,
+        GREASE => 0x8a8a,
+        CHROME_UNKNOWN => 0x6399,
     }
 }
 
