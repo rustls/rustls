@@ -11,7 +11,6 @@ use crate::client::{handy, ClientConfig, EchMode, ResolvesClientCert};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
-use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{compress, verify, versions, KeyLog, KeyLogFile, WantsVersions};
 
@@ -29,7 +28,7 @@ impl ConfigBuilder<ClientConfig, WantsVersions> {
         self,
         mode: EchMode,
     ) -> Result<ConfigBuilder<ClientConfig, WantsVerifier>, Error> {
-        let mut res = self.with_protocol_versions(&[&TLS13][..])?;
+        let mut res = self.with_safe_default_protocol_versions()?; // It's alright to send the ECH with TLS 1.2, worst case, the server will ignore it.
         res.state.client_ech_mode = Some(mode);
         Ok(res)
     }
