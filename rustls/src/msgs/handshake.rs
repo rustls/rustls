@@ -1107,7 +1107,7 @@ impl ClientHelloPayload {
     pub(crate) fn check_psk_ext_is_last(&self) -> bool {
         self.extensions
             .last()
-            .map_or(false, |ext| ext.ext_type() == ExtensionType::PreSharedKey)
+            .is_some_and(|ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
     pub(crate) fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
