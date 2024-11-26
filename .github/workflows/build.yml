@@ -346,8 +346,8 @@ jobs:
       - name: Install cargo-hack
         uses: taiki-e/install-action@cargo-hack
 
-      - name: Check direct-minimal-versions
-        run: cargo minimal-versions --direct --ignore-private check
+      - name: Test minimal-versions - direct (all features)
+        run: cargo minimal-versions --direct --ignore-private test --all-features
         working-directory: rustls/
 
   cross:
