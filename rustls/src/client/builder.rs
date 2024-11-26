@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+use std::vec;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
 
@@ -12,7 +13,7 @@ use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
 use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{compress, verify, versions, WantsVersions};
+use crate::{compress, verify, versions, KeyLog, KeyLogFile, WantsVersions};
 
 impl ConfigBuilder<ClientConfig, WantsVersions> {
     /// Enable Encrypted Client Hello (ECH) in the given mode.
@@ -122,6 +123,13 @@ pub(super) mod danger {
     }
 }
 
+#[derive(Debug, Clone)]
+/// Emulate a browser's behavior.
+pub enum BrowserEmulator {
+    /// Emulate Chrome's behavior.
+    Chrome,
+}
+
 /// A config builder state where the caller needs to supply whether and how to provide a client
 /// certificate.
 ///
@@ -134,6 +142,23 @@ pub struct WantsClientCert {
 }
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
+    /// Enable a browser emulator.
+    pub fn with_browser_emulator(
+        self,
+        browser_emulator: BrowserEmulator,
+    ) -> ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
+        ConfigBuilder {
+            state: WantsClientCertWithBrowserEmulationEnabled {
+                versions: self.state.versions,
+                verifier: self.state.verifier,
+                client_ech_mode: self.state.client_ech_mode,
+                browser_emulator,
+            },
+            provider: self.provider,
+            time_provider: self.time_provider,
+            side: PhantomData,
+        }
+    }
     /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
@@ -170,6 +195,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         ClientConfig {
             provider: self.provider,
             alpn_protocols: Vec::new(),
+            browser_emulation: None,
             resumption: Resumption::default(),
             max_fragment_size: None,
             client_auth_cert_resolver,
@@ -185,6 +211,94 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
+            ech_mode: self.state.client_ech_mode,
+        }
+    }
+}
+
+/// A config builder state where the caller needs to supply whether and how to provide a client
+/// certificate.
+///
+/// For more information, see the [`ConfigBuilder`] documentation.
+#[derive(Clone)]
+pub struct WantsClientCertWithBrowserEmulationEnabled {
+    versions: versions::EnabledVersions,
+    verifier: Arc<dyn verify::ServerCertVerifier>,
+    client_ech_mode: Option<EchMode>,
+    browser_emulator: BrowserEmulator,
+}
+
+impl ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
+        /// Sets a single certificate chain and matching private key for use
+    /// in client authentication.
+    ///
+    /// `cert_chain` is a vector of DER-encoded certificates.
+    /// `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1. The
+    /// `aws-lc-rs` and `ring` [`CryptoProvider`][crate::CryptoProvider]s support
+    /// all three encodings, but other `CryptoProviders` may not.
+    ///
+    /// This function fails if `key_der` is invalid.
+    pub fn with_client_auth_cert(
+        self,
+        cert_chain: Vec<CertificateDer<'static>>,
+        key_der: PrivateKeyDer<'static>,
+    ) -> Result<ClientConfig, Error> {
+        let private_key = self
+            .provider
+            .key_provider
+            .load_private_key(key_der)?;
+        let resolver =
+            handy::AlwaysResolvesClientCert::new(private_key, CertificateChain(cert_chain))?;
+        Ok(self.with_client_cert_resolver(Arc::new(resolver)))
+    }
+
+    /// Do not support client auth.
+    pub fn with_no_client_auth(self) -> ClientConfig {
+        self.with_client_cert_resolver(Arc::new(handy::FailResolveClientCert {}))
+    }
+
+    /// Sets a custom [`ResolvesClientCert`].
+    pub fn with_client_cert_resolver(
+        self,
+        client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
+    ) -> ClientConfig {
+        let (
+            alpn_protocols,
+            cert_compressors,
+            cert_decompressors,
+        ) = match self.state.browser_emulator {
+            BrowserEmulator::Chrome => {
+                (
+                    vec![b"h2".to_vec(), b"http/1.1".to_vec()],
+                    vec![crate::compress::BROTLI_COMPRESSOR],
+                    vec![crate::compress::BROTLI_DECOMPRESSOR],
+                )
+            },
+        };
+
+        let key_log: Arc<dyn KeyLog> = match self.state.browser_emulator {
+            BrowserEmulator::Chrome => Arc::new(KeyLogFile::new()),
+        };
+
+        ClientConfig {
+            browser_emulation: Some(self.state.browser_emulator),
+            provider: self.provider,
+            resumption: Resumption::default(),
+            max_fragment_size: None,
+            client_auth_cert_resolver,
+            versions: self.state.versions,
+            enable_sni: true,
+            verifier: self.state.verifier,
+            enable_secret_extraction: false,
+            enable_early_data: false,
+            #[cfg(feature = "tls12")]
+            require_ems: cfg!(feature = "fips"),
+            time_provider: self.time_provider,
+            alpn_protocols,
+            key_log,
+            cert_compressors,
+            cert_decompressors,
+            cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             ech_mode: self.state.client_ech_mode,
         }
     }

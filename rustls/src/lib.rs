@@ -559,7 +559,9 @@ pub mod client {
     mod tls12;
     mod tls13;
 
+    pub use builder::BrowserEmulator;
     pub use builder::WantsClientCert;
+    pub use builder::WantsClientCertWithBrowserEmulationEnabled;
     pub use client_conn::{
         ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
         Resumption, Tls12Resumption, UnbufferedClientConnection,
