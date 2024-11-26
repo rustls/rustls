@@ -1,11 +1,13 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use emulation::{CHROME_CIPHER_SUITES, CHROME_SIGNATURE_VERIFICATION_ALGOS};
 use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+use crate::client::BrowserEmulator;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
@@ -28,6 +30,8 @@ pub mod ring;
 /// aws-lc-rs-based CryptoProvider.
 #[cfg(feature = "aws_lc_rs")]
 pub mod aws_lc_rs;
+
+pub mod emulation;
 
 /// TLS message encryption/decryption interfaces.
 pub mod cipher;
@@ -216,7 +220,39 @@ pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
 }
 
+pub struct CryptoProviderBuilder {
+    browser_emulator: Option<BrowserEmulator>,
+}
+
+impl CryptoProviderBuilder {
+    pub fn with_browser_emulator(mut self, browser_emulator: BrowserEmulator) -> Self {
+        self.browser_emulator = Some(browser_emulator);
+        self
+    }
+
+    pub fn build(self) -> CryptoProvider {
+        match self.browser_emulator {
+            Some(BrowserEmulator::Chrome) => {
+                let provider = CryptoProvider {
+                    cipher_suites: CHROME_CIPHER_SUITES.to_vec(),
+                    signature_verification_algorithms: CHROME_SIGNATURE_VERIFICATION_ALGOS,
+                    ..aws_lc_rs::default_provider()
+                };
+
+                provider
+            }
+            None => aws_lc_rs::default_provider(),
+        }
+    }
+}
+
 impl CryptoProvider {
+    pub fn builder() -> CryptoProviderBuilder {
+        CryptoProviderBuilder {
+            browser_emulator: None,
+        }
+    }
+
     /// Sets this `CryptoProvider` as the default for this process.
     ///
     /// This can be called successfully at most once in any process execution.
