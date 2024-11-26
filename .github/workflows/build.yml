@@ -81,10 +81,9 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
-      # nb. this is separate so it can be skipped on macOS & windows, where
-      # doctests don't work: https://github.com/rust-lang/cargo/issues/8531
+      # nb. this is separate since `--doc` option cannot be combined with other target option(s) ref:
+      # - https://doc.rust-lang.org/cargo/commands/cargo-test.html
       - name: cargo test --doc (release; all-features)
-        if: ${{ runner.os != 'macOS' && runner.os != 'Windows' }}
         run: cargo test --release --locked --all-features --doc
         env:
           RUST_BACKTRACE: 1
