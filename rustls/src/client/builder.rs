@@ -124,9 +124,15 @@ pub(super) mod danger {
 
 #[derive(Debug, Clone)]
 /// Emulate a browser's behavior.
-pub enum BrowserEmulator {
+pub enum BrowserType {
     /// Emulate Chrome's behavior.
     Chrome,
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserEmulator {
+    pub browser_type: BrowserType,
+    pub version: u8,
 }
 
 /// A config builder state where the caller needs to supply whether and how to provide a client
@@ -144,14 +150,14 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// Enable a browser emulator.
     pub fn with_browser_emulator(
         self,
-        browser_emulator: BrowserEmulator,
+        browser_emulator: &BrowserEmulator,
     ) -> ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
         ConfigBuilder {
             state: WantsClientCertWithBrowserEmulationEnabled {
                 versions: self.state.versions,
                 verifier: self.state.verifier,
                 client_ech_mode: self.state.client_ech_mode,
-                browser_emulator,
+                browser_emulator: browser_emulator.clone(),
             },
             provider: self.provider,
             time_provider: self.time_provider,
@@ -266,7 +272,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
             cert_compressors,
             cert_decompressors,
         ) = match self.state.browser_emulator {
-            BrowserEmulator::Chrome => {
+            BrowserEmulator { browser_type: BrowserType::Chrome, version: _ } => {
                 (
                     vec![b"h2".to_vec(), b"http/1.1".to_vec()],
                     vec![crate::compress::BROTLI_COMPRESSOR],
@@ -276,7 +282,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
         };
 
         let key_log: Arc<dyn KeyLog> = match self.state.browser_emulator {
-            BrowserEmulator::Chrome => Arc::new(KeyLogFile::new()),
+            BrowserEmulator { browser_type: BrowserType::Chrome, version: _ } => Arc::new(KeyLogFile::new()),
         };
 
         ClientConfig {

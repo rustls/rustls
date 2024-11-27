@@ -227,7 +227,7 @@ enum_builder! {
         FFDHE6144 => 0x0103,
         FFDHE8192 => 0x0104,
         GREASE => 0x8a8a,
-        CHROME_UNKNOWN => 0x6399,
+        X25519Kyber768Draft00 => 0x6399,
     }
 }
 

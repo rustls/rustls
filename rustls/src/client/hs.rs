@@ -13,6 +13,7 @@ use super::Tls12Resumption;
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
+use crate::client::builder::BrowserType;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
@@ -260,9 +261,9 @@ fn emit_client_hello_for_retry(
         .collect();
 
     match config.browser_emulation {
-        Some(BrowserEmulator::Chrome) => {
+        Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
             offered_groups.push(NamedGroup::GREASE);
-            offered_groups.push(NamedGroup::CHROME_UNKNOWN);
+            offered_groups.push(NamedGroup::X25519Kyber768Draft00);
         },
         _ => {},
     }
@@ -280,7 +281,7 @@ fn emit_client_hello_for_retry(
     ];
 
     match config.browser_emulation {
-        Some(BrowserEmulator::Chrome) => {
+        Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
             // TODO: needs to actually use the data - u8-length-prefixed list of ALPN protocols
             let application_settings: PayloadU16 = PayloadU16::new(vec![0x02, 0x68, 0x32]);
 
@@ -430,7 +431,7 @@ fn emit_client_hello_for_retry(
 
     match config.browser_emulation {
         // Chrome doesn't send this cipher suite.
-        Some(BrowserEmulator::Chrome) => {}
+        Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {}
         None => {
             // We don't do renegotiation at all, in fact.
             cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);

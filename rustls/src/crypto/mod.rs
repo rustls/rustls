@@ -7,6 +7,7 @@ use core::fmt::Debug;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+use crate::client::builder::BrowserType;
 use crate::client::BrowserEmulator;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
@@ -225,14 +226,14 @@ pub struct CryptoProviderBuilder {
 }
 
 impl CryptoProviderBuilder {
-    pub fn with_browser_emulator(mut self, browser_emulator: BrowserEmulator) -> Self {
-        self.browser_emulator = Some(browser_emulator);
+    pub fn with_browser_emulator(mut self, browser_emulator: &BrowserEmulator) -> Self {
+        self.browser_emulator = Some(browser_emulator.clone());
         self
     }
 
     pub fn build(self) -> CryptoProvider {
         match self.browser_emulator {
-            Some(BrowserEmulator::Chrome) => {
+            Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
                 let provider = CryptoProvider {
                     cipher_suites: CHROME_CIPHER_SUITES.to_vec(),
                     signature_verification_algorithms: CHROME_SIGNATURE_VERIFICATION_ALGOS,
