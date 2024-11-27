@@ -263,7 +263,7 @@ fn emit_client_hello_for_retry(
     match config.browser_emulation {
         Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
             offered_groups.push(NamedGroup::GREASE);
-            offered_groups.push(NamedGroup::X25519Kyber768Draft00);
+            // offered_groups.push(NamedGroup::X25519Kyber768Draft00);
         },
         _ => {},
     }
