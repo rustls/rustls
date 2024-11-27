@@ -246,7 +246,7 @@ pub mod async_io {
         user_buf: &'a mut [u8],
     }
 
-    impl<'a> Future for AsyncPipeReadFuture<'a> {
+    impl Future for AsyncPipeReadFuture<'_> {
         type Output = io::Result<usize>;
 
         fn poll(mut self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<Self::Output> {
@@ -285,7 +285,7 @@ pub mod async_io {
         user_buf: &'a [u8],
     }
 
-    impl<'a> Future for AsyncPipeWriteFuture<'a> {
+    impl Future for AsyncPipeWriteFuture<'_> {
         type Output = io::Result<()>;
 
         fn poll(mut self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<Self::Output> {
