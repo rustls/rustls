@@ -45,7 +45,7 @@ list of protocol features](https://docs.rs/rustls/latest/rustls/manual/_04_featu
 
 While Rustls itself is platform independent, by default it uses [`aws-lc-rs`] for implementing
 the cryptography in TLS.  See [the aws-lc-rs FAQ][aws-lc-rs-platforms-faq] for more details of the
-platform/architecture support constraints in aws-lc-rs.
+platform/architecture support constraints in [`aws-lc-rs`].
 
 [`ring`] is also available via the `ring` crate feature: see
 [the supported `ring` target platforms][ring-target-platforms].
@@ -56,7 +56,7 @@ to a wider set of architectures and environments, or compliance requirements.  S
 [`crypto::CryptoProvider`] documentation for more details.
 
 Specifying `default-features = false` when depending on rustls will remove the
-dependency on aws-lc-rs.
+dependency on [`aws-lc-rs`].
 
 Rustls requires Rust 1.63 or later. It has an optional dependency on zlib-rs which requires 1.75 or later.
 
@@ -80,7 +80,7 @@ builder types. See the [`crypto::CryptoProvider`] documentation for more details
 
 Rustls ships with two built-in providers controlled with associated feature flags:
 
-* [`aws-lc-rs`] - enabled by default, available with the `aws_lc_rs` feature flag enabled.
+* [`aws-lc-rs`] - enabled by default, also available with the `aws_lc_rs` feature flag enabled.
 * [`ring`] - available with the `ring` feature flag enabled.
 
 See the documentation for [`crypto::CryptoProvider`] for details on how providers are
@@ -96,7 +96,7 @@ cryptography.
 * [`rustls-rustcrypto`] - an experimental provider that uses the crypto primitives
 from [`RustCrypto`] for cryptography.
 * [`rustls-post-quantum`]: an experimental provider that adds support for post-quantum
-key exchange to the default aws-lc-rs provider.
+key exchange to the default [`aws-lc-rs`] provider.
 * [`rustls-wolfcrypt-provider`] - a work-in-progress provider that uses [`wolfCrypt`] for cryptography.
 
 [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider
