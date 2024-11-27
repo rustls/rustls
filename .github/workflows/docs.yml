@@ -16,7 +16,7 @@ on:
 jobs:
   generate:
     name: Generate pre-release documentation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
 
   deploy:
     name: Deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.repository == 'rustls/rustls'
     needs: generate
     environment:

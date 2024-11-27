@@ -29,7 +29,7 @@ jobs:
           - beta
           - nightly
         os:
-          - ubuntu-latest
+          - ubuntu-24.04
           - windows-latest
           - macos-latest
         exclude:
@@ -112,7 +112,7 @@ jobs:
 
   msrv:
     name: MSRV
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -134,7 +134,7 @@ jobs:
 
   features:
     name: Features
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -188,7 +188,7 @@ jobs:
 
   bogo:
     name: BoGo test suite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -230,7 +230,7 @@ jobs:
 
   fuzz:
     name: Smoke-test fuzzing targets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -252,7 +252,7 @@ jobs:
 
   benchmarks:
     name: Run benchmarks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -278,7 +278,7 @@ jobs:
 
   docs:
     name: Check for documentation errors
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -301,7 +301,7 @@ jobs:
 
   coverage:
     name: Measure coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'merge_group'
     steps:
       - name: Checkout sources
@@ -329,7 +329,7 @@ jobs:
 
   minver:
     name: Check minimum versions of direct dependencies
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -352,7 +352,7 @@ jobs:
 
   cross:
     name: cross-target testing
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name != 'merge_group'
     strategy:
       matrix:
@@ -388,7 +388,7 @@ jobs:
 
   semver:
     name: Check semver compatibility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -400,7 +400,7 @@ jobs:
 
   format:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -419,7 +419,7 @@ jobs:
 
   format-unstable:
     name: Format (unstable)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -442,7 +442,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -464,7 +464,7 @@ jobs:
 
   clippy-nightly:
     name: Clippy (Nightly)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -484,7 +484,7 @@ jobs:
 
   check-external-types:
     name: Validate external types appearing in public API
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -502,7 +502,7 @@ jobs:
 
   openssl-tests:
     name: Run openssl-tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4

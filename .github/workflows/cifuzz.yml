@@ -7,7 +7,7 @@ concurrency:
 
 jobs:
   Fuzzing:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Build Fuzzers
       id: build
