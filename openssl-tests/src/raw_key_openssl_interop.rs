@@ -447,6 +447,7 @@ mod tests {
 
         assert!(received_server_msg);
         assert_eq!(server_thread.join().unwrap(), "Hello, from openssl client!");
+        openssl_client.wait().unwrap();
     }
 
     #[test]
@@ -516,5 +517,8 @@ mod tests {
         server_process
             .kill()
             .expect("Failed to kill OpenSSL server process");
+        server_process
+            .wait()
+            .expect("Failed to wait on OpenSSL server process");
     }
 }
