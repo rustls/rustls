@@ -127,6 +127,7 @@ pub(super) mod danger {
 pub enum BrowserType {
     /// Emulate Chrome's behavior.
     Chrome,
+    Firefox,
 }
 
 #[derive(Debug, Clone)]
@@ -279,10 +280,22 @@ impl ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
                     vec![crate::compress::BROTLI_DECOMPRESSOR],
                 )
             },
+            BrowserEmulator { browser_type: BrowserType::Firefox, version: _ } => {
+                (
+                    vec![b"h2".to_vec(), b"http/1.1".to_vec()],
+                    vec![],
+                    vec![],
+                )
+            },
+            _ => {
+                (Vec::new(),
+                compress::default_cert_compressors().to_vec(),
+                compress::default_cert_decompressors().to_vec())
+            }
         };
 
         let key_log: Arc<dyn KeyLog> = match self.state.browser_emulator {
-            BrowserEmulator { browser_type: BrowserType::Chrome, version: _ } => Arc::new(KeyLogFile::new()),
+            _ => Arc::new(KeyLogFile::new()),
         };
 
         ClientConfig {

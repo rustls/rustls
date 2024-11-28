@@ -242,6 +242,15 @@ impl CryptoProviderBuilder {
 
                 provider
             }
+            Some(BrowserEmulator { browser_type: BrowserType::Firefox, version: _ }) => {
+                let provider = CryptoProvider {
+                    cipher_suites: CHROME_CIPHER_SUITES.to_vec(),
+                    signature_verification_algorithms: CHROME_SIGNATURE_VERIFICATION_ALGOS,
+                    ..aws_lc_rs::default_provider()
+                };
+
+                provider
+            }
             None => aws_lc_rs::default_provider(),
         }
     }
