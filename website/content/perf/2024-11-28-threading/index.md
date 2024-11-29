@@ -33,7 +33,7 @@ The benchmarking tool used for both OpenSSL and BoringSSL was [openssl-bench `02
 
 #### BoringSSL and OpenSSL
 The version of BoringSSL and its build instructions are the same
-as [the previous report](2024-10-18-report.md).
+as [the previous report](@/perf/2024-10-18-report.md).
 
 We test OpenSSL 3.4.0 which is the latest release at the time of writing.
 
