@@ -57,6 +57,7 @@
 //! The community has also started developing third-party providers for Rustls:
 //!
 //!   * [`rustls-mbedtls-provider`] - a provider that uses [`mbedtls`] for cryptography.
+//!   * [`rustls-openssl`] - a provider that uses [OpenSSL] for cryptography.
 //!   * [`rustls-post-quantum`]: an experimental provider that adds support for post-quantum
 //!     key exchange to the default aws-lc-rs provider.
 //!   * [`boring-rustls-provider`] - a work-in-progress provider that uses [`boringssl`] for
@@ -68,6 +69,8 @@
 //!
 //! [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider
 //! [`mbedtls`]: https://github.com/Mbed-TLS/mbedtls
+//! [`rustls-openssl`]: https://github.com/tofay/rustls-openssl
+//! [OpenSSL]: https://openssl-library.org/
 //! [`rustls-symcrypt`]: https://github.com/microsoft/rustls-symcrypt
 //! [SymCrypt]: https://github.com/microsoft/SymCrypt
 //! [`boring-rustls-provider`]: https://github.com/janrueth/boring-rustls-provider
