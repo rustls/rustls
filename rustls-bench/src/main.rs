@@ -51,7 +51,10 @@ pub fn main() {
             plaintext_size,
             max_fragment_size,
         } => {
-            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
+            for bench in lookup_matching_benches(cipher_suite, args.key_type, &provider).iter() {
                 bench_bulk(
                     &Parameters::new(bench, &args)
                         .with_plaintext_size(*plaintext_size)
@@ -64,8 +67,10 @@ pub fn main() {
         | Command::HandshakeResume { cipher_suite }
         | Command::HandshakeTicket { cipher_suite } => {
             let resume = ResumptionParam::from_subcommand(args.command());
-
-            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
+            for bench in lookup_matching_benches(cipher_suite, args.key_type, &provider).iter() {
                 bench_handshake(
                     &Parameters::new(bench, &args)
                         .with_client_auth(ClientAuth::No)
@@ -77,7 +82,10 @@ pub fn main() {
             cipher_suite,
             count,
         } => {
-            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
+            for bench in lookup_matching_benches(cipher_suite, args.key_type, &provider).iter() {
                 let params = Parameters::new(bench, &args);
                 let client_config = params.client_config();
                 let server_config = params.server_config();
@@ -686,12 +694,14 @@ fn bench_memory(
 fn lookup_matching_benches(
     ciphersuite_name: &str,
     key_type: Option<RequestedKeyType>,
+    provider: &Provider,
 ) -> Vec<BenchmarkParam> {
     let r: Vec<BenchmarkParam> = ALL_BENCHMARKS
         .iter()
         .filter(|params| {
             format!("{:?}", params.ciphersuite).to_lowercase() == ciphersuite_name.to_lowercase()
                 && (key_type.is_none() || Some(params.key_type) == key_type.map(KeyType::from))
+                && provider.supports_benchmark(params)
         })
         .cloned()
         .collect();
