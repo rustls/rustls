@@ -63,6 +63,7 @@ jobs:
             --accept 200..=204,403,429,500
             --cache
             --max-cache-age 1d
+            --exclude-path 'website/content/'
             '**/*.md'
             'target/doc/**/*.html'
           fail: true
