@@ -57,16 +57,19 @@
 //! The community has also started developing third-party providers for Rustls:
 //!
 //!   * [`rustls-mbedtls-provider`] - a provider that uses [`mbedtls`] for cryptography.
+//!   * [`rustls-post-quantum`]: an experimental provider that adds support for post-quantum
+//!     key exchange to the default aws-lc-rs provider.
 //!   * [`boring-rustls-provider`] - a work-in-progress provider that uses [`boringssl`] for
 //!     cryptography.
 //!   * [`rustls-rustcrypto`] - an experimental provider that uses the crypto primitives
 //!     from [`RustCrypto`] for cryptography.
-//!   * [`rustls-post-quantum`]: an experimental provider that adds support for post-quantum
-//!     key exchange to the default aws-lc-rs provider.
+//!   * [`rustls-symcrypt`] - a provider that uses Microsoft's [SymCrypt] library.
 //!   * [`rustls-wolfcrypt-provider`] - a work-in-progress provider that uses [`wolfCrypt`] for cryptography.
 //!
 //! [`rustls-mbedtls-provider`]: https://github.com/fortanix/rustls-mbedtls-provider
 //! [`mbedtls`]: https://github.com/Mbed-TLS/mbedtls
+//! [`rustls-symcrypt`]: https://github.com/microsoft/rustls-symcrypt
+//! [SymCrypt]: https://github.com/microsoft/SymCrypt
 //! [`boring-rustls-provider`]: https://github.com/janrueth/boring-rustls-provider
 //! [`boringssl`]: https://github.com/google/boringssl
 //! [`rustls-rustcrypto`]: https://github.com/RustCrypto/rustls-rustcrypto
