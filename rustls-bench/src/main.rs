@@ -35,7 +35,13 @@ pub fn main() {
             plaintext_size,
             max_fragment_size,
         } => {
-            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
+            for bench in lookup_matching_benches(cipher_suite, args.key_type)
+                .iter()
+                .filter(|t| provider.supports_benchmark(t))
+            {
                 bench_bulk(
                     &Parameters::new(bench, &args)
                         .with_plaintext_size(*plaintext_size)
@@ -48,8 +54,14 @@ pub fn main() {
         | Command::HandshakeResume { cipher_suite }
         | Command::HandshakeTicket { cipher_suite } => {
             let resume = ResumptionParam::from_subcommand(args.command());
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
 
-            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
+            for bench in lookup_matching_benches(cipher_suite, args.key_type)
+                .iter()
+                .filter(|t| provider.supports_benchmark(t))
+            {
                 bench_handshake(
                     &Parameters::new(bench, &args)
                         .with_client_auth(ClientAuth::No)
@@ -61,7 +73,13 @@ pub fn main() {
             cipher_suite,
             count,
         } => {
-            for bench in lookup_matching_benches(cipher_suite, args.key_type).iter() {
+            let provider = args
+                .provider
+                .unwrap_or_else(Provider::choose_default);
+            for bench in lookup_matching_benches(cipher_suite, args.key_type)
+                .iter()
+                .filter(|t| provider.supports_benchmark(t))
+            {
                 let params = Parameters::new(bench, &args);
                 let client_config = params.client_config();
                 let server_config = params.server_config();
