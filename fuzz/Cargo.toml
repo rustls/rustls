@@ -43,3 +43,7 @@ path = "fuzzers/server.rs"
 [[bin]]
 name = "server_name"
 path = "fuzzers/server_name.rs"
+
+[[bin]]
+name = "unbuffered"
+path = "fuzzers/unbuffered.rs"
