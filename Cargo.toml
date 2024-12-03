@@ -18,6 +18,8 @@ members = [
   "rustls-bench",
   # rustls cryptography provider integration tests
   "rustls-provider-test",
+  # rustls cryptography provider for fuzzing
+  "rustls-fuzzing-provider",
 ]
 
 ## Deliberately not included in `members`:

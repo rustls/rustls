@@ -2312,6 +2312,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-fuzzing-provider"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "rustls 0.23.20",
+ "rustls-webpki",
+]
+
+[[package]]
 name = "rustls-openssl-tests"
 version = "0.0.1"
 dependencies = [

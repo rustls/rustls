@@ -1,0 +1,12 @@
+[package]
+name = "rustls-fuzzing-provider"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rustls = { path = "../rustls", default-features = false, features = ["logging", "std", "tls12"] }
+webpki = { workspace = true }
+
+[dev-dependencies]
+env_logger = { workspace = true }
