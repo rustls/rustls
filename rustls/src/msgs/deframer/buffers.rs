@@ -91,7 +91,7 @@ impl<'b> Coalescer<'b> {
 }
 
 /// Accounting structure tracking progress in parsing a single buffer.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub(crate) struct BufferProgress {
     /// Prefix of the buffer that has been processed so far.
     ///
@@ -113,6 +113,13 @@ pub(crate) struct BufferProgress {
 }
 
 impl BufferProgress {
+    pub(super) fn new(processed: usize) -> Self {
+        Self {
+            processed,
+            discard: 0,
+        }
+    }
+
     #[inline]
     pub(crate) fn add_discard(&mut self, discard: usize) {
         self.discard += discard;
@@ -149,8 +156,6 @@ pub(crate) struct DeframerVecBuffer {
 
     /// What size prefix of `buf` is used.
     used: usize,
-
-    pub(crate) processed: usize,
 }
 
 impl DeframerVecBuffer {
@@ -174,10 +179,8 @@ impl DeframerVecBuffer {
             self.buf
                 .copy_within(taken..self.used, 0);
             self.used -= taken;
-            self.processed = self.processed.saturating_sub(taken);
-        } else if taken == self.used {
+        } else if taken >= self.used {
             self.used = 0;
-            self.processed = 0;
         }
     }
 
