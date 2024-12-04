@@ -33,6 +33,18 @@ impl Prf for PrfUsingHmac<'_> {
     fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]) {
         prf(output, self.0.with_key(secret).as_ref(), label, seed);
     }
+
+    fn new_secret(&self, secret: &[u8]) -> Option<Box<dyn PrfSecret>> {
+        Some(Box::new(PrfSecretUsingHmac(self.0.with_key(secret))))
+    }
+}
+
+struct PrfSecretUsingHmac(Box<dyn hmac::Key>);
+
+impl PrfSecret for PrfSecretUsingHmac {
+    fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]) {
+        prf(output, &*self.0, label, seed)
+    }
 }
 
 /// An instantiation of the TLS1.2 PRF with a specific, implicit hash function.
@@ -64,10 +76,34 @@ pub trait Prf: Send + Sync {
     /// The caller guarantees that `secret`, `label`, and `seed` are non-empty.
     fn for_secret(&self, output: &mut [u8], secret: &[u8], label: &[u8], seed: &[u8]);
 
+    /// Returns an object that can compute `PRF(secret, label, seed)` with
+    /// the same `secret`.
+    ///
+    /// This object can amortize any preprocessing needed on `secret` over
+    /// several `PRF(...)` calls.
+    ///
+    /// The default implementation returns `None`: in this case, rustls
+    /// itself hangs on to `secret` and calls `for_secret()` as needed.
+    ///
+    /// If `Some(_)` is returned, rustls does not call `for_secret()`.
+    fn new_secret(&self, _secret: &[u8]) -> Option<Box<dyn PrfSecret>> {
+        None
+    }
+
     /// Return `true` if this is backed by a FIPS-approved implementation.
     fn fips(&self) -> bool {
         false
     }
+}
+
+/// An instantiation of the TLS1.2 PRF with a fixed hash function and master secret.
+pub trait PrfSecret: Send + Sync {
+    /// Computes `PRF(secret, label, seed)`, writing the result into `output`.
+    ///
+    /// `secret` is implicit in this object; see [`Prf::new_secret`].
+    ///
+    /// The caller guarantees that `label` and `seed` are non-empty.
+    fn prf(&self, output: &mut [u8], label: &[u8], seed: &[u8]);
 }
 
 pub(crate) fn prf(out: &mut [u8], hmac_key: &dyn hmac::Key, label: &[u8], seed: &[u8]) {

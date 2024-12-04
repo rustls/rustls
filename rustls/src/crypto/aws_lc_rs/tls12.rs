@@ -6,7 +6,7 @@ use crate::crypto::cipher::{
     make_tls12_aad, AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter,
     MessageEncrypter, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN,
 };
-use crate::crypto::tls12::Prf;
+use crate::crypto::tls12::{Prf, PrfSecret};
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::error::Error;
@@ -457,6 +457,12 @@ impl Prf for Tls12Prf {
             seed,
         );
         Ok(())
+    }
+
+    fn new_secret(&self, secret: &[u8]) -> Option<Box<dyn PrfSecret>> {
+        // nb. this is not implemented, as aws-lc-rs `tls_prf::Secret::derive()` cannot
+        // take advantage of this optimisation.
+        None
     }
 
     fn fips(&self) -> bool {

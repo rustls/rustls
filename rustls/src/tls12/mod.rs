@@ -96,6 +96,7 @@ pub(crate) struct ConnectionSecrets {
     pub(crate) randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
     pub(crate) master_secret: [u8; 48],
+    master_secret_prf: Option<Box<dyn crypto::tls12::PrfSecret>>,
 }
 
 impl ConnectionSecrets {
@@ -110,6 +111,7 @@ impl ConnectionSecrets {
             randoms,
             suite,
             master_secret: [0u8; 48],
+            master_secret_prf: None,
         };
 
         let (label, seed) = match ems_seed {
@@ -134,6 +136,11 @@ impl ConnectionSecrets {
                 seed.as_ref(),
             )?;
 
+        ret.master_secret_prf = ret
+            .suite
+            .prf_provider
+            .new_secret(&ret.master_secret);
+
         Ok(ret)
     }
 
@@ -146,10 +153,23 @@ impl ConnectionSecrets {
             randoms,
             suite,
             master_secret: [0u8; 48],
+            master_secret_prf: suite
+                .prf_provider
+                .new_secret(master_secret),
         };
         ret.master_secret
             .copy_from_slice(master_secret);
         ret
+    }
+
+    fn prf(&self, out: &mut [u8], label: &[u8], seed: &[u8]) {
+        match &self.master_secret_prf {
+            Some(secret) => secret.prf(out, label, seed),
+            None => self
+                .suite
+                .prf_provider
+                .for_secret(out, &self.master_secret, label, seed),
+        }
     }
 
     /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
@@ -200,12 +220,7 @@ impl ConnectionSecrets {
         // NOTE: opposite order to above for no good reason.
         // Don't design security protocols on drugs, kids.
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
-        self.suite.prf_provider.for_secret(
-            &mut out,
-            &self.master_secret,
-            b"key expansion",
-            &randoms,
-        );
+        self.prf(&mut out, b"key expansion", &randoms);
 
         out
     }
@@ -220,14 +235,7 @@ impl ConnectionSecrets {
 
     fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {
         let mut out = vec![0u8; 12];
-
-        self.suite.prf_provider.for_secret(
-            &mut out,
-            &self.master_secret,
-            label,
-            handshake_hash.as_ref(),
-        );
-
+        self.prf(&mut out, label, handshake_hash.as_ref());
         out
     }
 
@@ -254,9 +262,7 @@ impl ConnectionSecrets {
             randoms.extend_from_slice(context);
         }
 
-        self.suite
-            .prf_provider
-            .for_secret(output, &self.master_secret, label, &randoms);
+        self.prf(output, label, &randoms);
     }
 
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
