@@ -96,6 +96,7 @@ pub(crate) struct ConnectionSecrets {
     pub(crate) randoms: ConnectionRandoms,
     suite: &'static Tls12CipherSuite,
     master_secret: [u8; 48],
+    master_secret_prf: Box<dyn crypto::tls12::PrfSecret>,
 }
 
 impl ConnectionSecrets {
@@ -106,17 +107,11 @@ impl ConnectionSecrets {
         randoms: ConnectionRandoms,
         suite: &'static Tls12CipherSuite,
     ) -> Result<Self, Error> {
-        let mut ret = Self {
-            randoms,
-            suite,
-            master_secret: [0u8; 48],
-        };
-
         let (label, seed) = match ems_seed {
             Some(seed) => ("extended master secret", Seed::Ems(seed)),
             None => (
                 "master secret",
-                Seed::Randoms(join_randoms(&ret.randoms.client, &ret.randoms.server)),
+                Seed::Randoms(join_randoms(&randoms.client, &randoms.server)),
             ),
         };
 
@@ -124,17 +119,25 @@ impl ConnectionSecrets {
         // slice parameters are non-empty.
         // `label` is guaranteed non-empty because it's assigned from a `&str` above.
         // `seed.as_ref()` is guaranteed non-empty by documentation on the AsRef impl.
-        ret.suite
-            .prf_provider
-            .for_key_exchange(
-                &mut ret.master_secret,
-                kx,
-                peer_pub_key,
-                label.as_bytes(),
-                seed.as_ref(),
-            )?;
+        let mut master_secret = [0u8; 48];
+        suite.prf_provider.for_key_exchange(
+            &mut master_secret,
+            kx,
+            peer_pub_key,
+            label.as_bytes(),
+            seed.as_ref(),
+        )?;
 
-        Ok(ret)
+        let master_secret_prf = suite
+            .prf_provider
+            .new_secret(&master_secret);
+
+        Ok(Self {
+            randoms,
+            suite,
+            master_secret,
+            master_secret_prf,
+        })
     }
 
     pub(crate) fn new_resume(
@@ -146,6 +149,9 @@ impl ConnectionSecrets {
             randoms,
             suite,
             master_secret: *master_secret,
+            master_secret_prf: suite
+                .prf_provider
+                .new_secret(master_secret),
         }
     }
 
@@ -197,12 +203,8 @@ impl ConnectionSecrets {
         // NOTE: opposite order to above for no good reason.
         // Don't design security protocols on drugs, kids.
         let randoms = join_randoms(&self.randoms.server, &self.randoms.client);
-        self.suite.prf_provider.for_secret(
-            &mut out,
-            &self.master_secret,
-            b"key expansion",
-            &randoms,
-        );
+        self.master_secret_prf
+            .prf(&mut out, b"key expansion", &randoms);
 
         out
     }
@@ -217,14 +219,8 @@ impl ConnectionSecrets {
 
     fn make_verify_data(&self, handshake_hash: &hash::Output, label: &[u8]) -> Vec<u8> {
         let mut out = vec![0u8; 12];
-
-        self.suite.prf_provider.for_secret(
-            &mut out,
-            &self.master_secret,
-            label,
-            handshake_hash.as_ref(),
-        );
-
+        self.master_secret_prf
+            .prf(&mut out, label, handshake_hash.as_ref());
         out
     }
 
@@ -251,9 +247,8 @@ impl ConnectionSecrets {
             randoms.extend_from_slice(context);
         }
 
-        self.suite
-            .prf_provider
-            .for_secret(output, &self.master_secret, label, &randoms);
+        self.master_secret_prf
+            .prf(output, label, &randoms);
     }
 
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
