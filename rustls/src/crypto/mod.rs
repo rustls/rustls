@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use emulation::{CHROME_CIPHER_SUITES, CHROME_SIGNATURE_VERIFICATION_ALGOS};
+use emulation::{CHROME_CIPHER_SUITES, CHROME_SIGNATURE_VERIFICATION_ALGOS, FIREFOX_CIPHER_SUITES, FIREFOX_SIGNATURE_VERIFICATION_ALGOS};
 use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
@@ -244,8 +244,8 @@ impl CryptoProviderBuilder {
             }
             Some(BrowserEmulator { browser_type: BrowserType::Firefox, version: _ }) => {
                 let provider = CryptoProvider {
-                    cipher_suites: CHROME_CIPHER_SUITES.to_vec(),
-                    signature_verification_algorithms: CHROME_SIGNATURE_VERIFICATION_ALGOS,
+                    cipher_suites: FIREFOX_CIPHER_SUITES.to_vec(),
+                    signature_verification_algorithms: FIREFOX_SIGNATURE_VERIFICATION_ALGOS,
                     ..aws_lc_rs::default_provider()
                 };
 

@@ -432,6 +432,8 @@ fn emit_client_hello_for_retry(
     match config.browser_emulation {
         // Chrome doesn't send this cipher suite.
         Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {}
+        // Firefox also doesn't seem to send this cipher suite?
+        Some(BrowserEmulator { browser_type: BrowserType::Firefox, version: _ }) => {}
         _ => {
             // We don't do renegotiation at all, in fact.
             cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
