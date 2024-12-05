@@ -647,6 +647,12 @@ impl From<&[u8]> for SharedSecret {
     }
 }
 
+impl From<Vec<u8>> for SharedSecret {
+    fn from(buf: Vec<u8>) -> Self {
+        Self { buf, offset: 0 }
+    }
+}
+
 /// This function returns a [`CryptoProvider`] that uses
 /// FIPS140-3-approved cryptography.
 ///
