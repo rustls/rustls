@@ -296,6 +296,7 @@ fn emit_client_hello_for_retry(
 
             exts.push(ClientExtension::RenegotiationInfo(PayloadU8::empty()));
             exts.push(ClientExtension::DelegatedCredentials(delegated_credentials_signature_algos));
+            exts.push(ClientExtension::RecordSizeLimit(16385));
         },
         _ => {},
     }

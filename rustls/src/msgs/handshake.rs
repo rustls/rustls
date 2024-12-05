@@ -576,6 +576,7 @@ pub enum ClientExtension {
     ReservedGrease(),
     SignedCertificateTimestamp(),
     DelegatedCredentials(PayloadU16),
+    RecordSizeLimit(u16),
     ApplicationSettings(PayloadU16),
     RenegotiationInfo(PayloadU8),
     Unknown(UnknownExtension),
@@ -609,6 +610,7 @@ impl ClientExtension {
             }
             Self::ReservedGrease() => ExtensionType::ReservedGrease,
             Self::DelegatedCredentials(_) => ExtensionType::DelegatedCredentials,
+            Self::RecordSizeLimit(_) => ExtensionType::RecordSizeLimit,
             Self::SignedCertificateTimestamp() => ExtensionType::SignedCertificateTimestamp,
             Self::ApplicationSettings(_) => ExtensionType::ApplicationSettings,
             Self::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
@@ -649,6 +651,7 @@ impl Codec<'_> for ClientExtension {
             Self::ReservedGrease() => {},
             Self::SignedCertificateTimestamp() => {},
             Self::DelegatedCredentials(ref r) => r.encode(nested.buf),
+            Self::RecordSizeLimit(ref r) => r.encode(nested.buf),
             Self::ApplicationSettings(ref r) => r.encode(nested.buf),
             Self::RenegotiationInfo(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
