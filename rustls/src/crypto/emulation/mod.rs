@@ -110,25 +110,26 @@ pub static FIREFOX_SIGNATURE_VERIFICATION_ALGOS: WebPkiSupportedAlgorithms = Web
         webpki_algs::RSA_PKCS1_3072_8192_SHA384,
     ],
     mapping: &[
-      (
-        SignatureScheme::ECDSA_NISTP384_SHA384,
-            &[
-                webpki_algs::ECDSA_P384_SHA384,
-                webpki_algs::ECDSA_P256_SHA384,
-                webpki_algs_aws::ECDSA_P521_SHA384,
-            ],
+        (
+          SignatureScheme::ECDSA_NISTP256_SHA256,
+          &[
+              webpki_algs::ECDSA_P256_SHA256,
+              webpki_algs::ECDSA_P384_SHA256,
+              webpki_algs_aws::ECDSA_P521_SHA256,
+          ],
         ),
         (
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            &[
-                webpki_algs::ECDSA_P256_SHA256,
-                webpki_algs::ECDSA_P384_SHA256,
-                webpki_algs_aws::ECDSA_P521_SHA256,
-            ],
+          SignatureScheme::ECDSA_NISTP384_SHA384,
+          &[
+              webpki_algs::ECDSA_P384_SHA384,
+              webpki_algs::ECDSA_P256_SHA384,
+              webpki_algs_aws::ECDSA_P521_SHA384,
+          ],
         ),
+
         (
-            SignatureScheme::ECDSA_NISTP521_SHA512,
-            &[webpki_algs_aws::ECDSA_P521_SHA512],
+          SignatureScheme::ECDSA_NISTP521_SHA512,
+          &[webpki_algs_aws::ECDSA_P521_SHA512],
         ),
         (
           SignatureScheme::RSA_PSS_SHA256,
@@ -153,6 +154,14 @@ pub static FIREFOX_SIGNATURE_VERIFICATION_ALGOS: WebPkiSupportedAlgorithms = Web
         (
           SignatureScheme::RSA_PKCS1_SHA512,
           &[webpki_algs::RSA_PKCS1_2048_8192_SHA512],
+        ),
+        (
+          SignatureScheme::ECDSA_SHA1_Legacy,
+          &[webpki_algs_aws::ECDSA_P256_SHA256], // fake signature scheme from the patch
+        ),
+        (
+          SignatureScheme::RSA_PKCS1_SHA1,
+          &[webpki_algs::RSA_PKCS1_2048_8192_SHA256], // fake signature scheme from the patch
         ),
     ],
 };
