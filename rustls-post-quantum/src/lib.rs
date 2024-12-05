@@ -125,7 +125,7 @@ impl SupportedKxGroup for X25519MLKEM768 {
     }
 
     fn name(&self) -> NamedGroup {
-        NAMED_GROUP
+        NamedGroup::X25519MLKEM768
     }
 
     fn usable_for_version(&self, version: ProtocolVersion) -> bool {
@@ -176,7 +176,7 @@ impl ActiveKeyExchange for Active {
     }
 
     fn group(&self) -> NamedGroup {
-        NAMED_GROUP
+        NamedGroup::X25519MLKEM768
     }
 }
 
@@ -233,8 +233,6 @@ impl CombinedShare {
         out
     }
 }
-
-const NAMED_GROUP: NamedGroup = NamedGroup::Unknown(0x11ec);
 
 const INVALID_KEY_SHARE: Error = Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare);
 
