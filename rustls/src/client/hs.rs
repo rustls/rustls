@@ -290,6 +290,13 @@ fn emit_client_hello_for_retry(
             exts.push(ClientExtension::ApplicationSettings(application_settings));
             exts.push(ClientExtension::RenegotiationInfo(PayloadU8::empty()));
         },
+        Some(BrowserEmulator { browser_type: BrowserType::Firefox, version: _ }) => {
+            // TODO: We don't really support the delegated credentials extension yet, just sending it in the client hello message
+            let delegated_credentials_signature_algos = PayloadU16::new(vec![0x04, 0x03, 0x05, 0x03, 0x06, 0x03, 0x02, 0x03]);
+
+            exts.push(ClientExtension::RenegotiationInfo(PayloadU8::empty()));
+            exts.push(ClientExtension::DelegatedCredentials(delegated_credentials_signature_algos));
+        },
         _ => {},
     }
 

@@ -121,6 +121,7 @@ enum_builder! {
         EncryptedClientHello => 0xfe0d, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-11.1
         EncryptedClientHelloOuterExtensions => 0xfd00, // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#section-5.1
         ReservedGrease => 0xbaba, 
+        DelegatedCredentials => 0x0022,
         SignedCertificateTimestamp => 0x0012,
         ApplicationSettings => 0x4469, 
     }

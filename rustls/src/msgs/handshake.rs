@@ -575,6 +575,7 @@ pub enum ClientExtension {
     EncryptedClientHelloOuterExtensions(Vec<ExtensionType>),
     ReservedGrease(),
     SignedCertificateTimestamp(),
+    DelegatedCredentials(PayloadU16),
     ApplicationSettings(PayloadU16),
     RenegotiationInfo(PayloadU8),
     Unknown(UnknownExtension),
@@ -607,6 +608,7 @@ impl ClientExtension {
                 ExtensionType::EncryptedClientHelloOuterExtensions
             }
             Self::ReservedGrease() => ExtensionType::ReservedGrease,
+            Self::DelegatedCredentials(_) => ExtensionType::DelegatedCredentials,
             Self::SignedCertificateTimestamp() => ExtensionType::SignedCertificateTimestamp,
             Self::ApplicationSettings(_) => ExtensionType::ApplicationSettings,
             Self::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
@@ -646,6 +648,7 @@ impl Codec<'_> for ClientExtension {
             Self::EncryptedClientHelloOuterExtensions(ref r) => r.encode(nested.buf),
             Self::ReservedGrease() => {},
             Self::SignedCertificateTimestamp() => {},
+            Self::DelegatedCredentials(ref r) => r.encode(nested.buf),
             Self::ApplicationSettings(ref r) => r.encode(nested.buf),
             Self::RenegotiationInfo(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
