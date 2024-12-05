@@ -40,7 +40,7 @@ anyhow = "1.0.73"
 asn1 = "0.20"
 async-std = { version = "1.12.0", features = ["attributes"] }
 async-trait = "0.1.74"
-aws-lc-rs = { version = "1.9", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
+aws-lc-rs = { version = "1.10", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
 base64 = "0.22"
 bencher = "0.1.5"
 brotli = { version = "7", default-features = false, features = ["std"] }
