@@ -11,6 +11,7 @@ rustls-openssl = { version = "0.2", optional = true }
 rustls-graviola = { workspace = true, optional = true }
 rustls-mbedcrypto-provider = { version = "0.1", optional = true }
 rustls-rustcrypto = { git = "https://github.com/RustCrypto/rustls-rustcrypto.git?rev=992778d", optional = true }
+rustls-symcrypt = { version = "0.1", features = ["x25519", "chacha"], optional = true }
 
 [features]
 default = []
@@ -22,6 +23,7 @@ mbedtls = ["dep:rustls-mbedcrypto-provider", "__polyfill_ticketer"]
 openssl = ["dep:rustls-openssl", "__polyfill_ticketer"]
 ring = ["rustls/ring"]
 rustcrypto = ["dep:rustls-rustcrypto", "__polyfill_ticketer"]
+symcrypt = ["dep:rustls-symcrypt"]
 __polyfill_ticketer = ["rustls/ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

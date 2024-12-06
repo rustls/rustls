@@ -960,6 +960,8 @@ enum Provider {
     Ring,
     #[cfg(feature = "rustcrypto")]
     RustCrypto,
+    #[cfg(feature = "symcrypt")]
+    SymCrypt,
     #[value(skip)]
     _None, // prevents this enum being uninhabited when built with no features
 }
@@ -983,6 +985,8 @@ impl Provider {
             Self::Ring => rustls::crypto::ring::default_provider(),
             #[cfg(feature = "rustcrypto")]
             Self::RustCrypto => rustls_rustcrypto::provider(),
+            #[cfg(feature = "symcrypt")]
+            Self::SymCrypt => rustls_symcrypt::default_symcrypt_provider(),
             Self::_None => unreachable!(),
         }
     }
@@ -1005,6 +1009,8 @@ impl Provider {
             Self::Ring => rustls::crypto::ring::Ticketer::new(),
             #[cfg(feature = "rustcrypto")]
             Self::RustCrypto => rustls::crypto::ring::Ticketer::new(), // XXX: polyfill
+            #[cfg(feature = "symcrypt")]
+            Self::SymCrypt => rustls::crypto::ring::Ticketer::new(), // XXX: polyfill
             Self::_None => unreachable!(),
         }
     }
@@ -1066,6 +1072,9 @@ impl Provider {
 
         #[cfg(feature = "rustcrypto")]
         available.push(Self::RustCrypto);
+
+        #[cfg(feature = "symcrypt")]
+        available.push(Self::SymCrypt);
 
         match available[..] {
             [] => panic!("no providers available in this build"),
