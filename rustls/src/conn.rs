@@ -654,8 +654,7 @@ impl<Data> ConnectionCommon<Data> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
     pub(crate) fn first_handshake_message(&mut self) -> Result<Option<Message<'static>>, Error> {
-        let mut buffer_progress = BufferProgress::default();
-        buffer_progress.add_processed(self.deframer_buffer.processed);
+        let mut buffer_progress = self.core.hs_deframer.progress();
 
         let res = self
             .core
@@ -666,7 +665,6 @@ impl<Data> ConnectionCommon<Data> {
             )
             .map(|opt| opt.map(|pm| Message::try_from(pm).map(|m| m.into_owned())));
 
-        self.deframer_buffer.processed = buffer_progress.processed();
         match res? {
             Some(Ok(msg)) => {
                 self.deframer_buffer
@@ -829,8 +827,7 @@ impl<Data> ConnectionCore<Data> {
             }
         };
 
-        let mut buffer_progress = BufferProgress::default();
-        buffer_progress.add_processed(deframer_buffer.processed);
+        let mut buffer_progress = self.hs_deframer.progress();
 
         loop {
             let res = self.deframe(
@@ -875,7 +872,6 @@ impl<Data> ConnectionCore<Data> {
             deframer_buffer.discard(buffer_progress.take_discard());
         }
 
-        deframer_buffer.processed = buffer_progress.processed();
         deframer_buffer.discard(buffer_progress.take_discard());
         self.state = Ok(state);
         Ok(self.common_state.current_io_state())

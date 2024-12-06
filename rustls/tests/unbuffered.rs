@@ -59,6 +59,57 @@ fn tls12_handshake() {
 }
 
 #[test]
+fn tls12_handshake_fragmented() {
+    let outcome = handshake_config(&rustls::version::TLS12, |client, server| {
+        client.max_fragment_size = Some(512);
+        client.cert_decompressors = vec![];
+        server.max_fragment_size = Some(512);
+    });
+    assert_eq!(
+        outcome.client_transcript,
+        vec![
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(WriteTraffic)"
+        ],
+        "client transcript mismatch"
+    );
+    assert_eq!(
+        outcome.server_transcript,
+        vec![
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)"
+        ],
+        "server transcript mismatch"
+    );
+}
+
+#[test]
 fn tls13_handshake() {
     let outcome = handshake(&rustls::version::TLS13);
     assert_eq!(
@@ -93,9 +144,66 @@ fn tls13_handshake() {
     );
 }
 
+#[test]
+fn tls13_handshake_fragmented() {
+    let outcome = handshake_config(&rustls::version::TLS13, |client, server| {
+        client.max_fragment_size = Some(512);
+        client.cert_decompressors = vec![];
+        server.max_fragment_size = Some(512);
+    });
+    assert_eq!(
+        outcome.client_transcript,
+        vec![
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)",
+            "Ok(WriteTraffic)"
+        ],
+        "client transcript mismatch"
+    );
+    assert_eq!(
+        outcome.server_transcript,
+        vec![
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(BlockedHandshake)",
+            "Ok(EncodeTlsData)",
+            "Ok(TransmitTlsData)",
+            "Ok(WriteTraffic)"
+        ],
+        "server transcript mismatch"
+    );
+}
+
 fn handshake(version: &'static rustls::SupportedProtocolVersion) -> Outcome {
-    let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
-    let client_config = make_client_config(KeyType::Rsa2048);
+    handshake_config(version, |_, _| ())
+}
+
+fn handshake_config(
+    version: &'static rustls::SupportedProtocolVersion,
+    editor: impl Fn(&mut ClientConfig, &mut ServerConfig),
+) -> Outcome {
+    let mut server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+    editor(&mut client_config, &mut server_config);
 
     run(
         Arc::new(client_config),

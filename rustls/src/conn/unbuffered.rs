@@ -8,7 +8,7 @@ use std::error::Error as StdError;
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
-use crate::msgs::deframer::buffers::{BufferProgress, DeframerSliceBuffer};
+use crate::msgs::deframer::buffers::DeframerSliceBuffer;
 use crate::server::ServerConnectionData;
 use crate::Error;
 
@@ -46,7 +46,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
         execute: impl FnOnce(&'c mut Self, &'i mut [u8], T) -> ConnectionState<'c, 'i, Data>,
     ) -> UnbufferedStatus<'c, 'i, Data> {
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
-        let mut buffer_progress = BufferProgress::default();
+        let mut buffer_progress = self.core.hs_deframer.progress();
 
         let (discard, state) = loop {
             if let Some(value) = check(self) {

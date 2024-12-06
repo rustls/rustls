@@ -17,6 +17,15 @@ fuzz_target!(|data: &[u8]| {
     );
     let example_com = "example.com".try_into().unwrap();
     let mut client = ClientConnection::new(config, example_com).unwrap();
-    let _ = client.read_tls(&mut io::Cursor::new(data));
-    let _ = client.process_new_packets();
+    let mut stream = io::Cursor::new(data);
+
+    loop {
+        let rd = client.read_tls(&mut stream).unwrap();
+        if client.process_new_packets().is_err() {
+            break;
+        }
+        if rd == 0 {
+            break;
+        }
+    }
 });

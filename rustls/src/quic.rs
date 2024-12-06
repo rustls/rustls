@@ -384,10 +384,6 @@ mod connection {
                 range.end,
             );
 
-            // `core.process_new_packets` should not process any data in `deframer_buffer`;
-            // it is already ready in `hs_deframer`.
-            self.deframer_buffer.processed = range.end;
-
             self.core
                 .hs_deframer
                 .coalesce(self.deframer_buffer.filled_mut())?;
