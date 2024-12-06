@@ -17,8 +17,6 @@ use rustls::client::{
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-#[cfg(feature = "post-quantum")]
-use rustls::crypto::SupportedKxGroup;
 use rustls::crypto::{aws_lc_rs, ring, CryptoProvider};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
@@ -1543,7 +1541,7 @@ pub fn main() {
                 // if X25519MLKEM768 is requested, insert it from rustls_post_quantum
                 #[cfg(feature = "post-quantum")]
                 if group == rustls_post_quantum::X25519MLKEM768.name() && opts.selected_provider == SelectedProvider::PostQuantum {
-                    opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519MLKEM768);
+                    opts.provider.kx_groups.insert(0, rustls_post_quantum::X25519MLKEM768);
                 }
             }
             "-resumption-delay" => {

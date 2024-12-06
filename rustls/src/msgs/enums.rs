@@ -223,6 +223,11 @@ enum_builder! {
         FFDHE4096 => 0x0102,
         FFDHE6144 => 0x0103,
         FFDHE8192 => 0x0104,
+        MLKEM512 => 0x0200,
+        MLKEM768 => 0x0201,
+        MLKEM1024 => 0x0202,
+        secp256r1MLKEM768 => 0x11eb,
+        X25519MLKEM768 => 0x11ec,
     }
 }
 

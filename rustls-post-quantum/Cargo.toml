@@ -1,6 +1,6 @@
 [package]
 name = "rustls-post-quantum"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.71"
 license = "Apache-2.0 OR ISC OR MIT"
@@ -11,8 +11,8 @@ repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
 
 [dependencies]
-rustls = { version = "0.23.2", features = ["aws_lc_rs"], path = "../rustls" }
-aws-lc-rs = { version = "1.9", features = ["non-fips", "unstable"], default-features = false }
+rustls = { version = "0.23.20", features = ["aws_lc_rs"], path = "../rustls" }
+aws-lc-rs = { version = "1.10", features = ["non-fips", "unstable"], default-features = false }
 
 [dev-dependencies]
 env_logger = "0.11"
