@@ -948,6 +948,8 @@ enum Provider {
     AwsLcRs,
     #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
     AwsLcRsFips,
+    #[cfg(feature = "boringssl")]
+    BoringSsl,
     #[cfg(feature = "graviola")]
     Graviola,
     #[cfg(feature = "ring")]
@@ -963,6 +965,8 @@ impl Provider {
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
             Self::AwsLcRsFips => rustls::crypto::default_fips_provider(),
+            #[cfg(feature = "boringssl")]
+            Self::BoringSsl => boring_rustls_provider::provider(),
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::default_provider(),
             #[cfg(feature = "ring")]
@@ -977,6 +981,8 @@ impl Provider {
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
             Self::AwsLcRsFips => rustls::crypto::aws_lc_rs::Ticketer::new(),
+            #[cfg(feature = "boringssl")]
+            Self::BoringSsl => rustls::crypto::ring::Ticketer::new(), // XXX: polyfill
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::Ticketer::new(),
             #[cfg(feature = "ring")]
@@ -1002,6 +1008,8 @@ impl Provider {
 
     fn supports_key_type(&self, _key_type: KeyType) -> bool {
         match self {
+            #[cfg(feature = "boringssl")]
+            Self::BoringSsl => !matches!(_key_type, KeyType::Ed25519 | KeyType::EcdsaP384),
             #[cfg(feature = "graviola")]
             Self::Graviola => !matches!(_key_type, KeyType::Ed25519),
             // all other providers support all key types
@@ -1018,6 +1026,9 @@ impl Provider {
 
         #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
         available.push(Self::AwsLcRsFips);
+
+        #[cfg(feature = "boringssl")]
+        available.push(Self::BoringSsl);
 
         #[cfg(feature = "graviola")]
         available.push(Self::Graviola);

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+boring-rustls-provider = { git = "https://github.com/janrueth/boring-rustls-provider.git?rev=aa6e1c3", optional = true }
 clap = { workspace = true }
 rustls = { workspace = true }
 rustls-graviola = { workspace = true, optional = true }
@@ -11,9 +12,11 @@ rustls-graviola = { workspace = true, optional = true }
 [features]
 default = []
 aws-lc-rs = ["rustls/aws-lc-rs"]
+boringssl = ["dep:boring-rustls-provider", "__polyfill_ticketer"]
 fips = ["rustls/fips", "aws-lc-rs"]
 graviola = ["dep:rustls-graviola"]
 ring = ["rustls/ring"]
+__polyfill_ticketer = ["rustls/ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = { workspace = true }
