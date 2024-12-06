@@ -463,6 +463,8 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
+ "log",
+ "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -2789,6 +2791,7 @@ dependencies = [
  "rustls-openssl",
  "rustls-rustcrypto",
  "rustls-symcrypt",
+ "rustls-wolfcrypt-provider",
  "tikv-jemallocator",
 ]
 
@@ -2898,6 +2901,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-pemfile"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dce314e5fee3f39953d46bb63bb8a46d40c2f8fb7cc5a3b6cab2bde9721d6e50"
+dependencies = [
+ "rustls-pki-types",
+]
+
+[[package]]
 name = "rustls-pki-types"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2998,6 +3010,31 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "untrusted 0.9.0",
+]
+
+[[package]]
+name = "rustls-wolfcrypt-provider"
+version = "0.1.0"
+source = "git+https://github.com/wolfSSL/rustls-wolfcrypt-provider.git?rev=0c7d407#0c7d407f1f330729a02eb996ebe051e857b71db8"
+dependencies = [
+ "chacha20poly1305",
+ "der",
+ "ecdsa",
+ "env_logger",
+ "foreign-types 0.5.0",
+ "hex",
+ "hmac",
+ "log",
+ "pkcs8",
+ "rand_core",
+ "rsa",
+ "rustls 0.23.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls-pemfile",
+ "rustls-pki-types",
+ "rustls-webpki",
+ "sha2",
+ "signature",
+ "wolfcrypt-rs",
 ]
 
 [[package]]
@@ -3884,6 +3921,14 @@ checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
 dependencies = [
  "cfg-if",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "wolfcrypt-rs"
+version = "0.1.0"
+source = "git+https://github.com/wolfSSL/rustls-wolfcrypt-provider.git?rev=0c7d407#0c7d407f1f330729a02eb996ebe051e857b71db8"
+dependencies = [
+ "bindgen 0.70.1",
 ]
 
 [[package]]
