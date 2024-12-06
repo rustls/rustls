@@ -9,6 +9,7 @@ clap = { workspace = true }
 rustls = { workspace = true }
 rustls-openssl = { version = "0.2", optional = true }
 rustls-graviola = { workspace = true, optional = true }
+rustls-rustcrypto = { git = "https://github.com/RustCrypto/rustls-rustcrypto.git?rev=992778d", optional = true }
 
 [features]
 default = []
@@ -18,6 +19,7 @@ fips = ["rustls/fips", "aws-lc-rs"]
 graviola = ["dep:rustls-graviola"]
 openssl = ["dep:rustls-openssl", "__polyfill_ticketer"]
 ring = ["rustls/ring"]
+rustcrypto = ["dep:rustls-rustcrypto", "__polyfill_ticketer"]
 __polyfill_ticketer = ["rustls/ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
