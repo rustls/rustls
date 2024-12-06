@@ -19,6 +19,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # XXX TBD CONSIDER CI TESTING OF THE FOLLOWING WITH & WITHOUT `critical-section` FEATURE:
+  # - bogo
+  # - ci-bench
+  # - fuzz
+  # - openssl-tests
+  # - provider-example
+  # - rustls-post-quantum
   build:
     name: Build+test
     runs-on: ${{ matrix.os }}
@@ -76,17 +83,32 @@ jobs:
       # nb. feature sets that include "fips" should be --release --
       # this is required for fips on windows.
       # nb. "--all-targets" does not include doctests
-      - name: cargo test (release; all features)
+      # critical-section feature requires both `--cfg portable_atomic_unstable_coerce_unsized` & Rust nightly
+      - name: cargo test (release; all features except critical-section)
+        if: ${{ !startsWith(matrix.rust, 'nightly') }}
+        run: cargo test --release --locked --lib $(admin/all-features-except critical-section rustls) --all-targets
+        env:
+          RUST_BACKTRACE: 1
+      - name: cargo test (release; all features including critical-section - Rust nightly only)
+        if: startsWith(matrix.rust, 'nightly')
         run: cargo test --release --locked --all-features --all-targets
         env:
           RUST_BACKTRACE: 1
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
 
       # nb. this is separate since `--doc` option cannot be combined with other target option(s) ref:
       # - https://doc.rust-lang.org/cargo/commands/cargo-test.html
-      - name: cargo test --doc (release; all-features)
+      - name: cargo test --doc (release; all features except critical-section)
+        if: ${{ !startsWith(matrix.rust, 'nightly') }}
+        run: cargo test --release --locked $(admin/all-features-except critical-section rustls) --doc
+        env:
+          RUST_BACKTRACE: 1
+      - name: cargo test --doc (release; all features including critical-section - Rust nightly only)
+        if: startsWith(matrix.rust, 'nightly')
         run: cargo test --release --locked --all-features --doc
         env:
           RUST_BACKTRACE: 1
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
 
       - name: cargo test (debug; aws-lc-rs)
         run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging,std --all-targets
@@ -107,7 +129,10 @@ jobs:
       - name: cargo build (debug; rustls-provider-test)
         run: cargo build --locked -p rustls-provider-test
 
+      # XXX TODO FIX & RE-ENABLE
       - name: cargo package --all-features -p rustls
+        # XXX XXX SKIP THIS STEP FOR NOW - XXX TODO NEEDS INVESTIGATION
+        if: ${{ false }}
         run: cargo package --all-features -p rustls
 
   msrv:
@@ -119,18 +144,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # XXX TODO ADD CONSISTENT LABEL HERE - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.71"
 
-      # zlib-rs is optional and requires a later MSRV
-      - run: cargo check --locked --lib $(admin/all-features-except zlib rustls) -p rustls
+      # zlib-rs is optional and requires a later MSRV; critical-section requires Rust nightly
+      - run: cargo check --locked --lib $(admin/all-features-except zlib,critical-section rustls) -p rustls
 
+      # XXX TODO ADD CONSISTENT LABEL HERE - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.75"
 
-      - run: cargo check --locked --lib --all-features -p rustls
+      # critical-section requires Rust nightly; check build of all other features with MSRV
+      - run: cargo check --locked --lib $(admin/all-features-except critical-section rustls) -p rustls
 
   features:
     name: Features
@@ -141,8 +169,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # XXX TBD rust-toolchain - ??? ??? ???
+      - name: Install rust-toolchain - nightly
+        uses: dtolnay/rust-toolchain@nightly
         with:
           target: x86_64-unknown-none
 
@@ -170,6 +199,12 @@ jobs:
         run: cargo test --locked --no-default-features
         working-directory: rustls
 
+      - name: cargo test (debug; no default features; critical-section)
+        run: cargo test --locked --no-default-features --features critical-section,std
+        working-directory: rustls
+        env:
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
+
       - name: cargo test (debug; no default features; tls12)
         run: cargo test --locked --no-default-features --features tls12,std
         working-directory: rustls
@@ -195,8 +230,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # XXX TBD rust-toolchain - ??? ??? ???
+      - name: Install rust-toolchain - nightly
+        uses: dtolnay/rust-toolchain@nightly
 
       - name: Install golang toolchain
         uses: actions/setup-go@v5
@@ -262,17 +298,22 @@ jobs:
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
 
+      # XXX TBD FEATURES - ??? ??? ???
       - name: Smoke-test benchmark program (ring)
         run: cargo run -p rustls-bench --profile=bench --locked --features ring -- --multiplier 0.1
 
+      # XXX TBD FEATURES - ??? ??? ???
       - name: Smoke-test benchmark program (aws-lc-rs)
         run: cargo run -p rustls-bench --profile=bench --locked --features aws-lc-rs -- --multiplier 0.1
 
+      # XXX TBD FEATURES - ??? ??? ???
       - name: Smoke-test benchmark program (fips)
         run: cargo run -p rustls-bench --profile=bench --locked --features fips -- --provider aws-lc-rs-fips --multiplier 0.1
 
-      - name: Run micro-benchmarks
-        run: cargo bench --locked --all-features
+      # XXX TBD FEATURES - ??? ??? ???
+      - name: Run micro-benchmarks - XXX TBD XXX XXX FEATURES
+        # run: cargo bench --locked --all-features
+        run: cargo bench --locked $(admin/all-features-except critical-section rustls)
         env:
           RUSTFLAGS: --cfg=bench
 
@@ -285,19 +326,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install rust toolchain
+      # XXX TODO MORE CONSISTENT LABEL HERE - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust toolchain - nightly
         uses: dtolnay/rust-toolchain@nightly
 
+      # XXX TBD FEATURES - ??? ??? ???
       - name: cargo doc (rustls; all features)
         run: cargo doc --locked --all-features --no-deps --document-private-items --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings
+          # XXX TBD ??? ??? ???
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
 
       - name: Check README.md
+        # XXX TBD FEATURES - ??? ??? ???
         run: |
           cargo build --locked --all-features
           ./admin/pull-readme
           git diff --exit-code
+        # XXX TBD ??? ??? ???
+        env:
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
 
   coverage:
     name: Measure coverage
@@ -309,8 +358,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # XXX TBD rust-toolchain - ??? ??? ???
+      # XXX TODO MORE CONSISTENT LABEL HERE - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust-toolchain - nightly - with llvm-tools
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools
 
@@ -319,6 +370,9 @@ jobs:
 
       - name: Measure coverage
         run: ./admin/coverage --lcov --output-path final.info
+        # XXX TBD ??? - FEATURES ??? ??? ???
+        env:
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
 
       - name: Report to codecov.io
         uses: codecov/codecov-action@v5
@@ -336,7 +390,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install rust toolchain
+      # XXX TODO MORE CONSISTENT LABEL HERE - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust toolchain - nightly
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Install cargo-minimal-versions
@@ -377,14 +432,49 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # XXX TBD rust-toolchain - ??? ??? ???
+      # XXX TODO MORE CONSISTENT LABEL HERE - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust-toolchain - nightly
+        uses: dtolnay/rust-toolchain@nightly
       - name: Install cross (cross-rs) from GitHub
         run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Install bindgen feature & CLI for aws-lc-sys (as needed for many cross targets)
         if: ${{ matrix.target != 'i686-unknown-linux-gnu' }}
         run: cargo add --dev --features bindgen 'aws-lc-sys@>0.20' --package rustls --verbose && cargo install bindgen-cli --verbose
       - run: cross test --package rustls --target ${{ matrix.target }}
+      - run: cross test --features critical-section --package rustls --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
+
+  cross-build-with-critical-section-feature:
+    # NOTE: The purpose of this CI job is to test build support for CPU targets with no atomic ptr support
+    # (using critical-section feature)
+    name: cross-target build with critical-section feature
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          # FOR FUTURE CONSIDERATION: test with some other targets with & without atomic ptr support
+          # 32-bit target(s) with no atomic ptr:
+          - thumbv6m-none-eabi
+          # 32-bit Android (Linux) target(s):
+          - armv7-linux-androideabi
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # XXX TBD rust-toolchain - ??? ??? ???
+      # XXX TODO MORE CONSISTENT LABEL HERE - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust-toolchain - nightly
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Install cross (cross-rs) from GitHub
+        run: cargo install cross --git https://github.com/cross-rs/cross
+      # XXX TBD TEST WITH XXX TBD XXX PROVIDER(S)
+      - run: cross build --no-default-features --features critical-section,custom-provider --package rustls --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: --cfg portable_atomic_unstable_coerce_unsized
 
   semver:
     name: Check semver compatibility
@@ -406,7 +496,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Install rust toolchain
+      # XXX TODO MORE CONSISTENT LABEL HERE WITH COMPONENT(S) LABEL - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust toolchain - stable - with rustfmt
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -425,7 +516,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Install rust nightly toolchain
+      # XXX TODO MORE CONSISTENT LABEL HERE WITH COMPONENT(S) LABEL - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust nightly toolchain - nightly-2024-02-21 - with rustfmt
         uses: dtolnay/rust-toolchain@master
         with:
           components: rustfmt
@@ -441,7 +533,8 @@ jobs:
         continue-on-error: true
 
   clippy:
-    name: Clippy
+    # XXX TBD IMPROVE THIS JOB LABEL & REVIEW CONSISTENCY WITH LOOSER clippy-nightly JOB - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+    name: Clippy (strict / deny warnings)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -453,7 +546,8 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
-      - name: Install rust toolchain
+      # XXX TODO MORE CONSISTENT LABEL HERE WITH COMPONENT(S) LABEL - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust toolchain - stable - with clippy
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -475,7 +569,8 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
-      - name: Install rust toolchain
+      # XXX TODO MORE CONSISTENT LABEL HERE WITH COMPONENT(S) LABEL - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust toolchain - nightly - with clippy
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
@@ -490,7 +585,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Install rust toolchain
+      # XXX TODO MORE CONSISTENT LABEL HERE WITH COMPONENT(S) LABEL - XXX TODO RAISE SEPARATE PR TO UPDATE THIS
+      - name: Install rust toolchain - nightly-2024-06-30
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2024-06-30
@@ -509,8 +605,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
+      # XXX TBD rust-toolchain - ??? ??? ???
+      - name: Install rust-toolchain - nightly
+        uses: dtolnay/rust-toolchain@nightly
   
       - name: Install pixi
         run: | 

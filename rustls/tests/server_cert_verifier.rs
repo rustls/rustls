@@ -5,13 +5,14 @@
 use super::*;
 
 mod common;
-use std::sync::Arc;
 
 use common::{
     do_handshake, do_handshake_until_both_error, make_client_config_with_versions,
     make_pair_for_arc_configs, make_server_config, ErrorFromPeer, MockServerVerifier,
     ALL_KEY_TYPES,
 };
+
+use rustls::internal::alias::Arc;
 use rustls::{AlertDescription, Error, InvalidMessage};
 
 #[test]

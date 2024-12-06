@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 use core::fmt::{Debug, Formatter};
@@ -9,6 +8,7 @@ use subtle::ConstantTimeEq;
 
 use super::ring_like::aead;
 use super::ring_like::rand::{SecureRandom, SystemRandom};
+use crate::alias::Arc;
 use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;

@@ -65,11 +65,13 @@ log = { version = "0.4.8" }
 macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
 num-bigint = "0.4.4"
-once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
+once_cell = { version = "1.20.2", default-features = false } # feature(s) specified in member(s) where used
 openssl = "0.10"
 p256 = { version = "0.13.2", default-features = false, features = ["alloc", "ecdsa", "pkcs8"] }
 pkcs8 = "0.10.2"
 pki-types = { package = "rustls-pki-types", version = "1.10", features = ["alloc"] }
+portable-atomic = { version = "1.10.0", default-features = false }
+portable-atomic-util = { version = "0.2.4", default-features = false } # feature(s) specified in member(s) where used
 rand_core = { version = "0.6", features = ["getrandom"] }
 rayon = "1.7"
 rcgen = { version = "0.13", features = ["pem", "aws_lc_rs"], default-features = false }

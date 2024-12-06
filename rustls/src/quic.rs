@@ -17,7 +17,6 @@ use crate::tls13::Tls13CipherSuite;
 
 #[cfg(feature = "std")]
 mod connection {
-    use alloc::sync::Arc;
     use alloc::vec;
     use alloc::vec::Vec;
     use core::fmt::{self, Debug};
@@ -26,6 +25,7 @@ mod connection {
     use pki_types::ServerName;
 
     use super::{DirectionalKeys, KeyChange, Version};
+    use crate::alias::Arc;
     use crate::client::{ClientConfig, ClientConnectionData};
     use crate::common_state::{CommonState, Protocol, DEFAULT_BUFFER_LIMIT};
     use crate::conn::{ConnectionCore, SideData};

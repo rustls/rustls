@@ -21,11 +21,16 @@
 
 use std::io::{self, Read, Write};
 use std::net::ToSocketAddrs;
-use std::sync::Arc;
 use std::{process, str};
+
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
+use std::sync::Arc;
 
 use clap::Parser;
 use mio::net::TcpStream;
+
 use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
