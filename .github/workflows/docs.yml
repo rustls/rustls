@@ -2,8 +2,6 @@ name: documentation
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 on:
   workflow_dispatch:
@@ -85,6 +83,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'rustls/rustls'
     needs: generate
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -92,4 +93,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
