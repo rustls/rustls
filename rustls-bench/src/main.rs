@@ -952,6 +952,8 @@ enum Provider {
     BoringSsl,
     #[cfg(feature = "graviola")]
     Graviola,
+    #[cfg(feature = "openssl")]
+    OpenSsl,
     #[cfg(feature = "ring")]
     Ring,
     #[value(skip)]
@@ -969,6 +971,8 @@ impl Provider {
             Self::BoringSsl => boring_rustls_provider::provider(),
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::default_provider(),
+            #[cfg(feature = "openssl")]
+            Self::OpenSsl => rustls_openssl::default_provider(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::default_provider(),
             Self::_None => unreachable!(),
@@ -985,6 +989,8 @@ impl Provider {
             Self::BoringSsl => rustls::crypto::ring::Ticketer::new(), // XXX: polyfill
             #[cfg(feature = "graviola")]
             Self::Graviola => rustls_graviola::Ticketer::new(),
+            #[cfg(feature = "openssl")]
+            Self::OpenSsl => rustls::crypto::ring::Ticketer::new(), // XXX: polyfill
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::Ticketer::new(),
             Self::_None => unreachable!(),
@@ -1012,6 +1018,8 @@ impl Provider {
             Self::BoringSsl => !matches!(_key_type, KeyType::Ed25519 | KeyType::EcdsaP384),
             #[cfg(feature = "graviola")]
             Self::Graviola => !matches!(_key_type, KeyType::Ed25519),
+            #[cfg(feature = "openssl")]
+            Self::OpenSsl => !matches!(_key_type, KeyType::Ed25519),
             // all other providers support all key types
             _ => true,
         }
@@ -1032,6 +1040,9 @@ impl Provider {
 
         #[cfg(feature = "graviola")]
         available.push(Self::Graviola);
+
+        #[cfg(feature = "openssl")]
+        available.push(Self::OpenSsl);
 
         #[cfg(feature = "ring")]
         available.push(Self::Ring);

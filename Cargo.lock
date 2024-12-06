@@ -424,7 +424,7 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "regex",
@@ -2396,6 +2396,7 @@ dependencies = [
  "clap",
  "rustls 0.23.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustls-graviola",
+ "rustls-openssl",
  "tikv-jemallocator",
 ]
 
@@ -2449,6 +2450,20 @@ version = "0.2.0-alpha.2"
 source = "git+https://github.com/ctz/graviola#b136d1976d4150fbf75865fc8c07aef359907a2a"
 dependencies = [
  "graviola",
+ "rustls 0.23.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls-webpki",
+]
+
+[[package]]
+name = "rustls-openssl"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad6baac2596417ed1ac329842cc9ab22d90fbbc3c59612ecd74d783b1df26523"
+dependencies = [
+ "foreign-types-shared 0.1.1",
+ "once_cell",
+ "openssl",
+ "openssl-sys",
  "rustls 0.23.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustls-webpki",
 ]
