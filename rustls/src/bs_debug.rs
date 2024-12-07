@@ -12,7 +12,7 @@ use core::fmt;
 /// `BsDebug` is not a part of public API of bytes crate.
 pub(crate) struct BsDebug<'a>(pub(crate) &'a [u8]);
 
-impl<'a> fmt::Debug for BsDebug<'a> {
+impl fmt::Debug for BsDebug<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(fmt, "b\"")?;
         for &c in self.0 {

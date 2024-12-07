@@ -1,5 +1,5 @@
 use std::env;
-use std::sync::{Mutex, Once};
+use std::sync::Mutex;
 
 #[macro_use]
 mod macros;
@@ -36,15 +36,9 @@ mod tests_with_aws_lc_rs {
 #[allow(dead_code)]
 fn serialized(f: impl FnOnce()) {
     // Ensure every test is run serialized
-    // TODO: Use `std::sync::Lazy` once that is stable.
-    static mut MUTEX: Option<Mutex<()>> = None;
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| unsafe {
-        MUTEX = Some(Mutex::new(()));
-    });
-    let mutex = unsafe { MUTEX.as_mut() };
+    static MUTEX: Mutex<()> = const { Mutex::new(()) };
 
-    let _guard = mutex.unwrap().get_mut().unwrap();
+    let _guard = MUTEX.lock().unwrap();
 
     // XXX: NOT thread safe.
     env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");

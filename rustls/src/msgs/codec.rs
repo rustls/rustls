@@ -293,7 +293,7 @@ impl<'a> LengthPrefixedBuffer<'a> {
     }
 }
 
-impl<'a> Drop for LengthPrefixedBuffer<'a> {
+impl Drop for LengthPrefixedBuffer<'_> {
     /// Goes back and corrects the length previously inserted at the start of the structure.
     fn drop(&mut self) {
         match self.size_len {

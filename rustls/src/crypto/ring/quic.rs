@@ -212,14 +212,17 @@ impl quic::Algorithm for KeyBuilder {
     }
 }
 
-test_for_each_provider! {
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use std::dbg;
+
+    use super::provider::tls13::{
+        TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
+    };
     use crate::common_state::Side;
     use crate::crypto::tls13::OkmBlock;
     use crate::quic::*;
-    use provider::tls13::{
-        TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
-    };
 
     fn test_short_packet(version: Version, expected: &[u8]) {
         const PN: u64 = 654360564;

@@ -83,7 +83,7 @@ impl fmt::Debug for Payload<'_> {
 #[derive(Clone, Eq, PartialEq)]
 pub(crate) struct PayloadU24<'a>(pub(crate) Payload<'a>);
 
-impl<'a> PayloadU24<'a> {
+impl PayloadU24<'_> {
     pub(crate) fn into_owned(self) -> PayloadU24<'static> {
         PayloadU24(self.0.into_owned())
     }
@@ -103,7 +103,7 @@ impl<'a> Codec<'a> for PayloadU24<'a> {
     }
 }
 
-impl<'a> fmt::Debug for PayloadU24<'a> {
+impl fmt::Debug for PayloadU24<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }

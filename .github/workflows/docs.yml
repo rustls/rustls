@@ -2,10 +2,9 @@ name: documentation
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -25,6 +24,11 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
+      - name: Install zola
+        uses: taiki-e/install-action@v2
+        with:
+          tool: zola@0.19.1
+
       - name: Generate version information
         run: |
           echo >tag.html \
@@ -39,28 +43,53 @@ jobs:
         env:
           RUSTDOCFLAGS: -Dwarnings --cfg=docsrs --html-after-content tag.html
 
+      - name: Generate other pages
+        run: |
+          cd website && zola build --output-dir ../target/website/
+
+      - name: Restore lychee cache
+        uses: actions/cache@v4
+        with:
+          path: .lycheecache
+          key: cache-lychee-${{ github.sha }}
+          restore-keys: cache-lychee-
+
+      - name: Check links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >
+            --accept 200..=204,403,429,500
+            --cache
+            --max-cache-age 1d
+            --exclude-path 'website/content/'
+            '**/*.md'
+            'target/doc/**/*.html'
+          fail: true
+
       - name: Massage rustdoc output
         run: |
           # lockfile causes deployment step to go wrong, due to permissions
           rm -f target/doc/.lock
-          # make resulting url be more sensible
-          mv target/doc/rustls target/doc/prerelease
+          # move the result into website root
+          mv target/doc/rustls target/website/docs
 
       - name: Package and upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./target/doc/
+          path: ./target/website/
 
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
     if: github.repository == 'rustls/rustls'
     needs: generate
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}prerelease/
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

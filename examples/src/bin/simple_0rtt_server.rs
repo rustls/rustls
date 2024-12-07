@@ -13,11 +13,13 @@
 //! that is sensible outside of example code.
 
 use std::error::Error as StdError;
-use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::{env, io};
+
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
@@ -29,11 +31,12 @@ fn main() -> Result<(), Box<dyn StdError>> {
         .next()
         .expect("missing private key file argument");
 
-    let certs = rustls_pemfile::certs(&mut BufReader::new(&mut File::open(cert_file)?))
-        .collect::<Result<Vec<_>, _>>()?;
+    let certs = CertificateDer::pem_file_iter(cert_file)
+        .expect("cannot open certificate file")
+        .map(|cert| cert.unwrap())
+        .collect::<Vec<_>>();
     let private_key =
-        rustls_pemfile::private_key(&mut BufReader::new(&mut File::open(private_key_file)?))?
-            .unwrap();
+        PrivateKeyDer::from_pem_file(private_key_file).expect("cannot open private key file");
 
     let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()

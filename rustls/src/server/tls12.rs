@@ -146,7 +146,7 @@ mod client_hello {
 
                     self.config
                         .session_storage
-                        .get(&client_hello.session_id.get_encoding())
+                        .get(client_hello.session_id.as_ref())
                 })
                 .and_then(|x| persist::ServerSessionValue::read_bytes(&x).ok())
                 .filter(|resumedata| {
@@ -583,7 +583,11 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
             ems_seed,
             self.randoms,
             self.suite,
-        )?;
+        )
+        .map_err(|err| {
+            cx.common
+                .send_fatal_alert(AlertDescription::IllegalParameter, err)
+        })?;
         cx.common.kx_state.complete();
 
         self.config.key_log.log(
@@ -906,7 +910,7 @@ impl State<ServerConnectionData> for ExpectFinished {
             let worked = self
                 .config
                 .session_storage
-                .put(self.session_id.get_encoding(), value.get_encoding());
+                .put(self.session_id.as_ref().to_vec(), value.get_encoding());
             if worked {
                 debug!("Session saved");
             } else {

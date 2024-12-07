@@ -2,7 +2,7 @@
 //! `simpleclient.rs`.
 //!
 //! It sends a HTTP request to pq.cloudflareresearch.com and prints the response to
-//! stdout.  Observe in that output: `kex=X25519Kyber768Draft00`
+//! stdout.  Observe in that output: `kex=X25519MLKEM768`
 //!
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.

@@ -136,6 +136,12 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    /// Returns whether this verifier requires raw public keys as defined
+    /// in [RFC 7250](https://tools.ietf.org/html/rfc7250).
+    fn requires_raw_public_keys(&self) -> bool {
+        false
+    }
 }
 
 /// Something that can verify a client certificate chain
@@ -249,6 +255,12 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    /// Returns whether this verifier requires raw public keys as defined
+    /// in [RFC 7250](https://tools.ietf.org/html/rfc7250).
+    fn requires_raw_public_keys(&self) -> bool {
+        false
+    }
 }
 
 /// Turns off client authentication.

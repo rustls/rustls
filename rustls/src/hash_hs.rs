@@ -183,13 +183,15 @@ impl Clone for HandshakeHash {
     }
 }
 
-test_for_each_provider! {
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
+    use super::provider::hash::SHA256;
     use super::*;
-    use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
     use crate::crypto::hash::Hash;
+    use crate::enums::{HandshakeType, ProtocolVersion};
     use crate::msgs::base::Payload;
-    use crate::enums::{ProtocolVersion, HandshakeType};
-    use provider::hash::SHA256;
+    use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 
     #[test]
     fn hashes_correctly() {
@@ -213,9 +215,10 @@ test_for_each_provider! {
         let server_hello_done_message = Message {
             version: ProtocolVersion::TLSv1_2,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
-                        typ: HandshakeType::ServerHelloDone,
-                        payload: HandshakePayload::ServerHelloDone,
-                        }) };
+                typ: HandshakeType::ServerHelloDone,
+                payload: HandshakePayload::ServerHelloDone,
+            }),
+        };
 
         let app_data_ignored = Message {
             version: ProtocolVersion::TLSv1_3,
@@ -224,7 +227,7 @@ test_for_each_provider! {
 
         let end_of_early_data_flight = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::HandshakeFlight(Payload::Borrowed(b"\x05\x00\x00\x00"))
+            payload: MessagePayload::HandshakeFlight(Payload::Borrowed(b"\x05\x00\x00\x00")),
         };
 
         // buffered mode
@@ -232,17 +235,26 @@ test_for_each_provider! {
         hhb.add_message(&server_hello_done_message);
         hhb.add_message(&app_data_ignored);
         hhb.add_message(&end_of_early_data_flight);
-        assert_eq!(hhb.start_hash(&SHA256).current_hash().as_ref(),
-                   SHA256.hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00").as_ref());
+        assert_eq!(
+            hhb.start_hash(&SHA256)
+                .current_hash()
+                .as_ref(),
+            SHA256
+                .hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00")
+                .as_ref()
+        );
 
         // non-buffered mode
         let mut hh = HandshakeHashBuffer::new().start_hash(&SHA256);
         hh.add_message(&server_hello_done_message);
         hh.add_message(&app_data_ignored);
         hh.add_message(&end_of_early_data_flight);
-        assert_eq!(hh.current_hash().as_ref(),
-                   SHA256.hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00").as_ref());
-
+        assert_eq!(
+            hh.current_hash().as_ref(),
+            SHA256
+                .hash(b"\x0e\x00\x00\x00\x05\x00\x00\x00")
+                .as_ref()
+        );
     }
 
     #[cfg(feature = "tls12")]

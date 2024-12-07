@@ -5,8 +5,8 @@
 Back in 2000 [Bellare and Namprempre](https://eprint.iacr.org/2000/025) discussed how to make authenticated
 encryption by composing separate encryption and authentication primitives.  That paper included this table:
 
-| Composition Method | Privacy || Integrity ||
-|--------------------|---------||-----------||
+| Composition Method | Privacy | | | Integrity | |
+|--------------------|---------|-|-|-----------|-|
 || IND-CPA | IND-CCA | NM-CPA | INT-PTXT | INT-CTXT |
 | Encrypt-and-MAC | insecure | insecure | insecure | secure | insecure |
 | MAC-then-encrypt | secure | insecure | insecure | secure | insecure |
@@ -71,7 +71,7 @@ as applied to compression of combined secret and attacker-chosen strings.
 
 Compression continued to be an option in TLSv1.1 (2006) and in TLSv1.2 (2008).  Support in libraries was widespread.
 
-[CRIME](http://netifera.com/research/crime/CRIME_ekoparty2012.pdf) ([CVE-2012-4929](https://nvd.nist.gov/vuln/detail/CVE-2012-4929))
+[CRIME](https://en.wikipedia.org/wiki/CRIME) ([CVE-2012-4929](https://nvd.nist.gov/vuln/detail/CVE-2012-4929))
 was demonstrated in 2012, again by Thai Duong and Juliano Rizzo.  It attacked several protocols offering transparent
 compression of application data, allowing quick adaptive chosen-plaintext attacks against secret values like cookies.
 
@@ -115,7 +115,7 @@ rustls naturally does not support SSLv2, but most importantly does not support R
 
 ## Poodle
 
-[POODLE](https://www.openssl.org/~bodo/ssl-poodle.pdf) ([CVE-2014-3566](https://nvd.nist.gov/vuln/detail/CVE-2014-3566))
+[POODLE](https://cdn1.vox-cdn.com/uploads/chorus_asset/file/2354994/ssl-poodle.0.pdf) ([CVE-2014-3566](https://nvd.nist.gov/vuln/detail/CVE-2014-3566))
 is an attack against CBC mode ciphersuites in SSLv3.  This was possible in most cases because some clients willingly
 downgraded to SSLv3 after failed handshakes for later versions.
 

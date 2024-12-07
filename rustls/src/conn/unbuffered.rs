@@ -245,13 +245,13 @@ impl<'c, 'i, Data> From<ReadEarlyData<'c, 'i, Data>> for ConnectionState<'c, 'i,
     }
 }
 
-impl<'c, 'i, Data> From<EncodeTlsData<'c, Data>> for ConnectionState<'c, 'i, Data> {
+impl<'c, Data> From<EncodeTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
     fn from(v: EncodeTlsData<'c, Data>) -> Self {
         Self::EncodeTlsData(v)
     }
 }
 
-impl<'c, 'i, Data> From<TransmitTlsData<'c, Data>> for ConnectionState<'c, 'i, Data> {
+impl<'c, Data> From<TransmitTlsData<'c, Data>> for ConnectionState<'c, '_, Data> {
     fn from(v: TransmitTlsData<'c, Data>) -> Self {
         Self::TransmitTlsData(v)
     }
@@ -354,7 +354,7 @@ impl<'c, 'i, Data> ReadEarlyData<'c, 'i, Data> {
     }
 }
 
-impl<'c, 'i> ReadEarlyData<'c, 'i, ServerConnectionData> {
+impl ReadEarlyData<'_, '_, ServerConnectionData> {
     /// decrypts and returns the next available app-data record
     // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
     pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {
@@ -463,9 +463,8 @@ impl<'c, Data> EncodeTlsData<'c, Data> {
     /// Returns the number of bytes that were written into `outgoing_tls`, or an error if
     /// the provided buffer is too small. In the error case, `outgoing_tls` is not modified
     pub fn encode(&mut self, outgoing_tls: &mut [u8]) -> Result<usize, EncodeError> {
-        let chunk = match self.chunk.take() {
-            Some(chunk) => chunk,
-            None => return Err(EncodeError::AlreadyEncoded),
+        let Some(chunk) = self.chunk.take() else {
+            return Err(EncodeError::AlreadyEncoded);
         };
 
         let required_size = chunk.len();

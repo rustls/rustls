@@ -5,18 +5,13 @@ use std::println;
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::handshake::{ServerDhParams, ServerKeyExchange, ServerKeyExchangeParams};
-use crate::enums::{
-    CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
-};
-use crate::error::InvalidMessage;
-use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
-use crate::msgs::codec::{put_u16, Codec, Reader};
-use crate::msgs::enums::{
-    ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
+use super::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
+use super::codec::{put_u16, Codec, Reader};
+use super::enums::{
+    CertificateType, ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
-use crate::msgs::handshake::{
+use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
@@ -25,9 +20,13 @@ use crate::msgs::handshake::{
     HandshakePayload, HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
     NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
     PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
-    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchangePayload, SessionId,
-    UnknownExtension,
+    ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
+    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
+use crate::enums::{
+    CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
+};
+use crate::error::InvalidMessage;
 use crate::verify::DigitallySignedStruct;
 
 #[test]
@@ -493,6 +492,22 @@ fn client_alpn_extension() {
 }
 
 #[test]
+fn client_client_certificate_extension() {
+    test_client_extension_getter(ExtensionType::ClientCertificateType, |chp| {
+        chp.client_certificate_extension()
+            .is_some()
+    });
+}
+
+#[test]
+fn client_server_certificate_extension() {
+    test_client_extension_getter(ExtensionType::ServerCertificateType, |chp| {
+        chp.server_certificate_extension()
+            .is_some()
+    });
+}
+
+#[test]
 fn client_quic_params_extension() {
     test_client_extension_getter(ExtensionType::TransportParameters, |chp| {
         chp.quic_params_extension().is_some()
@@ -678,6 +693,20 @@ fn server_ecpoints_extension() {
 fn server_supported_versions() {
     test_server_extension_getter(ExtensionType::SupportedVersions, |shp| {
         shp.supported_versions().is_some()
+    });
+}
+
+#[test]
+fn server_client_certificate_type_extension() {
+    test_server_extension_getter(ExtensionType::ClientCertificateType, |shp| {
+        shp.client_cert_type().is_some()
+    });
+}
+
+#[test]
+fn server_server_certificate_type_extension() {
+    test_server_extension_getter(ExtensionType::ServerCertificateType, |shp| {
+        shp.server_cert_type().is_some()
     });
 }
 
@@ -955,6 +984,8 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
+            ClientExtension::ServerCertTypes(vec![CertificateType::RawPublicKey]),
+            ClientExtension::ClientCertTypes(vec![CertificateType::RawPublicKey]),
             ClientExtension::TransportParameters(vec![1, 2, 3]),
             ClientExtension::EarlyData,
             ClientExtension::CertificateCompressionAlgorithms(vec![
@@ -992,6 +1023,8 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
             }),
+            ServerExtension::ClientCertType(CertificateType::RawPublicKey),
+            ServerExtension::ServerCertType(CertificateType::RawPublicKey),
         ],
     }
 }

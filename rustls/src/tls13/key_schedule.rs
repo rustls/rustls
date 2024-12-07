@@ -1,16 +1,16 @@
+//! Key schedule maintenance for TLS1.3
+
 use alloc::boxed::Box;
 use alloc::string::ToString;
 
 use crate::common_state::{CommonState, Side};
-use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter};
+use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
 use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::crypto::{hash, hmac, SharedSecret};
 use crate::error::Error;
 use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::{quic, KeyLog, Tls13CipherSuite};
-
-/// Key schedule maintenance for TLS1.3
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -524,18 +524,6 @@ impl KeyScheduleTraffic {
         secret
     }
 
-    pub(crate) fn resumption_master_secret_and_derive_ticket_psk(
-        &self,
-        hs_hash: &hash::Output,
-        nonce: &[u8],
-    ) -> OkmBlock {
-        let resumption_master_secret = self
-            .ks
-            .derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref());
-        self.ks
-            .derive_ticket_psk(&resumption_master_secret, nonce)
-    }
-
     pub(crate) fn export_keying_material(
         &self,
         out: &mut [u8],
@@ -589,6 +577,28 @@ impl KeyScheduleTraffic {
     }
 }
 
+pub(crate) struct ResumptionSecret<'a> {
+    kst: &'a KeyScheduleTraffic,
+    resumption_master_secret: OkmBlock,
+}
+
+impl<'a> ResumptionSecret<'a> {
+    pub(crate) fn new(kst: &'a KeyScheduleTraffic, hs_hash: &hash::Output) -> Self {
+        ResumptionSecret {
+            kst,
+            resumption_master_secret: kst
+                .ks
+                .derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref()),
+        }
+    }
+
+    pub(crate) fn derive_ticket_psk(&self, nonce: &[u8]) -> OkmBlock {
+        self.kst
+            .ks
+            .derive_ticket_psk(&self.resumption_master_secret, nonce)
+    }
+}
+
 impl KeySchedule {
     fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
         Self {
@@ -604,7 +614,7 @@ impl KeySchedule {
             .suite
             .hkdf_provider
             .expander_for_okm(secret);
-        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref());
 
         common
@@ -626,7 +636,7 @@ impl KeySchedule {
             .suite
             .hkdf_provider
             .expander_for_okm(secret);
-        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
+        let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
         let iv = derive_traffic_iv(expander.as_ref());
         self.suite.aead_alg.decrypter(key, iv)
     }
@@ -770,6 +780,23 @@ impl KeySchedule {
     }
 }
 
+/// [HKDF-Expand-Label] where the output is an AEAD key.
+///
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
+pub fn derive_traffic_key(
+    expander: &dyn HkdfExpander,
+    aead_alg: &dyn Tls13AeadAlgorithm,
+) -> AeadKey {
+    hkdf_expand_label_aead_key(expander, aead_alg.key_len(), b"key", &[])
+}
+
+/// [HKDF-Expand-Label] where the output is an IV.
+///
+/// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
+pub fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
+    hkdf_expand_label(expander, b"iv", &[])
+}
+
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
 /// it is infallible.
 ///
@@ -843,14 +870,6 @@ pub(crate) fn server_ech_hrr_confirmation_secret(
     )
 }
 
-pub(crate) fn derive_traffic_key(expander: &dyn HkdfExpander, aead_key_len: usize) -> AeadKey {
-    hkdf_expand_label_aead_key(expander, aead_key_len, b"key", &[])
-}
-
-pub(crate) fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
-    hkdf_expand_label(expander, b"iv", &[])
-}
-
 fn hkdf_expand_label_inner<F, T>(
     expander: &dyn HkdfExpander,
     label: &[u8],
@@ -879,16 +898,18 @@ where
     f(expander, info)
 }
 
-test_for_each_provider! {
-    use core::fmt::Debug;
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
+    use core::fmt::Debug;
 
-    use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-    use provider::ring_like::aead;
-    use provider::tls13::{
+    use super::provider::ring_like::aead;
+    use super::provider::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
+    use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
     use crate::KeyLog;
 
     #[test]
@@ -1037,7 +1058,10 @@ test_for_each_provider! {
         let expander = TLS13_AES_128_GCM_SHA256_INTERNAL
             .hkdf_provider
             .expander_for_okm(&traffic_secret);
-        let key = derive_traffic_key(expander.as_ref(), aead_alg.key_len());
+        let key = derive_traffic_key(
+            expander.as_ref(),
+            TLS13_AES_128_GCM_SHA256_INTERNAL.aead_alg,
+        );
         let key = aead::UnboundKey::new(aead_alg, key.as_ref()).unwrap();
         let seal_output = seal_zeroes(key);
         let expected_key = aead::UnboundKey::new(aead_alg, expected_key).unwrap();
@@ -1062,13 +1086,15 @@ test_for_each_provider! {
     }
 }
 
-bench_for_each_provider! {
+#[cfg(all(test, bench))]
+#[macro_rules_attribute::apply(bench_for_each_provider)]
+mod benchmarks {
     #[bench]
     fn bench_sha256(b: &mut test::Bencher) {
         use core::fmt::Debug;
 
+        use super::provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
-        use provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
         use crate::KeyLog;
 
         fn extract_traffic_secret(ks: &KeySchedule, kind: SecretKind) {
@@ -1086,9 +1112,7 @@ bench_for_each_provider! {
                 .expander_for_okm(&traffic_secret);
             test::black_box(derive_traffic_key(
                 traffic_secret_expander.as_ref(),
-                TLS13_CHACHA20_POLY1305_SHA256_INTERNAL
-                    .aead_alg
-                    .key_len(),
+                TLS13_CHACHA20_POLY1305_SHA256_INTERNAL.aead_alg,
             ));
             test::black_box(derive_traffic_iv(traffic_secret_expander.as_ref()));
         }

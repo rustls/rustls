@@ -12,7 +12,9 @@ use crate::crypto::CryptoProvider;
 use crate::verify::ServerCertVerifier;
 use crate::webpki::{RootCertStore, WebPkiServerVerifier};
 
-bench_for_each_provider! {
+#[macro_rules_attribute::apply(bench_for_each_provider)]
+mod benchmarks {
+    use super::provider;
     use super::Context;
 
     #[bench]

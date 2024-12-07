@@ -240,13 +240,16 @@ pub enum ConnectionTrafficSecrets {
     },
 }
 
-test_for_each_provider! {
-    use provider::tls13::*;
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use std::println;
+
+    use super::provider::tls13::*;
 
     #[test]
     fn test_scs_is_debug() {
-        println!("{:?}", provider::ALL_CIPHER_SUITES);
+        println!("{:?}", super::provider::ALL_CIPHER_SUITES);
     }
 
     #[test]

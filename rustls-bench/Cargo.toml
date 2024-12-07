@@ -1,0 +1,17 @@
+[package]
+name = "rustls-bench"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+rustls = { path = "../rustls" }
+
+[features]
+default = []
+aws-lc-rs = ["rustls/aws-lc-rs"]
+fips = ["rustls/fips", "aws-lc-rs"]
+ring = ["rustls/ring"]
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { workspace = true }

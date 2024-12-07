@@ -3,20 +3,19 @@
 
 use std::env;
 use std::error::Error;
-use std::fs::File;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::Arc;
 
-use pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::UnbufferedServerConnection;
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
     UnbufferedStatus,
 };
 use rustls::ServerConfig;
-use rustls_pemfile::Item;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
@@ -248,24 +247,14 @@ fn send_tls(
 }
 
 fn load_certs(path: impl AsRef<Path>) -> Result<Vec<CertificateDer<'static>>, io::Error> {
-    let mut reader = BufReader::new(File::open(path)?);
-    rustls_pemfile::certs(&mut reader).collect()
+    Ok(CertificateDer::pem_file_iter(path)
+        .expect("cannot open certificate file")
+        .map(|cert| cert.unwrap())
+        .collect())
 }
 
 fn load_private_key(path: impl AsRef<Path>) -> Result<PrivateKeyDer<'static>, io::Error> {
-    let mut reader = BufReader::new(File::open(&path)?);
-
-    loop {
-        match rustls_pemfile::read_one(&mut reader)? {
-            Some(Item::Pkcs1Key(key)) => return Ok(key.into()),
-            Some(Item::Pkcs8Key(key)) => return Ok(key.into()),
-            Some(Item::Sec1Key(key)) => return Ok(key.into()),
-            None => break,
-            _ => continue,
-        }
-    }
-
-    panic!("no keys found in {}", path.as_ref().display())
+    Ok(PrivateKeyDer::from_pem_file(path).expect("cannot open private key file"))
 }
 
 const KB: usize = 1024;

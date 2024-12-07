@@ -5,12 +5,11 @@
 //
 
 use std::fmt::{Debug, Formatter};
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::sync::Arc;
-use std::{env, fs, net, process, thread, time};
+use std::{env, net, process, thread, time};
 
 use base64::prelude::{Engine, BASE64_STANDARD};
-use pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
@@ -18,10 +17,14 @@ use rustls::client::{
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, SupportedKxGroup};
+#[cfg(feature = "post-quantum")]
+use rustls::crypto::SupportedKxGroup;
+use rustls::crypto::{aws_lc_rs, ring, CryptoProvider};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, UnixTime};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
@@ -95,10 +98,10 @@ struct Options {
     install_cert_compression_algs: CompressionAlgs,
     selected_provider: SelectedProvider,
     provider: CryptoProvider,
-    ech_config_list: Option<pki_types::EchConfigListBytes<'static>>,
+    ech_config_list: Option<EchConfigListBytes<'static>>,
     expect_ech_accept: bool,
-    expect_ech_retry_configs: Option<pki_types::EchConfigListBytes<'static>>,
-    on_resume_ech_config_list: Option<pki_types::EchConfigListBytes<'static>>,
+    expect_ech_retry_configs: Option<EchConfigListBytes<'static>>,
+    on_resume_ech_config_list: Option<EchConfigListBytes<'static>>,
     on_resume_expect_ech_accept: bool,
     on_initial_expect_ech_accept: bool,
     enable_ech_grease: bool,
@@ -209,7 +212,9 @@ impl Options {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum SelectedProvider {
     AwsLcRs,
+    #[cfg_attr(not(feature = "fips"), allow(dead_code))]
     AwsLcRsFips,
+    #[cfg_attr(not(feature = "post-quantum"), allow(dead_code))]
     PostQuantum,
     Ring,
 }
@@ -221,7 +226,9 @@ impl SelectedProvider {
             .as_deref()
         {
             None | Some("aws-lc-rs") => Self::AwsLcRs,
+            #[cfg(feature = "fips")]
             Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
+            #[cfg(feature = "post-quantum")]
             Some("post-quantum") => Self::PostQuantum,
             Some("ring") => Self::Ring,
             Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
@@ -263,24 +270,6 @@ impl SelectedProvider {
     }
 }
 
-fn load_cert(filename: &str) -> Vec<CertificateDer<'static>> {
-    let certfile = fs::File::open(filename).expect("cannot open certificate file");
-    let mut reader = BufReader::new(certfile);
-    rustls_pemfile::certs(&mut reader)
-        .map(|result| result.unwrap())
-        .collect()
-}
-
-fn load_key(filename: &str) -> PrivateKeyDer<'static> {
-    let keyfile = fs::File::open(filename).expect("cannot open private key file");
-    let mut reader = BufReader::new(keyfile);
-    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
-        .map(|result| result.unwrap())
-        .collect::<Vec<_>>();
-    assert!(keys.len() == 1);
-    keys.pop().unwrap().into()
-}
-
 fn load_root_certs(filename: &str) -> Arc<RootCertStore> {
     let mut roots = RootCertStore::empty();
 
@@ -295,7 +284,11 @@ fn load_root_certs(filename: &str) -> Arc<RootCertStore> {
         filename => filename,
     };
 
-    roots.add_parsable_certificates(load_cert(filename));
+    roots.add_parsable_certificates(
+        CertificateDer::pem_file_iter(filename)
+            .unwrap()
+            .map(|item| item.unwrap()),
+    );
     Arc::new(roots)
 }
 
@@ -611,8 +604,11 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
             server::WebPkiClientVerifier::no_client_auth()
         };
 
-    let cert = load_cert(&opts.cert_file);
-    let key = load_key(&opts.key_file);
+    let cert = CertificateDer::pem_file_iter(&opts.cert_file)
+        .unwrap()
+        .map(|cert| cert.unwrap())
+        .collect::<Vec<_>>();
+    let key = PrivateKeyDer::from_pem_file(&opts.key_file).unwrap();
 
     let mut provider = opts.provider.clone();
 
@@ -795,8 +791,11 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(&opts.trusted_cert_file)));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
-        let cert = load_cert(&opts.cert_file);
-        let key = load_key(&opts.key_file);
+        let cert = CertificateDer::pem_file_iter(&opts.cert_file)
+            .unwrap()
+            .map(|item| item.unwrap())
+            .collect();
+        let key = PrivateKeyDer::from_pem_file(&opts.key_file).unwrap();
         cfg.with_client_auth_cert(cert, key)
             .unwrap()
     } else {
@@ -963,6 +962,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":UNEXPECTED_EXTENSION:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedKxGroup) => quit(":WRONG_CURVE:"),
+        Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare) => quit(":BAD_ECPOINT:"),
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
@@ -1540,9 +1540,10 @@ pub fn main() {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
                 opts.groups.get_or_insert(Vec::new()).push(group);
 
-                // if X25519Kyber768Draft00 is requested, insert it from rustls_post_quantum
-                if group == rustls_post_quantum::X25519Kyber768Draft00.name() && opts.selected_provider == SelectedProvider::PostQuantum {
-                    opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519Kyber768Draft00);
+                // if X25519MLKEM768 is requested, insert it from rustls_post_quantum
+                #[cfg(feature = "post-quantum")]
+                if group == rustls_post_quantum::X25519MLKEM768.name() && opts.selected_provider == SelectedProvider::PostQuantum {
+                    opts.provider.kx_groups.insert(0, &rustls_post_quantum::X25519MLKEM768);
                 }
             }
             "-resumption-delay" => {
@@ -1558,6 +1559,7 @@ pub fn main() {
             "-install-one-cert-compression-alg" => {
                 opts.install_cert_compression_algs = CompressionAlgs::One(args.remove(0).parse::<u16>().unwrap());
             }
+            #[cfg(feature = "fips")]
             "-fips-202205" if opts.selected_provider == SelectedProvider::AwsLcRsFips => {
                 opts.provider = rustls::crypto::default_fips_provider();
             }
@@ -1667,6 +1669,7 @@ pub fn main() {
             "-ignore-tls13-downgrade" |
             "-allow-hint-mismatch" |
             "-wpa-202304" |
+            "-cnsa-202407" |
             "-srtp-profiles" |
             "-permute-extensions" |
             "-signed-cert-timestamps" |

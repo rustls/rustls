@@ -16,7 +16,7 @@ use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
 };
 use crate::conn::ConnectionRandoms;
-use crate::crypto::ActiveKeyExchange;
+use crate::crypto::{ActiveKeyExchange, SharedSecret};
 use crate::enums::{
     AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
@@ -29,8 +29,9 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
     CertificatePayloadTls13, ClientExtension, EchConfigPayload, HandshakeMessagePayload,
-    HandshakePayload, HasServerExtensions, NewSessionTicketPayloadTls13, PresharedKeyIdentity,
-    PresharedKeyOffer, ServerExtension, ServerHelloPayload, CERTIFICATE_MAX_SIZE_LIMIT,
+    HandshakePayload, HasServerExtensions, KeyShareEntry, NewSessionTicketPayloadTls13,
+    PresharedKeyIdentity, PresharedKeyOffer, ServerExtension, ServerHelloPayload,
+    CERTIFICATE_MAX_SIZE_LIMIT,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -38,6 +39,7 @@ use crate::sign::{CertifiedKey, Signer};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake, KeyScheduleTraffic,
+    ResumptionSecret,
 };
 use crate::tls13::{
     construct_client_verify_message, construct_server_verify_message, Tls13CipherSuite,
@@ -88,29 +90,25 @@ pub(super) fn handle_server_hello(
             )
         })?;
 
-    if our_key_share.group() != their_key_share.group {
-        return Err({
+    let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
+        .map_err(|_| {
             cx.common.send_fatal_alert(
                 AlertDescription::IllegalParameter,
                 PeerMisbehaved::WrongGroupForKeyShare,
             )
-        });
-    }
+        })?;
 
     let key_schedule_pre_handshake = if let (Some(selected_psk), Some(early_key_schedule)) =
         (server_hello.psk_index(), early_key_schedule)
     {
         if let Some(ref resuming) = resuming_session {
-            let resuming_suite = match suite.can_resume_from(resuming.suite()) {
-                Some(resuming) => resuming,
-                None => {
-                    return Err({
-                        cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
-                        )
-                    });
-                }
+            let Some(resuming_suite) = suite.can_resume_from(resuming.suite()) else {
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
+                    )
+                });
             };
 
             // If the server varies the suite here, we will have encrypted early data with
@@ -149,7 +147,12 @@ pub(super) fn handle_server_hello(
     };
 
     cx.common.kx_state.complete();
-    let shared_secret = our_key_share.complete(&their_key_share.payload.0)?;
+    let shared_secret = our_key_share
+        .complete(&their_key_share.payload.0)
+        .map_err(|err| {
+            cx.common
+                .send_fatal_alert(AlertDescription::IllegalParameter, err)
+        })?;
 
     let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
 
@@ -209,6 +212,50 @@ pub(super) fn handle_server_hello(
         key_schedule,
         hello,
     }))
+}
+
+enum KeyExchangeChoice {
+    Whole(Box<dyn ActiveKeyExchange>),
+    Component(Box<dyn ActiveKeyExchange>),
+}
+
+impl KeyExchangeChoice {
+    /// Decide between `our_key_share` or `our_key_share.hybrid_component()`
+    /// based on the selection of the server expressed in `their_key_share`.
+    fn new(
+        config: &Arc<ClientConfig>,
+        cx: &mut ClientContext<'_>,
+        our_key_share: Box<dyn ActiveKeyExchange>,
+        their_key_share: &KeyShareEntry,
+    ) -> Result<Self, ()> {
+        if our_key_share.group() == their_key_share.group {
+            return Ok(Self::Whole(our_key_share));
+        }
+
+        let (component_group, _) = our_key_share
+            .hybrid_component()
+            .ok_or(())?;
+
+        if component_group != their_key_share.group {
+            return Err(());
+        }
+
+        // correct the record for the benefit of accuracy of
+        // `negotiated_key_exchange_group()`
+        let actual_skxg = config
+            .find_kx_group(component_group, ProtocolVersion::TLSv1_3)
+            .ok_or(())?;
+        cx.common.kx_state = KxState::Start(actual_skxg);
+
+        Ok(Self::Component(our_key_share))
+    }
+
+    fn complete(self, peer_pub_key: &[u8]) -> Result<SharedSecret, Error> {
+        match self {
+            Self::Whole(akx) => akx.complete(peer_pub_key),
+            Self::Component(akx) => akx.complete_hybrid_component(peer_pub_key),
+        }
+    }
 }
 
 fn validate_server_hello(
@@ -422,6 +469,8 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
         hs::process_alpn_protocol(cx.common, &self.config, exts.alpn_protocol())?;
+        hs::process_client_cert_type_extension(cx.common, &self.config, exts.client_cert_type())?;
+        hs::process_server_cert_type_extension(cx.common, &self.config, exts.server_cert_type())?;
 
         let ech_retry_configs = match (cx.data.ech_status, exts.server_ech_extension()) {
             // If we didn't offer ECH, or ECH was accepted, but the server sent an ECH encrypted
@@ -904,19 +953,17 @@ impl State<ClientConnectionData> for ExpectCompressedCertificate {
             HandshakePayload::CompressedCertificate
         )?;
 
-        let decompressor = match self
+        let selected_decompressor = self
             .config
             .cert_decompressors
             .iter()
-            .find(|item| item.algorithm() == compressed_cert.alg)
-        {
-            Some(dec) => dec,
-            None => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::BadCertificate,
-                    PeerMisbehaved::SelectedUnofferedCertCompression,
-                ));
-            }
+            .find(|item| item.algorithm() == compressed_cert.alg);
+
+        let Some(decompressor) = selected_decompressor else {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::BadCertificate,
+                PeerMisbehaved::SelectedUnofferedCertCompression,
+            ));
         };
 
         if compressed_cert.uncompressed_len as usize > CERTIFICATE_MAX_SIZE_LIMIT {
@@ -1166,12 +1213,11 @@ fn emit_compressed_certificate_tls13(
     let mut cert_payload = CertificatePayloadTls13::new(certkey.cert.iter(), None);
     cert_payload.context = PayloadU8::new(auth_context.clone().unwrap_or_default());
 
-    let compressed = match config
+    let Ok(compressed) = config
         .cert_compression_cache
         .compression_for(compressor, &cert_payload)
-    {
-        Ok(compressed) => compressed,
-        Err(_) => return emit_certificate_tls13(flight, Some(certkey), auth_context),
+    else {
+        return emit_certificate_tls13(flight, Some(certkey), auth_context);
     };
 
     flight.add(HandshakeMessagePayload {
@@ -1419,9 +1465,8 @@ impl ExpectTraffic {
         }
 
         let handshake_hash = self.transcript.current_hash();
-        let secret = self
-            .key_schedule
-            .resumption_master_secret_and_derive_ticket_psk(&handshake_hash, &nst.nonce.0);
+        let secret = ResumptionSecret::new(&self.key_schedule, &handshake_hash)
+            .derive_ticket_psk(&nst.nonce.0);
 
         let now = self.config.current_time()?;
 

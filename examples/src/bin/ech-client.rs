@@ -29,16 +29,18 @@ use clap::Parser;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
-use hickory_resolver::Resolver;
+use hickory_resolver::{Resolver, TokioResolver};
 use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
-use rustls::pki_types::ServerName;
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::RootCertStore;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
 
     // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
@@ -47,12 +49,12 @@ fn main() {
     } else {
         ResolverConfig::google_https()
     };
-    let resolver = Resolver::new(resolver_config, ResolverOpts::default()).unwrap();
+    let resolver = Resolver::tokio(resolver_config, ResolverOpts::default());
     let server_ech_config = match args.grease {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.ech_config {
             Some(path) => Some(read_ech(&path)),
-            None => lookup_ech_configs(&resolver, &args.outer_hostname, args.port),
+            None => lookup_ech_configs(&resolver, &args.outer_hostname, args.port).await,
         },
     };
 
@@ -78,10 +80,10 @@ fn main() {
     let root_store = match args.cafile {
         Some(file) => {
             let mut root_store = RootCertStore::empty();
-            let certfile = fs::File::open(file).expect("Cannot open CA file");
-            let mut reader = BufReader::new(certfile);
             root_store.add_parsable_certificates(
-                rustls_pemfile::certs(&mut reader).map(|result| result.unwrap()),
+                CertificateDer::pem_file_iter(file)
+                    .expect("Cannot open CA file")
+                    .map(|result| result.unwrap()),
             );
             root_store
         }
@@ -165,7 +167,7 @@ struct Args {
     #[clap(long)]
     cafile: Option<String>,
 
-    /// HTTP GET this PATH [default: ech-check.php].
+    /// HTTP GET this PATH.
     #[clap(long, default_value = "ech-check.php")]
     path: String,
 
@@ -173,7 +175,7 @@ struct Args {
     #[clap(long)]
     host: Option<String>,
 
-    /// Use Google DNS for the DNS-over-HTTPS lookup [default].
+    /// Use Google DNS for the DNS-over-HTTPS lookup (default).
     #[clap(long, group = "dns")]
     use_google_dns: bool,
     /// Use Cloudflare DNS for the DNS-over-HTTPS lookup.
@@ -200,11 +202,11 @@ struct Args {
 }
 
 // TODO(@cpu): consider upstreaming to hickory-dns
-fn lookup_ech_configs(
-    resolver: &Resolver,
+async fn lookup_ech_configs(
+    resolver: &TokioResolver,
     domain: &str,
     port: u16,
-) -> Option<pki_types::EchConfigListBytes<'static>> {
+) -> Option<EchConfigListBytes<'static>> {
     // For non-standard ports, lookup the ECHConfig using port-prefix naming
     // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
     let qname_to_lookup = match port {
@@ -214,6 +216,7 @@ fn lookup_ech_configs(
 
     resolver
         .lookup(qname_to_lookup, RecordType::HTTPS)
+        .await
         .ok()?
         .record_iter()
         .find_map(|r| match r.data() {
@@ -231,7 +234,7 @@ fn lookup_ech_configs(
         .map(Into::into)
 }
 
-fn read_ech(path: &str) -> pki_types::EchConfigListBytes<'static> {
+fn read_ech(path: &str) -> EchConfigListBytes<'static> {
     let file = fs::File::open(path).unwrap_or_else(|_| panic!("Cannot open ECH file: {path}"));
     let mut reader = BufReader::new(file);
     let mut bytes = Vec::new();

@@ -1,4 +1,4 @@
-use core::ops::{Deref, DerefMut};
+use core::ops::{Deref, DerefMut, Range};
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
@@ -38,6 +38,21 @@ impl<'a> InboundOpaqueMessage<'a> {
         }
     }
 
+    /// Force conversion into a plaintext message.
+    ///
+    /// `range` restricts the resulting message: this function panics if it is out of range for
+    /// the underlying message payload.
+    ///
+    /// This should only be used for messages that are known to be in plaintext. Otherwise, the
+    /// `InboundOpaqueMessage` should be decrypted into a `PlainMessage` using a `MessageDecrypter`.
+    pub fn into_plain_message_range(self, range: Range<usize>) -> InboundPlainMessage<'a> {
+        InboundPlainMessage {
+            typ: self.typ,
+            version: self.version,
+            payload: &self.payload.into_inner()[range],
+        }
+    }
+
     /// For TLS1.3 (only), checks the length msg.payload is valid and removes the padding.
     ///
     /// Returns an error if the message (pre-unpadding) is too long, or the padding is invalid,
@@ -73,7 +88,7 @@ impl Deref for BorrowedPayload<'_> {
     }
 }
 
-impl<'a> DerefMut for BorrowedPayload<'a> {
+impl DerefMut for BorrowedPayload<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }

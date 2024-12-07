@@ -1,22 +1,22 @@
 /// A macro which defines an enum type.
 macro_rules! enum_builder {
-    ($(#[$comment:meta])* @U8 $($enum:tt)+) => {
-        enum_builder!(u8: $(#[$comment])* $($enum)+);
-    };
-    ($(#[$comment:meta])* @U16 $($enum:tt)+) => {
-        enum_builder!(u16: $(#[$comment])* $($enum)+);
-    };
     (
-        $uint:ty:
-        $(#[$comment:meta])*
+        $(#[doc = $comment:literal])*
+        #[repr($uint:ty)]
         $enum_vis:vis enum $enum_name:ident
-        { $( $enum_var: ident => $enum_val: expr ),* $(,)? }
+        {
+          $( $enum_var:ident => $enum_val:literal),* $(,)?
+          $( !Debug:
+            $( $enum_var_nd:ident => $enum_val_nd:literal),* $(,)?
+          )?
+        }
     ) => {
-        $(#[$comment])*
+        $(#[doc = $comment])*
         #[non_exhaustive]
-        #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+        #[derive(PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
             $( $enum_var),*
+            $(, $($enum_var_nd),* )?
             ,Unknown($uint)
         }
 
@@ -32,6 +32,7 @@ macro_rules! enum_builder {
             $enum_vis fn as_str(&self) -> Option<&'static str> {
                 match self {
                     $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
+                    $(, $( $enum_name::$enum_var_nd => Some(stringify!($enum_var_nd))),* )?
                     ,$enum_name::Unknown(_) => None,
                 }
             }
@@ -56,6 +57,7 @@ macro_rules! enum_builder {
             fn from(x: $uint) -> Self {
                 match x {
                     $($enum_val => $enum_name::$enum_var),*
+                    $(, $($enum_val_nd => $enum_name::$enum_var_nd),* )?
                     , x => $enum_name::Unknown(x),
                 }
             }
@@ -65,7 +67,17 @@ macro_rules! enum_builder {
             fn from(value: $enum_name) -> Self {
                 match value {
                     $( $enum_name::$enum_var => $enum_val),*
+                    $(, $( $enum_name::$enum_var_nd => $enum_val_nd),* )?
                     ,$enum_name::Unknown(x) => x
+                }
+            }
+        }
+
+        impl core::fmt::Debug for $enum_name {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                match self {
+                    $( $enum_name::$enum_var => f.write_str(stringify!($enum_var)), )*
+                    _ => write!(f, "{}(0x{:x?})", stringify!($enum_name), <$uint>::from(*self)),
                 }
             }
         }

@@ -120,6 +120,13 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
         sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>>;
 
+    /// Return true if the client only supports raw public keys.
+    ///
+    /// See [RFC 7250](https://www.rfc-editor.org/rfc/rfc7250).
+    fn only_raw_public_keys(&self) -> bool {
+        false
+    }
+
     /// Return true if any certificates at all are available.
     fn has_certs(&self) -> bool;
 }
@@ -309,10 +316,9 @@ impl ClientConfig {
         provider: Arc<CryptoProvider>,
     ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsVersions {
-                provider,
-                time_provider: Arc::new(DefaultTimeProvider),
-            },
+            state: WantsVersions {},
+            provider,
+            time_provider: Arc::new(DefaultTimeProvider),
             side: PhantomData,
         }
     }
@@ -335,10 +341,9 @@ impl ClientConfig {
         time_provider: Arc<dyn TimeProvider>,
     ) -> ConfigBuilder<Self, WantsVersions> {
         ConfigBuilder {
-            state: WantsVersions {
-                provider,
-                time_provider,
-            },
+            state: WantsVersions {},
+            provider,
+            time_provider,
             side: PhantomData,
         }
     }
@@ -517,7 +522,7 @@ pub(super) mod danger {
         pub cfg: &'a mut ClientConfig,
     }
 
-    impl<'a> DangerousClientConfig<'a> {
+    impl DangerousClientConfig<'_> {
         /// Overrides the default `ServerCertVerifier` with something else.
         pub fn set_certificate_verifier(&mut self, verifier: Arc<dyn ServerCertVerifier>) {
             self.cfg.verifier = verifier;
@@ -641,7 +646,7 @@ mod connection {
         }
     }
 
-    impl<'a> io::Write for WriteEarlyData<'a> {
+    impl io::Write for WriteEarlyData<'_> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             self.sess.write_early_data(buf)
         }
@@ -742,7 +747,7 @@ mod connection {
         /// it is concerned only with cryptography, whereas this _also_ covers TLS-level
         /// configuration that NIST recommends, as well as ECH HPKE suites if applicable.
         pub fn fips(&self) -> bool {
-            self.inner.core.data.fips
+            self.inner.core.common_state.fips
         }
 
         fn write_early_data(&mut self, data: &[u8]) -> io::Result<usize> {
@@ -805,8 +810,8 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
+        common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
-        data.fips = config.fips();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -890,15 +895,14 @@ impl MayEncryptEarlyData<'_> {
         early_data: &[u8],
         outgoing_tls: &mut [u8],
     ) -> Result<usize, EarlyDataError> {
-        let allowed = match self
+        let Some(allowed) = self
             .conn
             .core
             .data
             .early_data
             .check_write_opt(early_data.len())
-        {
-            Some(allowed) => allowed,
-            None => return Err(EarlyDataError::ExceededAllowedEarlyData),
+        else {
+            return Err(EarlyDataError::ExceededAllowedEarlyData);
         };
 
         self.conn
@@ -942,7 +946,6 @@ pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
     pub(super) ech_status: EchStatus,
-    pub(super) fips: bool,
 }
 
 impl ClientConnectionData {
@@ -951,7 +954,6 @@ impl ClientConnectionData {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
             ech_status: EchStatus::NotOffered,
-            fips: false,
         }
     }
 }

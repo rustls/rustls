@@ -74,9 +74,6 @@ fn tls13_handshake() {
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
             "Ok(WriteTraffic)"
         ],
         "client transcript mismatch"
@@ -90,9 +87,6 @@ fn tls13_handshake() {
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)"
@@ -221,9 +215,6 @@ fn early_data() {
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)",
             "Ok(WriteTraffic)"
         ]
     );
@@ -237,9 +228,6 @@ fn early_data() {
             "Ok(ReadEarlyData)",
             "Ok(TransmitTlsData)",
             "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
             "Ok(EncodeTlsData)",
             "Ok(TransmitTlsData)",
             "Ok(WriteTraffic)"
@@ -1312,7 +1300,7 @@ fn server_receives_incorrect_first_handshake_message() {
     assert_eq!(discard, junk_buffer_len);
     assert_eq!(
         format!("{state:?}"),
-        "Err(InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: Unknown(255) })"
+        "Err(InappropriateHandshakeMessage { expect_types: [ClientHello], got_type: HandshakeType(0xff) })"
     );
 
     let UnbufferedStatus { discard, state } = server.process_tls_records(&mut []);

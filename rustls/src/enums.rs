@@ -6,7 +6,7 @@ enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
-    @U8
+    #[repr(u8)]
     pub enum AlertDescription {
         CloseNotify => 0x00,
         UnexpectedMessage => 0x0a,
@@ -50,7 +50,7 @@ enum_builder! {
     /// The `HandshakeType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
-    @U8
+    #[repr(u8)]
     pub enum HandshakeType {
         HelloRequest => 0x00,
         ClientHello => 0x01,
@@ -79,7 +79,7 @@ enum_builder! {
     /// The `ContentType` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
-    @U8
+    #[repr(u8)]
     pub enum ContentType {
         ChangeCipherSpec => 0x14,
         Alert => 0x15,
@@ -93,7 +93,7 @@ enum_builder! {
     /// The `ProtocolVersion` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
-    @U16
+    #[repr(u16)]
     pub enum ProtocolVersion {
         SSLv2 => 0x0200,
         SSLv3 => 0x0300,
@@ -111,9 +111,33 @@ enum_builder! {
     /// The `CipherSuite` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
-    @U16
+    #[repr(u16)]
     pub enum CipherSuite {
         TLS_NULL_WITH_NULL_NULL => 0x0000,
+        TLS_PSK_WITH_AES_128_GCM_SHA256 => 0x00a8,
+        TLS_PSK_WITH_AES_256_GCM_SHA384 => 0x00a9,
+        TLS_EMPTY_RENEGOTIATION_INFO_SCSV => 0x00ff,
+        TLS13_AES_128_GCM_SHA256 => 0x1301,
+        TLS13_AES_256_GCM_SHA384 => 0x1302,
+        TLS13_CHACHA20_POLY1305_SHA256 => 0x1303,
+        TLS13_AES_128_CCM_SHA256 => 0x1304,
+        TLS13_AES_128_CCM_8_SHA256 => 0x1305,
+        TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA => 0xc009,
+        TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA => 0xc00a,
+        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA => 0xc013,
+        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA => 0xc014,
+        TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 => 0xc023,
+        TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 => 0xc024,
+        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 => 0xc027,
+        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => 0xc028,
+        TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 => 0xc02b,
+        TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 => 0xc02c,
+        TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => 0xc02f,
+        TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => 0xc030,
+        TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca8,
+        TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca9,
+
+    !Debug:
         TLS_RSA_WITH_NULL_MD5 => 0x0001,
         TLS_RSA_WITH_NULL_SHA => 0x0002,
         TLS_RSA_EXPORT_WITH_RC4_40_MD5 => 0x0003,
@@ -269,8 +293,6 @@ enum_builder! {
         TLS_DH_DSS_WITH_AES_256_GCM_SHA384 => 0x00a5,
         TLS_DH_anon_WITH_AES_128_GCM_SHA256 => 0x00a6,
         TLS_DH_anon_WITH_AES_256_GCM_SHA384 => 0x00a7,
-        TLS_PSK_WITH_AES_128_GCM_SHA256 => 0x00a8,
-        TLS_PSK_WITH_AES_256_GCM_SHA384 => 0x00a9,
         TLS_DHE_PSK_WITH_AES_128_GCM_SHA256 => 0x00aa,
         TLS_DHE_PSK_WITH_AES_256_GCM_SHA384 => 0x00ab,
         TLS_RSA_PSK_WITH_AES_128_GCM_SHA256 => 0x00ac,
@@ -299,12 +321,6 @@ enum_builder! {
         TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c3,
         TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c4,
         TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256 => 0x00c5,
-        TLS_EMPTY_RENEGOTIATION_INFO_SCSV => 0x00ff,
-        TLS13_AES_128_GCM_SHA256 => 0x1301,
-        TLS13_AES_256_GCM_SHA384 => 0x1302,
-        TLS13_CHACHA20_POLY1305_SHA256 => 0x1303,
-        TLS13_AES_128_CCM_SHA256 => 0x1304,
-        TLS13_AES_128_CCM_8_SHA256 => 0x1305,
         TLS_ECDH_ECDSA_WITH_NULL_SHA => 0xc001,
         TLS_ECDH_ECDSA_WITH_RC4_128_SHA => 0xc002,
         TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA => 0xc003,
@@ -313,8 +329,6 @@ enum_builder! {
         TLS_ECDHE_ECDSA_WITH_NULL_SHA => 0xc006,
         TLS_ECDHE_ECDSA_WITH_RC4_128_SHA => 0xc007,
         TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA => 0xc008,
-        TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA => 0xc009,
-        TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA => 0xc00a,
         TLS_ECDH_RSA_WITH_NULL_SHA => 0xc00b,
         TLS_ECDH_RSA_WITH_RC4_128_SHA => 0xc00c,
         TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA => 0xc00d,
@@ -323,8 +337,6 @@ enum_builder! {
         TLS_ECDHE_RSA_WITH_NULL_SHA => 0xc010,
         TLS_ECDHE_RSA_WITH_RC4_128_SHA => 0xc011,
         TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA => 0xc012,
-        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA => 0xc013,
-        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA => 0xc014,
         TLS_ECDH_anon_WITH_NULL_SHA => 0xc015,
         TLS_ECDH_anon_WITH_RC4_128_SHA => 0xc016,
         TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA => 0xc017,
@@ -339,20 +351,12 @@ enum_builder! {
         TLS_SRP_SHA_WITH_AES_256_CBC_SHA => 0xc020,
         TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA => 0xc021,
         TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA => 0xc022,
-        TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 => 0xc023,
-        TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 => 0xc024,
         TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256 => 0xc025,
         TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384 => 0xc026,
-        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 => 0xc027,
-        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => 0xc028,
         TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256 => 0xc029,
         TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384 => 0xc02a,
-        TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 => 0xc02b,
-        TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 => 0xc02c,
         TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256 => 0xc02d,
         TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384 => 0xc02e,
-        TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => 0xc02f,
-        TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => 0xc030,
         TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256 => 0xc031,
         TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384 => 0xc032,
         TLS_ECDHE_PSK_WITH_RC4_128_SHA => 0xc033,
@@ -480,8 +484,6 @@ enum_builder! {
         TLS_ECDHE_ECDSA_WITH_AES_256_CCM => 0xc0ad,
         TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 => 0xc0ae,
         TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8 => 0xc0af,
-        TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca8,
-        TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 => 0xcca9,
         TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => 0xccaa,
         TLS_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccab,
         TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccac,
@@ -496,7 +498,7 @@ enum_builder! {
     /// The `SignatureScheme` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
-    @U16
+    #[repr(u16)]
     pub enum SignatureScheme {
         RSA_PKCS1_SHA1 => 0x0201,
         ECDSA_SHA1_Legacy => 0x0203,
@@ -559,7 +561,7 @@ enum_builder! {
     /// The `SignatureAlgorithm` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
-    @U8
+    #[repr(u8)]
     pub enum SignatureAlgorithm {
         Anonymous => 0x00,
         RSA => 0x01,
@@ -575,7 +577,7 @@ enum_builder! {
     /// Values in this enum are taken from [RFC8879].
     ///
     /// [RFC8879]: https://www.rfc-editor.org/rfc/rfc8879.html#section-7.3
-    @U16
+    #[repr(u16)]
     pub enum CertificateCompressionAlgorithm {
         Zlib => 1,
         Brotli => 2,
@@ -589,7 +591,7 @@ enum_builder! {
     /// Specified in [draft-ietf-tls-esni Section 5].
     ///
     /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
-    @U8
+    #[repr(u8)]
     pub enum EchClientHelloType {
         ClientHelloOuter => 0,
         ClientHelloInner => 1

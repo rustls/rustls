@@ -96,7 +96,7 @@ impl<'a> Iterator for Chunker<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Chunker<'a> {
+impl ExactSizeIterator for Chunker<'_> {
     fn len(&self) -> usize {
         (self.payload.len() + self.limit - 1) / self.limit
     }

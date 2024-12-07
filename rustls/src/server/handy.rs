@@ -199,6 +199,30 @@ impl server::ResolvesServerCert for AlwaysResolvesChain {
     }
 }
 
+/// An exemplar `ResolvesServerCert` implementation that always resolves to a single
+/// [RFC 7250] raw public key.  
+///
+/// [RFC 7250]: https://tools.ietf.org/html/rfc7250  
+#[derive(Clone, Debug)]
+pub struct AlwaysResolvesServerRawPublicKeys(Arc<sign::CertifiedKey>);
+
+impl AlwaysResolvesServerRawPublicKeys {
+    /// Create a new `AlwaysResolvesServerRawPublicKeys` instance.
+    pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
+        Self(certified_key)
+    }
+}
+
+impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
+    fn resolve(&self, _client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
+
+    fn only_raw_public_keys(&self) -> bool {
+        true
+    }
+}
+
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod sni_resolver {
     use alloc::string::{String, ToString};
@@ -282,7 +306,7 @@ mod sni_resolver {
         fn test_resolvesservercertusingsni_requires_sni() {
             let rscsni = ResolvesServerCertUsingSni::new();
             assert!(rscsni
-                .resolve(ClientHello::new(&None, &[], None, &[]))
+                .resolve(ClientHello::new(&None, &[], None, None, None, &[]))
                 .is_none());
         }
 
@@ -293,7 +317,7 @@ mod sni_resolver {
                 .unwrap()
                 .to_owned();
             assert!(rscsni
-                .resolve(ClientHello::new(&Some(name), &[], None, &[]))
+                .resolve(ClientHello::new(&Some(name), &[], None, None, None, &[]))
                 .is_none());
         }
     }

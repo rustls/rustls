@@ -163,7 +163,16 @@ use crate::{ClientConfig, ServerConfig};
 #[derive(Clone)]
 pub struct ConfigBuilder<Side: ConfigSide, State> {
     pub(crate) state: State,
+    pub(crate) provider: Arc<CryptoProvider>,
+    pub(crate) time_provider: Arc<dyn TimeProvider>,
     pub(crate) side: PhantomData<Side>,
+}
+
+impl<Side: ConfigSide, State> ConfigBuilder<Side, State> {
+    /// Return the crypto provider used to construct this builder.
+    pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
+        &self.provider
+    }
 }
 
 impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
@@ -184,10 +193,7 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
-pub struct WantsVersions {
-    pub(crate) provider: Arc<CryptoProvider>,
-    pub(crate) time_provider: Arc<dyn TimeProvider>,
-}
+pub struct WantsVersions {}
 
 impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
     /// Accept the default protocol versions: both TLS1.2 and TLS1.3 are enabled.
@@ -203,7 +209,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
         versions: &[&'static versions::SupportedProtocolVersion],
     ) -> Result<ConfigBuilder<S, WantsVerifier>, Error> {
         let mut any_usable_suite = false;
-        for suite in &self.state.provider.cipher_suites {
+        for suite in &self.provider.cipher_suites {
             if versions.contains(&suite.version()) {
                 any_usable_suite = true;
                 break;
@@ -214,13 +220,13 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             return Err(Error::General("no usable cipher suites configured".into()));
         }
 
-        if self.state.provider.kx_groups.is_empty() {
+        if self.provider.kx_groups.is_empty() {
             return Err(Error::General("no kx groups configured".into()));
         }
 
         // verifying cipher suites have matching kx groups
         let mut supported_kx_algos = Vec::with_capacity(ALL_KEY_EXCHANGE_ALGORITHMS.len());
-        for group in self.state.provider.kx_groups.iter() {
+        for group in self.provider.kx_groups.iter() {
             let kx = group.name().key_exchange_algorithm();
             if !supported_kx_algos.contains(&kx) {
                 supported_kx_algos.push(kx);
@@ -232,7 +238,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             }
         }
 
-        for cs in self.state.provider.cipher_suites.iter() {
+        for cs in self.provider.cipher_suites.iter() {
             let cs_kx = cs.key_exchange_algorithms();
             if cs_kx
                 .iter()
@@ -249,11 +255,11 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 
         Ok(ConfigBuilder {
             state: WantsVerifier {
-                provider: self.state.provider,
                 versions: versions::EnabledVersions::new(versions),
-                time_provider: self.state.time_provider,
                 client_ech_mode: None,
             },
+            provider: self.provider,
+            time_provider: self.time_provider,
             side: self.side,
         })
     }
@@ -264,9 +270,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsVerifier {
-    pub(crate) provider: Arc<CryptoProvider>,
     pub(crate) versions: versions::EnabledVersions,
-    pub(crate) time_provider: Arc<dyn TimeProvider>,
     pub(crate) client_ech_mode: Option<EchMode>,
 }
 

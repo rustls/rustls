@@ -11,7 +11,7 @@ use crate::log::{debug, error, warn};
 use crate::msgs::alert::AlertMessagePayload;
 use crate::msgs::base::Payload;
 use crate::msgs::codec::Codec;
-use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
+use crate::msgs::enums::{AlertLevel, ExtensionType, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{CertificateChain, HandshakeMessagePayload};
 use crate::msgs::message::{
@@ -24,7 +24,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{quic, record_layer};
+use crate::{quic, record_layer, PeerIncompatible};
 
 /// Connection state common to both client and server connections.
 pub struct CommonState {
@@ -55,6 +55,7 @@ pub struct CommonState {
     pub(crate) enable_secret_extraction: bool,
     temper_counters: TemperCounters,
     pub(crate) refresh_traffic_keys_pending: bool,
+    pub(crate) fips: bool,
 }
 
 impl CommonState {
@@ -84,6 +85,7 @@ impl CommonState {
             enable_secret_extraction: false,
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
+            fips: false,
         }
     }
 
@@ -105,21 +107,27 @@ impl CommonState {
         !(self.may_send_application_data && self.may_receive_application_data)
     }
 
-    /// Retrieves the certificate chain used by the peer to authenticate.
+    /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
     ///
     /// The order of the certificate chain is as it appears in the TLS
     /// protocol: the first certificate relates to the peer, the
     /// second certifies the first, the third certifies the second, and
     /// so on.
     ///
+    /// When using raw public keys, the first and only element is the raw public key.
+    ///
     /// This is made available for both full and resumed handshakes.
     ///
-    /// For clients, this is the certificate chain of the server.
+    /// For clients, this is the certificate chain or the raw public key of the server.
     ///
-    /// For servers, this is the certificate chain of the client,
+    /// For servers, this is the certificate chain or the raw public key of the client,
     /// if client authentication was completed.
     ///
     /// The return value is None until this value is available.
+    ///
+    /// Note: the return type of the 'certificate', when using raw public keys is `CertificateDer<'static>`
+    /// even though this should technically be a `SubjectPublicKeyInfoDer<'static>`.
+    /// This choice simplifies the API and ensures backwards compatibility.
     pub fn peer_certificates(&self) -> Option<&[CertificateDer<'static>]> {
         self.peer_certificates.as_deref()
     }
@@ -512,10 +520,15 @@ impl CommonState {
                 .received_warning_alert()?;
             if self.is_tls13() && alert.description != AlertDescription::UserCanceled {
                 return Err(self.send_fatal_alert(AlertDescription::DecodeError, err));
-            } else {
-                warn!("TLS alert warning received: {:?}", alert);
-                return Ok(());
             }
+
+            // Some implementations send pointless `user_canceled` alerts, don't log them
+            // in release mode (https://bugs.openjdk.org/browse/JDK-8323517).
+            if alert.description != AlertDescription::UserCanceled || cfg!(debug_assertions) {
+                warn!("TLS alert warning received: {alert:?}");
+            }
+
+            return Ok(());
         }
 
         Err(err)
@@ -880,6 +893,35 @@ pub(crate) enum Protocol {
 enum Limit {
     Yes,
     No,
+}
+
+#[derive(Debug)]
+pub(super) struct RawKeyNegotiationParams {
+    pub(super) peer_supports_raw_key: bool,
+    pub(super) local_expects_raw_key: bool,
+    pub(super) extension_type: ExtensionType,
+}
+
+impl RawKeyNegotiationParams {
+    pub(super) fn validate_raw_key_negotiation(&self) -> RawKeyNegotationResult {
+        match (self.local_expects_raw_key, self.peer_supports_raw_key) {
+            (true, true) => RawKeyNegotationResult::Negotiated(self.extension_type),
+            (false, false) => RawKeyNegotationResult::NotNegotiated,
+            (true, false) => RawKeyNegotationResult::Err(Error::PeerIncompatible(
+                PeerIncompatible::IncorrectCertificateTypeExtension,
+            )),
+            (false, true) => RawKeyNegotationResult::Err(Error::PeerIncompatible(
+                PeerIncompatible::UnsolicitedCertificateTypeExtension,
+            )),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum RawKeyNegotationResult {
+    Negotiated(ExtensionType),
+    NotNegotiated,
+    Err(Error),
 }
 
 /// Tracking technically-allowed protocol actions

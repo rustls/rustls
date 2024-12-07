@@ -1,0 +1,16 @@
+<html>
+  <head>
+    <title>rustls: {{ page.title | default (value="a modern TLS library written in Rust") }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+  <a href=".."><img id="baby-logo" src="/rustls-ferris.png"></a>
+  {% block lede %} {% endblock %}
+  <div class="box">
+    <div class="content">
+      {% block content %} {% endblock %}
+    </div>
+  </div>
+  </body>
+</html>

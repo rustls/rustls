@@ -8,7 +8,9 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
-use crate::common_state::{KxState, Protocol, State};
+use crate::common_state::{
+    KxState, Protocol, RawKeyNegotationResult, RawKeyNegotiationParams, State,
+};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{
@@ -18,7 +20,7 @@ use crate::enums::{
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace};
-use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
+use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
@@ -156,6 +158,9 @@ impl ExtensionProcessing {
             ocsp_response.take();
         }
 
+        self.validate_server_cert_type_extension(hello, config, cx)?;
+        self.validate_client_cert_type_extension(hello, config, cx)?;
+
         self.exts.extend(extra_exts);
 
         Ok(())
@@ -200,6 +205,88 @@ impl ExtensionProcessing {
             self.exts
                 .push(ServerExtension::ExtendedMasterSecretAck);
         }
+    }
+
+    fn validate_server_cert_type_extension(
+        &mut self,
+        hello: &ClientHelloPayload,
+        config: &ServerConfig,
+        cx: &mut ServerContext<'_>,
+    ) -> Result<(), Error> {
+        let requires_server_rpk = config
+            .cert_resolver
+            .only_raw_public_keys();
+        let client_allows_rpk = hello
+            .server_certificate_extension()
+            .map(|certificate_types| certificate_types.contains(&CertificateType::RawPublicKey))
+            .unwrap_or(false);
+
+        let raw_key_negotation_params = RawKeyNegotiationParams {
+            peer_supports_raw_key: client_allows_rpk,
+            local_expects_raw_key: requires_server_rpk,
+            extension_type: ExtensionType::ServerCertificateType,
+        };
+
+        self.process_cert_type_extension(
+            raw_key_negotation_params.validate_raw_key_negotiation(),
+            cx,
+        )
+    }
+
+    fn validate_client_cert_type_extension(
+        &mut self,
+        hello: &ClientHelloPayload,
+        config: &ServerConfig,
+        cx: &mut ServerContext<'_>,
+    ) -> Result<(), Error> {
+        let requires_client_rpk = config
+            .verifier
+            .requires_raw_public_keys();
+        let client_offers_rpk = hello
+            .client_certificate_extension()
+            .map(|certificate_types| certificate_types.contains(&CertificateType::RawPublicKey))
+            .unwrap_or(false);
+
+        let raw_key_negotation_params = RawKeyNegotiationParams {
+            peer_supports_raw_key: client_offers_rpk,
+            local_expects_raw_key: requires_client_rpk,
+            extension_type: ExtensionType::ClientCertificateType,
+        };
+        self.process_cert_type_extension(
+            raw_key_negotation_params.validate_raw_key_negotiation(),
+            cx,
+        )
+    }
+
+    fn process_cert_type_extension(
+        &mut self,
+        raw_key_negotiation_result: RawKeyNegotationResult,
+        cx: &mut ServerContext<'_>,
+    ) -> Result<(), Error> {
+        match raw_key_negotiation_result {
+            RawKeyNegotationResult::Negotiated(ExtensionType::ClientCertificateType) => {
+                self.exts
+                    .push(ServerExtension::ClientCertType(
+                        CertificateType::RawPublicKey,
+                    ));
+            }
+            RawKeyNegotationResult::Negotiated(ExtensionType::ServerCertificateType) => {
+                self.exts
+                    .push(ServerExtension::ServerCertType(
+                        CertificateType::RawPublicKey,
+                    ));
+            }
+            RawKeyNegotationResult::Err(err) => {
+                return Err(cx
+                    .common
+                    .send_fatal_alert(AlertDescription::HandshakeFailure, err));
+            }
+            RawKeyNegotationResult::NotNegotiated => {}
+            RawKeyNegotationResult::Negotiated(_) => unreachable!(
+                "The extension type should only ever be ClientCertificateType or ServerCertificateType"
+            ),
+        }
+        Ok(())
     }
 }
 
@@ -317,6 +404,8 @@ impl ExpectClientHello {
                 &cx.data.sni,
                 &sig_schemes,
                 client_hello.alpn_extension(),
+                client_hello.server_certificate_extension(),
+                client_hello.client_certificate_extension(),
                 &client_hello.cipher_suites,
             );
 

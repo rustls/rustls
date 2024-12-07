@@ -241,20 +241,59 @@ impl client::ResolvesClientCert for AlwaysResolvesClientCert {
     }
 }
 
-test_for_each_provider! {
+/// An exemplar `ResolvesClientCert` implementation that always resolves to a single
+/// [RFC 7250] raw public key.  
+///
+/// [RFC 7250]: https://tools.ietf.org/html/rfc7250  
+#[derive(Clone, Debug)]
+pub struct AlwaysResolvesClientRawPublicKeys(Arc<sign::CertifiedKey>);
+impl AlwaysResolvesClientRawPublicKeys {
+    /// Create a new `AlwaysResolvesClientRawPublicKeys` instance.
+    pub fn new(certified_key: Arc<sign::CertifiedKey>) -> Self {
+        Self(certified_key)
+    }
+}
+
+impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
+    fn resolve(
+        &self,
+        _root_hint_subjects: &[&[u8]],
+        _sigschemes: &[SignatureScheme],
+    ) -> Option<Arc<sign::CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
+
+    fn only_raw_public_keys(&self) -> bool {
+        true
+    }
+
+    /// Returns true if the resolver is ready to present an identity.
+    ///
+    /// Even though the function is called `has_certs`, it returns true  
+    /// although only an RPK (Raw Public Key) is available, not an actual certificate.  
+    fn has_certs(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use alloc::sync::Arc;
+    use std::prelude::v1::*;
+
+    use pki_types::{ServerName, UnixTime};
+
+    use super::provider::cipher_suite;
     use super::NoClientSessionStorage;
     use crate::client::ClientSessionStore;
+    use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;
     use crate::msgs::handshake::CertificateChain;
     #[cfg(feature = "tls12")]
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
-    use crate::msgs::base::PayloadU16;
-    use provider::cipher_suite;
-
-    use pki_types::{ServerName, UnixTime};
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {
@@ -291,11 +330,9 @@ test_for_each_provider! {
             c.remove_tls12_session(&name);
         }
 
-        #[cfg_attr(not(feature = "tls12"), allow(clippy::infallible_destructuring_match))]
-        let tls13_suite = match cipher_suite::TLS13_AES_256_GCM_SHA384 {
-            SupportedCipherSuite::Tls13(inner) => inner,
-            #[cfg(feature = "tls12")]
-            _ => unreachable!(),
+        let SupportedCipherSuite::Tls13(tls13_suite) = cipher_suite::TLS13_AES_256_GCM_SHA384
+        else {
+            unreachable!();
         };
         c.insert_tls13_ticket(
             name.clone(),

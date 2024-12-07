@@ -23,9 +23,9 @@ use crate::log::warn;
 use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
-    CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
-    EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest, NamedGroup,
-    PSKKeyExchangeMode, ServerNameType,
+    CertificateStatusType, CertificateType, ClientCertificateType, Compression, ECCurveType,
+    ECPointFormat, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest,
+    NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
 use crate::verify::DigitallySignedStruct;
@@ -88,9 +88,8 @@ impl Codec<'_> for Random {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let bytes = match r.take(32) {
-            Some(bytes) => bytes,
-            None => return Err(InvalidMessage::MissingData("Random")),
+        let Some(bytes) = r.take(32) else {
+            return Err(InvalidMessage::MissingData("Random"));
         };
 
         let mut opaque = [0; 32];
@@ -145,7 +144,7 @@ impl Codec<'_> for SessionId {
     fn encode(&self, bytes: &mut Vec<u8>) {
         debug_assert!(self.len <= 32);
         bytes.push(self.len as u8);
-        bytes.extend_from_slice(&self.data[..self.len]);
+        bytes.extend_from_slice(self.as_ref());
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
@@ -154,9 +153,8 @@ impl Codec<'_> for SessionId {
             return Err(InvalidMessage::TrailingData("SessionID"));
         }
 
-        let bytes = match r.take(len) {
-            Some(bytes) => bytes,
-            None => return Err(InvalidMessage::MissingData("SessionID")),
+        let Some(bytes) = r.take(len) else {
+            return Err(InvalidMessage::MissingData("SessionID"));
         };
 
         let mut out = [0u8; 32];
@@ -182,6 +180,12 @@ impl SessionId {
     #[cfg(feature = "tls12")]
     pub(crate) fn is_empty(&self) -> bool {
         self.len == 0
+    }
+}
+
+impl AsRef<[u8]> for SessionId {
+    fn as_ref(&self) -> &[u8] {
+        &self.data[..self.len]
     }
 }
 
@@ -536,6 +540,10 @@ impl TlsListElement for ProtocolVersion {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
 
+impl TlsListElement for CertificateType {
+    const SIZE_LEN: ListLength = ListLength::U8;
+}
+
 impl TlsListElement for CertificateCompressionAlgorithm {
     const SIZE_LEN: ListLength = ListLength::U8;
 }
@@ -555,6 +563,8 @@ pub enum ClientExtension {
     Cookie(PayloadU16),
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest),
+    ServerCertTypes(Vec<CertificateType>),
+    ClientCertTypes(Vec<CertificateType>),
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
     EarlyData,
@@ -580,6 +590,8 @@ impl ClientExtension {
             Self::Cookie(_) => ExtensionType::Cookie,
             Self::ExtendedMasterSecretRequest => ExtensionType::ExtendedMasterSecret,
             Self::CertificateStatusRequest(_) => ExtensionType::StatusRequest,
+            Self::ClientCertTypes(_) => ExtensionType::ClientCertificateType,
+            Self::ServerCertTypes(_) => ExtensionType::ServerCertificateType,
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
             Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
@@ -614,6 +626,8 @@ impl Codec<'_> for ClientExtension {
             Self::PresharedKey(ref r) => r.encode(nested.buf),
             Self::Cookie(ref r) => r.encode(nested.buf),
             Self::CertificateStatusRequest(ref r) => r.encode(nested.buf),
+            Self::ClientCertTypes(ref r) => r.encode(nested.buf),
+            Self::ServerCertTypes(ref r) => r.encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
                 nested.buf.extend_from_slice(r);
             }
@@ -651,6 +665,8 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::ExtendedMasterSecret if !sub.any_left() => {
                 Self::ExtendedMasterSecretRequest
             }
+            ExtensionType::ClientCertificateType => Self::ClientCertTypes(Vec::read(&mut sub)?),
+            ExtensionType::ServerCertificateType => Self::ServerCertTypes(Vec::read(&mut sub)?),
             ExtensionType::StatusRequest => {
                 let csr = CertificateStatusRequest::read(&mut sub)?;
                 Self::CertificateStatusRequest(csr)
@@ -718,6 +734,8 @@ pub enum ServerExtension {
     PresharedKey(u16),
     ExtendedMasterSecretAck,
     CertificateStatusAck,
+    ServerCertType(CertificateType),
+    ClientCertType(CertificateType),
     SupportedVersions(ProtocolVersion),
     TransportParameters(Vec<u8>),
     TransportParametersDraft(Vec<u8>),
@@ -736,6 +754,8 @@ impl ServerExtension {
             Self::Protocols(_) => ExtensionType::ALProtocolNegotiation,
             Self::KeyShare(_) => ExtensionType::KeyShare,
             Self::PresharedKey(_) => ExtensionType::PreSharedKey,
+            Self::ClientCertType(_) => ExtensionType::ClientCertificateType,
+            Self::ServerCertType(_) => ExtensionType::ServerCertificateType,
             Self::ExtendedMasterSecretAck => ExtensionType::ExtendedMasterSecret,
             Self::CertificateStatusAck => ExtensionType::StatusRequest,
             Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
@@ -764,6 +784,8 @@ impl Codec<'_> for ServerExtension {
             Self::Protocols(ref r) => r.encode(nested.buf),
             Self::KeyShare(ref r) => r.encode(nested.buf),
             Self::PresharedKey(r) => r.encode(nested.buf),
+            Self::ClientCertType(r) => r.encode(nested.buf),
+            Self::ServerCertType(r) => r.encode(nested.buf),
             Self::SupportedVersions(ref r) => r.encode(nested.buf),
             Self::TransportParameters(ref r) | Self::TransportParametersDraft(ref r) => {
                 nested.buf.extend_from_slice(r);
@@ -785,6 +807,12 @@ impl Codec<'_> for ServerExtension {
             ExtensionType::StatusRequest => Self::CertificateStatusAck,
             ExtensionType::RenegotiationInfo => Self::RenegotiationInfo(PayloadU8::read(&mut sub)?),
             ExtensionType::ALProtocolNegotiation => Self::Protocols(Vec::read(&mut sub)?),
+            ExtensionType::ClientCertificateType => {
+                Self::ClientCertType(CertificateType::read(&mut sub)?)
+            }
+            ExtensionType::ServerCertificateType => {
+                Self::ServerCertType(CertificateType::read(&mut sub)?)
+            }
             ExtensionType::KeyShare => Self::KeyShare(KeyShareEntry::read(&mut sub)?),
             ExtensionType::PreSharedKey => Self::PresharedKey(u16::read(&mut sub)?),
             ExtensionType::ExtendedMasterSecret => Self::ExtendedMasterSecretAck,
@@ -1000,6 +1028,22 @@ impl ClientHelloPayload {
         }
     }
 
+    pub(crate) fn server_certificate_extension(&self) -> Option<&[CertificateType]> {
+        let ext = self.find_extension(ExtensionType::ServerCertificateType)?;
+        match ext {
+            ClientExtension::ServerCertTypes(req) => Some(req),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn client_certificate_extension(&self) -> Option<&[CertificateType]> {
+        let ext = self.find_extension(ExtensionType::ClientCertificateType)?;
+        match ext {
+            ClientExtension::ClientCertTypes(req) => Some(req),
+            _ => None,
+        }
+    }
+
     pub(crate) fn alpn_extension(&self) -> Option<&Vec<ProtocolName>> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
@@ -1063,7 +1107,7 @@ impl ClientHelloPayload {
     pub(crate) fn check_psk_ext_is_last(&self) -> bool {
         self.extensions
             .last()
-            .map_or(false, |ext| ext.ext_type() == ExtensionType::PreSharedKey)
+            .is_some_and(|ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
     pub(crate) fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
@@ -1303,12 +1347,12 @@ impl HelloRetryRequest {
 
 #[derive(Clone, Debug)]
 pub struct ServerHelloPayload {
+    pub extensions: Vec<ServerExtension>,
     pub(crate) legacy_version: ProtocolVersion,
     pub(crate) random: Random,
     pub(crate) session_id: SessionId,
     pub(crate) cipher_suite: CipherSuite,
     pub(crate) compression_method: Compression,
-    pub(crate) extensions: Vec<ServerExtension>,
 }
 
 impl Codec<'_> for ServerHelloPayload {
@@ -1464,7 +1508,7 @@ pub(crate) enum CertificateExtension<'a> {
     Unknown(UnknownExtension),
 }
 
-impl<'a> CertificateExtension<'a> {
+impl CertificateExtension<'_> {
     pub(crate) fn ext_type(&self) -> ExtensionType {
         match *self {
             Self::CertificateStatus(_) => ExtensionType::StatusRequest,
@@ -1516,7 +1560,7 @@ impl<'a> Codec<'a> for CertificateExtension<'a> {
     }
 }
 
-impl<'a> TlsListElement for CertificateExtension<'a> {
+impl TlsListElement for CertificateExtension<'_> {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
@@ -1581,7 +1625,7 @@ impl<'a> CertificateEntry<'a> {
     }
 }
 
-impl<'a> TlsListElement for CertificateEntry<'a> {
+impl TlsListElement for CertificateEntry<'_> {
     const SIZE_LEN: ListLength = ListLength::U24 {
         max: CERTIFICATE_MAX_SIZE_LIMIT,
         error: InvalidMessage::CertificatePayloadTooLarge,
@@ -1867,9 +1911,8 @@ pub(crate) struct ServerDhParams {
 impl ServerDhParams {
     #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
-        let params = match kx.ffdhe_group() {
-            Some(params) => params,
-            None => panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group()),
+        let Some(params) = kx.ffdhe_group() else {
+            panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group());
         };
 
         Self {
@@ -2033,6 +2076,22 @@ pub(crate) trait HasServerExtensions {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match *ext {
             ServerExtension::Protocols(ref protos) => protos.as_single_slice(),
+            _ => None,
+        }
+    }
+
+    fn server_cert_type(&self) -> Option<&CertificateType> {
+        let ext = self.find_extension(ExtensionType::ServerCertificateType)?;
+        match ext {
+            ServerExtension::ServerCertType(req) => Some(req),
+            _ => None,
+        }
+    }
+
+    fn client_cert_type(&self) -> Option<&CertificateType> {
+        let ext = self.find_extension(ExtensionType::ClientCertificateType)?;
+        match ext {
+            ServerExtension::ClientCertType(req) => Some(req),
             _ => None,
         }
     }

@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Runs clippy on every package in this repo.
+#
+# Passes through any extra arguments to each invocation.
+#
+# Exits non-zero if any clippy invocation exits non-zero,
+# but always runs them all.
+
+rc=0
+script_args="$@"
+
+function run_clippy() {
+  if ! ( set -x ; cargo clippy --locked "$@" $script_args ) ; then
+    rc=$PIPESTATUS
+  fi
+}
+
+# because examples enable rustls' features, `--workspace --no-default-features` is not
+# the same as `--package rustls --no-default-features` so run it separately
+run_clippy --package rustls --no-default-features --all-targets
+
+# run all workspace members (individually, because we don't want feature unification)
+for p in $(admin/all-workspace-members) ; do
+  # `bogo` is allergic to `--all-features`
+  if [ "$p" == "bogo" ] ; then
+    ALL_FEATURES="--features fips"
+  else
+    ALL_FEATURES="--all-features"
+  fi
+
+  run_clippy --package $p $ALL_FEATURES --all-targets
+done
+
+# not part of the workspace
+run_clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets
+run_clippy --manifest-path=rustls-post-quantum/Cargo.toml --all-features --all-targets
+
+exit $rc

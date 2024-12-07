@@ -7,7 +7,7 @@ use crate::version::TLS12;
 /// Implements [`Prf`] using a [`hmac::Hmac`].
 pub struct PrfUsingHmac<'a>(pub &'a dyn hmac::Hmac);
 
-impl<'a> Prf for PrfUsingHmac<'a> {
+impl Prf for PrfUsingHmac<'_> {
     fn for_key_exchange(
         &self,
         output: &mut [u8; 48],

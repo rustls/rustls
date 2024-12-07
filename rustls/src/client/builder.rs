@@ -7,11 +7,9 @@ use pki_types::{CertificateDer, PrivateKeyDer};
 use super::client_conn::Resumption;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{handy, ClientConfig, EchMode, ResolvesClientCert};
-use crate::crypto::CryptoProvider;
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
-use crate::time_provider::TimeProvider;
 use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{compress, verify, versions, WantsVersions};
@@ -55,7 +53,6 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         root_store: impl Into<Arc<webpki::RootCertStore>>,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         let algorithms = self
-            .state
             .provider
             .signature_verification_algorithms;
         self.with_webpki_verifier(
@@ -73,12 +70,12 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
         ConfigBuilder {
             state: WantsClientCert {
-                provider: self.state.provider,
                 versions: self.state.versions,
                 verifier,
-                time_provider: self.state.time_provider,
                 client_ech_mode: self.state.client_ech_mode,
             },
+            provider: self.provider,
+            time_provider: self.time_provider,
             side: PhantomData,
         }
     }
@@ -113,12 +110,12 @@ pub(super) mod danger {
         ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
             ConfigBuilder {
                 state: WantsClientCert {
-                    provider: self.cfg.state.provider,
                     versions: self.cfg.state.versions,
                     verifier,
-                    time_provider: self.cfg.state.time_provider,
                     client_ech_mode: self.cfg.state.client_ech_mode,
                 },
+                provider: self.cfg.provider,
+                time_provider: self.cfg.time_provider,
                 side: PhantomData,
             }
         }
@@ -131,10 +128,8 @@ pub(super) mod danger {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone)]
 pub struct WantsClientCert {
-    provider: Arc<CryptoProvider>,
     versions: versions::EnabledVersions,
     verifier: Arc<dyn verify::ServerCertVerifier>,
-    time_provider: Arc<dyn TimeProvider>,
     client_ech_mode: Option<EchMode>,
 }
 
@@ -144,8 +139,8 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
     /// `key_der` is a DER-encoded private key as PKCS#1, PKCS#8, or SEC1. The
-    /// `aws-lc-rs` and `ring` [`CryptoProvider`]s support all three encodings,
-    /// but other `CryptoProviders` may not.
+    /// `aws-lc-rs` and `ring` [`CryptoProvider`][crate::CryptoProvider]s support
+    /// all three encodings, but other `CryptoProviders` may not.
     ///
     /// This function fails if `key_der` is invalid.
     pub fn with_client_auth_cert(
@@ -154,7 +149,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
         let private_key = self
-            .state
             .provider
             .key_provider
             .load_private_key(key_der)?;
@@ -174,7 +168,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> ClientConfig {
         ClientConfig {
-            provider: self.state.provider,
+            provider: self.provider,
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             max_fragment_size: None,
@@ -187,7 +181,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             enable_early_data: false,
             #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
-            time_provider: self.state.time_provider,
+            time_provider: self.time_provider,
             cert_compressors: compress::default_cert_compressors().to_vec(),
             cert_compression_cache: Arc::new(compress::CompressionCache::default()),
             cert_decompressors: compress::default_cert_decompressors().to_vec(),
