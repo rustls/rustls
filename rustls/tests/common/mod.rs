@@ -6,6 +6,9 @@ extern crate alloc;
 use alloc::sync::Arc;
 use core::ops::DerefMut;
 
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
+
 use pki_types::pem::PemObject;
 use pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
@@ -1326,6 +1329,7 @@ impl RawTls {
     }
 }
 
+#[cfg(feature = "std")]
 pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
@@ -1373,6 +1377,7 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     .into()
 }
 
+#[cfg(feature = "std")]
 pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
     static TLS13_PLAIN_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
 

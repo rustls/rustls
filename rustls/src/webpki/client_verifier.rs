@@ -427,19 +427,20 @@ pub(crate) enum AnonymousClientPolicy {
     /// Clients that do not present a client certificate are denied.
     Deny,
 }
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
+    use alloc::{format, vec};
+    use std::println;
 
-test_for_each_provider! {
-    use super::WebPkiClientVerifier;
-    use crate::server::VerifierBuilderError;
-    use crate::RootCertStore;
-
+    use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
-    use alloc::sync::Arc;
-    use alloc::{vec, format};
-    use alloc::vec::Vec;
-
-    use std::println;
+    use super::{provider, WebPkiClientVerifier};
+    use crate::server::VerifierBuilderError;
+    use crate::RootCertStore;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der

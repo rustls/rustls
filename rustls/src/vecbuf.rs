@@ -1,14 +1,9 @@
-use alloc::collections::VecDeque;
-use alloc::vec::Vec;
-use core::{cmp, mem};
-#[cfg(feature = "std")]
-use std::io;
-#[cfg(feature = "std")]
-use std::io::Read;
-
 use crate::compat::io;
 use crate::compat::io::Read;
 use crate::msgs::message::OutboundChunks;
+use alloc::collections::VecDeque;
+use alloc::vec::Vec;
+use core::{cmp, mem};
 
 /// This is a byte buffer that is built from a deque of byte vectors.
 ///
