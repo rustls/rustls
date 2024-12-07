@@ -901,9 +901,9 @@ where
 #[cfg(test)]
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
     use core::fmt::Debug;
-    use std::prelude::v1::*;
-    use std::vec;
 
     use super::provider::ring_like::aead;
     use super::provider::tls13::{

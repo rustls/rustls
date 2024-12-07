@@ -4,6 +4,8 @@ use std::sync::Mutex;
 #[macro_use]
 mod macros;
 
+extern crate alloc;
+
 #[cfg(feature = "ring")]
 #[path = "."]
 mod tests_with_ring {

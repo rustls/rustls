@@ -1,11 +1,11 @@
+use core::str::FromStr;
+use core::sync::atomic::{AtomicU64, Ordering};
+
 use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
-use std::io::Write;
 use std::net::IpAddr;
 use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use rcgen::{
@@ -15,6 +15,7 @@ use rcgen::{
     SignatureAlgorithm, PKCS_ECDSA_P256_SHA256, PKCS_ECDSA_P384_SHA384, PKCS_ECDSA_P521_SHA512,
     PKCS_ED25519, PKCS_RSA_SHA256, PKCS_RSA_SHA384, PKCS_RSA_SHA512,
 };
+use rustls::compat::io::Write;
 use time::OffsetDateTime;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

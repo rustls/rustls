@@ -69,15 +69,17 @@ required-features = ["ring"]
 [[example]]
 name = "test_ca"
 path = "examples/internal/test_ca.rs"
+required-features = ["std"]
 
 [[test]]
 name = "api"
 path = "tests/runners/api.rs"
+required-features = ["std"]
 
 [[test]]
 name = "api_ffdhe"
 path = "tests/runners/api_ffdhe.rs"
-required-features = ["tls12"]
+required-features = ["tls12", "std"]
 
 [[test]]
 name = "bogo"
@@ -86,6 +88,7 @@ path = "tests/bogo.rs"
 [[test]]
 name = "client_cert_verifier"
 path = "tests/runners/client_cert_verifier.rs"
+required-features = ["std"]
 
 [[test]]
 name = "ech"
@@ -94,22 +97,26 @@ path = "tests/ech.rs"
 [[test]]
 name = "key_log_file_env"
 path = "tests/runners/key_log_file_env.rs"
+required-features = ["std"]
 
 [[test]]
 name = "process_provider"
 path = "tests/process_provider.rs"
+required-features = ["std"]
 
 [[test]]
 name = "server_cert_verifier"
 path = "tests/runners/server_cert_verifier.rs"
+required-features = ["std"]
 
 [[test]]
 name = "unbuffered"
 path = "tests/runners/unbuffered.rs"
+required-features = ["std"]
 
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
-features = ["read_buf", "ring"]
+features = ["read_buf", "ring", "std"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo_check_external_types]
