@@ -7,13 +7,14 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::num::NonZeroUsize;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{mem, thread};
 
 use clap::{Parser, ValueEnum};
+
 use rustls::client::{Resumption, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
+use rustls::internal::alias::Arc;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::{

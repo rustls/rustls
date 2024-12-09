@@ -1,7 +1,6 @@
-use alloc::sync::Arc;
-
 use pki_types::ServerName;
 
+use crate::alias::Arc;
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::msgs::handshake::CertificateChain;
@@ -279,13 +278,13 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
 #[cfg(test)]
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
-    use alloc::sync::Arc;
     use std::prelude::v1::*;
 
     use pki_types::{ServerName, UnixTime};
 
     use super::provider::cipher_suite;
     use super::NoClientSessionStorage;
+    use crate::alias::Arc;
     use crate::client::ClientSessionStore;
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;

@@ -23,6 +23,10 @@
 use std::fs;
 use std::io::{stdout, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
 use std::sync::Arc;
 
 use clap::Parser;
@@ -31,6 +35,7 @@ use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{Resolver, TokioResolver};
 use log::trace;
+
 use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;

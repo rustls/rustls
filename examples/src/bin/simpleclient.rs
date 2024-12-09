@@ -10,6 +10,10 @@
 
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
+
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
 use std::sync::Arc;
 
 use rustls::RootCertStore;

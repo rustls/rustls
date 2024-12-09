@@ -17,6 +17,10 @@ use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::str::FromStr;
+
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
 use std::sync::Arc;
 
 use rustls::pki_types::pem::PemObject;
