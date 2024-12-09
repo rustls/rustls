@@ -306,7 +306,7 @@ mod sni_resolver {
         fn test_resolvesservercertusingsni_requires_sni() {
             let rscsni = ResolvesServerCertUsingSni::new();
             assert!(rscsni
-                .resolve(ClientHello::new(&None, &[], None, None, None, &[]))
+                .resolve(ClientHello::new(&None, &[], None, None, None, &[], None))
                 .is_none());
         }
 
@@ -317,7 +317,15 @@ mod sni_resolver {
                 .unwrap()
                 .to_owned();
             assert!(rscsni
-                .resolve(ClientHello::new(&Some(name), &[], None, None, None, &[]))
+                .resolve(ClientHello::new(
+                    &Some(name),
+                    &[],
+                    None,
+                    None,
+                    None,
+                    &[],
+                    None
+                ))
                 .is_none());
         }
     }
