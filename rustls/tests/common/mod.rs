@@ -385,7 +385,7 @@ impl KeyType {
         )))
     }
 
-    pub fn get_certified_key(&self) -> Result<Arc<CertifiedKey>, Error> {
+    pub fn get_certified_key_with_raw_pub_key(&self) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider::default_provider()
             .key_provider
             .load_private_key(self.get_key())?;
@@ -399,6 +399,13 @@ impl KeyType {
         )))
     }
 
+    pub fn get_certified_key_with_cert_chain(&self) -> Result<Arc<CertifiedKey>, Error> {
+        let private_key = provider::default_provider()
+            .key_provider
+            .load_private_key(self.get_key())?;
+        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)))
+    }
+
     fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
         CertificateRevocationListDer::from_pem_slice(
             self.bytes_for(&format!("{role}.{type}.crl.pem")),
@@ -408,6 +415,7 @@ impl KeyType {
 
     pub fn ca_distinguished_name(&self) -> &'static [u8] {
         match self {
+            // TODO: what's up with the &b"blah"[..] ceremony?
             KeyType::Rsa2048 => {
                 &b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 2048 CA"[..]
             }
@@ -428,6 +436,13 @@ impl KeyType {
             }
             KeyType::Ed25519 => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA"[..],
         }
+    }
+
+    pub fn ca_cert(&self) -> CertificateDer<'_> {
+        self.get_chain()
+            .into_iter()
+            .next_back()
+            .unwrap()
     }
 }
 
@@ -573,7 +588,8 @@ pub fn make_server_config_with_client_verifier(
 pub fn make_server_config_with_raw_key_support(kt: KeyType) -> ServerConfig {
     let mut client_verifier = MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt);
     let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
-        kt.get_certified_key().unwrap(),
+        kt.get_certified_key_with_raw_pub_key()
+            .unwrap(),
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
