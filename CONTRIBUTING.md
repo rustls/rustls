@@ -109,6 +109,10 @@ single user, or just a few co-located users).
 
 The `#[cfg(test)] mod tests {}` module goes on the very bottom, if present.
 
+When defining new module definitions with `mod` they should be placed after
+private `use`'s, and before `pub use`'s. Files that have many `mod`'s should aim
+to avoid non-trivial code alongside the module definitions.
+
 #### Ordering for a given type
 
 For a given type, we prefer to order items as follows:
