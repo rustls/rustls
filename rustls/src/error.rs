@@ -675,8 +675,11 @@ pub use other_error::OtherError;
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
-    use std::{println, vec};
+    use alloc::string::ToString;
+    use alloc::vec;
+
+    use std::boxed::Box;
+    use std::println;
 
     use super::{CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError};
 

@@ -5,16 +5,13 @@ use core::fmt;
 use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
-#[cfg(feature = "std")]
-use std::io;
 
 use pki_types::{DnsName, UnixTime};
 
 use super::hs;
 use crate::builder::ConfigBuilder;
-use crate::common_state::{CommonState, Side};
-#[cfg(feature = "std")]
-use crate::common_state::{Protocol, State};
+use crate::common_state::{CommonState, Protocol, Side, State};
+use crate::compat::io;
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
@@ -522,7 +519,6 @@ impl ServerConfig {
                 .any(|cs| cs.version().version == v)
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
         self.provider
             .cipher_suites
@@ -537,7 +533,6 @@ impl ServerConfig {
     }
 }
 
-#[cfg(feature = "std")]
 mod connection {
     use alloc::boxed::Box;
     use alloc::sync::Arc;
@@ -545,10 +540,10 @@ mod connection {
     use core::fmt;
     use core::fmt::{Debug, Formatter};
     use core::ops::{Deref, DerefMut};
-    use std::io;
 
     use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
     use crate::common_state::{CommonState, Context, Side};
+    use crate::compat::io;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
     use crate::server::hs;
@@ -883,7 +878,6 @@ mod connection {
     }
 }
 
-#[cfg(feature = "std")]
 pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
 /// Unbuffered version of `ServerConnection`
@@ -953,7 +947,6 @@ impl Accepted {
     /// Takes the state returned from [`Acceptor::accept()`] as well as the [`ServerConfig`] and
     /// [`sign::CertifiedKey`] that should be used for the session. Returns an error if
     /// configuration-dependent validation of the received `ClientHello` message fails.
-    #[cfg(feature = "std")]
     pub fn into_connection(
         mut self,
         config: Arc<ServerConfig>,
@@ -1001,11 +994,8 @@ impl Debug for Accepted {
         f.debug_struct("Accepted").finish()
     }
 }
-
-#[cfg(feature = "std")]
 struct Accepting;
 
-#[cfg(feature = "std")]
 impl State<ServerConnectionData> for Accepting {
     fn handle<'m>(
         self: Box<Self>,
@@ -1050,7 +1040,6 @@ impl EarlyDataState {
         };
     }
 
-    #[cfg(feature = "std")]
     fn was_accepted(&self) -> bool {
         matches!(self, Self::Accepted { .. })
     }
@@ -1068,7 +1057,6 @@ impl EarlyDataState {
         }
     }
 
-    #[cfg(feature = "std")]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Accepted {
@@ -1135,7 +1123,6 @@ impl ConnectionCore<ServerConnectionData> {
         ))
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn reject_early_data(&mut self) {
         assert!(
             self.common_state.is_handshaking(),
@@ -1144,7 +1131,6 @@ impl ConnectionCore<ServerConnectionData> {
         self.data.early_data.reject();
     }
 
-    #[cfg(feature = "std")]
     pub(crate) fn get_sni_str(&self) -> Option<&str> {
         self.data.get_sni_str()
     }
@@ -1160,7 +1146,6 @@ pub struct ServerConnectionData {
 }
 
 impl ServerConnectionData {
-    #[cfg(feature = "std")]
     pub(super) fn get_sni_str(&self) -> Option<&str> {
         self.sni.as_ref().map(AsRef::as_ref)
     }
@@ -1168,10 +1153,9 @@ impl ServerConnectionData {
 
 impl crate::conn::SideData for ServerConnectionData {}
 
-#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
-    use std::format;
+    use alloc::format;
 
     use super::*;
 
