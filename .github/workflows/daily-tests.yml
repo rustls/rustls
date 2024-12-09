@@ -5,11 +5,11 @@ permissions:
 
 on:
   workflow_dispatch:
-  schedule:
+  # schedule:
     # We run these tests on a daily basis (at a time slightly offset from the
     # top of the hour), as their runtime is either too long for the usual per-PR
     # CI, or because they rely on external 3rd party services that can be flaky.
-    - cron: '15 18 * * *'
+    # - cron: '15 18 * * *'
 
 jobs:
   connect-tests:
