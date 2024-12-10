@@ -23,8 +23,10 @@ brotli = { workspace = true, optional = true }
 brotli-decompressor = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
-# only required for no-std
-once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
+# once_cell is only required for no-std; race feature is only required for combination no-std & no critical-section feature
+once_cell = { workspace = true, default-features = false, features = ["alloc", "race"] }
+portable-atomic = { workspace = true, default-features = false, optional = true }
+portable-atomic-util = { workspace = true, optional = true, default-features = false, features = ["alloc"] }
 ring = { workspace = true, optional = true }
 subtle = { workspace = true }
 webpki = { workspace = true }
@@ -45,6 +47,7 @@ tls12 = []
 read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 zlib = ["dep:zlib-rs"]
+critical-section = ["dep:portable-atomic", "dep:portable-atomic-util", "once_cell/critical-section", "portable-atomic/critical-section"]
 
 [dev-dependencies]
 base64 = { workspace = true }

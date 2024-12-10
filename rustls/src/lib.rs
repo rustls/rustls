@@ -174,8 +174,8 @@
 //! ```rust
 //! # #[cfg(feature = "aws_lc_rs")] {
 //! # use rustls;
+//! # use rustls::internal::alias::Arc;
 //! # use webpki;
-//! # use std::sync::Arc;
 //! # rustls::crypto::aws_lc_rs::default_provider().install_default();
 //! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
@@ -315,6 +315,16 @@
 //!
 //! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
 //!
+//! - `critical-section`: uses `Arc` from `portable-atomic-util` together with
+//!   `portable-atomic` and `once-cell` with `critical-section` option to
+//!   enable support for targets with no atomic ptr functionality.
+//!   This option requires use of `--cfg` option with `portable_atomic_unstable_coerce_unsized`
+//!   together with Rust nightly when building in order to build properly
+//!   (see documentation in `portable-atomic-util` for more details).
+//!   As stated in the `portable-atomic` crate documentation, this option also requires a
+//!   "suitable critical section implementation" (see `critical-section` documentation).
+//!   Note that with this feature enabled, `rustls` will use both `once-cell` & `portable-atomic`
+//!   with `critical-section` feature enabled.
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
@@ -401,6 +411,18 @@ mod log {
 #[macro_use]
 mod test_macros;
 
+mod alias {
+    // NOTE: `Arc` from `portable_atomic_util` is ONLY used to support the `critical-section` feature (as documented above).
+    #[cfg(feature = "critical-section")]
+    extern crate portable_atomic_util;
+
+    #[cfg(feature = "critical-section")]
+    pub use portable_atomic_util::Arc;
+
+    #[cfg(not(feature = "critical-section"))]
+    pub use alloc::sync::Arc;
+}
+
 #[macro_use]
 mod msgs;
 mod common_state;
@@ -442,6 +464,9 @@ mod webpki;
 #[allow(missing_docs)]
 #[doc(hidden)]
 pub mod internal {
+    pub mod alias {
+        pub use crate::alias::Arc;
+    }
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
         pub mod base {

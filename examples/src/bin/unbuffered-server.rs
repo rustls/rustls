@@ -6,6 +6,10 @@ use std::error::Error;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
+
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
 use std::sync::Arc;
 
 use rustls::pki_types::pem::PemObject;

@@ -3,12 +3,17 @@
 //! using asynchronous I/O using either async-std or tokio.
 
 use std::error::Error;
+
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
 use std::sync::Arc;
 
 #[cfg(feature = "async-std")]
 use async_std::io::{ReadExt, WriteExt};
 #[cfg(feature = "async-std")]
 use async_std::net::TcpStream;
+
 use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,

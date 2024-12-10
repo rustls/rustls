@@ -8,12 +8,17 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::ops::Add;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, thread};
 
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
+use std::sync::Arc;
+
 use clap::Parser;
 use rcgen::KeyPair;
+
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
 use rustls::RootCertStore;

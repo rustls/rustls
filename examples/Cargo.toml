@@ -13,8 +13,12 @@ env_logger = { workspace = true }
 hickory-resolver = { workspace = true }
 log = { workspace = true }
 mio = { workspace = true }
+portable-atomic-util = { workspace = true, optional = true, default-features = false, features = ["alloc"]  }
 rcgen = { workspace = true }
 rustls = { path = "../rustls", features = [ "logging" ]}
 serde = { workspace = true }
 tokio = { workspace = true }
 webpki-roots = { workspace = true }
+
+[features]
+critical-section = ["portable-atomic-util", "rustls/critical-section"]

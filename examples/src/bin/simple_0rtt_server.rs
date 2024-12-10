@@ -15,8 +15,12 @@
 use std::error::Error as StdError;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::Arc;
 use std::{env, io};
+
+#[cfg(feature = "critical-section")]
+use portable_atomic_util::Arc;
+#[cfg(not(feature = "critical-section"))]
+use std::sync::Arc;
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
