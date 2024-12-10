@@ -54,7 +54,7 @@ async fn main() {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.ech_config {
             Some(path) => Some(read_ech(&path)),
-            None => lookup_ech_configs(&resolver, &args.outer_hostname, args.port).await,
+            None => lookup_ech_configs(&resolver, &args.inner_hostname, args.port).await,
         },
     };
 
