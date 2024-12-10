@@ -971,6 +971,17 @@ pub struct MockServerVerifier {
 impl ServerCertVerifier for MockServerVerifier {
     fn verify_server_cert(
         &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, Error> {
+        unreachable!()
+    }
+
+    fn yeet_verify_server_cert(
+        &self,
         end_entity: &IdentityDer<'_>,
         intermediates: &[CertificateDer<'_>],
         server_name: &ServerName<'_>,
@@ -1009,6 +1020,15 @@ impl ServerCertVerifier for MockServerVerifier {
     }
 
     fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
+    }
+
+    fn yeet_verify_tls13_signature(
         &self,
         message: &[u8],
         cert: &IdentityDer<'_>,
@@ -1154,6 +1174,15 @@ impl ClientCertVerifier for MockClientVerifier {
 
     fn verify_client_cert(
         &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _now: UnixTime,
+    ) -> Result<ClientCertVerified, Error> {
+        unreachable!()
+    }
+
+    fn yeet_verify_client_cert(
+        &self,
         _end_entity: &IdentityDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
@@ -1175,7 +1204,7 @@ impl ClientCertVerifier for MockClientVerifier {
         }
     }
 
-    fn verify_tls13_signature(
+    fn yeet_verify_tls13_signature(
         &self,
         message: &[u8],
         cert: &IdentityDer<'_>,
@@ -1194,9 +1223,18 @@ impl ClientCertVerifier for MockClientVerifier {
             IdentityDer::Certificate(_) => {
                 assert!(!self.requires_raw_public_keys());
                 self.parent
-                    .verify_tls13_signature(message, cert, dss)
+                    .yeet_verify_tls13_signature(message, cert, dss)
             }
         }
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        unreachable!()
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

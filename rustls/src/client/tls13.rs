@@ -1153,7 +1153,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
         let cert_verified = self
             .config
             .verifier
-            .verify_server_cert(
+            .yeet_verify_server_cert(
                 &end_entity,
                 intermediates,
                 &self.server_name,
@@ -1170,7 +1170,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
         let sig_verified = self
             .config
             .verifier
-            .verify_tls13_signature(
+            .yeet_verify_tls13_signature(
                 construct_server_verify_message(&handshake_hash).as_ref(),
                 &end_entity,
                 cert_verify,

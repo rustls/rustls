@@ -510,7 +510,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
                 self.config
                     .verifier
-                    .verify_client_cert(
+                    .yeet_verify_client_cert(
                         &IdentityDer::Certificate(end_entity.clone()),
                         intermediates,
                         now,

@@ -860,7 +860,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let cert_verified = st
             .config
             .verifier
-            .verify_server_cert(
+            .yeet_verify_server_cert(
                 &IdentityDer::Certificate(end_entity.clone()),
                 intermediates,
                 &st.server_name,
