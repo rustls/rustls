@@ -16,9 +16,7 @@ use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
-use crate::common_state::{
-    CommonState, HandshakeKind, KxState, RawKeyNegotationResult, RawKeyNegotiationParams, State,
-};
+use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
@@ -701,46 +699,30 @@ pub(super) fn process_server_cert_type_extension(
     common: &mut CommonState,
     config: &ClientConfig,
     server_cert_extension: Option<&CertificateType>,
-) -> Result<(), Error> {
-    let requires_server_rpk = config
-        .verifier
-        .requires_raw_public_keys();
-    let server_offers_rpk = matches!(server_cert_extension, Some(CertificateType::RawPublicKey));
-
-    let raw_key_negotation_params = RawKeyNegotiationParams {
-        peer_supports_raw_key: server_offers_rpk,
-        local_expects_raw_key: requires_server_rpk,
-        extension_type: ExtensionType::ServerCertificateType,
-    };
-    match raw_key_negotation_params.validate_raw_key_negotiation() {
-        RawKeyNegotationResult::Err(err) => {
-            Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
-        }
-        _ => Ok(()),
-    }
+) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
+    process_cert_type_extension(
+        common,
+        config
+            .verifier
+            .requires_raw_public_keys(),
+        server_cert_extension.copied(),
+        ExtensionType::ServerCertificateType,
+    )
 }
 
 pub(super) fn process_client_cert_type_extension(
     common: &mut CommonState,
     config: &ClientConfig,
     client_cert_extension: Option<&CertificateType>,
-) -> Result<(), Error> {
-    let requires_client_rpk = config
-        .client_auth_cert_resolver
-        .only_raw_public_keys();
-    let server_allows_rpk = matches!(client_cert_extension, Some(CertificateType::RawPublicKey));
-
-    let raw_key_negotation_params = RawKeyNegotiationParams {
-        peer_supports_raw_key: server_allows_rpk,
-        local_expects_raw_key: requires_client_rpk,
-        extension_type: ExtensionType::ClientCertificateType,
-    };
-    match raw_key_negotation_params.validate_raw_key_negotiation() {
-        RawKeyNegotationResult::Err(err) => {
-            Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
-        }
-        _ => Ok(()),
-    }
+) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
+    process_cert_type_extension(
+        common,
+        config
+            .client_auth_cert_resolver
+            .only_raw_public_keys(),
+        client_cert_extension.copied(),
+        ExtensionType::ClientCertificateType,
+    )
 }
 
 impl State<ClientConnectionData> for ExpectServerHello {
@@ -1198,6 +1180,27 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
 
     fn into_owned(self: Box<Self>) -> NextState<'static> {
         self
+    }
+}
+
+fn process_cert_type_extension(
+    common: &mut CommonState,
+    client_expects: bool,
+    server_negotiated: Option<CertificateType>,
+    extension_type: ExtensionType,
+) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
+    match (client_expects, server_negotiated) {
+        (true, Some(CertificateType::RawPublicKey)) => {
+            Ok(Some((extension_type, CertificateType::RawPublicKey)))
+        }
+        (true, _) => Err(common.send_fatal_alert(
+            AlertDescription::HandshakeFailure,
+            Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
+        )),
+        (_, Some(CertificateType::RawPublicKey)) => {
+            unreachable!("Caught by `PeerMisbehaved::UnsolicitedEncryptedExtension`")
+        }
+        (_, _) => Ok(None),
     }
 }
 
