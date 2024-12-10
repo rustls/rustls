@@ -117,13 +117,13 @@ jobs:
 
       - name: Check ech-client (research.cloudflare.com)
         run: >
-          cargo run --locked -p rustls-examples --bin ech-client -- research.cloudflare.com cloudflare.com --path /cdn-cgi/trace |
+          cargo run --locked -p rustls-examples --bin ech-client -- cloudflare-ech.com research.cloudflare.com --path /cdn-cgi/trace |
             grep 'sni=encrypted'
 
       - name: Check ech-client (defo.ie)
         run: >
-          cargo run --locked -p rustls-examples --bin ech-client -- --host defo.ie defo.ie www.defo.ie |
-            grep 'SSL_ECH_STATUS: success'
+          cargo run --locked -p rustls-examples --bin ech-client -- --host min-ng.test.defo.ie --path "echstat.php?format=json" public.test.defo.ie min-ng.test.defo.ie |
+            grep '"SSL_ECH_STATUS": "success"'
 
       - name: Check provider-example client
         run: cargo run --locked -p rustls-provider-example --example client
