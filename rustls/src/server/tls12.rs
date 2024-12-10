@@ -5,7 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
-use pki_types::UnixTime;
+use pki_types::{IdentityDer, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::common::ActiveCertifiedKey;
@@ -510,7 +510,11 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
                 self.config
                     .verifier
-                    .verify_client_cert(end_entity, intermediates, now)
+                    .verify_client_cert(
+                        &IdentityDer::Certificate(end_entity.clone()),
+                        intermediates,
+                        now,
+                    )
                     .map_err(|err| {
                         cx.common
                             .send_cert_verify_error_alert(err)

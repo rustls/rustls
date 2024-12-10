@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use pki_types::ServerName;
+use pki_types::{IdentityDer, ServerName, SubjectPublicKeyInfoDer};
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
@@ -1141,11 +1141,20 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
 
         let now = self.config.current_time()?;
 
+        // TODO: implement gathering this information
+        let is_raw_public_key = false;
+        let end_entity = if is_raw_public_key {
+            let spki = SubjectPublicKeyInfoDer::from(end_entity.as_ref());
+            IdentityDer::PublicKey(spki)
+        } else {
+            IdentityDer::Certificate(end_entity.clone())
+        };
+
         let cert_verified = self
             .config
             .verifier
             .verify_server_cert(
-                end_entity,
+                &end_entity,
                 intermediates,
                 &self.server_name,
                 &self.server_cert.ocsp_response,
@@ -1163,7 +1172,7 @@ impl State<ClientConnectionData> for ExpectCertificateVerify<'_> {
             .verifier
             .verify_tls13_signature(
                 construct_server_verify_message(&handshake_hash).as_ref(),
-                end_entity,
+                &end_entity,
                 cert_verify,
             )
             .map_err(|err| {

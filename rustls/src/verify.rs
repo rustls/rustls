@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::{CertificateDer, ServerName, UnixTime};
+use pki_types::{CertificateDer, IdentityDer, ServerName, UnixTime};
 
 use crate::enums::SignatureScheme;
 use crate::error::{Error, InvalidMessage};
@@ -81,7 +81,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// [Certificate]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.4.2
     fn verify_server_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
+        end_entity: &IdentityDer<'_>,
         intermediates: &[CertificateDer<'_>],
         server_name: &ServerName<'_>,
         ocsp_response: &[u8],
@@ -127,7 +127,7 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &CertificateDer<'_>,
+        cert: &IdentityDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
 
@@ -207,7 +207,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     /// [BadEncoding]: crate::CertificateError#variant.BadEncoding
     fn verify_client_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
+        end_entity: &IdentityDer<'_>,
         intermediates: &[CertificateDer<'_>],
         now: UnixTime,
     ) -> Result<ClientCertVerified, Error>;
@@ -246,7 +246,7 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &CertificateDer<'_>,
+        cert: &IdentityDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
 
@@ -283,7 +283,7 @@ impl ClientCertVerifier for NoClientAuth {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &CertificateDer<'_>,
+        _end_entity: &IdentityDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
@@ -302,7 +302,7 @@ impl ClientCertVerifier for NoClientAuth {
     fn verify_tls13_signature(
         &self,
         _message: &[u8],
-        _cert: &CertificateDer<'_>,
+        _cert: &IdentityDer<'_>,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         unimplemented!();

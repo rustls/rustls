@@ -7,8 +7,8 @@ use std::sync::{Arc, OnceLock};
 
 use pki_types::pem::PemObject;
 use pki_types::{
-    CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
-    SubjectPublicKeyInfoDer, UnixTime,
+    CertificateDer, CertificateRevocationListDer, IdentityDer, PrivateKeyDer, PrivatePkcs8KeyDer,
+    ServerName, SubjectPublicKeyInfoDer, UnixTime,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
@@ -971,7 +971,7 @@ pub struct MockServerVerifier {
 impl ServerCertVerifier for MockServerVerifier {
     fn verify_server_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
+        end_entity: &IdentityDer<'_>,
         intermediates: &[CertificateDer<'_>],
         server_name: &ServerName<'_>,
         ocsp_response: &[u8],
@@ -1011,7 +1011,7 @@ impl ServerCertVerifier for MockServerVerifier {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &CertificateDer<'_>,
+        cert: &IdentityDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         println!(
@@ -1019,16 +1019,22 @@ impl ServerCertVerifier for MockServerVerifier {
             message, cert, dss
         );
         if let Some(error) = &self.tls13_signature_error {
-            Err(error.clone())
-        } else if self.requires_raw_public_keys {
-            verify_tls13_signature_with_raw_key(
-                message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
-                dss,
-                &provider::default_provider().signature_verification_algorithms,
-            )
-        } else {
-            Ok(HandshakeSignatureValid::assertion())
+            return Err(error.clone());
+        }
+        match cert {
+            IdentityDer::PublicKey(spki) => {
+                assert!(self.requires_raw_public_keys);
+                verify_tls13_signature_with_raw_key(
+                    message,
+                    &spki,
+                    dss,
+                    &provider::default_provider().signature_verification_algorithms,
+                )
+            }
+            IdentityDer::Certificate(_) => {
+                assert!(!self.requires_raw_public_keys);
+                Ok(HandshakeSignatureValid::assertion())
+            }
         }
     }
 
@@ -1148,7 +1154,7 @@ impl ClientCertVerifier for MockClientVerifier {
 
     fn verify_client_cert(
         &self,
-        _end_entity: &CertificateDer<'_>,
+        _end_entity: &IdentityDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
@@ -1172,19 +1178,24 @@ impl ClientCertVerifier for MockClientVerifier {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &CertificateDer<'_>,
+        cert: &IdentityDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        if self.expect_raw_public_keys {
-            verify_tls13_signature_with_raw_key(
-                message,
-                &SubjectPublicKeyInfoDer::from(cert.as_ref()),
-                dss,
-                &provider::default_provider().signature_verification_algorithms,
-            )
-        } else {
-            self.parent
-                .verify_tls13_signature(message, cert, dss)
+        match cert {
+            IdentityDer::PublicKey(spki) => {
+                assert!(self.requires_raw_public_keys());
+                verify_tls13_signature_with_raw_key(
+                    message,
+                    spki,
+                    dss,
+                    &provider::default_provider().signature_verification_algorithms,
+                )
+            }
+            IdentityDer::Certificate(_) => {
+                assert!(!self.requires_raw_public_keys());
+                self.parent
+                    .verify_tls13_signature(message, cert, dss)
+            }
         }
     }
 

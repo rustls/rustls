@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
+use pki_types::{CertificateDer, CertificateRevocationListDer, IdentityDer, UnixTime};
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use super::{pki_error, VerifierBuilderError};
@@ -359,11 +359,17 @@ impl ClientCertVerifier for WebPkiClientVerifier {
 
     fn verify_client_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
+        end_entity: &IdentityDer<'_>,
         intermediates: &[CertificateDer<'_>],
         now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
-        let cert = ParsedCertificate::try_from(end_entity)?;
+        let cert = match end_entity {
+            IdentityDer::Certificate(cert) => ParsedCertificate::try_from(cert)?,
+            IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+        };
 
         let crl_refs = self.crls.iter().collect::<Vec<_>>();
 
@@ -408,10 +414,18 @@ impl ClientCertVerifier for WebPkiClientVerifier {
     fn verify_tls13_signature(
         &self,
         message: &[u8],
-        cert: &CertificateDer<'_>,
+        cert: &IdentityDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13_signature(message, cert, dss, &self.supported_algs)
+        match cert {
+            IdentityDer::Certificate(cert) => {
+                verify_tls13_signature(message, cert, dss, &self.supported_algs)
+            }
+            IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+        }
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {

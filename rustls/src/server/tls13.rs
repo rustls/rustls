@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, IdentityDer, UnixTime};
 use subtle::ConstantTimeEq;
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
@@ -1104,7 +1104,11 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         self.config
             .verifier
-            .verify_client_cert(end_entity, intermediates, now)
+            .verify_client_cert(
+                &IdentityDer::Certificate(end_entity.clone()),
+                intermediates,
+                now,
+            )
             .map_err(|err| {
                 cx.common
                     .send_cert_verify_error_alert(err)
@@ -1156,7 +1160,11 @@ impl State<ServerConnectionData> for ExpectCertificateVerify {
 
             self.config
                 .verifier
-                .verify_tls13_signature(msg.as_ref(), &certs[0], sig)
+                .verify_tls13_signature(
+                    msg.as_ref(),
+                    &IdentityDer::Certificate(certs[0].clone()),
+                    sig,
+                )
         };
 
         if let Err(e) = rc {
