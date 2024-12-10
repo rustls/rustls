@@ -11,6 +11,7 @@ use rustls::unbuffered::{ConnectionState, UnbufferedStatus};
 use rustls::{ClientConfig, RootCertStore, ServerConfig, SideData};
 
 fuzz_target!(|data: &[u8]| {
+    let _ = env_logger::try_init();
     let mut data = data.to_vec();
     match data.split_first_mut() {
         Some((0x00, rest)) => client(rest),
