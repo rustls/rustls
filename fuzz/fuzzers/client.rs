@@ -9,6 +9,7 @@ use std::sync::Arc;
 use rustls::{ClientConfig, ClientConnection, RootCertStore};
 
 fuzz_target!(|data: &[u8]| {
+    let _ = env_logger::try_init();
     let root_store = RootCertStore::empty();
     let config = Arc::new(
         ClientConfig::builder()

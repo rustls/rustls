@@ -10,6 +10,7 @@ use rustls::server::{Acceptor, ResolvesServerCert};
 use rustls::{ServerConfig, ServerConnection};
 
 fuzz_target!(|data: &[u8]| {
+    let _ = env_logger::try_init();
     match data.split_first() {
         Some((0x00, rest)) => fuzz_buffered_api(rest),
         Some((0x01, rest)) => fuzz_acceptor_api(rest),
