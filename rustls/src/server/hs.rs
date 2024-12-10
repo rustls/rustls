@@ -398,6 +398,12 @@ impl ExpectClientHello {
         sig_schemes
             .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
+        // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
+        let certificate_authorities_extension = if version != ProtocolVersion::TLSv1_2 {
+            client_hello.certificate_authorities_extension()
+        } else {
+            None
+        };
         // Choose a certificate.
         let certkey = {
             let client_hello = ClientHello::new(
@@ -407,6 +413,7 @@ impl ExpectClientHello {
                 client_hello.server_certificate_extension(),
                 client_hello.client_certificate_extension(),
                 &client_hello.cipher_suites,
+                certificate_authorities_extension,
             );
 
             let certkey = self
@@ -718,6 +725,10 @@ pub(super) fn process_client_hello<'m>(
     } else if cx.data.sni != sni {
         return Err(PeerMisbehaved::ServerNameDifferedOnRetry.into());
     }
+
+    cx.data.certificate_authorities_ext = client_hello
+        .certificate_authorities_extension()
+        .map(ToOwned::to_owned);
 
     let sig_schemes = client_hello
         .sigalgs_extension()
