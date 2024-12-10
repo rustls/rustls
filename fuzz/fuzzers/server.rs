@@ -6,10 +6,11 @@ extern crate rustls;
 use std::io;
 use std::sync::Arc;
 
-use rustls::server::{Acceptor, ResolvesServerCert};
+use rustls::server::Acceptor;
 use rustls::{ServerConfig, ServerConnection};
 
 fuzz_target!(|data: &[u8]| {
+    let _ = env_logger::try_init();
     match data.split_first() {
         Some((0x00, rest)) => fuzz_buffered_api(rest),
         Some((0x01, rest)) => fuzz_acceptor_api(rest),
@@ -19,14 +20,29 @@ fuzz_target!(|data: &[u8]| {
 
 fn fuzz_buffered_api(data: &[u8]) {
     let config = Arc::new(
-        ServerConfig::builder()
+        ServerConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
             .with_no_client_auth()
-            .with_cert_resolver(Arc::new(Fail)),
+            .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver()),
     );
     let mut stream = io::Cursor::new(data);
     let mut server = ServerConnection::new(config).unwrap();
-    let _ = server.read_tls(&mut stream);
-    let _ = server.process_new_packets();
+
+    loop {
+        let rd = server.read_tls(&mut stream);
+        if server.process_new_packets().is_err() {
+            break;
+        }
+
+        if matches!(rd, Ok(0) | Err(_)) {
+            break;
+        }
+
+        // gather and discard written data
+        let mut wr = vec![];
+        server.write_tls(&mut &mut wr).unwrap();
+    }
 }
 
 fn fuzz_acceptor_api(data: &[u8]) {
@@ -44,17 +60,5 @@ fn fuzz_acceptor_api(data: &[u8]) {
         if rd == 0 {
             break;
         }
-    }
-}
-
-#[derive(Debug)]
-struct Fail;
-
-impl ResolvesServerCert for Fail {
-    fn resolve(
-        &self,
-        _client_hello: rustls::server::ClientHello,
-    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
-        None
     }
 }
