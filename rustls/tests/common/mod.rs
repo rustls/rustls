@@ -1055,6 +1055,10 @@ impl ServerCertVerifier for MockServerVerifier {
                 assert!(!self.requires_raw_public_keys);
                 Ok(HandshakeSignatureValid::assertion())
             }
+            _ => {
+                // I assume this should error?
+                todo!()
+            }
         }
     }
 
@@ -1224,6 +1228,10 @@ impl ClientCertVerifier for MockClientVerifier {
                 assert!(!self.requires_raw_public_keys());
                 self.parent
                     .yeet_verify_tls13_signature(message, cert, dss)
+            }
+            _ => {
+                // I assume this should error?
+                todo!()
             }
         }
     }

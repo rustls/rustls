@@ -106,6 +106,10 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
                 // I assume this should error?
                 todo!()
             }
+            _ => {
+                // I assume this should error?
+                todo!()
+            }
         }
     }
 
@@ -163,6 +167,10 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
         match cert {
             IdentityDer::Certificate(cert) => self.verify_tls13_signature(message, &cert, dss),
             IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+            _ => {
                 // I assume this should error?
                 todo!()
             }
@@ -264,6 +272,10 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
                 // I assume this should error?
                 todo!()
             }
+            _ => {
+                // I assume this should error?
+                todo!()
+            }
         }
     }
 
@@ -316,6 +328,10 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
         match cert {
             IdentityDer::Certificate(cert) => self.verify_tls13_signature(message, cert, dss),
             IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+            _ => {
                 // I assume this should error?
                 todo!()
             }
