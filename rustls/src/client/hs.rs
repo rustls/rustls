@@ -17,9 +17,7 @@ use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
-use crate::common_state::{
-    CommonState, HandshakeKind, KxState, RawKeyNegotationResult, RawKeyNegotiationParams, State,
-};
+use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
@@ -692,20 +690,20 @@ pub(super) fn process_server_cert_type_extension(
     config: &ClientConfig,
     server_cert_extension: Option<&CertificateType>,
 ) -> Result<(), Error> {
-    let requires_server_rpk = config
+    let client_expects = match config
         .verifier
-        .requires_raw_public_keys();
-    let server_offers_rpk = matches!(server_cert_extension, Some(CertificateType::RawPublicKey));
-
-    let raw_key_negotation_params = RawKeyNegotiationParams {
-        peer_supports_raw_key: server_offers_rpk,
-        local_expects_raw_key: requires_server_rpk,
-        extension_type: ExtensionType::ServerCertificateType,
+        .requires_raw_public_keys()
+    {
+        true => CertificateType::RawPublicKey,
+        false => CertificateType::X509,
     };
-    match raw_key_negotation_params.validate_raw_key_negotiation() {
-        RawKeyNegotationResult::Err(err) => {
-            Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
-        }
+
+    match check_certificate_type(
+        client_expects,
+        server_cert_extension.copied(),
+        ExtensionType::ServerCertificateType,
+    ) {
+        Err(err) => Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err)),
         _ => Ok(()),
     }
 }
@@ -715,20 +713,20 @@ pub(super) fn process_client_cert_type_extension(
     config: &ClientConfig,
     client_cert_extension: Option<&CertificateType>,
 ) -> Result<(), Error> {
-    let requires_client_rpk = config
+    let client_expects = match config
         .client_auth_cert_resolver
-        .only_raw_public_keys();
-    let server_allows_rpk = matches!(client_cert_extension, Some(CertificateType::RawPublicKey));
-
-    let raw_key_negotation_params = RawKeyNegotiationParams {
-        peer_supports_raw_key: server_allows_rpk,
-        local_expects_raw_key: requires_client_rpk,
-        extension_type: ExtensionType::ClientCertificateType,
+        .only_raw_public_keys()
+    {
+        true => CertificateType::RawPublicKey,
+        false => CertificateType::X509,
     };
-    match raw_key_negotation_params.validate_raw_key_negotiation() {
-        RawKeyNegotationResult::Err(err) => {
-            Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
-        }
+
+    match check_certificate_type(
+        client_expects,
+        client_cert_extension.copied(),
+        ExtensionType::ClientCertificateType,
+    ) {
+        Err(err) => Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err)),
         _ => Ok(()),
     }
 }
@@ -1181,6 +1179,25 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
     }
 }
 
+fn check_certificate_type(
+    client_expects: CertificateType,
+    server_negotiated: Option<CertificateType>,
+    extension_type: ExtensionType,
+) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
+    match (client_expects, server_negotiated) {
+        (CertificateType::RawPublicKey, Some(CertificateType::RawPublicKey)) => {
+            Ok(Some((extension_type, CertificateType::RawPublicKey)))
+        }
+        (CertificateType::RawPublicKey, _) => Err(Error::PeerIncompatible(
+            PeerIncompatible::IncorrectCertificateTypeExtension,
+        )),
+        (_, Some(CertificateType::RawPublicKey)) => Err(Error::PeerIncompatible(
+            PeerIncompatible::UnsolicitedCertificateTypeExtension,
+        )),
+        (_, _) => Ok(None),
+    }
+}
+
 enum ClientSessionValue {
     Tls13(persist::Tls13ClientSessionValue),
     #[cfg(feature = "tls12")]
@@ -1227,4 +1244,86 @@ fn low_quality_integer_hash(mut x: u32) -> u32 {
         .wrapping_add(x << 3);
     x = (x ^ 0xb55a4f09) ^ (x >> 16);
     x
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::msgs::enums::{CertificateType, ExtensionType};
+    use crate::{Error, PeerIncompatible};
+
+    use super::check_certificate_type;
+
+    #[test]
+    fn test_check_certificate_type() {
+        // There are 7 cases to consider:
+        // 2 options for what the client expects, 3 options for what the server negotiated (including None), and 2 extension types.
+        assert_eq!(
+            check_certificate_type(
+                CertificateType::RawPublicKey,
+                Some(CertificateType::RawPublicKey),
+                ExtensionType::ServerCertificateType
+            ),
+            Ok(Some((
+                ExtensionType::ServerCertificateType,
+                CertificateType::RawPublicKey
+            )))
+        );
+        assert_eq!(
+            check_certificate_type(
+                CertificateType::RawPublicKey,
+                Some(CertificateType::RawPublicKey),
+                ExtensionType::ClientCertificateType
+            ),
+            Ok(Some((
+                ExtensionType::ClientCertificateType,
+                CertificateType::RawPublicKey
+            )))
+        );
+        assert_eq!(
+            check_certificate_type(
+                CertificateType::RawPublicKey,
+                Some(CertificateType::X509),
+                ExtensionType::ClientCertificateType
+            ),
+            Err(Error::PeerIncompatible(
+                PeerIncompatible::IncorrectCertificateTypeExtension,
+            ))
+        );
+        assert_eq!(
+            check_certificate_type(
+                CertificateType::RawPublicKey,
+                None,
+                ExtensionType::ClientCertificateType
+            ),
+            Err(Error::PeerIncompatible(
+                PeerIncompatible::IncorrectCertificateTypeExtension,
+            ))
+        );
+        assert_eq!(
+            check_certificate_type(
+                CertificateType::X509,
+                Some(CertificateType::RawPublicKey),
+                ExtensionType::ClientCertificateType
+            ),
+            Err(Error::PeerIncompatible(
+                PeerIncompatible::UnsolicitedCertificateTypeExtension,
+            ))
+        );
+        assert_eq!(
+            check_certificate_type(
+                CertificateType::X509,
+                Some(CertificateType::X509),
+                ExtensionType::ClientCertificateType
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            check_certificate_type(
+                CertificateType::X509,
+                None,
+                ExtensionType::ClientCertificateType
+            ),
+            Ok(None)
+        );
+    }
 }
