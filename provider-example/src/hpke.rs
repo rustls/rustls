@@ -1,8 +1,6 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
-use std::error::Error as StdError;
 
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_crypto::HpkeCrypto;
@@ -14,7 +12,7 @@ use rustls::internal::msgs::enums::{
     HpkeAead as HpkeAeadId, HpkeKdf as HpkeKdfId, HpkeKem as HpkeKemId, HpkeKem,
 };
 use rustls::internal::msgs::handshake::HpkeSymmetricCipherSuite;
-use rustls::{Error, OtherError};
+use rustls::Error;
 
 /// All supported HPKE suites.
 ///
@@ -213,14 +211,28 @@ impl HpkeOpener for HpkeRsReceiver {
     }
 }
 
+use error_util::other_err;
+
 #[cfg(feature = "std")]
-fn other_err(err: impl StdError + Send + Sync + 'static) -> Error {
-    Error::Other(OtherError(Arc::new(err)))
+mod error_util {
+    use alloc::sync::Arc;
+    use rustls::Error;
+    use rustls::OtherError;
+    use std::error::Error as StdError;
+
+    pub(crate) fn other_err(err: impl StdError + Send + Sync + 'static) -> Error {
+        Error::Other(OtherError(Arc::new(err)))
+    }
 }
 
 #[cfg(not(feature = "std"))]
-fn other_err(err: impl Send + Sync + 'static) -> Error {
-    Error::General(alloc::format!("{}", err));
+mod error_util {
+    use core::any::Any;
+    use rustls::Error;
+
+    pub(crate) fn other_err(_err: impl Any) -> Error {
+        Error::Other(OtherError())
+    }
 }
 
 #[cfg(test)]
