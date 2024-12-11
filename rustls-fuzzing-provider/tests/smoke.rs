@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::Write;
 
 use rustls::version::{TLS12, TLS13};
@@ -7,15 +8,69 @@ use rustls::{
 
 // These tests exercise rustls_fuzzing_provider and makes sure it can
 // handshake with itself without errors.
+//
+// Transcripts are written into the fuzzing corpus.
 
 #[test]
 fn pairwise_tls12() {
-    test_version(&TLS12);
+    let transcript = test_version(&TLS12);
+
+    fs::write(
+        "../fuzz/corpus/unbuffered/tls12-server.bin",
+        [&[0u8], &transcript.server_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/unbuffered/tls12-client.bin",
+        [&[1u8], &transcript.client_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/server/buffered-tls12-client.bin",
+        [&[0u8], &transcript.client_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/server/accepter-tls12-client.bin",
+        [&[1u8], &transcript.client_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/client/tls12-server.bin",
+        &transcript.server_wrote,
+    )
+    .unwrap();
 }
 
 #[test]
 fn pairwise_tls13() {
-    test_version(&TLS13);
+    let transcript = test_version(&TLS13);
+
+    fs::write(
+        "../fuzz/corpus/unbuffered/tls13-server.bin",
+        [&[0u8], &transcript.server_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/unbuffered/tls13-client.bin",
+        [&[1u8], &transcript.client_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/server/buffered-tls13-client.bin",
+        [&[0u8], &transcript.client_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/server/accepter-tls13-client.bin",
+        [&[1u8], &transcript.client_wrote[..]].concat(),
+    )
+    .unwrap();
+    fs::write(
+        "../fuzz/corpus/client/tls13-server.bin",
+        &transcript.server_wrote,
+    )
+    .unwrap();
 }
 
 fn test_version(version: &'static SupportedProtocolVersion) -> Transcript {
