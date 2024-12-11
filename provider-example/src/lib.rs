@@ -12,7 +12,6 @@ use rustls::pki_types::PrivateKeyDer;
 mod aead;
 mod hash;
 mod hmac;
-#[cfg(feature = "std")]
 pub mod hpke;
 mod kx;
 mod sign;
