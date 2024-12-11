@@ -132,42 +132,17 @@ pub trait ResolvesServerCert: Debug + Send + Sync {
 }
 
 /// A struct representing the received Client Hello
+#[derive(Debug)]
 pub struct ClientHello<'a> {
-    server_name: &'a Option<DnsName<'a>>,
-    signature_schemes: &'a [SignatureScheme],
-    alpn: Option<&'a Vec<ProtocolName>>,
-    server_cert_types: Option<&'a [CertificateType]>,
-    client_cert_types: Option<&'a [CertificateType]>,
-    cipher_suites: &'a [CipherSuite],
+    pub(super) server_name: &'a Option<DnsName<'a>>,
+    pub(super) signature_schemes: &'a [SignatureScheme],
+    pub(super) alpn: Option<&'a Vec<ProtocolName>>,
+    pub(super) server_cert_types: Option<&'a [CertificateType]>,
+    pub(super) client_cert_types: Option<&'a [CertificateType]>,
+    pub(super) cipher_suites: &'a [CipherSuite],
 }
 
 impl<'a> ClientHello<'a> {
-    /// Creates a new ClientHello
-    pub(super) fn new(
-        server_name: &'a Option<DnsName<'_>>,
-        signature_schemes: &'a [SignatureScheme],
-        alpn: Option<&'a Vec<ProtocolName>>,
-        server_cert_types: Option<&'a [CertificateType]>,
-        client_cert_types: Option<&'a [CertificateType]>,
-        cipher_suites: &'a [CipherSuite],
-    ) -> Self {
-        trace!("sni {:?}", server_name);
-        trace!("sig schemes {:?}", signature_schemes);
-        trace!("alpn protocols {:?}", alpn);
-        trace!("server cert types {:?}", server_cert_types);
-        trace!("client cert types {:?}", client_cert_types);
-        trace!("cipher suites {:?}", cipher_suites);
-
-        ClientHello {
-            server_name,
-            signature_schemes,
-            alpn,
-            server_cert_types,
-            client_cert_types,
-            cipher_suites,
-        }
-    }
-
     /// Get the server name indicator.
     ///
     /// Returns `None` if the client did not supply a SNI.
@@ -938,14 +913,17 @@ impl Accepted {
     /// Get the [`ClientHello`] for this connection.
     pub fn client_hello(&self) -> ClientHello<'_> {
         let payload = Self::client_hello_payload(&self.message);
-        ClientHello::new(
-            &self.connection.core.data.sni,
-            &self.sig_schemes,
-            payload.alpn_extension(),
-            payload.server_certificate_extension(),
-            payload.client_certificate_extension(),
-            &payload.cipher_suites,
-        )
+        let ch = ClientHello {
+            server_name: &self.connection.core.data.sni,
+            signature_schemes: &self.sig_schemes,
+            alpn: payload.alpn_extension(),
+            server_cert_types: payload.server_certificate_extension(),
+            client_cert_types: payload.client_certificate_extension(),
+            cipher_suites: &payload.cipher_suites,
+        };
+
+        trace!("Accepted::client_hello(): {ch:#?}");
+        ch
     }
 
     /// Convert the [`Accepted`] into a [`ServerConnection`].
