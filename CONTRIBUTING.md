@@ -108,6 +108,14 @@ sense to place a `const` directly below the user (especially if there is a
 single user, or just a few co-located users).
 
 The `#[cfg(test)] mod tests {}` module goes on the very bottom, if present.
+Other module definitions (like `mod foo { .. }`) can be ordered among other
+items as it makes sense in the context of the items imported from them.
+Module declarations (like `mod foo;`) should be ordered before other items
+but after imports. Imports from local modules (both declared and defined)
+should be kept close to the module declaration/definition.
+
+Files that have substantial amounts of code inside inline modules should
+probably avoid also having much code outside of these modules.
 
 #### Ordering for a given type
 
