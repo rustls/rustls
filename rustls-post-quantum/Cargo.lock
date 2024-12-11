@@ -460,7 +460,7 @@ checksum = "16f1201b3c9a7ee8039bcadc17b7e605e2945b27eee7631788c1bd2b0643674b"
 
 [[package]]
 name = "rustls-post-quantum"
-version = "0.3.0"
+version = "0.2.0"
 dependencies = [
  "aws-lc-rs",
  "env_logger",
