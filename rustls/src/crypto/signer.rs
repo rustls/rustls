@@ -90,7 +90,7 @@ pub trait Signer: Debug + Send + Sync {
 ///
 /// Note: this struct is also used to represent an [RFC 7250] raw public key,
 /// when the client/server is configured to use raw public keys instead of
-/// certificates.  
+/// certificates.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Clone, Debug)]

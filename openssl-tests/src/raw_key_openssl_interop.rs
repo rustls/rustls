@@ -1,8 +1,8 @@
 //! This module provides tests for the interoperability of raw public keys with OpenSSL, and also
 //! demonstrates how to set up a client-server architecture that utilizes raw public keys.
 //!
-//! The module also includes example implementations of the `ServerCertVerifier` and `ClientCertVerifier` traits, using  
-//! pre-configured raw public keys for the verification of the peer.  
+//! The module also includes example implementations of the `ServerCertVerifier` and `ClientCertVerifier` traits, using
+//! pre-configured raw public keys for the verification of the peer.
 
 mod client {
     use std::io::{self, Read, Write};
