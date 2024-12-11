@@ -4,11 +4,11 @@
 //! post-quantum-secure key exchange algorithm.
 //!
 //! X25519MLKEM768 is pre-standardization, so you should treat
-//! this as experimental.  You may see unexpected interop failures, and
-//! the algorithm implemented here may not be the one that eventually
-//! becomes widely deployed.
+//! this as experimental.  You may see unexpected connection failures (such as [tldr.fail])
+//! -- [please report these to us][interop-bug].  X25519MLKEM768 is becoming widely
+//! deployed, eg, by [Chrome] and [Cloudflare].
 //!
-//! However, the two components of this key exchange are well regarded:
+//! The two components of this key exchange are well regarded:
 //! X25519 alone is already used by default by rustls, and tends to have
 //! higher quality implementations than other elliptic curves.
 //! ML-KEM-768 was standardized by NIST in [FIPS203].
@@ -25,6 +25,11 @@
 //!
 //! [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/>
 //! [FIPS203]: <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.203.pdf>
+//! [Chrome]: <https://security.googleblog.com/2024/09/a-new-path-for-kyber-on-web.html>
+//! [Cloudflare]: <https://blog.cloudflare.com/pq-2024/#ml-kem-768-and-x25519>
+//! [interop-bug]: <https://github.com/rustls/rustls/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=>
+//! [tldr.fail]: <https://tldr.fail/>
+//!
 //!
 //! # How to use this crate
 //!
