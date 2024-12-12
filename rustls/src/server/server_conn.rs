@@ -32,7 +32,7 @@ use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
-use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
+use crate::{compress, sign, verify, versions, DistinguishedName, KeyLog, WantsVersions};
 
 /// A trait for the ability to store server session data.
 ///
@@ -140,6 +140,10 @@ pub struct ClientHello<'a> {
     pub(super) server_cert_types: Option<&'a [CertificateType]>,
     pub(super) client_cert_types: Option<&'a [CertificateType]>,
     pub(super) cipher_suites: &'a [CipherSuite],
+    /// The [certificate_authorities] extension, if it was sent by the client.
+    ///
+    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
 }
 
 impl<'a> ClientHello<'a> {
@@ -201,6 +205,15 @@ impl<'a> ClientHello<'a> {
     /// Returns `None` if the client did not include a certificate type extension.
     pub fn client_cert_types(&self) -> Option<&'a [CertificateType]> {
         self.client_cert_types
+    }
+
+    /// Get the [certificate_authorities] extension sent by the client.
+    ///
+    /// Returns `None` if the client did not send this extension.
+    ///
+    /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
+    pub fn certificate_authorities(&self) -> Option<&'a [DistinguishedName]> {
+        self.certificate_authorities
     }
 }
 
@@ -920,6 +933,7 @@ impl Accepted {
             server_cert_types: payload.server_certificate_extension(),
             client_cert_types: payload.client_certificate_extension(),
             cipher_suites: &payload.cipher_suites,
+            certificate_authorities: payload.certificate_authorities_extension(),
         };
 
         trace!("Accepted::client_hello(): {ch:#?}");

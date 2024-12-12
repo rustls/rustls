@@ -323,6 +323,13 @@ impl KeyType {
         }
     }
 
+    pub fn ca_cert(&self) -> CertificateDer<'_> {
+        self.get_chain()
+            .into_iter()
+            .next_back()
+            .expect("cert chain cannot be empty")
+    }
+
     pub fn get_chain(&self) -> Vec<CertificateDer<'static>> {
         CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
             .map(|result| result.unwrap())
@@ -385,7 +392,7 @@ impl KeyType {
         )))
     }
 
-    pub fn get_certified_key(&self) -> Result<Arc<CertifiedKey>, Error> {
+    pub fn certified_key_with_raw_pub_key(&self) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider::default_provider()
             .key_provider
             .load_private_key(self.get_key())?;
@@ -397,6 +404,13 @@ impl KeyType {
             vec![public_key_as_cert],
             private_key,
         )))
+    }
+
+    pub fn certified_key_with_cert_chain(&self) -> Result<Arc<CertifiedKey>, Error> {
+        let private_key = provider::default_provider()
+            .key_provider
+            .load_private_key(self.get_key())?;
+        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)))
     }
 
     fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
@@ -561,7 +575,8 @@ pub fn make_server_config_with_client_verifier(
 pub fn make_server_config_with_raw_key_support(kt: KeyType) -> ServerConfig {
     let mut client_verifier = MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt);
     let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
-        kt.get_certified_key().unwrap(),
+        kt.certified_key_with_raw_pub_key()
+            .unwrap(),
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.

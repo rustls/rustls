@@ -271,6 +271,12 @@ fn emit_client_hello_for_retry(
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
 
+    if support_tls13 {
+        if let Some(cas_extension) = config.verifier.root_hint_subjects() {
+            exts.push(ClientExtension::AuthorityNames(cas_extension.to_owned()));
+        }
+    }
+
     // Send the ECPointFormat extension only if we are proposing ECDHE
     if config
         .provider

@@ -59,6 +59,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
 webpki-roots = { workspace = true }
+x509-parser = { workspace = true }
 
 [[bench]]
 name = "benchmarks"

@@ -312,7 +312,8 @@ mod sni_resolver {
                     alpn: None,
                     server_cert_types: None,
                     client_cert_types: None,
-                    cipher_suites: &[]
+                    cipher_suites: &[],
+                    certificate_authorities: None,
                 })
                 .is_none());
         }
@@ -330,7 +331,8 @@ mod sni_resolver {
                     alpn: None,
                     server_cert_types: None,
                     client_cert_types: None,
-                    cipher_suites: &[]
+                    cipher_suites: &[],
+                    certificate_authorities: None,
                 })
                 .is_none());
         }
