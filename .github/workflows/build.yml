@@ -104,8 +104,14 @@ jobs:
       - name: cargo build (debug; rustls-provider-example lib in no-std mode)
         run: cargo build --locked -p rustls-provider-example --no-default-features
 
+      - name: cargo test (debug; rustls-provider-example; all features)
+        run: cargo test --all-features -p rustls-provider-example
+
       - name: cargo build (debug; rustls-provider-test)
         run: cargo build --locked -p rustls-provider-test
+
+      - name: cargo test (debug; rustls-provider-test; all features)
+        run: cargo test --all-features -p rustls-provider-test
 
       - name: cargo package --all-features -p rustls
         run: cargo package --all-features -p rustls
