@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let server_ech_config = match args.grease {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.ech_config {
-            Some(path) => Some(read_ech(&path)),
+            Some(path) => Some(read_ech(&path)?),
             None => lookup_ech_configs(&resolver, &args.inner_hostname, args.port).await,
         },
     };
@@ -225,14 +225,14 @@ async fn lookup_ech_configs(
         .map(Into::into)
 }
 
-fn read_ech(path: &str) -> EchConfigListBytes<'static> {
-    let file = fs::File::open(path).unwrap_or_else(|_| panic!("Cannot open ECH file: {path}"));
+fn read_ech(path: &str) -> Result<EchConfigListBytes<'static>, Box<dyn Error>> {
+    let file = fs::File::open(path).map_err(|err| format!("cannot open ECH file {path}: {err}"))?;
     let mut reader = BufReader::new(file);
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
-        .unwrap_or_else(|_| panic!("Cannot read ECH file: {path}"));
-    bytes.into()
+        .map_err(|err| format!("cannot read ECH file {path}: {err}"))?;
+    Ok(bytes.into())
 }
 
 /// A HPKE suite to use for GREASE ECH.
