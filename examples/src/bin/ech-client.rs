@@ -32,7 +32,7 @@ use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{ResolveError, Resolver, TokioResolver};
 use log::trace;
-use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
+use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
@@ -67,10 +67,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .init();
 
     let ech_mode = match server_ech_config {
-        Some(ech_config_list) => EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES)?.into(),
+        Some(ech_config_list) => {
+            EchMode::from(EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES)?)
+        }
         None => {
             let (public_key, _) = GREASE_HPKE_SUITE.generate_key_pair()?;
-            EchGreaseConfig::new(GREASE_HPKE_SUITE, public_key).into()
+            EchMode::from(EchGreaseConfig::new(GREASE_HPKE_SUITE, public_key))
         }
     };
 
@@ -221,7 +223,7 @@ async fn lookup_ech_configs(
                 }),
             _ => None,
         })
-        .map(Into::into))
+        .map(EchConfigListBytes::from))
 }
 
 fn read_ech(path: &str) -> Result<EchConfigListBytes<'static>, Box<dyn Error>> {
@@ -231,7 +233,7 @@ fn read_ech(path: &str) -> Result<EchConfigListBytes<'static>, Box<dyn Error>> {
     reader
         .read_to_end(&mut bytes)
         .map_err(|err| format!("cannot read ECH file {path}: {err}"))?;
-    Ok(bytes.into())
+    Ok(EchConfigListBytes::from(bytes))
 }
 
 /// A HPKE suite to use for GREASE ECH.
