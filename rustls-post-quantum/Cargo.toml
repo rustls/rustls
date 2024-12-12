@@ -9,11 +9,18 @@ description = "Experimental support for post-quantum key exchange in rustls"
 homepage = "https://github.com/rustls/rustls"
 repository = "https://github.com/rustls/rustls"
 categories = ["network-programming", "cryptography"]
+autobenches = false
 
 [dependencies]
 rustls = { version = "0.23.20", features = ["aws_lc_rs"], path = "../rustls" }
 aws-lc-rs = { version = "1.10", features = ["non-fips", "unstable"], default-features = false }
 
 [dev-dependencies]
+criterion = "0.5"
 env_logger = "0.11"
 webpki-roots = "0.26"
+
+[[bench]]
+name = "benchmarks"
+path = "benches/benchmarks.rs"
+harness = false
