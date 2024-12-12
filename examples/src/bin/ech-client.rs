@@ -20,6 +20,7 @@
 //!   </p>
 //! ```
 
+use std::error::Error;
 use std::fs;
 use std::io::{stdout, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -40,7 +41,7 @@ use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::RootCertStore;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
@@ -66,13 +67,9 @@ async fn main() {
         .init();
 
     let ech_mode = match server_ech_config {
-        Some(ech_config_list) => EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES)
-            .unwrap()
-            .into(),
+        Some(ech_config_list) => EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES)?.into(),
         None => {
-            let (public_key, _) = GREASE_HPKE_SUITE
-                .generate_key_pair()
-                .unwrap();
+            let (public_key, _) = GREASE_HPKE_SUITE.generate_key_pair()?;
             EchGreaseConfig::new(GREASE_HPKE_SUITE, public_key).into()
         }
     };
@@ -95,8 +92,7 @@ async fn main() {
     // Construct a rustls client config with a custom provider, and ECH enabled.
     let mut config =
         rustls::ClientConfig::builder_with_provider(aws_lc_rs::default_provider().into())
-            .with_ech(ech_mode)
-            .unwrap()
+            .with_ech(ech_mode)?
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
@@ -105,22 +101,17 @@ async fn main() {
     let config = Arc::new(config);
 
     // The "inner" SNI that we're really trying to reach.
-    let server_name: ServerName<'static> = args
-        .inner_hostname
-        .clone()
-        .try_into()
-        .unwrap();
+    let server_name: ServerName<'static> = args.inner_hostname.clone().try_into()?;
 
     for i in 0..args.num_reqs {
         trace!("\nRequest {} of {}", i + 1, args.num_reqs);
-        let mut conn = rustls::ClientConnection::new(config.clone(), server_name.clone()).unwrap();
+        let mut conn = rustls::ClientConnection::new(config.clone(), server_name.clone())?;
         // The "outer" server that we're connecting to.
         let sock_addr = (args.outer_hostname.as_str(), args.port)
-            .to_socket_addrs()
-            .unwrap()
+            .to_socket_addrs()?
             .next()
-            .unwrap();
-        let mut sock = TcpStream::connect(sock_addr).unwrap();
+            .ok_or("cannot resolve hostname")?;
+        let mut sock = TcpStream::connect(sock_addr)?;
         let mut tls = rustls::Stream::new(&mut conn, &mut sock);
 
         let request =
@@ -130,8 +121,7 @@ async fn main() {
                 args.host.as_ref().unwrap_or(&args.inner_hostname),
             );
         dbg!(&request);
-        tls.write_all(request.as_bytes())
-            .unwrap();
+        tls.write_all(request.as_bytes())?;
         assert!(!tls.conn.is_handshaking());
         assert_eq!(
             tls.conn.ech_status(),
@@ -141,9 +131,10 @@ async fn main() {
             }
         );
         let mut plaintext = Vec::new();
-        tls.read_to_end(&mut plaintext).unwrap();
-        stdout().write_all(&plaintext).unwrap();
+        tls.read_to_end(&mut plaintext)?;
+        stdout().write_all(&plaintext)?;
     }
+    Ok(())
 }
 
 /// Connects to the TLS server at hostname:PORT.  The default PORT
