@@ -44,18 +44,24 @@ use rustls::RootCertStore;
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
-    let resolver_config = if args.use_cloudflare_dns {
-        ResolverConfig::cloudflare_https()
-    } else {
-        ResolverConfig::google_https()
-    };
-    let resolver = Resolver::tokio(resolver_config, ResolverOpts::default());
     let server_ech_config = match args.grease {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.ech_config {
             Some(path) => Some(read_ech(&path)?),
-            None => lookup_ech_configs(&resolver, &args.inner_hostname, args.port).await?,
+            None => {
+                // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
+                let resolver_config = if args.use_cloudflare_dns {
+                    ResolverConfig::cloudflare_https()
+                } else {
+                    ResolverConfig::google_https()
+                };
+                lookup_ech_configs(
+                    &Resolver::tokio(resolver_config, ResolverOpts::default()),
+                    &args.inner_hostname,
+                    args.port,
+                )
+                .await?
+            }
         },
     };
 
