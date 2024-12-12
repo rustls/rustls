@@ -30,7 +30,7 @@ use clap::Parser;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
-use hickory_resolver::{Resolver, TokioResolver};
+use hickory_resolver::{ResolveError, Resolver, TokioResolver};
 use log::trace;
 use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
 use rustls::crypto::aws_lc_rs;
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         true => None, // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.ech_config {
             Some(path) => Some(read_ech(&path)?),
-            None => lookup_ech_configs(&resolver, &args.inner_hostname, args.port).await,
+            None => lookup_ech_configs(&resolver, &args.inner_hostname, args.port).await?,
         },
     };
 
@@ -197,7 +197,7 @@ async fn lookup_ech_configs(
     resolver: &TokioResolver,
     domain: &str,
     port: u16,
-) -> Option<EchConfigListBytes<'static>> {
+) -> Result<Option<EchConfigListBytes<'static>>, ResolveError> {
     // For non-standard ports, lookup the ECHConfig using port-prefix naming
     // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
     let qname_to_lookup = match port {
@@ -205,10 +205,9 @@ async fn lookup_ech_configs(
         port => format!("_{port}._https.{domain}"),
     };
 
-    resolver
+    Ok(resolver
         .lookup(qname_to_lookup, RecordType::HTTPS)
-        .await
-        .ok()?
+        .await?
         .record_iter()
         .find_map(|r| match r.data() {
             RData::HTTPS(svcb) => svcb
@@ -222,7 +221,7 @@ async fn lookup_ech_configs(
                 }),
             _ => None,
         })
-        .map(Into::into)
+        .map(Into::into))
 }
 
 fn read_ech(path: &str) -> Result<EchConfigListBytes<'static>, Box<dyn Error>> {
