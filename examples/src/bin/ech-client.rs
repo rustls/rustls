@@ -44,10 +44,10 @@ use rustls::RootCertStore;
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let server_ech_config = match args.grease {
-        true => None, // Force the use of the GREASE ext by skipping ECH config lookup
+    let server_ech_configs = match args.grease {
+        true => Vec::new(), // Force the use of the GREASE ext by skipping ECH config lookup
         false => match args.ech_config {
-            Some(path) => Some(read_ech(&path)?),
+            Some(path) => vec![read_ech(&path)?],
             None => {
                 // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
                 let resolver_config = if args.use_cloudflare_dns {
@@ -72,11 +72,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .parse_filters("trace")
         .init();
 
-    let ech_mode = match server_ech_config {
-        Some(ech_config_list) => {
-            EchMode::from(EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES)?)
-        }
-        None => {
+    let ech_mode = match server_ech_configs.is_empty() {
+        false => EchMode::from(
+            server_ech_configs
+                .into_iter()
+                .find_map(|list| EchConfig::new(list, ALL_SUPPORTED_SUITES).ok())
+                .ok_or("no supported ECH configs")?,
+        ),
+        true => {
             let (public_key, _) = GREASE_HPKE_SUITE.generate_key_pair()?;
             EchMode::from(EchGreaseConfig::new(GREASE_HPKE_SUITE, public_key))
         }
@@ -200,12 +203,19 @@ struct Args {
     inner_hostname: String,
 }
 
+/// Collect up all `EchConfigListBytes` found in the HTTPS record(s) for a given domain name/port.
+///
+/// The domain name should be the **inner** name used for Encrypted Client Hello (ECH). The
+/// lookup is done using DNS-over-HTTPS to protect that inner name from being disclosed in
+/// plaintext ahead of the TLS handshake that negotiates ECH for the inner name.
+///
+/// Returns an empty vec if no HTTPS records with ECH configs are found.
 // TODO(@cpu): consider upstreaming to hickory-dns
 async fn lookup_ech_configs(
     resolver: &TokioResolver,
     domain: &str,
     port: u16,
-) -> Result<Option<EchConfigListBytes<'static>>, ResolveError> {
+) -> Result<Vec<EchConfigListBytes<'static>>, ResolveError> {
     // For non-standard ports, lookup the ECHConfig using port-prefix naming
     // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
     let qname_to_lookup = match port {
@@ -213,23 +223,29 @@ async fn lookup_ech_configs(
         port => format!("_{port}._https.{domain}"),
     };
 
-    Ok(resolver
+    let lookup = resolver
         .lookup(qname_to_lookup, RecordType::HTTPS)
-        .await?
-        .record_iter()
-        .find_map(|r| match r.data() {
-            RData::HTTPS(svcb) => svcb
-                .svc_params()
+        .await?;
+
+    let mut ech_config_lists = Vec::new();
+    for r in lookup.record_iter() {
+        let RData::HTTPS(svcb) = r.data() else {
+            continue;
+        };
+
+        ech_config_lists.extend(
+            svcb.svc_params()
                 .iter()
                 .find_map(|sp| match sp {
                     (SvcParamKey::EchConfigList, SvcParamValue::EchConfigList(e)) => {
-                        Some(e.clone().0)
+                        Some(EchConfigListBytes::from(e.clone().0))
                     }
                     _ => None,
                 }),
-            _ => None,
-        })
-        .map(EchConfigListBytes::from))
+        )
+    }
+
+    Ok(ech_config_lists)
 }
 
 fn read_ech(path: &str) -> Result<EchConfigListBytes<'static>, Box<dyn Error>> {
