@@ -571,6 +571,7 @@ pub enum ClientExtension {
     CertificateCompressionAlgorithms(Vec<CertificateCompressionAlgorithm>),
     EncryptedClientHello(EncryptedClientHello),
     EncryptedClientHelloOuterExtensions(Vec<ExtensionType>),
+    AuthorityNames(Vec<DistinguishedName>),
     Unknown(UnknownExtension),
 }
 
@@ -600,6 +601,7 @@ impl ClientExtension {
             Self::EncryptedClientHelloOuterExtensions(_) => {
                 ExtensionType::EncryptedClientHelloOuterExtensions
             }
+            Self::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -634,6 +636,7 @@ impl Codec<'_> for ClientExtension {
             Self::CertificateCompressionAlgorithms(ref r) => r.encode(nested.buf),
             Self::EncryptedClientHello(ref r) => r.encode(nested.buf),
             Self::EncryptedClientHelloOuterExtensions(ref r) => r.encode(nested.buf),
+            Self::AuthorityNames(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -682,6 +685,7 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::EncryptedClientHelloOuterExtensions => {
                 Self::EncryptedClientHelloOuterExtensions(Vec::read(&mut sub)?)
             }
+            ExtensionType::CertificateAuthorities => Self::AuthorityNames(Vec::read(&mut sub)?),
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -1157,6 +1161,13 @@ impl ClientHelloPayload {
             has_duplicates::<_, _, u16>(algs.iter().cloned())
         } else {
             false
+        }
+    }
+
+    pub(crate) fn certificate_authorities_extension(&self) -> Option<&[DistinguishedName]> {
+        match self.find_extension(ExtensionType::CertificateAuthorities)? {
+            ClientExtension::AuthorityNames(ext) => Some(ext),
+            _ => unreachable!("extension type checked"),
         }
     }
 }
