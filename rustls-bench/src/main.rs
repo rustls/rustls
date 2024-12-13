@@ -932,6 +932,8 @@ enum Provider {
     AwsLcRsFips,
     #[cfg(feature = "post-quantum")]
     PostQuantum,
+    #[cfg(feature = "post-quantum-no-opt")]
+    PostQuantumNoOpt,
     #[cfg(feature = "ring")]
     Ring,
     #[value(skip)]
@@ -947,6 +949,8 @@ impl Provider {
             Self::AwsLcRsFips => rustls::crypto::default_fips_provider(),
             #[cfg(feature = "post-quantum")]
             Self::PostQuantum => rustls_post_quantum::provider(),
+            #[cfg(feature = "post-quantum-no-opt")]
+            Self::PostQuantumNoOpt => rustls_post_quantum::provider_no_optimization(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::default_provider(),
             Self::_None => unreachable!(),
@@ -961,6 +965,8 @@ impl Provider {
             Self::AwsLcRsFips => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(feature = "post-quantum")]
             Self::PostQuantum => rustls::crypto::aws_lc_rs::Ticketer::new(),
+            #[cfg(feature = "post-quantum-no-opt")]
+            Self::PostQuantumNoOpt => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::Ticketer::new(),
             Self::_None => unreachable!(),
@@ -999,6 +1005,8 @@ impl Provider {
 
         #[cfg(feature = "post-quantum")]
         available.push(Self::PostQuantum);
+        #[cfg(feature = "post-quantum-no-opt")]
+        available.push(Self::PostQuantumNoOpt);
 
         #[cfg(feature = "ring")]
         available.push(Self::Ring);
