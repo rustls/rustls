@@ -44,25 +44,28 @@ use rustls::RootCertStore;
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let server_ech_configs = match args.grease {
-        true => Vec::new(), // Force the use of the GREASE ext by skipping ECH config lookup
-        false => match args.ech_config {
-            Some(path) => vec![read_ech(&path)?],
-            None => {
-                // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
-                let resolver_config = if args.use_cloudflare_dns {
-                    ResolverConfig::cloudflare_https()
-                } else {
-                    ResolverConfig::google_https()
-                };
-                lookup_ech_configs(
-                    &Resolver::tokio(resolver_config, ResolverOpts::default()),
-                    &args.inner_hostname,
-                    args.port,
-                )
-                .await?
-            }
-        },
+    let server_ech_configs = match (args.grease, args.ech_config) {
+        (true, Some(_)) => return Err("cannot specify both --grease and --ech-config".into()),
+        (true, None) => {
+            Vec::new() // Force the use of the GREASE ext by skipping ECH config lookup
+        }
+        (false, Some(path)) => {
+            vec![read_ech(&path)?]
+        }
+        (false, None) => {
+            // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
+            let resolver_config = if args.use_cloudflare_dns {
+                ResolverConfig::cloudflare_https()
+            } else {
+                ResolverConfig::google_https()
+            };
+            lookup_ech_configs(
+                &Resolver::tokio(resolver_config, ResolverOpts::default()),
+                &args.inner_hostname,
+                args.port,
+            )
+            .await?
+        }
     };
 
     // NOTE: we defer setting up env_logger and setting the trace default filter level until
