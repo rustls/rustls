@@ -4,20 +4,28 @@
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
 //!
-//! Example usage:
-//! ```
-//! cargo run --package rustls-examples --bin ech-client -- --host defo.ie defo.ie www.defo.ie
+//! It should be invoked providing the outer hostname you will make the initial connection
+//! to, and then the inner hostname being protected with ECH. Example usage:
+//! ```text
+//! cargo run --package rustls-examples --bin ech-client -- \
+//!   --host min-ng.test.defo.ie \
+//!   --path "echstat.php?format=json" \
+//!    public.test.defo.ie \
+//!    min-ng.test.defo.ie
 //! ```
 //!
-//! This will perform a DNS-over-HTTPS lookup for the defo.ie ECH config, using it to determine
-//! the plaintext SNI to send to the server. The protected encrypted SNI will be "www.defo.ie".
-//! An HTTP request for Host: defo.ie will be made once the handshake completes. You should
-//! observe output that contains:
+//! This will perform a DNS-over-HTTPS lookup for the "min-ng.test.defo.ie" server's ECH config.
+//!
+//! Afterward, a TLS connection will be made to "public.test.defo.ie" using the public name
+//! specified in the ECH config as the outer client hello's SNI. The protected inner client
+//! hello's encrypted SNI will be "min-ng.test.defo.ie".
+//!
+//! Once TLS with ECH is negotiated, an HTTP request for Host: "min-ng.test.defo.ie" and the
+//! path "echstat.php?format=json" will be made.
+//!
+//! You should observe JSON output that contains the key/value:
 //! ```
-//!   <p>SSL_ECH_OUTER_SNI: cover.defo.ie <br />
-//!   SSL_ECH_INNER_SNI: www.defo.ie <br />
-//!   SSL_ECH_STATUS: success <img src="greentick-small.png" alt="good" /> <br/>
-//!   </p>
+//! "SSL_ECH_STATUS": "success"
 //! ```
 
 use std::error::Error;
