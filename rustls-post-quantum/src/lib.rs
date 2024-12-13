@@ -76,6 +76,17 @@ pub fn provider() -> CryptoProvider {
     parent
 }
 
+/// XXX
+pub fn provider_no_optimization() -> CryptoProvider {
+    let mut parent = default_provider();
+
+    parent
+        .kx_groups
+        .splice(0..0, [UNOPTIMIZED_X25519_MLKEM768, MLKEM768]);
+
+    parent
+}
+
 /// This is the [X25519MLKEM768] key exchange.
 ///
 /// [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/>
@@ -95,6 +106,69 @@ pub static X25519MLKEM768: &dyn SupportedKxGroup = &hybrid::Hybrid {
 ///
 /// [MLKEM]: https://datatracker.ietf.org/doc/draft-connolly-tls-mlkem-key-agreement
 pub static MLKEM768: &dyn SupportedKxGroup = &mlkem::MlKem768;
+
+static UNOPTIMIZED_X25519_MLKEM768: &dyn SupportedKxGroup = &Unoptimized;
+
+#[derive(Debug)]
+struct Unoptimized;
+
+impl SupportedKxGroup for Unoptimized {
+    fn start(&self) -> Result<Box<dyn rustls::crypto::ActiveKeyExchange>, Error> {
+        Ok(Box::new(UnoptimizedActive {
+            hybrid: X25519MLKEM768.start()?,
+            separate: kx_group::X25519.start()?,
+        }))
+    }
+
+    fn start_and_complete(
+        &self,
+        client_share: &[u8],
+    ) -> Result<rustls::crypto::CompletedKeyExchange, Error> {
+        X25519MLKEM768.start_and_complete(client_share)
+    }
+
+    fn usable_for_version(&self, version: rustls::ProtocolVersion) -> bool {
+        version == rustls::ProtocolVersion::TLSv1_3
+    }
+
+    fn name(&self) -> NamedGroup {
+        X25519MLKEM768.name()
+    }
+
+    fn ffdhe_group(&self) -> Option<rustls::ffdhe_groups::FfdheGroup<'static>> {
+        X25519MLKEM768.ffdhe_group()
+    }
+}
+
+struct UnoptimizedActive {
+    hybrid: Box<dyn rustls::crypto::ActiveKeyExchange>,
+    separate: Box<dyn rustls::crypto::ActiveKeyExchange>,
+}
+
+impl rustls::crypto::ActiveKeyExchange for UnoptimizedActive {
+    fn complete(self: Box<Self>, peer: &[u8]) -> Result<rustls::crypto::SharedSecret, Error> {
+        self.hybrid.complete(peer)
+    }
+
+    fn complete_hybrid_component(
+        self: Box<Self>,
+        peer: &[u8],
+    ) -> Result<rustls::crypto::SharedSecret, Error> {
+        self.separate.complete(peer)
+    }
+
+    fn hybrid_component(&self) -> Option<(NamedGroup, &[u8])> {
+        Some((self.separate.group(), self.separate.pub_key()))
+    }
+
+    fn group(&self) -> NamedGroup {
+        self.hybrid.group()
+    }
+
+    fn pub_key(&self) -> &[u8] {
+        self.hybrid.pub_key()
+    }
+}
 
 const INVALID_KEY_SHARE: Error = Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare);
 
