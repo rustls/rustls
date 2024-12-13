@@ -2336,6 +2336,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "rustls 0.23.20",
+ "rustls-post-quantum",
  "tikv-jemallocator",
 ]
 
