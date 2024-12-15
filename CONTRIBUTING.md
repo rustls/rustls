@@ -18,6 +18,8 @@ If you believe you've found a security bug please
 in GitHub, and not as a regular repository issue. See [SECURITY.md] for more
 information.
 
+[SECURITY.md]: SECURITY.md
+
 ## Code changes
 
 Some ideas and guidelines for contributions:
