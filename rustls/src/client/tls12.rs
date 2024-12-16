@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use pki_types::ServerName;
+use pki_types::{IdentityDer, ServerName};
 pub(super) use server_hello::CompleteServerHelloHandling;
 use subtle::ConstantTimeEq;
 
@@ -860,8 +860,8 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let cert_verified = st
             .config
             .verifier
-            .verify_server_cert(
-                end_entity,
+            .yeet_verify_server_cert(
+                &IdentityDer::Certificate(end_entity.clone()),
                 intermediates,
                 &st.server_name,
                 &st.server_cert.ocsp_response,

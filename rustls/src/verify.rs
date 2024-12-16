@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::{CertificateDer, ServerName, UnixTime};
+use pki_types::{CertificateDer, IdentityDer, ServerName, UnixTime};
 
 use crate::enums::SignatureScheme;
 use crate::error::{Error, InvalidMessage};
@@ -88,6 +88,31 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
         now: UnixTime,
     ) -> Result<ServerCertVerified, Error>;
 
+    /// Verify the end-entity certificate `end_entity` is valid
+    // TODO: better docs
+    fn yeet_verify_server_cert(
+        &self,
+        end_entity: &IdentityDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        server_name: &ServerName<'_>,
+        ocsp_response: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, Error> {
+        match end_entity {
+            IdentityDer::Certificate(cert) => {
+                self.verify_server_cert(&cert, intermediates, server_name, ocsp_response, now)
+            }
+            IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+            _ => {
+                // I assume this should error?
+                todo!()
+            }
+        }
+    }
+
     /// Verify a signature allegedly by the given server certificate.
     ///
     /// `message` is not hashed, and needs hashing during the verification.
@@ -130,6 +155,27 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
+
+    /// Verify a signature allegedly by the given server certificate.
+    // TODO: better docs
+    fn yeet_verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &IdentityDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        match cert {
+            IdentityDer::Certificate(cert) => self.verify_tls13_signature(message, &cert, dss),
+            IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+            _ => {
+                // I assume this should error?
+                todo!()
+            }
+        }
+    }
 
     /// Return the list of SignatureSchemes that this verifier will handle,
     /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
@@ -222,6 +268,27 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
         now: UnixTime,
     ) -> Result<ClientCertVerified, Error>;
 
+    /// Verify the end-entity certificate `end_entity` is valid
+    // TODO: better docs
+    fn yeet_verify_client_cert(
+        &self,
+        end_entity: &IdentityDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    ) -> Result<ClientCertVerified, Error> {
+        match end_entity {
+            IdentityDer::Certificate(cert) => self.verify_client_cert(&cert, intermediates, now),
+            IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+            _ => {
+                // I assume this should error?
+                todo!()
+            }
+        }
+    }
+
     /// Verify a signature allegedly by the given client certificate.
     ///
     /// `message` is not hashed, and needs hashing during the verification.
@@ -259,6 +326,27 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
         cert: &CertificateDer<'_>,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error>;
+
+    /// Verify a signature, exposing information if this is RPK or a regular X509 certificate.
+    // TODO: better docs
+    fn yeet_verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &IdentityDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        match cert {
+            IdentityDer::Certificate(cert) => self.verify_tls13_signature(message, cert, dss),
+            IdentityDer::PublicKey(_) => {
+                // I assume this should error?
+                todo!()
+            }
+            _ => {
+                // I assume this should error?
+                todo!()
+            }
+        }
+    }
 
     /// Return the list of SignatureSchemes that this verifier will handle,
     /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
