@@ -1199,6 +1199,8 @@ impl ExpectFinished {
                 .peer_certificates
                 .clone()
                 .unwrap_or_default(),
+            &self.config.verifier,
+            &self.config.client_auth_cert_resolver,
             now,
             lifetime,
             self.using_ems,
