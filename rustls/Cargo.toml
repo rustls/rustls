@@ -50,11 +50,8 @@ tls12 = []
 read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 zlib = ["dep:zlib-rs"]
-# XXX TODO COMBINE THESE TWO INTO NEW `critical-section` feature
-portable-atomic = ["dep:portable-atomic"]
-portable-atomic-util = ["dep:portable-atomic-util"]
-# XXX TODO UPDATE TO INCLUDE ALL DEPENDENCIES & DEPENDENCY FEATURES REQUIRED FOR THIS FUNCTIONALITY
-critical-section = ["dep:critical-section"]
+# XXX TBD NEW / UNSTABLE FEATURE(S):
+critical-section = ["dep:critical-section", "dep:portable-atomic", "dep:portable-atomic-util", "once_cell/critical-section", "portable-atomic/critical-section"]
 
 [dev-dependencies]
 base64 = { workspace = true }
