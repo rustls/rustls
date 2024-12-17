@@ -413,6 +413,8 @@ mod test_macros;
 mod sync {
     #[allow(clippy::disallowed_types)]
     pub(crate) type Arc<T> = alloc::sync::Arc<T>;
+    #[allow(clippy::disallowed_types)]
+    pub(crate) type Weak<T> = alloc::sync::Weak<T>;
 }
 
 #[macro_use]

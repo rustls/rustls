@@ -861,17 +861,84 @@ fn client_can_get_server_cert_after_resumption() {
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
+            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
             let original_certs = client.peer_certificates();
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
+            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
             let resumed_certs = client.peer_certificates();
 
             assert_eq!(original_certs, resumed_certs);
         }
+    }
+}
+
+#[test]
+fn client_only_attempts_resumption_with_compatible_security() {
+    let kt = KeyType::Rsa2048;
+    CountingLogger::install();
+    CountingLogger::reset();
+
+    let server_config = make_server_config(kt);
+    for version in rustls::ALL_VERSIONS {
+        let base_client_config = make_client_config_with_versions(kt, &[version]);
+        let (mut client, mut server) =
+            make_pair_for_configs(base_client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+        // base case
+        let (mut client, mut server) =
+            make_pair_for_configs(base_client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        // allowed case, using `clone`
+        let client_config = ClientConfig::clone(&base_client_config);
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        // disallowed case: unmatching `client_auth_cert_resolver`
+        let mut client_config = ClientConfig::clone(&base_client_config);
+        client_config.client_auth_cert_resolver =
+            make_client_config_with_versions_with_auth(kt, &[version]).client_auth_cert_resolver;
+
+        CountingLogger::reset();
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        #[cfg(feature = "logging")]
+        assert!(COUNTS.with(|c| {
+            c.borrow().trace.iter().any(|item| {
+                item == "resumption not allowed between different ResolvesClientCert values"
+            })
+        }));
+
+        // disallowed case: unmatching `verifier`
+        let mut client_config = make_client_config_with_versions_with_auth(kt, &[version]);
+        client_config.resumption = base_client_config.resumption.clone();
+        client_config.client_auth_cert_resolver =
+            Arc::clone(&base_client_config.client_auth_cert_resolver);
+
+        CountingLogger::reset();
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        #[cfg(feature = "logging")]
+        assert!(COUNTS.with(|c| {
+            c.borrow()
+                .trace
+                .iter()
+                .any(|item| item == "resumption not allowed between different ServerCertVerifiers")
+        }));
     }
 }
 
