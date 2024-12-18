@@ -233,11 +233,30 @@ pub mod kx_group {
 }
 
 /// A list of the default key exchange groups supported by this provider.
-pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = ALL_KX_GROUPS;
+///
+/// This does not contain MLKEM768; by default MLKEM768 is only offered
+/// in hybrid with X25519.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    #[cfg(feature = "prefer-post-quantum")]
+    kx_group::X25519MLKEM768,
+    kx_group::X25519,
+    kx_group::SECP256R1,
+    kx_group::SECP384R1,
+    #[cfg(not(feature = "prefer-post-quantum"))]
+    kx_group::X25519MLKEM768,
+];
 
 /// A list of all the key exchange groups supported by this provider.
-pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] =
-    &[kx_group::X25519, kx_group::SECP256R1, kx_group::SECP384R1];
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    #[cfg(feature = "prefer-post-quantum")]
+    kx_group::X25519MLKEM768,
+    kx_group::X25519,
+    kx_group::SECP256R1,
+    kx_group::SECP384R1,
+    #[cfg(not(feature = "prefer-post-quantum"))]
+    kx_group::X25519MLKEM768,
+    kx_group::MLKEM768,
+];
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use ticketer::Ticketer;
