@@ -32,10 +32,9 @@ pki-types = { workspace = true }
 zeroize = { workspace = true }
 zlib-rs = { workspace = true, optional = true }
 # XXX TODO MOVE & FIX ORDERING OF THESE ENTRIES
-# XXX TODO SPECIFY DEPENDENCY VERSIONS IN TOP-LEVEL CARGO TOML
-portable-atomic = { version = "1.10.0", default-features = false, optional = true }
-portable-atomic-util = { version = "0.2.4", default-features = false, optional = true }
-critical-section = { version = "1.2.0", default-features = false, optional = true }
+portable-atomic = { workspace = true, default-features = false, optional = true }
+portable-atomic-util = { workspace = true, default-features = false, optional = true }
+critical-section = { workspace = true, default-features = false, optional = true }
 
 [features]
 default = ["aws_lc_rs", "logging", "std", "tls12"]
