@@ -212,8 +212,6 @@ enum SelectedProvider {
     AwsLcRs,
     #[cfg_attr(not(feature = "fips"), allow(dead_code))]
     AwsLcRsFips,
-    #[cfg_attr(not(feature = "post-quantum"), allow(dead_code))]
-    PostQuantum,
     Ring,
 }
 
@@ -226,8 +224,6 @@ impl SelectedProvider {
             None | Some("aws-lc-rs") => Self::AwsLcRs,
             #[cfg(feature = "fips")]
             Some("aws-lc-rs-fips") => Self::AwsLcRsFips,
-            #[cfg(feature = "post-quantum")]
-            Some("post-quantum") => Self::PostQuantum,
             Some("ring") => Self::Ring,
             Some(other) => panic!("unrecognised value for BOGO_SHIM_PROVIDER: {other:?}"),
         }
@@ -235,13 +231,19 @@ impl SelectedProvider {
 
     fn provider(&self) -> CryptoProvider {
         match self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
-                // ensure all suites and kx groups are included (even in fips builds)
-                // as non-fips test cases require them.  runner activates fips mode via -fips-202205 option
-                // this includes rustls-post-quantum, which just returns an altered
-                // version of `aws_lc_rs::default_provider()`
+            Self::AwsLcRs | Self::AwsLcRsFips => {
+                // align with boringssl's defaults:
+                // - there are many tests that assume X25519 is the default kx group,
+                //   (whereas rustls has X25519MLKEM768 as default)
+                // - ensure all suites and kx groups are included (even in fips builds)
+                //   as non-fips test cases require them.  runner activates fips mode
+                //   for selected tests via -fips-202205 option
                 CryptoProvider {
-                    kx_groups: aws_lc_rs::ALL_KX_GROUPS.to_vec(),
+                    kx_groups: vec![
+                        aws_lc_rs::kx_group::X25519,
+                        aws_lc_rs::kx_group::SECP256R1,
+                        aws_lc_rs::kx_group::SECP384R1,
+                    ],
                     cipher_suites: aws_lc_rs::ALL_CIPHER_SUITES.to_vec(),
                     ..aws_lc_rs::default_provider()
                 }
@@ -253,16 +255,14 @@ impl SelectedProvider {
 
     fn ticketer(&self) -> Arc<dyn ProducesTickets> {
         match self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => {
-                aws_lc_rs::Ticketer::new().unwrap()
-            }
+            Self::AwsLcRs | Self::AwsLcRsFips => aws_lc_rs::Ticketer::new().unwrap(),
             Self::Ring => ring::Ticketer::new().unwrap(),
         }
     }
 
     fn supports_ech(&self) -> bool {
         match *self {
-            Self::AwsLcRs | Self::AwsLcRsFips | Self::PostQuantum => true,
+            Self::AwsLcRs | Self::AwsLcRsFips => true,
             Self::Ring => false,
         }
     }
@@ -1538,10 +1538,9 @@ pub fn main() {
                 let group = NamedGroup::from(args.remove(0).parse::<u16>().unwrap());
                 opts.groups.get_or_insert(Vec::new()).push(group);
 
-                // if X25519MLKEM768 is requested, insert it from rustls_post_quantum
-                #[cfg(feature = "post-quantum")]
-                if group == rustls_post_quantum::X25519MLKEM768.name() && opts.selected_provider == SelectedProvider::PostQuantum {
-                    opts.provider.kx_groups.insert(0, rustls_post_quantum::X25519MLKEM768);
+                // if X25519MLKEM768 is requested, insert it
+                if group == aws_lc_rs::kx_group::X25519MLKEM768.name() {
+                    opts.provider.kx_groups.insert(0, aws_lc_rs::kx_group::X25519MLKEM768);
                 }
             }
             "-resumption-delay" => {
