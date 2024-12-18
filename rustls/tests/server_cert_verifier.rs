@@ -5,7 +5,6 @@
 use super::*;
 
 mod common;
-use std::sync::Arc;
 
 use common::{
     client_config_builder, client_config_builder_with_versions, do_handshake,
@@ -20,6 +19,7 @@ use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
+use rustls::util::alias::Arc;
 use rustls::version::{TLS12, TLS13};
 use rustls::{
     AlertDescription, CertificateError, DigitallySignedStruct, DistinguishedName, Error,

@@ -213,7 +213,7 @@ impl HpkeOpener for HpkeRsReceiver {
 
 #[cfg(feature = "std")]
 fn other_err(err: impl std::error::Error + Send + Sync + 'static) -> Error {
-    Error::Other(OtherError(alloc::sync::Arc::new(err)))
+    Error::Other(OtherError(rustls::util::alias::Arc::new(err)))
 }
 
 #[cfg(not(feature = "std"))]

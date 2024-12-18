@@ -1,11 +1,11 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+use crate::alias::Arc;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
@@ -124,7 +124,7 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// ```
 /// # #[cfg(feature = "aws_lc_rs")] {
-/// # use std::sync::Arc;
+/// # use rustls::util::alias::Arc;
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
@@ -157,6 +157,15 @@ pub use crate::suites::CipherSuiteCommon;
 /// - **Signature verification algorithms** - see [`crypto::WebPkiSupportedAlgorithms`].
 /// - **Authentication key loading** - see [`crypto::KeyProvider::load_private_key()`] and
 ///   [`sign::SigningKey`].
+///
+/// XXX TODO ADD SOME INFO FOR CARGO PACKAGING AND IMPROVE TITLE FOR PROVIDER EXAMPLE BELOW - POSSIBLY IN A SEPARATE PR
+///
+/// # Cargo packaging with optional crate features
+///
+/// XXX TODO ADD DESCRIPTION & ADD REFERENCE TO PROVIDER EXAMPLE
+///
+/// - `std` (generally enabled by default) - enable functionality that is not available with `no-std` build - XXX TODO ADD SOME MORE DETAIL (???)
+/// - `critical-section` - XXX TODO XXX
 ///
 /// # Example code
 ///
@@ -693,25 +702,28 @@ pub fn default_fips_provider() -> CryptoProvider {
 }
 
 mod static_default {
-    #[cfg(not(feature = "std"))]
+    // XXX TODO ADD CLEAR EXPLANATION OF SELECTION BETWEEN std::sync::OnceLock / once_cell::sync::OnceCell / once_cell::race::OnceBox
+    #[cfg(not(any(feature = "critical-section", feature = "std")))]
     use alloc::boxed::Box;
-    use alloc::sync::Arc;
-    #[cfg(feature = "std")]
+    #[cfg(all(not(feature = "critical-section"), feature = "std"))]
     use std::sync::OnceLock;
 
-    #[cfg(not(feature = "std"))]
+    #[cfg(not(any(feature = "critical-section", feature = "std")))]
     use once_cell::race::OnceBox;
+    #[cfg(feature = "critical-section")]
+    use once_cell::sync::OnceCell;
 
     use super::CryptoProvider;
+    use crate::alias::Arc;
 
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "critical-section", feature = "std"))]
     pub(crate) fn install_default(
         default_provider: CryptoProvider,
     ) -> Result<(), Arc<CryptoProvider>> {
         PROCESS_DEFAULT_PROVIDER.set(Arc::new(default_provider))
     }
 
-    #[cfg(not(feature = "std"))]
+    #[cfg(not(any(feature = "critical-section", feature = "std")))]
     pub(crate) fn install_default(
         default_provider: CryptoProvider,
     ) -> Result<(), Arc<CryptoProvider>> {
@@ -724,9 +736,14 @@ mod static_default {
         PROCESS_DEFAULT_PROVIDER.get()
     }
 
-    #[cfg(feature = "std")]
+    // NOTE: Always using third-party `OnceCell` with `critical-section` to make testing with `cargo test` easier
+    // (as `cargo test` always seems to enable the `std` feature)
+    #[cfg(feature = "critical-section")]
+    static PROCESS_DEFAULT_PROVIDER: OnceCell<Arc<CryptoProvider>> = OnceCell::new();
+    #[cfg(all(not(feature = "critical-section"), feature = "std"))]
     static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
-    #[cfg(not(feature = "std"))]
+    // XXX TODO ADD MISSING CI TESTING WITH THIS PROVIDER (which is what requires once_cell "race" feature)
+    #[cfg(not(any(feature = "critical-section", feature = "std")))]
     static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
 }
 

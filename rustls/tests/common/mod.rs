@@ -3,7 +3,7 @@
 
 use std::io;
 use std::ops::DerefMut;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use pki_types::pem::PemObject;
 use pki_types::{
@@ -23,6 +23,7 @@ use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
+use rustls::util::alias::Arc;
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
     DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,

@@ -12,3 +12,7 @@ provider-example = { package = "rustls-provider-example", version = "0.0.1", pat
 rustls = { version = "0.23.8", features = ["aws_lc_rs", "logging"], path = "../rustls" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[features]
+# XXX TODO ADD NOTE REGARDING UNSTABLE FEATURE(S) HERE
+critical-section = ["provider-example/critical-section"]

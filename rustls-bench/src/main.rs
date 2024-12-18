@@ -7,11 +7,11 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::num::NonZeroUsize;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{mem, thread};
 
 use clap::{Parser, ValueEnum};
+
 use rustls::client::{Resumption, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::pem::PemObject;
@@ -21,6 +21,7 @@ use rustls::server::{
     WebPkiClientVerifier,
 };
 use rustls::unbuffered::{ConnectionState, EncryptError, InsufficientSizeError, UnbufferedStatus};
+use rustls::util::alias::Arc;
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
     RootCertStore, ServerConfig, ServerConnection, SideData,
