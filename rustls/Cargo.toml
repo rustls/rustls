@@ -23,17 +23,23 @@ brotli = { workspace = true, optional = true }
 brotli-decompressor = { workspace = true, optional = true }
 hashbrown = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
-# only required for no-std
-once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
+# XXX TODO UPDATE `once_cell` ENTRY IN SEPARATE PR (IF NEEDED)
+# once_cell is only required for no-std feature (this is also used with critical-section feature)
+# XXX TODO CONFIRM OR REMOVE THIS STATEMENT: once_cell `alloc` feature is specified as ONLY required with `critical-section` feature;
+# alloc & race features are only required in case of both no-std & critical-section NOT enabled
+# XXX TBD ADD STATEMENT: looks like alloc implies race but need to reserach this further (seems to be not documented, potentially may not be true in the future)
+once_cell = { workspace = true, default-features = false, features = ["alloc", "race"] }
+portable-atomic = { workspace = true, default-features = false, optional = true }
+portable-atomic-util = { workspace = true, default-features = false, optional = true }
 ring = { workspace = true, optional = true }
 subtle = { workspace = true }
 webpki = { workspace = true }
 pki-types = { workspace = true }
 zeroize = { workspace = true }
 zlib-rs = { workspace = true, optional = true }
-# XXX TODO MOVE & FIX ORDERING OF THESE ENTRIES
-portable-atomic = { workspace = true, default-features = false, optional = true }
-portable-atomic-util = { workspace = true, default-features = false, optional = true }
+# XXX TBD KEEPING TO MAKE IT EASIER TO UPGRADE USING `cargo upgrade` (available in third-party `cargo-edit` crate)
+# XXX TBD MAY BE REMOVED FROM HERE & WORKSPACE CARGO TOML IF THIS PR IS READY FOR REVIEW (SOMEDAY)
+# XXX TBD MAY MOVE THIS ENTRY UP IF THIS STAYS IN PR READY FOR REVIEW
 critical-section = { workspace = true, default-features = false, optional = true }
 
 [features]
