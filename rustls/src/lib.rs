@@ -273,6 +273,10 @@
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
 //!
+//! - `std` (enabled by default): XXX TODO ADD THIS - XXX TODO SHOULD ADD THIS IN SEPARATE PR
+//!
+//! XXX TODO CHECK FOR ANY OTHER FEATURES MISSING FROM THIS CRATE FEATURES DOCUMENTATION
+//!
 //! - `aws_lc_rs` (enabled by default): makes the rustls crate depend on the [`aws-lc-rs`] crate.
 //!   Use `rustls::crypto::aws_lc_rs::default_provider().install_default()` to
 //!   use it as the default `CryptoProvider`, or provide it explicitly
@@ -315,6 +319,7 @@
 //!
 //! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
 //!
+//! - `critical-section`: XXX TODO DOCUMENT INTERACTION WITH once_cell; XXX TBD DOCUMENT AS UNSTABLE OPTION
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
