@@ -13,7 +13,7 @@ autobenches = false
 
 [dependencies]
 rustls = { version = "0.23.20", features = ["aws_lc_rs"], path = "../rustls" }
-aws-lc-rs = { version = "1.12", default-features = false }
+aws-lc-rs = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.5"

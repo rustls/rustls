@@ -23,14 +23,6 @@ run_clippy --package rustls --no-default-features --all-targets
 # run all workspace members (individually, because we don't want feature unification)
 for p in $(admin/all-workspace-members) ; do
   case "$p" in
-    bogo)
-      # `bogo` is allergic to `--all-features`
-      ALL_FEATURES="--features fips"
-      ;;
-    rustls-bench)
-      # rustls-bench with post-quantum cannot co-exist with aws-lc-rs+fips
-      ALL_FEATURES=$(admin/all-features-except post-quantum rustls-bench)
-      ;;
     *)
       ALL_FEATURES="--all-features"
       ;;
@@ -41,6 +33,5 @@ done
 
 # not part of the workspace
 run_clippy --manifest-path=fuzz/Cargo.toml --all-features --all-targets
-run_clippy --manifest-path=rustls-post-quantum/Cargo.toml --all-features --all-targets
 
 exit $rc
