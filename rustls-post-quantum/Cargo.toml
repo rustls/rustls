@@ -12,8 +12,7 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [dependencies]
-rustls = { version = "0.23.20", features = ["aws_lc_rs"], path = "../rustls" }
-aws-lc-rs = { workspace = true }
+rustls = { version = "0.23.20", features = ["aws_lc_rs", "prefer-post-quantum"], path = "../rustls" }
 
 [dev-dependencies]
 criterion = "0.5"

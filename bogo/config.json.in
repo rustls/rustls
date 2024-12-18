@@ -55,6 +55,10 @@
 #else
     "*MLKEM*": "not implemented",
 #endif
+#if defined(AWS_LC_RS)
+    "PostQuantumNotEnabledByDefaultInClients": "it is",
+    "PostQuantumNotEnabledByDefaultForAServer": "",
+#endif
     "*Kyber*": "old draft, not implemented",
     "ExtraClientEncryptedExtension-*": "we don't implement ALPS",
     "Server-JDK11*": "workarounds for oracle engineering quality",

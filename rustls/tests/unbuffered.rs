@@ -42,12 +42,19 @@ fn tls12_handshake_fragmented() {
         server.max_fragment_size = Some(512);
     });
 
+    let mut expected_client = TLS12_CLIENT_TRANSCRIPT_FRAGMENTED.to_vec();
+    let mut expected_server = TLS12_SERVER_TRANSCRIPT_FRAGMENTED.to_vec();
+    if provider_is_aws_lc_rs() && cfg!(feature = "prefer-post-quantum") {
+        // client hello is larger for X25519MLKEM768
+        expected_client.splice(0..0, ["EncodeTlsData", "EncodeTlsData"]);
+        expected_server.splice(0..0, ["BlockedHandshake", "BlockedHandshake"]);
+    }
     assert_eq!(
-        outcome.client_transcript, TLS12_CLIENT_TRANSCRIPT_FRAGMENTED,
+        outcome.client_transcript, expected_client,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript, TLS12_SERVER_TRANSCRIPT_FRAGMENTED,
+        outcome.server_transcript, expected_server,
         "server transcript mismatch"
     );
 }
@@ -74,12 +81,25 @@ fn tls13_handshake_fragmented() {
         server.max_fragment_size = Some(512);
     });
 
+    let mut expected_client = TLS13_CLIENT_TRANSCRIPT_FRAGMENTED.to_vec();
+    let mut expected_server = TLS13_SERVER_TRANSCRIPT_FRAGMENTED.to_vec();
+
+    if provider_is_aws_lc_rs() && cfg!(feature = "prefer-post-quantum") {
+        // client hello is larger for X25519MLKEM768
+        expected_client.splice(0..0, ["EncodeTlsData", "EncodeTlsData"]);
+        expected_server.splice(0..0, ["BlockedHandshake", "BlockedHandshake"]);
+
+        // and server flight
+        expected_client.splice(4..4, ["BlockedHandshake", "BlockedHandshake"]);
+        expected_server.splice(4..4, ["EncodeTlsData", "EncodeTlsData"]);
+    }
+
     assert_eq!(
-        outcome.client_transcript, TLS13_CLIENT_TRANSCRIPT_FRAGMENTED,
+        outcome.client_transcript, expected_client,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript, TLS13_SERVER_TRANSCRIPT_FRAGMENTED,
+        outcome.server_transcript, expected_server,
         "server transcript mismatch"
     );
 }
@@ -1257,7 +1277,7 @@ fn make_connection_pair(
 fn server_receives_handshake_byte_by_byte() {
     let (mut client, mut server) = make_connection_pair(&TLS13);
 
-    let mut client_hello_buffer = vec![0u8; 1024];
+    let mut client_hello_buffer = vec![0u8; 2048];
     let UnbufferedStatus { discard, state } = client.process_tls_records(&mut []);
 
     assert_eq!(discard, 0);
