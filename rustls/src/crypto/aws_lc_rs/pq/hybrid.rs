@@ -68,6 +68,24 @@ impl SupportedKxGroup for Hybrid {
         self.name
     }
 
+    fn fips(&self) -> bool {
+        // Behold! The Night Mare: SP800-56C rev 2:
+        //
+        // "In addition to the currently approved techniques for the generation of the
+        // shared secret Z as specified in SP 800-56A and SP 800-56B, this Recommendation
+        // permits the use of a "hybrid" shared secret of the form Z′ = Z || T, a
+        // concatenation consisting of a "standard" shared secret Z that was generated
+        // during the execution of a key-establishment scheme (as currently specified in
+        // [SP 800-56A] or [SP 800-56B])"
+        //
+        // According to hearsay on the TLSWG mailing list, NIST plan to adjust
+        // this and allow both orders.  But, for now, we follow that "logic".
+        match self.layout.post_quantum_first {
+            true => self.post_quantum.fips(),
+            false => self.classical.fips(),
+        }
+    }
+
     fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         version == ProtocolVersion::TLSv1_3
     }
