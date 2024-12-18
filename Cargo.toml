@@ -67,7 +67,7 @@ log = { version = "0.4.8" }
 macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
 num-bigint = "0.4.4"
-once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
+once_cell = { version = "1.20.2", default-features = false } # feature(s) specified in workspace member(s) where once_cell is used
 openssl = "0.10"
 p256 = { version = "0.13.2", default-features = false, features = ["alloc", "ecdsa", "pkcs8"] }
 pkcs8 = "0.10.2"
