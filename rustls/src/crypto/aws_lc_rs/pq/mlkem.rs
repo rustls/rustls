@@ -50,6 +50,22 @@ impl SupportedKxGroup for MlKem768 {
         NamedGroup::MLKEM768
     }
 
+    fn fips(&self) -> bool {
+        // AUDITORS:
+        // At the time of writing, the ML-KEM implementation in AWS-LC-FIPS module 3.0
+        // is FIPS-pending.  Some regulatory regimes (eg, FedRAMP rev 5 SC-13) allow
+        // use of implementations in this state, as if they are already approved.
+        //
+        // We follow this liberal interpretation, and say MlKem768 is FIPS-compliant
+        // if the underlying library is in FIPS mode.
+        //
+        // TODO: adjust the `fips()` function return type to allow more policies to
+        // be expressed, perhaps following something like
+        // <https://github.com/golang/go/issues/70200#issuecomment-2490017956> --
+        // see <https://github.com/rustls/rustls/issues/2309>
+        super::super::fips()
+    }
+
     fn usable_for_version(&self, version: ProtocolVersion) -> bool {
         version == ProtocolVersion::TLSv1_3
     }
