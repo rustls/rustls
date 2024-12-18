@@ -8,12 +8,14 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::ops::Add;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 use std::{fs, thread};
 
+use rustls::util::alias::Arc;
+
 use clap::Parser;
 use rcgen::KeyPair;
+
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
 use rustls::RootCertStore;

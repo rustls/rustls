@@ -32,7 +32,8 @@ use std::error::Error;
 use std::fs;
 use std::io::{stdout, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::sync::Arc;
+
+use rustls::util::alias::Arc;
 
 use clap::Parser;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
@@ -40,6 +41,7 @@ use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{ResolveError, Resolver, TokioResolver};
 use log::trace;
+
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;

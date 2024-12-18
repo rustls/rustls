@@ -10,7 +10,8 @@
 
 use std::io::{stdout, Read, Write};
 use std::net::TcpStream;
-use std::sync::Arc;
+
+use rustls::util::alias::Arc;
 
 use rustls::RootCertStore;
 

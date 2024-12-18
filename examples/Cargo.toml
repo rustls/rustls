@@ -18,3 +18,7 @@ rustls = { path = "../rustls", features = [ "logging" ]}
 serde = { workspace = true }
 tokio = { workspace = true }
 webpki-roots = { workspace = true }
+
+[features]
+# XXX TODO ADD NOTE REGARDING UNSTABLE FEATURE(S) HERE
+critical-section = ["rustls/critical-section"]

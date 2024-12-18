@@ -3,12 +3,14 @@
 //! using asynchronous I/O using either async-std or tokio.
 
 use std::error::Error;
-use std::sync::Arc;
+
+use rustls::util::alias::Arc;
 
 #[cfg(feature = "async-std")]
 use async_std::io::{ReadExt, WriteExt};
 #[cfg(feature = "async-std")]
 use async_std::net::TcpStream;
+
 use rustls::client::{ClientConnectionData, UnbufferedClientConnection};
 use rustls::unbuffered::{
     AppDataRecord, ConnectionState, EncodeError, EncryptError, InsufficientSizeError,
