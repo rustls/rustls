@@ -129,7 +129,7 @@ jobs:
         run: cargo run --locked -p rustls-provider-example --example client
 
       - name: Check rustls-post-quantum client
-        run: cargo run --locked --manifest-path=rustls-post-quantum/Cargo.toml --example client | grep 'kex=X25519MLKEM768'
+        run: cargo run --locked -p rustls-post-quantum --example client | grep 'kex=X25519MLKEM768'
 
 
   feature-powerset:

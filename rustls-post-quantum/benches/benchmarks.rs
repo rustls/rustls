@@ -1,5 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use std::sync::Arc;
 
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rustls::crypto::aws_lc_rs::kx_group::X25519;
 use rustls::crypto::{
     aws_lc_rs, ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup,
@@ -7,7 +8,6 @@ use rustls::crypto::{
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{ClientConfig, ClientConnection, Error, NamedGroup, RootCertStore};
 use rustls_post_quantum::{MLKEM768, X25519MLKEM768};
-use std::sync::Arc;
 
 fn bench_client(c: &mut Criterion) {
     let mut group = c.benchmark_group("client");
