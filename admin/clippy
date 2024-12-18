@@ -10,6 +10,9 @@
 rc=0
 script_args="$@"
 
+# XXX TODO: FIND A BETTER PLACE TO DEFINE STABLE VS UNSTABLE FEATURES IN A SINGLE PLACE
+UNSTABLE_FEATURES="critical-section"
+
 function run_clippy() {
   if ! ( set -x ; cargo clippy --locked "$@" $script_args ) ; then
     rc=$PIPESTATUS
@@ -29,10 +32,15 @@ for p in $(admin/all-workspace-members) ; do
       ;;
     rustls-bench)
       # rustls-bench with post-quantum cannot co-exist with aws-lc-rs+fips
-      ALL_FEATURES=$(admin/all-features-except post-quantum rustls-bench)
+      ALL_FEATURES=$(admin/all-features-except $UNSTABLE_FEATURES post-quantum rustls-bench)
+      ;;
+    rustls-provider-test)
+      # no features for `rustls-provider-test`, which only has unstable `critical-section` feature (besides default `std` feature)
+      ALL_FEATURES=$(admin/all-features-except $UNSTABLE_FEATURES post-quantum rustls-bench)
       ;;
     *)
-      ALL_FEATURES="--all-features"
+      # XXX TODO RENAME ALL_FEATURES TO SOMETHING MORE CONSISTENT
+      ALL_FEATURES=$(admin/all-features-except $UNSTABLE_FEATURES $p)
       ;;
   esac
 

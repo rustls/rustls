@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+# XXX TODO DEFINE LIST OF UNSTABLE FEATURES IN ONE PLACE
+echo $(admin/all-features-except critical-section "$@")

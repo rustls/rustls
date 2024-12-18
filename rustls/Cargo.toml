@@ -50,7 +50,6 @@ read_buf = ["rustversion", "std"]
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
 zlib = ["dep:zlib-rs"]
 # XXX TODO ADD COMMENT(S) FOR STABLE VS UNSTABLE FEATURES
-# XXX TODO ADD CI TESTING FOR NEW `critical-section` FEATURE
 critical-section = [
     "dep:critical-section",
     "dep:portable-atomic",
@@ -123,7 +122,7 @@ name = "unbuffered"
 path = "tests/runners/unbuffered.rs"
 
 [package.metadata.docs.rs]
-# all non-default features except fips (cannot build on docs.rs environment)
+# all non-default features except critical-section (uses portable-atomic-util) & fips (cannot build on docs.rs environment)
 features = ["read_buf", "ring"]
 rustdoc-args = ["--cfg", "docsrs"]
 
