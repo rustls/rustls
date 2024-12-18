@@ -57,6 +57,7 @@ critical-section = [
     "dep:portable-atomic-util",
     "once_cell/critical-section",
     "portable-atomic/critical-section",
+    "portable-atomic-util/alloc",
 ]
 
 [dev-dependencies]

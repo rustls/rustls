@@ -25,7 +25,6 @@
 
 use std::env;
 use std::io::Write;
-use std::sync::Arc;
 
 use super::*;
 
@@ -34,6 +33,8 @@ use common::{
     do_handshake, make_client_config_with_versions, make_pair_for_arc_configs, make_server_config,
     transfer, KeyType,
 };
+
+use rustls::util::alias::Arc;
 
 #[test]
 fn exercise_key_log_file_for_client() {

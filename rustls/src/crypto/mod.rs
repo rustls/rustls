@@ -1,11 +1,11 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+use crate::alias::Arc;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
@@ -124,7 +124,7 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// ```
 /// # #[cfg(feature = "aws_lc_rs")] {
-/// # use std::sync::Arc;
+/// # use rustls::util::alias::Arc;
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
@@ -705,7 +705,6 @@ mod static_default {
     // XXX TODO ADD CLEAR EXPLANATION OF SELECTION BETWEEN std::sync::OnceLock / once_cell::sync::OnceCell / once_cell::race::OnceBox
     #[cfg(not(any(feature = "critical-section", feature = "std")))]
     use alloc::boxed::Box;
-    use alloc::sync::Arc;
     #[cfg(all(not(feature = "critical-section"), feature = "std"))]
     use std::sync::OnceLock;
 
@@ -715,6 +714,7 @@ mod static_default {
     use once_cell::sync::OnceCell;
 
     use super::CryptoProvider;
+    use crate::alias::Arc;
 
     #[cfg(any(feature = "critical-section", feature = "std"))]
     pub(crate) fn install_default(

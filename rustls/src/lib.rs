@@ -174,8 +174,8 @@
 //! ```rust
 //! # #[cfg(feature = "aws_lc_rs")] {
 //! # use rustls;
+//! # use rustls::util::alias::Arc;
 //! # use webpki;
-//! # use std::sync::Arc;
 //! # rustls::crypto::aws_lc_rs::default_provider().install_default();
 //! # let root_store = rustls::RootCertStore::from_iter(
 //! #  webpki_roots::TLS_SERVER_ROOTS
@@ -319,7 +319,23 @@
 //!
 //! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
 //!
-//! - `critical-section`: XXX TODO DOCUMENT INTERACTION WITH once_cell; XXX TBD DOCUMENT AS UNSTABLE OPTION
+//! - `critical-section` (unstable): uses `Arc` from `portable-atomic-util` together with
+//!   `portable-atomic` and `once-cell` with `critical-section` option to
+//!   enable support for targets with no atomic ptr functionality.
+//!   See the following notes and caveats:
+//!
+//!   This option requires use of `--cfg` option with `portable_atomic_unstable_coerce_unsized`
+//!   together with Rust nightly when building in order to build properly
+//!   (see documentation in `portable-atomic-util` for more details).
+//!
+//!   As stated in the `portable-atomic` crate documentation, this option also requires a
+//!   "suitable critical section implementation" (see `critical-section` documentation).
+//!   Note that with this feature enabled, `rustls` will use both `once-cell` & `portable-atomic`
+//!   with `critical-section` feature enabled.
+//!
+//!   XXX TODO DOCUMENT INTERACTION WITH once_cell
+//!
+//!   XXX TODO ADD NOTES FOR util::alias
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
@@ -405,6 +421,18 @@ mod log {
 #[cfg(test)]
 #[macro_use]
 mod test_macros;
+
+mod alias {
+    // NOTE: `Arc` from `portable_atomic_util` is ONLY used to support the `critical-section` feature (as documented above).
+    #[cfg(feature = "critical-section")]
+    extern crate portable_atomic_util;
+
+    #[cfg(feature = "critical-section")]
+    pub(crate) use portable_atomic_util::Arc;
+
+    #[cfg(not(feature = "critical-section"))]
+    pub(crate) use alloc::sync::Arc;
+}
 
 #[macro_use]
 mod msgs;
@@ -667,6 +695,19 @@ pub mod quic;
 #[cfg(any(feature = "std", feature = "hashbrown"))] // < XXX: incorrect feature gate
 /// APIs for implementing TLS tickets
 pub mod ticketer;
+
+/// Utility module
+pub mod util {
+    /// External type alias
+    pub mod alias {
+        /// Alias to the correct `Arc` type: alias to `portable_atomic_util::Arc` in case `critical-section`
+        /// feature is enabled, otherwise alias to `alloc::sync::Arc`.
+        ///
+        /// This is to help rustls library users and custom providers use the correct `Arc` type,
+        /// regardless of whether `critical-section` feature is enabled or not.
+        pub type Arc<T> = crate::alias::Arc<T>; // NOTE that simply doing pub use ...::Arc seems to affect links to standard Arc throughout the docs
+    }
+}
 
 /// This is the rustls manual.
 pub mod manual;
