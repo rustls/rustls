@@ -233,10 +233,24 @@ pub mod kx_group {
 }
 
 /// A list of the default key exchange groups supported by this provider.
-pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = kx::ALL_KX_GROUPS;
+///
+/// This does not contain MLKEM768; by default MLKEM768 is only offered
+/// in hybrid with X25519.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    kx_group::X25519MLKEM768,
+    kx::ALL_KX_GROUPS[0],
+    kx::ALL_KX_GROUPS[1],
+    kx::ALL_KX_GROUPS[2],
+];
 
 /// A list of all the key exchange groups supported by this provider.
-pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = kx::ALL_KX_GROUPS;
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    kx_group::X25519MLKEM768,
+    kx::ALL_KX_GROUPS[0],
+    kx::ALL_KX_GROUPS[1],
+    kx::ALL_KX_GROUPS[2],
+    kx_group::MLKEM768,
+];
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use ticketer::Ticketer;
@@ -286,5 +300,14 @@ mod tests {
     #[test]
     fn default_suites() {
         assert_eq!(super::DEFAULT_CIPHER_SUITES, super::ALL_CIPHER_SUITES);
+    }
+
+    #[test]
+    fn kx_lists() {
+        assert_eq!(
+            super::kx::ALL_KX_GROUPS.len(),
+            3,
+            "ALL_KX_GROUPS and DEFAULT_KX_GROUPS list must be updated"
+        );
     }
 }

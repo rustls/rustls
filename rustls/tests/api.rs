@@ -3827,10 +3827,11 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
     }
 }
 
-fn expected_kx_for_version(_version: &SupportedProtocolVersion) -> NamedGroup {
-    match provider_is_fips() {
-        true => NamedGroup::secp256r1,
-        false => NamedGroup::X25519,
+fn expected_kx_for_version(version: &SupportedProtocolVersion) -> NamedGroup {
+    match (version.version, provider_is_aws_lc_rs(), provider_is_fips()) {
+        (ProtocolVersion::TLSv1_3, true, _) => NamedGroup::X25519MLKEM768,
+        (ProtocolVersion::TLSv1_2, _, true) => NamedGroup::secp256r1,
+        (_, _, _) => NamedGroup::X25519,
     }
 }
 
