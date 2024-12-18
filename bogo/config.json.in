@@ -135,6 +135,8 @@
     "Compliance-fips-202205-TLS-Server-ECDSA_P521_SHA512": "",
     "Compliance-fips-202205-TLS-Client-Ed25519": "",
     "Compliance-fips-202205-TLS-Server-Ed25519": "",
+    "Compliance-fips-202205-TLS-Client-MLKEM": "",
+    "Compliance-fips-202205-TLS-Server-MLKEM": "",
 #endif
     "*-QUIC-*" :"",
     "QUIC-*": "",

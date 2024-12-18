@@ -11,21 +11,17 @@ case ${BOGO_SHIM_PROVIDER:-aws-lc-rs} in
       cargo run -- -print-rustls-provider
       ;;
   aws-lc-rs)
-      cpp -P -DAWS_LC_RS config.json.in > config.json
+      cpp -P -DAWS_LC_RS -DPOST_QUANTUM config.json.in > config.json
       cargo run -- -print-rustls-provider
       ;;
   aws-lc-rs-fips)
-      cpp -P -DAWS_LC_RS -DFIPS config.json.in > config.json
+      cpp -P -DAWS_LC_RS -DFIPS -DPOST_QUANTUM config.json.in > config.json
       cargo run --features fips -- -print-rustls-provider
-      ;;
-  post-quantum)
-      cpp -P -DAWS_LC_RS -DPOST_QUANTUM config.json.in > config.json
-      cargo run --features post-quantum -- -print-rustls-provider
       ;;
   existing)
       ;;
   *)
-      echo "unsupported BOGO_SHIM_PROVIDER: supported are (ring|aws-lc-rs|aws-lc-rs-fips|post-quantum|existing)"
+      echo "unsupported BOGO_SHIM_PROVIDER: supported are (ring|aws-lc-rs|aws-lc-rs-fips|existing)"
       exit 1
       ;;
 esac
