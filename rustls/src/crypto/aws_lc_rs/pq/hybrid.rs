@@ -1,8 +1,10 @@
-use rustls::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
-use rustls::ffdhe_groups::FfdheGroup;
-use rustls::{Error, NamedGroup, ProtocolVersion};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
-use crate::INVALID_KEY_SHARE;
+use super::INVALID_KEY_SHARE;
+use crate::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
+use crate::ffdhe_groups::FfdheGroup;
+use crate::{Error, NamedGroup, ProtocolVersion};
 
 /// A generalization of hybrid key exchange.
 #[derive(Debug)]

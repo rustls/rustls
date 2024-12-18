@@ -1,12 +1,12 @@
-//! This crate provides a [`rustls::crypto::CryptoProvider`] that includes
-//! a hybrid[^1], post-quantum-secure[^2] key exchange algorithm --
-//! specifically [X25519MLKEM768], as well as a non-hybrid
+//! This module provides a hybrid[^1], post-quantum-secure[^2] key exchange
+//! algorithm -- specifically [X25519MLKEM768], as well as a non-hybrid
 //! post-quantum-secure key exchange algorithm.
 //!
-//! X25519MLKEM768 is pre-standardization, so you should treat
-//! this as experimental.  You may see unexpected connection failures (such as [tldr.fail])
-//! -- [please report these to us][interop-bug].  X25519MLKEM768 is becoming widely
-//! deployed, eg, by [Chrome] and [Cloudflare].
+//! X25519MLKEM768 is pre-standardization, but is now widely deployed,
+//! for example, by [Chrome] and [Cloudflare].
+//!
+//! You may see unexpected connection failures (such as [tldr.fail])
+//! -- [please report these to us][interop-bug].
 //!
 //! The two components of this key exchange are well regarded:
 //! X25519 alone is already used by default by rustls, and tends to have
@@ -29,52 +29,13 @@
 //! [Cloudflare]: <https://blog.cloudflare.com/pq-2024/#ml-kem-768-and-x25519>
 //! [interop-bug]: <https://github.com/rustls/rustls/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=>
 //! [tldr.fail]: <https://tldr.fail/>
-//!
-//!
-//! # How to use this crate
-//!
-//! There are a few options:
-//!
-//! **To use this as the rustls default provider**: include this code early in your program:
-//!
-//! ```rust
-//! rustls_post_quantum::provider().install_default().unwrap();
-//! ```
-//!
-//! **To incorporate just the key exchange algorithm(s) in a custom [`rustls::crypto::CryptoProvider`]**:
-//!
-//! ```rust
-//! use rustls::crypto::{aws_lc_rs, CryptoProvider};
-//! let parent = aws_lc_rs::default_provider();
-//! let my_provider = CryptoProvider {
-//!     kx_groups: vec![
-//!         rustls_post_quantum::X25519MLKEM768,
-//!         aws_lc_rs::kx_group::X25519,
-//!         rustls_post_quantum::MLKEM768,
-//!     ],
-//!     ..parent
-//! };
-//! ```
-//!
 
-use rustls::crypto::aws_lc_rs::{default_provider, kx_group};
-use rustls::crypto::{CryptoProvider, SupportedKxGroup};
-use rustls::{Error, NamedGroup, PeerMisbehaved};
+use crate::crypto::aws_lc_rs::kx_group;
+use crate::crypto::SupportedKxGroup;
+use crate::{Error, NamedGroup, PeerMisbehaved};
 
 mod hybrid;
 mod mlkem;
-
-/// A `CryptoProvider` which includes `X25519MLKEM768` and `MLKEM768`
-/// key exchanges.
-pub fn provider() -> CryptoProvider {
-    let mut parent = default_provider();
-
-    parent
-        .kx_groups
-        .splice(0..0, [X25519MLKEM768, MLKEM768]);
-
-    parent
-}
 
 /// This is the [X25519MLKEM768] key exchange.
 ///
