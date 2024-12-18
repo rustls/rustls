@@ -32,3 +32,5 @@ webpki-roots = { workspace = true }
 [features]
 default = ["std"]
 std = ["hpke-rs/std", "hpke-rs-crypto/std", "pkcs8/std", "rustls/std"]
+# XXX TODO ADD NOTE REGARDING STABLE VS UNSTABLE FEATURE(S) HERE
+critical-section = ["rustls/critical-section"]
