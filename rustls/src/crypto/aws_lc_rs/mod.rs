@@ -19,6 +19,8 @@ use crate::{Error, OtherError};
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
+/// Post-quantum secure algorithms.
+pub(crate) mod pq;
 /// Using software keys for authentication.
 pub mod sign;
 
@@ -227,6 +229,7 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 /// [`DEFAULT_KX_GROUPS`] is provided as an array of this provider's defaults.
 pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
+    pub use super::pq::{MLKEM768, X25519MLKEM768};
 }
 
 /// A list of the default key exchange groups supported by this provider.
