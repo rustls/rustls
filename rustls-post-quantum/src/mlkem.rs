@@ -1,5 +1,4 @@
 use aws_lc_rs::kem;
-use aws_lc_rs::unstable::kem::ML_KEM_768;
 use rustls::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{Error, NamedGroup, ProtocolVersion};
@@ -11,7 +10,7 @@ pub(crate) struct MlKem768;
 
 impl SupportedKxGroup for MlKem768 {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
-        let decaps_key = kem::DecapsulationKey::generate(&ML_KEM_768)
+        let decaps_key = kem::DecapsulationKey::generate(&kem::ML_KEM_768)
             .map_err(|_| Error::General("key generation failed".into()))?;
 
         let pub_key_bytes = decaps_key
@@ -26,8 +25,8 @@ impl SupportedKxGroup for MlKem768 {
     }
 
     fn start_and_complete(&self, client_share: &[u8]) -> Result<CompletedKeyExchange, Error> {
-        let encaps_key =
-            kem::EncapsulationKey::new(&ML_KEM_768, client_share).map_err(|_| INVALID_KEY_SHARE)?;
+        let encaps_key = kem::EncapsulationKey::new(&kem::ML_KEM_768, client_share)
+            .map_err(|_| INVALID_KEY_SHARE)?;
 
         let (ciphertext, shared_secret) = encaps_key
             .encapsulate()
