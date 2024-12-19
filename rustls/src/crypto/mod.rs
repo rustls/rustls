@@ -32,6 +32,7 @@ pub mod ring;
 #[cfg(feature = "aws_lc_rs")]
 pub mod aws_lc_rs;
 
+/// retch-specific CryptoProvider.
 pub mod emulation;
 
 /// TLS message encryption/decryption interfaces.
@@ -221,16 +222,19 @@ pub struct CryptoProvider {
     pub key_provider: &'static dyn KeyProvider,
 }
 
+/// Convenience builder for `CryptoProvider`.
 pub struct CryptoProviderBuilder {
     browser_emulator: Option<BrowserEmulator>,
 }
 
 impl CryptoProviderBuilder {
+    /// Sets the browser emulator to use for this provider.
     pub fn with_browser_emulator(mut self, browser_emulator: &BrowserEmulator) -> Self {
         self.browser_emulator = Some(browser_emulator.clone());
         self
     }
 
+    /// Builds the `CryptoProvider`.
     pub fn build(self) -> CryptoProvider {
         match self.browser_emulator {
             Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
@@ -257,6 +261,7 @@ impl CryptoProviderBuilder {
 }
 
 impl CryptoProvider {
+    /// Returns a new `CryptoProviderBuilder`.
     pub fn builder() -> CryptoProviderBuilder {
         CryptoProviderBuilder {
             browser_emulator: None,

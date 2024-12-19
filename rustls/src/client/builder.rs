@@ -127,12 +127,16 @@ pub(super) mod danger {
 pub enum BrowserType {
     /// Emulate Chrome's behavior.
     Chrome,
+    /// Emulate Firefox's behavior.
     Firefox,
 }
 
+/// Struct holding the browser emulator configuration.
 #[derive(Debug, Clone)]
 pub struct BrowserEmulator {
+    /// Emulated browser, e.g. Chrome or Firefox
     pub browser_type: BrowserType,
+    /// Browser version
     pub version: u8,
 }
 
@@ -287,11 +291,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
                     vec![],
                 )
             },
-            _ => {
-                (Vec::new(),
-                compress::default_cert_compressors().to_vec(),
-                compress::default_cert_decompressors().to_vec())
-            }
         };
 
         let key_log: Arc<dyn KeyLog> = match self.state.browser_emulator {
