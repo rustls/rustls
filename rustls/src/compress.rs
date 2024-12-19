@@ -34,12 +34,12 @@
 
 #[cfg(feature = "std")]
 use alloc::collections::VecDeque;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 #[cfg(feature = "std")]
 use std::sync::Mutex;
 
+use crate::atomic_sync::Arc;
 use crate::enums::CertificateCompressionAlgorithm;
 use crate::msgs::base::{Payload, PayloadU24};
 use crate::msgs::codec::Codec;
