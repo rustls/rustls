@@ -1,6 +1,6 @@
 [package]
 name = "rustls-post-quantum"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 rust-version = "1.71"
 license = "Apache-2.0 OR ISC OR MIT"
@@ -12,7 +12,7 @@ categories = ["network-programming", "cryptography"]
 autobenches = false
 
 [dependencies]
-rustls = { version = "0.23.20", features = ["aws_lc_rs", "prefer-post-quantum"], path = "../rustls" }
+rustls = { version = "0.23.22", features = ["aws_lc_rs", "prefer-post-quantum"], path = "../rustls" }
 
 [dev-dependencies]
 criterion = "0.5"
