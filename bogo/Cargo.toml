@@ -7,9 +7,7 @@ edition = "2021"
 base64 = { workspace = true }
 env_logger = { workspace = true }
 rustls = { path = "../rustls", features = ["aws_lc_rs", "ring", "tls12"] }
-rustls-post-quantum = { path = "../rustls-post-quantum", optional = true }
 
 [features]
 default = []
-post-quantum = ["dep:rustls-post-quantum"]
 fips = ["rustls/fips"]
