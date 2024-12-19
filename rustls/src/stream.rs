@@ -1,5 +1,9 @@
+use crate::compat::io::{Read, Result, Write};
 use core::ops::{Deref, DerefMut};
-use std::io::{IoSlice, Read, Result, Write};
+
+// For vectored I/O
+#[cfg(feature = "std")]
+use crate::compat::io::IoSlice;
 
 use crate::conn::{ConnectionCommon, SideData};
 
@@ -102,6 +106,7 @@ where
         Ok(len)
     }
 
+    #[cfg(feature = "std")]
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
         self.complete_prior_io()?;
 

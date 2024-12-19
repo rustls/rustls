@@ -325,8 +325,7 @@ impl Drop for LengthPrefixedBuffer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::*;
-    use std::vec;
+    use alloc::vec;
 
     use super::*;
 

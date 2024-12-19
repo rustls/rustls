@@ -3,10 +3,9 @@ use core::fmt::{Debug, Formatter};
 use std::env::var_os;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io;
-use std::io::Write;
 use std::sync::Mutex;
 
+use crate::compat::io::{self, Write};
 use crate::log::warn;
 use crate::KeyLog;
 
