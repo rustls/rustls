@@ -92,8 +92,6 @@ The community has also started developing third-party providers for Rustls:
 
 * [`rustls-mbedtls-provider`] - a provider that uses [`mbedtls`] for cryptography.
 * [`rustls-openssl`] - a provider that uses [OpenSSL] for cryptography.
-* [`rustls-post-quantum`]: an experimental provider that adds support for post-quantum
-key exchange to the default aws-lc-rs provider.
 * [`boring-rustls-provider`] - a work-in-progress provider that uses [`boringssl`] for
 cryptography.
 * [`rustls-rustcrypto`] - an experimental provider that uses the crypto primitives
@@ -111,7 +109,6 @@ from [`RustCrypto`] for cryptography.
 [`boringssl`]: https://github.com/google/boringssl
 [`rustls-rustcrypto`]: https://github.com/RustCrypto/rustls-rustcrypto
 [`RustCrypto`]: https://github.com/RustCrypto
-[`rustls-post-quantum`]: https://crates.io/crates/rustls-post-quantum
 [`rustls-wolfcrypt-provider`]: https://github.com/wolfSSL/rustls-wolfcrypt-provider
 [`wolfCrypt`]: https://www.wolfssl.com/products/wolfcrypt
 
