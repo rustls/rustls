@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 fn main() {
     env_logger::init();
-    rustls_post_quantum::provider()
+    rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .unwrap();
 
