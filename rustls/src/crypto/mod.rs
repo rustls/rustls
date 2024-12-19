@@ -1,11 +1,11 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+use crate::atomic_sync::Arc;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 pub use crate::webpki::{
@@ -124,7 +124,7 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// ```
 /// # #[cfg(feature = "aws_lc_rs")] {
-/// # use std::sync::Arc;
+/// # use rustls::internal::alias::atomic_sync::Arc;
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
 ///
@@ -695,7 +695,6 @@ pub fn default_fips_provider() -> CryptoProvider {
 mod static_default {
     #[cfg(not(feature = "std"))]
     use alloc::boxed::Box;
-    use alloc::sync::Arc;
     #[cfg(feature = "std")]
     use std::sync::OnceLock;
 
@@ -703,6 +702,7 @@ mod static_default {
     use once_cell::race::OnceBox;
 
     use super::CryptoProvider;
+    use crate::atomic_sync::Arc;
 
     #[cfg(feature = "std")]
     pub(crate) fn install_default(

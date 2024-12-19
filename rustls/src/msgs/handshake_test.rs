@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use std::prelude::v1::*;
 use std::{format, println, vec};
 
@@ -22,6 +21,7 @@ use super::handshake::{
     ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
     ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, UnknownExtension,
 };
+use crate::atomic_sync::Arc;
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
