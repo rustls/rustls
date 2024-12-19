@@ -62,3 +62,44 @@ const INVALID_KEY_SHARE: Error = Error::PeerMisbehaved(PeerMisbehaved::InvalidKe
 const X25519_LEN: usize = 32;
 const MLKEM768_CIPHERTEXT_LEN: usize = 1088;
 const MLKEM768_ENCAP_LEN: usize = 1184;
+
+#[cfg(bench)]
+mod benchmarks {
+    #[bench]
+    fn bench_client_mlkem768(b: &mut test::Bencher) {
+        bench_client(b, super::MLKEM768);
+    }
+
+    #[bench]
+    fn bench_client_x25519mlkem768(b: &mut test::Bencher) {
+        bench_client(b, super::X25519MLKEM768);
+    }
+
+    #[bench]
+    fn bench_server_mlkem768(b: &mut test::Bencher) {
+        bench_server(b, super::MLKEM768);
+    }
+
+    #[bench]
+    fn bench_server_x25519mlkem768(b: &mut test::Bencher) {
+        bench_server(b, super::X25519MLKEM768);
+    }
+
+    fn bench_client(b: &mut test::Bencher, kxg: &dyn super::SupportedKxGroup) {
+        b.iter(|| {
+            let akx = kxg.start().unwrap();
+            test::black_box(akx.pub_key());
+        });
+    }
+
+    fn bench_server(b: &mut test::Bencher, kxg: &dyn super::SupportedKxGroup) {
+        let client = kxg.start().unwrap();
+
+        b.iter(|| {
+            let ckx = kxg
+                .start_and_complete(client.pub_key())
+                .unwrap();
+            test::black_box(ckx);
+        });
+    }
+}
