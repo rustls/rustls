@@ -1,6 +1,4 @@
 use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 
@@ -13,6 +11,8 @@ use aws_lc_rs::digest::{SHA256_OUTPUT_LEN, SHA384_OUTPUT_LEN, SHA512_OUTPUT_LEN}
 use aws_lc_rs::encoding::{AsBigEndian, Curve25519SeedBin, EcPrivateKeyBin};
 use zeroize::Zeroize;
 
+#[cfg(feature = "std")]
+use crate::atomic_sync::Arc;
 use crate::crypto::aws_lc_rs::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
 use crate::crypto::aws_lc_rs::unspecified_err;
 use crate::crypto::hpke::{
