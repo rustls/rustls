@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -9,6 +8,7 @@ use subtle::ConstantTimeEq;
 
 use super::hs::{self, HandshakeHashOrBuffer, ServerContext};
 use super::server_conn::ServerConnectionData;
+use crate::atomic_sync::Arc;
 use crate::check::{inappropriate_handshake_message, inappropriate_message};
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,

@@ -1,10 +1,10 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
 
 use super::client_conn::Resumption;
+use crate::atomic_sync::Arc;
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{handy, ClientConfig, EchMode, ResolvesClientCert};
 use crate::error::Error;
@@ -89,9 +89,9 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use alloc::sync::Arc;
     use core::marker::PhantomData;
 
+    use crate::atomic_sync::Arc;
     use crate::client::WantsClientCert;
     use crate::{verify, ClientConfig, ConfigBuilder, WantsVerifier};
 
