@@ -1,5 +1,6 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -8,9 +9,7 @@ use pki_types::DnsName;
 use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
-use crate::common_state::{
-    KxState, Protocol, RawKeyNegotationResult, RawKeyNegotiationParams, State,
-};
+use crate::common_state::{KxState, Protocol, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{
@@ -213,22 +212,25 @@ impl ExtensionProcessing {
         config: &ServerConfig,
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
-        let requires_server_rpk = config
+        let server_supports = if config
             .cert_resolver
-            .only_raw_public_keys();
-        let client_allows_rpk = hello
-            .server_certificate_extension()
-            .map(|certificate_types| certificate_types.contains(&CertificateType::RawPublicKey))
-            .unwrap_or(false);
-
-        let raw_key_negotation_params = RawKeyNegotiationParams {
-            peer_supports_raw_key: client_allows_rpk,
-            local_expects_raw_key: requires_server_rpk,
-            extension_type: ExtensionType::ServerCertificateType,
+            .only_raw_public_keys()
+        {
+            CertificateType::RawPublicKey
+        } else {
+            CertificateType::X509
         };
+        let client_supports = hello
+            .server_certificate_extension()
+            .map(|certificate_types| certificate_types.to_vec())
+            .unwrap_or_default();
 
         self.process_cert_type_extension(
-            raw_key_negotation_params.validate_raw_key_negotiation(),
+            check_certificate_type(
+                client_supports,
+                server_supports,
+                ExtensionType::ServerCertificateType,
+            ),
             cx,
         )
     }
@@ -239,52 +241,54 @@ impl ExtensionProcessing {
         config: &ServerConfig,
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
-        let requires_client_rpk = config
+        let server_supports = if config
             .verifier
-            .requires_raw_public_keys();
-        let client_offers_rpk = hello
-            .client_certificate_extension()
-            .map(|certificate_types| certificate_types.contains(&CertificateType::RawPublicKey))
-            .unwrap_or(false);
-
-        let raw_key_negotation_params = RawKeyNegotiationParams {
-            peer_supports_raw_key: client_offers_rpk,
-            local_expects_raw_key: requires_client_rpk,
-            extension_type: ExtensionType::ClientCertificateType,
+            .requires_raw_public_keys()
+        {
+            CertificateType::RawPublicKey
+        } else {
+            CertificateType::X509
         };
+        let client_supports = hello
+            .client_certificate_extension()
+            .map(|certificate_types| certificate_types.to_vec())
+            .unwrap_or_default();
+
         self.process_cert_type_extension(
-            raw_key_negotation_params.validate_raw_key_negotiation(),
+            check_certificate_type(
+                client_supports,
+                server_supports,
+                ExtensionType::ClientCertificateType,
+            ),
             cx,
         )
     }
 
     fn process_cert_type_extension(
         &mut self,
-        raw_key_negotiation_result: RawKeyNegotationResult,
+        raw_key_negotiation_result: Result<Option<(ExtensionType, CertificateType)>, Error>,
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         match raw_key_negotiation_result {
-            RawKeyNegotationResult::Negotiated(ExtensionType::ClientCertificateType) => {
+            Ok(Some((ExtensionType::ClientCertificateType, cert_type))) => {
                 self.exts
                     .push(ServerExtension::ClientCertType(
-                        CertificateType::RawPublicKey,
+                        cert_type
                     ));
             }
-            RawKeyNegotationResult::Negotiated(ExtensionType::ServerCertificateType) => {
+            Ok(Some((ExtensionType::ServerCertificateType, cert_type))) => {
                 self.exts
                     .push(ServerExtension::ServerCertType(
-                        CertificateType::RawPublicKey,
+                        cert_type
                     ));
             }
-            RawKeyNegotationResult::Err(err) => {
+            Err(err) => {
                 return Err(cx
                     .common
                     .send_fatal_alert(AlertDescription::HandshakeFailure, err));
             }
-            RawKeyNegotationResult::NotNegotiated => {}
-            RawKeyNegotationResult::Negotiated(_) => unreachable!(
-                "The extension type should only ever be ClientCertificateType or ServerCertificateType"
-            ),
+            Ok(None) => {}
+            Ok(Some((_,_))) => return Err(Error::General("The extension type should only ever be ClientCertificateType or ServerCertificateType".to_string())),
         }
         Ok(())
     }
@@ -741,4 +745,56 @@ pub(super) fn process_client_hello<'m>(
 pub(crate) enum HandshakeHashOrBuffer {
     Buffer(HandshakeHashBuffer),
     Hash(HandshakeHash),
+}
+
+fn check_certificate_type(
+    client_supports: Vec<CertificateType>,
+    server_supports: CertificateType,
+    extension_type: ExtensionType,
+) -> Result<Option<(ExtensionType, CertificateType)>, Error> {
+    if server_supports == CertificateType::X509 && client_supports.is_empty() {
+        return Ok(None);
+    }
+
+    if client_supports.contains(&server_supports) {
+        Ok(Some((extension_type, server_supports)))
+    } else {
+        Err(Error::PeerIncompatible(
+            PeerIncompatible::IncorrectCertificateTypeExtension,
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::string::ToString;
+
+    use crate::common_state::{CommonState, Side};
+    use crate::error::Error;
+    use crate::msgs::enums::{CertificateType, ExtensionType};
+    use crate::server::ServerConnectionData;
+    use crate::vecbuf::ChunkVecBuffer;
+
+    use super::{ExtensionProcessing, ServerContext};
+
+    #[test]
+    fn test_process_cert_type_extension() {
+        let mut common_state = CommonState::new(Side::Server);
+        let mut server_data = ServerConnectionData::default();
+        let mut plaintext_buffer = ChunkVecBuffer::new(None);
+
+        let mut cx = ServerContext {
+            common: &mut common_state,
+            data: &mut server_data,
+            sendable_plaintext: Some(&mut plaintext_buffer),
+        };
+
+        let mut ext_processing = ExtensionProcessing::new();
+        let invalid_cert_type_extension = Ok(Some((
+            ExtensionType::ALProtocolNegotiation,
+            CertificateType::RawPublicKey,
+        )));
+
+        assert_eq!(ext_processing.process_cert_type_extension(invalid_cert_type_extension, &mut cx), Err(Error::General("The extension type should only ever be ClientCertificateType or ServerCertificateType".to_string())));
+    }
 }

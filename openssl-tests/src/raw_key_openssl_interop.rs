@@ -329,6 +329,9 @@ mod tests {
     use std::sync::mpsc::channel;
     use std::thread;
 
+    use rustls::pki_types::pem::PemObject;
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+
     use super::{client, server};
     use crate::utils::verify_openssl3_available;
 
@@ -386,6 +389,56 @@ mod tests {
     }
 
     #[test]
+    fn test_rust_x509_server_with_openssl_raw_key_and_x509_client() {
+        verify_openssl3_available();
+
+        let listener = tcp_listener();
+        let port = listener.local_addr().unwrap().port();
+
+        let cert_file = SERVER_CERT_KEY_FILE;
+        let private_key_file = SERVER_PRIV_KEY_FILE;
+
+        let certs = CertificateDer::pem_file_iter(cert_file)
+            .unwrap()
+            .map(|cert| cert.unwrap())
+            .collect();
+        let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
+        let config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, private_key)
+            .unwrap();
+        let server_thread = thread::spawn(move || {
+            server::run_server(config, listener).expect("failed to run server to completion")
+        });
+
+        // Start the OpenSSL client
+        let mut openssl_client = Command::new("openssl")
+            .arg("s_client")
+            .arg("-connect")
+            .arg(format!("[::]:{:?}", port))
+            .arg("-enable_client_rpk")
+            .arg("-key")
+            .arg(CLIENT_PRIV_KEY_FILE)
+            .arg("-cert")
+            .arg(CLIENT_CERT_KEY_FILE)
+            .arg("-tls1_3")
+            .arg("-debug")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Failed to execute OpenSSL client");
+
+        let stdin = openssl_client.stdin.take().unwrap();
+        let stdout = openssl_client.stdout.take().unwrap();
+        let received_server_msg =
+            process_openssl_client_interaction(stdin, stdout, "Hello, from openssl client!");
+
+        assert!(received_server_msg);
+        assert_eq!(server_thread.join().unwrap(), "Hello, from openssl client!");
+        openssl_client.wait().unwrap();
+    }
+
+    #[test]
     fn test_rust_server_with_openssl_client() {
         verify_openssl3_available();
 
@@ -418,36 +471,46 @@ mod tests {
             .spawn()
             .expect("Failed to execute OpenSSL client");
 
-        let mut stdin = openssl_client.stdin.take().unwrap();
-        let mut stdout = openssl_client.stdout.take().unwrap();
-        let mut stdout_buf = [0; 1024];
-        let mut openssl_stdout = String::new();
-        let mut received_server_msg = false;
-        loop {
-            match stdout.read(&mut stdout_buf) {
-                Ok(0) => break,
-                Ok(len) => {
-                    let read = &stdout_buf[..len];
-
-                    std::io::stdout()
-                        .write_all(read)
-                        .unwrap();
-                    openssl_stdout.push_str(&String::from_utf8_lossy(read));
-                    if openssl_stdout.contains("Hello from the server") {
-                        received_server_msg = true;
-                        stdin
-                            .write_all(b"Hello, from openssl client!")
-                            .expect("Failed to write to stdin");
-                        break;
-                    }
-                }
-                Err(e) => panic!("Error reading from OpenSSL stdin: {e:?}"),
-            }
-        }
+        let stdin = openssl_client.stdin.take().unwrap();
+        let stdout = openssl_client.stdout.take().unwrap();
+        let received_server_msg =
+            process_openssl_client_interaction(stdin, stdout, "Hello, from openssl client!");
 
         assert!(received_server_msg);
         assert_eq!(server_thread.join().unwrap(), "Hello, from openssl client!");
         openssl_client.wait().unwrap();
+    }
+
+    fn process_openssl_client_interaction(
+        mut stdin: std::process::ChildStdin,
+        mut stdout: std::process::ChildStdout,
+        message: &str,
+    ) -> bool {
+        let mut stdout_buf = [0; 1024];
+        let mut openssl_stdout = String::new();
+
+        loop {
+            let len = match stdout.read(&mut stdout_buf) {
+                Ok(0) => break,
+                Ok(len) => len,
+                Err(e) => panic!("Error reading from OpenSSL stdin: {e:?}"),
+            };
+
+            let read = &stdout_buf[..len];
+            std::io::stdout()
+                .write_all(read)
+                .unwrap();
+            openssl_stdout.push_str(&String::from_utf8_lossy(read));
+
+            if openssl_stdout.contains("Hello from the server") {
+                stdin
+                    .write_all(message.as_bytes())
+                    .expect("Failed to write to stdin");
+                return true;
+            }
+        }
+
+        false
     }
 
     #[test]
