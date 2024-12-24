@@ -41,7 +41,7 @@ anyhow = "1.0.73"
 asn1 = "0.20"
 async-std = { version = "1.12.0", features = ["attributes"] }
 async-trait = "0.1.74"
-aws-lc-rs = { version = "1.12", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
+aws-lc-rs = { version = "1.12", default-features = false }
 base64 = "0.22"
 bencher = "0.1.5"
 brotli = { version = "7", default-features = false, features = ["std"] }
@@ -95,3 +95,7 @@ zlib-rs = "0.4"
 [profile.bench]
 codegen-units = 1
 lto = true
+
+# TODO(@cpu): remove after https://github.com/rustls/webpki/pull/308 is merged/released.
+[patch.crates-io]
+webpki = { package = "rustls-webpki", git = 'https://github.com/cpu/webpki.git', rev = 'ee06a0a48a307876342af2271870cf5df06d2dad' }
