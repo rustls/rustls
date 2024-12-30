@@ -36,7 +36,7 @@ use rustls::{
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
     HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog, NamedGroup,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SideData,
-    SignatureScheme, Stream, StreamOwned, SupportedCipherSuite,
+    SignatureScheme, Stream, StreamOwned, SupportedCipherSuite, SupportedProtocolVersion,
 };
 
 use super::*;
@@ -904,10 +904,6 @@ fn server_can_get_client_cert_after_resumption() {
 
 #[test]
 fn resumption_combinations() {
-    let expected_kx = match provider_is_fips() {
-        true => NamedGroup::secp256r1,
-        false => NamedGroup::X25519,
-    };
     for kt in ALL_KEY_TYPES {
         let server_config = make_server_config(*kt);
         for version in rustls::ALL_VERSIONS {
@@ -915,6 +911,8 @@ fn resumption_combinations() {
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
+
+            let expected_kx = expected_kx_for_version(version);
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
@@ -3710,16 +3708,12 @@ fn test_ciphersuites() -> Vec<(
 
 #[test]
 fn negotiated_ciphersuite_default() {
-    let expected_kx = match provider_is_fips() {
-        true => NamedGroup::secp256r1,
-        false => NamedGroup::X25519,
-    };
     for kt in ALL_KEY_TYPES {
         do_suite_and_kx_test(
             make_client_config(*kt),
             make_server_config(*kt),
             find_suite(CipherSuite::TLS13_AES_256_GCM_SHA384),
-            expected_kx,
+            expected_kx_for_version(&rustls::version::TLS13),
             ProtocolVersion::TLSv1_3,
         );
     }
@@ -3735,10 +3729,6 @@ fn all_suites_covered() {
 
 #[test]
 fn negotiated_ciphersuite_client() {
-    let expected_kx = match provider_is_fips() {
-        true => NamedGroup::secp256r1,
-        false => NamedGroup::X25519,
-    };
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let client_config = finish_client_config(
@@ -3758,7 +3748,7 @@ fn negotiated_ciphersuite_client() {
             client_config,
             make_server_config(kt),
             scs,
-            expected_kx,
+            expected_kx_for_version(version),
             version.version,
         );
     }
@@ -3766,10 +3756,6 @@ fn negotiated_ciphersuite_client() {
 
 #[test]
 fn negotiated_ciphersuite_server() {
-    let expected_kx = match provider_is_fips() {
-        true => NamedGroup::secp256r1,
-        false => NamedGroup::X25519,
-    };
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let server_config = finish_server_config(
@@ -3789,7 +3775,7 @@ fn negotiated_ciphersuite_server() {
             make_client_config(kt),
             server_config,
             scs,
-            expected_kx,
+            expected_kx_for_version(version),
             version.version,
         );
     }
@@ -3797,10 +3783,6 @@ fn negotiated_ciphersuite_server() {
 
 #[test]
 fn negotiated_ciphersuite_server_ignoring_client_preference() {
-    let expected_kx = match provider_is_fips() {
-        true => NamedGroup::secp256r1,
-        false => NamedGroup::X25519,
-    };
     for (version, kt, suite) in test_ciphersuites() {
         let scs = find_suite(suite);
         let scs_other = if scs.suite() == CipherSuite::TLS13_AES_256_GCM_SHA384 {
@@ -3839,9 +3821,16 @@ fn negotiated_ciphersuite_server_ignoring_client_preference() {
             client_config,
             server_config,
             scs,
-            expected_kx,
+            expected_kx_for_version(version),
             version.version,
         );
+    }
+}
+
+fn expected_kx_for_version(_version: &SupportedProtocolVersion) -> NamedGroup {
+    match provider_is_fips() {
+        true => NamedGroup::secp256r1,
+        false => NamedGroup::X25519,
     }
 }
 
