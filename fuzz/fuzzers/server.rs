@@ -50,7 +50,10 @@ fn fuzz_acceptor_api(data: &[u8]) {
     let mut stream = io::Cursor::new(data);
 
     loop {
-        let rd = server.read_tls(&mut stream).unwrap();
+        let rd = server
+            .read_tls(&mut stream)
+            .unwrap_or(0);
+
         match server.accept() {
             Ok(Some(_)) | Err(_) => {
                 break;
