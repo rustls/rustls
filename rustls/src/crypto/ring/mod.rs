@@ -32,7 +32,7 @@ pub(crate) mod tls13;
 pub fn default_provider() -> CryptoProvider {
     CryptoProvider {
         cipher_suites: DEFAULT_CIPHER_SUITES.to_vec(),
-        kx_groups: ALL_KX_GROUPS.to_vec(),
+        kx_groups: DEFAULT_KX_GROUPS.to_vec(),
         signature_verification_algorithms: SUPPORTED_SIG_ALGS,
         secure_random: &Ring,
         key_provider: &Ring,
@@ -166,9 +166,13 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 /// All defined key exchange groups supported by *ring* appear in this module.
 ///
 /// [`ALL_KX_GROUPS`] is provided as an array of all of these values.
+/// [`DEFAULT_KX_GROUPS`] is provided as an array of this provider's defaults.
 pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
 }
+
+/// A list of the default key exchange groups supported by this provider.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = ALL_KX_GROUPS;
 
 /// A list of all the key exchange groups supported by this provider.
 pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] =
