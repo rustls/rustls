@@ -6,7 +6,7 @@ extern crate rustls;
 use std::io;
 use std::sync::Arc;
 
-use rustls::server::Acceptor;
+use rustls::server::{Accepted, Acceptor};
 use rustls::{ServerConfig, ServerConnection};
 
 fuzz_target!(|data: &[u8]| {
@@ -29,20 +29,7 @@ fn fuzz_buffered_api(data: &[u8]) {
     let mut stream = io::Cursor::new(data);
     let mut server = ServerConnection::new(config).unwrap();
 
-    loop {
-        let rd = server.read_tls(&mut stream);
-        if server.process_new_packets().is_err() {
-            break;
-        }
-
-        if matches!(rd, Ok(0) | Err(_)) {
-            break;
-        }
-
-        // gather and discard written data
-        let mut wr = vec![];
-        server.write_tls(&mut &mut wr).unwrap();
-    }
+    service_connection(&mut stream, &mut server);
 }
 
 fn fuzz_acceptor_api(data: &[u8]) {
@@ -55,7 +42,11 @@ fn fuzz_acceptor_api(data: &[u8]) {
             .unwrap_or(0);
 
         match server.accept() {
-            Ok(Some(_)) | Err(_) => {
+            Ok(Some(accepted)) => {
+                fuzz_accepted(&mut stream, accepted);
+                break;
+            }
+            Err(_) => {
                 break;
             }
             Ok(None) => {}
@@ -63,5 +54,36 @@ fn fuzz_acceptor_api(data: &[u8]) {
         if rd == 0 {
             break;
         }
+    }
+}
+
+fn fuzz_accepted(stream: &mut dyn io::Read, accepted: Accepted) {
+    let mut maybe_server = accepted.into_connection(Arc::new(
+        ServerConfig::builder_with_provider(rustls_fuzzing_provider::provider().into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver()),
+    ));
+
+    if let Ok(conn) = &mut maybe_server {
+        service_connection(stream, conn);
+    }
+}
+
+fn service_connection(stream: &mut dyn io::Read, server: &mut ServerConnection) {
+    loop {
+        let rd = server.read_tls(stream);
+        if server.process_new_packets().is_err() {
+            break;
+        }
+
+        if matches!(rd, Ok(0) | Err(_)) {
+            break;
+        }
+
+        // gather and discard written data
+        let mut wr = vec![];
+        server.write_tls(&mut &mut wr).unwrap();
     }
 }
