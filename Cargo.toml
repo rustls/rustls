@@ -41,7 +41,7 @@ anyhow = "1.0.73"
 asn1 = "0.20"
 async-std = { version = "1.12.0", features = ["attributes"] }
 async-trait = "0.1.74"
-aws-lc-rs = { version = "1.12", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
+aws-lc-rs = { version = "1.12", default-features = false }
 base64 = "0.22"
 bencher = "0.1.5"
 brotli = { version = "7", default-features = false, features = ["std"] }
@@ -85,7 +85,7 @@ subtle = { version = "2.5.0", default-features = false }
 time = { version = "0.3.6", default-features = false }
 tikv-jemallocator = "0.6"
 tokio = { version = "1.34", features = ["io-util", "macros", "net", "rt"]}
-webpki = { package = "rustls-webpki", version = "0.102.8", features = ["alloc"], default-features = false }
+webpki = { package = "rustls-webpki", version = "0.103", features = ["alloc"], default-features = false }
 webpki-roots = "0.26"
 x25519-dalek = "2"
 x509-parser = "0.16"
@@ -95,3 +95,7 @@ zlib-rs = "0.4"
 [profile.bench]
 codegen-units = 1
 lto = true
+
+# TODO(@cpu): remove after https://github.com/rustls/webpki/pull/308 is merged/released.
+[patch.crates-io]
+webpki = { package = "rustls-webpki", git = 'https://github.com/cpu/webpki.git', rev = 'b0cfb4475089717c8ff238f582e9b072057853d4' }

@@ -36,14 +36,14 @@ zlib-rs = { workspace = true, optional = true }
 default = ["aws_lc_rs", "logging", "std", "tls12"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]
 logging = ["log"]
-aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
+aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 ring = ["dep:ring", "webpki/ring"]
 custom-provider = []
 tls12 = []
 read_buf = ["rustversion", "std"]
-fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
+fips = ["dep:aws-lc-rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 zlib = ["dep:zlib-rs"]
 
 [dev-dependencies]
