@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -e
+
+# Install dependencies to use `once_cell` & `portable_atomic_util::Arc` with critical-section
+# (cannot use `once_cell` with `--no-default-features` here due to workspace config in top-level `Cargo.toml`)
+cargo add once_cell -F alloc,race,critical-section -p rustls
+cargo add portable-atomic --no-default-features -F critical-section -p rustls
+cargo add portable-atomic-util --no-default-features -F alloc -p rustls
+
+# Update `rustls/src`: wverwrite `rustls/src/atomic_sync.rs` to use `portable_atomic_util::Arc`
+echo "extern crate portable_atomic_util;pub(crate) use portable_atomic_util::Arc;" > rustls/src/atomic_sync.rs
+
+# Update `rustls/tests`: overwrite  `Arc` import in `rustls/tests/common/mod.rs` to use `Arc` from `portable-atomic-util`
+sed -i.orig "s/pub use std::sync::Arc;/extern crate portable_atomic_util;pub use portable_atomic_util::Arc;/g" rustls/tests/common/mod.rs
