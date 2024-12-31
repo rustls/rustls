@@ -5,15 +5,16 @@
 use super::*;
 
 mod common;
-use std::sync::Arc;
 
 use common::{
     client_config_builder, client_config_builder_with_versions, do_handshake,
     do_handshake_until_both_error, do_handshake_until_error, make_client_config_with_versions,
     make_pair_for_arc_configs, make_server_config, server_config_builder, transfer_altered,
-    Altered, ErrorFromPeer, KeyType, MockServerVerifier, ALL_KEY_TYPES,
+    Altered, Arc, ErrorFromPeer, KeyType, MockServerVerifier, ALL_KEY_TYPES,
 };
+
 use pki_types::{CertificateDer, ServerName};
+
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
@@ -25,6 +26,7 @@ use rustls::{
     AlertDescription, CertificateError, DigitallySignedStruct, DistinguishedName, Error,
     InvalidMessage, RootCertStore,
 };
+
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
 

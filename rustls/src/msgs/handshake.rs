@@ -1,7 +1,6 @@
 use alloc::collections::BTreeSet;
 #[cfg(feature = "logging")]
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -9,6 +8,7 @@ use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
 
+use crate::atomic_sync::Arc;
 #[cfg(feature = "tls12")]
 use crate::crypto::ActiveKeyExchange;
 use crate::crypto::SecureRandom;
