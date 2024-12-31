@@ -61,7 +61,7 @@ hmac = "0.12"
 hpke-rs = "0.2"
 hpke-rs-crypto = "0.2"
 hpke-rs-rust-crypto = "0.2"
-itertools = "0.13"
+itertools = "0.14"
 log = { version = "0.4.8" }
 macro_rules_attribute = "0.2"
 mio = { version = "1", features = ["net", "os-poll"] }
