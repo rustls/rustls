@@ -427,13 +427,13 @@ pub(crate) enum AnonymousClientPolicy {
     /// Clients that do not present a client certificate are denied.
     Deny,
 }
-
 #[cfg(test)]
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
-    use std::prelude::v1::*;
-    use std::sync::Arc;
-    use std::{format, println, vec};
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
+    use alloc::{format, vec};
+    use std::println;
 
     use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};

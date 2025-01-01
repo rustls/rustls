@@ -1,9 +1,13 @@
 #![allow(dead_code)]
 #![allow(clippy::duplicate_mod)]
 
-use std::io;
-use std::ops::DerefMut;
-use std::sync::{Arc, OnceLock};
+extern crate alloc;
+
+use alloc::sync::Arc;
+use core::ops::DerefMut;
+
+#[cfg(feature = "std")]
+use std::sync::OnceLock;
 
 use pki_types::pem::PemObject;
 use pki_types::{
@@ -14,6 +18,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::client::{
     AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, WebPkiServerVerifier,
 };
+use rustls::compat::io;
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::{verify_tls13_signature_with_raw_key, CryptoProvider};
 use rustls::internal::msgs::codec::{Codec, Reader};
@@ -1327,6 +1332,7 @@ impl RawTls {
     }
 }
 
+#[cfg(feature = "std")]
 pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
@@ -1374,6 +1380,7 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     .into()
 }
 
+#[cfg(feature = "std")]
 pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
     static TLS13_PLAIN_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
 

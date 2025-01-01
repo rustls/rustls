@@ -41,8 +41,8 @@ impl fmt::Debug for BsDebug<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::format;
-    use std::prelude::v1::*;
+    use alloc::format;
+    use alloc::vec::Vec;
 
     use super::BsDebug;
 
