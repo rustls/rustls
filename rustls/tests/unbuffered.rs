@@ -65,46 +65,51 @@ fn tls12_handshake_fragmented() {
         client.cert_decompressors = vec![];
         server.max_fragment_size = Some(512);
     });
+    let mut expected_client = vec![
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(WriteTraffic)",
+    ];
+    let mut expected_server = vec![
+        "Ok(BlockedHandshake)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(WriteTraffic)",
+    ];
+    if provider_is_aws_lc_rs() {
+        // client hello is larger for X25519MLKEM768
+        expected_client.splice(0..0, ["Ok(EncodeTlsData)", "Ok(EncodeTlsData)"]);
+        expected_server.splice(0..0, ["Ok(BlockedHandshake)", "Ok(BlockedHandshake)"]);
+    }
     assert_eq!(
-        outcome.client_transcript,
-        vec![
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(WriteTraffic)"
-        ],
+        outcome.client_transcript, expected_client,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript,
-        vec![
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)"
-        ],
+        outcome.server_transcript, expected_server,
         "server transcript mismatch"
     );
 }
@@ -151,44 +156,56 @@ fn tls13_handshake_fragmented() {
         client.cert_decompressors = vec![];
         server.max_fragment_size = Some(512);
     });
+
+    let mut expected_client = vec![
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(BlockedHandshake)",
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(BlockedHandshake)",
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(WriteTraffic)",
+        "Ok(WriteTraffic)",
+    ];
+    let mut expected_server = vec![
+        "Ok(BlockedHandshake)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(BlockedHandshake)",
+        "Ok(EncodeTlsData)",
+        "Ok(TransmitTlsData)",
+        "Ok(WriteTraffic)",
+    ];
+
+    if provider_is_aws_lc_rs() {
+        // client hello is larger for X25519MLKEM768
+        expected_client.splice(0..0, ["Ok(EncodeTlsData)", "Ok(EncodeTlsData)"]);
+        expected_server.splice(0..0, ["Ok(BlockedHandshake)", "Ok(BlockedHandshake)"]);
+
+        // and server flight
+        expected_client.splice(4..4, ["Ok(BlockedHandshake)", "Ok(BlockedHandshake)"]);
+        expected_server.splice(4..4, ["Ok(EncodeTlsData)", "Ok(EncodeTlsData)"]);
+    }
+
     assert_eq!(
-        outcome.client_transcript,
-        vec![
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)"
-        ],
+        outcome.client_transcript, expected_client,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript,
-        vec![
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)"
-        ],
+        outcome.server_transcript, expected_server,
         "server transcript mismatch"
     );
 }
@@ -1364,7 +1381,7 @@ fn make_connection_pair(
 fn server_receives_handshake_byte_by_byte() {
     let (mut client, mut server) = make_connection_pair(&TLS13);
 
-    let mut client_hello_buffer = vec![0u8; 1024];
+    let mut client_hello_buffer = vec![0u8; 2048];
     let UnbufferedStatus { discard, state } = client.process_tls_records(&mut []);
 
     assert_eq!(discard, 0);

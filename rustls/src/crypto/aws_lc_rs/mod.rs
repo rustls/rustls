@@ -9,7 +9,7 @@ pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom};
+use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -19,6 +19,8 @@ use crate::{Error, OtherError};
 
 /// Hybrid public key encryption (HPKE).
 pub mod hpke;
+/// Post-quantum secure algorithms.
+pub(crate) mod pq;
 /// Using software keys for authentication.
 pub mod sign;
 
@@ -50,7 +52,7 @@ pub fn default_provider() -> CryptoProvider {
 fn default_kx_groups() -> Vec<&'static dyn SupportedKxGroup> {
     #[cfg(feature = "fips")]
     {
-        ALL_KX_GROUPS
+        DEFAULT_KX_GROUPS
             .iter()
             .filter(|cs| cs.fips())
             .copied()
@@ -58,7 +60,7 @@ fn default_kx_groups() -> Vec<&'static dyn SupportedKxGroup> {
     }
     #[cfg(not(feature = "fips"))]
     {
-        ALL_KX_GROUPS.to_vec()
+        DEFAULT_KX_GROUPS.to_vec()
     }
 }
 
@@ -224,15 +226,34 @@ static SUPPORTED_SIG_ALGS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms
 /// All defined key exchange groups supported by aws-lc-rs appear in this module.
 ///
 /// [`ALL_KX_GROUPS`] is provided as an array of all of these values.
+/// [`DEFAULT_KX_GROUPS`] is provided as an array of this provider's defaults.
 pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
+    pub use super::pq::{MLKEM768, X25519MLKEM768};
 }
 
-pub use kx::ALL_KX_GROUPS;
+/// A list of the default key exchange groups supported by this provider.
+///
+/// This does not contain MLKEM768; by default MLKEM768 is only offered
+/// in hybrid with X25519.
+pub static DEFAULT_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    kx_group::X25519MLKEM768,
+    kx::ALL_KX_GROUPS[0],
+    kx::ALL_KX_GROUPS[1],
+    kx::ALL_KX_GROUPS[2],
+];
+
+/// A list of all the key exchange groups supported by this provider.
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+    kx_group::X25519MLKEM768,
+    kx::ALL_KX_GROUPS[0],
+    kx::ALL_KX_GROUPS[1],
+    kx::ALL_KX_GROUPS[2],
+    kx_group::MLKEM768,
+];
+
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use ticketer::Ticketer;
-
-use super::SupportedKxGroup;
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {
@@ -279,5 +300,14 @@ mod tests {
     #[test]
     fn default_suites() {
         assert_eq!(super::DEFAULT_CIPHER_SUITES, super::ALL_CIPHER_SUITES);
+    }
+
+    #[test]
+    fn kx_lists() {
+        assert_eq!(
+            super::kx::ALL_KX_GROUPS.len(),
+            3,
+            "ALL_KX_GROUPS and DEFAULT_KX_GROUPS list must be updated"
+        );
     }
 }

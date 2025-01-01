@@ -118,8 +118,8 @@ fn uncompressed_point(point: &[u8]) -> bool {
     matches!(point.first(), Some(0x04))
 }
 
-/// A list of all the key exchange groups supported by rustls.
-pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
+/// A list of all the key exchange groups supported by this provider.
+pub(crate) static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.
