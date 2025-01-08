@@ -207,7 +207,7 @@ of these licenses, at your option.
 
 - Joe Birr-Pixton ([@ctz], Project Founder - full-time funded by [Prossimo])
 - Dirkjan Ochtman ([@djc], Co-maintainer)
-- Daniel McCarney ([@cpu], Co-maintainer - half-time funded by [Prossimo])
+- Daniel McCarney ([@cpu], Co-maintainer)
 - Josh Aas ([@bdaehlie], Project Management)
 
 [@ctz]: https://github.com/ctz
