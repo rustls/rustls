@@ -95,6 +95,18 @@ pub static CHROME_SIGNATURE_VERIFICATION_ALGOS: WebPkiSupportedAlgorithms = WebP
     ],
 };
 
+/// The signature schemes supported by Google Chrome.
+pub static CHROME_SIGNATURE_SCHEMES: &[SignatureScheme; 8] = &[
+    SignatureScheme::ECDSA_NISTP256_SHA256,
+    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PKCS1_SHA256,
+    SignatureScheme::ECDSA_NISTP384_SHA384,
+    SignatureScheme::RSA_PSS_SHA384,
+    SignatureScheme::RSA_PKCS1_SHA384,
+    SignatureScheme::RSA_PSS_SHA512,
+    SignatureScheme::RSA_PKCS1_SHA512,
+];
+
 /// The signature verification algorithms supported by Firefox.
 pub static FIREFOX_SIGNATURE_VERIFICATION_ALGOS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
       all: &[
@@ -171,3 +183,18 @@ pub static FIREFOX_SIGNATURE_VERIFICATION_ALGOS: WebPkiSupportedAlgorithms = Web
         ),
     ],
 };
+
+/// The signature schemes supported by Firefox.
+pub static FIREFOX_SIGNATURE_SCHEMES: &[SignatureScheme; 11] = &[
+    SignatureScheme::ECDSA_NISTP256_SHA256,
+    SignatureScheme::ECDSA_NISTP384_SHA384,
+    SignatureScheme::ECDSA_NISTP521_SHA512,
+    SignatureScheme::RSA_PSS_SHA256,
+    SignatureScheme::RSA_PSS_SHA384,
+    SignatureScheme::RSA_PSS_SHA512,
+    SignatureScheme::RSA_PKCS1_SHA256,
+    SignatureScheme::RSA_PKCS1_SHA384,
+    SignatureScheme::RSA_PKCS1_SHA512,
+    SignatureScheme::ECDSA_SHA1_Legacy,
+    SignatureScheme::RSA_PKCS1_SHA1,
+];

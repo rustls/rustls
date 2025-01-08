@@ -577,7 +577,7 @@ pub mod client {
     pub mod danger {
         pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
-        pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+        pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, NoVerifier};
     }
 
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};

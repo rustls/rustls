@@ -1,8 +1,11 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use std::vec;
 
 use pki_types::{CertificateDer, ServerName, UnixTime};
 
+use crate::client::{BrowserEmulator, BrowserType};
+use crate::crypto::emulation::{CHROME_SIGNATURE_SCHEMES, FIREFOX_SIGNATURE_SCHEMES};
 use crate::enums::SignatureScheme;
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::base::PayloadU16;
@@ -60,6 +63,74 @@ impl ClientCertVerified {
     /// Make a `ClientCertVerified`
     pub fn assertion() -> Self {
         Self(())
+    }
+}
+
+#[derive(Debug)]
+pub struct NoVerifier(Option<BrowserEmulator>);
+
+impl NoVerifier {
+    pub fn new(browser_emulator: Option<BrowserEmulator>) -> Self {
+        Self(browser_emulator)
+    }
+}
+
+impl ServerCertVerifier for NoVerifier {
+    fn verify_server_cert(
+            &self,
+            end_entity: &CertificateDer<'_>,
+            intermediates: &[CertificateDer<'_>],
+            server_name: &ServerName<'_>,
+            ocsp_response: &[u8],
+            now: UnixTime,
+        ) -> Result<ServerCertVerified, Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        match &self.0 {
+            Some(browser_emulator) => match browser_emulator.browser_type {
+                BrowserType::Chrome => CHROME_SIGNATURE_SCHEMES.to_vec(),
+                BrowserType::Firefox => FIREFOX_SIGNATURE_SCHEMES.to_vec(),
+            }
+            None => vec![
+                SignatureScheme::RSA_PKCS1_SHA1,
+                SignatureScheme::ECDSA_SHA1_Legacy,
+                SignatureScheme::RSA_PKCS1_SHA256,
+                SignatureScheme::ECDSA_NISTP256_SHA256,
+                SignatureScheme::RSA_PKCS1_SHA384,
+                SignatureScheme::ECDSA_NISTP384_SHA384,
+                SignatureScheme::RSA_PKCS1_SHA512,
+                SignatureScheme::ECDSA_NISTP521_SHA512,
+                SignatureScheme::RSA_PSS_SHA256,
+                SignatureScheme::RSA_PSS_SHA384,
+                SignatureScheme::RSA_PSS_SHA512,
+                SignatureScheme::ED25519,
+                SignatureScheme::ED448,
+            ],
+        }
+    }
+
+    fn requires_raw_public_keys(&self) -> bool {
+        false
     }
 }
 
