@@ -8,7 +8,8 @@
    You can run the workflow manually for the to-be-released branch by visiting
    [the daily-tests workflow](https://github.com/rustls/rustls/actions/workflows/daily-tests.yml)
    in your browser and selecting "Run workflow".
-3. Update `rustls/Cargo.toml` to set the correct version.
+3. Update `rustls/Cargo.toml` to set the correct version. Then run `cargo update` again in repo root and in `fuzz/`
+   so that lock files pick the new rustls version.
 4. Make a commit with the new version number, something like 'Prepare $VERSION'.  This
    should not contain functional changes: just version numbers, and perhaps markdown changes.
 5. Do a dry run: in `rustls/` check `cargo publish --dry-run`.
