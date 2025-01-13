@@ -7,17 +7,17 @@ description = "Rustls CPU instruction counting benchmarks."
 publish = false
 
 [dependencies]
-anyhow = "1.0.73"
-async-trait = "0.1.74"
-byteorder = "1.4.3"
-clap = { version = "4.3.21", features = ["derive"] }
-fxhash = "0.2.1"
-itertools = "0.13"
-rayon = "1.7.0"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+byteorder = { workspace = true }
+clap = { workspace = true }
+fxhash = { workspace = true }
+itertools = { workspace = true }
+rayon = { workspace = true }
 rustls = { path = "../rustls", features = ["ring", "aws_lc_rs"] }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.6"
+tikv-jemallocator = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-crabgrind = "=0.1.9" # compatible with valgrind package on GHA ubuntu-latest
+crabgrind = { workspace = true }

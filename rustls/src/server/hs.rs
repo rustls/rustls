@@ -398,16 +398,23 @@ impl ExpectClientHello {
         sig_schemes
             .retain(|scheme| suites::compatible_sigscheme_for_suites(*scheme, &client_suites));
 
+        // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
+        let certificate_authorities = match version {
+            ProtocolVersion::TLSv1_2 => None,
+            _ => client_hello.certificate_authorities_extension(),
+        };
         // Choose a certificate.
         let certkey = {
-            let client_hello = ClientHello::new(
-                &cx.data.sni,
-                &sig_schemes,
-                client_hello.alpn_extension(),
-                client_hello.server_certificate_extension(),
-                client_hello.client_certificate_extension(),
-                &client_hello.cipher_suites,
-            );
+            let client_hello = ClientHello {
+                server_name: &cx.data.sni,
+                signature_schemes: &sig_schemes,
+                alpn: client_hello.alpn_extension(),
+                client_cert_types: client_hello.server_certificate_extension(),
+                server_cert_types: client_hello.client_certificate_extension(),
+                cipher_suites: &client_hello.cipher_suites,
+                certificate_authorities,
+            };
+            trace!("Resolving server certificate: {client_hello:#?}");
 
             let certkey = self
                 .config

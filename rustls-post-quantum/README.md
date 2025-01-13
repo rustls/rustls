@@ -8,11 +8,66 @@ Rustls is a modern TLS library written in Rust.
 
 # rustls-post-quantum
 
-This crate provides experimental support for [X25519Kyber768Draft00] post-quantum
-key exchange. See [the documentation][docs] for more details.
+This crate provides a [`rustls::crypto::CryptoProvider`] that includes
+a hybrid[^1], post-quantum-secure[^2] key exchange algorithm --
+specifically [X25519MLKEM768], as well as a non-hybrid
+post-quantum-secure key exchange algorithm.
+
+X25519MLKEM768 is pre-standardization, so you should treat
+this as experimental.  You may see unexpected connection failures (such as [tldr.fail])
+-- [please report these to us][interop-bug].  X25519MLKEM768 is becoming widely
+deployed, eg, by [Chrome] and [Cloudflare].
+
+The two components of this key exchange are well regarded:
+X25519 alone is already used by default by rustls, and tends to have
+higher quality implementations than other elliptic curves.
+ML-KEM-768 was standardized by NIST in [FIPS203].
+
+[^1]: meaning: a construction that runs a classical and post-quantum
+      key exchange, and uses the output of both together.  This is a hedge
+      against the post-quantum half being broken.
+
+[^2]: a "post-quantum-secure" algorithm is one posited to be invulnerable
+      to attack using a cryptographically-relevant quantum computer.  In contrast,
+      classical algorithms would be broken by such a computer.  Note that such computers
+      do not currently exist, and may never exist, but current traffic could be captured
+      now and attacked later.
+
+[X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/>
+[FIPS203]: <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.203.pdf>
+[Chrome]: <https://security.googleblog.com/2024/09/a-new-path-for-kyber-on-web.html>
+[Cloudflare]: <https://blog.cloudflare.com/pq-2024/#ml-kem-768-and-x25519>
+[interop-bug]: <https://github.com/rustls/rustls/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=>
+[tldr.fail]: <https://tldr.fail/>
+
+
+## How to use this crate
+
+There are a few options:
+
+**To use this as the rustls default provider**: include this code early in your program:
+
+```rust
+rustls_post_quantum::provider().install_default().unwrap();
+```
+
+**To incorporate just the key exchange algorithm(s) in a custom [`rustls::crypto::CryptoProvider`]**:
+
+```rust
+use rustls::crypto::{aws_lc_rs, CryptoProvider};
+let parent = aws_lc_rs::default_provider();
+let my_provider = CryptoProvider {
+    kx_groups: vec![
+        rustls_post_quantum::X25519MLKEM768,
+        aws_lc_rs::kx_group::X25519,
+        rustls_post_quantum::MLKEM768,
+    ],
+    ..parent
+};
+```
+
 
 This crate is release under the same licenses as the [main rustls crate][rustls].
 
-[X25519Kyber768Draft00]: https://datatracker.ietf.org/doc/draft-tls-westerbaan-xyber768d00/03/
-[docs]: https://docs.rs/rustls-post-quantum/latest/
 [rustls]: https://crates.io/crates/rustls
+[`rustls::crypto::CryptoProvider`]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html

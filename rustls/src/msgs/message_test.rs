@@ -34,9 +34,8 @@ fn test_read_fuzz_corpus() {
             .into_plain_message();
         println!("{:?}", msg);
 
-        let msg = match Message::try_from(msg) {
-            Ok(msg) => msg,
-            Err(_) => continue,
+        let Ok(msg) = Message::try_from(msg) else {
+            continue;
         };
 
         let enc = PlainMessage::from(msg)

@@ -230,6 +230,11 @@ enum_builder! {
         FFDHE8192 => 0x0104,
         GREASE => 0x8a8a,
         X25519Kyber768Draft00 => 0x6399,
+        MLKEM512 => 0x0200,
+        MLKEM768 => 0x0201,
+        MLKEM1024 => 0x0202,
+        secp256r1MLKEM768 => 0x11eb,
+        X25519MLKEM768 => 0x11ec,
     }
 }
 

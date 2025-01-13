@@ -88,9 +88,8 @@ impl Codec<'_> for Random {
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let bytes = match r.take(32) {
-            Some(bytes) => bytes,
-            None => return Err(InvalidMessage::MissingData("Random")),
+        let Some(bytes) = r.take(32) else {
+            return Err(InvalidMessage::MissingData("Random"));
         };
 
         let mut opaque = [0; 32];
@@ -154,9 +153,8 @@ impl Codec<'_> for SessionId {
             return Err(InvalidMessage::TrailingData("SessionID"));
         }
 
-        let bytes = match r.take(len) {
-            Some(bytes) => bytes,
-            None => return Err(InvalidMessage::MissingData("SessionID")),
+        let Some(bytes) = r.take(len) else {
+            return Err(InvalidMessage::MissingData("SessionID"));
         };
 
         let mut out = [0u8; 32];
@@ -579,6 +577,7 @@ pub enum ClientExtension {
     RecordSizeLimit(u16),
     ApplicationSettings(PayloadU16),
     RenegotiationInfo(PayloadU8),
+    AuthorityNames(Vec<DistinguishedName>),
     Unknown(UnknownExtension),
 }
 
@@ -614,6 +613,7 @@ impl ClientExtension {
             Self::SignedCertificateTimestamp() => ExtensionType::SignedCertificateTimestamp,
             Self::ApplicationSettings(_) => ExtensionType::ApplicationSettings,
             Self::RenegotiationInfo(_) => ExtensionType::RenegotiationInfo,
+            Self::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
             Self::Unknown(ref r) => r.typ,
         }
     }
@@ -654,6 +654,7 @@ impl Codec<'_> for ClientExtension {
             Self::RecordSizeLimit(ref r) => r.encode(nested.buf),
             Self::ApplicationSettings(ref r) => r.encode(nested.buf),
             Self::RenegotiationInfo(ref r) => r.encode(nested.buf),
+            Self::AuthorityNames(ref r) => r.encode(nested.buf),
             Self::Unknown(ref r) => r.encode(nested.buf),
         }
     }
@@ -702,6 +703,7 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::EncryptedClientHelloOuterExtensions => {
                 Self::EncryptedClientHelloOuterExtensions(Vec::read(&mut sub)?)
             }
+            ExtensionType::CertificateAuthorities => Self::AuthorityNames(Vec::read(&mut sub)?),
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -1127,7 +1129,7 @@ impl ClientHelloPayload {
     pub(crate) fn check_psk_ext_is_last(&self) -> bool {
         self.extensions
             .last()
-            .map_or(false, |ext| ext.ext_type() == ExtensionType::PreSharedKey)
+            .is_some_and(|ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
     pub(crate) fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
@@ -1177,6 +1179,13 @@ impl ClientHelloPayload {
             has_duplicates::<_, _, u16>(algs.iter().cloned())
         } else {
             false
+        }
+    }
+
+    pub(crate) fn certificate_authorities_extension(&self) -> Option<&[DistinguishedName]> {
+        match self.find_extension(ExtensionType::CertificateAuthorities)? {
+            ClientExtension::AuthorityNames(ext) => Some(ext),
+            _ => unreachable!("extension type checked"),
         }
     }
 }
@@ -1931,9 +1940,8 @@ pub(crate) struct ServerDhParams {
 impl ServerDhParams {
     #[cfg(feature = "tls12")]
     pub(crate) fn new(kx: &dyn ActiveKeyExchange) -> Self {
-        let params = match kx.ffdhe_group() {
-            Some(params) => params,
-            None => panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group()),
+        let Some(params) = kx.ffdhe_group() else {
+            panic!("invalid NamedGroup for DHE key exchange: {:?}", kx.group());
         };
 
         Self {

@@ -3,9 +3,8 @@
 
 use std::io;
 use std::ops::DerefMut;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use once_cell::sync::OnceCell;
 use pki_types::pem::PemObject;
 use pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
@@ -324,6 +323,13 @@ impl KeyType {
         }
     }
 
+    pub fn ca_cert(&self) -> CertificateDer<'_> {
+        self.get_chain()
+            .into_iter()
+            .next_back()
+            .expect("cert chain cannot be empty")
+    }
+
     pub fn get_chain(&self) -> Vec<CertificateDer<'static>> {
         CertificateDer::pem_slice_iter(self.bytes_for("end.fullchain"))
             .map(|result| result.unwrap())
@@ -386,7 +392,7 @@ impl KeyType {
         )))
     }
 
-    pub fn get_certified_key(&self) -> Result<Arc<CertifiedKey>, Error> {
+    pub fn certified_key_with_raw_pub_key(&self) -> Result<Arc<CertifiedKey>, Error> {
         let private_key = provider::default_provider()
             .key_provider
             .load_private_key(self.get_key())?;
@@ -400,6 +406,13 @@ impl KeyType {
         )))
     }
 
+    pub fn certified_key_with_cert_chain(&self) -> Result<Arc<CertifiedKey>, Error> {
+        let private_key = provider::default_provider()
+            .key_provider
+            .load_private_key(self.get_key())?;
+        Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)))
+    }
+
     fn get_crl(&self, role: &str, r#type: &str) -> CertificateRevocationListDer<'static> {
         CertificateRevocationListDer::from_pem_slice(
             self.bytes_for(&format!("{role}.{type}.crl.pem")),
@@ -409,25 +422,13 @@ impl KeyType {
 
     pub fn ca_distinguished_name(&self) -> &'static [u8] {
         match self {
-            KeyType::Rsa2048 => {
-                &b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 2048 CA"[..]
-            }
-            KeyType::Rsa3072 => {
-                &b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 3072 CA"[..]
-            }
-            KeyType::Rsa4096 => {
-                &b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 4096 CA"[..]
-            }
-            KeyType::EcdsaP256 => {
-                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA"[..]
-            }
-            KeyType::EcdsaP384 => {
-                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p384 CA"[..]
-            }
-            KeyType::EcdsaP521 => {
-                &b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA"[..]
-            }
-            KeyType::Ed25519 => &b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA"[..],
+            KeyType::Rsa2048 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 2048 CA",
+            KeyType::Rsa3072 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 3072 CA",
+            KeyType::Rsa4096 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 4096 CA",
+            KeyType::EcdsaP256 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA",
+            KeyType::EcdsaP384 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p384 CA",
+            KeyType::EcdsaP521 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA",
+            KeyType::Ed25519 => b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA",
         }
     }
 }
@@ -574,7 +575,8 @@ pub fn make_server_config_with_client_verifier(
 pub fn make_server_config_with_raw_key_support(kt: KeyType) -> ServerConfig {
     let mut client_verifier = MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt);
     let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
-        kt.get_certified_key().unwrap(),
+        kt.certified_key_with_raw_pub_key()
+            .unwrap(),
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
@@ -1329,8 +1331,8 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
     // needed to extend lifetime of Tls13CipherSuite to 'static
-    static TLS13_LIMITED_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
-    static TLS12_LIMITED_SUITE: OnceCell<rustls::Tls12CipherSuite> = OnceCell::new();
+    static TLS13_LIMITED_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
+    static TLS12_LIMITED_SUITE: OnceLock<rustls::Tls12CipherSuite> = OnceLock::new();
 
     let tls13_limited = TLS13_LIMITED_SUITE.get_or_init(|| {
         let tls13 = provider::cipher_suite::TLS13_AES_128_GCM_SHA256
@@ -1347,9 +1349,10 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     });
 
     let tls12_limited = TLS12_LIMITED_SUITE.get_or_init(|| {
-        let tls12 = match provider::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 {
-            SupportedCipherSuite::Tls12(tls12) => tls12,
-            _ => unreachable!(),
+        let SupportedCipherSuite::Tls12(tls12) =
+            provider::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        else {
+            unreachable!();
         };
 
         rustls::Tls12CipherSuite {
@@ -1372,7 +1375,7 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
 }
 
 pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
-    static TLS13_PLAIN_SUITE: OnceCell<rustls::Tls13CipherSuite> = OnceCell::new();
+    static TLS13_PLAIN_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
 
     let tls13 = TLS13_PLAIN_SUITE.get_or_init(|| {
         let tls13 = provider::cipher_suite::TLS13_AES_256_GCM_SHA384

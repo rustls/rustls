@@ -300,7 +300,9 @@ impl ServerCertVerifier for WebPkiServerVerifier {
     }
 }
 
-test_for_each_provider! {
+#[cfg(test)]
+#[macro_rules_attribute::apply(test_for_each_provider)]
+mod tests {
     use std::prelude::v1::*;
     use std::sync::Arc;
     use std::{println, vec};
@@ -308,7 +310,7 @@ test_for_each_provider! {
     use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
-    use super::{VerifierBuilderError, WebPkiServerVerifier};
+    use super::{provider, VerifierBuilderError, WebPkiServerVerifier};
     use crate::RootCertStore;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {

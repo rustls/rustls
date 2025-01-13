@@ -90,7 +90,7 @@ pub trait Signer: Debug + Send + Sync {
 ///
 /// Note: this struct is also used to represent an [RFC 7250] raw public key,
 /// when the client/server is configured to use raw public keys instead of
-/// certificates.  
+/// certificates.
 ///
 /// [RFC 7250]: https://tools.ietf.org/html/rfc7250
 #[derive(Clone, Debug)]
@@ -122,9 +122,8 @@ impl CertifiedKey {
     /// Verify the consistency of this [`CertifiedKey`]'s public and private keys.
     /// This is done by performing a comparison of SubjectPublicKeyInfo bytes.
     pub fn keys_match(&self) -> Result<(), Error> {
-        let key_spki = match self.key.public_key() {
-            Some(key) => key,
-            None => return Err(InconsistentKeys::Unknown.into()),
+        let Some(key_spki) = self.key.public_key() else {
+            return Err(InconsistentKeys::Unknown.into());
         };
 
         let cert = ParsedCertificate::try_from(self.end_entity_cert()?)?;

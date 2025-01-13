@@ -2,8 +2,6 @@ name: documentation
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 on:
   workflow_dispatch:
@@ -63,6 +61,7 @@ jobs:
             --accept 200..=204,403,429,500
             --cache
             --max-cache-age 1d
+            --exclude-path 'website/content/'
             '**/*.md'
             'target/doc/**/*.html'
           fail: true
@@ -84,6 +83,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'rustls/rustls'
     needs: generate
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -91,4 +93,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

@@ -9,9 +9,8 @@ use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessa
 fuzz_target!(|data: &[u8]| {
     let mut rdr = Reader::init(data);
     if let Ok(m) = OutboundOpaqueMessage::read(&mut rdr) {
-        let msg = match Message::try_from(m.into_plain_message()) {
-            Ok(msg) => msg,
-            Err(_) => return,
+        let Ok(msg) = Message::try_from(m.into_plain_message()) else {
+            return;
         };
         //println!("msg = {:#?}", m);
         let enc = PlainMessage::from(msg)

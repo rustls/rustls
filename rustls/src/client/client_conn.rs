@@ -906,15 +906,14 @@ impl MayEncryptEarlyData<'_> {
         early_data: &[u8],
         outgoing_tls: &mut [u8],
     ) -> Result<usize, EarlyDataError> {
-        let allowed = match self
+        let Some(allowed) = self
             .conn
             .core
             .data
             .early_data
             .check_write_opt(early_data.len())
-        {
-            Some(allowed) => allowed,
-            None => return Err(EarlyDataError::ExceededAllowedEarlyData),
+        else {
+            return Err(EarlyDataError::ExceededAllowedEarlyData);
         };
 
         self.conn

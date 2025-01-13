@@ -1,8 +1,6 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
-use std::error::Error as StdError;
 
 use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_crypto::HpkeCrypto;
@@ -214,13 +212,13 @@ impl HpkeOpener for HpkeRsReceiver {
 }
 
 #[cfg(feature = "std")]
-fn other_err(err: impl StdError + Send + Sync + 'static) -> Error {
-    Error::Other(OtherError(Arc::new(err)))
+fn other_err(err: impl std::error::Error + Send + Sync + 'static) -> Error {
+    Error::Other(OtherError(alloc::sync::Arc::new(err)))
 }
 
 #[cfg(not(feature = "std"))]
-fn other_err(err: impl Send + Sync + 'static) -> Error {
-    Error::General(alloc::format!("{}", err));
+fn other_err(_err: impl core::any::Any) -> Error {
+    Error::Other(OtherError())
 }
 
 #[cfg(test)]

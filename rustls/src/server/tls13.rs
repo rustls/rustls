@@ -198,52 +198,49 @@ mod client_hello {
                 (share.group == selected_kxg.name()).then_some((share, selected_kxg))
             });
 
-            let chosen_share_and_kxg = match chosen_share_and_kxg {
-                Some(s) => s,
-                None => {
-                    // We don't have a suitable key share.  Send a HelloRetryRequest
-                    // for the mutually_preferred_group.
-                    self.transcript.add_message(chm);
+            let Some(chosen_share_and_kxg) = chosen_share_and_kxg else {
+                // We don't have a suitable key share.  Send a HelloRetryRequest
+                // for the mutually_preferred_group.
+                self.transcript.add_message(chm);
 
-                    if self.done_retry {
-                        return Err(cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::RefusedToFollowHelloRetryRequest,
-                        ));
-                    }
-
-                    emit_hello_retry_request(
-                        &mut self.transcript,
-                        self.suite,
-                        client_hello.session_id,
-                        cx.common,
-                        selected_kxg.name(),
-                    );
-                    emit_fake_ccs(cx.common);
-
-                    let skip_early_data = max_early_data_size(self.config.max_early_data_size);
-
-                    let next = Box::new(hs::ExpectClientHello {
-                        config: self.config,
-                        transcript: HandshakeHashOrBuffer::Hash(self.transcript),
-                        #[cfg(feature = "tls12")]
-                        session_id: SessionId::empty(),
-                        #[cfg(feature = "tls12")]
-                        using_ems: false,
-                        done_retry: true,
-                        send_tickets: self.send_tickets,
-                        extra_exts: self.extra_exts,
-                    });
-
-                    return if early_data_requested {
-                        Ok(Box::new(ExpectAndSkipRejectedEarlyData {
-                            skip_data_left: skip_early_data,
-                            next,
-                        }))
-                    } else {
-                        Ok(next)
-                    };
+                if self.done_retry {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::RefusedToFollowHelloRetryRequest,
+                    ));
                 }
+
+                emit_hello_retry_request(
+                    &mut self.transcript,
+                    self.suite,
+                    client_hello.session_id,
+                    cx.common,
+                    selected_kxg.name(),
+                );
+                emit_fake_ccs(cx.common);
+
+                let skip_early_data = max_early_data_size(self.config.max_early_data_size);
+
+                let next = Box::new(hs::ExpectClientHello {
+                    config: self.config,
+                    transcript: HandshakeHashOrBuffer::Hash(self.transcript),
+                    #[cfg(feature = "tls12")]
+                    session_id: SessionId::empty(),
+                    #[cfg(feature = "tls12")]
+                    using_ems: false,
+                    done_retry: true,
+                    send_tickets: self.send_tickets,
+                    extra_exts: self.extra_exts,
+                });
+
+                return if early_data_requested {
+                    Ok(Box::new(ExpectAndSkipRejectedEarlyData {
+                        skip_data_left: skip_early_data,
+                        next,
+                    }))
+                } else {
+                    Ok(next)
+                };
             };
 
             let mut chosen_psk_index = None;
@@ -282,19 +279,20 @@ mod client_hello {
                     ));
                 }
 
-                for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                    let now = self.config.current_time()?;
+                let now = self.config.current_time()?;
 
-                    let resume = match self
+                for (i, psk_id) in psk_offer.identities.iter().enumerate() {
+                    let maybe_resume_data = self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .map(|resumedata| {
                             resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
                         })
                         .filter(|resumedata| {
                             hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
-                        }) {
-                        Some(resume) => resume,
-                        None => continue,
+                        });
+
+                    let Some(resume) = maybe_resume_data else {
+                        continue;
                     };
 
                     if !self.check_binder(
@@ -622,12 +620,9 @@ mod client_hello {
             false => EarlyDataDecision::Disabled,
         };
 
-        let resume = match resumedata {
-            Some(resume) => resume,
-            None => {
-                // never any early data if not resuming.
-                return rejected_or_disabled;
-            }
+        let Some(resume) = resumedata else {
+            // never any early data if not resuming.
+            return rejected_or_disabled;
         };
 
         /* Non-zero max_early_data_size controls whether early_data is allowed at all.
@@ -768,12 +763,11 @@ mod client_hello {
     ) {
         let payload = CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response);
 
-        let entry = match config
+        let Ok(entry) = config
             .cert_compression_cache
             .compression_for(cert_compressor, &payload)
-        {
-            Ok(entry) => entry,
-            Err(_) => return emit_certificate_tls13(flight, cert_chain, ocsp_response),
+        else {
+            return emit_certificate_tls13(flight, cert_chain, ocsp_response);
         };
 
         let c = HandshakeMessagePayload {
@@ -973,19 +967,17 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
             HandshakePayload::CompressedCertificate
         )?;
 
-        let decompressor = match self
+        let selected_decompressor = self
             .config
             .cert_decompressors
             .iter()
-            .find(|item| item.algorithm() == compressed_cert.alg)
-        {
-            Some(dec) => dec,
-            None => {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::BadCertificate,
-                    PeerMisbehaved::SelectedUnofferedCertCompression,
-                ));
-            }
+            .find(|item| item.algorithm() == compressed_cert.alg);
+
+        let Some(decompressor) = selected_decompressor else {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::BadCertificate,
+                PeerMisbehaved::SelectedUnofferedCertCompression,
+            ));
         };
 
         if compressed_cert.uncompressed_len as usize > CERTIFICATE_MAX_SIZE_LIMIT {
@@ -1089,26 +1081,23 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verifier
             .client_auth_mandatory();
 
-        let (end_entity, intermediates) = match client_cert.split_first() {
-            None => {
-                if !mandatory {
-                    debug!("client auth requested but no certificate supplied");
-                    self.transcript.abandon_client_auth();
-                    return Ok(Box::new(ExpectFinished {
-                        config: self.config,
-                        suite: self.suite,
-                        key_schedule: self.key_schedule,
-                        transcript: self.transcript,
-                        send_tickets: self.send_tickets,
-                    }));
-                }
-
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::CertificateRequired,
-                    Error::NoCertificatesPresented,
-                ));
+        let Some((end_entity, intermediates)) = client_cert.split_first() else {
+            if !mandatory {
+                debug!("client auth requested but no certificate supplied");
+                self.transcript.abandon_client_auth();
+                return Ok(Box::new(ExpectFinished {
+                    config: self.config,
+                    suite: self.suite,
+                    key_schedule: self.key_schedule,
+                    transcript: self.transcript,
+                    send_tickets: self.send_tickets,
+                }));
             }
-            Some(chain) => chain,
+
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::CertificateRequired,
+                Error::NoCertificatesPresented,
+            ));
         };
 
         let now = self.config.current_time()?;
@@ -1313,9 +1302,8 @@ impl ExpectFinished {
 
         let stateless = config.ticketer.enabled();
         let (ticket, lifetime) = if stateless {
-            let ticket = match config.ticketer.encrypt(&plain) {
-                Some(t) => t,
-                None => return Ok(()),
+            let Some(ticket) = config.ticketer.encrypt(&plain) else {
+                return Ok(());
             };
             (ticket, config.ticketer.lifetime())
         } else {

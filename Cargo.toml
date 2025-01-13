@@ -14,17 +14,20 @@ members = [
   "provider-example",
   # the main library and tests
   "rustls",
+  # benchmarking tool
+  "rustls-bench",
+  # experimental post-quantum algorithm support
+  "rustls-post-quantum",
   # rustls cryptography provider integration tests
   "rustls-provider-test",
+  # rustls cryptography provider for fuzzing
+  "rustls-fuzzing-provider",
 ]
 
 ## Deliberately not included in `members`:
 exclude = [
   # `cargo fuzz` integration (requires nightly)
   "fuzz",
-  # experimental post-quantum algorithm support
-  # (conflicting feature requirements with `rustls`)
-  "rustls-post-quantum",
 ]
 
 default-members = [
@@ -32,6 +35,62 @@ default-members = [
   "rustls",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1.0.73"
+asn1 = "0.20"
+async-std = { version = "1.12.0", features = ["attributes"] }
+async-trait = "0.1.74"
+aws-lc-rs = { version = "1.12", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
+base64 = "0.22"
+bencher = "0.1.5"
+brotli = { version = "7", default-features = false, features = ["std"] }
+brotli-decompressor = "4.0.1" # 4.0.1 required for panic fix
+byteorder = "1.4.3"
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+clap = { version = "4.3.21", features = ["derive", "env"] }
+crabgrind = "=0.1.9" # compatible with valgrind package on GHA ubuntu-latest
+der = "0.7"
+ecdsa = "0.16.8"
+env_logger = "0.11"
+fxhash = "0.2.1"
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
+hex = "0.4"
+hickory-resolver = { version = "=0.25.0-alpha.3", features = ["dns-over-https-rustls", "webpki-roots"] }
+hmac = "0.12"
+hpke-rs = "0.2"
+hpke-rs-crypto = "0.2"
+hpke-rs-rust-crypto = "0.2"
+itertools = "0.14"
+log = { version = "0.4.8" }
+macro_rules_attribute = "0.2"
+mio = { version = "1", features = ["net", "os-poll"] }
+num-bigint = "0.4.4"
+once_cell = { version = "1.16", default-features = false, features = ["alloc", "race"] }
+openssl = "0.10"
+p256 = { version = "0.13.2", default-features = false, features = ["alloc", "ecdsa", "pkcs8"] }
+pkcs8 = "0.10.2"
+pki-types = { package = "rustls-pki-types", version = "1.10", features = ["alloc"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+rayon = "1.7"
+rcgen = { version = "0.13", features = ["pem", "aws_lc_rs"], default-features = false }
+regex = "1"
+ring = "0.17"
+rsa = { version = "0.9", features = ["sha2"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = { version = "0.10", default-features = false }
+signature = "2"
+subtle = { version = "2.5.0", default-features = false }
+time = { version = "0.3.6", default-features = false }
+tikv-jemallocator = "0.6"
+tokio = { version = "1.34", features = ["io-util", "macros", "net", "rt"]}
+webpki = { package = "rustls-webpki", version = "0.102.8", features = ["alloc"], default-features = false }
+webpki-roots = "0.26"
+x25519-dalek = "2"
+x509-parser = "0.16"
+zeroize = "1.7"
+zlib-rs = "0.4"
 
 [profile.bench]
 codegen-units = 1

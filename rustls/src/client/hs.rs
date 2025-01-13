@@ -301,6 +301,12 @@ fn emit_client_hello_for_retry(
         _ => {},
     }
 
+    if support_tls13 {
+        if let Some(cas_extension) = config.verifier.root_hint_subjects() {
+            exts.push(ClientExtension::AuthorityNames(cas_extension.to_owned()));
+        }
+    }
+
     // Send the ECPointFormat extension only if we are proposing ECDHE
     if config
         .provider
@@ -334,8 +340,26 @@ fn emit_client_hello_for_retry(
 
     if let Some(key_share) = &key_share {
         debug_assert!(support_tls13);
-        let key_share = KeyShareEntry::new(key_share.group(), key_share.pub_key());
-        exts.push(ClientExtension::KeyShare(vec![key_share]));
+        let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
+
+        if retryreq.is_none() {
+            // Only for the initial client hello, see if we can send a second KeyShare
+            // for "free".  We only do this if the same algorithm is also supported
+            // separately by our provider for this version (`find_kx_group` looks that up).
+            if let Some((component_group, component_share)) =
+                key_share
+                    .hybrid_component()
+                    .filter(|(group, _)| {
+                        config
+                            .find_kx_group(*group, ProtocolVersion::TLSv1_3)
+                            .is_some()
+                    })
+            {
+                shares.push(KeyShareEntry::new(component_group, component_share));
+            }
+        }
+
+        exts.push(ClientExtension::KeyShare(shares));
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::cookie) {
@@ -419,7 +443,7 @@ fn emit_client_hello_for_retry(
             _ => {}
         };
 
-        let seed = (input.hello.extension_order_seed as u32) << 16
+        let seed = ((input.hello.extension_order_seed as u32) << 16)
             | (u16::from(new_ext.ext_type()) as u32);
         match low_quality_integer_hash(seed) {
             u32::MAX => 0,
@@ -623,8 +647,8 @@ fn prepare_resumption<'a>(
     let resuming = match resuming {
         Some(resuming) if !resuming.ticket().is_empty() => resuming,
         _ => {
-            if config.supports_version(ProtocolVersion::TLSv1_3)
-                || config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
+            if config.supports_version(ProtocolVersion::TLSv1_2)
+                && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
             {
                 // If we don't have a ticket, request one.
                 exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
@@ -633,19 +657,16 @@ fn prepare_resumption<'a>(
         }
     };
 
-    let tls13 = match resuming.map(|csv| csv.tls13()) {
-        Some(tls13) => tls13,
-        None => {
-            // TLS 1.2; send the ticket if we have support this protocol version
-            if config.supports_version(ProtocolVersion::TLSv1_2)
-                && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
-            {
-                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                    Payload::new(resuming.ticket()),
-                )));
-            }
-            return None; // TLS 1.2, so nothing to return here
+    let Some(tls13) = resuming.map(|csv| csv.tls13()) else {
+        // TLS 1.2; send the ticket if we have support this protocol version
+        if config.supports_version(ProtocolVersion::TLSv1_2)
+            && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
+        {
+            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
+                Payload::new(resuming.ticket()),
+            )));
         }
+        return None; // TLS 1.2, so nothing to return here
     };
 
     if !config.supports_version(ProtocolVersion::TLSv1_3) {
@@ -1078,16 +1099,13 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // Or asks us to use a ciphersuite we didn't offer.
         let config = &self.next.input.config;
-        let cs = match config.find_cipher_suite(hrr.cipher_suite) {
-            Some(cs) => cs,
-            None => {
-                return Err({
-                    cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
-                    )
-                });
-            }
+        let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
+            return Err({
+                cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedCipherSuite,
+                )
+            });
         };
 
         // Or offers ECH related extensions when we didn't offer ECH.
@@ -1141,14 +1159,11 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         let key_share = match req_group {
             Some(group) if group != offered_key_share.group() => {
-                let skxg = match config.find_kx_group(group, ProtocolVersion::TLSv1_3) {
-                    Some(skxg) => skxg,
-                    None => {
-                        return Err(cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
-                        ));
-                    }
+                let Some(skxg) = config.find_kx_group(group, ProtocolVersion::TLSv1_3) else {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup,
+                    ));
                 };
 
                 cx.common.kx_state = KxState::Start(skxg);
