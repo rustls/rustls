@@ -8,8 +8,8 @@ on:
   push:
     branches:
       - main
-  # schedule:
-  #   - cron: '0 18 * * *'
+  schedule:
+    - cron: '0 18 * * *'
 
 jobs:
   generate:

@@ -13,11 +13,14 @@ use super::Tls12Resumption;
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
+#[cfg(feature = "impit")]
 use crate::client::builder::BrowserType;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
-use crate::client::{tls13, BrowserEmulator, ClientConfig, EchMode, EchStatus};
+#[cfg(feature = "impit")]
+use crate::client::BrowserEmulator;
+use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
 use crate::common_state::{
     CommonState, HandshakeKind, KxState, RawKeyNegotationResult, RawKeyNegotiationParams, State,
 };
@@ -27,7 +30,9 @@ use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, Pr
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
-use crate::msgs::base::{Payload, PayloadU16, PayloadU8};
+use crate::msgs::base::Payload;
+#[cfg(feature = "impit")]
+use crate::msgs::base::{PayloadU16, PayloadU8};
 use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode,
 };
@@ -248,6 +253,20 @@ fn emit_client_hello_for_retry(
     assert!(!supported_versions.is_empty());
 
     // offer groups which are usable for any offered version
+    #[cfg(not(feature = "impit"))]
+    let offered_groups: Vec<NamedGroup> = config
+        .provider
+        .kx_groups
+        .iter()
+        .filter(|skxg| {
+            supported_versions
+                .iter()
+                .any(|v| skxg.usable_for_version(*v))
+        })
+        .map(|skxg| skxg.name())
+        .collect();
+
+    #[cfg(feature = "impit")]
     let mut offered_groups: Vec<NamedGroup> = config
         .provider
         .kx_groups
@@ -260,12 +279,16 @@ fn emit_client_hello_for_retry(
         .map(|skxg| skxg.name())
         .collect();
 
+    #[cfg(feature = "impit")]
     match config.browser_emulation {
-        Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
+        Some(BrowserEmulator {
+            browser_type: BrowserType::Chrome,
+            version: _,
+        }) => {
             offered_groups.push(NamedGroup::GREASE);
             // offered_groups.push(NamedGroup::X25519Kyber768Draft00);
-        },
-        _ => {},
+        }
+        _ => {}
     }
 
     let mut exts = vec![
@@ -280,8 +303,12 @@ fn emit_client_hello_for_retry(
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
 
+    #[cfg(feature = "impit")]
     match config.browser_emulation {
-        Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
+        Some(BrowserEmulator {
+            browser_type: BrowserType::Chrome,
+            version: _,
+        }) => {
             // TODO: needs to actually use the data - u8-length-prefixed list of ALPN protocols
             let application_settings: PayloadU16 = PayloadU16::new(vec![0x02, 0x68, 0x32]);
 
@@ -289,16 +316,22 @@ fn emit_client_hello_for_retry(
             exts.push(ClientExtension::SignedCertificateTimestamp());
             exts.push(ClientExtension::ApplicationSettings(application_settings));
             exts.push(ClientExtension::RenegotiationInfo(PayloadU8::empty()));
-        },
-        Some(BrowserEmulator { browser_type: BrowserType::Firefox, version: _ }) => {
+        }
+        Some(BrowserEmulator {
+            browser_type: BrowserType::Firefox,
+            version: _,
+        }) => {
             // TODO: We don't really support the delegated credentials extension yet, just sending it in the client hello message
-            let delegated_credentials_signature_algos = PayloadU16::new(vec![0x04, 0x03, 0x05, 0x03, 0x06, 0x03, 0x02, 0x03]);
+            let delegated_credentials_signature_algos =
+                PayloadU16::new(vec![0x04, 0x03, 0x05, 0x03, 0x06, 0x03, 0x02, 0x03]);
 
             exts.push(ClientExtension::RenegotiationInfo(PayloadU8::empty()));
-            exts.push(ClientExtension::DelegatedCredentials(delegated_credentials_signature_algos));
+            exts.push(ClientExtension::DelegatedCredentials(
+                delegated_credentials_signature_algos,
+            ));
             exts.push(ClientExtension::RecordSizeLimit(16385));
-        },
-        _ => {},
+        }
+        _ => {}
     }
 
     if support_tls13 {
@@ -461,11 +494,22 @@ fn emit_client_hello_for_retry(
         })
         .collect();
 
+    #[cfg(not(feature = "impit"))]
+    // We don't do renegotiation at all, in fact.
+    cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+
+    #[cfg(feature = "impit")]
     match config.browser_emulation {
         // Chrome doesn't send this cipher suite.
-        Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {}
+        Some(BrowserEmulator {
+            browser_type: BrowserType::Chrome,
+            version: _,
+        }) => {}
         // Firefox also doesn't seem to send this cipher suite?
-        Some(BrowserEmulator { browser_type: BrowserType::Firefox, version: _ }) => {}
+        Some(BrowserEmulator {
+            browser_type: BrowserType::Firefox,
+            version: _,
+        }) => {}
         _ => {
             // We don't do renegotiation at all, in fact.
             cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);

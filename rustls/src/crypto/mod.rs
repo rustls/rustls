@@ -1,13 +1,19 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use emulation::{CHROME_CIPHER_SUITES, CHROME_SIGNATURE_VERIFICATION_ALGOS, FIREFOX_CIPHER_SUITES, FIREFOX_SIGNATURE_VERIFICATION_ALGOS};
 use core::fmt::Debug;
+#[cfg(feature = "impit")]
+use emulation::{
+    CHROME_CIPHER_SUITES, CHROME_SIGNATURE_VERIFICATION_ALGOS, FIREFOX_CIPHER_SUITES,
+    FIREFOX_SIGNATURE_VERIFICATION_ALGOS,
+};
 
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+#[cfg(feature = "impit")]
 use crate::client::builder::BrowserType;
+#[cfg(feature = "impit")]
 use crate::client::BrowserEmulator;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
@@ -223,10 +229,12 @@ pub struct CryptoProvider {
 }
 
 /// Convenience builder for `CryptoProvider`.
+#[cfg(feature = "impit")]
 pub struct CryptoProviderBuilder {
     browser_emulator: Option<BrowserEmulator>,
 }
 
+#[cfg(feature = "impit")]
 impl CryptoProviderBuilder {
     /// Sets the browser emulator to use for this provider.
     pub fn with_browser_emulator(mut self, browser_emulator: &BrowserEmulator) -> Self {
@@ -237,7 +245,10 @@ impl CryptoProviderBuilder {
     /// Builds the `CryptoProvider`.
     pub fn build(self) -> CryptoProvider {
         match self.browser_emulator {
-            Some(BrowserEmulator { browser_type: BrowserType::Chrome, version: _ }) => {
+            Some(BrowserEmulator {
+                browser_type: BrowserType::Chrome,
+                version: _,
+            }) => {
                 let provider = CryptoProvider {
                     cipher_suites: CHROME_CIPHER_SUITES.to_vec(),
                     signature_verification_algorithms: CHROME_SIGNATURE_VERIFICATION_ALGOS,
@@ -246,7 +257,10 @@ impl CryptoProviderBuilder {
 
                 provider
             }
-            Some(BrowserEmulator { browser_type: BrowserType::Firefox, version: _ }) => {
+            Some(BrowserEmulator {
+                browser_type: BrowserType::Firefox,
+                version: _,
+            }) => {
                 let provider = CryptoProvider {
                     cipher_suites: FIREFOX_CIPHER_SUITES.to_vec(),
                     signature_verification_algorithms: FIREFOX_SIGNATURE_VERIFICATION_ALGOS,
@@ -262,6 +276,7 @@ impl CryptoProviderBuilder {
 
 impl CryptoProvider {
     /// Returns a new `CryptoProviderBuilder`.
+    #[cfg(feature = "impit")]
     pub fn builder() -> CryptoProviderBuilder {
         CryptoProviderBuilder {
             browser_emulator: None,

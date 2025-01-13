@@ -1,6 +1,10 @@
+use crate::versions::TLS13;
+#[cfg(feature = "impit")]
+use crate::{KeyLog, KeyLogFile};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+#[cfg(feature = "impit")]
 use std::vec;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
@@ -12,7 +16,7 @@ use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
 use crate::webpki::{self, WebPkiServerVerifier};
-use crate::{compress, verify, versions, KeyLog, KeyLogFile, WantsVersions};
+use crate::{compress, verify, versions, WantsVersions};
 
 impl ConfigBuilder<ClientConfig, WantsVersions> {
     /// Enable Encrypted Client Hello (ECH) in the given mode.
@@ -28,7 +32,11 @@ impl ConfigBuilder<ClientConfig, WantsVersions> {
         self,
         mode: EchMode,
     ) -> Result<ConfigBuilder<ClientConfig, WantsVerifier>, Error> {
+        #[cfg(not(feature = "impit"))]
+        let mut res = self.with_protocol_versions(&[&TLS13][..])?;
+        #[cfg(feature = "impit")]
         let mut res = self.with_safe_default_protocol_versions()?; // It's alright to send the ECH with TLS 1.2, worst case, the server will ignore it.
+
         res.state.client_ech_mode = Some(mode);
         Ok(res)
     }
@@ -122,6 +130,7 @@ pub(super) mod danger {
     }
 }
 
+#[cfg(feature = "impit")]
 #[derive(Debug, Clone)]
 /// Emulate a browser's behavior.
 pub enum BrowserType {
@@ -131,6 +140,7 @@ pub enum BrowserType {
     Firefox,
 }
 
+#[cfg(feature = "impit")]
 /// Struct holding the browser emulator configuration.
 #[derive(Debug, Clone)]
 pub struct BrowserEmulator {
@@ -153,6 +163,7 @@ pub struct WantsClientCert {
 
 impl ConfigBuilder<ClientConfig, WantsClientCert> {
     /// Enable a browser emulator.
+    #[cfg(feature = "impit")]
     pub fn with_browser_emulator(
         self,
         browser_emulator: &BrowserEmulator,
@@ -205,6 +216,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         ClientConfig {
             provider: self.provider,
             alpn_protocols: Vec::new(),
+            #[cfg(feature = "impit")]
             browser_emulation: None,
             resumption: Resumption::default(),
             max_fragment_size: None,
@@ -230,6 +242,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
 /// certificate.
 ///
 /// For more information, see the [`ConfigBuilder`] documentation.
+#[cfg(feature = "impit")]
 #[derive(Clone)]
 pub struct WantsClientCertWithBrowserEmulationEnabled {
     versions: versions::EnabledVersions,
@@ -238,8 +251,9 @@ pub struct WantsClientCertWithBrowserEmulationEnabled {
     browser_emulator: BrowserEmulator,
 }
 
+#[cfg(feature = "impit")]
 impl ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
-        /// Sets a single certificate chain and matching private key for use
+    /// Sets a single certificate chain and matching private key for use
     /// in client authentication.
     ///
     /// `cert_chain` is a vector of DER-encoded certificates.
@@ -272,26 +286,21 @@ impl ConfigBuilder<ClientConfig, WantsClientCertWithBrowserEmulationEnabled> {
         self,
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> ClientConfig {
-        let (
-            alpn_protocols,
-            cert_compressors,
-            cert_decompressors,
-        ) = match self.state.browser_emulator {
-            BrowserEmulator { browser_type: BrowserType::Chrome, version: _ } => {
-                (
+        let (alpn_protocols, cert_compressors, cert_decompressors) =
+            match self.state.browser_emulator {
+                BrowserEmulator {
+                    browser_type: BrowserType::Chrome,
+                    version: _,
+                } => (
                     vec![b"h2".to_vec(), b"http/1.1".to_vec()],
                     vec![crate::compress::BROTLI_COMPRESSOR],
                     vec![crate::compress::BROTLI_DECOMPRESSOR],
-                )
-            },
-            BrowserEmulator { browser_type: BrowserType::Firefox, version: _ } => {
-                (
-                    vec![b"h2".to_vec(), b"http/1.1".to_vec()],
-                    vec![],
-                    vec![],
-                )
-            },
-        };
+                ),
+                BrowserEmulator {
+                    browser_type: BrowserType::Firefox,
+                    version: _,
+                } => (vec![b"h2".to_vec(), b"http/1.1".to_vec()], vec![], vec![]),
+            };
 
         let key_log: Arc<dyn KeyLog> = match self.state.browser_emulator {
             _ => Arc::new(KeyLogFile::new()),

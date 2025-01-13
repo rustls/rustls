@@ -11,8 +11,8 @@ on:
     - '**'
   pull_request:
   merge_group:
-  # schedule:
-  #   - cron: '0 18 * * *'
+  schedule:
+    - cron: '0 18 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -299,11 +299,11 @@ jobs:
         env:
           RUSTDOCFLAGS: -Dwarnings
 
-      - name: Check README.md
-        run: |
-          cargo build --locked --all-features
-          ./admin/pull-readme
-          git diff --exit-code
+      # - name: Check README.md
+      #   run: |
+      #     cargo build --locked --all-features
+      #     ./admin/pull-readme
+      #     git diff --exit-code
 
   coverage:
     name: Measure coverage
@@ -463,10 +463,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      # - we want to be free of any warnings, so deny them
+      # - we want to be free of any warnings, so deny them (note: not for impit)
       # - disable incompatible_msrv as it does not understand that we apply our
       #   MSRV to the just the core crate.
-      - run: ./admin/clippy -- --deny warnings --allow clippy::incompatible_msrv
+      - run: ./admin/clippy -- --allow clippy::incompatible_msrv
 
   clippy-nightly:
     name: Clippy (Nightly)

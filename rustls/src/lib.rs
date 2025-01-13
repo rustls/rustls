@@ -567,9 +567,11 @@ pub mod client {
     mod tls12;
     mod tls13;
 
-    pub use builder::{BrowserEmulator, BrowserType};
     pub use builder::WantsClientCert;
+    #[cfg(feature = "impit")]
     pub use builder::WantsClientCertWithBrowserEmulationEnabled;
+    #[cfg(feature = "impit")]
+    pub use builder::{BrowserEmulator, BrowserType};
     pub use client_conn::{
         ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
         Resumption, Tls12Resumption, UnbufferedClientConnection,
@@ -585,7 +587,9 @@ pub mod client {
     pub mod danger {
         pub use super::builder::danger::DangerousClientConfigBuilder;
         pub use super::client_conn::danger::DangerousClientConfig;
-        pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, NoVerifier};
+        #[cfg(feature = "impit")]
+        pub use crate::verify::NoVerifier;
+        pub use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     }
 
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};

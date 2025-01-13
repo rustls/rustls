@@ -648,8 +648,8 @@ impl Codec<'_> for ClientExtension {
             Self::CertificateCompressionAlgorithms(ref r) => r.encode(nested.buf),
             Self::EncryptedClientHello(ref r) => r.encode(nested.buf),
             Self::EncryptedClientHelloOuterExtensions(ref r) => r.encode(nested.buf),
-            Self::ReservedGrease() => {},
-            Self::SignedCertificateTimestamp() => {},
+            Self::ReservedGrease() => {}
+            Self::SignedCertificateTimestamp() => {}
             Self::DelegatedCredentials(ref r) => r.encode(nested.buf),
             Self::RecordSizeLimit(ref r) => r.encode(nested.buf),
             Self::ApplicationSettings(ref r) => r.encode(nested.buf),
