@@ -24,36 +24,13 @@ const MAX_ITERATIONS: usize = 100;
 #[test]
 fn tls12_handshake() {
     let outcome = handshake(&rustls::version::TLS12);
+
     assert_eq!(
-        outcome.client_transcript,
-        vec![
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "WriteTraffic"
-        ],
+        outcome.client_transcript, TLS12_CLIENT_TRANSCRIPT,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript,
-        vec![
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic"
-        ],
+        outcome.server_transcript, TLS12_SERVER_TRANSCRIPT,
         "server transcript mismatch"
     );
 }
@@ -65,46 +42,13 @@ fn tls12_handshake_fragmented() {
         client.cert_decompressors = vec![];
         server.max_fragment_size = Some(512);
     });
+
     assert_eq!(
-        outcome.client_transcript,
-        vec![
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "WriteTraffic"
-        ],
+        outcome.client_transcript, TLS12_CLIENT_TRANSCRIPT_FRAGMENTED,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript,
-        vec![
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic"
-        ],
+        outcome.server_transcript, TLS12_SERVER_TRANSCRIPT_FRAGMENTED,
         "server transcript mismatch"
     );
 }
@@ -112,34 +56,13 @@ fn tls12_handshake_fragmented() {
 #[test]
 fn tls13_handshake() {
     let outcome = handshake(&rustls::version::TLS13);
+
     assert_eq!(
-        outcome.client_transcript,
-        vec![
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic",
-            "WriteTraffic"
-        ],
+        outcome.client_transcript, TLS13_CLIENT_TRANSCRIPT,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript,
-        vec![
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic"
-        ],
+        outcome.server_transcript, TLS13_SERVER_TRANSCRIPT,
         "server transcript mismatch"
     );
 }
@@ -151,44 +74,13 @@ fn tls13_handshake_fragmented() {
         client.cert_decompressors = vec![];
         server.max_fragment_size = Some(512);
     });
+
     assert_eq!(
-        outcome.client_transcript,
-        vec![
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic",
-            "WriteTraffic"
-        ],
+        outcome.client_transcript, TLS13_CLIENT_TRANSCRIPT_FRAGMENTED,
         "client transcript mismatch"
     );
     assert_eq!(
-        outcome.server_transcript,
-        vec![
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "BlockedHandshake",
-            "EncodeTlsData",
-            "TransmitTlsData",
-            "WriteTraffic"
-        ],
+        outcome.server_transcript, TLS13_SERVER_TRANSCRIPT_FRAGMENTED,
         "server transcript mismatch"
     );
 }
@@ -1424,3 +1316,123 @@ fn server_receives_incorrect_first_handshake_message() {
         _ => panic!("unexpected alert sending state"),
     };
 }
+
+const TLS12_CLIENT_TRANSCRIPT: &[&str] = &[
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "WriteTraffic",
+];
+
+const TLS12_SERVER_TRANSCRIPT: &[&str] = &[
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "WriteTraffic",
+];
+
+const TLS12_CLIENT_TRANSCRIPT_FRAGMENTED: &[&str] = &[
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "WriteTraffic",
+];
+
+const TLS12_SERVER_TRANSCRIPT_FRAGMENTED: &[&str] = &[
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "WriteTraffic",
+];
+
+const TLS13_CLIENT_TRANSCRIPT: &[&str] = &[
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "WriteTraffic",
+    "WriteTraffic",
+];
+
+const TLS13_SERVER_TRANSCRIPT: &[&str] = &[
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "WriteTraffic",
+];
+
+const TLS13_CLIENT_TRANSCRIPT_FRAGMENTED: &[&str] = &[
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "WriteTraffic",
+    "WriteTraffic",
+];
+
+const TLS13_SERVER_TRANSCRIPT_FRAGMENTED: &[&str] = &[
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "BlockedHandshake",
+    "EncodeTlsData",
+    "TransmitTlsData",
+    "WriteTraffic",
+];
