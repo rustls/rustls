@@ -7,7 +7,7 @@ description = "Rustls connectivity based integration tests."
 publish = false
 
 [dependencies]
-rustls = { path = "../rustls", features = [ "logging" ]}
+rustls = { path = "../rustls", features = ["logging"] }
 
 [dev-dependencies]
 hickory-resolver = { workspace = true }

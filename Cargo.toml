@@ -31,6 +31,7 @@ exclude = [
 ]
 
 default-members = [
+  # ---
   "examples",
   "rustls",
 ]
@@ -84,7 +85,7 @@ signature = "2"
 subtle = { version = "2.5.0", default-features = false }
 time = { version = "0.3.6", default-features = false }
 tikv-jemallocator = "0.6"
-tokio = { version = "1.34", features = ["io-util", "macros", "net", "rt"]}
+tokio = { version = "1.34", features = ["io-util", "macros", "net", "rt"] }
 webpki = { package = "rustls-webpki", version = "0.102.8", features = ["alloc"], default-features = false }
 webpki-roots = "0.26"
 x25519-dalek = "2"
