@@ -27,32 +27,32 @@ fn tls12_handshake() {
     assert_eq!(
         outcome.client_transcript,
         vec![
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(WriteTraffic)"
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "WriteTraffic"
         ],
         "client transcript mismatch"
     );
     assert_eq!(
         outcome.server_transcript,
         vec![
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)"
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic"
         ],
         "server transcript mismatch"
     );
@@ -68,42 +68,42 @@ fn tls12_handshake_fragmented() {
     assert_eq!(
         outcome.client_transcript,
         vec![
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(WriteTraffic)"
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "WriteTraffic"
         ],
         "client transcript mismatch"
     );
     assert_eq!(
         outcome.server_transcript,
         vec![
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)"
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic"
         ],
         "server transcript mismatch"
     );
@@ -115,30 +115,30 @@ fn tls13_handshake() {
     assert_eq!(
         outcome.client_transcript,
         vec![
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)"
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic",
+            "WriteTraffic"
         ],
         "client transcript mismatch"
     );
     assert_eq!(
         outcome.server_transcript,
         vec![
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)"
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic"
         ],
         "server transcript mismatch"
     );
@@ -154,40 +154,40 @@ fn tls13_handshake_fragmented() {
     assert_eq!(
         outcome.client_transcript,
         vec![
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)"
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic",
+            "WriteTraffic"
         ],
         "client transcript mismatch"
     );
     assert_eq!(
         outcome.server_transcript,
         vec![
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)"
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic"
         ],
         "server transcript mismatch"
     );
@@ -312,31 +312,31 @@ fn early_data() {
     assert_eq!(
         outcome.client_transcript,
         vec![
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)",
-            "Ok(WriteTraffic)"
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic",
+            "WriteTraffic"
         ]
     );
     assert_eq!(
         outcome.server_transcript,
         vec![
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(EncodeTlsData)",
-            "Ok(ReadEarlyData)",
-            "Ok(TransmitTlsData)",
-            "Ok(BlockedHandshake)",
-            "Ok(EncodeTlsData)",
-            "Ok(TransmitTlsData)",
-            "Ok(WriteTraffic)"
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "EncodeTlsData",
+            "ReadEarlyData",
+            "TransmitTlsData",
+            "BlockedHandshake",
+            "EncodeTlsData",
+            "TransmitTlsData",
+            "WriteTraffic"
         ]
     );
     assert!(client_actions
@@ -1058,10 +1058,11 @@ fn advance_client(
     transcript: &mut Vec<String>,
 ) -> State {
     let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
+    let state = state.unwrap();
 
     transcript.push(format!("{:?}", state));
 
-    let state = match state.unwrap() {
+    let state = match state {
         ConnectionState::TransmitTlsData(mut state) => {
             let mut sent_early_data = false;
             if let Some(early_data) = actions.early_data_to_send {
@@ -1104,10 +1105,11 @@ fn advance_server(
     transcript: &mut Vec<String>,
 ) -> State {
     let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
+    let state = state.unwrap();
 
     transcript.push(format!("{:?}", state));
 
-    let state = match state.unwrap() {
+    let state = match state {
         ConnectionState::ReadEarlyData(mut state) => {
             let mut records = vec![];
             let mut peeked_len = state.peek_len();
