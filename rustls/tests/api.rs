@@ -2457,6 +2457,37 @@ fn client_respects_buffer_limit_post_handshake() {
     check_read(&mut server.reader(), b"01234567890123456789012345");
 }
 
+#[test]
+fn buf_read() {
+    let (mut client, mut server) = make_pair(KeyType::Rsa2048);
+
+    do_handshake(&mut client, &mut server);
+
+    // Write two separate messages
+    assert_eq!(client.writer().write(b"hello").unwrap(), 5);
+    transfer(&mut client, &mut server);
+    assert_eq!(client.writer().write(b"world").unwrap(), 5);
+    transfer(&mut client, &mut server);
+    server.process_new_packets().unwrap();
+
+    let mut reader = server.reader();
+    // fill_buf() returns each record separately (this is an implementation detail)
+    assert_eq!(reader.fill_buf().unwrap(), b"hello");
+    // partially consuming the buffer is OK
+    reader.consume(1);
+    assert_eq!(reader.fill_buf().unwrap(), b"ello");
+    // Read::read is compatible with BufRead
+    let mut b = [0u8; 2];
+    reader.read_exact(&mut b).unwrap();
+    assert_eq!(b, *b"el");
+    assert_eq!(reader.fill_buf().unwrap(), b"lo");
+    reader.consume(2);
+    // once the first packet is consumed, the next one is available
+    assert_eq!(reader.fill_buf().unwrap(), b"world");
+    reader.consume(5);
+    check_fill_buf_err(&mut reader, io::ErrorKind::WouldBlock);
+}
+
 struct OtherSession<'a, C, S>
 where
     C: DerefMut + Deref<Target = ConnectionCommon<S>>,
@@ -2591,6 +2622,20 @@ fn server_read_returns_wouldblock_when_no_data() {
 fn client_read_returns_wouldblock_when_no_data() {
     let (mut client, _) = make_pair(KeyType::Rsa2048);
     assert!(matches!(client.reader().read(&mut [0u8; 1]),
+                     Err(err) if err.kind() == io::ErrorKind::WouldBlock));
+}
+
+#[test]
+fn server_fill_buf_returns_wouldblock_when_no_data() {
+    let (_, mut server) = make_pair(KeyType::Rsa2048);
+    assert!(matches!(server.reader().fill_buf(),
+                     Err(err) if err.kind() == io::ErrorKind::WouldBlock));
+}
+
+#[test]
+fn client_fill_buf_returns_wouldblock_when_no_data() {
+    let (mut client, _) = make_pair(KeyType::Rsa2048);
+    assert!(matches!(client.reader().fill_buf(),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
 
