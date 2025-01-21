@@ -4,7 +4,7 @@ use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
 
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom};
+use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -170,7 +170,10 @@ pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
 }
 
-pub use kx::ALL_KX_GROUPS;
+/// A list of all the key exchange groups supported by this provider.
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] =
+    &[kx_group::X25519, kx_group::SECP256R1, kx_group::SECP384R1];
+
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use ticketer::Ticketer;
 
