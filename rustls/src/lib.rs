@@ -273,47 +273,7 @@
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
 //!
-//! - `aws_lc_rs` (enabled by default): makes the rustls crate depend on the [`aws-lc-rs`] crate.
-//!   Use `rustls::crypto::aws_lc_rs::default_provider().install_default()` to
-//!   use it as the default `CryptoProvider`, or provide it explicitly
-//!   when making a `ClientConfig` or `ServerConfig`.
-//!
-//!   Note that aws-lc-rs has additional build-time dependencies like cmake.
-//!   See [the documentation](https://aws.github.io/aws-lc-rs/requirements/index.html) for details.
-//!
-//! - `ring`: makes the rustls crate depend on the *ring* crate for cryptography.
-//!   Use `rustls::crypto::ring::default_provider().install_default()` to
-//!   use it as the default `CryptoProvider`, or provide it explicitly
-//!   when making a `ClientConfig` or `ServerConfig`.
-//!
-//! - `fips`: enable support for FIPS140-3-approved cryptography, via the aws-lc-rs crate.
-//!   This feature enables the `aws_lc_rs` feature, which makes the rustls crate depend
-//!   on [aws-lc-rs](https://github.com/aws/aws-lc-rs).  It also changes the default
-//!   for [`ServerConfig::require_ems`] and [`ClientConfig::require_ems`].
-//!
-//!   See [manual::_06_fips] for more details.
-//!
-//! - `custom-provider`: disables implicit use of built-in providers (`aws-lc-rs` or `ring`). This forces
-//!    applications to manually install one, for instance, when using a custom `CryptoProvider`.
-//!
-//! - `tls12` (enabled by default): enable support for TLS version 1.2. Note that, due to the
-//!   additive nature of Cargo features and because it is enabled by default, other crates
-//!   in your dependency graph could re-enable it for your application. If you want to disable
-//!   TLS 1.2 for security reasons, consider explicitly enabling TLS 1.3 only in the config
-//!   builder API.
-//!
-//! - `logging` (enabled by default): make the rustls crate depend on the `log` crate.
-//!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
-//!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
-//!   contain secret key data, and so are safe to archive without affecting session security.
-//!
-//! - `read_buf`: when building with Rust Nightly, adds support for the unstable
-//!   `std::io::ReadBuf` and related APIs. This reduces costs from initializing
-//!   buffers. Will do nothing on non-Nightly releases.
-//!
-//! - `brotli`: uses the `brotli` crate for RFC8879 certificate compression support.
-//!
-//! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
+#![doc = document_features::document_features!()]
 //!
 
 // Require docs for public APIs, deny unsafe code, etc.
