@@ -3,7 +3,7 @@
 #![allow(clippy::duplicate_mod)]
 
 use std::fmt::Debug;
-use std::io::{self, IoSlice, Read, Write};
+use std::io::{self, BufRead, IoSlice, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -606,6 +606,18 @@ fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
 fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
     let mut buf = vec![0u8; 1];
     let err = reader.read(&mut buf).unwrap_err();
+    assert!(matches!(err, err  if err.kind()  == err_kind))
+}
+
+fn check_fill_buf(reader: &mut dyn io::BufRead, bytes: &[u8]) {
+    let b = reader.fill_buf().unwrap();
+    assert_eq!(b, bytes);
+    let len = b.len();
+    reader.consume(len);
+}
+
+fn check_fill_buf_err(reader: &mut dyn io::BufRead, err_kind: io::ErrorKind) {
+    let err = reader.fill_buf().unwrap_err();
     assert!(matches!(err, err  if err.kind()  == err_kind))
 }
 
@@ -2911,6 +2923,8 @@ fn client_stream_read() {
         test_client_stream_read(StreamKind::Ref, ReadKind::BorrowedBuf);
         test_client_stream_read(StreamKind::Owned, ReadKind::BorrowedBuf);
     }
+    test_client_stream_read(StreamKind::Ref, ReadKind::BufRead);
+    test_client_stream_read(StreamKind::Owned, ReadKind::BufRead);
 }
 
 #[test]
@@ -2922,6 +2936,8 @@ fn server_stream_read() {
         test_server_stream_read(StreamKind::Ref, ReadKind::BorrowedBuf);
         test_server_stream_read(StreamKind::Owned, ReadKind::BorrowedBuf);
     }
+    test_server_stream_read(StreamKind::Ref, ReadKind::BufRead);
+    test_server_stream_read(StreamKind::Owned, ReadKind::BufRead);
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -2929,9 +2945,10 @@ enum ReadKind {
     Buf,
     #[cfg(read_buf)]
     BorrowedBuf,
+    BufRead,
 }
 
-fn test_stream_read(read_kind: ReadKind, mut stream: impl Read, data: &[u8]) {
+fn test_stream_read(read_kind: ReadKind, mut stream: impl BufRead, data: &[u8]) {
     match read_kind {
         ReadKind::Buf => {
             check_read(&mut stream, data);
@@ -2941,6 +2958,10 @@ fn test_stream_read(read_kind: ReadKind, mut stream: impl Read, data: &[u8]) {
         ReadKind::BorrowedBuf => {
             check_read_buf(&mut stream, data);
             check_read_buf_err(&mut stream, io::ErrorKind::UnexpectedEof)
+        }
+        ReadKind::BufRead => {
+            check_fill_buf(&mut stream, data);
+            check_fill_buf_err(&mut stream, io::ErrorKind::UnexpectedEof)
         }
     }
 }
@@ -2955,7 +2976,7 @@ fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             let mut pipe = OtherSession::new(&mut server);
             transfer_eof(&mut client);
 
-            let stream: Box<dyn Read> = match stream_kind {
+            let stream: Box<dyn BufRead> = match stream_kind {
                 StreamKind::Ref => Box::new(Stream::new(&mut client, &mut pipe)),
                 StreamKind::Owned => Box::new(StreamOwned::new(client, pipe)),
             };
@@ -2975,7 +2996,7 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             let mut pipe = OtherSession::new(&mut client);
             transfer_eof(&mut server);
 
-            let stream: Box<dyn Read> = match stream_kind {
+            let stream: Box<dyn BufRead> = match stream_kind {
                 StreamKind::Ref => Box::new(Stream::new(&mut server, &mut pipe)),
                 StreamKind::Owned => Box::new(StreamOwned::new(server, pipe)),
             };
