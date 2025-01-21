@@ -9,7 +9,7 @@ pub(crate) use aws_lc_rs as ring_like;
 use pki_types::PrivateKeyDer;
 use webpki::aws_lc_rs as webpki_algs;
 
-use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom};
+use crate::crypto::{CryptoProvider, KeyProvider, SecureRandom, SupportedKxGroup};
 use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
@@ -228,11 +228,12 @@ pub mod kx_group {
     pub use super::kx::{SECP256R1, SECP384R1, X25519};
 }
 
-pub use kx::ALL_KX_GROUPS;
+/// A list of all the key exchange groups supported by this provider.
+pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] =
+    &[kx_group::X25519, kx_group::SECP256R1, kx_group::SECP384R1];
+
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 pub use ticketer::Ticketer;
-
-use super::SupportedKxGroup;
 
 /// Compatibility shims between ring 0.16.x and 0.17.x API
 mod ring_shim {
