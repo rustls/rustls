@@ -506,6 +506,20 @@ jobs:
         working-directory: rustls/
         run: cargo check-external-types
 
+  taplo:
+      name: Taplo
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout sources
+          uses: actions/checkout@v4
+          with:
+            persist-credentials: false
+
+        - name: Install rust toolchain
+          uses: dtolnay/rust-toolchain@stable
+        - run: cargo install taplo-cli --locked
+        - run: taplo format --check
+
   openssl-tests:
     name: Run openssl-tests
     runs-on: ubuntu-latest
