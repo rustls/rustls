@@ -976,13 +976,24 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         // A retry request is illegal if it contains no cookie and asks for
         // retry of a group we already sent.
-        if cookie.is_none() && req_group == Some(offered_key_share.group()) {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup,
-                )
-            });
+        let config = &self.next.input.config;
+
+        if let (None, Some(req_group)) = (cookie, req_group) {
+            let offered_hybrid = offered_key_share
+                .hybrid_component()
+                .and_then(|(group_name, _)| {
+                    config.find_kx_group(group_name, ProtocolVersion::TLSv1_3)
+                })
+                .map(|skxg| skxg.name());
+
+            if req_group == offered_key_share.group() || Some(req_group) == offered_hybrid {
+                return Err({
+                    cx.common.send_fatal_alert(
+                        AlertDescription::IllegalParameter,
+                        PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup,
+                    )
+                });
+            }
         }
 
         // Or has an empty cookie.
@@ -1063,7 +1074,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to use a ciphersuite we didn't offer.
-        let config = &self.next.input.config;
         let Some(cs) = config.find_cipher_suite(hrr.cipher_suite) else {
             return Err({
                 cx.common.send_fatal_alert(
