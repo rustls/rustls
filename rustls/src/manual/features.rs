@@ -12,6 +12,7 @@ APIs ([`CryptoProvider`] for example).
 * ECDSA, Ed25519 or RSA server authentication by clients `*`
 * ECDSA, Ed25519[^1] or RSA server authentication by servers `*`
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves `*`
+* Post-quantum hybrid key exchange with [X25519MLKEM768](https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/) [^2] `*`
 * AES128-GCM and AES256-GCM bulk encryption, with safe nonces `*`
 * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)) `*`
 * ALPN support
@@ -36,6 +37,7 @@ APIs ([`CryptoProvider`] for example).
       in browsers.  It is also not supported by the WebPKI, because the
       CA/Browser Forum Baseline Requirements do not support it for publicly
       trusted certificates.
+[^2]: See [the documentation][crate::manual::_05_defaults#about-the-post-quantum-secure-key-exchange-x25519mlkem768]
 
 ## Non-features
 
@@ -77,7 +79,7 @@ cause security or interop failures.
 Instead, we suggest that potential users of that API consider:
 
 - whether their use can fit in standard extensions such as ALPN,
-  or [ALPS][alps][^2].
+  or [ALPS][alps][^3].
 - if not, whether they can fit in a more general extension, and define
   and standardize that in the [IETF TLSWG][tlswg].
 
@@ -93,6 +95,6 @@ See also: [Go's position on such an API][golang].
 [alps]: https://datatracker.ietf.org/doc/html/draft-vvv-tls-alps
 [golang]: https://github.com/golang/go/issues/51497
 [tlswg]: https://datatracker.ietf.org/wg/tls/charter/
-[^2]: rustls does not currently implement ALPS, but it is something we
+[^3]: rustls does not currently implement ALPS, but it is something we
   would consider once standardised and deployed.
 */
