@@ -463,10 +463,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      # - we want to be free of any warnings, so deny them
-      # - disable incompatible_msrv as it does not understand that we apply our
-      #   MSRV to the just the core crate.
-      - run: ./admin/clippy -- --deny warnings --allow clippy::incompatible_msrv
+      # We want to be free of any warnings, so deny them.
+      - run: ./admin/clippy -- --deny warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
