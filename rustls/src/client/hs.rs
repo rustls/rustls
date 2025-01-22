@@ -312,10 +312,14 @@ fn emit_client_hello_for_retry(
         debug_assert!(support_tls13);
         let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
 
-        if retryreq.is_none() {
-            // Only for the initial client hello, see if we can send a second KeyShare
-            // for "free".  We only do this if the same algorithm is also supported
-            // separately by our provider for this version (`find_kx_group` looks that up).
+        if !retryreq
+            .map(|rr| rr.requested_key_share_group().is_some())
+            .unwrap_or_default()
+        {
+            // Only for the initial client hello, or a HRR that does not specify a kx group,
+            // see if we can send a second KeyShare for "free".  We only do this if the same
+            // algorithm is also supported separately by our provider for this version
+            // (`find_kx_group` looks that up).
             if let Some((component_group, component_share)) =
                 key_share
                     .hybrid_component()
