@@ -293,7 +293,8 @@
 //! - `prefer-post-quantum`: for the [`aws-lc-rs`]-backed provider, prioritizes post-quantum secure
 //!   key exchange by default (using X25519MLKEM768).  This feature merely alters the order
 //!   of `rustls::crypto::aws_lc_rs::DEFAULT_KX_GROUPS`.  We expect to add this feature
-//!   to the default set in a future minor release.
+//!   to the default set in a future minor release.  See [the manual][x25519mlkem768-manual]
+//!   for more details.
 //!
 //! - `custom-provider`: disables implicit use of built-in providers (`aws-lc-rs` or `ring`). This forces
 //!    applications to manually install one, for instance, when using a custom `CryptoProvider`.
@@ -317,6 +318,7 @@
 //!
 //! - `zlib`: uses the `zlib-rs` crate for RFC8879 certificate compression support.
 //!
+//! [x25519mlkem768-manual]: manual::_05_defaults#about-the-post-quantum-secure-key-exchange-x25519mlkem768
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
