@@ -483,8 +483,8 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
-      # do not deny warnings, as nightly clippy sometimes has false negatives
-      - run: ./admin/clippy
+      # We want to be free of any warnings, so deny them.
+      - run: ./admin/clippy -- --deny warnings
 
   check-external-types:
     name: Validate external types appearing in public API
