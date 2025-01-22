@@ -6,11 +6,13 @@ edition = "2021"
 [dependencies]
 clap = { workspace = true }
 rustls = { path = "../rustls" }
+rustls-post-quantum = { path = "../rustls-post-quantum", optional = true }
 
 [features]
 default = []
 aws-lc-rs = ["rustls/aws-lc-rs"]
 fips = ["rustls/fips", "aws-lc-rs"]
+post-quantum = ["dep:rustls-post-quantum"]
 ring = ["rustls/ring"]
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

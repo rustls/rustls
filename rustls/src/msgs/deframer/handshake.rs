@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::mem;
 use core::ops::Range;
 
-use super::buffers::{Coalescer, Delocator, Locator};
+use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{u24, Codec};
 use crate::msgs::message::InboundPlainMessage;
@@ -71,6 +71,11 @@ impl HandshakeDeframer {
         for span in DissectHandshakeIter::new(msg, containing_buffer) {
             self.spans.push(span);
         }
+    }
+
+    /// Returns a `BufferProgress` that skips over unprocessed handshake data.
+    pub(crate) fn progress(&self) -> BufferProgress {
+        BufferProgress::new(self.outer_discard)
     }
 
     /// Do we have a message ready? ie, would `iter().next()` return `Some`?

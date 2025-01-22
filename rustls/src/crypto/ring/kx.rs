@@ -11,9 +11,6 @@ use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
 
 /// A key-exchange group supported by *ring*.
-///
-/// All possible instances of this class are provided by the library in
-/// the [`ALL_KX_GROUPS`] array.
 struct KxGroup {
     /// The IANA "TLS Supported Groups" name of the group
     name: NamedGroup,
@@ -117,9 +114,6 @@ fn uncompressed_point(point: &[u8]) -> bool {
     // <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.8.2>
     matches!(point.first(), Some(0x04))
 }
-
-/// A list of all the key exchange groups supported by rustls.
-pub static ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[X25519, SECP256R1, SECP384R1];
 
 /// An in-progress key exchange.  This has the algorithm,
 /// our private key, and our public key.

@@ -95,7 +95,7 @@ enum_builder! {
     /// The `Unknown` item is used when processing unrecognised ordinals.
     #[repr(u16)]
     pub enum ProtocolVersion {
-        SSLv2 => 0x0200,
+        SSLv2 => 0x0002,
         SSLv3 => 0x0300,
         TLSv1_0 => 0x0301,
         TLSv1_1 => 0x0302,

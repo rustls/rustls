@@ -930,6 +930,8 @@ enum Provider {
     AwsLcRs,
     #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
     AwsLcRsFips,
+    #[cfg(feature = "post-quantum")]
+    PostQuantum,
     #[cfg(feature = "ring")]
     Ring,
     #[value(skip)]
@@ -943,6 +945,8 @@ impl Provider {
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::default_provider(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
             Self::AwsLcRsFips => rustls::crypto::default_fips_provider(),
+            #[cfg(feature = "post-quantum")]
+            Self::PostQuantum => rustls_post_quantum::provider(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::default_provider(),
             Self::_None => unreachable!(),
@@ -955,6 +959,8 @@ impl Provider {
             Self::AwsLcRs => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
             Self::AwsLcRsFips => rustls::crypto::aws_lc_rs::Ticketer::new(),
+            #[cfg(feature = "post-quantum")]
+            Self::PostQuantum => rustls::crypto::aws_lc_rs::Ticketer::new(),
             #[cfg(feature = "ring")]
             Self::Ring => rustls::crypto::ring::Ticketer::new(),
             Self::_None => unreachable!(),
@@ -990,6 +996,9 @@ impl Provider {
 
         #[cfg(all(feature = "aws-lc-rs", feature = "fips"))]
         available.push(Self::AwsLcRsFips);
+
+        #[cfg(feature = "post-quantum")]
+        available.push(Self::PostQuantum);
 
         #[cfg(feature = "ring")]
         available.push(Self::Ring);

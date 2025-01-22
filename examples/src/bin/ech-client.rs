@@ -4,22 +4,31 @@
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
 //!
-//! Example usage:
-//! ```
-//! cargo run --package rustls-examples --bin ech-client -- --host defo.ie defo.ie www.defo.ie
+//! It should be invoked providing the outer hostname you will make the initial connection
+//! to, and then the inner hostname being protected with ECH. Example usage:
+//! ```text
+//! cargo run --package rustls-examples --bin ech-client -- \
+//!   --host min-ng.test.defo.ie \
+//!   --path "echstat.php?format=json" \
+//!    public.test.defo.ie \
+//!    min-ng.test.defo.ie
 //! ```
 //!
-//! This will perform a DNS-over-HTTPS lookup for the defo.ie ECH config, using it to determine
-//! the plaintext SNI to send to the server. The protected encrypted SNI will be "www.defo.ie".
-//! An HTTP request for Host: defo.ie will be made once the handshake completes. You should
-//! observe output that contains:
+//! This will perform a DNS-over-HTTPS lookup for the "min-ng.test.defo.ie" server's ECH config.
+//!
+//! Afterward, a TLS connection will be made to "public.test.defo.ie" using the public name
+//! specified in the ECH config as the outer client hello's SNI. The protected inner client
+//! hello's encrypted SNI will be "min-ng.test.defo.ie".
+//!
+//! Once TLS with ECH is negotiated, an HTTP request for Host: "min-ng.test.defo.ie" and the
+//! path "echstat.php?format=json" will be made.
+//!
+//! You should observe JSON output that contains the key/value:
 //! ```
-//!   <p>SSL_ECH_OUTER_SNI: cover.defo.ie <br />
-//!   SSL_ECH_INNER_SNI: www.defo.ie <br />
-//!   SSL_ECH_STATUS: success <img src="greentick-small.png" alt="good" /> <br/>
-//!   </p>
+//! "SSL_ECH_STATUS": "success"
 //! ```
 
+use std::error::Error;
 use std::fs;
 use std::io::{stdout, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -29,9 +38,9 @@ use clap::Parser;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts};
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
-use hickory_resolver::{Resolver, TokioResolver};
+use hickory_resolver::{ResolveError, Resolver, TokioResolver};
 use log::trace;
-use rustls::client::{EchConfig, EchGreaseConfig, EchStatus};
+use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
@@ -40,22 +49,31 @@ use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::RootCertStore;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
-    let resolver_config = if args.use_cloudflare_dns {
-        ResolverConfig::cloudflare_https()
-    } else {
-        ResolverConfig::google_https()
-    };
-    let resolver = Resolver::tokio(resolver_config, ResolverOpts::default());
-    let server_ech_config = match args.grease {
-        true => None, // Force the use of the GREASE ext by skipping ECH config lookup
-        false => match args.ech_config {
-            Some(path) => Some(read_ech(&path)),
-            None => lookup_ech_configs(&resolver, &args.outer_hostname, args.port).await,
-        },
+    let server_ech_configs = match (args.grease, args.ech_config) {
+        (true, Some(_)) => return Err("cannot specify both --grease and --ech-config".into()),
+        (true, None) => {
+            Vec::new() // Force the use of the GREASE ext by skipping ECH config lookup
+        }
+        (false, Some(path)) => {
+            vec![read_ech(&path)?]
+        }
+        (false, None) => {
+            // Find raw ECH configs using DNS-over-HTTPS with Hickory DNS.
+            let resolver_config = if args.use_cloudflare_dns {
+                ResolverConfig::cloudflare_https()
+            } else {
+                ResolverConfig::google_https()
+            };
+            lookup_ech_configs(
+                &Resolver::tokio(resolver_config, ResolverOpts::default()),
+                &args.inner_hostname,
+                args.port,
+            )
+            .await?
+        }
     };
 
     // NOTE: we defer setting up env_logger and setting the trace default filter level until
@@ -65,15 +83,16 @@ async fn main() {
         .parse_filters("trace")
         .init();
 
-    let ech_mode = match server_ech_config {
-        Some(ech_config_list) => EchConfig::new(ech_config_list, ALL_SUPPORTED_SUITES)
-            .unwrap()
-            .into(),
-        None => {
-            let (public_key, _) = GREASE_HPKE_SUITE
-                .generate_key_pair()
-                .unwrap();
-            EchGreaseConfig::new(GREASE_HPKE_SUITE, public_key).into()
+    let ech_mode = match server_ech_configs.is_empty() {
+        false => EchMode::from(
+            server_ech_configs
+                .into_iter()
+                .find_map(|list| EchConfig::new(list, ALL_SUPPORTED_SUITES).ok())
+                .ok_or("no supported ECH configs")?,
+        ),
+        true => {
+            let (public_key, _) = GREASE_HPKE_SUITE.generate_key_pair()?;
+            EchMode::from(EchGreaseConfig::new(GREASE_HPKE_SUITE, public_key))
         }
     };
 
@@ -95,8 +114,7 @@ async fn main() {
     // Construct a rustls client config with a custom provider, and ECH enabled.
     let mut config =
         rustls::ClientConfig::builder_with_provider(aws_lc_rs::default_provider().into())
-            .with_ech(ech_mode)
-            .unwrap()
+            .with_ech(ech_mode)?
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
@@ -105,22 +123,17 @@ async fn main() {
     let config = Arc::new(config);
 
     // The "inner" SNI that we're really trying to reach.
-    let server_name: ServerName<'static> = args
-        .inner_hostname
-        .clone()
-        .try_into()
-        .unwrap();
+    let server_name: ServerName<'static> = args.inner_hostname.clone().try_into()?;
 
     for i in 0..args.num_reqs {
         trace!("\nRequest {} of {}", i + 1, args.num_reqs);
-        let mut conn = rustls::ClientConnection::new(config.clone(), server_name.clone()).unwrap();
+        let mut conn = rustls::ClientConnection::new(config.clone(), server_name.clone())?;
         // The "outer" server that we're connecting to.
         let sock_addr = (args.outer_hostname.as_str(), args.port)
-            .to_socket_addrs()
-            .unwrap()
+            .to_socket_addrs()?
             .next()
-            .unwrap();
-        let mut sock = TcpStream::connect(sock_addr).unwrap();
+            .ok_or("cannot resolve hostname")?;
+        let mut sock = TcpStream::connect(sock_addr)?;
         let mut tls = rustls::Stream::new(&mut conn, &mut sock);
 
         let request =
@@ -130,8 +143,7 @@ async fn main() {
                 args.host.as_ref().unwrap_or(&args.inner_hostname),
             );
         dbg!(&request);
-        tls.write_all(request.as_bytes())
-            .unwrap();
+        tls.write_all(request.as_bytes())?;
         assert!(!tls.conn.is_handshaking());
         assert_eq!(
             tls.conn.ech_status(),
@@ -141,9 +153,10 @@ async fn main() {
             }
         );
         let mut plaintext = Vec::new();
-        tls.read_to_end(&mut plaintext).unwrap();
-        stdout().write_all(&plaintext).unwrap();
+        tls.read_to_end(&mut plaintext)?;
+        stdout().write_all(&plaintext)?;
     }
+    Ok(())
 }
 
 /// Connects to the TLS server at hostname:PORT.  The default PORT
@@ -201,12 +214,19 @@ struct Args {
     inner_hostname: String,
 }
 
+/// Collect up all `EchConfigListBytes` found in the HTTPS record(s) for a given domain name/port.
+///
+/// The domain name should be the **inner** name used for Encrypted Client Hello (ECH). The
+/// lookup is done using DNS-over-HTTPS to protect that inner name from being disclosed in
+/// plaintext ahead of the TLS handshake that negotiates ECH for the inner name.
+///
+/// Returns an empty vec if no HTTPS records with ECH configs are found.
 // TODO(@cpu): consider upstreaming to hickory-dns
 async fn lookup_ech_configs(
     resolver: &TokioResolver,
     domain: &str,
     port: u16,
-) -> Option<EchConfigListBytes<'static>> {
+) -> Result<Vec<EchConfigListBytes<'static>>, ResolveError> {
     // For non-standard ports, lookup the ECHConfig using port-prefix naming
     // See: https://datatracker.ietf.org/doc/html/rfc9460#section-9.1
     let qname_to_lookup = match port {
@@ -214,34 +234,39 @@ async fn lookup_ech_configs(
         port => format!("_{port}._https.{domain}"),
     };
 
-    resolver
+    let lookup = resolver
         .lookup(qname_to_lookup, RecordType::HTTPS)
-        .await
-        .ok()?
-        .record_iter()
-        .find_map(|r| match r.data() {
-            RData::HTTPS(svcb) => svcb
-                .svc_params()
+        .await?;
+
+    let mut ech_config_lists = Vec::new();
+    for r in lookup.record_iter() {
+        let RData::HTTPS(svcb) = r.data() else {
+            continue;
+        };
+
+        ech_config_lists.extend(
+            svcb.svc_params()
                 .iter()
                 .find_map(|sp| match sp {
                     (SvcParamKey::EchConfigList, SvcParamValue::EchConfigList(e)) => {
-                        Some(e.clone().0)
+                        Some(EchConfigListBytes::from(e.clone().0))
                     }
                     _ => None,
                 }),
-            _ => None,
-        })
-        .map(Into::into)
+        )
+    }
+
+    Ok(ech_config_lists)
 }
 
-fn read_ech(path: &str) -> EchConfigListBytes<'static> {
-    let file = fs::File::open(path).unwrap_or_else(|_| panic!("Cannot open ECH file: {path}"));
+fn read_ech(path: &str) -> Result<EchConfigListBytes<'static>, Box<dyn Error>> {
+    let file = fs::File::open(path).map_err(|err| format!("cannot open ECH file {path}: {err}"))?;
     let mut reader = BufReader::new(file);
     let mut bytes = Vec::new();
     reader
         .read_to_end(&mut bytes)
-        .unwrap_or_else(|_| panic!("Cannot read ECH file: {path}"));
-    bytes.into()
+        .map_err(|err| format!("cannot read ECH file {path}: {err}"))?;
+    Ok(EchConfigListBytes::from(bytes))
 }
 
 /// A HPKE suite to use for GREASE ECH.
