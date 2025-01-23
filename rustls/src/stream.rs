@@ -1,5 +1,5 @@
 use core::ops::{Deref, DerefMut};
-use std::io::{IoSlice, Read, Result, Write};
+use std::io::{BufRead, IoSlice, Read, Result, Write};
 
 use crate::conn::{ConnectionCommon, SideData};
 
@@ -57,6 +57,15 @@ where
 
         Ok(())
     }
+
+    // Implements `BufRead::fill_buf` but with more flexible lifetimes, so StreamOwned can reuse it
+    fn fill_buf(mut self) -> Result<&'a [u8]>
+    where
+        S: 'a,
+    {
+        self.prepare_read()?;
+        self.conn.reader().into_first_chunk()
+    }
 }
 
 impl<'a, C, T, S> Read for Stream<'a, C, T>
@@ -74,6 +83,26 @@ where
     fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
         self.prepare_read()?;
         self.conn.reader().read_buf(cursor)
+    }
+}
+
+impl<'a, C, T, S> BufRead for Stream<'a, C, T>
+where
+    C: 'a + DerefMut + Deref<Target = ConnectionCommon<S>>,
+    T: 'a + Read + Write,
+    S: 'a + SideData,
+{
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+        // reborrow to get an owned `Stream`
+        Stream {
+            conn: self.conn,
+            sock: self.sock,
+        }
+        .fill_buf()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.conn.reader().consume(amt)
     }
 }
 
