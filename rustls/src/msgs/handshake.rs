@@ -1,7 +1,6 @@
 use alloc::collections::BTreeSet;
 #[cfg(feature = "logging")]
 use alloc::string::String;
-use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -28,6 +27,7 @@ use crate::msgs::enums::{
     NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
+use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 use crate::x509::wrap_in_sequence;
 

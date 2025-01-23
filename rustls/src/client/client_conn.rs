@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -20,6 +19,7 @@ use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
 use crate::suites::SupportedCipherSuite;
+use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
@@ -511,10 +511,9 @@ pub enum Tls12Resumption {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use alloc::sync::Arc;
-
     use super::verify::ServerCertVerifier;
     use super::ClientConfig;
+    use crate::sync::Arc;
 
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
@@ -611,7 +610,6 @@ impl EarlyData {
 
 #[cfg(feature = "std")]
 mod connection {
-    use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
@@ -625,6 +623,7 @@ mod connection {
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
+    use crate::sync::Arc;
     use crate::ClientConfig;
 
     /// Stub that implements io::Write and dispatches to `write_early_data`.

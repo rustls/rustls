@@ -2,7 +2,6 @@
 
 use alloc::boxed::Box;
 use alloc::string::ToString;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
@@ -15,6 +14,7 @@ use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, R
 use crate::crypto::signer::{public_key_to_spki, Signer, SigningKey};
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::Error;
+use crate::sync::Arc;
 use crate::x509::{wrap_concat_in_sequence, wrap_in_octet_string};
 
 /// Parse `der` as any supported key encoding/type, returning

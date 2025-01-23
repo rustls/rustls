@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
@@ -8,6 +7,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, SubjectPublicKeyInfoDer};
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
 use crate::server::ParsedCertificate;
+use crate::sync::Arc;
 use crate::x509;
 
 /// An abstract signing key.

@@ -464,7 +464,11 @@ jobs:
         with:
           components: clippy
       # We want to be free of any warnings, so deny them.
-      - run: ./admin/clippy -- --deny warnings
+      # - Allow `clippy::disallowed_types` as a workaround since `disallowed_types` configured in `.clippy.toml`
+      #   is only intended for the main `rustls` crate.
+      - run: ./admin/clippy -- --deny warnings --allow clippy::disallowed_types
+      # - Keep the main crate free of all warnings.
+      - run: cargo clippy -p rustls -- --deny warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
@@ -483,8 +487,12 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
-      # do not deny warnings, as nightly clippy sometimes has false negatives
-      - run: ./admin/clippy
+      # Do not deny warnings, as nightly clippy sometimes has false negatives.
+      # - Ignore `clippy::disallowed_types` as a workaround since `disallowed_types` configured in `.clippy.toml`
+      #   is only intended for main `rustls` crate.
+      - run: ./admin/clippy -- --allow clippy::disallowed_types
+      # Check the main crate for any Clippy nightly warnings, but do not deny them.
+      - run: cargo clippy -p rustls
 
   check-external-types:
     name: Validate external types appearing in public API

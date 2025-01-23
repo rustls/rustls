@@ -1,5 +1,3 @@
-use alloc::sync::Arc;
-
 use pki_types::PrivateKeyDer;
 pub(crate) use ring as ring_like;
 use webpki::ring as webpki_algs;
@@ -9,6 +7,7 @@ use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
 use crate::suites::SupportedCipherSuite;
+use crate::sync::Arc;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::Error;
 

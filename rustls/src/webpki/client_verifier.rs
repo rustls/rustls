@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime};
@@ -10,6 +9,7 @@ use crate::crypto;
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 #[cfg(doc)]
 use crate::server::ServerConfig;
+use crate::sync::Arc;
 use crate::verify::{
     ClientCertVerified, ClientCertVerifier, DigitallySignedStruct, HandshakeSignatureValid,
     NoClientAuth,
@@ -432,7 +432,6 @@ pub(crate) enum AnonymousClientPolicy {
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
     use std::prelude::v1::*;
-    use std::sync::Arc;
     use std::{format, println, vec};
 
     use pki_types::pem::PemObject;
@@ -440,6 +439,7 @@ mod tests {
 
     use super::{provider, WebPkiClientVerifier};
     use crate::server::VerifierBuilderError;
+    use crate::sync::Arc;
     use crate::RootCertStore;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {

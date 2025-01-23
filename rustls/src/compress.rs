@@ -34,7 +34,6 @@
 
 #[cfg(feature = "std")]
 use alloc::collections::VecDeque;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 #[cfg(feature = "std")]
@@ -44,6 +43,7 @@ use crate::enums::CertificateCompressionAlgorithm;
 use crate::msgs::base::{Payload, PayloadU24};
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{CertificatePayloadTls13, CompressedCertificatePayload};
+use crate::sync::Arc;
 
 /// Returns the supported `CertDecompressor` implementations enabled
 /// by crate features.
