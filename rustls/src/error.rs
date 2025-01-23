@@ -621,13 +621,13 @@ impl From<rand::GetRandomFailed> for Error {
 }
 
 mod other_error {
-    #[cfg(feature = "std")]
-    use alloc::sync::Arc;
     use core::fmt;
     #[cfg(feature = "std")]
     use std::error::Error as StdError;
 
     use super::Error;
+    #[cfg(feature = "std")]
+    use crate::sync::Arc;
 
     /// Any other error that cannot be expressed by a more specific [`Error`] variant.
     ///
@@ -679,6 +679,8 @@ mod tests {
     use std::{println, vec};
 
     use super::{CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError};
+    #[cfg(feature = "std")]
+    use crate::sync::Arc;
 
     #[test]
     fn certificate_error_equality() {
@@ -698,7 +700,7 @@ mod tests {
         );
         let other = Other(OtherError(
             #[cfg(feature = "std")]
-            alloc::sync::Arc::from(Box::from("")),
+            Arc::from(Box::from("")),
         ));
         assert_ne!(other, other);
         assert_ne!(BadEncoding, Expired);
@@ -722,7 +724,7 @@ mod tests {
         assert_eq!(UnsupportedRevocationReason, UnsupportedRevocationReason);
         let other = Other(OtherError(
             #[cfg(feature = "std")]
-            alloc::sync::Arc::from(Box::from("")),
+            Arc::from(Box::from("")),
         ));
         assert_ne!(other, other);
         assert_ne!(BadSignature, InvalidCrlNumber);
@@ -731,7 +733,7 @@ mod tests {
     #[test]
     #[cfg(feature = "std")]
     fn other_error_equality() {
-        let other_error = OtherError(alloc::sync::Arc::from(Box::from("")));
+        let other_error = OtherError(Arc::from(Box::from("")));
         assert_ne!(other_error, other_error);
         let other: Error = other_error.into();
         assert_ne!(other, other);
@@ -769,7 +771,7 @@ mod tests {
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
             Error::Other(OtherError(
                 #[cfg(feature = "std")]
-                alloc::sync::Arc::from(Box::from("")),
+                Arc::from(Box::from("")),
             )),
         ];
 

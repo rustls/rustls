@@ -1,7 +1,6 @@
 #![allow(clippy::duplicate_mod)]
 
 use std::num::NonZeroUsize;
-use std::sync::Arc;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};

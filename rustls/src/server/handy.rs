@@ -1,8 +1,8 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
 use crate::server::ClientHello;
+use crate::sync::Arc;
 use crate::{server, sign};
 
 /// Something which never stores sessions.
@@ -26,11 +26,11 @@ impl server::StoresServerSessions for NoServerSessionStorage {
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod cache {
-    use alloc::sync::Arc;
     use alloc::vec::Vec;
     use core::fmt::{Debug, Formatter};
 
     use crate::lock::Mutex;
+    use crate::sync::Arc;
     use crate::{limited_cache, server};
 
     /// An implementer of `StoresServerSessions` that stores everything
@@ -226,7 +226,6 @@ impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod sni_resolver {
     use alloc::string::{String, ToString};
-    use alloc::sync::Arc;
     use core::fmt::Debug;
 
     use pki_types::{DnsName, ServerName};
@@ -234,6 +233,7 @@ mod sni_resolver {
     use crate::error::Error;
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
+    use crate::sync::Arc;
     use crate::webpki::{verify_server_name, ParsedCertificate};
     use crate::{server, sign};
 

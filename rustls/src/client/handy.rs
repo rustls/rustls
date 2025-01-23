@@ -1,11 +1,10 @@
-use alloc::sync::Arc;
-
 use pki_types::ServerName;
 
 use crate::enums::SignatureScheme;
 use crate::error::Error;
 use crate::msgs::handshake::CertificateChain;
 use crate::msgs::persist;
+use crate::sync::Arc;
 use crate::{client, sign, NamedGroup};
 
 /// An implementer of `ClientSessionStore` which does nothing.
@@ -279,7 +278,6 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
 #[cfg(test)]
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
-    use alloc::sync::Arc;
     use std::prelude::v1::*;
 
     use pki_types::{ServerName, UnixTime};
@@ -294,6 +292,7 @@ mod tests {
     use crate::msgs::handshake::SessionId;
     use crate::msgs::persist::Tls13ClientSessionValue;
     use crate::suites::SupportedCipherSuite;
+    use crate::sync::Arc;
 
     #[test]
     fn test_noclientsessionstorage_does_nothing() {

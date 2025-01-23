@@ -35,9 +35,10 @@ mod std_lock {
 #[cfg(not(feature = "std"))]
 mod no_std_lock {
     use alloc::boxed::Box;
-    use alloc::sync::Arc;
     use core::fmt::Debug;
     use core::ops::DerefMut;
+
+    use crate::sync::Arc;
 
     /// A no-std compatible wrapper around [`Lock`].
     #[derive(Debug)]

@@ -1,6 +1,4 @@
 use alloc::boxed::Box;
-#[cfg(feature = "std")]
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 
@@ -21,6 +19,8 @@ use crate::crypto::hpke::{
 use crate::crypto::tls13::{expand, HkdfExpander, HkdfPrkExtract, HkdfUsingHmac};
 use crate::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
+#[cfg(feature = "std")]
+use crate::sync::Arc;
 use crate::{Error, OtherError};
 
 /// Default [RFC 9180] Hybrid Public Key Encryption (HPKE) suites supported by aws-lc-rs cryptography.

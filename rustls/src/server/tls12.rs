@@ -1,6 +1,5 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
-use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -29,6 +28,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::PartiallyExtractedSecrets;
+use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
 use crate::verify;
 

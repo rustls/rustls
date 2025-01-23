@@ -6,10 +6,11 @@ use std::fmt::Debug;
 use std::io::{self, IoSlice, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::{fmt, mem};
 
 use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
+
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;

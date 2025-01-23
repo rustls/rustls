@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
@@ -8,6 +7,7 @@ use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
 use crate::server::{handy, ResolvesServerCert, ServerConfig};
 use crate::sign::CertifiedKey;
+use crate::sync::Arc;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
 use crate::{compress, versions, InconsistentKeys, NoKeyLog};
 

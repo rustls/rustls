@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 // aws-lc-rs has a -- roughly -- ring-compatible API, so we just reuse all that
@@ -14,6 +13,7 @@ use crate::enums::SignatureScheme;
 use crate::rand::GetRandomFailed;
 use crate::sign::SigningKey;
 use crate::suites::SupportedCipherSuite;
+use crate::sync::Arc;
 use crate::webpki::WebPkiSupportedAlgorithms;
 use crate::{Error, OtherError};
 

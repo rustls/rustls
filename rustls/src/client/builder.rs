@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
@@ -10,6 +9,7 @@ use crate::client::{handy, ClientConfig, EchMode, ResolvesClientCert};
 use crate::error::Error;
 use crate::key_log::NoKeyLog;
 use crate::msgs::handshake::CertificateChain;
+use crate::sync::Arc;
 use crate::versions::TLS13;
 use crate::webpki::{self, WebPkiServerVerifier};
 use crate::{compress, verify, versions, WantsVersions};
@@ -89,10 +89,10 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use alloc::sync::Arc;
     use core::marker::PhantomData;
 
     use crate::client::WantsClientCert;
+    use crate::sync::Arc;
     use crate::{verify, ClientConfig, ConfigBuilder, WantsVerifier};
 
     /// Accessor for dangerous configuration options.

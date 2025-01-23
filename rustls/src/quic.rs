@@ -17,7 +17,6 @@ use crate::tls13::Tls13CipherSuite;
 
 #[cfg(feature = "std")]
 mod connection {
-    use alloc::sync::Arc;
     use alloc::vec;
     use alloc::vec::Vec;
     use core::fmt::{self, Debug};
@@ -35,6 +34,7 @@ mod connection {
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
     use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
+    use crate::sync::Arc;
     use crate::vecbuf::ChunkVecBuffer;
 
     /// A QUIC client or server connection.

@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTime};
@@ -6,6 +5,7 @@ use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, Unknown
 
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use crate::log::trace;
+use crate::sync::Arc;
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
@@ -304,13 +304,13 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
     use std::prelude::v1::*;
-    use std::sync::Arc;
     use std::{println, vec};
 
     use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
     use super::{provider, VerifierBuilderError, WebPkiServerVerifier};
+    use crate::sync::Arc;
     use crate::RootCertStore;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {

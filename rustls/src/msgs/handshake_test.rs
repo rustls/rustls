@@ -1,4 +1,3 @@
-use alloc::sync::Arc;
 use std::prelude::v1::*;
 use std::{format, println, vec};
 
@@ -26,6 +25,7 @@ use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::InvalidMessage;
+use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 
 #[test]

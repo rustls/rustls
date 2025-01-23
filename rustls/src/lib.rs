@@ -401,6 +401,14 @@ mod log {
 #[macro_use]
 mod test_macros;
 
+/// This internal `sync` module aliases the `Arc` implementation to allow downstream forks
+/// of rustls targetting architectures without atomic pointers to replace the implementation
+/// with another implementation such as `portable_atomic_util::Arc` in one central location.
+mod sync {
+    #[allow(clippy::disallowed_types)]
+    pub(crate) type Arc<T> = alloc::sync::Arc<T>;
+}
+
 #[macro_use]
 mod msgs;
 mod common_state;

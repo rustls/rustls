@@ -1,5 +1,3 @@
-#[cfg(feature = "std")]
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -7,6 +5,8 @@ use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, OwnedCertRevocationList};
 
 use crate::error::{CertRevocationListError, CertificateError, Error, OtherError};
+#[cfg(feature = "std")]
+use crate::sync::Arc;
 
 mod anchors;
 mod client_verifier;

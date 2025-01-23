@@ -3,13 +3,14 @@
 
 use std::io;
 use std::ops::DerefMut;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use pki_types::pem::PemObject;
 use pki_types::{
     CertificateDer, CertificateRevocationListDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName,
     SubjectPublicKeyInfoDer, UnixTime,
 };
+
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
     AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, WebPkiServerVerifier,
@@ -28,9 +29,13 @@ use rustls::{
     DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
     RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
+
 use webpki::anchor_from_trusted_cert;
 
 use super::provider;
+
+// Import `Arc` here for tests - can be overwritten to test with another `Arc` such as `portable_atomic_util::Arc`
+pub use std::sync::Arc;
 
 macro_rules! embed_files {
     (
