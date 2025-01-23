@@ -142,7 +142,7 @@ impl ChunkVecBuffer {
         Ok(offs)
     }
 
-    fn consume(&mut self, used: usize) {
+    pub(crate) fn consume(&mut self, used: usize) {
         // first, mark the rightmost extent of the used buffer
         self.prefix_used += used;
 
@@ -174,6 +174,13 @@ impl ChunkVecBuffer {
         let used = wr.write_vectored(&bufs[..len])?;
         self.consume(used);
         Ok(used)
+    }
+
+    /// Returns the first contiguous chunk of data, or None if empty.
+    pub(crate) fn chunk(&self) -> Option<&[u8]> {
+        self.chunks
+            .front()
+            .map(|chunk| &chunk[self.prefix_used..])
     }
 }
 

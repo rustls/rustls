@@ -173,7 +173,7 @@ mod connection {
         pub(super) has_seen_eof: bool,
     }
 
-    impl Reader<'_> {
+    impl<'a> Reader<'a> {
         /// Check the connection's state if no bytes are available for reading.
         fn check_no_bytes_state(&self) -> io::Result<()> {
             match (self.has_received_close_notify, self.has_seen_eof) {
@@ -187,6 +187,20 @@ mod connection {
                 // connection still going, but needs more data: signal `WouldBlock` so that
                 // the caller knows this
                 (false, false) => Err(io::ErrorKind::WouldBlock.into()),
+            }
+        }
+
+        /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
+        ///
+        /// This method consumes `self` so that it can return a slice whose lifetime is bounded by
+        /// the [`ConnectionCommon`] that created this `Reader`.
+        pub fn into_first_chunk(self) -> io::Result<&'a [u8]> {
+            match self.received_plaintext.chunk() {
+                Some(chunk) => Ok(chunk),
+                None => {
+                    self.check_no_bytes_state()?;
+                    Ok(&[])
+                }
             }
         }
     }
