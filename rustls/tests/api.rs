@@ -4910,11 +4910,11 @@ mod test_quic {
             let (header, payload_tag) = buf.split_at_mut(8);
             let (payload, tag_buf) = payload_tag.split_at_mut(8);
             let tag = x
-                .encrypt_in_place(42, header, payload)
+                .encrypt_in_place(42, header, payload, None)
                 .unwrap();
             tag_buf.copy_from_slice(tag.as_ref());
 
-            let result = y.decrypt_in_place(42, header, payload_tag);
+            let result = y.decrypt_in_place(42, header, payload_tag, None);
             match result {
                 Ok(payload) => payload == [0; 8],
                 Err(_) => false,
@@ -5345,7 +5345,7 @@ mod test_quic {
         let tag = client_keys
             .local
             .packet
-            .encrypt_in_place(PACKET_NUMBER, header, payload)
+            .encrypt_in_place(PACKET_NUMBER, header, payload, None)
             .unwrap();
 
         let sample_len = client_keys.local.header.sample_len();
@@ -5474,7 +5474,7 @@ mod test_quic {
         let payload = server_keys
             .remote
             .packet
-            .decrypt_in_place(PACKET_NUMBER, header, payload)
+            .decrypt_in_place(PACKET_NUMBER, header, payload, None)
             .unwrap();
 
         assert_eq!(&payload[..PAYLOAD.len()], PAYLOAD);
