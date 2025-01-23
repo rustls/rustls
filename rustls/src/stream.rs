@@ -41,6 +41,22 @@ where
 
         Ok(())
     }
+
+    fn prepare_read(&mut self) -> Result<()> {
+        self.complete_prior_io()?;
+
+        // We call complete_io() in a loop since a single call may read only
+        // a partial packet from the underlying transport. A full packet is
+        // needed to get more plaintext, which we must do if EOF has not been
+        // hit.
+        while self.conn.wants_read() {
+            if self.conn.complete_io(self.sock)?.0 == 0 {
+                break;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a, C, T, S> Read for Stream<'a, C, T>
@@ -50,35 +66,13 @@ where
     S: SideData,
 {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.complete_prior_io()?;
-
-        // We call complete_io() in a loop since a single call may read only
-        // a partial packet from the underlying transport. A full packet is
-        // needed to get more plaintext, which we must do if EOF has not been
-        // hit.
-        while self.conn.wants_read() {
-            if self.conn.complete_io(self.sock)?.0 == 0 {
-                break;
-            }
-        }
-
+        self.prepare_read()?;
         self.conn.reader().read(buf)
     }
 
     #[cfg(read_buf)]
     fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> Result<()> {
-        self.complete_prior_io()?;
-
-        // We call complete_io() in a loop since a single call may read only
-        // a partial packet from the underlying transport. A full packet is
-        // needed to get more plaintext, which we must do if EOF has not been
-        // hit.
-        while self.conn.wants_read() {
-            if self.conn.complete_io(self.sock)?.0 == 0 {
-                break;
-            }
-        }
-
+        self.prepare_read()?;
         self.conn.reader().read_buf(cursor)
     }
 }
