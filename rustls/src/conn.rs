@@ -25,7 +25,7 @@ mod connection {
     use alloc::vec::Vec;
     use core::fmt::Debug;
     use core::ops::{Deref, DerefMut};
-    use std::io;
+    use std::io::{self, BufRead, Read};
 
     use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
@@ -47,7 +47,7 @@ mod connection {
         /// Read TLS content from `rd`.
         ///
         /// See [`ConnectionCommon::read_tls()`] for more information.
-        pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
+        pub fn read_tls(&mut self, rd: &mut dyn Read) -> Result<usize, io::Error> {
             match self {
                 Self::Client(conn) => conn.read_tls(rd),
                 Self::Server(conn) => conn.read_tls(rd),
@@ -108,7 +108,7 @@ mod connection {
         pub fn complete_io<T>(&mut self, io: &mut T) -> Result<(usize, usize), io::Error>
         where
             Self: Sized,
-            T: io::Read + io::Write,
+            T: Read + io::Write,
         {
             match self {
                 Self::Client(conn) => conn.complete_io(io),
@@ -205,7 +205,7 @@ mod connection {
         }
     }
 
-    impl io::Read for Reader<'_> {
+    impl Read for Reader<'_> {
         /// Obtain plaintext data received from the peer over this TLS connection.
         ///
         /// If the peer closes the TLS session cleanly, this returns `Ok(0)`  once all
@@ -268,6 +268,29 @@ mod connection {
             }
 
             self.check_no_bytes_state()
+        }
+    }
+
+    impl BufRead for Reader<'_> {
+        /// Obtain a chunk of plaintext data received from the peer over this TLS connection.
+        /// This reads the same data as [`Reader::read()`], but returns a reference instead of
+        /// copying the data.
+        ///
+        /// The caller should call [`Reader::consume()`] afterward to advance the buffer.
+        ///
+        /// See [`Reader::into_first_chunk()`] for a version of this function that returns a
+        /// buffer with a longer lifetime.
+        fn fill_buf(&mut self) -> io::Result<&[u8]> {
+            Reader {
+                // reborrow
+                received_plaintext: self.received_plaintext,
+                ..*self
+            }
+            .into_first_chunk()
+        }
+
+        fn consume(&mut self, amt: usize) {
+            self.received_plaintext.consume(amt)
         }
     }
 
