@@ -14,6 +14,21 @@ autotests = false
 exclude = ["src/testdata", "tests/**"]
 build = "build.rs"
 
+[features]
+default = ["aws_lc_rs", "logging", "std", "tls12"]
+
+aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
+aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
+brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
+custom-provider = []
+fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
+logging = ["log"]
+read_buf = ["rustversion", "std"]
+ring = ["dep:ring", "webpki/ring"]
+std = ["webpki/std", "pki-types/std", "once_cell/std"]
+tls12 = []
+zlib = ["dep:zlib-rs"]
+
 [build-dependencies]
 rustversion = { version = "1.0.6", optional = true }
 
@@ -31,21 +46,6 @@ webpki = { workspace = true }
 pki-types = { workspace = true }
 zeroize = { workspace = true }
 zlib-rs = { workspace = true, optional = true }
-
-[features]
-default = ["aws_lc_rs", "logging", "std", "tls12"]
-
-aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
-aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
-brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
-custom-provider = []
-fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
-logging = ["log"]
-read_buf = ["rustversion", "std"]
-ring = ["dep:ring", "webpki/ring"]
-std = ["webpki/std", "pki-types/std", "once_cell/std"]
-tls12 = []
-zlib = ["dep:zlib-rs"]
 
 [dev-dependencies]
 base64 = { workspace = true }
