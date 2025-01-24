@@ -273,6 +273,9 @@
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
 //!
+//! - `std` (enabled by default): enable the high-level (buffered) Connection API and other functionality
+//!   which relies on the `std` library.
+//!
 //! - `aws_lc_rs` (enabled by default): makes the rustls crate depend on the [`aws-lc-rs`] crate.
 //!   Use `rustls::crypto::aws_lc_rs::default_provider().install_default()` to
 //!   use it as the default `CryptoProvider`, or provide it explicitly
