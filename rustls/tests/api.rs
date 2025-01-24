@@ -2,15 +2,16 @@
 
 #![allow(clippy::duplicate_mod)]
 
-use std::fmt::Debug;
-use std::io::{self, IoSlice, Read, Write};
-use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use std::{fmt, mem};
+use alloc::sync::Arc;
+use core::fmt::Debug;
+use core::ops::{Deref, DerefMut};
+use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{fmt, mem};
+use std::sync::Mutex;
 
 use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
 use rustls::client::{verify_server_cert_signed_by_trust_anchor, ResolvesClientCert, Resumption};
+use rustls::compat::io::{self, Read, Write};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
@@ -38,6 +39,9 @@ use rustls::{
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SideData,
     SignatureScheme, Stream, StreamOwned, SupportedCipherSuite, SupportedProtocolVersion,
 };
+
+#[cfg(feature = "std")]
+use rustls::compat::io::IoSlice;
 
 use super::*;
 
@@ -1935,6 +1939,7 @@ impl ClientCheckCertResolve {
     }
 }
 
+#[cfg(feature = "std")]
 impl Drop for ClientCheckCertResolve {
     fn drop(&mut self) {
         if !std::thread::panicking() {
@@ -2312,6 +2317,7 @@ fn server_respects_buffer_limit_pre_handshake() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048);
 
@@ -2393,6 +2399,7 @@ fn client_respects_buffer_limit_pre_handshake() {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048);
 
@@ -2489,6 +2496,7 @@ where
         os
     }
 
+    #[cfg(feature = "std")]
     fn flush_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
         let mut total = 0;
         let mut lengths = vec![];
@@ -2545,6 +2553,7 @@ where
         unreachable!()
     }
 
+    #[cfg(feature = "std")]
     fn flush(&mut self) -> io::Result<()> {
         if !self.buffer.is_empty() {
             let buffer = mem::take(&mut self.buffer);
@@ -2557,6 +2566,7 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "std")]
     fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
         if self.buffered {
             self.buffer
@@ -2811,7 +2821,7 @@ struct EofWriter<const N: usize> {
     written: usize,
 }
 
-impl<const N: usize> std::io::Write for EofWriter<N> {
+impl<const N: usize> rustls::compat::io::Write for EofWriter<N> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let prev = self.written;
         self.written = N.min(self.written + buf.len());
@@ -2823,7 +2833,7 @@ impl<const N: usize> std::io::Write for EofWriter<N> {
     }
 }
 
-impl<const N: usize> std::io::Read for EofWriter<N> {
+impl<const N: usize> rustls::compat::io::Read for EofWriter<N> {
     fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
         panic!() // This is a writer, it should not be read from.
     }
@@ -2984,6 +2994,7 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
 }
 
 #[test]
+#[cfg(feature = "std")]
 fn test_client_write_and_vectored_write_equivalence() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048);
     do_handshake(&mut client, &mut server);
@@ -3856,7 +3867,7 @@ impl KeyLogToVec {
     }
 
     fn take(&self) -> Vec<KeyLogItem> {
-        std::mem::take(&mut self.items.lock().unwrap())
+        core::mem::take(&mut self.items.lock().unwrap())
     }
 }
 
@@ -4308,7 +4319,7 @@ impl ClientStorage {
 
     #[cfg(feature = "tls12")]
     fn ops_and_reset(&self) -> Vec<ClientStorageOp> {
-        std::mem::take(&mut self.ops.lock().unwrap())
+        core::mem::take(&mut self.ops.lock().unwrap())
     }
 }
 
@@ -5323,7 +5334,7 @@ mod test_quic {
         let header_len = PLAIN_HEADER.len();
         let tag_len = client_keys.local.packet.tag_len();
         let padding_len = 1200 - header_len - PAYLOAD.len() - tag_len;
-        buf.extend(std::iter::repeat(0).take(padding_len));
+        buf.extend(core::iter::repeat(0).take(padding_len));
         let (header, payload) = buf.split_at_mut(header_len);
         let tag = client_keys
             .local
@@ -5961,6 +5972,8 @@ fn test_client_mtu_reduction() {
         fn flush(&mut self) -> io::Result<()> {
             panic!()
         }
+
+        #[cfg(feature = "std")]
         fn write_vectored(&mut self, b: &[io::IoSlice<'_>]) -> io::Result<usize> {
             let writes = b
                 .iter()

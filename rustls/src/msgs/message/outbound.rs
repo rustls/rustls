@@ -308,7 +308,9 @@ pub(crate) fn read_opaque_message_header(
 
 #[cfg(test)]
 mod tests {
-    use std::{println, vec};
+    use alloc::vec;
+
+    use std::println;
 
     use super::*;
 

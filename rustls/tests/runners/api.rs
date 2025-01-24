@@ -1,7 +1,9 @@
 #![cfg_attr(read_buf, feature(read_buf))]
 #![cfg_attr(read_buf, feature(core_io_borrowed_buf))]
 
-use std::cell::RefCell;
+use core::cell::RefCell;
+
+extern crate alloc;
 
 #[macro_use]
 mod macros;

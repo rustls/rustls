@@ -1,7 +1,9 @@
 #![allow(clippy::duplicate_mod)]
 
-use std::num::NonZeroUsize;
-use std::sync::Arc;
+extern crate alloc;
+
+use alloc::sync::Arc;
+use core::num::NonZeroUsize;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};

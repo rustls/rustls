@@ -361,7 +361,7 @@ impl Codec<'_> for DigitallySignedStruct {
 
 #[test]
 fn assertions_are_debug() {
-    use std::format;
+    use alloc::format;
 
     assert_eq!(
         format!("{:?}", ClientCertVerified::assertion()),
