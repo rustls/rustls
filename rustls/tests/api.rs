@@ -1657,7 +1657,7 @@ fn client_checks_server_certificate_with_given_name() {
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::NotValidForName
+                    certificate_error_expecting_name("not-the-right-hostname.com")
                 )))
             );
         }
@@ -1692,7 +1692,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
             assert_eq!(
                 check_server_name(client_config.clone(), server_config.clone(), "198.51.100.2"),
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::NotValidForName
+                    certificate_error_expecting_name("198.51.100.2")
                 )))
             );
 
@@ -1706,7 +1706,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
             assert_eq!(
                 check_server_name(client_config.clone(), server_config.clone(), "2001:db8::2"),
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::NotValidForName
+                    certificate_error_expecting_name("2001:db8::2")
                 )))
             );
         }
@@ -3417,7 +3417,9 @@ fn sni_resolver_rejects_wrong_names() {
         )
     );
     assert_eq!(
-        Err(Error::InvalidCertificate(CertificateError::NotValidForName)),
+        Err(Error::InvalidCertificate(certificate_error_expecting_name(
+            "not-localhost"
+        ))),
         resolver.add(
             "not-localhost",
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
@@ -3430,6 +3432,22 @@ fn sni_resolver_rejects_wrong_names() {
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
+}
+
+fn certificate_error_expecting_name(expected: &str) -> CertificateError {
+    CertificateError::NotValidForNameDetail {
+        expected: ServerName::try_from(expected)
+            .unwrap()
+            .to_owned(),
+        presented: vec![
+            // ref. examples/internal/test_ca.rs
+            r#"DnsName("testserver.com")"#.into(),
+            r#"DnsName("second.testserver.com")"#.into(),
+            r#"DnsName("localhost")"#.into(),
+            "IpAddress(198.51.100.1)".into(),
+            "IpAddress(2001:db8::1)".into(),
+        ],
+    }
 }
 
 #[test]
