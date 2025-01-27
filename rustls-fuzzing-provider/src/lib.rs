@@ -13,7 +13,7 @@ use rustls::crypto::{
 };
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::pki_types::{
-    AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
+    alg_id, AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
     SignatureVerificationAlgorithm,
 };
 use rustls::{
@@ -21,7 +21,6 @@ use rustls::{
     PeerMisbehaved, ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme,
     SupportedCipherSuite, Tls12CipherSuite, Tls13CipherSuite,
 };
-use webpki::alg_id;
 
 /// This is a `CryptoProvider` that provides NO SECURITY and is for fuzzing only.
 pub fn provider() -> crypto::CryptoProvider {
