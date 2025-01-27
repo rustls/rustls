@@ -21,7 +21,6 @@ rustls = { path = "../rustls", default-features = false, features = ["logging", 
 rsa = { workspace = true }
 sha2 = { workspace = true }
 signature = { workspace = true }
-webpki = { workspace = true }
 x25519-dalek = { workspace = true }
 
 [dev-dependencies]

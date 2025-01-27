@@ -58,13 +58,13 @@ fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;
     match error {
         BadDer | BadDerTime | TrailingData(_) => CertificateError::BadEncoding.into(),
-        CertNotValidYet => CertificateError::NotValidYet.into(),
-        CertExpired | InvalidCertValidity => CertificateError::Expired.into(),
+        CertNotValidYet { .. } => CertificateError::NotValidYet.into(),
+        CertExpired { .. } | InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
-        CertNotValidForName => CertificateError::NotValidForName.into(),
+        CertNotValidForName { .. } => CertificateError::NotValidForName.into(),
         CertRevoked => CertificateError::Revoked.into(),
         UnknownRevocationStatus => CertificateError::UnknownRevocationStatus.into(),
-        CrlExpired => CertificateError::ExpiredRevocationList.into(),
+        CrlExpired { .. } => CertificateError::ExpiredRevocationList.into(),
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey
@@ -189,7 +189,7 @@ mod tests {
             ),
         ];
         for t in testcases {
-            assert_eq!(crl_error(t.0), t.1);
+            assert_eq!(crl_error(t.0.clone()), t.1);
         }
 
         assert!(matches!(
