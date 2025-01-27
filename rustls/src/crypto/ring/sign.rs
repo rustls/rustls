@@ -6,8 +6,7 @@ use alloc::vec::Vec;
 use alloc::{format, vec};
 use core::fmt::{self, Debug, Formatter};
 
-use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer};
-use webpki::alg_id;
+use pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer, SubjectPublicKeyInfoDer, alg_id};
 
 use super::ring_like::rand::{SecureRandom, SystemRandom};
 use super::ring_like::signature::{self, EcdsaKeyPair, Ed25519KeyPair, KeyPair, RsaKeyPair};
