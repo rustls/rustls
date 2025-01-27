@@ -6,7 +6,6 @@ publish = false
 
 [dependencies]
 rustls = { path = "../rustls", default-features = false, features = ["logging", "std", "tls12"] }
-webpki = { workspace = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }

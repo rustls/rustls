@@ -2,9 +2,10 @@ use der::Reader;
 use rsa::signature::Verifier;
 use rsa::{pkcs1v15, pss, BigUint, RsaPublicKey};
 use rustls::crypto::WebPkiSupportedAlgorithms;
-use rustls::pki_types::{AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm};
+use rustls::pki_types::{
+    alg_id, AlgorithmIdentifier, InvalidSignature, SignatureVerificationAlgorithm,
+};
 use rustls::SignatureScheme;
-use webpki::alg_id;
 
 pub static ALGORITHMS: WebPkiSupportedAlgorithms = WebPkiSupportedAlgorithms {
     all: &[RSA_PSS_SHA256, RSA_PKCS1_SHA256],
