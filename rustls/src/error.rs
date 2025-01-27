@@ -2,6 +2,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use pki_types::ServerName;
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
@@ -372,6 +373,22 @@ pub enum CertificateError {
     /// the expected name.
     NotValidForName,
 
+    /// The subject names in an end-entity certificate do not include
+    /// the expected name.
+    ///
+    /// This variant is semantically the same as `NotValidForName`, but includes
+    /// extra data to improve error reports.
+    NotValidForNameContext {
+        /// Expected server name.
+        expected: ServerName<'static>,
+
+        /// The names presented in the end entity certificate.
+        ///
+        /// These are the subject names as present in the leaf certificate and may contain DNS names
+        /// with or without a wildcard label as well as IP address names.
+        presented: Vec<String>,
+    },
+
     /// The certificate is being used for a different purpose than allowed.
     InvalidPurpose,
 
@@ -405,6 +422,16 @@ impl PartialEq<Self> for CertificateError {
             (UnknownIssuer, UnknownIssuer) => true,
             (BadSignature, BadSignature) => true,
             (NotValidForName, NotValidForName) => true,
+            (
+                NotValidForNameContext {
+                    expected: left_expected,
+                    presented: left_presented,
+                },
+                NotValidForNameContext {
+                    expected: right_expected,
+                    presented: right_presented,
+                },
+            ) => (left_expected, left_presented) == (right_expected, right_presented),
             (InvalidPurpose, InvalidPurpose) => true,
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
             (ExpiredRevocationList, ExpiredRevocationList) => true,
@@ -420,7 +447,10 @@ impl From<CertificateError> for AlertDescription {
     fn from(e: CertificateError) -> Self {
         use CertificateError::*;
         match e {
-            BadEncoding | UnhandledCriticalExtension | NotValidForName => Self::BadCertificate,
+            BadEncoding
+            | UnhandledCriticalExtension
+            | NotValidForName
+            | NotValidForNameContext { .. } => Self::BadCertificate,
             // RFC 5246/RFC 8446
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
@@ -681,6 +711,7 @@ mod tests {
     use super::{CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError};
     #[cfg(feature = "std")]
     use crate::sync::Arc;
+    use pki_types::ServerName;
 
     #[test]
     fn certificate_error_equality() {
@@ -693,6 +724,31 @@ mod tests {
         assert_eq!(UnknownIssuer, UnknownIssuer);
         assert_eq!(BadSignature, BadSignature);
         assert_eq!(NotValidForName, NotValidForName);
+        let context = NotValidForNameContext {
+            expected: ServerName::try_from("example.com")
+                .unwrap()
+                .to_owned(),
+            presented: vec!["other.com".into()],
+        };
+        assert_eq!(context, context);
+        assert_ne!(
+            context,
+            NotValidForNameContext {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![]
+            }
+        );
+        assert_ne!(
+            context,
+            NotValidForNameContext {
+                expected: ServerName::try_from("huh.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec!["other.com".into()],
+            }
+        );
         assert_eq!(InvalidPurpose, InvalidPurpose);
         assert_eq!(
             ApplicationVerificationFailure,
