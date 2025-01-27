@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::CertificateRevocationListDer;
-use webpki::{CertRevocationList, OwnedCertRevocationList};
+use webpki::{CertRevocationList, InvalidNameContext, OwnedCertRevocationList};
 
 use crate::error::{CertRevocationListError, CertificateError, Error, OtherError};
 #[cfg(feature = "std")]
@@ -61,7 +61,14 @@ fn pki_error(error: webpki::Error) -> Error {
         CertNotValidYet { .. } => CertificateError::NotValidYet.into(),
         CertExpired { .. } | InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
-        CertNotValidForName { .. } => CertificateError::NotValidForName.into(),
+        CertNotValidForName(InvalidNameContext {
+            expected,
+            presented,
+        }) => CertificateError::NotValidForNameContext {
+            expected,
+            presented,
+        }
+        .into(),
         CertRevoked => CertificateError::Revoked.into(),
         UnknownRevocationStatus => CertificateError::UnknownRevocationStatus.into(),
         CrlExpired { .. } => CertificateError::ExpiredRevocationList.into(),
