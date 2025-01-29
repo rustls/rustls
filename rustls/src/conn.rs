@@ -290,7 +290,8 @@ mod connection {
         }
 
         fn consume(&mut self, amt: usize) {
-            self.received_plaintext.consume(amt)
+            self.received_plaintext
+                .consume_first_chunk(amt)
         }
     }
 
