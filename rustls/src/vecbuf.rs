@@ -150,12 +150,17 @@ impl ChunkVecBuffer {
         // buffers
         while let Some(buf) = self.chunks.front() {
             if self.prefix_used < buf.len() {
-                break;
+                return;
             } else {
                 self.prefix_used -= buf.len();
                 self.chunks.pop_front();
             }
         }
+
+        debug_assert_eq!(
+            self.prefix_used, 0,
+            "attempted to `ChunkVecBuffer::consume` more than available"
+        );
     }
 
     /// Read data out of this object, passing it `wr`
