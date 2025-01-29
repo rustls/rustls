@@ -142,7 +142,20 @@ impl ChunkVecBuffer {
         Ok(offs)
     }
 
-    pub(crate) fn consume(&mut self, used: usize) {
+    pub(crate) fn consume_first_chunk(&mut self, used: usize) {
+        // this backs (infallible) `BufRead::consume`, where `used` is
+        // user-supplied.
+        assert!(
+            used <= self
+                .chunk()
+                .map(|ch| ch.len())
+                .unwrap_or_default(),
+            "illegal `BufRead::consume` usage",
+        );
+        self.consume(used);
+    }
+
+    fn consume(&mut self, used: usize) {
         // first, mark the rightmost extent of the used buffer
         self.prefix_used += used;
 
