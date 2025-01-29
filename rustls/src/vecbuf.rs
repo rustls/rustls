@@ -76,6 +76,10 @@ impl ChunkVecBuffer {
         let len = bytes.len();
 
         if !bytes.is_empty() {
+            if self.chunks.is_empty() {
+                debug_assert_eq!(self.prefix_used, 0);
+            }
+
             self.chunks.push_back(bytes);
         }
 
@@ -190,6 +194,7 @@ impl ChunkVecBuffer {
         }
         let len = cmp::min(bufs.len(), self.chunks.len());
         let used = wr.write_vectored(&bufs[..len])?;
+        assert!(used <= self.len(), "illegal write_vectored return value");
         self.consume(used);
         Ok(used)
     }
