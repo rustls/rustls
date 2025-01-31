@@ -181,7 +181,7 @@ depth=2 CN = ponytown RSA CA
 verify error:num=19:self signed certificate in certificate chain
 hello world
 ^C
-$ echo hello world | cargo run --bin tlsclient-mio -- --cafile test-ca/rsa-2048/ca.cert -p 8443 localhost
+$ echo hello world | cargo run --bin tlsclient-mio -- --cafile test-ca/rsa-2048/ca.cert --port 8443 localhost
 hello world
 ^C
 ```
