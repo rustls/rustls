@@ -5,4 +5,4 @@ extern crate rustls;
 
 use rustls::internal::fuzzing::fuzz_deframer;
 
-fuzz_target!(|bytes: &[u8]| { fuzz_deframer(bytes) });
+fuzz_target!(|bytes: &[u8]| fuzz_deframer(bytes));
