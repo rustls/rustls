@@ -127,7 +127,7 @@ mod test_raw_keys {
                     assert_eq!(
                         err,
                         ErrorFromPeer::Server(Error::PeerIncompatible(
-                            PeerIncompatible::UnsolicitedCertificateTypeExtension
+                            PeerIncompatible::IncorrectCertificateTypeExtension
                         ))
                     )
                 }
