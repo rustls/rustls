@@ -192,6 +192,18 @@ jobs:
         run: cargo test --locked --release --no-run
         working-directory: rustls
 
+  portable-build:
+    name: Portable build test
+    steps:
+      - name: Install rust nightly toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          target: riscv32imc-unknown-none-elf # with no atomic ptr
+
+      - name: cargo build (debug; no default features; no-std) # no std; no built-in provider; XXX TBD hashbrown - ???
+        run: cargo build --locked --no-default-features --target riscv32imc-unknown-none-elf
+        working-directory: rustls
+
   bogo:
     name: BoGo test suite
     runs-on: ubuntu-latest
