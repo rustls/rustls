@@ -221,14 +221,14 @@ impl ExtensionProcessing {
             .map(|certificate_types| certificate_types.contains(&CertificateType::RawPublicKey))
             .unwrap_or(false);
 
-        let raw_key_negotation_params = RawKeyNegotiationParams {
+        let raw_key_negotiation_params = RawKeyNegotiationParams {
             peer_supports_raw_key: client_allows_rpk,
             local_expects_raw_key: requires_server_rpk,
             extension_type: ExtensionType::ServerCertificateType,
         };
 
         self.process_cert_type_extension(
-            raw_key_negotation_params.validate_raw_key_negotiation(),
+            raw_key_negotiation_params.validate_raw_key_negotiation(),
             cx,
         )
     }
@@ -247,13 +247,13 @@ impl ExtensionProcessing {
             .map(|certificate_types| certificate_types.contains(&CertificateType::RawPublicKey))
             .unwrap_or(false);
 
-        let raw_key_negotation_params = RawKeyNegotiationParams {
+        let raw_key_negotiation_params = RawKeyNegotiationParams {
             peer_supports_raw_key: client_offers_rpk,
             local_expects_raw_key: requires_client_rpk,
             extension_type: ExtensionType::ClientCertificateType,
         };
         self.process_cert_type_extension(
-            raw_key_negotation_params.validate_raw_key_negotiation(),
+            raw_key_negotiation_params.validate_raw_key_negotiation(),
             cx,
         )
     }
