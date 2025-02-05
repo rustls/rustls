@@ -811,6 +811,7 @@ impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
 pub struct UnbufferedConnectionCommon<Data> {
     pub(crate) core: ConnectionCore<Data>,
     wants_write: bool,
+    emitted_peer_closed_state: bool,
 }
 
 impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
@@ -818,6 +819,7 @@ impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
         Self {
             core,
             wants_write: false,
+            emitted_peer_closed_state: false,
         }
     }
 }
