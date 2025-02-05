@@ -44,10 +44,10 @@
 //!
 //! #### Built-in providers
 //!
-//! Rustls ships with two built-in providers controlled with associated feature flags:
+//! Rustls ships with two built-in providers controlled by associated crate features:
 //!
-//!   * [`aws-lc-rs`] - enabled by default, available with the `aws_lc_rs` feature flag enabled.
-//!   * [`ring`] - available with the `ring` feature flag enabled.
+//!   * [`aws-lc-rs`] - enabled by default, available with the `aws_lc_rs` crate feature enabled.
+//!   * [`ring`] - available with the `ring` crate feature enabled.
 //!
 //! See the documentation for [`crypto::CryptoProvider`] for details on how providers are
 //! selected.
@@ -286,8 +286,8 @@
 //!   use it as the default `CryptoProvider`, or provide it explicitly
 //!   when making a `ClientConfig` or `ServerConfig`.
 //!
-//! - `fips`: enable support for FIPS140-3-approved cryptography, via the aws-lc-rs crate.
-//!   This feature enables the `aws_lc_rs` feature, which makes the rustls crate depend
+//! - `fips`: enable support for FIPS140-3-approved cryptography, via the [`aws-lc-rs`] crate.
+//!   This feature enables the `aws_lc_rs` crate feature, which makes the rustls crate depend
 //!   on [aws-lc-rs](https://github.com/aws/aws-lc-rs).  It also changes the default
 //!   for [`ServerConfig::require_ems`] and [`ClientConfig::require_ems`].
 //!
