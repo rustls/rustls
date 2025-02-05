@@ -131,6 +131,18 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 .core
                 .common_state
                 .has_received_close_notify
+                && !self.emitted_peer_closed_state
+            {
+                self.emitted_peer_closed_state = true;
+                break (buffer.pending_discard(), ConnectionState::PeerClosed);
+            } else if self
+                .core
+                .common_state
+                .has_received_close_notify
+                && self
+                    .core
+                    .common_state
+                    .has_sent_close_notify
             {
                 break (buffer.pending_discard(), ConnectionState::Closed);
             } else if self
@@ -185,7 +197,26 @@ pub enum ConnectionState<'c, 'i, Data> {
     /// the received data.
     ReadTraffic(ReadTraffic<'c, 'i, Data>),
 
-    /// Connection has been cleanly closed by the peer
+    /// Connection has been cleanly closed by the peer.
+    ///
+    /// This state is encountered at most once by each connection -- it is
+    /// "edge" triggered, rather than "level" triggered.
+    ///
+    /// It delimits the data received from the peer, meaning you can be sure you
+    /// have received all the data the peer sent.
+    ///
+    /// No further application data will be received from the peer, so no further
+    /// `ReadTraffic` states will be produced.
+    ///
+    /// However, it is possible to _send_ further application data via `WriteTraffic`
+    /// states, or close the connection cleanly by calling
+    /// [`WriteTraffic::queue_close_notify()`].
+    PeerClosed,
+
+    /// Connection has been cleanly closed by both us and the peer.
+    ///
+    /// This is a terminal state.  No other states will be produced for this
+    /// connection.
     Closed,
 
     /// One, or more, early (RTT-0) data records are available
@@ -261,6 +292,8 @@ impl<Data> fmt::Debug for ConnectionState<'_, '_, Data> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ReadTraffic(..) => f.debug_tuple("ReadTraffic").finish(),
+
+            Self::PeerClosed => write!(f, "PeerClosed"),
 
             Self::Closed => write!(f, "Closed"),
 
