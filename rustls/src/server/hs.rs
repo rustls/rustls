@@ -8,7 +8,7 @@ use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
 use crate::common_state::{
-    KxState, Protocol, RawKeyNegotationResult, RawKeyNegotiationParams, State,
+    KxState, Protocol, RawKeyNegotiationResult, RawKeyNegotiationParams, State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;
@@ -260,29 +260,29 @@ impl ExtensionProcessing {
 
     fn process_cert_type_extension(
         &mut self,
-        raw_key_negotiation_result: RawKeyNegotationResult,
+        raw_key_negotiation_result: RawKeyNegotiationResult,
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         match raw_key_negotiation_result {
-            RawKeyNegotationResult::Negotiated(ExtensionType::ClientCertificateType) => {
+            RawKeyNegotiationResult::Negotiated(ExtensionType::ClientCertificateType) => {
                 self.exts
                     .push(ServerExtension::ClientCertType(
                         CertificateType::RawPublicKey,
                     ));
             }
-            RawKeyNegotationResult::Negotiated(ExtensionType::ServerCertificateType) => {
+            RawKeyNegotiationResult::Negotiated(ExtensionType::ServerCertificateType) => {
                 self.exts
                     .push(ServerExtension::ServerCertType(
                         CertificateType::RawPublicKey,
                     ));
             }
-            RawKeyNegotationResult::Err(err) => {
+            RawKeyNegotiationResult::Err(err) => {
                 return Err(cx
                     .common
                     .send_fatal_alert(AlertDescription::HandshakeFailure, err));
             }
-            RawKeyNegotationResult::NotNegotiated => {}
-            RawKeyNegotationResult::Negotiated(_) => unreachable!(
+            RawKeyNegotiationResult::NotNegotiated => {}
+            RawKeyNegotiationResult::Negotiated(_) => unreachable!(
                 "The extension type should only ever be ClientCertificateType or ServerCertificateType"
             ),
         }

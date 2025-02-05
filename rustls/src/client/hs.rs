@@ -17,7 +17,7 @@ use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
 use crate::common_state::{
-    CommonState, HandshakeKind, KxState, RawKeyNegotationResult, RawKeyNegotiationParams, State,
+    CommonState, HandshakeKind, KxState, RawKeyNegotiationResult, RawKeyNegotiationParams, State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
@@ -713,7 +713,7 @@ pub(super) fn process_server_cert_type_extension(
         extension_type: ExtensionType::ServerCertificateType,
     };
     match raw_key_negotation_params.validate_raw_key_negotiation() {
-        RawKeyNegotationResult::Err(err) => {
+        RawKeyNegotiationResult::Err(err) => {
             Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
         }
         _ => Ok(()),
@@ -736,7 +736,7 @@ pub(super) fn process_client_cert_type_extension(
         extension_type: ExtensionType::ClientCertificateType,
     };
     match raw_key_negotation_params.validate_raw_key_negotiation() {
-        RawKeyNegotationResult::Err(err) => {
+        RawKeyNegotiationResult::Err(err) => {
             Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
         }
         _ => Ok(()),

@@ -908,14 +908,14 @@ pub(super) struct RawKeyNegotiationParams {
 }
 
 impl RawKeyNegotiationParams {
-    pub(super) fn validate_raw_key_negotiation(&self) -> RawKeyNegotationResult {
+    pub(super) fn validate_raw_key_negotiation(&self) -> RawKeyNegotiationResult {
         match (self.local_expects_raw_key, self.peer_supports_raw_key) {
-            (true, true) => RawKeyNegotationResult::Negotiated(self.extension_type),
-            (false, false) => RawKeyNegotationResult::NotNegotiated,
-            (true, false) => RawKeyNegotationResult::Err(Error::PeerIncompatible(
+            (true, true) => RawKeyNegotiationResult::Negotiated(self.extension_type),
+            (false, false) => RawKeyNegotiationResult::NotNegotiated,
+            (true, false) => RawKeyNegotiationResult::Err(Error::PeerIncompatible(
                 PeerIncompatible::IncorrectCertificateTypeExtension,
             )),
-            (false, true) => RawKeyNegotationResult::Err(Error::PeerIncompatible(
+            (false, true) => RawKeyNegotiationResult::Err(Error::PeerIncompatible(
                 PeerIncompatible::UnsolicitedCertificateTypeExtension,
             )),
         }
@@ -923,7 +923,7 @@ impl RawKeyNegotiationParams {
 }
 
 #[derive(Debug)]
-pub(crate) enum RawKeyNegotationResult {
+pub(crate) enum RawKeyNegotiationResult {
     Negotiated(ExtensionType),
     NotNegotiated,
     Err(Error),
