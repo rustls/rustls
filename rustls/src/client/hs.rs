@@ -707,12 +707,12 @@ pub(super) fn process_server_cert_type_extension(
         .requires_raw_public_keys();
     let server_offers_rpk = matches!(server_cert_extension, Some(CertificateType::RawPublicKey));
 
-    let raw_key_negotation_params = RawKeyNegotiationParams {
+    let raw_key_negotiation_params = RawKeyNegotiationParams {
         peer_supports_raw_key: server_offers_rpk,
         local_expects_raw_key: requires_server_rpk,
         extension_type: ExtensionType::ServerCertificateType,
     };
-    match raw_key_negotation_params.validate_raw_key_negotiation() {
+    match raw_key_negotiation_params.validate_raw_key_negotiation() {
         RawKeyNegotiationResult::Err(err) => {
             Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
         }
@@ -730,12 +730,12 @@ pub(super) fn process_client_cert_type_extension(
         .only_raw_public_keys();
     let server_allows_rpk = matches!(client_cert_extension, Some(CertificateType::RawPublicKey));
 
-    let raw_key_negotation_params = RawKeyNegotiationParams {
+    let raw_key_negotiation_params = RawKeyNegotiationParams {
         peer_supports_raw_key: server_allows_rpk,
         local_expects_raw_key: requires_client_rpk,
         extension_type: ExtensionType::ClientCertificateType,
     };
-    match raw_key_negotation_params.validate_raw_key_negotiation() {
+    match raw_key_negotiation_params.validate_raw_key_negotiation() {
         RawKeyNegotiationResult::Err(err) => {
             Err(common.send_fatal_alert(AlertDescription::HandshakeFailure, err))
         }
