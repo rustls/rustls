@@ -8,7 +8,7 @@ use super::server_conn::ServerConnectionData;
 #[cfg(feature = "tls12")]
 use super::tls12;
 use crate::common_state::{
-    KxState, Protocol, RawKeyNegotiationResult, RawKeyNegotiationParams, State,
+    KxState, Protocol, RawKeyNegotiationParams, RawKeyNegotiationResult, State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::crypto::SupportedKxGroup;

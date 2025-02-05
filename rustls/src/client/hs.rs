@@ -17,7 +17,7 @@ use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
 use crate::common_state::{
-    CommonState, HandshakeKind, KxState, RawKeyNegotiationResult, RawKeyNegotiationParams, State,
+    CommonState, HandshakeKind, KxState, RawKeyNegotiationParams, RawKeyNegotiationResult, State,
 };
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
