@@ -78,10 +78,10 @@ builder types. See the [`crypto::CryptoProvider`] documentation for more details
 
 #### Built-in providers
 
-Rustls ships with two built-in providers controlled with associated feature flags:
+Rustls ships with two built-in providers controlled by associated crate features:
 
-* [`aws-lc-rs`] - enabled by default, available with the `aws_lc_rs` feature flag enabled.
-* [`ring`] - available with the `ring` feature flag enabled.
+* [`aws-lc-rs`] - enabled by default, available with the `aws_lc_rs` crate feature enabled.
+* [`ring`] - available with the `ring` crate feature enabled.
 
 See the documentation for [`crypto::CryptoProvider`] for details on how providers are
 selected.
