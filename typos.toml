@@ -1,0 +1,26 @@
+[default]
+extend-ignore-re = [
+  ".*Encrypter.*",
+  ".*encrypter.*",
+  ".*_nd",
+  "pn_*",
+  "EDE_*",
+  "PN",
+  "Josh Aas",
+  "hel.*lo",
+  "mis-*",
+  "thr",
+  "ture dat",
+]
+
+[files]
+extend-exclude = [
+  # ---
+  "*.cert",
+  "*.chain",
+  "*.fullchain",
+  "*.pem",
+  "*.svg",
+  "rfc*.json",
+  "website/templates/macros.html",
+]
