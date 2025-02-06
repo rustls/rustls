@@ -113,6 +113,13 @@ impl ChunkVecBuffer {
 
         Ok(())
     }
+
+    /// Inspect the first chunk from this object.
+    pub(crate) fn peek(&self) -> Option<&[u8]> {
+        self.chunks
+            .front()
+            .map(|ch| ch.as_slice())
+    }
 }
 
 #[cfg(feature = "std")]

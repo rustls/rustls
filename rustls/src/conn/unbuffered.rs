@@ -53,15 +53,15 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 break (buffer.pending_discard(), execute(self, incoming_tls, value));
             }
 
-            if let Some(chunk) = self
+            if !self
                 .core
                 .common_state
                 .received_plaintext
-                .pop()
+                .is_empty()
             {
                 break (
                     buffer.pending_discard(),
-                    ReadTraffic::new(self, incoming_tls, chunk).into(),
+                    ReadTraffic::new(self, incoming_tls).into(),
                 );
             }
 
@@ -316,50 +316,51 @@ impl<Data> fmt::Debug for ConnectionState<'_, '_, Data> {
 
 /// Application data is available
 pub struct ReadTraffic<'c, 'i, Data> {
-    _conn: &'c mut UnbufferedConnectionCommon<Data>,
+    conn: &'c mut UnbufferedConnectionCommon<Data>,
     // for forwards compatibility; to support in-place decryption in the future
     _incoming_tls: &'i mut [u8],
-    chunk: Vec<u8>,
-    taken: bool,
+
+    // owner of the latest chunk obtained in `next_record`, as borrowed by
+    // `AppDataRecord`
+    chunk: Option<Vec<u8>>,
 }
 
 impl<'c, 'i, Data> ReadTraffic<'c, 'i, Data> {
-    fn new(
-        _conn: &'c mut UnbufferedConnectionCommon<Data>,
-        _incoming_tls: &'i mut [u8],
-        chunk: Vec<u8>,
-    ) -> Self {
+    fn new(conn: &'c mut UnbufferedConnectionCommon<Data>, _incoming_tls: &'i mut [u8]) -> Self {
         Self {
-            _conn,
+            conn,
             _incoming_tls,
-            chunk,
-            taken: false,
+            chunk: None,
         }
     }
 
     /// Decrypts and returns the next available app-data record
     // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
     pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {
-        if self.taken {
-            None
-        } else {
-            self.taken = true;
-            Some(Ok(AppDataRecord {
+        self.chunk = self
+            .conn
+            .core
+            .common_state
+            .received_plaintext
+            .pop();
+        self.chunk.as_ref().map(|chunk| {
+            Ok(AppDataRecord {
                 discard: 0,
-                payload: &self.chunk,
-            }))
-        }
+                payload: chunk,
+            })
+        })
     }
 
     /// Returns the payload size of the next app-data record *without* decrypting it
     ///
     /// Returns `None` if there are no more app-data records
     pub fn peek_len(&self) -> Option<NonZeroUsize> {
-        if self.taken {
-            None
-        } else {
-            NonZeroUsize::new(self.chunk.len())
-        }
+        self.conn
+            .core
+            .common_state
+            .received_plaintext
+            .peek()
+            .and_then(|ch| NonZeroUsize::new(ch.len()))
     }
 }
 
