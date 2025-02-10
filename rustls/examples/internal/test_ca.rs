@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::env;
+use std::error::Error as StdError;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::IpAddr;
@@ -17,7 +18,7 @@ use rcgen::{
 };
 use time::OffsetDateTime;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn StdError>> {
     let mut certified_keys = HashMap::with_capacity(ROLES.len() * SIG_ALGS.len());
     for role in ROLES {
         for alg in SIG_ALGS {
