@@ -334,7 +334,7 @@ unnecessary. The one exception to this is when the symbol name is overly
 generic, or easily confused between different crates. In this case we prefer to
 import the symbol name under an alias, or if the parent module name is short,
 using a one-level qualified path. E.g. for a crate with a local `Error` type,
-prefer to `import std::error::Error as StdError`.
+prefer to import (use) `std::error::Error` as `StdError`.
 
 ### Exports
 
