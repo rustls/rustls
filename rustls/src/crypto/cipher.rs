@@ -6,6 +6,8 @@ use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
+#[cfg(feature = "std")]
+use crate::error::StdError;
 use crate::msgs::codec;
 pub use crate::msgs::message::{
     BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, OutboundChunks,
@@ -103,7 +105,7 @@ impl fmt::Display for UnsupportedOperationError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for UnsupportedOperationError {}
+impl StdError for UnsupportedOperationError {}
 
 /// How a TLS1.2 `key_block` is partitioned.
 ///

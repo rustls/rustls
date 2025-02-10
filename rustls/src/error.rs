@@ -9,6 +9,9 @@ use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{EchConfigPayload, KeyExchangeAlgorithm};
 use crate::rand;
 
+#[cfg(feature = "std")]
+pub(crate) use std::error::Error as StdError;
+
 /// rustls reports protocol errors using this type.
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Clone)]
@@ -612,7 +615,7 @@ impl From<SystemTimeError> for Error {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for Error {}
+impl StdError for Error {}
 
 impl From<rand::GetRandomFailed> for Error {
     fn from(_: rand::GetRandomFailed) -> Self {
@@ -622,10 +625,10 @@ impl From<rand::GetRandomFailed> for Error {
 
 mod other_error {
     use core::fmt;
-    #[cfg(feature = "std")]
-    use std::error::Error as StdError;
 
     use super::Error;
+    #[cfg(feature = "std")]
+    use super::StdError;
     #[cfg(feature = "std")]
     use crate::sync::Arc;
 

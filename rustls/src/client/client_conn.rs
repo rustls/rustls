@@ -14,6 +14,8 @@ use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
+#[cfg(feature = "std")]
+use crate::error::StdError;
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
@@ -941,7 +943,7 @@ impl fmt::Display for EarlyDataError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for EarlyDataError {}
+impl StdError for EarlyDataError {}
 
 /// State associated with a client connection.
 #[derive(Debug)]

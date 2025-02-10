@@ -3,11 +3,11 @@
 use alloc::vec::Vec;
 use core::num::NonZeroUsize;
 use core::{fmt, mem};
-#[cfg(feature = "std")]
-use std::error::Error as StdError;
 
 use super::UnbufferedConnectionCommon;
 use crate::client::ClientConnectionData;
+#[cfg(feature = "std")]
+use crate::error::StdError;
 use crate::msgs::deframer::buffers::DeframerSliceBuffer;
 use crate::server::ServerConnectionData;
 use crate::Error;

@@ -4,6 +4,8 @@ use core::fmt;
 use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, OwnedCertRevocationList};
 
+#[cfg(feature = "std")]
+use crate::error::StdError;
 use crate::error::{CertRevocationListError, CertificateError, Error, OtherError};
 #[cfg(feature = "std")]
 use crate::sync::Arc;
@@ -52,7 +54,7 @@ impl fmt::Display for VerifierBuilderError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for VerifierBuilderError {}
+impl StdError for VerifierBuilderError {}
 
 fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;
