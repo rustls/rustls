@@ -258,7 +258,7 @@ impl ExtensionProcessing {
             extension_type == ExtensionType::ClientCertificateType
                 || extension_type == ExtensionType::ServerCertificateType
         );
-        let raw_key_negotation_result = match (
+        let raw_key_negotiation_result = match (
             requires_raw_keys,
             client_supports.contains(&CertificateType::RawPublicKey),
             client_supports.contains(&CertificateType::X509),
@@ -274,7 +274,7 @@ impl ExtensionProcessing {
             (false, false, false) => return Ok(()),
         };
 
-        match raw_key_negotation_result {
+        match raw_key_negotiation_result {
             Ok((ExtensionType::ClientCertificateType, cert_type)) => {
                 self.exts
                     .push(ServerExtension::ClientCertType(cert_type));

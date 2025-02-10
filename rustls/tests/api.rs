@@ -401,7 +401,7 @@ mod test_raw_keys {
             }
             Payload::new(parsed.get_encoding())
         } else {
-            panic!("Expected to succesfully encode handshake message");
+            panic!("Expected to successfully encode handshake message");
         };
 
         // // Re-encrypt
@@ -6138,7 +6138,7 @@ fn bad_client_max_fragment_sizes() {
 }
 
 #[test]
-fn handshakes_complete_and_data_flows_with_gratuitious_max_fragment_sizes() {
+fn handshakes_complete_and_data_flows_with_gratuitous_max_fragment_sizes() {
     // general exercising of msgs::fragmenter and msgs::deframer
     for kt in ALL_KEY_TYPES {
         for version in rustls::ALL_VERSIONS {
@@ -8245,7 +8245,7 @@ fn large_client_hello_acceptor() {
 }
 
 #[test]
-fn hybrid_kx_component_share_offered_if_supported_seperately() {
+fn hybrid_kx_component_share_offered_if_supported_separately() {
     let kt = KeyType::Rsa2048;
     let client_config = finish_client_config(
         kt,
@@ -8271,7 +8271,7 @@ fn hybrid_kx_component_share_offered_if_supported_seperately() {
 }
 
 #[test]
-fn hybrid_kx_component_share_not_offered_unless_supported_seperately() {
+fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     let kt = KeyType::Rsa2048;
     let client_config = finish_client_config(
         kt,
