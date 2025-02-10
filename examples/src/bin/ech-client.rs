@@ -28,7 +28,7 @@
 //! "SSL_ECH_STATUS": "success"
 //! ```
 
-use std::error::Error;
+use std::error::Error as StdError;
 use std::fs;
 use std::io::{stdout, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
@@ -49,7 +49,7 @@ use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
 use rustls::RootCertStore;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Box<dyn StdError>> {
     let args = Args::parse();
 
     let server_ech_configs = match (args.grease, args.ech_config) {

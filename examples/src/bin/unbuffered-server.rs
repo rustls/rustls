@@ -2,7 +2,7 @@
 //! handle the buffers required to receive, process and send TLS data.
 
 use std::env;
-use std::error::Error;
+use std::error::Error as StdError;
 use std::io::{self, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
@@ -17,7 +17,7 @@ use rustls::unbuffered::{
 };
 use rustls::ServerConfig;
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn StdError>> {
     let mut args = env::args();
     args.next();
     let cert_file = args

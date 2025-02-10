@@ -1,7 +1,7 @@
 //! This is a simple client using rustls' unbuffered API. Meaning that the application layer must
 //! handle the buffers required to receive, process and send TLS data.
 
-use std::error::Error;
+use std::error::Error as StdError;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use rustls::unbuffered::{
 use rustls::version::TLS13;
 use rustls::{ClientConfig, RootCertStore};
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn StdError>> {
     let root_store = RootCertStore {
         roots: webpki_roots::TLS_SERVER_ROOTS.into(),
     };
