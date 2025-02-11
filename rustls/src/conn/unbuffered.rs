@@ -42,15 +42,18 @@ impl<Data> UnbufferedConnectionCommon<Data> {
     fn process_tls_records_common<'c, 'i, T>(
         &'c mut self,
         incoming_tls: &'i mut [u8],
-        mut check: impl FnMut(&mut Self) -> Option<T>,
-        execute: impl FnOnce(&'c mut Self, &'i mut [u8], T) -> ConnectionState<'c, 'i, Data>,
+        mut early_data_available: impl FnMut(&mut Self) -> Option<T>,
+        early_data_state: impl FnOnce(&'c mut Self, &'i mut [u8], T) -> ConnectionState<'c, 'i, Data>,
     ) -> UnbufferedStatus<'c, 'i, Data> {
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
         let mut buffer_progress = self.core.hs_deframer.progress();
 
         let (discard, state) = loop {
-            if let Some(value) = check(self) {
-                break (buffer.pending_discard(), execute(self, incoming_tls, value));
+            if let Some(value) = early_data_available(self) {
+                break (
+                    buffer.pending_discard(),
+                    early_data_state(self, incoming_tls, value),
+                );
             }
 
             if !self
