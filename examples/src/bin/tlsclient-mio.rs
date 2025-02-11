@@ -115,7 +115,7 @@ impl TlsClient {
         let io_state = match self.tls_conn.process_new_packets() {
             Ok(io_state) => io_state,
             Err(err) => {
-                println!("TLS error: {:?}", err);
+                println!("TLS error: {err}");
                 self.closing = true;
                 return;
             }
