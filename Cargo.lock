@@ -493,7 +493,7 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "env_logger",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "rustls-post-quantum",
 ]
 
@@ -2479,7 +2479,7 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.22"
+version = "0.23.23"
 dependencies = [
  "aws-lc-rs",
  "base64",
@@ -2513,7 +2513,7 @@ name = "rustls-bench"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "rustls-post-quantum",
  "tikv-jemallocator",
 ]
@@ -2530,7 +2530,7 @@ dependencies = [
  "fxhash",
  "itertools 0.14.0",
  "rayon",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "tikv-jemallocator",
 ]
 
@@ -2541,7 +2541,7 @@ dependencies = [
  "hickory-resolver",
  "regex",
  "ring",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "tokio",
 ]
 
@@ -2556,7 +2556,7 @@ dependencies = [
  "log",
  "mio",
  "rcgen",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "serde",
  "tokio",
  "webpki-roots",
@@ -2567,7 +2567,7 @@ name = "rustls-fuzzing-provider"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "rustls-webpki",
 ]
 
@@ -2580,7 +2580,7 @@ dependencies = [
  "num-bigint",
  "once_cell",
  "openssl",
- "rustls 0.23.22",
+ "rustls 0.23.23",
 ]
 
 [[package]]
@@ -2595,7 +2595,7 @@ version = "0.2.2"
 dependencies = [
  "criterion",
  "env_logger",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "webpki-roots",
 ]
 
@@ -2616,7 +2616,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rcgen",
  "rsa",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "rustls-webpki",
  "sha2",
  "signature",
@@ -2629,7 +2629,7 @@ name = "rustls-provider-test"
 version = "0.1.0"
 dependencies = [
  "hex",
- "rustls 0.23.22",
+ "rustls 0.23.23",
  "rustls-provider-example",
  "serde",
  "serde_json",
