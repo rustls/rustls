@@ -6699,6 +6699,23 @@ fn test_no_warning_logging_during_successful_sessions() {
     }
 }
 
+#[test]
+fn test_multiple_cipher_suite_enum_values() {
+    // test enum value with debug fmt:
+    assert_eq!(CipherSuite::from(0), CipherSuite::TLS_NULL_WITH_NULL_NULL);
+    assert_eq!(u16::from(CipherSuite::TLS_NULL_WITH_NULL_NULL), 0);
+    assert_eq!(CipherSuite::TLS_NULL_WITH_NULL_NULL.as_str(), Some("TLS_NULL_WITH_NULL_NULL"));
+    assert_eq!(format!("{:?}", CipherSuite::TLS_NULL_WITH_NULL_NULL), "TLS_NULL_WITH_NULL_NULL");
+    assert_eq!(format!("{:?}", CipherSuite::from(0)), "TLS_NULL_WITH_NULL_NULL");
+
+    // test enum value with no debug fmt:
+    assert_eq!(CipherSuite::from(1), CipherSuite::TLS_RSA_WITH_NULL_MD5);
+    assert_eq!(u16::from(CipherSuite::TLS_RSA_WITH_NULL_MD5), 1);
+    assert_eq!(CipherSuite::TLS_RSA_WITH_NULL_MD5.as_str(), Some("TLS_RSA_WITH_NULL_MD5"));
+    assert_eq!(format!("{:?}", CipherSuite::TLS_RSA_WITH_NULL_MD5), "CipherSuite(0x1)");
+    assert_eq!(format!("{:?}", CipherSuite::from(1)), "CipherSuite(0x1)");
+}
+
 /// Test that secrets can be extracted and used for encryption/decryption.
 #[cfg(feature = "tls12")]
 #[test]
