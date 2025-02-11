@@ -6729,6 +6729,19 @@ fn test_multiple_cipher_suite_enum_values() {
         "CipherSuite(0x1)"
     );
     assert_eq!(format!("{:?}", CipherSuite::from(1)), "CipherSuite(0x1)");
+
+    // test enum with CipherSuite::Unknown(...)
+    assert_eq!(CipherSuite::from(9876), CipherSuite::Unknown(9876));
+    assert_eq!(u16::from(CipherSuite::Unknown(9876)), 9876);
+    assert_eq!(CipherSuite::Unknown(9876).as_str(), None);
+    assert_eq!(
+        format!("{:?}", CipherSuite::Unknown(9876)),
+        "CipherSuite(0x2694)"
+    );
+    assert_eq!(
+        format!("{:?}", CipherSuite::from(9876)),
+        "CipherSuite(0x2694)"
+    );
 }
 
 /// Test that secrets can be extracted and used for encryption/decryption.
