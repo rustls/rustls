@@ -9,7 +9,7 @@ use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
-use crate::{compress, versions, InconsistentKeys, NoKeyLog};
+use crate::{compress, versions, NoKeyLog};
 
 impl ConfigBuilder<ServerConfig, WantsVerifier> {
     /// Choose how to verify client certificates.
@@ -67,18 +67,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         cert_chain: Vec<CertificateDer<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
-        let private_key = self
-            .provider
-            .key_provider
-            .load_private_key(key_der)?;
-
-        let certified_key = CertifiedKey::new(cert_chain, private_key);
-        match certified_key.keys_match() {
-            // Don't treat unknown consistency as an error
-            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => (),
-            Err(err) => return Err(err),
-        }
-
+        let certified_key = CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
         Ok(self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key))))
     }
 
@@ -101,18 +90,8 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         key_der: PrivateKeyDer<'static>,
         ocsp: Vec<u8>,
     ) -> Result<ServerConfig, Error> {
-        let private_key = self
-            .provider
-            .key_provider
-            .load_private_key(key_der)?;
-
-        let mut certified_key = CertifiedKey::new(cert_chain, private_key);
-        match certified_key.keys_match() {
-            // Don't treat unknown consistency as an error
-            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => (),
-            Err(err) => return Err(err),
-        }
-
+        let mut certified_key =
+            CertifiedKey::from_der(cert_chain, key_der, self.crypto_provider())?;
         certified_key.ocsp = Some(ocsp);
         Ok(self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key))))
     }
