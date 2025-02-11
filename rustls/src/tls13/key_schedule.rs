@@ -827,9 +827,10 @@ pub(crate) fn hkdf_expand_label_aead_key(
     label: &[u8],
     context: &[u8],
 ) -> AeadKey {
-    hkdf_expand_label_inner(expander, label, context, key_len, |e, info| {
-        let key: AeadKey = expand(e, info);
-        key.with_length(key_len)
+    hkdf_expand_label_inner(expander, label, context, key_len, |e, info| match key_len {
+        16 => expand::<AeadKey, 16>(e, info),
+        32 => expand::<AeadKey, 32>(e, info),
+        _ => unimplemented!("only 128-bit or 256-bit AeadKeys supported"),
     })
 }
 
