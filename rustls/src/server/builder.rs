@@ -106,15 +106,15 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             .key_provider
             .load_private_key(key_der)?;
 
-        let certified_key = CertifiedKey::new(cert_chain, private_key);
+        let mut certified_key = CertifiedKey::new(cert_chain, private_key);
         match certified_key.keys_match() {
             // Don't treat unknown consistency as an error
             Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => (),
             Err(err) => return Err(err),
         }
 
-        let resolver = SingleCertAndKey::new_with_extras(certified_key, ocsp);
-        Ok(self.with_cert_resolver(Arc::new(resolver)))
+        certified_key.ocsp = Some(ocsp);
+        Ok(self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key))))
     }
 
     /// Sets a custom [`ResolvesServerCert`].
