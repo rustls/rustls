@@ -88,9 +88,13 @@ pub trait Signer: Debug + Send + Sync {
     fn scheme(&self) -> SignatureScheme;
 }
 
-/// Something which always resolves to the same cert chain.
+/// Server certificate resolver which always resolves to the same certificate and key.
+///
+/// For use with [`ConfigBuilder::with_cert_resolver()`].
+///
+/// [`ConfigBuilder::with_cert_resolver()`]: crate::ConfigBuilder::with_cert_resolver
 #[derive(Debug)]
-pub(crate) struct SingleCertAndKey(Arc<CertifiedKey>);
+pub struct SingleCertAndKey(Arc<CertifiedKey>);
 
 impl From<CertifiedKey> for SingleCertAndKey {
     fn from(certified_key: CertifiedKey) -> Self {
