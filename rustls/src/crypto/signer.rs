@@ -2,13 +2,15 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use pki_types::{AlgorithmIdentifier, CertificateDer, SubjectPublicKeyInfoDer};
+use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
 use crate::x509;
+
+use super::CryptoProvider;
 
 /// An abstract signing key.
 ///
@@ -123,6 +125,30 @@ pub struct CertifiedKey {
 }
 
 impl CertifiedKey {
+    /// Create a new `CertifiedKey` from a certificate chain and DER-encoded private key.
+    ///
+    /// Attempt to parse the private key with the given [`CryptoProvider`]'s [`KeyProvider`] and
+    /// verify that it matches the public key in the first certificate of the `cert_chain`
+    /// if possible.
+    ///
+    /// [`KeyProvider`]: crate::crypto::KeyProvider
+    pub fn from_der(
+        cert_chain: Vec<CertificateDer<'static>>,
+        key: PrivateKeyDer<'static>,
+        provider: &CryptoProvider,
+    ) -> Result<Self, Error> {
+        let private_key = provider
+            .key_provider
+            .load_private_key(key)?;
+
+        let certified_key = Self::new(cert_chain, private_key);
+        match certified_key.keys_match() {
+            // Don't treat unknown consistency as an error
+            Ok(()) | Err(Error::InconsistentKeys(InconsistentKeys::Unknown)) => Ok(certified_key),
+            Err(err) => Err(err),
+        }
+    }
+
     /// Make a new CertifiedKey, with the given chain and key.
     ///
     /// The cert chain must not be empty. The first certificate in the chain
