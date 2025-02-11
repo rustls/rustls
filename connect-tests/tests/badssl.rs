@@ -42,7 +42,7 @@ mod online {
     fn wrong_host() {
         connect("wrong.host.badssl.com")
             .fails()
-            .expect(r"TLS error: invalid peer certificate: NotValidForName")
+            .expect(r#"TLS error: invalid peer certificate: certificate not valid for name \"wrong.host.badssl.com\"; certificate is only valid for DnsName\(\"\*.badssl.com\"\) or DnsName\(\"badssl.com\"\)"#)
             .go()
             .unwrap();
     }
