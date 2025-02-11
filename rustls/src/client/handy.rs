@@ -1,8 +1,6 @@
 use pki_types::ServerName;
 
 use crate::enums::SignatureScheme;
-use crate::error::Error;
-use crate::msgs::handshake::CertificateChain;
 use crate::msgs::persist;
 use crate::sync::Arc;
 use crate::{client, sign, NamedGroup};
@@ -208,35 +206,6 @@ impl client::ResolvesClientCert for FailResolveClientCert {
 
     fn has_certs(&self) -> bool {
         false
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);
-
-impl AlwaysResolvesClientCert {
-    pub(super) fn new(
-        private_key: Arc<dyn sign::SigningKey>,
-        chain: CertificateChain<'static>,
-    ) -> Result<Self, Error> {
-        Ok(Self(Arc::new(sign::CertifiedKey::new(
-            chain.0,
-            private_key,
-        ))))
-    }
-}
-
-impl client::ResolvesClientCert for AlwaysResolvesClientCert {
-    fn resolve(
-        &self,
-        _root_hint_subjects: &[&[u8]],
-        _sigschemes: &[SignatureScheme],
-    ) -> Option<Arc<sign::CertifiedKey>> {
-        Some(Arc::clone(&self.0))
-    }
-
-    fn has_certs(&self) -> bool {
-        true
     }
 }
 
