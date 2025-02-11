@@ -89,24 +89,6 @@ pub trait Signer: Debug + Send + Sync {
 #[derive(Debug)]
 pub(crate) struct SingleCertAndKey(Arc<CertifiedKey>);
 
-impl SingleCertAndKey {
-    /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey` and OCSP response.
-    ///
-    /// If non-empty, the given OCSP response is attached.
-    pub(crate) fn new_with_extras(certified_key: CertifiedKey, ocsp: Vec<u8>) -> Self {
-        let mut r = Self::from(certified_key);
-
-        {
-            let cert = Arc::make_mut(&mut r.0);
-            if !ocsp.is_empty() {
-                cert.ocsp = Some(ocsp);
-            }
-        }
-
-        r
-    }
-}
-
 impl From<CertifiedKey> for SingleCertAndKey {
     fn from(certified_key: CertifiedKey) -> Self {
         Self(Arc::new(certified_key))
