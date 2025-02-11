@@ -168,9 +168,9 @@ impl server::ProducesTickets for NeverProducesTickets {
 
 /// Something which always resolves to the same cert chain.
 #[derive(Debug)]
-pub(super) struct AlwaysResolvesChain(Arc<sign::CertifiedKey>);
+pub(super) struct SingleCertAndKey(Arc<sign::CertifiedKey>);
 
-impl AlwaysResolvesChain {
+impl SingleCertAndKey {
     /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey`.
     pub(super) fn new(certified_key: sign::CertifiedKey) -> Self {
         Self(Arc::new(certified_key))
@@ -193,7 +193,7 @@ impl AlwaysResolvesChain {
     }
 }
 
-impl server::ResolvesServerCert for AlwaysResolvesChain {
+impl server::ResolvesServerCert for SingleCertAndKey {
     fn resolve(&self, _client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
         Some(Arc::clone(&self.0))
     }

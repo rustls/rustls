@@ -79,7 +79,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             Err(err) => return Err(err),
         }
 
-        let resolver = handy::AlwaysResolvesChain::new(certified_key);
+        let resolver = handy::SingleCertAndKey::new(certified_key);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
@@ -114,7 +114,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             Err(err) => return Err(err),
         }
 
-        let resolver = handy::AlwaysResolvesChain::new_with_extras(certified_key, ocsp);
+        let resolver = handy::SingleCertAndKey::new_with_extras(certified_key, ocsp);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
