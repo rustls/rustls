@@ -668,6 +668,7 @@ pub mod pki_types {
 
 /// Message signing interfaces.
 pub mod sign {
+    pub(crate) use crate::crypto::signer::SingleCertAndKey;
     pub use crate::crypto::signer::{CertifiedKey, Signer, SigningKey};
 }
 
