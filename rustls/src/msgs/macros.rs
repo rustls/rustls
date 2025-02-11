@@ -5,9 +5,9 @@ macro_rules! enum_builder {
         #[repr($uint:ty)]
         $enum_vis:vis enum $enum_name:ident
         {
-          $( $enum_var:ident => $enum_val:literal),* $(,)?
+          $( $enum_var_dbg_fmt:ident => $enum_value_dbg_fmt:literal),* $(,)?
           $( !Debug:
-            $( $enum_var_nd:ident => $enum_val_nd:literal),* $(,)?
+            $( $enum_var_no_fmt:ident => $enum_value_no_fmt:literal),* $(,)?
           )?
         }
     ) => {
@@ -15,8 +15,8 @@ macro_rules! enum_builder {
         #[non_exhaustive]
         #[derive(PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
-            $( $enum_var),*
-            $(, $($enum_var_nd),* )?
+            $( $enum_var_dbg_fmt),*
+            $(, $($enum_var_no_fmt),* )?
             ,Unknown($uint)
         }
 
@@ -31,8 +31,8 @@ macro_rules! enum_builder {
             #[allow(dead_code)]
             $enum_vis fn as_str(&self) -> Option<&'static str> {
                 match self {
-                    $( $enum_name::$enum_var => Some(stringify!($enum_var))),*
-                    $(, $( $enum_name::$enum_var_nd => Some(stringify!($enum_var_nd))),* )?
+                    $( $enum_name::$enum_var_dbg_fmt => Some(stringify!($enum_var_dbg_fmt))),*
+                    $(, $( $enum_name::$enum_var_no_fmt => Some(stringify!($enum_var_no_fmt))),* )?
                     ,$enum_name::Unknown(_) => None,
                 }
             }
@@ -56,8 +56,8 @@ macro_rules! enum_builder {
         impl From<$uint> for $enum_name {
             fn from(x: $uint) -> Self {
                 match x {
-                    $($enum_val => $enum_name::$enum_var),*
-                    $(, $($enum_val_nd => $enum_name::$enum_var_nd),* )?
+                    $($enum_value_dbg_fmt => $enum_name::$enum_var_dbg_fmt),*
+                    $(, $($enum_value_no_fmt => $enum_name::$enum_var_no_fmt),* )?
                     , x => $enum_name::Unknown(x),
                 }
             }
@@ -66,8 +66,8 @@ macro_rules! enum_builder {
         impl From<$enum_name> for $uint {
             fn from(value: $enum_name) -> Self {
                 match value {
-                    $( $enum_name::$enum_var => $enum_val),*
-                    $(, $( $enum_name::$enum_var_nd => $enum_val_nd),* )?
+                    $( $enum_name::$enum_var_dbg_fmt => $enum_value_dbg_fmt),*
+                    $(, $( $enum_name::$enum_var_no_fmt => $enum_value_no_fmt),* )?
                     ,$enum_name::Unknown(x) => x
                 }
             }
@@ -76,7 +76,7 @@ macro_rules! enum_builder {
         impl core::fmt::Debug for $enum_name {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 match self {
-                    $( $enum_name::$enum_var => f.write_str(stringify!($enum_var)), )*
+                    $( $enum_name::$enum_var_dbg_fmt => f.write_str(stringify!($enum_var_dbg_fmt)), )*
                     _ => write!(f, "{}(0x{:x?})", stringify!($enum_name), <$uint>::from(*self)),
                 }
             }
