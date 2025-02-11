@@ -7734,7 +7734,8 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         .load_private_key(KeyType::Rsa2048.get_client_key())
         .unwrap();
     let big_cert_and_key = sign::CertifiedKey::new(vec![big_cert], key);
-    client_config.client_auth_cert_resolver = Arc::new(AlwaysResolves(big_cert_and_key.into()));
+    client_config.client_auth_cert_resolver =
+        Arc::new(sign::SingleCertAndKey::from(big_cert_and_key));
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
     assert_eq!(
@@ -7748,23 +7749,6 @@ fn test_cert_decompression_by_server_would_result_in_excessively_large_cert() {
         client.process_new_packets(),
         Err(Error::AlertReceived(AlertDescription::BadCertificate))
     );
-
-    #[derive(Debug)]
-    struct AlwaysResolves(Arc<sign::CertifiedKey>);
-
-    impl ResolvesClientCert for AlwaysResolves {
-        fn resolve(
-            &self,
-            _root_hint_subjects: &[&[u8]],
-            _sigschemes: &[SignatureScheme],
-        ) -> Option<Arc<sign::CertifiedKey>> {
-            Some(self.0.clone())
-        }
-
-        fn has_certs(&self) -> bool {
-            true
-        }
-    }
 }
 
 #[derive(Debug)]
