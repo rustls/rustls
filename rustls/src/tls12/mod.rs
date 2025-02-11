@@ -183,10 +183,10 @@ impl ConnectionSecrets {
         (
             self.suite
                 .aead_alg
-                .decrypter(AeadKey::new(read_key), read_iv),
+                .decrypter(AeadKey::from_slice(read_key).unwrap(), read_iv),
             self.suite
                 .aead_alg
-                .encrypter(AeadKey::new(write_key), write_iv, extra),
+                .encrypter(AeadKey::from_slice(write_key).unwrap(), write_iv, extra),
         )
     }
 
@@ -270,12 +270,12 @@ impl ConnectionSecrets {
         let (server_iv, explicit_nonce) = key_block.split_at(shape.fixed_iv_len);
 
         let client_secrets = self.suite.aead_alg.extract_keys(
-            AeadKey::new(client_key),
+            AeadKey::from_slice(client_key).unwrap(),
             client_iv,
             explicit_nonce,
         )?;
         let server_secrets = self.suite.aead_alg.extract_keys(
-            AeadKey::new(server_key),
+            AeadKey::from_slice(server_key).unwrap(),
             server_iv,
             explicit_nonce,
         )?;
