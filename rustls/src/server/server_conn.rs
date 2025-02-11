@@ -918,6 +918,10 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
         self.core.data.early_data.pop()
     }
+
+    pub(crate) fn peek_early_data(&self) -> Option<&[u8]> {
+        self.core.data.early_data.peek()
+    }
 }
 
 /// Represents a `ClientHello` message received through the [`Acceptor`].
@@ -1056,6 +1060,13 @@ impl EarlyDataState {
 
     pub(super) fn was_rejected(&self) -> bool {
         matches!(self, Self::Rejected)
+    }
+
+    fn peek(&self) -> Option<&[u8]> {
+        match self {
+            Self::Accepted { received, .. } => received.peek(),
+            _ => None,
+        }
     }
 
     fn pop(&mut self) -> Option<Vec<u8>> {
