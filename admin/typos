@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+# Checks for known typos in all files known by git, with limited exceptions.
+#
+# To auto-correct all detected typos:
+# $ ./admin/typos --write-changes
+#
+# To show other options:
+# $ ./admin/typos --help
+
+set -e
+
+EXCLUDE_FILE_PATTERNS=$(echo \
+  ':!:*.cert' \
+  ':!:*.svg' \
+  ':!:*.chain' \
+  ':!:*.fullchain' \
+  ':!:*.pem' \
+  ':!:*rfc*.json' \
+  ':!:website/templates/macros.html' \
+  ':!:*.png' \
+  ':!:*.pdf' \
+  ':!:*.bin' \
+  ':!:*.der' \
+  ':!:*.woff2' \
+)
+
+git ls-files . $EXCLUDE_FILE_PATTERNS | xargs typos "$@"

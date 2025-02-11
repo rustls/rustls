@@ -526,6 +526,20 @@ jobs:
       - run: cargo install taplo-cli --locked
       - run: taplo format --check
 
+  typos:
+    name: Typos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - run: cargo install typos-cli --locked
+      - run: admin/typos
+
   openssl-tests:
     name: Run openssl-tests
     runs-on: ubuntu-latest
