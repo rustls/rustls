@@ -3,10 +3,10 @@ use core::marker::PhantomData;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
 
+use super::{handy, ResolvesServerCert, ServerConfig};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
-use crate::server::{handy, ResolvesServerCert, ServerConfig};
-use crate::sign::CertifiedKey;
+use crate::sign::{CertifiedKey, SingleCertAndKey};
 use crate::sync::Arc;
 use crate::verify::{ClientCertVerifier, NoClientAuth};
 use crate::{compress, versions, InconsistentKeys, NoKeyLog};
@@ -79,7 +79,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             Err(err) => return Err(err),
         }
 
-        let resolver = handy::SingleCertAndKey::new(certified_key);
+        let resolver = SingleCertAndKey::new(certified_key);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 
@@ -114,7 +114,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             Err(err) => return Err(err),
         }
 
-        let resolver = handy::SingleCertAndKey::new_with_extras(certified_key, ocsp);
+        let resolver = SingleCertAndKey::new_with_extras(certified_key, ocsp);
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
 

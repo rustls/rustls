@@ -6,7 +6,7 @@ use pki_types::{AlgorithmIdentifier, CertificateDer, SubjectPublicKeyInfoDer};
 
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
-use crate::server::ParsedCertificate;
+use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
 use crate::x509;
 
@@ -83,6 +83,39 @@ pub trait Signer: Debug + Send + Sync {
 
     /// Reveals which scheme will be used when you call [`Self::sign()`].
     fn scheme(&self) -> SignatureScheme;
+}
+
+/// Something which always resolves to the same cert chain.
+#[derive(Debug)]
+pub(crate) struct SingleCertAndKey(Arc<CertifiedKey>);
+
+impl SingleCertAndKey {
+    /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey`.
+    pub(crate) fn new(certified_key: CertifiedKey) -> Self {
+        Self(Arc::new(certified_key))
+    }
+
+    /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey` and OCSP response.
+    ///
+    /// If non-empty, the given OCSP response is attached.
+    pub(crate) fn new_with_extras(certified_key: CertifiedKey, ocsp: Vec<u8>) -> Self {
+        let mut r = Self::new(certified_key);
+
+        {
+            let cert = Arc::make_mut(&mut r.0);
+            if !ocsp.is_empty() {
+                cert.ocsp = Some(ocsp);
+            }
+        }
+
+        r
+    }
+}
+
+impl ResolvesServerCert for SingleCertAndKey {
+    fn resolve(&self, _client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        Some(Arc::clone(&self.0))
+    }
 }
 
 /// A packaged-together certificate chain, matching `SigningKey` and

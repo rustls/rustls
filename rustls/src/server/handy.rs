@@ -166,39 +166,6 @@ impl server::ProducesTickets for NeverProducesTickets {
     }
 }
 
-/// Something which always resolves to the same cert chain.
-#[derive(Debug)]
-pub(super) struct SingleCertAndKey(Arc<sign::CertifiedKey>);
-
-impl SingleCertAndKey {
-    /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey`.
-    pub(super) fn new(certified_key: sign::CertifiedKey) -> Self {
-        Self(Arc::new(certified_key))
-    }
-
-    /// Creates an `AlwaysResolvesChain`, using the supplied `CertifiedKey` and OCSP response.
-    ///
-    /// If non-empty, the given OCSP response is attached.
-    pub(super) fn new_with_extras(certified_key: sign::CertifiedKey, ocsp: Vec<u8>) -> Self {
-        let mut r = Self::new(certified_key);
-
-        {
-            let cert = Arc::make_mut(&mut r.0);
-            if !ocsp.is_empty() {
-                cert.ocsp = Some(ocsp);
-            }
-        }
-
-        r
-    }
-}
-
-impl server::ResolvesServerCert for SingleCertAndKey {
-    fn resolve(&self, _client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        Some(Arc::clone(&self.0))
-    }
-}
-
 /// An exemplar `ResolvesServerCert` implementation that always resolves to a single
 /// [RFC 7250] raw public key.
 ///
