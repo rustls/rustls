@@ -540,6 +540,48 @@ impl From<CertificateError> for AlertDescription {
     }
 }
 
+impl fmt::Display for CertificateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(feature = "std")]
+            Self::NotValidForNameContext {
+                expected,
+                presented,
+            } => {
+                write!(
+                    f,
+                    "certificate not valid for name {:?}; certificate ",
+                    expected.to_str()
+                )?;
+
+                match presented.as_slice() {
+                    &[] => write!(
+                        f,
+                        "is not valid for any names (according to its subjectAltName extension)"
+                    ),
+                    [one] => write!(f, "is only valid for {}", one),
+                    many => {
+                        write!(f, "is only valid for ")?;
+
+                        let n = many.len();
+                        let all_but_last = &many[..n - 1];
+                        let last = &many[n - 1];
+
+                        for (i, name) in all_but_last.iter().enumerate() {
+                            write!(f, "{}", name)?;
+                            if i < n - 2 {
+                                write!(f, ", ")?;
+                            }
+                        }
+                        write!(f, " or {}", last)
+                    }
+                }
+            }
+            other => write!(f, "{:?}", other),
+        }
+    }
+}
+
 impl From<CertificateError> for Error {
     #[inline]
     fn from(e: CertificateError) -> Self {
@@ -673,7 +715,7 @@ impl fmt::Display for Error {
             Self::PeerMisbehaved(ref why) => write!(f, "peer misbehaved: {:?}", why),
             Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
             Self::InvalidCertificate(ref err) => {
-                write!(f, "invalid peer certificate: {:?}", err)
+                write!(f, "invalid peer certificate: {}", err)
             }
             Self::InvalidCertRevocationList(ref err) => {
                 write!(f, "invalid certificate revocation list: {:?}", err)
@@ -946,6 +988,30 @@ mod tests {
             super::PeerMisbehaved::UnsolicitedCertExtension.into(),
             Error::AlertReceived(AlertDescription::ExportRestriction),
             super::CertificateError::Expired.into(),
+            super::CertificateError::NotValidForNameContext {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![],
+            }
+            .into(),
+            super::CertificateError::NotValidForNameContext {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec!["DnsName(\"hello.com\")".into()],
+            }
+            .into(),
+            super::CertificateError::NotValidForNameContext {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![
+                    "DnsName(\"hello.com\")".into(),
+                    "DnsName(\"goodbye.com\")".into(),
+                ],
+            }
+            .into(),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
             Error::FailedToGetRandomBytes,
