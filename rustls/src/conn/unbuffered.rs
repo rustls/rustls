@@ -19,7 +19,7 @@ impl UnbufferedConnectionCommon<ClientConnectionData> {
         &'c mut self,
         incoming_tls: &'i mut [u8],
     ) -> UnbufferedStatus<'c, 'i, ClientConnectionData> {
-        self.process_tls_records_common(incoming_tls, |_| None, |_, _, ()| unreachable!())
+        self.process_tls_records_common(incoming_tls, |_| false, |_, _| unreachable!())
     }
 }
 
@@ -32,27 +32,27 @@ impl UnbufferedConnectionCommon<ServerConnectionData> {
     ) -> UnbufferedStatus<'c, 'i, ServerConnectionData> {
         self.process_tls_records_common(
             incoming_tls,
-            |conn| conn.pop_early_data(),
-            |conn, incoming_tls, chunk| ReadEarlyData::new(conn, incoming_tls, chunk).into(),
+            |conn| conn.peek_early_data().is_some(),
+            |conn, incoming_tls| ReadEarlyData::new(conn, incoming_tls).into(),
         )
     }
 }
 
 impl<Data> UnbufferedConnectionCommon<Data> {
-    fn process_tls_records_common<'c, 'i, T>(
+    fn process_tls_records_common<'c, 'i>(
         &'c mut self,
         incoming_tls: &'i mut [u8],
-        mut early_data_available: impl FnMut(&mut Self) -> Option<T>,
-        early_data_state: impl FnOnce(&'c mut Self, &'i mut [u8], T) -> ConnectionState<'c, 'i, Data>,
+        mut early_data_available: impl FnMut(&mut Self) -> bool,
+        early_data_state: impl FnOnce(&'c mut Self, &'i mut [u8]) -> ConnectionState<'c, 'i, Data>,
     ) -> UnbufferedStatus<'c, 'i, Data> {
         let mut buffer = DeframerSliceBuffer::new(incoming_tls);
         let mut buffer_progress = self.core.hs_deframer.progress();
 
         let (discard, state) = loop {
-            if let Some(value) = early_data_available(self) {
+            if early_data_available(self) {
                 break (
                     buffer.pending_discard(),
-                    early_data_state(self, incoming_tls, value),
+                    early_data_state(self, incoming_tls),
                 );
             }
 
@@ -369,52 +369,47 @@ impl<'c, 'i, Data> ReadTraffic<'c, 'i, Data> {
 
 /// Early application-data is available.
 pub struct ReadEarlyData<'c, 'i, Data> {
-    _conn: &'c mut UnbufferedConnectionCommon<Data>,
+    conn: &'c mut UnbufferedConnectionCommon<Data>,
+
     // for forwards compatibility; to support in-place decryption in the future
     _incoming_tls: &'i mut [u8],
-    chunk: Vec<u8>,
-    taken: bool,
+
+    // owner of the latest chunk obtained in `next_record`, as borrowed by
+    // `AppDataRecord`
+    chunk: Option<Vec<u8>>,
 }
 
-impl<'c, 'i, Data> ReadEarlyData<'c, 'i, Data> {
+impl<'c, 'i> ReadEarlyData<'c, 'i, ServerConnectionData> {
     fn new(
-        _conn: &'c mut UnbufferedConnectionCommon<Data>,
+        conn: &'c mut UnbufferedConnectionCommon<ServerConnectionData>,
         _incoming_tls: &'i mut [u8],
-        chunk: Vec<u8>,
     ) -> Self {
         Self {
-            _conn,
+            conn,
             _incoming_tls,
-            chunk,
-            taken: false,
+            chunk: None,
         }
     }
-}
 
-impl ReadEarlyData<'_, '_, ServerConnectionData> {
     /// decrypts and returns the next available app-data record
     // TODO deprecate in favor of `Iterator` implementation, which requires in-place decryption
     pub fn next_record(&mut self) -> Option<Result<AppDataRecord<'_>, Error>> {
-        if self.taken {
-            None
-        } else {
-            self.taken = true;
-            Some(Ok(AppDataRecord {
+        self.chunk = self.conn.pop_early_data();
+        self.chunk.as_ref().map(|chunk| {
+            Ok(AppDataRecord {
                 discard: 0,
-                payload: &self.chunk,
-            }))
-        }
+                payload: chunk,
+            })
+        })
     }
 
     /// returns the payload size of the next app-data record *without* decrypting it
     ///
     /// returns `None` if there are no more app-data records
     pub fn peek_len(&self) -> Option<NonZeroUsize> {
-        if self.taken {
-            None
-        } else {
-            NonZeroUsize::new(self.chunk.len())
-        }
+        self.conn
+            .peek_early_data()
+            .and_then(|ch| NonZeroUsize::new(ch.len()))
     }
 }
 
