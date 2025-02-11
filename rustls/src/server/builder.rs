@@ -79,8 +79,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             Err(err) => return Err(err),
         }
 
-        let resolver = SingleCertAndKey::new(certified_key);
-        Ok(self.with_cert_resolver(Arc::new(resolver)))
+        Ok(self.with_cert_resolver(Arc::new(SingleCertAndKey::from(certified_key))))
     }
 
     /// Sets a single certificate chain, matching private key and optional OCSP
