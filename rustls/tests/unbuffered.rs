@@ -862,11 +862,9 @@ fn write_traffic<T: SideData, R, F: FnMut(WriteTraffic<T>) -> R>(
 ) -> R {
     let UnbufferedStatus { discard, state } = status;
     assert_eq!(discard, 0);
-    let state = state.unwrap();
-    if let ConnectionState::WriteTraffic(state) = state {
-        f(state)
-    } else {
-        panic!("unexpected client state {state:?} (wanted WriteTraffic)");
+    match state.unwrap() {
+        ConnectionState::WriteTraffic(state) => f(state),
+        other => panic!("unexpected state {other:?} (wanted WriteTraffic)"),
     }
 }
 
@@ -976,23 +974,21 @@ fn advance_client(
     let state = match state {
         ConnectionState::TransmitTlsData(mut state) => {
             let mut sent_early_data = false;
-            if let Some(early_data) = actions.early_data_to_send {
-                if let Some(mut state) = state.may_encrypt_early_data() {
-                    write_with_buffer_size_checks(
-                        |out_buf| state.encrypt(early_data, out_buf),
-                        |e| {
-                            println!("encrypt error: {e}");
-                            if let EarlyDataError::Encrypt(EncryptError::InsufficientSize(ise)) = e
-                            {
-                                ise
-                            } else {
-                                unreachable!()
-                            }
-                        },
-                        &mut buffers.outgoing,
-                    );
-                    sent_early_data = true;
-                }
+            if let (Some(early_data), Some(mut state)) =
+                (actions.early_data_to_send, state.may_encrypt_early_data())
+            {
+                write_with_buffer_size_checks(
+                    |out_buf| state.encrypt(early_data, out_buf),
+                    |e| {
+                        println!("encrypt error: {e}");
+                        match e {
+                            EarlyDataError::Encrypt(EncryptError::InsufficientSize(ise)) => ise,
+                            _ => unreachable!(),
+                        }
+                    },
+                    &mut buffers.outgoing,
+                );
+                sent_early_data = true;
             }
             state.done();
             State::TransmitTlsData {
@@ -1055,10 +1051,9 @@ fn handle_state<Data>(
                 |out_buf| state.encode(out_buf),
                 |e| {
                     println!("encode error: {e}");
-                    if let EncodeError::InsufficientSize(ise) = e {
-                        ise
-                    } else {
-                        unreachable!()
+                    match e {
+                        EncodeError::InsufficientSize(ise) => ise,
+                        _ => unreachable!(),
                     }
                 },
                 outgoing,
@@ -1074,11 +1069,11 @@ fn handle_state<Data>(
 
         ConnectionState::TransmitTlsData(mut state) => {
             let mut sent_app_data = false;
-            if let Some(app_data) = actions.app_data_to_send {
-                if let Some(mut state) = state.may_encrypt_app_data() {
-                    encrypt(&mut state, app_data, outgoing);
-                    sent_app_data = true;
-                }
+            if let (Some(app_data), Some(mut state)) =
+                (actions.app_data_to_send, state.may_encrypt_app_data())
+            {
+                encrypt(&mut state, app_data, outgoing);
+                sent_app_data = true;
             }
 
             let mut sent_close_notify = false;
@@ -1159,10 +1154,9 @@ fn encrypt<Data>(state: &mut WriteTraffic<'_, Data>, app_data: &[u8], outgoing: 
 }
 
 fn map_encrypt_error(e: EncryptError) -> InsufficientSizeError {
-    if let EncryptError::InsufficientSize(ise) = e {
-        ise
-    } else {
-        unreachable!()
+    match e {
+        EncryptError::InsufficientSize(ise) => ise,
+        _ => unreachable!(),
     }
 }
 
