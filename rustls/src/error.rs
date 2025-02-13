@@ -487,6 +487,7 @@ impl PartialEq<Self> for CertificateError {
             ) => le.eq(re) && lp.eq(rp),
             (InvalidPurpose, InvalidPurpose) => true,
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
+            (UnknownRevocationStatus, UnknownRevocationStatus) => true,
             (ExpiredRevocationList, ExpiredRevocationList) => true,
             (
                 ExpiredRevocationListDetail {
@@ -831,6 +832,8 @@ mod tests {
         assert_eq!(Revoked, Revoked);
         assert_eq!(UnhandledCriticalExtension, UnhandledCriticalExtension);
         assert_eq!(UnknownIssuer, UnknownIssuer);
+        assert_eq!(ExpiredRevocationList, ExpiredRevocationList);
+        assert_eq!(UnknownRevocationStatus, UnknownRevocationStatus);
         let detail = ExpiredRevocationListDetail {
             time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
             next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
