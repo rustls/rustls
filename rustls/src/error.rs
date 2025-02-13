@@ -2,7 +2,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-use pki_types::ServerName;
+use pki_types::{ServerName, UnixTime};
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
@@ -346,8 +346,30 @@ pub enum CertificateError {
     /// The current time is after the `notAfter` time in the certificate.
     Expired,
 
+    /// The current time is after the `notAfter` time in the certificate.
+    ///
+    /// This variant is semantically the same as `Expired`, but includes
+    /// extra data to improve error reports.
+    ExpiredDetail {
+        /// The validation time.
+        time: UnixTime,
+        /// The `notAfter` time of the certificate.
+        not_after: UnixTime,
+    },
+
     /// The current time is before the `notBefore` time in the certificate.
     NotValidYet,
+
+    /// The current time is before the `notBefore` time in the certificate.
+    ///
+    /// This variant is semantically the same as `NotValidYet`, but includes
+    /// extra data to improve error reports.
+    NotValidYetDetail {
+        /// The validation time.
+        time: UnixTime,
+        /// The `notBefore` time of the certificate.
+        not_before: UnixTime,
+    },
 
     /// The certificate has been revoked.
     Revoked,
@@ -364,6 +386,17 @@ pub enum CertificateError {
 
     /// The certificate's revocation status could not be determined, because the CRL is expired.
     ExpiredRevocationList,
+
+    /// The certificate's revocation status could not be determined, because the CRL is expired.
+    ///
+    /// This variant is semantically the same as `ExpiredRevocationList`, but includes
+    /// extra data to improve error reports.
+    ExpiredRevocationListDetail {
+        /// The validation time.
+        time: UnixTime,
+        /// The nextUpdate time of the CRL.
+        next_update: UnixTime,
+    },
 
     /// A certificate is not correctly signed by the key of its alleged
     /// issuer.
@@ -416,7 +449,27 @@ impl PartialEq<Self> for CertificateError {
         match (self, other) {
             (BadEncoding, BadEncoding) => true,
             (Expired, Expired) => true,
+            (
+                ExpiredDetail {
+                    time: lt,
+                    not_after: lna,
+                },
+                ExpiredDetail {
+                    time: rt,
+                    not_after: rna,
+                },
+            ) => lt.eq(rt) && lna.eq(rna),
             (NotValidYet, NotValidYet) => true,
+            (
+                NotValidYetDetail {
+                    time: lt,
+                    not_before: lnb,
+                },
+                NotValidYetDetail {
+                    time: rt,
+                    not_before: rnb,
+                },
+            ) => lt.eq(rt) && lnb.eq(rnb),
             (Revoked, Revoked) => true,
             (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
             (UnknownIssuer, UnknownIssuer) => true,
@@ -435,6 +488,16 @@ impl PartialEq<Self> for CertificateError {
             (InvalidPurpose, InvalidPurpose) => true,
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
             (ExpiredRevocationList, ExpiredRevocationList) => true,
+            (
+                ExpiredRevocationListDetail {
+                    time: lt,
+                    next_update: lnu,
+                },
+                ExpiredRevocationListDetail {
+                    time: rt,
+                    next_update: rnu,
+                },
+            ) => lt.eq(rt) && lnu.eq(rnu),
             _ => false,
         }
     }
@@ -454,11 +517,16 @@ impl From<CertificateError> for AlertDescription {
             // RFC 5246/RFC 8446
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
-            Expired | NotValidYet => Self::CertificateExpired,
+            Expired | ExpiredDetail { .. } | NotValidYet | NotValidYetDetail { .. } => {
+                Self::CertificateExpired
+            }
             Revoked => Self::CertificateRevoked,
             // OpenSSL, BoringSSL and AWS-LC all generate an Unknown CA alert for
             // the case where revocation status can not be determined, so we do the same here.
-            UnknownIssuer | UnknownRevocationStatus | ExpiredRevocationList => Self::UnknownCA,
+            UnknownIssuer
+            | UnknownRevocationStatus
+            | ExpiredRevocationList
+            | ExpiredRevocationListDetail { .. } => Self::UnknownCA,
             BadSignature => Self::DecryptError,
             InvalidPurpose => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
@@ -705,10 +773,13 @@ pub use other_error::OtherError;
 
 #[cfg(test)]
 mod tests {
+    use core::time::Duration;
     use std::prelude::v1::*;
     use std::{println, vec};
 
-    use super::{CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError};
+    use super::{
+        CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError, UnixTime,
+    };
     #[cfg(feature = "std")]
     use crate::sync::Arc;
     use pki_types::ServerName;
@@ -718,10 +789,67 @@ mod tests {
         use super::CertificateError::*;
         assert_eq!(BadEncoding, BadEncoding);
         assert_eq!(Expired, Expired);
+        let detail = ExpiredDetail {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+        };
+        assert_eq!(detail, detail);
+        assert_ne!(
+            detail,
+            ExpiredDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            detail,
+            ExpiredDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(NotValidYet, NotValidYet);
+        let detail = NotValidYetDetail {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+        };
+        assert_eq!(detail, detail);
+        assert_ne!(
+            detail,
+            NotValidYetDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
+        assert_ne!(
+            detail,
+            NotValidYetDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+            }
+        );
         assert_eq!(Revoked, Revoked);
         assert_eq!(UnhandledCriticalExtension, UnhandledCriticalExtension);
         assert_eq!(UnknownIssuer, UnknownIssuer);
+        let detail = ExpiredRevocationListDetail {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+        };
+        assert_eq!(detail, detail);
+        assert_ne!(
+            detail,
+            ExpiredRevocationListDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            detail,
+            ExpiredRevocationListDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(BadSignature, BadSignature);
         assert_eq!(NotValidForName, NotValidForName);
         let detail = NotValidForNameDetail {
