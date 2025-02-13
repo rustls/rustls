@@ -2,7 +2,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-use pki_types::ServerName;
+use pki_types::{ServerName, UnixTime};
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
@@ -346,8 +346,30 @@ pub enum CertificateError {
     /// The current time is after the `notAfter` time in the certificate.
     Expired,
 
+    /// The current time is after the `notAfter` time in the certificate.
+    ///
+    /// This variant is semantically the same as `Expired`, but includes
+    /// extra data to improve error reports.
+    ExpiredContext {
+        /// The validation time.
+        time: UnixTime,
+        /// The `notAfter` time of the certificate.
+        not_after: UnixTime,
+    },
+
     /// The current time is before the `notBefore` time in the certificate.
     NotValidYet,
+
+    /// The current time is before the `notBefore` time in the certificate.
+    ///
+    /// This variant is semantically the same as `NotValidYet`, but includes
+    /// extra data to improve error reports.
+    NotValidYetContext {
+        /// The validation time.
+        time: UnixTime,
+        /// The `notBefore` time of the certificate.
+        not_before: UnixTime,
+    },
 
     /// The certificate has been revoked.
     Revoked,
@@ -364,6 +386,17 @@ pub enum CertificateError {
 
     /// The certificate's revocation status could not be determined, because the CRL is expired.
     ExpiredRevocationList,
+
+    /// The certificate's revocation status could not be determined, because the CRL is expired.
+    ///
+    /// This variant is semantically the same as `ExpiredRevocationList`, but includes
+    /// extra data to improve error reports.
+    ExpiredRevocationListContext {
+        /// The validation time.
+        time: UnixTime,
+        /// The nextUpdate time of the CRL.
+        next_update: UnixTime,
+    },
 
     /// A certificate is not correctly signed by the key of its alleged
     /// issuer.
@@ -416,7 +449,27 @@ impl PartialEq<Self> for CertificateError {
         match (self, other) {
             (BadEncoding, BadEncoding) => true,
             (Expired, Expired) => true,
+            (
+                ExpiredContext {
+                    time: left_time,
+                    not_after: left_not_after,
+                },
+                ExpiredContext {
+                    time: right_time,
+                    not_after: right_not_after,
+                },
+            ) => (left_time, left_not_after) == (right_time, right_not_after),
             (NotValidYet, NotValidYet) => true,
+            (
+                NotValidYetContext {
+                    time: left_time,
+                    not_before: left_not_before,
+                },
+                NotValidYetContext {
+                    time: right_time,
+                    not_before: right_not_before,
+                },
+            ) => (left_time, left_not_before) == (right_time, right_not_before),
             (Revoked, Revoked) => true,
             (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
             (UnknownIssuer, UnknownIssuer) => true,
@@ -435,6 +488,16 @@ impl PartialEq<Self> for CertificateError {
             (InvalidPurpose, InvalidPurpose) => true,
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
             (ExpiredRevocationList, ExpiredRevocationList) => true,
+            (
+                ExpiredRevocationListContext {
+                    time: left_time,
+                    next_update: left_next_update,
+                },
+                ExpiredRevocationListContext {
+                    time: right_time,
+                    next_update: right_next_update,
+                },
+            ) => (left_time, left_next_update) == (right_time, right_next_update),
             _ => false,
         }
     }
@@ -454,11 +517,16 @@ impl From<CertificateError> for AlertDescription {
             // RFC 5246/RFC 8446
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
-            Expired | NotValidYet => Self::CertificateExpired,
+            Expired | ExpiredContext { .. } | NotValidYet | NotValidYetContext { .. } => {
+                Self::CertificateExpired
+            }
             Revoked => Self::CertificateRevoked,
             // OpenSSL, BoringSSL and AWS-LC all generate an Unknown CA alert for
             // the case where revocation status can not be determined, so we do the same here.
-            UnknownIssuer | UnknownRevocationStatus | ExpiredRevocationList => Self::UnknownCA,
+            UnknownIssuer
+            | UnknownRevocationStatus
+            | ExpiredRevocationList
+            | ExpiredRevocationListContext { .. } => Self::UnknownCA,
             BadSignature => Self::DecryptError,
             InvalidPurpose => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
@@ -705,10 +773,13 @@ pub use other_error::OtherError;
 
 #[cfg(test)]
 mod tests {
+    use core::time::Duration;
     use std::prelude::v1::*;
     use std::{println, vec};
 
-    use super::{CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError};
+    use super::{
+        CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError, UnixTime,
+    };
     #[cfg(feature = "std")]
     use crate::sync::Arc;
     use pki_types::ServerName;
@@ -718,10 +789,67 @@ mod tests {
         use super::CertificateError::*;
         assert_eq!(BadEncoding, BadEncoding);
         assert_eq!(Expired, Expired);
+        let context = ExpiredContext {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+        };
+        assert_eq!(context, context);
+        assert_ne!(
+            context,
+            ExpiredContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            context,
+            ExpiredContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(NotValidYet, NotValidYet);
+        let context = NotValidYetContext {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+        };
+        assert_eq!(context, context);
+        assert_ne!(
+            context,
+            NotValidYetContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
+        assert_ne!(
+            context,
+            NotValidYetContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+            }
+        );
         assert_eq!(Revoked, Revoked);
         assert_eq!(UnhandledCriticalExtension, UnhandledCriticalExtension);
         assert_eq!(UnknownIssuer, UnknownIssuer);
+        let context = ExpiredRevocationListContext {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+        };
+        assert_eq!(context, context);
+        assert_ne!(
+            context,
+            ExpiredRevocationListContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            context,
+            ExpiredRevocationListContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(BadSignature, BadSignature);
         assert_eq!(NotValidForName, NotValidForName);
         let context = NotValidForNameContext {

@@ -1872,12 +1872,12 @@ fn client_check_server_certificate_ee_crl_expired() {
 
             // We expect the handshake to fail since the CRL is expired.
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert_eq!(
+            assert!(matches!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::ExpiredRevocationList
+                    CertificateError::ExpiredRevocationListContext { .. }
                 )))
-            );
+            ));
 
             let client_config =
                 make_client_config_with_verifier(&[version], ignore_expiration_builder.clone());
