@@ -577,6 +577,42 @@ impl fmt::Display for CertificateError {
                     }
                 }
             }
+
+            Self::ExpiredDetail { time, not_after } => write!(
+                f,
+                "certificate expired: current UNIX time is {}, \
+                 but certificate is not valid after {} \
+                 ({} seconds ago)",
+                time.as_secs(),
+                not_after.as_secs(),
+                time.as_secs()
+                    .saturating_sub(not_after.as_secs())
+            ),
+
+            Self::NotValidYetDetail { time, not_before } => write!(
+                f,
+                "certificate not valid yet: current UNIX time is {}, \
+                 but certificate is not valid before {} \
+                 ({} seconds in future)",
+                time.as_secs(),
+                not_before.as_secs(),
+                not_before
+                    .as_secs()
+                    .saturating_sub(time.as_secs())
+            ),
+
+            Self::ExpiredRevocationListDetail { time, next_update } => write!(
+                f,
+                "certificate revocation list expired: \
+                 current UNIX time is {}, \
+                 but CRL is not valid after {} \
+                 ({} seconds ago)",
+                time.as_secs(),
+                next_update.as_secs(),
+                time.as_secs()
+                    .saturating_sub(next_update.as_secs())
+            ),
+
             other => write!(f, "{:?}", other),
         }
     }
@@ -1001,6 +1037,21 @@ mod tests {
                     "DnsName(\"hello.com\")".into(),
                     "DnsName(\"goodbye.com\")".into(),
                 ],
+            }
+            .into(),
+            super::CertificateError::NotValidYetDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(300)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(320)),
+            }
+            .into(),
+            super::CertificateError::ExpiredDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(320)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(300)),
+            }
+            .into(),
+            super::CertificateError::ExpiredRevocationListDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(320)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(300)),
             }
             .into(),
             Error::General("undocumented error".to_string()),
