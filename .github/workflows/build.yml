@@ -247,7 +247,9 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Install cargo fuzz
-        run: cargo install cargo-fuzz
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-fuzz
 
       - name: Smoke-test fuzz targets
         run: |
@@ -321,7 +323,9 @@ jobs:
           components: llvm-tools
 
       - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-llvm-cov
 
       - name: Measure coverage
         run: ./admin/coverage --lcov --output-path final.info
@@ -385,11 +389,20 @@ jobs:
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - name: Install cross (cross-rs) from GitHub
-        run: cargo install cross --git https://github.com/cross-rs/cross
-      - name: Install bindgen feature & CLI for aws-lc-sys (as needed for many cross targets)
+      - name: Install cross
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cross
+          git: https://github.com/cross-rs/cross
+          # known-working main in feb 2025, bump as needed
+          rev: c7dee4d
+      - name: Install bindgen-cli
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: bindgen-cli
+      - name: Enable bindgen feature for aws-lc-sys (as needed for many cross targets)
         if: ${{ matrix.target != 'i686-unknown-linux-gnu' }}
-        run: cargo add --dev --features bindgen 'aws-lc-sys@>0.20' --package rustls --verbose && cargo install bindgen-cli --verbose
+        run: cargo add --dev --features bindgen 'aws-lc-sys@>0.20' --package rustls --verbose
       - run: cross test --package rustls --target ${{ matrix.target }}
 
   semver:
@@ -507,7 +520,10 @@ jobs:
         with:
           toolchain: nightly-2024-06-30
           # ^ sync with https://github.com/awslabs/cargo-check-external-types/blob/main/rust-toolchain.toml
-      - run: cargo install --locked cargo-check-external-types
+      - name: Install cargo-check-external-types
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: cargo-check-external-types
       - name: run cargo-check-external-types for rustls/
         working-directory: rustls/
         run: cargo check-external-types
@@ -523,7 +539,10 @@ jobs:
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
-      - run: cargo install taplo-cli --locked
+      - name: Install taplo-cli
+        uses: taiki-e/cache-cargo-install-action@v2
+        with:
+          tool: taplo-cli
       - run: taplo format --check
 
   openssl-tests:
