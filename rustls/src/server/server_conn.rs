@@ -908,6 +908,10 @@ impl DerefMut for UnbufferedServerConnection {
 }
 
 impl UnbufferedConnectionCommon<ServerConnectionData> {
+    pub(crate) fn peek_early_data(&self) -> Option<&[u8]> {
+        self.core.data.early_data.peek()
+    }
+
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
         self.core.data.early_data.pop()
     }
@@ -1049,6 +1053,13 @@ impl EarlyDataState {
 
     pub(super) fn was_rejected(&self) -> bool {
         matches!(self, Self::Rejected)
+    }
+
+    fn peek(&self) -> Option<&[u8]> {
+        match self {
+            Self::Accepted { ref received, .. } => received.peek(),
+            _ => None,
+        }
     }
 
     fn pop(&mut self) -> Option<Vec<u8>> {
