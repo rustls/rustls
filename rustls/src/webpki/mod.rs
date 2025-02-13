@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use pki_types::CertificateRevocationListDer;
-use webpki::{CertRevocationList, OwnedCertRevocationList};
+use webpki::{CertRevocationList, InvalidNameContext, OwnedCertRevocationList};
 
 use crate::error::{CertRevocationListError, CertificateError, Error, OtherError};
 #[cfg(feature = "std")]
@@ -58,13 +58,27 @@ fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;
     match error {
         BadDer | BadDerTime | TrailingData(_) => CertificateError::BadEncoding.into(),
-        CertNotValidYet => CertificateError::NotValidYet.into(),
-        CertExpired | InvalidCertValidity => CertificateError::Expired.into(),
+        CertNotValidYet { time, not_before } => {
+            CertificateError::NotValidYetDetail { time, not_before }.into()
+        }
+        CertExpired { time, not_after } => {
+            CertificateError::ExpiredDetail { time, not_after }.into()
+        }
+        InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
-        CertNotValidForName => CertificateError::NotValidForName.into(),
+        CertNotValidForName(InvalidNameContext {
+            expected,
+            presented,
+        }) => CertificateError::NotValidForNameDetail {
+            expected,
+            presented,
+        }
+        .into(),
         CertRevoked => CertificateError::Revoked.into(),
         UnknownRevocationStatus => CertificateError::UnknownRevocationStatus.into(),
-        CrlExpired => CertificateError::ExpiredRevocationList.into(),
+        CrlExpired { time, next_update } => {
+            CertificateError::ExpiredRevocationListDetail { time, next_update }.into()
+        }
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey
@@ -189,7 +203,7 @@ mod tests {
             ),
         ];
         for t in testcases {
-            assert_eq!(crl_error(t.0), t.1);
+            assert_eq!(crl_error(t.0.clone()), t.1);
         }
 
         assert!(matches!(

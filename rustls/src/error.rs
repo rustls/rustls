@@ -2,6 +2,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
+use pki_types::{ServerName, UnixTime};
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
@@ -345,8 +346,30 @@ pub enum CertificateError {
     /// The current time is after the `notAfter` time in the certificate.
     Expired,
 
+    /// The current time is after the `notAfter` time in the certificate.
+    ///
+    /// This variant is semantically the same as `Expired`, but includes
+    /// extra data to improve error reports.
+    ExpiredDetail {
+        /// The validation time.
+        time: UnixTime,
+        /// The `notAfter` time of the certificate.
+        not_after: UnixTime,
+    },
+
     /// The current time is before the `notBefore` time in the certificate.
     NotValidYet,
+
+    /// The current time is before the `notBefore` time in the certificate.
+    ///
+    /// This variant is semantically the same as `NotValidYet`, but includes
+    /// extra data to improve error reports.
+    NotValidYetDetail {
+        /// The validation time.
+        time: UnixTime,
+        /// The `notBefore` time of the certificate.
+        not_before: UnixTime,
+    },
 
     /// The certificate has been revoked.
     Revoked,
@@ -364,6 +387,17 @@ pub enum CertificateError {
     /// The certificate's revocation status could not be determined, because the CRL is expired.
     ExpiredRevocationList,
 
+    /// The certificate's revocation status could not be determined, because the CRL is expired.
+    ///
+    /// This variant is semantically the same as `ExpiredRevocationList`, but includes
+    /// extra data to improve error reports.
+    ExpiredRevocationListDetail {
+        /// The validation time.
+        time: UnixTime,
+        /// The nextUpdate time of the CRL.
+        next_update: UnixTime,
+    },
+
     /// A certificate is not correctly signed by the key of its alleged
     /// issuer.
     BadSignature,
@@ -371,6 +405,22 @@ pub enum CertificateError {
     /// The subject names in an end-entity certificate do not include
     /// the expected name.
     NotValidForName,
+
+    /// The subject names in an end-entity certificate do not include
+    /// the expected name.
+    ///
+    /// This variant is semantically the same as `NotValidForName`, but includes
+    /// extra data to improve error reports.
+    NotValidForNameDetail {
+        /// Expected server name.
+        expected: ServerName<'static>,
+
+        /// The names presented in the end entity certificate.
+        ///
+        /// These are the subject names as present in the leaf certificate and may contain DNS names
+        /// with or without a wildcard label as well as IP address names.
+        presented: Vec<String>,
+    },
 
     /// The certificate is being used for a different purpose than allowed.
     InvalidPurpose,
@@ -399,15 +449,56 @@ impl PartialEq<Self> for CertificateError {
         match (self, other) {
             (BadEncoding, BadEncoding) => true,
             (Expired, Expired) => true,
+            (
+                ExpiredDetail {
+                    time: lt,
+                    not_after: lna,
+                },
+                ExpiredDetail {
+                    time: rt,
+                    not_after: rna,
+                },
+            ) => lt.eq(rt) && lna.eq(rna),
             (NotValidYet, NotValidYet) => true,
+            (
+                NotValidYetDetail {
+                    time: lt,
+                    not_before: lnb,
+                },
+                NotValidYetDetail {
+                    time: rt,
+                    not_before: rnb,
+                },
+            ) => lt.eq(rt) && lnb.eq(rnb),
             (Revoked, Revoked) => true,
             (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
             (UnknownIssuer, UnknownIssuer) => true,
             (BadSignature, BadSignature) => true,
             (NotValidForName, NotValidForName) => true,
+            (
+                NotValidForNameDetail {
+                    expected: le,
+                    presented: lp,
+                },
+                NotValidForNameDetail {
+                    expected: re,
+                    presented: rp,
+                },
+            ) => le.eq(re) && lp.eq(rp),
             (InvalidPurpose, InvalidPurpose) => true,
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
+            (UnknownRevocationStatus, UnknownRevocationStatus) => true,
             (ExpiredRevocationList, ExpiredRevocationList) => true,
+            (
+                ExpiredRevocationListDetail {
+                    time: lt,
+                    next_update: lnu,
+                },
+                ExpiredRevocationListDetail {
+                    time: rt,
+                    next_update: rnu,
+                },
+            ) => lt.eq(rt) && lnu.eq(rnu),
             _ => false,
         }
     }
@@ -420,15 +511,23 @@ impl From<CertificateError> for AlertDescription {
     fn from(e: CertificateError) -> Self {
         use CertificateError::*;
         match e {
-            BadEncoding | UnhandledCriticalExtension | NotValidForName => Self::BadCertificate,
+            BadEncoding
+            | UnhandledCriticalExtension
+            | NotValidForName
+            | NotValidForNameDetail { .. } => Self::BadCertificate,
             // RFC 5246/RFC 8446
             // certificate_expired
             //  A certificate has expired or **is not currently valid**.
-            Expired | NotValidYet => Self::CertificateExpired,
+            Expired | ExpiredDetail { .. } | NotValidYet | NotValidYetDetail { .. } => {
+                Self::CertificateExpired
+            }
             Revoked => Self::CertificateRevoked,
             // OpenSSL, BoringSSL and AWS-LC all generate an Unknown CA alert for
             // the case where revocation status can not be determined, so we do the same here.
-            UnknownIssuer | UnknownRevocationStatus | ExpiredRevocationList => Self::UnknownCA,
+            UnknownIssuer
+            | UnknownRevocationStatus
+            | ExpiredRevocationList
+            | ExpiredRevocationListDetail { .. } => Self::UnknownCA,
             BadSignature => Self::DecryptError,
             InvalidPurpose => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
@@ -437,6 +536,84 @@ impl From<CertificateError> for AlertDescription {
             //  Some other (unspecified) issue arose in processing the
             //  certificate, rendering it unacceptable.
             Other(..) => Self::CertificateUnknown,
+        }
+    }
+}
+
+impl fmt::Display for CertificateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            #[cfg(feature = "std")]
+            Self::NotValidForNameDetail {
+                expected,
+                presented,
+            } => {
+                write!(
+                    f,
+                    "certificate not valid for name {:?}. certificate ",
+                    expected.to_str()
+                )?;
+
+                match presented.as_slice() {
+                    &[] => write!(
+                        f,
+                        "is not valid for any names (according to its subjectAltName extension)"
+                    ),
+                    [one] => write!(f, "is only valid for {}", one),
+                    many => {
+                        write!(f, "is only valid for ")?;
+
+                        let n = many.len();
+                        let all_but_last = &many[..n - 1];
+                        let last = &many[n - 1];
+
+                        for (i, name) in all_but_last.iter().enumerate() {
+                            write!(f, "{}", name)?;
+                            if i < n - 2 {
+                                write!(f, ", ")?;
+                            }
+                        }
+                        write!(f, " or {}", last)
+                    }
+                }
+            }
+
+            Self::ExpiredDetail { time, not_after } => write!(
+                f,
+                "certificate expired: current UNIX time is {}, \
+                 but certificate is not valid after {} \
+                 ({} seconds ago)",
+                time.as_secs(),
+                not_after.as_secs(),
+                time.as_secs()
+                    .saturating_sub(not_after.as_secs())
+            ),
+
+            Self::NotValidYetDetail { time, not_before } => write!(
+                f,
+                "certificate not valid yet: current UNIX time is {}, \
+                 but certificate is not valid before {} \
+                 ({} seconds in future)",
+                time.as_secs(),
+                not_before.as_secs(),
+                not_before
+                    .as_secs()
+                    .saturating_sub(time.as_secs())
+            ),
+
+            Self::ExpiredRevocationListDetail { time, next_update } => write!(
+                f,
+                "certificate revocation list expired: \
+                 current UNIX time is {}, \
+                 but CRL is not valid after {} \
+                 ({} seconds ago)",
+                time.as_secs(),
+                next_update.as_secs(),
+                time.as_secs()
+                    .saturating_sub(next_update.as_secs())
+            ),
+
+            other => write!(f, "{:?}", other),
         }
     }
 }
@@ -574,7 +751,7 @@ impl fmt::Display for Error {
             Self::PeerMisbehaved(ref why) => write!(f, "peer misbehaved: {:?}", why),
             Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
             Self::InvalidCertificate(ref err) => {
-                write!(f, "invalid peer certificate: {:?}", err)
+                write!(f, "invalid peer certificate: {}", err)
             }
             Self::InvalidCertRevocationList(ref err) => {
                 write!(f, "invalid certificate revocation list: {:?}", err)
@@ -675,24 +852,103 @@ pub use other_error::OtherError;
 
 #[cfg(test)]
 mod tests {
+    use core::time::Duration;
     use std::prelude::v1::*;
     use std::{println, vec};
 
-    use super::{CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError};
+    use super::{
+        CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError, UnixTime,
+    };
     #[cfg(feature = "std")]
     use crate::sync::Arc;
+    use pki_types::ServerName;
 
     #[test]
     fn certificate_error_equality() {
         use super::CertificateError::*;
         assert_eq!(BadEncoding, BadEncoding);
         assert_eq!(Expired, Expired);
+        let detail = ExpiredDetail {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+        };
+        assert_eq!(detail, detail);
+        assert_ne!(
+            detail,
+            ExpiredDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            detail,
+            ExpiredDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(NotValidYet, NotValidYet);
+        let detail = NotValidYetDetail {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+        };
+        assert_eq!(detail, detail);
+        assert_ne!(
+            detail,
+            NotValidYetDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
+        assert_ne!(
+            detail,
+            NotValidYetDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+            }
+        );
         assert_eq!(Revoked, Revoked);
         assert_eq!(UnhandledCriticalExtension, UnhandledCriticalExtension);
         assert_eq!(UnknownIssuer, UnknownIssuer);
+        assert_eq!(ExpiredRevocationList, ExpiredRevocationList);
+        assert_eq!(UnknownRevocationStatus, UnknownRevocationStatus);
+        let detail = ExpiredRevocationListDetail {
+            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+        };
+        assert_eq!(detail, detail);
+        assert_ne!(
+            detail,
+            ExpiredRevocationListDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            detail,
+            ExpiredRevocationListDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(BadSignature, BadSignature);
         assert_eq!(NotValidForName, NotValidForName);
+        let detail = NotValidForNameDetail {
+            expected: ServerName::try_from("example.com")
+                .unwrap()
+                .to_owned(),
+            presented: vec!["other.com".into()],
+        };
+        assert_eq!(detail, detail);
+        assert_ne!(
+            detail,
+            NotValidForNameDetail {
+                expected: ServerName::try_from("huh.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![]
+            }
+        );
         assert_eq!(InvalidPurpose, InvalidPurpose);
         assert_eq!(
             ApplicationVerificationFailure,
@@ -759,6 +1015,45 @@ mod tests {
             super::PeerMisbehaved::UnsolicitedCertExtension.into(),
             Error::AlertReceived(AlertDescription::ExportRestriction),
             super::CertificateError::Expired.into(),
+            super::CertificateError::NotValidForNameDetail {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![],
+            }
+            .into(),
+            super::CertificateError::NotValidForNameDetail {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec!["DnsName(\"hello.com\")".into()],
+            }
+            .into(),
+            super::CertificateError::NotValidForNameDetail {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![
+                    "DnsName(\"hello.com\")".into(),
+                    "DnsName(\"goodbye.com\")".into(),
+                ],
+            }
+            .into(),
+            super::CertificateError::NotValidYetDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(300)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(320)),
+            }
+            .into(),
+            super::CertificateError::ExpiredDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(320)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(300)),
+            }
+            .into(),
+            super::CertificateError::ExpiredRevocationListDetail {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(320)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(300)),
+            }
+            .into(),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
             Error::FailedToGetRandomBytes,
