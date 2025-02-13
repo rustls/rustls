@@ -1775,12 +1775,12 @@ fn client_check_server_certificate_ee_unknown_revocation() {
             // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
             // server's EE certificate's revocation status is unknown given the CRLs we've provided.
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert!(matches!(
+            assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
                     CertificateError::UnknownRevocationStatus
                 )))
-            ));
+            );
 
             // We expect if we use the allow_unknown_verifier that the handshake will not fail.
             let client_config =
@@ -2162,12 +2162,12 @@ fn client_mandatory_auth_client_revocation_works() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &missing_client_crl_server_config);
             let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(matches!(
+            assert_eq!(
                 res,
                 Err(ErrorFromPeer::Server(Error::InvalidCertificate(
                     CertificateError::UnknownRevocationStatus
                 )))
-            ));
+            );
             // Connecting to the server missing CRL information for the client should not error
             // if the server's verifier allows unknown revocation status.
             let (mut client, mut server) =
