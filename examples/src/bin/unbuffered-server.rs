@@ -170,6 +170,11 @@ fn handle(
                 }
             }
 
+            ConnectionState::PeerClosed => {}
+            ConnectionState::Closed => {
+                open_connection = false;
+            }
+
             _ => unreachable!(),
         }
 

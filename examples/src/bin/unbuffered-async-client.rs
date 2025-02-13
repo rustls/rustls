@@ -54,12 +54,12 @@ async fn converse(
     let mut outgoing_used = 0;
 
     let mut we_closed = false;
-    let mut peer_closed = false;
+    let mut fully_closed = false;
     let mut sent_request = false;
     let mut received_response = false;
 
     let mut iter_count = 0;
-    while !(peer_closed || (we_closed && incoming_used == 0)) {
+    while !fully_closed {
         let UnbufferedStatus { mut discard, state } =
             conn.process_tls_records(&mut incoming_tls[..incoming_used]);
 
@@ -155,8 +155,10 @@ async fn converse(
                 }
             }
 
+            ConnectionState::PeerClosed => {}
+
             ConnectionState::Closed => {
-                peer_closed = true;
+                fully_closed = true;
             }
 
             // other states are not expected in this example
