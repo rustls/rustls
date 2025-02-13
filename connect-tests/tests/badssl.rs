@@ -33,7 +33,7 @@ mod online {
     fn expired() {
         connect("expired.badssl.com")
             .fails()
-            .expect(r"TLS error: invalid peer certificate: Expired")
+            .expect(r"TLS error: invalid peer certificate: certificate expired: verification time [0-9]+ \(UNIX\), but certificate is not valid after [0-9]+ \([0-9]+ seconds ago\)")
             .go()
             .unwrap();
     }
@@ -119,7 +119,7 @@ mod online {
     fn sha1_2016() {
         connect("sha1-2016.badssl.com")
             .fails()
-            .expect(r"TLS error: invalid peer certificate: Expired")
+            .expect(r"TLS error: invalid peer certificate: certificate expired: verification time [0-9]+ \(UNIX\), but certificate is not valid after [0-9]+ \([0-9]+ seconds ago\)")
             .go()
             .unwrap();
     }
