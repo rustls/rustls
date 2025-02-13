@@ -58,8 +58,13 @@ fn pki_error(error: webpki::Error) -> Error {
     use webpki::Error::*;
     match error {
         BadDer | BadDerTime | TrailingData(_) => CertificateError::BadEncoding.into(),
-        CertNotValidYet { .. } => CertificateError::NotValidYet.into(),
-        CertExpired { .. } | InvalidCertValidity => CertificateError::Expired.into(),
+        CertNotValidYet { time, not_before } => {
+            CertificateError::NotValidYetContext { time, not_before }.into()
+        }
+        CertExpired { time, not_after } => {
+            CertificateError::ExpiredContext { time, not_after }.into()
+        }
+        InvalidCertValidity => CertificateError::Expired.into(),
         UnknownIssuer => CertificateError::UnknownIssuer.into(),
         CertNotValidForName(InvalidNameContext {
             expected,
@@ -71,7 +76,9 @@ fn pki_error(error: webpki::Error) -> Error {
         .into(),
         CertRevoked => CertificateError::Revoked.into(),
         UnknownRevocationStatus => CertificateError::UnknownRevocationStatus.into(),
-        CrlExpired { .. } => CertificateError::ExpiredRevocationList.into(),
+        CrlExpired { time, next_update } => {
+            CertificateError::ExpiredRevocationListContext { time, next_update }.into()
+        }
         IssuerNotCrlSigner => CertRevocationListError::IssuerInvalidForCrl.into(),
 
         InvalidSignatureForPublicKey
