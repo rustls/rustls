@@ -57,7 +57,7 @@ env_logger = "0.11"
 fxhash = "0.2.1"
 hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
-hickory-resolver = { version = "=0.25.0-alpha.3", features = ["dns-over-https-rustls", "webpki-roots"] }
+hickory-resolver = { version = "0.25.0-alpha.5", features = ["dns-over-https-rustls", "webpki-roots"] }
 hmac = "0.12"
 hpke-rs = "0.2"
 hpke-rs-crypto = "0.2"
