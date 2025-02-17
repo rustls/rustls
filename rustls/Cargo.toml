@@ -18,7 +18,7 @@ build = "build.rs"
 default = ["aws_lc_rs", "logging", "std", "tls12"]
 
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
-aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws_lc_rs"]
+aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs"]
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 custom-provider = []
 fips = ["aws_lc_rs", "aws-lc-rs?/fips"]

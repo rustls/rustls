@@ -2556,7 +2556,7 @@ dependencies = [
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki",
+ "rustls-webpki 0.102.8",
  "subtle",
  "zeroize",
 ]
@@ -2580,7 +2580,7 @@ dependencies = [
  "rcgen",
  "ring",
  "rustls-pki-types",
- "rustls-webpki",
+ "rustls-webpki 0.103.0",
  "rustversion",
  "serde",
  "serde_json",
@@ -2652,7 +2652,6 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "rustls 0.23.23",
- "rustls-webpki",
 ]
 
 [[package]]
@@ -2669,9 +2668,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-pki-types"
-version = "1.10.1"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2bf47e6ff922db3825eb750c4e2ff784c6ff8fb9e13046ef6a1d1c5401b0b37"
+checksum = "917ce264624a4b4db1c364dcc35bfca9ded014d0a958cd47ad3e960e988ea51c"
 
 [[package]]
 name = "rustls-post-quantum"
@@ -2701,7 +2700,6 @@ dependencies = [
  "rcgen",
  "rsa",
  "rustls 0.23.23",
- "rustls-webpki",
  "sha2",
  "signature",
  "webpki-roots",
@@ -2724,6 +2722,16 @@ name = "rustls-webpki"
 version = "0.102.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
+dependencies = [
+ "ring",
+ "rustls-pki-types",
+ "untrusted",
+]
+
+[[package]]
+name = "rustls-webpki"
+version = "0.103.0"
+source = "git+https://github.com/rustls/webpki?rev=a182fb079#a182fb07915d9acd87f41ce22111dfed78e9b4c2"
 dependencies = [
  "aws-lc-rs",
  "ring",

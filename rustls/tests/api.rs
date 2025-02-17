@@ -1657,7 +1657,7 @@ fn client_checks_server_certificate_with_given_name() {
             assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::NotValidForName
+                    certificate_error_expecting_name("not-the-right-hostname.com")
                 )))
             );
         }
@@ -1692,7 +1692,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
             assert_eq!(
                 check_server_name(client_config.clone(), server_config.clone(), "198.51.100.2"),
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::NotValidForName
+                    certificate_error_expecting_name("198.51.100.2")
                 )))
             );
 
@@ -1706,7 +1706,7 @@ fn client_checks_server_certificate_with_given_ip_address() {
             assert_eq!(
                 check_server_name(client_config.clone(), server_config.clone(), "2001:db8::2"),
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::NotValidForName
+                    certificate_error_expecting_name("2001:db8::2")
                 )))
             );
         }
@@ -1771,12 +1771,12 @@ fn client_check_server_certificate_ee_unknown_revocation() {
             // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
             // server's EE certificate's revocation status is unknown given the CRLs we've provided.
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert!(matches!(
+            assert_eq!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
                     CertificateError::UnknownRevocationStatus
                 )))
-            ));
+            );
 
             // We expect if we use the allow_unknown_verifier that the handshake will not fail.
             let client_config =
@@ -1868,12 +1868,12 @@ fn client_check_server_certificate_ee_crl_expired() {
 
             // We expect the handshake to fail since the CRL is expired.
             let err = do_handshake_until_error(&mut client, &mut server);
-            assert_eq!(
+            assert!(matches!(
                 err,
                 Err(ErrorFromPeer::Client(Error::InvalidCertificate(
-                    CertificateError::ExpiredRevocationList
+                    CertificateError::ExpiredRevocationListDetail { .. }
                 )))
-            );
+            ));
 
             let client_config =
                 make_client_config_with_verifier(&[version], ignore_expiration_builder.clone());
@@ -2154,12 +2154,12 @@ fn client_mandatory_auth_client_revocation_works() {
             let (mut client, mut server) =
                 make_pair_for_arc_configs(&client_config, &missing_client_crl_server_config);
             let res = do_handshake_until_error(&mut client, &mut server);
-            assert!(matches!(
+            assert_eq!(
                 res,
                 Err(ErrorFromPeer::Server(Error::InvalidCertificate(
                     CertificateError::UnknownRevocationStatus
                 )))
-            ));
+            );
             // Connecting to the server missing CRL information for the client should not error
             // if the server's verifier allows unknown revocation status.
             let (mut client, mut server) =
@@ -3417,7 +3417,9 @@ fn sni_resolver_rejects_wrong_names() {
         )
     );
     assert_eq!(
-        Err(Error::InvalidCertificate(CertificateError::NotValidForName)),
+        Err(Error::InvalidCertificate(certificate_error_expecting_name(
+            "not-localhost"
+        ))),
         resolver.add(
             "not-localhost",
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
@@ -3430,6 +3432,22 @@ fn sni_resolver_rejects_wrong_names() {
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
+}
+
+fn certificate_error_expecting_name(expected: &str) -> CertificateError {
+    CertificateError::NotValidForNameDetail {
+        expected: ServerName::try_from(expected)
+            .unwrap()
+            .to_owned(),
+        presented: vec![
+            // ref. examples/internal/test_ca.rs
+            r#"DnsName("testserver.com")"#.into(),
+            r#"DnsName("second.testserver.com")"#.into(),
+            r#"DnsName("localhost")"#.into(),
+            "IpAddress(198.51.100.1)".into(),
+            "IpAddress(2001:db8::1)".into(),
+        ],
+    }
 }
 
 #[test]
