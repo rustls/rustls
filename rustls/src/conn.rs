@@ -467,18 +467,7 @@ impl<Data> ConnectionCommon<Data> {
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     /// Should be used with care as it exposes secret key material.
     pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        if !self.enable_secret_extraction {
-            return Err(Error::General("Secret extraction is disabled".into()));
-        }
-
-        let st = self.core.state?;
-
-        let record_layer = self.core.common_state.record_layer;
-        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
-        Ok(ExtractedSecrets {
-            tx: (record_layer.write_seq(), tx),
-            rx: (record_layer.read_seq(), rx),
-        })
+        self.core.dangerous_extract_secrets()
     }
 
     /// Sets a limit on the internal buffers used to buffer
@@ -1159,6 +1148,24 @@ impl<Data> ConnectionCore<Data> {
 
         self.common_state
             .process_main_protocol(msg, state, &mut self.data, sendable_plaintext)
+    }
+
+    pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        if !self
+            .common_state
+            .enable_secret_extraction
+        {
+            return Err(Error::General("Secret extraction is disabled".into()));
+        }
+
+        let st = self.state?;
+
+        let record_layer = self.common_state.record_layer;
+        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
+        Ok(ExtractedSecrets {
+            tx: (record_layer.write_seq(), tx),
+            rx: (record_layer.read_seq(), rx),
+        })
     }
 
     pub(crate) fn export_keying_material<T: AsMut<[u8]>>(
