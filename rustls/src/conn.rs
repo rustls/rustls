@@ -813,6 +813,14 @@ impl<Data> From<ConnectionCore<Data>> for UnbufferedConnectionCommon<Data> {
     }
 }
 
+impl<Data> UnbufferedConnectionCommon<Data> {
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.core.dangerous_extract_secrets()
+    }
+}
+
 impl<T> Deref for UnbufferedConnectionCommon<T> {
     type Target = CommonState;
 

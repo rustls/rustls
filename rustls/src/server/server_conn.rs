@@ -25,6 +25,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::CertificateType;
 use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
 use crate::msgs::message::Message;
+use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
@@ -890,6 +891,12 @@ impl UnbufferedServerConnection {
                 Vec::new(),
             )?),
         })
+    }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.dangerous_extract_secrets()
     }
 }
 
