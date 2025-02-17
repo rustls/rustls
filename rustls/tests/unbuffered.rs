@@ -3,6 +3,7 @@
 use std::num::NonZeroUsize;
 
 use rustls::client::{ClientConnectionData, EarlyDataError, UnbufferedClientConnection};
+use rustls::crypto::CryptoProvider;
 use rustls::server::{ServerConnectionData, UnbufferedServerConnection};
 use rustls::unbuffered::{
     ConnectionState, EncodeError, EncryptError, InsufficientSizeError, ReadTraffic,
@@ -10,13 +11,15 @@ use rustls::unbuffered::{
 };
 use rustls::version::TLS13;
 use rustls::{
-    AlertDescription, CertificateError, ClientConfig, Error, InvalidMessage, ServerConfig, SideData,
+    AlertDescription, CertificateError, ClientConfig, ConnectionTrafficSecrets, Error,
+    InvalidMessage, ServerConfig, SideData,
 };
 
 use super::*;
 
 mod common;
 use common::*;
+use provider::cipher_suite;
 
 const MAX_ITERATIONS: usize = 100;
 
@@ -1409,6 +1412,96 @@ fn server_receives_incorrect_first_handshake_message() {
         }
         _ => panic!("unexpected alert sending state"),
     };
+}
+
+/// Test that secrets can be extracted and used for encryption/decryption.
+#[test]
+fn test_secret_extraction_enabled() {
+    // Normally, secret extraction would be used to configure kTLS (TLS offload
+    // to the kernel). We want this test to run on any platform, though, so
+    // instead we just compare secrets for equality.
+
+    // TLS 1.2 and 1.3 have different mechanisms for key exchange and handshake,
+    // and secrets are stored/extracted differently, so we want to test them both.
+    // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
+    // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
+    let kt = KeyType::Rsa2048;
+    for suite in [
+        cipher_suite::TLS13_AES_128_GCM_SHA256,
+        cipher_suite::TLS13_AES_256_GCM_SHA384,
+        #[cfg(not(feature = "fips"))]
+        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+        #[cfg(not(feature = "fips"))]
+        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+    ] {
+        let version = suite.version();
+        println!("Testing suite {:?}", suite.suite().as_str());
+
+        // Only offer the cipher suite (and protocol version) that we're testing
+        let mut server_config = ServerConfig::builder_with_provider(
+            CryptoProvider {
+                cipher_suites: vec![suite],
+                ..provider::default_provider()
+            }
+            .into(),
+        )
+        .with_protocol_versions(&[version])
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(kt.get_chain(), kt.get_key())
+        .unwrap();
+        // Opt into secret extraction from both sides
+        server_config.enable_secret_extraction = true;
+        let server_config = Arc::new(server_config);
+
+        let mut client_config = make_client_config(kt);
+        client_config.enable_secret_extraction = true;
+
+        let mut outcome = run(
+            Arc::new(client_config),
+            &mut NO_ACTIONS.clone(),
+            server_config.clone(),
+            &mut NO_ACTIONS.clone(),
+        );
+
+        let client = outcome.client.take().unwrap();
+        let server = outcome.server.take().unwrap();
+
+        // The handshake is finished, we're now able to extract traffic secrets
+        let client_secrets = client
+            .dangerous_extract_secrets()
+            .unwrap();
+        let server_secrets = server
+            .dangerous_extract_secrets()
+            .unwrap();
+
+        // Comparing secrets for equality is something you should never have to
+        // do in production code, so ConnectionTrafficSecrets doesn't implement
+        // PartialEq/Eq on purpose. Instead, we have to get creative.
+        fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8]) {
+            match s {
+                ConnectionTrafficSecrets::Aes128Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
+                ConnectionTrafficSecrets::Aes256Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
+                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
+                    (key.as_ref(), iv.as_ref())
+                }
+                _ => panic!("unexpected secret type"),
+            }
+        }
+
+        fn assert_secrets_equal(
+            (l_seq, l_sec): (u64, ConnectionTrafficSecrets),
+            (r_seq, r_sec): (u64, ConnectionTrafficSecrets),
+        ) {
+            assert_eq!(l_seq, r_seq);
+            assert_eq!(explode_secrets(&l_sec), explode_secrets(&r_sec));
+        }
+
+        assert_secrets_equal(client_secrets.tx, server_secrets.rx);
+        assert_secrets_equal(client_secrets.rx, server_secrets.tx);
+    }
 }
 
 const TLS12_CLIENT_TRANSCRIPT: &[&str] = &[

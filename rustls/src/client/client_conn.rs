@@ -18,7 +18,7 @@ use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
 use crate::msgs::persist;
-use crate::suites::SupportedCipherSuite;
+use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::sync::Arc;
 #[cfg(feature = "std")]
 use crate::time_provider::DefaultTimeProvider;
@@ -846,6 +846,12 @@ impl UnbufferedClientConnection {
         Ok(Self {
             inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
         })
+    }
+
+    /// Extract secrets, so they can be used when configuring kTLS, for example.
+    /// Should be used with care as it exposes secret key material.
+    pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        self.inner.dangerous_extract_secrets()
     }
 }
 
