@@ -86,6 +86,13 @@ impl ChunkVecBuffer {
         len
     }
 
+    /// Inspect the first chunk from this object.
+    pub(crate) fn peek(&self) -> Option<&[u8]> {
+        self.chunks
+            .front()
+            .map(|ch| ch.as_slice())
+    }
+
     /// Take one of the chunks from this object.
     ///
     /// This function returns `None` if the object `is_empty`.
