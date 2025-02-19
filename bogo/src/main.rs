@@ -10,6 +10,10 @@ use std::sync::Arc;
 use std::{env, net, process, thread, time};
 
 use base64::prelude::{BASE64_STANDARD, Engine};
+#[cfg(unix)]
+use nix::sys::signal::{self, Signal};
+#[cfg(unix)]
+use nix::unistd::Pid;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
@@ -107,6 +111,7 @@ struct Options {
     expect_curve_id: Option<NamedGroup>,
     on_initial_expect_curve_id: Option<NamedGroup>,
     on_resume_expect_curve_id: Option<NamedGroup>,
+    wait_for_debugger: bool,
 }
 
 impl Options {
@@ -176,6 +181,7 @@ impl Options {
             expect_curve_id: None,
             on_initial_expect_curve_id: None,
             on_resume_expect_curve_id: None,
+            wait_for_debugger: false,
         }
     }
 
@@ -1600,6 +1606,16 @@ pub fn main() {
             "-server-preference" => {
                 opts.server_preference = true;
             }
+            "-wait-for-debugger" => {
+                #[cfg(windows)]
+                {
+                    panic("-wait-for-debugger not supported on Windows");
+                }
+                #[cfg(unix)]
+                {
+                    opts.wait_for_debugger = true;
+                }
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -1692,6 +1708,14 @@ pub fn main() {
     }
 
     println!("opts {:?}", opts);
+
+    #[cfg(unix)]
+    if opts.wait_for_debugger {
+        // On Unix systems when -wait-for-debugger is passed from the BoGo runner
+        // we should SIGSTOP ourselves to allow a debugger to attach to the shim to
+        // continue the testing process.
+        signal::kill(Pid::from_raw(process::id() as i32), Signal::SIGSTOP).unwrap();
+    }
 
     let (mut client_cfg, mut server_cfg) = match opts.side {
         Side::Client => (Some(make_client_cfg(&opts)), None),
