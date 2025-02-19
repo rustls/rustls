@@ -38,10 +38,14 @@ fi
 # Best effort on OS-X
 case $OSTYPE in darwin*) set +e ;; esac
 
+# Set default timeout unless -wait-for-debugger flag is present.
+# When this flag is set the shim will pause itself, and the runner will
+# print the PID to attach to in order to continue.
+runner_args="-pipe -allow-unimplemented"
+[[ ! "$*" =~ "-wait-for-debugger" ]] && runner_args+=" -test.timeout 60s"
+
 ( cd bogo/ssl/test/runner && ./runner.test -shim-path ../../../../../target/debug/bogo \
      -shim-config ../../../../config.json \
-     -pipe \
-     -allow-unimplemented \
-     -test.timeout 60s \
+     $runner_args \
      "$@") # you can pass in `-test "Foo;Bar"` to run specific tests
 true
