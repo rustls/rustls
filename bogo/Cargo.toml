@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 base64 = { workspace = true }
 env_logger = { workspace = true }
+nix = { version = "0.29", default-features = false, features = ["signal"] }
 rustls = { path = "../rustls", features = ["aws_lc_rs", "ring", "tls12"] }
 rustls-post-quantum = { path = "../rustls-post-quantum", optional = true }
 
