@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-#![allow(clippy::duplicate_mod)]
+#![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::io;
 use std::ops::DerefMut;

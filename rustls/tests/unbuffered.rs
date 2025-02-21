@@ -1,4 +1,4 @@
-#![allow(clippy::duplicate_mod)]
+#![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::num::NonZeroUsize;
 

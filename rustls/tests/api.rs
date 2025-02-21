@@ -1,6 +1,6 @@
 //! Assorted public API tests.
 
-#![allow(clippy::duplicate_mod)]
+#![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::fmt::Debug;
 use std::io::{self, BufRead, IoSlice, Read, Write};
