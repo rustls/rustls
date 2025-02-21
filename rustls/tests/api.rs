@@ -4895,12 +4895,9 @@ mod test_quic {
                 break None;
             }
         };
-        if let Err(e) = recv.read_hs(&buf) {
-            return Err(e);
-        } else {
-            assert_eq!(recv.alert(), None);
-        }
 
+        recv.read_hs(&buf)?;
+        assert_eq!(recv.alert(), None);
         Ok(change)
     }
 
@@ -6521,11 +6518,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 #[test]
 fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
     fn alter_server_signature_to_ecdsa_sha1(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake {
-            parsed,
-            ref mut encoded,
-        } = &mut msg.payload
-        {
+        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
             if let HandshakePayload::ServerKeyExchange(_) = &mut parsed.payload {
                 // nb. we don't care that this corrupts the signature, key exchange, etc.
                 let original = encoded.bytes();

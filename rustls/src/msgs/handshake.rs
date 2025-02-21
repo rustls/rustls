@@ -492,7 +492,7 @@ pub enum CertificateStatusRequest {
 impl Codec<'_> for CertificateStatusRequest {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
-            Self::Ocsp(ref r) => r.encode(bytes),
+            Self::Ocsp(r) => r.encode(bytes),
             Self::Unknown((typ, payload)) => {
                 typ.encode(bytes);
                 payload.encode(bytes);
@@ -1130,7 +1130,7 @@ impl ClientHelloPayload {
 
     pub(crate) fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
         let last_extension = self.extensions.last_mut();
-        if let Some(ClientExtension::PresharedKey(ref mut offer)) = last_extension {
+        if let Some(ClientExtension::PresharedKey(offer)) = last_extension {
             offer.binders[0] = PresharedKeyBinder::from(binder.into());
         }
     }
@@ -2772,7 +2772,7 @@ impl<'a> HandshakeMessagePayload<'a> {
 
         let binder_len = match self.payload {
             HandshakePayload::ClientHello(ref ch) => match ch.extensions.last() {
-                Some(ClientExtension::PresharedKey(ref offer)) => {
+                Some(ClientExtension::PresharedKey(offer)) => {
                     let mut binders_encoding = Vec::new();
                     offer
                         .binders

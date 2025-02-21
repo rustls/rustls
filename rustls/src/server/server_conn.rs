@@ -1060,9 +1060,7 @@ impl EarlyDataState {
 
     fn pop(&mut self) -> Option<Vec<u8>> {
         match self {
-            Self::Accepted {
-                ref mut received, ..
-            } => received.pop(),
+            Self::Accepted { received, .. } => received.pop(),
             _ => None,
         }
     }
@@ -1070,9 +1068,7 @@ impl EarlyDataState {
     #[cfg(feature = "std")]
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Accepted {
-                ref mut received, ..
-            } => received.read(buf),
+            Self::Accepted { received, .. } => received.read(buf),
             _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
         }
     }
@@ -1089,17 +1085,17 @@ impl EarlyDataState {
 
     pub(super) fn take_received_plaintext(&mut self, bytes: Payload<'_>) -> bool {
         let available = bytes.bytes().len();
-        match self {
-            Self::Accepted {
-                ref mut received,
-                ref mut left,
-            } if received.apply_limit(available) == available && available <= *left => {
-                received.append(bytes.into_vec());
-                *left -= available;
-                true
-            }
-            _ => false,
+        let Self::Accepted { received, left } = self else {
+            return false;
+        };
+
+        if received.apply_limit(available) != available || available > *left {
+            return false;
         }
+
+        received.append(bytes.into_vec());
+        *left -= available;
+        true
     }
 }
 

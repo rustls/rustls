@@ -140,11 +140,12 @@ impl TicketSwitcher {
             }
 
             // Make the switch, or mark for recovery if not possible
-            if let Some(next) = state.next.take() {
-                state.previous = Some(mem::replace(&mut state.current, next));
-                state.next_switch_time = now.saturating_add(u64::from(self.lifetime));
-            } else {
-                are_recovering = true;
+            match state.next.take() {
+                Some(next) => {
+                    state.previous = Some(mem::replace(&mut state.current, next));
+                    state.next_switch_time = now.saturating_add(u64::from(self.lifetime));
+                }
+                _ => are_recovering = true,
             }
         }
 
