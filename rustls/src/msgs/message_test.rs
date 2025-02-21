@@ -8,7 +8,7 @@ use super::codec::Reader;
 use super::enums::AlertLevel;
 use super::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use crate::enums::{AlertDescription, HandshakeType};
-use crate::msgs::base::{PayloadU16, PayloadU24, PayloadU8};
+use crate::msgs::base::{PayloadU8, PayloadU16, PayloadU24};
 
 #[test]
 fn test_read_fuzz_corpus() {

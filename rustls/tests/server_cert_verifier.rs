@@ -7,16 +7,16 @@ use super::*;
 mod common;
 
 use common::{
-    client_config_builder, client_config_builder_with_versions, do_handshake,
-    do_handshake_until_both_error, do_handshake_until_error, make_client_config_with_versions,
-    make_pair_for_arc_configs, make_server_config, server_config_builder, transfer_altered,
-    Altered, Arc, ErrorFromPeer, KeyType, MockServerVerifier, ALL_KEY_TYPES,
+    ALL_KEY_TYPES, Altered, Arc, ErrorFromPeer, KeyType, MockServerVerifier, client_config_builder,
+    client_config_builder_with_versions, do_handshake, do_handshake_until_both_error,
+    do_handshake_until_error, make_client_config_with_versions, make_pair_for_arc_configs,
+    make_server_config, server_config_builder, transfer_altered,
 };
 
 use pki_types::{CertificateDer, ServerName};
 
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::WebPkiServerVerifier;
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ResolvesServerCert};
@@ -186,10 +186,12 @@ fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
     .unwrap();
     let cas_sending_server_verifier = Arc::new(ServerCertVerifierWithCasExt {
         verifier: server_verifier.clone(),
-        ca_names: vec![KeyType::Rsa2048
-            .ca_distinguished_name()
-            .to_vec()
-            .into()],
+        ca_names: vec![
+            KeyType::Rsa2048
+                .ca_distinguished_name()
+                .to_vec()
+                .into(),
+        ],
     });
 
     for (protocol_version, cas_extension_expected) in [(&TLS12, false), (&TLS13, true)] {
@@ -209,7 +211,9 @@ fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
                             .any(|ext| matches!(ext, ClientExtension::AuthorityNames(_))),
                         cas_extension_expected
                     );
-                    println!("cas extension expectation met! cas_extension_expected: {cas_extension_expected}");
+                    println!(
+                        "cas extension expectation met! cas_extension_expected: {cas_extension_expected}"
+                    );
                 }
             }
             Altered::InPlace
@@ -312,7 +316,9 @@ pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Arc<CertifiedKey>)>
 impl ResolvesServerCert for ResolvesCertChainByCaName {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let Some(cas_extension) = client_hello.certificate_authorities() else {
-            println!("ResolvesCertChainByCaName: no CAs extension in ClientHello, returning default cert");
+            println!(
+                "ResolvesCertChainByCaName: no CAs extension in ClientHello, returning default cert"
+            );
             return Some(self.0[0].1.clone());
         };
         for (name, certified_key) in self.0.iter() {

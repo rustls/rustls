@@ -3,7 +3,7 @@ use pki_types::ServerName;
 use crate::enums::SignatureScheme;
 use crate::msgs::persist;
 use crate::sync::Arc;
-use crate::{client, sign, NamedGroup};
+use crate::{NamedGroup, client, sign};
 
 /// An implementer of `ClientSessionStore` which does nothing.
 #[derive(Debug)]
@@ -40,7 +40,7 @@ mod cache {
 
     use crate::lock::Mutex;
     use crate::msgs::persist;
-    use crate::{limited_cache, NamedGroup};
+    use crate::{NamedGroup, limited_cache};
 
     const MAX_TLS13_TICKETS_PER_SERVER: usize = 8;
 
@@ -251,8 +251,8 @@ mod tests {
 
     use pki_types::{ServerName, UnixTime};
 
-    use super::provider::cipher_suite;
     use super::NoClientSessionStorage;
+    use super::provider::cipher_suite;
     use crate::client::ClientSessionStore;
     use crate::msgs::base::PayloadU16;
     use crate::msgs::enums::NamedGroup;

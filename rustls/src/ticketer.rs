@@ -10,7 +10,7 @@ use crate::lock::{Mutex, MutexGuard};
 use crate::server::ProducesTickets;
 #[cfg(not(feature = "std"))]
 use crate::time_provider::TimeProvider;
-use crate::{rand, Error};
+use crate::{Error, rand};
 
 #[derive(Debug)]
 pub(crate) struct TicketSwitcherState {

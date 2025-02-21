@@ -8,7 +8,7 @@
 //! Note that `unwrap()` is used to deal with networking errors; this is not something
 //! that is sensible outside of example code.
 
-use std::io::{stdout, Read, Write};
+use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 

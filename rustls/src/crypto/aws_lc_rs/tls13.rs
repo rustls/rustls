@@ -5,8 +5,8 @@ use aws_lc_rs::{aead, hkdf, hmac};
 
 use crate::crypto;
 use crate::crypto::cipher::{
-    make_tls13_aad, AeadKey, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,
-    Tls13AeadAlgorithm, UnsupportedOperationError,
+    AeadKey, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,
+    Tls13AeadAlgorithm, UnsupportedOperationError, make_tls13_aad,
 };
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
@@ -88,9 +88,7 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
         Box::new(AeadMessageEncrypter {
-            enc_key: aead::LessSafeKey::new(
-                aead::UnboundKey::new(self.0 .0, key.as_ref()).unwrap(),
-            ),
+            enc_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap()),
             iv,
         })
     }
@@ -98,9 +96,7 @@ impl Tls13AeadAlgorithm for Chacha20Poly1305Aead {
     fn decrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageDecrypter> {
         // safety: the caller arranges that `key` is `key_len()` in bytes, so this unwrap is safe.
         Box::new(AeadMessageDecrypter {
-            dec_key: aead::LessSafeKey::new(
-                aead::UnboundKey::new(self.0 .0, key.as_ref()).unwrap(),
-            ),
+            dec_key: aead::LessSafeKey::new(aead::UnboundKey::new(self.0.0, key.as_ref()).unwrap()),
             iv,
         })
     }

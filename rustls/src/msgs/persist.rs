@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 
 use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
-use crate::msgs::base::{PayloadU16, PayloadU8};
+use crate::msgs::base::{PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::CertificateChain;
 #[cfg(feature = "tls12")]

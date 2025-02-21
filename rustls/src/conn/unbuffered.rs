@@ -7,10 +7,10 @@ use core::{fmt, mem};
 use std::error::Error as StdError;
 
 use super::UnbufferedConnectionCommon;
+use crate::Error;
 use crate::client::ClientConnectionData;
 use crate::msgs::deframer::buffers::DeframerSliceBuffer;
 use crate::server::ServerConnectionData;
-use crate::Error;
 
 impl UnbufferedConnectionCommon<ClientConnectionData> {
     /// Processes the TLS records in `incoming_tls` buffer until a new [`UnbufferedStatus`] is

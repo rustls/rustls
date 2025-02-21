@@ -366,7 +366,7 @@ mod ffdhe {
         SupportedKxGroup,
     };
     use rustls::ffdhe_groups::FfdheGroup;
-    use rustls::{ffdhe_groups, CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite};
+    use rustls::{CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite, ffdhe_groups};
 
     use super::provider;
 

@@ -4,7 +4,7 @@ use core::ops::Range;
 
 use super::buffers::{BufferProgress, Coalescer, Delocator, Locator};
 use crate::error::InvalidMessage;
-use crate::msgs::codec::{u24, Codec};
+use crate::msgs::codec::{Codec, u24};
 use crate::msgs::message::InboundPlainMessage;
 use crate::{ContentType, ProtocolVersion};
 

@@ -746,7 +746,7 @@ impl State<ServerConnectionData> for ExpectCcs {
                 return Err(inappropriate_message(
                     &payload,
                     &[ContentType::ChangeCipherSpec],
-                ))
+                ));
             }
         }
 

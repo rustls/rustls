@@ -30,7 +30,7 @@
 
 use std::error::Error;
 use std::fs;
-use std::io::{stdout, BufReader, Read, Write};
+use std::io::{BufReader, Read, Write, stdout};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
@@ -40,13 +40,13 @@ use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{ResolveError, Resolver, TokioResolver};
 use log::trace;
+use rustls::RootCertStore;
 use rustls::client::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
 use rustls::crypto::aws_lc_rs;
 use rustls::crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
 use rustls::crypto::hpke::Hpke;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, ServerName};
-use rustls::RootCertStore;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -136,12 +136,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut sock = TcpStream::connect(sock_addr)?;
         let mut tls = rustls::Stream::new(&mut conn, &mut sock);
 
-        let request =
-            format!(
-                "GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
-                args.path,
-                args.host.as_ref().unwrap_or(&args.inner_hostname),
-            );
+        let request = format!(
+            "GET /{} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n",
+            args.path,
+            args.host
+                .as_ref()
+                .unwrap_or(&args.inner_hostname),
+        );
         dbg!(&request);
         tls.write_all(request.as_bytes())?;
         assert!(!tls.conn.is_handshaking());

@@ -7,9 +7,10 @@ use super::*;
 mod common;
 
 use common::{
-    do_handshake_until_both_error, do_handshake_until_error, make_client_config_with_versions,
+    ALL_KEY_TYPES, Arc, ErrorFromPeer, KeyType, MockClientVerifier, do_handshake_until_both_error,
+    do_handshake_until_error, make_client_config_with_versions,
     make_client_config_with_versions_with_auth, make_pair_for_arc_configs, server_config_builder,
-    server_name, Arc, ErrorFromPeer, KeyType, MockClientVerifier, ALL_KEY_TYPES,
+    server_name,
 };
 
 use rustls::server::danger::ClientCertVerified;

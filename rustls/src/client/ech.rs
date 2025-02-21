@@ -5,10 +5,11 @@ use alloc::vec::Vec;
 use pki_types::{DnsName, EchConfigListBytes, ServerName};
 use subtle::ConstantTimeEq;
 
+use crate::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::client::tls13;
+use crate::crypto::SecureRandom;
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{EncapsulatedSecret, Hpke, HpkePublicKey, HpkeSealer, HpkeSuite};
-use crate::crypto::SecureRandom;
 use crate::hash_hs::{HandshakeHash, HandshakeHashBuffer};
 use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU16};
@@ -24,9 +25,8 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::msgs::persist::Retrieved;
 use crate::tls13::key_schedule::{
-    server_ech_hrr_confirmation_secret, KeyScheduleEarly, KeyScheduleHandshakeStart,
+    KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
-use crate::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::{
     AlertDescription, CommonState, EncryptedClientHelloError, Error, HandshakeType,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, Tls13CipherSuite,
@@ -499,7 +499,7 @@ impl EchState {
                         AlertDescription::DecodeError,
                         PeerMisbehaved::IllegalHelloRetryRequestWithInvalidEch,
                     )
-                })
+                });
             }
             Some(ech_conf) => ech_conf,
         };

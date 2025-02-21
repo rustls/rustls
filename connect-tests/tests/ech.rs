@@ -29,9 +29,11 @@ mod ech_config {
         let parsed_configs = Vec::<EchConfigPayload>::read(&mut Reader::init(&tls_encoded_list))
             .expect("failed to deserialize ECH config list");
         assert!(!parsed_configs.is_empty());
-        assert!(parsed_configs
-            .iter()
-            .all(|config| matches!(config, EchConfigPayload::V18(_))));
+        assert!(
+            parsed_configs
+                .iter()
+                .all(|config| matches!(config, EchConfigPayload::V18(_)))
+        );
     }
 
     /// Use `resolver` to make an HTTPS record type query for `domain`, returning the

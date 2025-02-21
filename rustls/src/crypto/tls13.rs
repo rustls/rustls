@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 use zeroize::Zeroize;
 
-use super::{hmac, ActiveKeyExchange};
+use super::{ActiveKeyExchange, hmac};
 use crate::error::Error;
 use crate::version::TLS13;
 
@@ -266,7 +266,7 @@ pub struct OutputLengthError;
 mod tests {
     use std::prelude::v1::*;
 
-    use super::{expand, Hkdf, HkdfUsingHmac};
+    use super::{Hkdf, HkdfUsingHmac, expand};
     // nb: crypto::aws_lc_rs provider doesn't provide (or need) hmac,
     // so cannot be used for this test.
     use crate::crypto::ring::hmac;
@@ -397,9 +397,10 @@ mod tests {
         let info = &[];
 
         let mut output = [0u8; 32 * 255 + 1];
-        assert!(hkdf
-            .extract_from_secret(None, ikm)
-            .expand_slice(info, &mut output)
-            .is_err());
+        assert!(
+            hkdf.extract_from_secret(None, ikm)
+                .expand_slice(info, &mut output)
+                .is_err()
+        );
     }
 }

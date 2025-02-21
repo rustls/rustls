@@ -5,12 +5,12 @@ use alloc::string::ToString;
 
 use crate::common_state::{CommonState, Side};
 use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
-use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use crate::crypto::{hash, hmac, SharedSecret};
+use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
+use crate::crypto::{SharedSecret, hash, hmac};
 use crate::error::Error;
 use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
-use crate::{quic, KeyLog, Tls13CipherSuite};
+use crate::{KeyLog, Tls13CipherSuite, quic};
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -909,7 +909,7 @@ mod tests {
     use super::provider::tls13::{
         TLS13_AES_128_GCM_SHA256_INTERNAL, TLS13_CHACHA20_POLY1305_SHA256_INTERNAL,
     };
-    use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
+    use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
     use crate::KeyLog;
 
     #[test]
@@ -1094,7 +1094,7 @@ mod benchmarks {
         use core::fmt::Debug;
 
         use super::provider::tls13::TLS13_CHACHA20_POLY1305_SHA256_INTERNAL;
-        use super::{derive_traffic_iv, derive_traffic_key, KeySchedule, SecretKind};
+        use super::{KeySchedule, SecretKind, derive_traffic_iv, derive_traffic_key};
         use crate::KeyLog;
 
         fn extract_traffic_secret(ks: &KeySchedule, kind: SecretKind) {

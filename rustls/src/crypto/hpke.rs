@@ -4,9 +4,9 @@ use core::fmt::Debug;
 
 use zeroize::Zeroize;
 
+use crate::Error;
 use crate::msgs::enums::HpkeKem;
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
-use crate::Error;
 
 /// An HPKE suite, specifying a key encapsulation mechanism and a symmetric cipher suite.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -3,7 +3,7 @@ use core::mem;
 use crate::error::{Error, InvalidMessage};
 use crate::msgs::codec::Reader;
 use crate::msgs::message::{
-    read_opaque_message_header, InboundOpaqueMessage, MessageError, HEADER_SIZE,
+    HEADER_SIZE, InboundOpaqueMessage, MessageError, read_opaque_message_header,
 };
 
 pub(crate) mod buffers;
@@ -106,24 +106,36 @@ mod tests {
 
     #[test]
     fn iterator_empty_before_header_received() {
-        assert!(DeframerIter::new(&mut [])
-            .next()
-            .is_none());
-        assert!(DeframerIter::new(&mut [0x16])
-            .next()
-            .is_none());
-        assert!(DeframerIter::new(&mut [0x16, 0x03])
-            .next()
-            .is_none());
-        assert!(DeframerIter::new(&mut [0x16, 0x03, 0x03])
-            .next()
-            .is_none());
-        assert!(DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00])
-            .next()
-            .is_none());
-        assert!(DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00, 0x01])
-            .next()
-            .is_none());
+        assert!(
+            DeframerIter::new(&mut [])
+                .next()
+                .is_none()
+        );
+        assert!(
+            DeframerIter::new(&mut [0x16])
+                .next()
+                .is_none()
+        );
+        assert!(
+            DeframerIter::new(&mut [0x16, 0x03])
+                .next()
+                .is_none()
+        );
+        assert!(
+            DeframerIter::new(&mut [0x16, 0x03, 0x03])
+                .next()
+                .is_none()
+        );
+        assert!(
+            DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00])
+                .next()
+                .is_none()
+        );
+        assert!(
+            DeframerIter::new(&mut [0x16, 0x03, 0x03, 0x00, 0x01])
+                .next()
+                .is_none()
+        );
     }
 
     #[test]

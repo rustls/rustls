@@ -5,13 +5,13 @@ use core::ops::{Deref, DerefMut, Range};
 #[cfg(feature = "std")]
 use std::io;
 
-use crate::common_state::{CommonState, Context, IoState, State, DEFAULT_BUFFER_LIMIT};
+use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, IoState, State};
 use crate::enums::{AlertDescription, ContentType, ProtocolVersion};
 use crate::error::{Error, PeerMisbehaved};
 use crate::log::trace;
+use crate::msgs::deframer::DeframerIter;
 use crate::msgs::deframer::buffers::{BufferProgress, DeframerVecBuffer, Delocator, Locator};
 use crate::msgs::deframer::handshake::HandshakeDeframer;
-use crate::msgs::deframer::DeframerIter;
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::record_layer::Decrypted;
@@ -27,12 +27,12 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io::{self, BufRead, Read};
 
+    use crate::ConnectionCommon;
     use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
     use crate::vecbuf::ChunkVecBuffer;
-    use crate::ConnectionCommon;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -295,8 +295,7 @@ mod connection {
         }
     }
 
-    const UNEXPECTED_EOF_MESSAGE: &str =
-        "peer closed connection without sending TLS close_notify: \
+    const UNEXPECTED_EOF_MESSAGE: &str = "peer closed connection without sending TLS close_notify: \
 https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof";
 
     /// A structure that implements [`std::io::Write`] for writing plaintext.
@@ -1003,7 +1002,7 @@ impl<Data> ConnectionCore<Data> {
                     Ok(None) if !self.hs_deframer.is_aligned() => {
                         return Err(
                             PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage.into(),
-                        )
+                        );
                     }
 
                     // failed decryption during trial decryption.

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::{fs, str, thread};
 
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
+use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::version::{TLS12, TLS13};

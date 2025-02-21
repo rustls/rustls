@@ -10,12 +10,12 @@ use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
 };
 use crate::webpki::verify::{
-    verify_server_cert_signed_by_trust_anchor_impl, verify_tls12_signature, verify_tls13_signature,
-    ParsedCertificate,
+    ParsedCertificate, verify_server_cert_signed_by_trust_anchor_impl, verify_tls12_signature,
+    verify_tls13_signature,
 };
-use crate::webpki::{parse_crls, verify_server_name, VerifierBuilderError};
+use crate::webpki::{VerifierBuilderError, parse_crls, verify_server_name};
 #[cfg(doc)]
-use crate::{crypto, ConfigBuilder, ServerConfig};
+use crate::{ConfigBuilder, ServerConfig, crypto};
 use crate::{Error, RootCertStore, SignatureScheme};
 
 /// A builder for configuring a `webpki` server certificate verifier.
@@ -309,9 +309,9 @@ mod tests {
     use pki_types::pem::PemObject;
     use pki_types::{CertificateDer, CertificateRevocationListDer};
 
-    use super::{provider, VerifierBuilderError, WebPkiServerVerifier};
-    use crate::sync::Arc;
+    use super::{VerifierBuilderError, WebPkiServerVerifier, provider};
     use crate::RootCertStore;
+    use crate::sync::Arc;
 
     fn load_crls(crls_der: &[&[u8]]) -> Vec<CertificateRevocationListDer<'static>> {
         crls_der

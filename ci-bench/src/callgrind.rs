@@ -6,8 +6,8 @@ use std::process::{Child, Command, Stdio};
 
 use anyhow::Context;
 
-use crate::benchmark::Benchmark;
 use crate::Side;
+use crate::benchmark::Benchmark;
 
 /// The subdirectory in which the callgrind output should be stored
 const CALLGRIND_OUTPUT_SUBDIR: &str = "callgrind";
@@ -89,7 +89,10 @@ impl CallgrindRunner {
                 if status.success() {
                     Ok(())
                 } else {
-                    anyhow::bail!("Failed to launch callgrind. Error: {}. Please ensure that valgrind is installed and on the $PATH.", status)
+                    anyhow::bail!(
+                        "Failed to launch callgrind. Error: {}. Please ensure that valgrind is installed and on the $PATH.",
+                        status
+                    )
                 }
             }
         }

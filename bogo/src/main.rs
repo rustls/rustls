@@ -9,7 +9,7 @@ use std::io::{self, Read, Write};
 use std::sync::Arc;
 use std::{env, net, process, thread, time};
 
-use base64::prelude::{Engine, BASE64_STANDARD};
+use base64::prelude::{BASE64_STANDARD, Engine};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
@@ -17,7 +17,7 @@ use rustls::client::{
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{aws_lc_rs, ring, CryptoProvider};
+use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
@@ -28,10 +28,10 @@ use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
 };
 use rustls::{
-    client, compress, server, sign, version, AlertDescription, CertificateCompressionAlgorithm,
-    CertificateError, Connection, DigitallySignedStruct, DistinguishedName, Error, HandshakeKind,
-    InvalidMessage, NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore,
-    Side, SignatureAlgorithm, SignatureScheme, SupportedProtocolVersion,
+    AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
+    DigitallySignedStruct, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
+    SignatureScheme, SupportedProtocolVersion, client, compress, server, sign, version,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -1704,9 +1704,10 @@ pub fn main() {
         ccfg: &Option<Arc<ClientConfig>>,
     ) -> Connection {
         assert!(opts.quic_transport_params.is_empty());
-        assert!(opts
-            .expect_quic_transport_params
-            .is_empty());
+        assert!(
+            opts.expect_quic_transport_params
+                .is_empty()
+        );
 
         if opts.side == Side::Server {
             let scfg = Arc::clone(scfg.as_ref().unwrap());

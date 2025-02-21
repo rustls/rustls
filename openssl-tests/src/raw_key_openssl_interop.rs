@@ -9,10 +9,10 @@ mod client {
     use std::net::TcpStream;
     use std::sync::Arc;
 
-    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::client::AlwaysResolvesClientRawPublicKeys;
+    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
     use rustls::crypto::{
-        aws_lc_rs as provider, verify_tls13_signature_with_raw_key, WebPkiSupportedAlgorithms,
+        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{
@@ -162,12 +162,12 @@ mod server {
 
     use rustls::client::danger::HandshakeSignatureValid;
     use rustls::crypto::{
-        aws_lc_rs as provider, verify_tls13_signature_with_raw_key, WebPkiSupportedAlgorithms,
+        WebPkiSupportedAlgorithms, aws_lc_rs as provider, verify_tls13_signature_with_raw_key,
     };
     use rustls::pki_types::pem::PemObject;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer, UnixTime};
-    use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
     use rustls::server::AlwaysResolvesServerRawPublicKeys;
+    use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
     use rustls::sign::CertifiedKey;
     use rustls::version::TLS13;
     use rustls::{
