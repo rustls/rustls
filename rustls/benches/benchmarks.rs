@@ -1,4 +1,5 @@
 #![cfg(feature = "ring")]
+#![allow(clippy::disallowed_types)]
 
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use rustls::crypto::ring as provider;

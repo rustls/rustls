@@ -1,6 +1,6 @@
 //! Tests for configuring and using a [`ServerCertVerifier`] for a client.
 
-#![allow(clippy::duplicate_mod)]
+#![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use super::*;
 
