@@ -6,16 +6,17 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
+use super::Tls12Resumption;
 #[cfg(feature = "tls12")]
 use super::tls12;
-use super::Tls12Resumption;
+use crate::SupportedCipherSuite;
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::ClientConnectionData;
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
-use crate::client::{tls13, ClientConfig, EchMode, EchStatus};
+use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::conn::ConnectionRandoms;
 use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
@@ -36,7 +37,6 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::SupportedCipherSuite;
 
 pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;

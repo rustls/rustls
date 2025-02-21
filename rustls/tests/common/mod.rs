@@ -16,7 +16,7 @@ use rustls::client::{
     AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
-use rustls::crypto::{verify_tls13_signature_with_raw_key, CryptoProvider};
+use rustls::crypto::{CryptoProvider, verify_tls13_signature_with_raw_key};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
@@ -530,9 +530,11 @@ pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
     let chain = kt.get_chain();
     let trust_anchor = chain.last().unwrap();
     RootCertStore {
-        roots: vec![anchor_from_trusted_cert(trust_anchor)
-            .unwrap()
-            .to_owned()],
+        roots: vec![
+            anchor_from_trusted_cert(trust_anchor)
+                .unwrap()
+                .to_owned(),
+        ],
     }
     .into()
 }
@@ -869,12 +871,16 @@ pub fn do_suite_and_kx_test(
 
     assert_eq!(None, client.negotiated_cipher_suite());
     assert_eq!(None, server.negotiated_cipher_suite());
-    assert!(client
-        .negotiated_key_exchange_group()
-        .is_none());
-    assert!(server
-        .negotiated_key_exchange_group()
-        .is_none());
+    assert!(
+        client
+            .negotiated_key_exchange_group()
+            .is_none()
+    );
+    assert!(
+        server
+            .negotiated_key_exchange_group()
+            .is_none()
+    );
     assert_eq!(None, client.protocol_version());
     assert_eq!(None, server.protocol_version());
     assert!(client.is_handshaking());
@@ -889,13 +895,17 @@ pub fn do_suite_and_kx_test(
     assert_eq!(Some(expect_version), server.protocol_version());
     assert_eq!(None, client.negotiated_cipher_suite());
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
-    assert!(client
-        .negotiated_key_exchange_group()
-        .is_none());
-    if matches!(expect_version, ProtocolVersion::TLSv1_2) {
-        assert!(server
+    assert!(
+        client
             .negotiated_key_exchange_group()
-            .is_none());
+            .is_none()
+    );
+    if matches!(expect_version, ProtocolVersion::TLSv1_2) {
+        assert!(
+            server
+                .negotiated_key_exchange_group()
+                .is_none()
+        );
     } else {
         assert_eq!(
             expect_kx,
@@ -919,9 +929,11 @@ pub fn do_suite_and_kx_test(
             .name()
     );
     if matches!(expect_version, ProtocolVersion::TLSv1_2) {
-        assert!(server
-            .negotiated_key_exchange_group()
-            .is_none());
+        assert!(
+            server
+                .negotiated_key_exchange_group()
+                .is_none()
+        );
     } else {
         assert_eq!(
             expect_kx,
@@ -1402,11 +1414,11 @@ pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
 }
 
 mod plaintext {
+    use rustls::ConnectionTrafficSecrets;
     use rustls::crypto::cipher::{
         AeadKey, InboundOpaqueMessage, InboundPlainMessage, Iv, MessageDecrypter, MessageEncrypter,
         OutboundPlainMessage, PrefixedPayload, Tls13AeadAlgorithm, UnsupportedOperationError,
     };
-    use rustls::ConnectionTrafficSecrets;
 
     use super::*;
 

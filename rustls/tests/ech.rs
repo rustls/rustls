@@ -1,4 +1,4 @@
-use base64::prelude::{Engine, BASE64_STANDARD};
+use base64::prelude::{BASE64_STANDARD, Engine};
 use pki_types::DnsName;
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::enums::{EchVersion, HpkeAead, HpkeKdf, HpkeKem};
@@ -119,8 +119,7 @@ const BASE64_ECHCONFIG_LIST_LOCALHOST: &str =
     "AED+DQA8AAAgACAxoIJyV36iDlfFRmqE+ho2PxXE0EISPfUUJYKCy6T8VwAIAAEAAQABAAOACWxvY2FsaG9zdAAA";
 
 // Two EchConfigs, both with server-name "cloudflare-esni.com".
-const BASE64_ECHCONFIG_LIST_CF: &str =
-    "AK3+DQBCwwAgACAJ9T5U4FeM6631r2bvAuGtmEd8zQaoTkFAtArTcMl/XQAEAAEAASUTY2xvdWRmbGFyZS1lc25pLmNvbQAA/g0AYwMAEABBBGGbUlGLuGRorUeFwmrgHImkrh9uxoPrnFKpS5bQvnc5grfMS3PvymQ2FYL02WQi1ZzZJg5OsYYdzlaGYnEoJNsABAABAAEqE2Nsb3VkZmxhcmUtZXNuaS5jb20AAA==";
+const BASE64_ECHCONFIG_LIST_CF: &str = "AK3+DQBCwwAgACAJ9T5U4FeM6631r2bvAuGtmEd8zQaoTkFAtArTcMl/XQAEAAEAASUTY2xvdWRmbGFyZS1lc25pLmNvbQAA/g0AYwMAEABBBGGbUlGLuGRorUeFwmrgHImkrh9uxoPrnFKpS5bQvnc5grfMS3PvymQ2FYL02WQi1ZzZJg5OsYYdzlaGYnEoJNsABAABAAEqE2Nsb3VkZmxhcmUtZXNuaS5jb20AAA==";
 
 // Three EchConfigs, the first one with an unsupported version.
 const BASE64_ECHCONFIG_LIST_WITH_UNSUPPORTED: &str = "AQW63QAFBQQDAgH+DQBmAAAQAEEE5itp4r9ln5e+Lx4NlIpM1Zdrt6keDUb73ampHp3culoB59aXqAoY+cPEox5W4nyDSNsWGhz1HX7xlC1Lz3IiwQAMAAEAAQABAAIAAQADQA5wdWJsaWMuZXhhbXBsZQAA/g0APQAAIAAgfWYWFXMCFK7ucFMzZvNqYJ6tZcDCCOYjIjRqtbzY3hwABBERIiJADnB1YmxpYy5leGFtcGxlAAD+DQBNAAAgACCFvWoDJ3wlQntS4mngx3qOtSS6HrPS8TJmLUsKxstzVwAMAAEAAQABAAIAAQADQA5wdWJsaWMuZXhhbXBsZQAIqqoABHRlc3Q=";

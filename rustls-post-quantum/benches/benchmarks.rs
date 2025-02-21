@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use rustls::crypto::aws_lc_rs::kx_group::X25519;
 use rustls::crypto::{
-    aws_lc_rs, ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup,
+    ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup, aws_lc_rs,
 };
 use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{ClientConfig, ClientConnection, Error, NamedGroup, RootCertStore};

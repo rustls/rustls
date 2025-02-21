@@ -201,7 +201,7 @@ mod sni_resolver {
     use crate::hash_map::HashMap;
     use crate::server::ClientHello;
     use crate::sync::Arc;
-    use crate::webpki::{verify_server_name, ParsedCertificate};
+    use crate::webpki::{ParsedCertificate, verify_server_name};
     use crate::{server, sign};
 
     /// Something that resolves do different cert chains/keys based
@@ -272,17 +272,19 @@ mod sni_resolver {
         #[test]
         fn test_resolvesservercertusingsni_requires_sni() {
             let rscsni = ResolvesServerCertUsingSni::new();
-            assert!(rscsni
-                .resolve(ClientHello {
-                    server_name: &None,
-                    signature_schemes: &[],
-                    alpn: None,
-                    server_cert_types: None,
-                    client_cert_types: None,
-                    cipher_suites: &[],
-                    certificate_authorities: None,
-                })
-                .is_none());
+            assert!(
+                rscsni
+                    .resolve(ClientHello {
+                        server_name: &None,
+                        signature_schemes: &[],
+                        alpn: None,
+                        server_cert_types: None,
+                        client_cert_types: None,
+                        cipher_suites: &[],
+                        certificate_authorities: None,
+                    })
+                    .is_none()
+            );
         }
 
         #[test]
@@ -291,17 +293,19 @@ mod sni_resolver {
             let name = DnsName::try_from("hello.com")
                 .unwrap()
                 .to_owned();
-            assert!(rscsni
-                .resolve(ClientHello {
-                    server_name: &Some(name),
-                    signature_schemes: &[],
-                    alpn: None,
-                    server_cert_types: None,
-                    client_cert_types: None,
-                    cipher_suites: &[],
-                    certificate_authorities: None,
-                })
-                .is_none());
+            assert!(
+                rscsni
+                    .resolve(ClientHello {
+                        server_name: &Some(name),
+                        signature_schemes: &[],
+                        alpn: None,
+                        server_cert_types: None,
+                        client_cert_types: None,
+                        cipher_suites: &[],
+                        certificate_authorities: None,
+                    })
+                    .is_none()
+            );
         }
     }
 }

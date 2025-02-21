@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
-use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_crypto::HpkeCrypto;
+use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_rust_crypto::HpkeRustCrypto;
 use rustls::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite,
@@ -287,8 +287,10 @@ mod tests {
     #[test]
     fn test_fips() {
         // None of the rust-crypto backed hpke-rs suites should be considered FIPS approved.
-        assert!(ALL_SUPPORTED_SUITES
-            .iter()
-            .all(|suite| !suite.fips()));
+        assert!(
+            ALL_SUPPORTED_SUITES
+                .iter()
+                .all(|suite| !suite.fips())
+        );
     }
 }

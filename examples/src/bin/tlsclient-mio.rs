@@ -26,10 +26,10 @@ use std::{process, str};
 
 use clap::Parser;
 use mio::net::TcpStream;
-use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
+use rustls::RootCertStore;
+use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
-use rustls::RootCertStore;
 
 const CLIENT: mio::Token = mio::Token(0);
 
@@ -329,10 +329,10 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
 }
 
 mod danger {
-    use rustls::client::danger::HandshakeSignatureValid;
-    use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
-    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
     use rustls::DigitallySignedStruct;
+    use rustls::client::danger::HandshakeSignatureValid;
+    use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
+    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 
     #[derive(Debug)]
     pub struct NoCertificateVerification(CryptoProvider);

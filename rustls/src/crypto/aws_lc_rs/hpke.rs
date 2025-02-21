@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
 
 use aws_lc_rs::aead::{
-    self, Aad, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey, NONCE_LEN,
+    self, Aad, BoundKey, NONCE_LEN, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey,
 };
 use aws_lc_rs::agreement;
 use aws_lc_rs::cipher::{AES_128_KEY_LEN, AES_256_KEY_LEN};
@@ -16,7 +16,7 @@ use crate::crypto::aws_lc_rs::unspecified_err;
 use crate::crypto::hpke::{
     EncapsulatedSecret, Hpke, HpkeOpener, HpkePrivateKey, HpkePublicKey, HpkeSealer, HpkeSuite,
 };
-use crate::crypto::tls13::{expand, HkdfExpander, HkdfPrkExtract, HkdfUsingHmac};
+use crate::crypto::tls13::{HkdfExpander, HkdfPrkExtract, HkdfUsingHmac, expand};
 use crate::msgs::enums::{HpkeAead, HpkeKdf, HpkeKem};
 use crate::msgs::handshake::HpkeSymmetricCipherSuite;
 #[cfg(feature = "std")]

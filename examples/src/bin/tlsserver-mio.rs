@@ -28,11 +28,11 @@ use std::{fs, net};
 use clap::{Parser, Subcommand};
 use log::{debug, error};
 use mio::net::{TcpListener, TcpStream};
-use rustls::crypto::{aws_lc_rs as provider, CryptoProvider};
+use rustls::RootCertStore;
+use rustls::crypto::{CryptoProvider, aws_lc_rs as provider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 use rustls::server::WebPkiClientVerifier;
-use rustls::RootCertStore;
 
 // Token for our listening socket.
 const LISTENER: mio::Token = mio::Token(0);

@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 
-use super::{hmac, ActiveKeyExchange};
+use super::{ActiveKeyExchange, hmac};
 use crate::error::Error;
 use crate::version::TLS12;
 

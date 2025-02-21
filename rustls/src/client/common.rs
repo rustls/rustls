@@ -6,7 +6,7 @@ use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
 use crate::msgs::handshake::{CertificateChain, DistinguishedName, ServerExtension};
 use crate::sync::Arc;
-use crate::{compress, sign, SignatureScheme};
+use crate::{SignatureScheme, compress, sign};
 
 #[derive(Debug)]
 pub(super) struct ServerCertDetails<'a> {

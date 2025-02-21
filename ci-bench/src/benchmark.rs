@@ -3,9 +3,9 @@ use std::sync::Arc;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 
+use crate::Side;
 use crate::callgrind::InstructionCounts;
 use crate::util::KeyType;
-use crate::Side;
 
 /// Validates a benchmark collection, returning an error if the provided benchmarks are invalid
 ///

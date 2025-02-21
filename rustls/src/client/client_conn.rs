@@ -7,6 +7,8 @@ use pki_types::{ServerName, UnixTime};
 
 use super::handy::NoClientSessionStorage;
 use super::hs;
+#[cfg(feature = "std")]
+use crate::WantsVerifier;
 use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
@@ -24,11 +26,9 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::unbuffered::{EncryptError, TransmitTlsData};
-#[cfg(feature = "std")]
-use crate::WantsVerifier;
-use crate::{compress, sign, verify, versions, KeyLog, WantsVersions};
 #[cfg(doc)]
-use crate::{crypto, DistinguishedName};
+use crate::{DistinguishedName, crypto};
+use crate::{KeyLog, WantsVersions, compress, sign, verify, versions};
 
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
@@ -511,8 +511,8 @@ pub enum Tls12Resumption {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use super::verify::ServerCertVerifier;
     use super::ClientConfig;
+    use super::verify::ServerCertVerifier;
     use crate::sync::Arc;
 
     /// Accessor for dangerous configuration options.
@@ -618,13 +618,13 @@ mod connection {
     use pki_types::ServerName;
 
     use super::ClientConnectionData;
+    use crate::ClientConfig;
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
     use crate::sync::Arc;
-    use crate::ClientConfig;
 
     /// Stub that implements io::Write and dispatches to `write_early_data`.
     pub struct WriteEarlyData<'a> {

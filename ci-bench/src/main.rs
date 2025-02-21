@@ -16,9 +16,9 @@ use itertools::Itertools;
 use rayon::iter::Either;
 use rayon::prelude::*;
 use rustls::client::Resumption;
-use rustls::crypto::{aws_lc_rs, ring, CryptoProvider, GetRandomFailed, SecureRandom};
-use rustls::pki_types::pem::PemObject;
+use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
 use rustls::pki_types::CertificateDer;
+use rustls::pki_types::pem::PemObject;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, HandshakeKind, ProtocolVersion, RootCertStore,
@@ -26,16 +26,16 @@ use rustls::{
 };
 
 use crate::benchmark::{
-    get_reported_instr_count, validate_benchmarks, Benchmark, BenchmarkKind, BenchmarkParams,
-    ResumptionKind,
+    Benchmark, BenchmarkKind, BenchmarkParams, ResumptionKind, get_reported_instr_count,
+    validate_benchmarks,
 };
 use crate::callgrind::{CallgrindRunner, CountInstructions};
+use crate::util::KeyType;
 use crate::util::async_io::{self, AsyncRead, AsyncWrite};
 use crate::util::transport::{
     read_handshake_message, read_plaintext_to_end_bounded, send_handshake_message,
     write_all_plaintext_bounded,
 };
-use crate::util::KeyType;
 
 mod benchmark;
 mod callgrind;
@@ -787,7 +787,9 @@ fn print_report(result: &CompareResult) {
     if !result.missing_in_baseline.is_empty() {
         println!("### ⚠️ Warning: missing benchmarks");
         println!();
-        println!("The following benchmark scenarios are present in the candidate but not in the baseline:");
+        println!(
+            "The following benchmark scenarios are present in the candidate but not in the baseline:"
+        );
         println!();
         for scenario in &result.missing_in_baseline {
             println!("* {scenario}");

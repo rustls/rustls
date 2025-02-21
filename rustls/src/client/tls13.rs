@@ -10,7 +10,7 @@ use super::hs::ClientContext;
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchState, EchStatus};
-use crate::client::{hs, ClientConfig, ClientSessionStore};
+use crate::client::{ClientConfig, ClientSessionStore, hs};
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
 };
@@ -27,10 +27,10 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CertificatePayloadTls13, ClientExtension, EchConfigPayload, HandshakeMessagePayload,
-    HandshakePayload, HasServerExtensions, KeyShareEntry, NewSessionTicketPayloadTls13,
-    PresharedKeyIdentity, PresharedKeyOffer, ServerExtension, ServerHelloPayload,
-    CERTIFICATE_MAX_SIZE_LIMIT,
+    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtension, EchConfigPayload,
+    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, KeyShareEntry,
+    NewSessionTicketPayloadTls13, PresharedKeyIdentity, PresharedKeyOffer, ServerExtension,
+    ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -42,10 +42,10 @@ use crate::tls13::key_schedule::{
     ResumptionSecret,
 };
 use crate::tls13::{
-    construct_client_verify_message, construct_server_verify_message, Tls13CipherSuite,
+    Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
 use crate::verify::{self, DigitallySignedStruct};
-use crate::{compress, crypto, KeyLog};
+use crate::{KeyLog, compress, crypto};
 
 // Extensions we expect in plaintext in the ServerHello.
 static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
@@ -479,7 +479,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::UnsupportedExtension,
                     PeerMisbehaved::UnsolicitedEchExtension,
-                ))
+                ));
             }
             // If we offered ECH, and it was rejected, store the retry configs (if any) from
             // the server's ECH extension. We will return them in an error produced at the end

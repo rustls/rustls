@@ -20,8 +20,8 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
-    CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketExtension, NewSessionTicketPayloadTls13, CERTIFICATE_MAX_SIZE_LIMIT,
+    CERTIFICATE_MAX_SIZE_LIMIT, CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload,
+    HandshakePayload, NewSessionTicketExtension, NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -32,7 +32,7 @@ use crate::tls13::key_schedule::{
     KeyScheduleTraffic, KeyScheduleTrafficWithClientFinishedPending, ResumptionSecret,
 };
 use crate::tls13::{
-    construct_client_verify_message, construct_server_verify_message, Tls13CipherSuite,
+    Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
 use crate::{compress, rand, verify};
 
@@ -402,7 +402,9 @@ mod client_hello {
                     cx.data.early_data.reject();
                 }
                 EarlyDataDecision::RequestedButRejected => {
-                    debug!("Client requested early_data, but not accepted: switching to handshake keys with trial decryption");
+                    debug!(
+                        "Client requested early_data, but not accepted: switching to handshake keys with trial decryption"
+                    );
                     key_schedule.set_handshake_decrypter(
                         Some(max_early_data_size(self.config.max_early_data_size)),
                         cx.common,

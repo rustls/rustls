@@ -19,7 +19,7 @@ use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
-use crate::msgs::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
+use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, CertificateType, ClientCertificateType, Compression, ECCurveType,

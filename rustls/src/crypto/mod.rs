@@ -5,21 +5,21 @@ use core::fmt::Debug;
 use pki_types::PrivateKeyDer;
 use zeroize::Zeroize;
 
+#[cfg(all(doc, feature = "tls12"))]
+use crate::Tls12CipherSuite;
 use crate::msgs::ffdhe_groups::FfdheGroup;
 use crate::sign::SigningKey;
 use crate::sync::Arc;
 pub use crate::webpki::{
-    verify_tls12_signature, verify_tls13_signature, verify_tls13_signature_with_raw_key,
-    WebPkiSupportedAlgorithms,
+    WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
+    verify_tls13_signature_with_raw_key,
 };
-#[cfg(all(doc, feature = "tls12"))]
-use crate::Tls12CipherSuite;
 #[cfg(doc)]
 use crate::{
-    client, crypto, server, sign, ClientConfig, ConfigBuilder, ServerConfig, SupportedCipherSuite,
-    Tls13CipherSuite,
+    ClientConfig, ConfigBuilder, ServerConfig, SupportedCipherSuite, Tls13CipherSuite, client,
+    crypto, server, sign,
 };
-use crate::{suites, Error, NamedGroup, ProtocolVersion, SupportedProtocolVersion};
+use crate::{Error, NamedGroup, ProtocolVersion, SupportedProtocolVersion, suites};
 
 /// *ring* based CryptoProvider.
 #[cfg(feature = "ring")]

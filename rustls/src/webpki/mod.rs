@@ -19,11 +19,11 @@ pub use server_verifier::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 // Conditionally exported from crate.
 #[allow(unreachable_pub)]
 pub use verify::{
-    verify_server_cert_signed_by_trust_anchor, verify_server_name, ParsedCertificate,
+    ParsedCertificate, verify_server_cert_signed_by_trust_anchor, verify_server_name,
 };
 pub use verify::{
-    verify_tls12_signature, verify_tls13_signature, verify_tls13_signature_with_raw_key,
-    WebPkiSupportedAlgorithms,
+    WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature,
+    verify_tls13_signature_with_raw_key,
 };
 
 /// An error that can occur when building a certificate verifier.
@@ -120,7 +120,7 @@ fn parse_crls(
 mod tests {
     #[test]
     fn pki_crl_errors() {
-        use super::{pki_error, CertRevocationListError, CertificateError, Error};
+        use super::{CertRevocationListError, CertificateError, Error, pki_error};
 
         // CRL signature errors should be turned into BadSignature.
         assert_eq!(
@@ -151,8 +151,8 @@ mod tests {
 
     #[test]
     fn crl_error_from_webpki() {
-        use super::crl_error;
         use super::CertRevocationListError::*;
+        use super::crl_error;
 
         let testcases = &[
             (webpki::Error::InvalidCrlSignatureForPublicKey, BadSignature),

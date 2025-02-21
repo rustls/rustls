@@ -14,9 +14,9 @@ use std::{fs, thread};
 
 use clap::Parser;
 use rcgen::KeyPair;
+use rustls::RootCertStore;
 use rustls::pki_types::{CertificateRevocationListDer, PrivatePkcs8KeyDer};
 use rustls::server::{Acceptor, ClientHello, ServerConfig, WebPkiClientVerifier};
-use rustls::RootCertStore;
 
 fn main() {
     let args = Args::parse();
@@ -280,14 +280,15 @@ impl CrlUpdater {
             thread::sleep(self.sleep_duration);
 
             let revoked_certs = if revoked {
-                vec![self
-                    .pki
-                    .client_cert
-                    .cert
-                    .params()
-                    .serial_number
-                    .clone()
-                    .unwrap()]
+                vec![
+                    self.pki
+                        .client_cert
+                        .cert
+                        .params()
+                        .serial_number
+                        .clone()
+                        .unwrap(),
+                ]
             } else {
                 Vec::default()
             };

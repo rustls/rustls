@@ -3,8 +3,8 @@ use std::{format, println, vec};
 
 use pki_types::{CertificateDer, DnsName};
 
-use super::base::{Payload, PayloadU16, PayloadU24, PayloadU8};
-use super::codec::{put_u16, Codec, Reader};
+use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     CertificateType, ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
@@ -799,11 +799,13 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
                 _ => {}
             };
 
-            assert!(HandshakeMessagePayload::read_version(
-                &mut Reader::init(&enc),
-                ProtocolVersion::TLSv1_2
-            )
-            .is_err());
+            assert!(
+                HandshakeMessagePayload::read_version(
+                    &mut Reader::init(&enc),
+                    ProtocolVersion::TLSv1_2
+                )
+                .is_err()
+            );
             assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
         }
     }
@@ -863,11 +865,13 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
                 _ => {}
             };
 
-            assert!(HandshakeMessagePayload::read_version(
-                &mut Reader::init(&enc),
-                ProtocolVersion::TLSv1_3
-            )
-            .is_err());
+            assert!(
+                HandshakeMessagePayload::read_version(
+                    &mut Reader::init(&enc),
+                    ProtocolVersion::TLSv1_3
+                )
+                .is_err()
+            );
         }
     }
 }

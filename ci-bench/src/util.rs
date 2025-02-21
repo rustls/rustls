@@ -37,7 +37,7 @@ pub mod async_io {
     use std::collections::VecDeque;
     use std::fs::File;
     use std::future::Future;
-    use std::pin::{pin, Pin};
+    use std::pin::{Pin, pin};
     use std::rc::Rc;
     use std::task::{Poll, RawWaker, RawWakerVTable, Waker};
     use std::{io, ptr, task};

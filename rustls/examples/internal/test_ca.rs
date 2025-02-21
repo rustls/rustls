@@ -11,9 +11,9 @@ use std::time::Duration;
 use rcgen::{
     BasicConstraints, CertificateParams, CertificateRevocationListParams, CertifiedKey,
     DistinguishedName, DnType, ExtendedKeyUsagePurpose, Ia5String, IsCa, KeyIdMethod, KeyPair,
-    KeyUsagePurpose, RevocationReason, RevokedCertParams, RsaKeySize, SanType, SerialNumber,
-    SignatureAlgorithm, PKCS_ECDSA_P256_SHA256, PKCS_ECDSA_P384_SHA384, PKCS_ECDSA_P521_SHA512,
-    PKCS_ED25519, PKCS_RSA_SHA256, PKCS_RSA_SHA384, PKCS_RSA_SHA512,
+    KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, PKCS_ECDSA_P384_SHA384, PKCS_ECDSA_P521_SHA512,
+    PKCS_ED25519, PKCS_RSA_SHA256, PKCS_RSA_SHA384, PKCS_RSA_SHA512, RevocationReason,
+    RevokedCertParams, RsaKeySize, SanType, SerialNumber, SignatureAlgorithm,
 };
 use time::OffsetDateTime;
 

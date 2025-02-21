@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use super::{MessageError, PlainMessage, HEADER_SIZE, MAX_PAYLOAD};
+use super::{HEADER_SIZE, MAX_PAYLOAD, MessageError, PlainMessage};
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::msgs::base::Payload;
 use crate::msgs::codec::{Codec, Reader};

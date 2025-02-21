@@ -297,9 +297,11 @@ mod tests {
     #[cfg(feature = "fips")]
     #[test]
     fn default_suites_are_fips() {
-        assert!(super::DEFAULT_CIPHER_SUITES
-            .iter()
-            .all(|scs| scs.fips()));
+        assert!(
+            super::DEFAULT_CIPHER_SUITES
+                .iter()
+                .all(|scs| scs.fips())
+        );
     }
 
     #[cfg(not(feature = "fips"))]

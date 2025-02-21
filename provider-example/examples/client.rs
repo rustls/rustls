@@ -1,4 +1,4 @@
-use std::io::{stdout, Read, Write};
+use std::io::{Read, Write, stdout};
 use std::net::TcpStream;
 use std::sync::Arc;
 

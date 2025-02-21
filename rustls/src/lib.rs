@@ -526,12 +526,12 @@ pub mod internal {
 /// [`unbuffered-client`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/unbuffered-client.rs
 /// [`unbuffered-server`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/unbuffered-server.rs
 pub mod unbuffered {
+    pub use crate::conn::UnbufferedConnectionCommon;
     pub use crate::conn::unbuffered::{
         AppDataRecord, ConnectionState, EncodeError, EncodeTlsData, EncryptError,
         InsufficientSizeError, ReadEarlyData, ReadTraffic, TransmitTlsData, UnbufferedStatus,
         WriteTraffic,
     };
-    pub use crate::conn::UnbufferedConnectionCommon;
 }
 
 // The public interface is:
@@ -567,7 +567,7 @@ pub use crate::ticketer::TicketSwitcher;
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
 pub use crate::verify::DigitallySignedStruct;
-pub use crate::versions::{SupportedProtocolVersion, ALL_VERSIONS, DEFAULT_VERSIONS};
+pub use crate::versions::{ALL_VERSIONS, DEFAULT_VERSIONS, SupportedProtocolVersion};
 pub use crate::webpki::RootCertStore;
 
 /// Items for use in a client.
@@ -603,8 +603,8 @@ pub mod client {
 
     pub use crate::msgs::persist::{Tls12ClientSessionValue, Tls13ClientSessionValue};
     pub use crate::webpki::{
-        verify_server_cert_signed_by_trust_anchor, verify_server_name, ServerCertVerifierBuilder,
-        VerifierBuilderError, WebPkiServerVerifier,
+        ServerCertVerifierBuilder, VerifierBuilderError, WebPkiServerVerifier,
+        verify_server_cert_signed_by_trust_anchor, verify_server_name,
     };
 }
 
@@ -692,12 +692,12 @@ pub(crate) mod polyfill;
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod hash_map {
     #[cfg(feature = "std")]
-    pub(crate) use std::collections::hash_map::Entry;
-    #[cfg(feature = "std")]
     pub(crate) use std::collections::HashMap;
+    #[cfg(feature = "std")]
+    pub(crate) use std::collections::hash_map::Entry;
 
     #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
-    pub(crate) use hashbrown::hash_map::Entry;
-    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
     pub(crate) use hashbrown::HashMap;
+    #[cfg(all(not(feature = "std"), feature = "hashbrown"))]
+    pub(crate) use hashbrown::hash_map::Entry;
 }

@@ -126,7 +126,7 @@ pub struct CompressionFailed;
 #[cfg(feature = "zlib")]
 mod feat_zlib_rs {
     use zlib_rs::c_api::Z_BEST_COMPRESSION;
-    use zlib_rs::{deflate, inflate, ReturnCode};
+    use zlib_rs::{ReturnCode, deflate, inflate};
 
     use super::*;
 

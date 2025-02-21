@@ -1,6 +1,6 @@
+use crate::Error;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
-use crate::Error;
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
 pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
