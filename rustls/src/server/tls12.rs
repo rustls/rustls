@@ -598,8 +598,8 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
         cx.common
             .start_encryption_tls12(&secrets, Side::Server);
 
-        if let Some(client_cert) = self.client_cert {
-            Ok(Box::new(ExpectCertificateVerify {
+        match self.client_cert {
+            Some(client_cert) => Ok(Box::new(ExpectCertificateVerify {
                 config: self.config,
                 secrets,
                 transcript: self.transcript,
@@ -607,9 +607,8 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
                 using_ems: self.using_ems,
                 client_cert,
                 send_ticket: self.send_ticket,
-            }))
-        } else {
-            Ok(Box::new(ExpectCcs {
+            })),
+            _ => Ok(Box::new(ExpectCcs {
                 config: self.config,
                 secrets,
                 transcript: self.transcript,
@@ -617,7 +616,7 @@ impl State<ServerConnectionData> for ExpectClientKx<'_> {
                 using_ems: self.using_ems,
                 resuming: false,
                 send_ticket: self.send_ticket,
-            }))
+            })),
         }
     }
 

@@ -38,7 +38,7 @@ use common::{
 fn exercise_key_log_file_for_client() {
     serialized(|| {
         let server_config = Arc::new(make_server_config(KeyType::Rsa2048));
-        env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
+        unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
 
         for version in rustls::ALL_VERSIONS {
             let mut client_config = make_client_config_with_versions(KeyType::Rsa2048, &[version]);
@@ -61,7 +61,7 @@ fn exercise_key_log_file_for_server() {
     serialized(|| {
         let mut server_config = make_server_config(KeyType::Rsa2048);
 
-        env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
+        unsafe { env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt") };
         server_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
         let server_config = Arc::new(server_config);

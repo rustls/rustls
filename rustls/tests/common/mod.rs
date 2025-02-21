@@ -1004,10 +1004,9 @@ impl ServerCertVerifier for MockServerVerifier {
         if let Some(expected_ocsp) = &self.expected_ocsp_response {
             assert_eq!(expected_ocsp, ocsp_response);
         }
-        if let Some(error) = &self.cert_rejection_error {
-            Err(error.clone())
-        } else {
-            Ok(ServerCertVerified::assertion())
+        match &self.cert_rejection_error {
+            Some(error) => Err(error.clone()),
+            _ => Ok(ServerCertVerified::assertion()),
         }
     }
 
@@ -1021,10 +1020,9 @@ impl ServerCertVerifier for MockServerVerifier {
             "verify_tls12_signature({:?}, {:?}, {:?})",
             message, cert, dss
         );
-        if let Some(error) = &self.tls12_signature_error {
-            Err(error.clone())
-        } else {
-            Ok(HandshakeSignatureValid::assertion())
+        match &self.tls12_signature_error {
+            Some(error) => Err(error.clone()),
+            _ => Ok(HandshakeSignatureValid::assertion()),
         }
     }
 
@@ -1038,17 +1036,15 @@ impl ServerCertVerifier for MockServerVerifier {
             "verify_tls13_signature({:?}, {:?}, {:?})",
             message, cert, dss
         );
-        if let Some(error) = &self.tls13_signature_error {
-            Err(error.clone())
-        } else if self.requires_raw_public_keys {
-            verify_tls13_signature_with_raw_key(
+        match &self.tls13_signature_error {
+            Some(error) => Err(error.clone()),
+            _ if self.requires_raw_public_keys => verify_tls13_signature_with_raw_key(
                 message,
                 &SubjectPublicKeyInfoDer::from(cert.as_ref()),
                 dss,
                 &provider::default_provider().signature_verification_algorithms,
-            )
-        } else {
-            Ok(HandshakeSignatureValid::assertion())
+            ),
+            _ => Ok(HandshakeSignatureValid::assertion()),
         }
     }
 
