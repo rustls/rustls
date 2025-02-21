@@ -4,6 +4,8 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
+#![allow(clippy::disallowed_types)]
+
 use std::fmt::{Debug, Formatter};
 use std::io::{self, Read, Write};
 use std::sync::Arc;
