@@ -5,22 +5,22 @@ set -e
 source <(cargo llvm-cov show-env --export-prefix "$@")
 cargo llvm-cov clean --workspace
 
-cargo build --locked --all-targets --all-features
-cargo test --locked --all-features
-cargo test -p rustls --locked --no-default-features --features tls12,logging,aws_lc_rs,fips,std
-cargo test -p rustls --locked --no-default-features --features tls12,logging,ring,std
+cargo build --frozen --all-targets --all-features
+cargo test --frozen --all-features
+cargo test -p rustls --frozen --no-default-features --features tls12,logging,aws_lc_rs,fips,std
+cargo test -p rustls --frozen --no-default-features --features tls12,logging,ring,std
 
 # ensure both zlib and brotli are tested, irrespective of their order
-cargo test --locked $(admin/all-features-except zlib rustls)
-cargo test --locked $(admin/all-features-except brotli rustls)
+cargo test --frozen $(admin/all-features-except zlib rustls)
+cargo test --frozen $(admin/all-features-except brotli rustls)
 
 ## bogo
-cargo test --locked --test bogo -- --ignored --test-threads 1
+cargo test --frozen --test bogo -- --ignored --test-threads 1
 
 # provider example unit tests
-cargo test --locked --package rustls-provider-example
+cargo test --frozen --package rustls-provider-example
 
 ## provider example tests
-cargo test --locked --package rustls-provider-test
+cargo test --frozen --package rustls-provider-test
 
 cargo llvm-cov report "$@"

@@ -71,20 +71,20 @@ jobs:
           go-version: "1.22.2"
 
       - name: cargo build (debug; default features)
-        run: cargo build --locked
+        run: cargo build --frozen
 
       # nb. feature sets that include "fips" should be --release --
       # this is required for fips on windows.
       # nb. "--all-targets" does not include doctests
       - name: cargo test (release; all features)
-        run: cargo test --release --locked --all-features --all-targets
+        run: cargo test --release --frozen --all-features --all-targets
         env:
           RUST_BACKTRACE: 1
 
       # nb. this is separate since `--doc` option cannot be combined with other target option(s) ref:
       # - https://doc.rust-lang.org/cargo/commands/cargo-test.html
       - name: cargo test --doc (release; all-features)
-        run: cargo test --release --locked --all-features --doc
+        run: cargo test --release --frozen --all-features --doc
         env:
           RUST_BACKTRACE: 1
 
@@ -99,16 +99,16 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: cargo build (debug; rustls-provider-example)
-        run: cargo build --locked -p rustls-provider-example
+        run: cargo build --frozen -p rustls-provider-example
 
       - name: cargo build (debug; rustls-provider-example lib in no-std mode)
-        run: cargo build --locked -p rustls-provider-example --no-default-features
+        run: cargo build --frozen -p rustls-provider-example --no-default-features
 
       - name: cargo test (debug; rustls-provider-example; all features)
         run: cargo test --all-features -p rustls-provider-example
 
       - name: cargo build (debug; rustls-provider-test)
-        run: cargo build --locked -p rustls-provider-test
+        run: cargo build --frozen -p rustls-provider-test
 
       - name: cargo test (debug; rustls-provider-test; all features)
         run: cargo test --all-features -p rustls-provider-test
@@ -130,13 +130,13 @@ jobs:
           toolchain: "1.71"
 
       # zlib-rs is optional and requires a later MSRV
-      - run: cargo check --locked --lib $(admin/all-features-except zlib rustls) -p rustls
+      - run: cargo check --frozen --lib $(admin/all-features-except zlib rustls) -p rustls
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.75"
 
-      - run: cargo check --locked --lib --all-features -p rustls
+      - run: cargo check --frozen --lib --all-features -p rustls
 
   features:
     name: Features
@@ -153,31 +153,31 @@ jobs:
           target: x86_64-unknown-none
 
       - name: cargo build (debug; default features)
-        run: cargo build --locked
+        run: cargo build --frozen
         working-directory: rustls
 
         # this target does _not_ include the libstd crate in its sysroot
         # it will catch unwanted usage of libstd in _dependencies_
       - name: cargo build (debug; no default features; no-std)
-        run: cargo build --locked --no-default-features --target x86_64-unknown-none
+        run: cargo build --frozen --no-default-features --target x86_64-unknown-none
         working-directory: rustls
 
       - name: cargo build (debug; no default features; no-std, hashbrown)
-        run: cargo build --locked --no-default-features --features hashbrown --target x86_64-unknown-none
+        run: cargo build --frozen --no-default-features --features hashbrown --target x86_64-unknown-none
         working-directory: rustls
 
       - name: cargo test (debug; default features)
-        run: cargo test --locked
+        run: cargo test --frozen
         working-directory: rustls
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; no default features)
-        run: cargo test --locked --no-default-features
+        run: cargo test --frozen --no-default-features
         working-directory: rustls
 
       - name: cargo test (debug; no default features; tls12)
-        run: cargo test --locked --no-default-features --features tls12,std
+        run: cargo test --frozen --no-default-features --features tls12,std
         working-directory: rustls
 
       - name: cargo test (debug; no default features; aws-lc-rs,tls12)
@@ -189,7 +189,7 @@ jobs:
         working-directory: rustls
 
       - name: cargo test (release; no run)
-        run: cargo test --locked --release --no-run
+        run: cargo test --frozen --release --no-run
         working-directory: rustls
 
   bogo:
@@ -271,16 +271,16 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Smoke-test benchmark program (ring)
-        run: cargo run -p rustls-bench --profile=bench --locked --features ring -- --multiplier 0.1
+        run: cargo run -p rustls-bench --profile=bench --frozen --features ring -- --multiplier 0.1
 
       - name: Smoke-test benchmark program (aws-lc-rs)
-        run: cargo run -p rustls-bench --profile=bench --locked --features aws-lc-rs -- --multiplier 0.1
+        run: cargo run -p rustls-bench --profile=bench --frozen --features aws-lc-rs -- --multiplier 0.1
 
       - name: Smoke-test benchmark program (fips)
-        run: cargo run -p rustls-bench --profile=bench --locked --features fips -- --provider aws-lc-rs-fips --multiplier 0.1
+        run: cargo run -p rustls-bench --profile=bench --frozen --features fips -- --provider aws-lc-rs-fips --multiplier 0.1
 
       - name: Run micro-benchmarks
-        run: cargo bench --locked --all-features
+        run: cargo bench --frozen --all-features
         env:
           RUSTFLAGS: --cfg=bench
 
@@ -297,13 +297,13 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: cargo doc (rustls; all features)
-        run: cargo doc --locked --all-features --no-deps --document-private-items --package rustls
+        run: cargo doc --frozen --all-features --no-deps --document-private-items --package rustls
         env:
           RUSTDOCFLAGS: -Dwarnings
 
       - name: Check README.md
         run: |
-          cargo build --locked --all-features
+          cargo build --frozen --all-features
           ./admin/pull-readme
           git diff --exit-code
 
@@ -587,6 +587,6 @@ jobs:
 
       - name: cargo test (in openssl-tests/)
         working-directory: openssl-tests/
-        run: cargo test --locked -- --include-ignored
+        run: cargo test --frozen -- --include-ignored
         env:
           RUST_BACKTRACE: 1

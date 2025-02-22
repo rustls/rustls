@@ -11,7 +11,7 @@ rc=0
 script_args="$@"
 
 function run_clippy() {
-  if ! ( set -x ; cargo clippy --locked "$@" $script_args ) ; then
+  if ! ( set -x ; cargo clippy --frozen "$@" $script_args ) ; then
     rc=$PIPESTATUS
   fi
 }
