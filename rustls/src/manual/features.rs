@@ -59,7 +59,7 @@ and will not support:
   certificates"). _Rustls' default certificate verifier does not support using a trust anchor as
   both a CA certificate and an end-entity certificate in order to limit complexity and risk in
   path building. While dangerous, all authentication can be turned off if required --
-  see the [example code](https://github.com/rustls/rustls/blob/992e2364a006b2e84a8cf6a7c3eaf0bdb773c9de/examples/src/bin/tlsclient-mio.rs#L318)_ `*`
+  see the [example code](https://github.com/rustls/rustls/blob/v/0.23.23/examples/src/bin/tlsclient-mio.rs#L338)_ `*`
 
 ### About "custom extensions"
 
