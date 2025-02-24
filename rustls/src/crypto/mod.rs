@@ -110,7 +110,7 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// # Making a custom `CryptoProvider`
 ///
-/// Your goal will be to populate a [`crypto::CryptoProvider`] struct instance.
+/// Your goal will be to populate an instance of this [`crypto::CryptoProvider`] struct.
 ///
 /// ## Which elements are required?
 ///
