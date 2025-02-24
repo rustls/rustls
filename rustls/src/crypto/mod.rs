@@ -120,7 +120,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// provider (dynamically).
 ///
 /// For example, if we want to make a provider that just overrides key loading in the config builder
-/// API ([`ConfigBuilder::with_single_cert`] etc.), it might look like this:
+/// API (with [`ConfigBuilder::with_single_cert`], etc.), it might look like this:
 ///
 /// ```
 /// # #[cfg(feature = "aws_lc_rs")] {
@@ -212,7 +212,7 @@ pub struct CryptoProvider {
     /// Source of cryptographically secure random numbers.
     pub secure_random: &'static dyn SecureRandom,
 
-    /// Provider for loading private [SigningKey]s from [PrivateKeyDer].
+    /// Provider for loading private [`SigningKey`]s from [`PrivateKeyDer`].
     pub key_provider: &'static dyn KeyProvider,
 }
 
