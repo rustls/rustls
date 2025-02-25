@@ -120,7 +120,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// provider (dynamically).
 ///
 /// For example, if we want to make a provider that just overrides key loading in the config builder
-/// API (with [`ConfigBuilder::with_single_cert`], etc.), it might look like this:
+/// API, it might look like this:
 ///
 /// ```
 /// # #[cfg(feature = "aws_lc_rs")] {
