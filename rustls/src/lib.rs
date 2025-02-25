@@ -265,6 +265,10 @@
 //!
 //! [`mio`]: https://docs.rs/mio/latest/mio/
 //!
+//! # Manual
+//!
+//! The [rustls manual](crate::manual) explains design decisions and includes how-to guidance.
+//!
 //! # Crate features
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
