@@ -1,6 +1,6 @@
 /*!
 
-This documentation primarily aims to explain design decisions taken in rustls.
+This documentation primarily aims to explain design decisions taken in rustls and includes other guidance.
 
 It does this from a few aspects: how rustls attempts to avoid construction errors
 that occurred in other TLS libraries, how rustls attempts to avoid past TLS

@@ -266,6 +266,10 @@
 //!
 //! [`mio`]: https://docs.rs/mio/latest/mio/
 //!
+//! # Detailed manual
+//!
+//! The [`detailed manual`](crate::manual) explains design decisions and includes how-to guidance.
+//!
 //! # Crate features
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
@@ -678,7 +682,7 @@ pub mod quic;
 /// APIs for implementing TLS tickets
 pub mod ticketer;
 
-/// This is the rustls manual.
+/// This is the detailed rustls manual.
 pub mod manual;
 
 pub mod time_provider;
