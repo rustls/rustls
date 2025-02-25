@@ -110,12 +110,12 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// # Making a custom `CryptoProvider`
 ///
-/// Your goal will be to populate a [`crypto::CryptoProvider`] struct instance.
+/// Your goal will be to populate an instance of this `CryptoProvider` struct.
 ///
 /// ## Which elements are required?
 ///
-/// There is no requirement that the individual elements (`SupportedCipherSuite`, `SupportedKxGroup`,
-/// `SigningKey`, etc.) come from the same crate.  It is allowed and expected that uninteresting
+/// There is no requirement that the individual elements ([`SupportedCipherSuite`], [`SupportedKxGroup`],
+/// [`SigningKey`], etc.) come from the same crate.  It is allowed and expected that uninteresting
 /// elements would be delegated back to one of the default providers (statically) or a parent
 /// provider (dynamically).
 ///
@@ -160,8 +160,8 @@ pub use crate::suites::CipherSuiteCommon;
 ///
 /// # Example code
 ///
-/// See [provider-example/] for a full client and server example that uses
-/// cryptography from the [rust-crypto] and [dalek-cryptography] projects.
+/// See custom [`provider-example/`] for a full client and server example that uses
+/// cryptography from the [`RustCrypto`] and [`dalek-cryptography`] projects.
 ///
 /// ```shell
 /// $ cargo run --example client | head -3
@@ -171,9 +171,9 @@ pub use crate::suites::CipherSuiteCommon;
 /// Content-Length: 19899
 /// ```
 ///
-/// [provider-example/]: https://github.com/rustls/rustls/tree/main/provider-example/
-/// [rust-crypto]: https://github.com/rustcrypto
-/// [dalek-cryptography]: https://github.com/dalek-cryptography
+/// [`provider-example/`]: https://github.com/rustls/rustls/tree/main/provider-example/
+/// [`RustCrypto`]: https://github.com/RustCrypto
+/// [`dalek-cryptography`]: https://github.com/dalek-cryptography
 ///
 /// # FIPS-approved cryptography
 /// The `fips` crate feature enables use of the `aws-lc-rs` crate in FIPS mode.
@@ -323,7 +323,7 @@ pub trait SecureRandom: Send + Sync + Debug {
     }
 }
 
-/// A mechanism for loading private [SigningKey]s from [PrivateKeyDer].
+/// A mechanism for loading private [`SigningKey`]s from [`PrivateKeyDer`].
 ///
 /// This trait is intended to be used with private key material that is sourced from DER,
 /// such as a private-key that may be present on-disk. It is not intended to be used with

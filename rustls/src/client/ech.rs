@@ -93,9 +93,9 @@ impl EchConfig {
     /// One of the provided ECH configurations must be compatible with the HPKE provider's supported
     /// suites or an error will be returned.
     ///
-    /// See the [ech-client.rs] example for a complete example of fetching ECH configs from DNS.
+    /// See the [`ech-client.rs`] example for a complete example of fetching ECH configs from DNS.
     ///
-    /// [ech-client.rs]: https://github.com/rustls/rustls/blob/main/examples/src/bin/ech-client.rs
+    /// [`ech-client.rs`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/ech-client.rs
     pub fn new(
         ech_config_list: EchConfigListBytes<'_>,
         hpke_suites: &[&'static dyn Hpke],

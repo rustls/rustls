@@ -80,14 +80,13 @@
 //!
 //! #### Custom provider
 //!
-//! We also provide a simple example of writing your own provider in the [`custom-provider`]
-//! example. This example implements a minimal provider using parts of the [`RustCrypto`]
-//! ecosystem.
+//! We also provide a simple example of writing your own provider in the [custom provider example].
+//! This example implements a minimal provider using parts of the [`RustCrypto`] ecosystem.
 //!
 //! See the [Making a custom CryptoProvider] section of the documentation for more information
 //! on this topic.
 //!
-//! [`custom-provider`]: https://github.com/rustls/rustls/tree/main/provider-example/
+//! [custom provider example]: https://github.com/rustls/rustls/tree/main/provider-example/
 //! [`RustCrypto`]: https://github.com/RustCrypto
 //! [Making a custom CryptoProvider]: https://docs.rs/rustls/latest/rustls/crypto/struct.CryptoProvider.html#making-a-custom-cryptoprovider
 //!
