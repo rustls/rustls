@@ -907,6 +907,23 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => {
+                // If we didn't have an input session to resume, and we sent a session ID,
+                // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
+                // In this instance since we're now continuing a TLS 1.2 handshake the server
+                // should not have echoed it back: it's a randomly generated session ID it couldn't
+                // have known.
+                if self.input.resuming.is_none()
+                    && !self.input.session_id.is_empty()
+                    && self.input.session_id == server_hello.session_id
+                {
+                    return Err({
+                        cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::ServerEchoedCompatibilitySessionId,
+                        )
+                    });
+                }
+
                 let resuming_session = self
                     .input
                     .resuming
