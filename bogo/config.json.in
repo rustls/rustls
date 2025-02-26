@@ -17,7 +17,6 @@
     "CheckLeafCurve": "",
     "SendWarningAlerts-*": "",
     "Peek-*": "",
-    "EchoTLS13CompatibilitySessionID": "",
     "ClientOCSPCallback*": "ocsp not supported yet",
     "ServerOCSPCallback*": "",
     "SendUnsolicitedOCSPOnCertificate-TLS13": "we unconditionally request a stapled OCSP response",
@@ -156,6 +155,7 @@
     ":ENCRYPTED_LENGTH_TOO_LONG:": ":GARBAGE:"
   },
   "TestErrorMap": {
+    "EchoTLS13CompatibilitySessionID": ":PEER_MISBEHAVIOUR:",
     "EmptyCertificateList": ":NO_CERTS:",
     "SendInvalidRecordType": ":GARBAGE:",
     "NoSharedCipher": ":HANDSHAKE_FAILURE:",
