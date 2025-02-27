@@ -18,10 +18,10 @@ build = "build.rs"
 default = ["aws_lc_rs", "logging", "std", "tls12"]
 
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
-aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs"]
+aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 custom-provider = []
-fips = ["aws_lc_rs", "aws-lc-rs?/fips"]
+fips = ["aws_lc_rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 logging = ["log"]
 prefer-post-quantum = ["aws_lc_rs"]
 read_buf = ["rustversion", "std"]
