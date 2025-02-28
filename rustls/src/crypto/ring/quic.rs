@@ -225,7 +225,7 @@ mod tests {
     use crate::quic::*;
 
     fn test_short_packet(version: Version, expected: &[u8]) {
-        const PN: u64 = 654360564;
+        const PACKET_NUMBER: u64 = 654360564;
         const SECRET: &[u8] = &[
             0x9a, 0xc3, 0x12, 0xa7, 0xf8, 0x77, 0x46, 0x8e, 0xbe, 0x69, 0x42, 0x27, 0x48, 0xad,
             0x00, 0xa1, 0x54, 0x43, 0xf1, 0x82, 0x03, 0xa0, 0x7d, 0x60, 0x60, 0xf6, 0x88, 0xf3,
@@ -249,7 +249,7 @@ mod tests {
         let mut buf = PLAIN.to_vec();
         let (header, payload) = buf.split_at_mut(4);
         let tag = packet
-            .encrypt_in_place(PN, header, payload)
+            .encrypt_in_place(PACKET_NUMBER, header, payload)
             .unwrap();
         buf.extend(tag.as_ref());
 
@@ -270,7 +270,7 @@ mod tests {
 
         let (header, payload_tag) = buf.split_at_mut(4);
         let plain = packet
-            .decrypt_in_place(PN, header, payload_tag)
+            .decrypt_in_place(PACKET_NUMBER, header, payload_tag)
             .unwrap();
 
         assert_eq!(plain, &PLAIN[4..]);
