@@ -6722,20 +6722,20 @@ fn test_no_warning_logging_during_successful_sessions() {
     if cfg!(feature = "logging") {
         COUNTS.with(|c| {
             println!("After tests: {:?}", c.borrow());
-            assert_eq!(c.borrow().warn, 0);
-            assert_eq!(c.borrow().error, 0);
-            assert_eq!(c.borrow().info, 0);
-            assert!(c.borrow().trace > 0);
-            assert!(c.borrow().debug > 0);
+            assert!(c.borrow().warn.is_empty());
+            assert!(c.borrow().error.is_empty());
+            assert!(c.borrow().info.is_empty());
+            assert!(!c.borrow().trace.is_empty());
+            assert!(!c.borrow().debug.is_empty());
         });
     } else {
         COUNTS.with(|c| {
             println!("After tests: {:?}", c.borrow());
-            assert_eq!(c.borrow().warn, 0);
-            assert_eq!(c.borrow().error, 0);
-            assert_eq!(c.borrow().info, 0);
-            assert_eq!(c.borrow().trace, 0);
-            assert_eq!(c.borrow().debug, 0);
+            assert!(c.borrow().warn.is_empty());
+            assert!(c.borrow().error.is_empty());
+            assert!(c.borrow().info.is_empty());
+            assert!(c.borrow().trace.is_empty());
+            assert!(c.borrow().debug.is_empty());
         });
     }
 }
