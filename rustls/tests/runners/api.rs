@@ -60,7 +60,8 @@ impl log::Log for CountingLogger {
         println!("logging at {:?}: {:?}", record.level(), record.args());
 
         COUNTS.with(|c| {
-            c.borrow_mut().add(record.level());
+            c.borrow_mut()
+                .add(record.level(), format!("{}", record.args()));
         });
     }
 
@@ -69,11 +70,11 @@ impl log::Log for CountingLogger {
 
 #[derive(Default, Debug)]
 struct LogCounts {
-    trace: usize,
-    debug: usize,
-    info: usize,
-    warn: usize,
-    error: usize,
+    trace: Vec<String>,
+    debug: Vec<String>,
+    info: Vec<String>,
+    warn: Vec<String>,
+    error: Vec<String>,
 }
 
 impl LogCounts {
@@ -87,13 +88,14 @@ impl LogCounts {
         *self = Self::new();
     }
 
-    fn add(&mut self, level: log::Level) {
+    fn add(&mut self, level: log::Level, message: String) {
         match level {
-            log::Level::Trace => self.trace += 1,
-            log::Level::Debug => self.debug += 1,
-            log::Level::Info => self.info += 1,
-            log::Level::Warn => self.warn += 1,
-            log::Level::Error => self.error += 1,
+            log::Level::Trace => &mut self.trace,
+            log::Level::Debug => &mut self.debug,
+            log::Level::Info => &mut self.info,
+            log::Level::Warn => &mut self.warn,
+            log::Level::Error => &mut self.error,
         }
+        .push(message);
     }
 }
