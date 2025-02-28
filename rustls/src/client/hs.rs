@@ -6,6 +6,7 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
+use super::ResolvesClientCert;
 use super::Tls12Resumption;
 #[cfg(feature = "tls12")]
 use super::tls12;
@@ -37,6 +38,7 @@ use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::sync::Arc;
 use crate::tls13::key_schedule::KeyScheduleEarly;
+use crate::verify::ServerCertVerifier;
 
 pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
@@ -64,6 +66,9 @@ fn find_session(
 
             #[cfg(not(feature = "tls12"))]
             None
+        })
+        .and_then(|resuming| {
+            resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
         })
         .and_then(|resuming| {
             let now = config
@@ -1243,6 +1248,22 @@ impl ClientSessionValue {
             Self::Tls13(v) => Some(v),
             #[cfg(feature = "tls12")]
             Self::Tls12(_) => None,
+        }
+    }
+
+    fn compatible_config(
+        self,
+        server_cert_verifier: &Arc<dyn ServerCertVerifier>,
+        client_creds: &Arc<dyn ResolvesClientCert>,
+    ) -> Option<Self> {
+        match &self {
+            Self::Tls13(v) => v
+                .compatible_config(server_cert_verifier, client_creds)
+                .then_some(self),
+            #[cfg(feature = "tls12")]
+            Self::Tls12(v) => v
+                .compatible_config(server_cert_verifier, client_creds)
+                .then_some(self),
         }
     }
 }
