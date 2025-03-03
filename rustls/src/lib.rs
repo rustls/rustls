@@ -629,7 +629,7 @@ pub mod server {
     pub use handy::ServerSessionMemoryCache;
     pub use handy::{AlwaysResolvesServerRawPublicKeys, NoServerSessionStorage};
     pub use server_conn::{
-        Accepted, ClientHello, ProducesTickets, ResolvesServerCert, ServerConfig,
+        Accepted, ClientHello, LoadsPsks, ProducesTickets, ResolvesServerCert, ServerConfig,
         ServerConnectionData, StoresServerSessions, UnbufferedServerConnection,
     };
     #[cfg(feature = "std")]

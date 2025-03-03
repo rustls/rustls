@@ -141,6 +141,12 @@ impl Codec<'_> for PayloadU16 {
     }
 }
 
+impl Zeroize for PayloadU16 {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 impl fmt::Debug for PayloadU16 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, &self.0)

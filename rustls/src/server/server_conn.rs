@@ -110,6 +110,14 @@ pub trait ProducesTickets: Debug + Send + Sync {
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 }
 
+/// TODO
+pub trait LoadsPsks: Debug + Send + Sync {
+    /// TODO
+    fn load_psk(&self, psk: &[u8]) -> Option<Vec<u8>>;
+    /// TODO
+    fn store_psk(&self, psk: &[u8]) -> Option<Vec<u8>>;
+}
+
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
 ///
@@ -272,6 +280,9 @@ pub struct ServerConfig {
 
     /// How to produce tickets.
     pub ticketer: Arc<dyn ProducesTickets>,
+
+    /// TODO
+    pub psks: Arc<dyn LoadsPsks>,
 
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].

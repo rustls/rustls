@@ -15,6 +15,7 @@ use crate::{KeyLog, Tls13CipherSuite, quic};
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SecretKind {
+    ExternalPskBinderKey,
     ResumptionPskBinderKey,
     ClientEarlyTrafficSecret,
     ClientHandshakeTrafficSecret,
@@ -32,6 +33,7 @@ impl SecretKind {
     fn to_bytes(self) -> &'static [u8] {
         use self::SecretKind::*;
         match self {
+            ExternalPskBinderKey => b"ext binder",
             ResumptionPskBinderKey => b"res binder",
             ClientEarlyTrafficSecret => b"c e traffic",
             ClientHandshakeTrafficSecret => b"c hs traffic",
@@ -84,9 +86,9 @@ pub(crate) struct KeyScheduleEarly {
 }
 
 impl KeyScheduleEarly {
-    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+    pub(crate) fn new(suite: &'static Tls13CipherSuite, psk: &[u8]) -> Self {
         Self {
-            ks: KeySchedule::new(suite, secret),
+            ks: KeySchedule::new(suite, psk),
         }
     }
 
@@ -600,11 +602,11 @@ impl<'a> ResumptionSecret<'a> {
 }
 
 impl KeySchedule {
-    fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, psk: &[u8]) -> Self {
         Self {
             current: suite
                 .hkdf_provider
-                .extract_from_secret(None, secret),
+                .extract_from_secret(None, psk),
             suite,
         }
     }

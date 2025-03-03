@@ -166,6 +166,18 @@ impl server::ProducesTickets for NeverProducesTickets {
     }
 }
 
+#[derive(Debug)]
+pub(super) struct NeverLoadsPsks {}
+
+impl server::LoadsPsks for NeverLoadsPsks {
+    fn load_psk(&self, _psk: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
+    fn store_psk(&self, _psk: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
+}
+
 /// An exemplar `ResolvesServerCert` implementation that always resolves to a single
 /// [RFC 7250] raw public key.
 ///

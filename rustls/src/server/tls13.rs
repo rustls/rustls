@@ -22,6 +22,7 @@ use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload,
     HandshakePayload, NewSessionTicketExtension, NewSessionTicketPayloadTls13,
+    PresharedKeyIdentity,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -89,6 +90,8 @@ mod client_hello {
     }
 
     impl CompleteClientHelloHandling {
+        /// Reports whether `binder` is the correct PSK binder
+        /// for TODO
         fn check_binder(
             &self,
             suite: &'static Tls13CipherSuite,
@@ -129,6 +132,19 @@ mod client_hello {
                     .take(ticket)
                     .and_then(|plain| persist::ServerSessionValue::read_bytes(&plain).ok())
             }
+        }
+
+        fn attempt_load_psk(&mut self, id: &PresharedKeyIdentity) -> Option<persist::PresharedKey> {
+            // See 4.2.11 of RFC 8446: "For identities
+            // established externally, an obfuscated_ticket_age
+            // of 0 SHOULD be used..."
+            if id.obfuscated_ticket_age != 0 {
+                return None;
+            }
+            self.config
+                .psks
+                .load_psk(&id.identity.0)
+                .and_then(|data| persist::PresharedKey::read_bytes(&data).ok())
         }
 
         pub(in crate::server) fn handle_client_hello(
@@ -284,6 +300,20 @@ mod client_hello {
                 let now = self.config.current_time()?;
 
                 for (i, psk_id) in psk_offer.identities.iter().enumerate() {
+                    if let Some(psk) = self.attempt_load_psk(psk_id) {
+                        if !self.check_binder(
+                            self.suite,
+                            chm,
+                            &psk.secret.0,
+                            psk_offer.binders[i].as_ref(),
+                        ) {
+                            return Err(cx.common.send_fatal_alert(
+                                AlertDescription::DecryptError,
+                                PeerMisbehaved::IncorrectBinder,
+                            ));
+                        }
+                    };
+
                     let maybe_resume_data = self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .map(|resumedata| {

@@ -399,6 +399,13 @@ impl PresharedKeyIdentity {
             obfuscated_ticket_age: age,
         }
     }
+
+    pub(crate) fn external(id: Vec<u8>) -> Self {
+        // See 4.2.11 of RFC 8446: "For identities established
+        // externally, an obfuscated_ticket_age of 0 SHOULD be
+        // used..."
+        Self::new(id, 0)
+    }
 }
 
 impl Codec<'_> for PresharedKeyIdentity {

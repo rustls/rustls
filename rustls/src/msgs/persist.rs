@@ -253,6 +253,56 @@ static MAX_TICKET_LIFETIME: u32 = 7 * 24 * 60 * 60;
 /// or receives the NewSessionTicket, _and_ actual clock skew over this period.
 static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
 
+/// A TLS 1.3 preshared key.
+///
+/// See RFC 8446 section 4.2.11.
+#[derive(Debug)]
+pub struct PresharedKey {
+    /// The label for the PSK.
+    ///
+    /// Clients send this as plaintext over the network.
+    pub(crate) identity: PayloadU16,
+    /// The raw secret.
+    pub(crate) secret: Zeroizing<PayloadU16>,
+    /// The cipher suite that is permitted to be used with the
+    /// PSK.
+    ///
+    /// Note that this is more strict than required. RFC 8446
+    /// only requires that the PSK be stored alongside its hash
+    /// algorithm, defaulting to SHA-256 if unknown.
+    pub(crate) cipher_suite: CipherSuite,
+}
+
+impl PresharedKey {
+    pub(crate) fn new(identity: &[u8], secret: &[u8], cipher_suite: CipherSuite) -> Self {
+        // TODO(eric): check if `secret` is all zeros?
+        Self {
+            identity: PayloadU16::new(identity.to_vec()),
+            secret: Zeroizing::new(PayloadU16::new(secret.to_vec())),
+            cipher_suite,
+        }
+    }
+}
+
+impl Codec<'_> for PresharedKey {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.identity.encode(bytes);
+        self.secret.encode(bytes);
+        self.cipher_suite.encode(bytes);
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let identity = PayloadU16::read(r)?;
+        let secret = Zeroizing::new(PayloadU16::read(r)?);
+        let cipher_suite = CipherSuite::read(r)?;
+        Ok(Self {
+            identity,
+            secret,
+            cipher_suite,
+        })
+    }
+}
+
 // --- Server types ---
 #[derive(Debug)]
 pub struct ServerSessionValue {
