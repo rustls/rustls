@@ -602,6 +602,7 @@ enum_builder! {
 mod tests {
     use super::*;
     use crate::msgs::enums::tests::{test_enum8, test_enum16};
+    use std::{format, println};
 
     #[test]
     fn test_enums() {
@@ -616,5 +617,41 @@ mod tests {
             CertificateCompressionAlgorithm::Zlib,
             CertificateCompressionAlgorithm::Zstd,
         );
+    }
+
+    #[test]
+    fn test_ciphersuite_partial_debug() {
+        for val in 0..=0xffff {
+            let t = CipherSuite::from(val);
+            println!(
+                "{val:4x} => debug={t:?} str={:?} array={:x?} into-int={:x?}",
+                t.as_str(),
+                t.to_array(),
+                u16::from(t)
+            );
+        }
+
+        assert_eq!(
+            format!("{:?}", CipherSuite::TLS_NULL_WITH_NULL_NULL),
+            "TLS_NULL_WITH_NULL_NULL"
+        );
+        assert_eq!(
+            format!("{:?}", CipherSuite::TLS_RSA_WITH_NULL_MD5),
+            "CipherSuite(0x1)"
+        );
+        assert_eq!(
+            format!("{:?}", CipherSuite::from(0xffff)),
+            "CipherSuite(0xffff)",
+        );
+
+        assert_eq!(
+            CipherSuite::TLS_NULL_WITH_NULL_NULL.as_str(),
+            Some("TLS_NULL_WITH_NULL_NULL")
+        );
+        assert_eq!(
+            CipherSuite::TLS_RSA_WITH_NULL_MD5.as_str(),
+            Some("TLS_RSA_WITH_NULL_MD5")
+        );
+        assert_eq!(CipherSuite::from(0xffff).as_str(), None);
     }
 }
