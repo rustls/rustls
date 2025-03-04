@@ -257,7 +257,7 @@ static MAX_FRESHNESS_SKEW_MS: u32 = 60 * 1000;
 ///
 /// See RFC 8446 section 4.2.11.
 #[derive(Debug)]
-pub struct PresharedKey {
+pub(crate) struct ExternalPresharedKey {
     /// The label for the PSK.
     ///
     /// Clients send this as plaintext over the network.
@@ -271,34 +271,70 @@ pub struct PresharedKey {
     /// only requires that the PSK be stored alongside its hash
     /// algorithm, defaulting to SHA-256 if unknown.
     pub(crate) cipher_suite: CipherSuite,
+    /// The maximum amount of early data accepted, if any.
+    pub(crate) max_early_data: Option<u32>,
+    /// ALPN protocol, if any.
+    pub(crate) alpn: Option<PayloadU8>,
 }
 
-impl PresharedKey {
-    pub(crate) fn new(identity: &[u8], secret: &[u8], cipher_suite: CipherSuite) -> Self {
+impl ExternalPresharedKey {
+    pub(crate) fn new(
+        identity: &[u8],
+        secret: &[u8],
+        cipher_suite: CipherSuite,
+        max_early_data: Option<u32>,
+        alpn: Option<PayloadU8>,
+    ) -> Self {
         // TODO(eric): check if `secret` is all zeros?
         Self {
             identity: PayloadU16::new(identity.to_vec()),
             secret: Zeroizing::new(PayloadU16::new(secret.to_vec())),
             cipher_suite,
+            max_early_data,
+            alpn,
         }
     }
 }
 
-impl Codec<'_> for PresharedKey {
+impl Codec<'_> for ExternalPresharedKey {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.identity.encode(bytes);
         self.secret.encode(bytes);
         self.cipher_suite.encode(bytes);
+        if let Some(max_early_data) = &self.max_early_data {
+            1u8.encode(bytes);
+            max_early_data.encode(bytes);
+        } else {
+            0u8.encode(bytes);
+        }
+        if let Some(alpn) = &self.alpn {
+            1u8.encode(bytes);
+            alpn.encode(bytes);
+        } else {
+            0u8.encode(bytes);
+        }
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let identity = PayloadU16::read(r)?;
         let secret = Zeroizing::new(PayloadU16::read(r)?);
         let cipher_suite = CipherSuite::read(r)?;
+        let max_early_data = if u8::read(r)? == 1 {
+            Some(u32::read(r)?)
+        } else {
+            None
+        };
+        let alpn = if u8::read(r)? == 1 {
+            Some(PayloadU8::read(r)?)
+        } else {
+            None
+        };
         Ok(Self {
             identity,
             secret,
             cipher_suite,
+            max_early_data,
+            alpn,
         })
     }
 }

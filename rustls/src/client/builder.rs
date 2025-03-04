@@ -166,6 +166,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             provider: self.provider,
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
+            preshared_keys: Arc::new(handy::NoPresharedKeys),
             max_fragment_size: None,
             client_auth_cert_resolver,
             versions: self.state.versions,

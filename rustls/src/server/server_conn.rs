@@ -111,7 +111,7 @@ pub trait ProducesTickets: Debug + Send + Sync {
 }
 
 /// TODO
-pub trait LoadsPsks: Debug + Send + Sync {
+pub trait SelectsPresharedKeys: Debug + Send + Sync {
     /// TODO
     fn load_psk(&self, psk: &[u8]) -> Option<Vec<u8>>;
     /// TODO
@@ -281,8 +281,14 @@ pub struct ServerConfig {
     /// How to produce tickets.
     pub ticketer: Arc<dyn ProducesTickets>,
 
-    /// TODO
-    pub psks: Arc<dyn LoadsPsks>,
+    /// Retrieves external preshared keys.
+    pub preshared_keys: Arc<dyn SelectsPresharedKeys>,
+
+    /// Only allow preshared key handshakes.
+    ///
+    /// The server will abort the connection if the client does
+    /// not provide a valid preshared key.
+    pub only_allow_preshared_keys: bool,
 
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].

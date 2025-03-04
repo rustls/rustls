@@ -1,8 +1,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::Debug;
+use core::fmt::{self, Debug};
 
 use pki_types::PrivateKeyDer;
+use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
 #[cfg(all(doc, feature = "tls12"))]
@@ -651,6 +652,98 @@ impl From<Vec<u8>> for SharedSecret {
     fn from(buf: Vec<u8>) -> Self {
         Self { buf, offset: 0 }
     }
+}
+
+/// A TLS 1.3 preshared key.
+#[derive(Clone)]
+pub struct PresharedKey<'a> {
+    identity: &'a [u8],
+    secret: &'a [u8],
+    hash_alg: hash::HashAlgorithm,
+    max_early_data: Option<u32>,
+    alpn: Option<&'a [u8]>,
+}
+
+impl<'a> PresharedKey<'a> {
+    /// Creates an external preshared key.
+    ///
+    /// It returns `None` if either `identity` or `secret` are
+    /// longer than (2^16)-1 bytes or if `secret` is all zeros.
+    ///
+    /// `identity` is a non-secret value sent as plaintext over
+    /// the network.
+    ///
+    /// # Warning
+    ///
+    /// `secret` must be cryptographically secure. It is also
+    /// generally unsafe for multiple clients or servers to share
+    /// preshared keys.
+    ///
+    /// See [RFC 8446] section 2.2 and [RFC 9257] for more
+    /// information.
+    ///
+    /// [RFC 8446]: https://www.rfc-editor.org/rfc/rfc8446.html
+    /// [RFC 9257]: https://www.rfc-editor.org/rfc/rfc9257.html
+    pub fn external(identity: &'a [u8], secret: &'a [u8]) -> Option<Self> {
+        if bool::from(ct_eq_zero(secret)) {
+            return None;
+        }
+        if identity.len() > u16::MAX as usize || secret.len() > u16::MAX as usize {
+            None
+        } else {
+            Some(Self {
+                identity,
+                secret,
+                hash_alg: hash::HashAlgorithm::SHA256,
+                max_early_data: None,
+                alpn: None,
+            })
+        }
+    }
+
+    /// Sets the hash algorithm associated with the PSK.
+    ///
+    /// By default the PSK uses SHA-256.
+    pub fn with_hash_alg(mut self, hash: hash::HashAlgorithm) -> Self {
+        self.hash_alg = hash;
+        self
+    }
+
+    /// Sets the maximum amount of early data allowed that can be
+    /// processed with the PSK.
+    ///
+    /// By default the PSK defers to the server or client config.
+    pub fn with_max_early_data(mut self, n: u32) -> Self {
+        self.max_early_data = Some(n);
+        self
+    }
+
+    /// Sets the ALPN protocol associated with the PSK.
+    pub fn with_alpn(mut self, alpn: &'a [u8]) -> Self {
+        self.alpn = Some(alpn);
+        self
+    }
+}
+
+impl Debug for PresharedKey<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Avoid displaying the secret.
+        f.debug_struct("PresharedKey")
+            .field("identity", &self.identity)
+            .field("hash_alg", &self.hash_alg)
+            .field("max_early_data", &self.max_early_data)
+            .field("alpn", &self.alpn)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Reports in constant time whether every byte in `x` is zero.
+fn ct_eq_zero(x: &[u8]) -> Choice {
+    let mut v = Choice::from(0u8);
+    for c in x {
+        v |= c.ct_ne(&0);
+    }
+    v
 }
 
 /// This function returns a [`CryptoProvider`] that uses

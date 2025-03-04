@@ -19,7 +19,7 @@ use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm};
+use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm, PresharedKey};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -142,6 +142,12 @@ pub(super) fn start_handshake(
         }
     };
 
+    let psk = if session_id.is_none() && config.supports_version(ProtocolVersion::TLSv1_3) {
+        config.preshared_keys.psk(&server_name)
+    } else {
+        None
+    };
+
     // https://tools.ietf.org/html/rfc8446#appendix-D.4
     // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
     let session_id = match session_id {
@@ -215,6 +221,11 @@ struct ClientHelloInput {
     session_id: SessionId,
     server_name: ServerName<'static>,
     prev_ech_ext: Option<ClientExtension>,
+}
+
+enum ResumptionOrPsk<'a> {
+    Resumption(persist::Retrieved<ClientSessionValue>),
+    PresharedKey(PresharedKey<'a>),
 }
 
 fn emit_client_hello_for_retry(

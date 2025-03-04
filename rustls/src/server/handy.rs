@@ -169,7 +169,7 @@ impl server::ProducesTickets for NeverProducesTickets {
 #[derive(Debug)]
 pub(super) struct NeverLoadsPsks {}
 
-impl server::LoadsPsks for NeverLoadsPsks {
+impl server::SelectsPresharedKeys for NeverLoadsPsks {
     fn load_psk(&self, _psk: &[u8]) -> Option<Vec<u8>> {
         None
     }

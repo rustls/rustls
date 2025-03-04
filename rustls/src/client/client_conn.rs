@@ -13,7 +13,7 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, PresharedKey, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::log::trace;
@@ -167,6 +167,9 @@ pub struct ClientConfig {
 
     /// How and when the client can resume a previous session.
     pub resumption: Resumption,
+
+    /// TODO
+    pub preshared_keys: Arc<dyn PresharedKeyStore>,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
@@ -507,6 +510,12 @@ pub enum Tls12Resumption {
     ///
     /// [^1]: <https://words.filippo.io/we-need-to-talk-about-session-tickets/>
     SessionIdOrTickets,
+}
+
+/// Stores preshared keys.
+pub trait PresharedKeyStore: fmt::Debug + Send + Sync {
+    /// Retrieves a preshared key from the store.
+    fn psk(&self, server_name: &ServerName<'_>) -> Option<PresharedKey<'_>>;
 }
 
 /// Container for unsafe APIs

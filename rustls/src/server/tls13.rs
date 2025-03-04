@@ -41,7 +41,7 @@ mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
     use crate::crypto::SupportedKxGroup;
-    use crate::enums::SignatureScheme;
+    use crate::enums::{CipherSuite, SignatureScheme};
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
@@ -74,6 +74,75 @@ mod client_hello {
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
     }
 
+    enum PresharedKey {
+        /// A PSK from session resumption.
+        Resumption(persist::ServerSessionValue),
+        /// An externally provisioned PSK.
+        External(persist::ExternalPresharedKey),
+    }
+
+    impl PresharedKey {
+        /// Is this [`PresharedKey::Resumption`]?
+        fn is_resumption(&self) -> bool {
+            matches!(self, Self::Resumption(_))
+        }
+
+        /// Is this [`PresharedKey::External`]?
+        fn is_external(&self) -> bool {
+            matches!(self, Self::External(_))
+        }
+
+        /// Returns the underlying secret.
+        fn as_secret(&self) -> &[u8] {
+            match self {
+                Self::Resumption(v) => v.master_secret.0.as_slice(),
+                Self::External(v) => v.secret.0.as_slice(),
+            }
+        }
+
+        /// Returns the session resumption data, if any.
+        fn resume_data(&self) -> Option<&persist::ServerSessionValue> {
+            match self {
+                Self::Resumption(v) => Some(v),
+                Self::External(_) => None,
+            }
+        }
+
+        /// Returns the cipher suite associated with the PSK.
+        fn cipher_suite(&self) -> CipherSuite {
+            match self {
+                Self::Resumption(v) => v.cipher_suite,
+                Self::External(v) => v.cipher_suite,
+            }
+        }
+
+        /// Returns the ALPN protocol associated with the PSK.
+        fn alpn(&self) -> Option<&PayloadU8> {
+            match self {
+                Self::Resumption(v) => v.alpn.as_ref(),
+                Self::External(v) => v.alpn.as_ref(),
+            }
+        }
+
+        /// Returns TLS protocol version associated with the PSK.
+        fn version(&self) -> ProtocolVersion {
+            match self {
+                Self::Resumption(v) => v.version,
+                Self::External(_) => ProtocolVersion::TLSv1_3,
+            }
+        }
+
+        /// Reports whether the PSK is fresh.
+        fn is_fresh(&self) -> bool {
+            match self {
+                Self::Resumption(v) => v.is_fresh(),
+                // External PSKs do not have a ticket age, so
+                // they're always fresh.
+                Self::External(_) => true,
+            }
+        }
+    }
+
     fn max_early_data_size(configured: u32) -> usize {
         if configured != 0 {
             configured as usize
@@ -96,7 +165,7 @@ mod client_hello {
             &self,
             suite: &'static Tls13CipherSuite,
             client_hello: &Message<'_>,
-            psk: &[u8],
+            psk: &PresharedKey,
             binder: &[u8],
         ) -> bool {
             let binder_plaintext = match &client_hello.payload {
@@ -110,7 +179,9 @@ mod client_hello {
                 .transcript
                 .hash_given(binder_plaintext);
 
-            let key_schedule = KeyScheduleEarly::new(suite, psk);
+            let key_schedule = KeyScheduleEarly::new(suite, psk.as_secret());
+            // TODO(eric): We choose ext/resumption depending on
+            // `psk`.
             let real_binder =
                 key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
@@ -134,17 +205,129 @@ mod client_hello {
             }
         }
 
-        fn attempt_load_psk(&mut self, id: &PresharedKeyIdentity) -> Option<persist::PresharedKey> {
-            // See 4.2.11 of RFC 8446: "For identities
-            // established externally, an obfuscated_ticket_age
-            // of 0 SHOULD be used..."
-            if id.obfuscated_ticket_age != 0 {
-                return None;
-            }
+        fn try_load_external_psk(
+            &mut self,
+            id: &PresharedKeyIdentity,
+        ) -> Option<persist::ExternalPresharedKey> {
             self.config
-                .psks
+                .preshared_keys
                 .load_psk(&id.identity.0)
-                .and_then(|data| persist::PresharedKey::read_bytes(&data).ok())
+                .and_then(|data| persist::ExternalPresharedKey::read_bytes(&data).ok())
+        }
+
+        /// Attempts to choose a PSK from the client hello.
+        fn try_choose_psk(
+            &mut self,
+            cx: &mut ServerContext<'_>,
+            chm: &Message<'_>,
+            client_hello: &ClientHelloPayload,
+        ) -> Result<Option<(PresharedKey, u16, PSKKeyExchangeMode)>, Error> {
+            let Some(psk_offer) = client_hello.psk() else {
+                return Ok(None);
+            };
+
+            if !client_hello.check_psk_ext_is_last() {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::PskExtensionMustBeLast,
+                ));
+            }
+
+            // "A client MUST provide a "psk_key_exchange_modes" extension if it
+            //  offers a "pre_shared_key" extension. If clients offer
+            //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
+            //  servers MUST abort the handshake." - RFC8446 4.2.9
+            let Some(modes) = client_hello.psk_modes() else {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::MissingExtension,
+                    PeerMisbehaved::MissingPskModesExtension,
+                ));
+            };
+
+            let Some(mode) = PSKKeyExchangeMode::preferred_mode(modes) else {
+                // TODO(eric):
+                // - Is it guaranteed that `!modes.is_empty()`?
+                // - This error is probably wrong.
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::MissingExtension,
+                    PeerMisbehaved::MissingPskModesExtension,
+                ));
+            };
+
+            if psk_offer.binders.is_empty() {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::DecodeError,
+                    PeerMisbehaved::MissingBinderInPskExtension,
+                ));
+            }
+
+            if psk_offer.binders.len() != psk_offer.identities.len() {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::IllegalParameter,
+                    PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders,
+                ));
+            }
+
+            let now = self.config.current_time()?;
+
+            let mut chosen_offer = None;
+
+            // RFC 8446 4.2.11: "Servers SHOULD NOT attempt to
+            // validate multiple binders; rather, they SHOULD
+            // select a single PSK and validate solely the binder
+            // that corresponds to that PSK."
+            for (i, (psk_id, binder)) in psk_offer
+                .identities
+                .iter()
+                .zip(&psk_offer.binders)
+                .enumerate()
+            {
+                if let Some(resume) = self
+                    .attempt_tls13_ticket_decryption(&psk_id.identity.0)
+                    .map(|resumedata| resumedata.set_freshness(psk_id.obfuscated_ticket_age, now))
+                    .filter(|resumedata| {
+                        hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
+                    })
+                {
+                    let psk = PresharedKey::Resumption(resume);
+                    chosen_offer = Some((psk, i, binder));
+                    break;
+                }
+
+                if let Some(ext_psk) = self.try_load_external_psk(psk_id) {
+                    let psk = PresharedKey::External(ext_psk);
+                    chosen_offer = Some((psk, i, binder));
+                    break;
+                };
+            }
+
+            let Some((psk, index, binder)) = chosen_offer else {
+                // None if the offers were suitable.
+                return Ok(None);
+            };
+
+            if !self.check_binder(self.suite, chm, &psk, binder.as_ref()) {
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::DecryptError,
+                    PeerMisbehaved::IncorrectBinder,
+                ));
+            }
+
+            if psk.is_resumption() && !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE)
+            {
+                debug!("Client unwilling to resume, DHE_KE not offered");
+                self.send_tickets = 0;
+                return Ok(None);
+            }
+
+            if let PresharedKey::Resumption(resume) = &psk {
+                cx.data.received_resumption_data = Some(resume.application_data.0.clone());
+                cx.common
+                    .peer_certificates
+                    .clone_from(&resume.client_cert_chain);
+            }
+
+            Ok(Some((psk, index as u16, mode)))
         }
 
         pub(in crate::server) fn handle_client_hello(
@@ -261,107 +444,19 @@ mod client_hello {
                 };
             };
 
-            let mut chosen_psk_index = None;
-            let mut resumedata = None;
+            let chosen_psk = self.try_choose_psk(cx, chm, client_hello)?;
 
-            if let Some(psk_offer) = client_hello.psk() {
-                if !client_hello.check_psk_ext_is_last() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::PskExtensionMustBeLast,
-                    ));
-                }
-
-                // "A client MUST provide a "psk_key_exchange_modes" extension if it
-                //  offers a "pre_shared_key" extension. If clients offer
-                //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
-                //  servers MUST abort the handshake." - RFC8446 4.2.9
-                if client_hello.psk_modes().is_none() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::MissingExtension,
-                        PeerMisbehaved::MissingPskModesExtension,
-                    ));
-                }
-
-                if psk_offer.binders.is_empty() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::DecodeError,
-                        PeerMisbehaved::MissingBinderInPskExtension,
-                    ));
-                }
-
-                if psk_offer.binders.len() != psk_offer.identities.len() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders,
-                    ));
-                }
-
-                let now = self.config.current_time()?;
-
-                for (i, psk_id) in psk_offer.identities.iter().enumerate() {
-                    if let Some(psk) = self.attempt_load_psk(psk_id) {
-                        if !self.check_binder(
-                            self.suite,
-                            chm,
-                            &psk.secret.0,
-                            psk_offer.binders[i].as_ref(),
-                        ) {
-                            return Err(cx.common.send_fatal_alert(
-                                AlertDescription::DecryptError,
-                                PeerMisbehaved::IncorrectBinder,
-                            ));
-                        }
-                    };
-
-                    let maybe_resume_data = self
-                        .attempt_tls13_ticket_decryption(&psk_id.identity.0)
-                        .map(|resumedata| {
-                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
-                        })
-                        .filter(|resumedata| {
-                            hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
-                        });
-
-                    let Some(resume) = maybe_resume_data else {
-                        continue;
-                    };
-
-                    if !self.check_binder(
-                        self.suite,
-                        chm,
-                        &resume.master_secret.0,
-                        psk_offer.binders[i].as_ref(),
-                    ) {
-                        return Err(cx.common.send_fatal_alert(
-                            AlertDescription::DecryptError,
-                            PeerMisbehaved::IncorrectBinder,
-                        ));
-                    }
-
-                    chosen_psk_index = Some(i);
-                    resumedata = Some(resume);
-                    break;
-                }
-            }
-
-            if !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE) {
-                debug!("Client unwilling to resume, DHE_KE not offered");
-                self.send_tickets = 0;
-                chosen_psk_index = None;
-                resumedata = None;
-            } else {
+            // It's not really clear whether sending session
+            // tickets is useful for external PSKs, so avoid it
+            // for now.
+            if !chosen_psk
+                .as_ref()
+                .is_some_and(|(psk, ..)| psk.is_external())
+            {
                 self.send_tickets = self.config.send_tls13_tickets;
             }
 
-            if let Some(ref resume) = resumedata {
-                cx.data.received_resumption_data = Some(resume.application_data.0.clone());
-                cx.common
-                    .peer_certificates
-                    .clone_from(&resume.client_cert_chain);
-            }
-
-            let full_handshake = resumedata.is_none();
+            let full_handshake = chosen_psk.is_none();
             self.transcript.add_message(chm);
             let key_schedule = emit_server_hello(
                 &mut self.transcript,
@@ -370,10 +465,7 @@ mod client_hello {
                 cx,
                 &client_hello.session_id,
                 chosen_share_and_kxg,
-                chosen_psk_index,
-                resumedata
-                    .as_ref()
-                    .map(|x| &x.master_secret.0[..]),
+                chosen_psk.as_ref(),
                 &self.config,
             )?;
             if !self.done_retry {
@@ -396,7 +488,9 @@ mod client_hello {
                 cx,
                 &mut ocsp_response,
                 client_hello,
-                resumedata.as_ref(),
+                chosen_psk
+                    .as_ref()
+                    .map(|(psk, _, _)| psk),
                 self.extra_exts,
                 &self.config,
             )?;
@@ -515,10 +609,13 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         session_id: &SessionId,
         share_and_kxgroup: (&KeyShareEntry, &'static dyn SupportedKxGroup),
-        chosen_psk_idx: Option<usize>,
-        resuming_psk: Option<&[u8]>,
+        psk: Option<&(PresharedKey, u16, PSKKeyExchangeMode)>,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
+        let (psk, chosen_psk_idx, chosen_psk_mode) = psk
+            .map(|(psk, idx, mode)| ((Some(psk), Some(*idx), Some(mode))))
+            .unwrap_or_default();
+
         let mut extensions = Vec::new();
 
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
@@ -532,14 +629,19 @@ mod client_hello {
             })?;
         cx.common.kx_state.complete();
 
-        extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(
-            ckx.group,
-            ckx.pub_key,
-        )));
+        // RFC 8446 4.2.9: "psk_ke:  PSK-only key establishment.
+        // In this mode, the server MUST NOT supply a "key_share"
+        // value."
+        if !matches!(chosen_psk_mode, Some(PSKKeyExchangeMode::PSK_KE)) {
+            extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(
+                ckx.group,
+                ckx.pub_key,
+            )));
+        }
         extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
 
         if let Some(psk_idx) = chosen_psk_idx {
-            extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
+            extensions.push(ServerExtension::PresharedKey(psk_idx));
         }
 
         let sh = Message {
@@ -566,8 +668,8 @@ mod client_hello {
         cx.common.send_msg(sh, false);
 
         // Start key schedule
-        let key_schedule_pre_handshake = if let Some(psk) = resuming_psk {
-            let early_key_schedule = KeyScheduleEarly::new(suite, psk);
+        let key_schedule_pre_handshake = if let Some(psk) = psk {
+            let early_key_schedule = KeyScheduleEarly::new(suite, psk.as_secret());
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -644,7 +746,7 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
+        psk: Option<&PresharedKey>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
@@ -654,14 +756,23 @@ mod client_hello {
             false => EarlyDataDecision::Disabled,
         };
 
-        let Some(resume) = resumedata else {
-            // never any early data if not resuming.
+        let Some(psk) = psk else {
+            // never any early data if not using a PSK.
             return rejected_or_disabled;
         };
 
-        /* Non-zero max_early_data_size controls whether early_data is allowed at all.
-         * We also require stateful resumption. */
-        let early_data_configured = config.max_early_data_size > 0 && !config.ticketer.enabled();
+        let early_data_configured = match psk {
+            /* Non-zero max_early_data_size controls whether early_data is allowed at all.
+             * We also require stateful resumption. */
+            PresharedKey::Resumption(_) => {
+                config.max_early_data_size > 0 && !config.ticketer.enabled()
+            }
+            PresharedKey::External(v) => match v.max_early_data {
+                Some(0) => false,
+                Some(_) => true,
+                None => config.max_early_data_size > 0,
+            },
+        };
 
         /* "For PSKs provisioned via NewSessionTicket, a server MUST validate
          *  that the ticket age for the selected PSK identity (computed by
@@ -680,10 +791,10 @@ mod client_hello {
          *
          * (RFC8446, 4.2.10) */
         let early_data_possible = early_data_requested
-            && resume.is_fresh()
-            && Some(resume.version) == cx.common.negotiated_version
-            && resume.cipher_suite == suite.common.suite
-            && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref();
+            && psk.is_fresh()
+            && Some(psk.version()) == cx.common.negotiated_version
+            && psk.cipher_suite() == suite.common.suite
+            && psk.alpn().as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref();
 
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
@@ -703,14 +814,16 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        resumedata: Option<&persist::ServerSessionValue>,
+        psk: Option<&PresharedKey>,
         extra_exts: Vec<ServerExtension>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
+        let resumedata = psk.and_then(|v| v.resume_data());
+
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;
 
-        let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
+        let early_data = decide_if_early_data_allowed(cx, hello, psk, suite, config);
         if early_data == EarlyDataDecision::Accepted {
             ep.exts.push(ServerExtension::EarlyData);
         }
