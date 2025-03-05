@@ -291,23 +291,6 @@ enum_builder! {
     }
 }
 
-impl PSKKeyExchangeMode {
-    /// Returns the preferred mode from `modes`.
-    pub(crate) fn preferred_mode(modes: &[Self]) -> Option<Self> {
-        // Prefer PSK_DHE_KE (PSK with ECDHE key
-        // establishment) over PSK_KE (PSK-only key
-        // establishment).
-        const ORDER: &[PSKKeyExchangeMode] =
-            &[PSKKeyExchangeMode::PSK_DHE_KE, PSKKeyExchangeMode::PSK_KE];
-        for want in ORDER {
-            if modes.iter().any(|got| got == want) {
-                return Some(*want);
-            }
-        }
-        None
-    }
-}
-
 enum_builder! {
     /// The `KeyUpdateRequest` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.

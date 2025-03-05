@@ -515,7 +515,7 @@ pub enum Tls12Resumption {
 /// Stores preshared keys.
 pub trait PresharedKeyStore: fmt::Debug + Send + Sync {
     /// Retrieves a preshared key from the store.
-    fn psk(&self, server_name: &ServerName<'_>) -> Option<PresharedKey<'_>>;
+    fn psk(&self, server_name: &ServerName<'_>) -> Option<PresharedKey>;
 }
 
 /// Container for unsafe APIs

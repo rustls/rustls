@@ -81,6 +81,7 @@ pub(super) fn handle_server_hello(
 ) -> hs::NextStateOrError<'static> {
     validate_server_hello(cx.common, server_hello)?;
 
+    // TODO(eric): only if not PSK_KE
     let their_key_share = server_hello
         .key_share()
         .ok_or_else(|| {
@@ -158,7 +159,7 @@ pub(super) fn handle_server_hello(
                 .send_fatal_alert(AlertDescription::IllegalParameter, err)
         })?;
 
-    let mut key_schedule = key_schedule_pre_handshake.into_handshake(shared_secret);
+    let mut key_schedule = key_schedule_pre_handshake.into_handshake(Some(shared_secret));
 
     // If we have ECH state, check that the server accepted our offer.
     if let Some(ech_state) = ech_state {

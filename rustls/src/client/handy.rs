@@ -37,7 +37,7 @@ impl client::ClientSessionStore for NoClientSessionStorage {
 pub(super) struct NoPresharedKeys;
 
 impl client::PresharedKeyStore for NoPresharedKeys {
-    fn psk(&self, _server_name: &ServerName<'_>) -> Option<PresharedKey<'_>> {
+    fn psk(&self, _server_name: &ServerName<'_>) -> Option<PresharedKey> {
         None
     }
 }

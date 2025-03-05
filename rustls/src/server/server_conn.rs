@@ -19,7 +19,7 @@ use crate::common_state::{Protocol, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, PresharedKey};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::log::trace;
@@ -110,12 +110,10 @@ pub trait ProducesTickets: Debug + Send + Sync {
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
 }
 
-/// TODO
+/// Selects TLS 1.3 external preshared keys.
 pub trait SelectsPresharedKeys: Debug + Send + Sync {
-    /// TODO
-    fn load_psk(&self, psk: &[u8]) -> Option<Vec<u8>>;
-    /// TODO
-    fn store_psk(&self, psk: &[u8]) -> Option<Vec<u8>>;
+    /// Retrieves a preshared key.
+    fn load_psk(&self, identity: &[u8]) -> Option<PresharedKey>;
 }
 
 /// How to choose a certificate chain and signing key for use

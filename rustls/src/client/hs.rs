@@ -223,9 +223,9 @@ struct ClientHelloInput {
     prev_ech_ext: Option<ClientExtension>,
 }
 
-enum ResumptionOrPsk<'a> {
+enum ResumptionOrPsk {
     Resumption(persist::Retrieved<ClientSessionValue>),
-    PresharedKey(PresharedKey<'a>),
+    PresharedKey(PresharedKey),
 }
 
 fn emit_client_hello_for_retry(

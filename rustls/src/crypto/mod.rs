@@ -6,6 +6,7 @@ use pki_types::PrivateKeyDer;
 use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
+use crate::CipherSuite;
 #[cfg(all(doc, feature = "tls12"))]
 use crate::Tls12CipherSuite;
 use crate::msgs::ffdhe_groups::FfdheGroup;
@@ -656,15 +657,17 @@ impl From<Vec<u8>> for SharedSecret {
 
 /// A TLS 1.3 preshared key.
 #[derive(Clone)]
-pub struct PresharedKey<'a> {
-    identity: &'a [u8],
-    secret: &'a [u8],
+pub struct PresharedKey {
+    identity: Vec<u8>,
+    secret: Vec<u8>,
     hash_alg: hash::HashAlgorithm,
-    max_early_data: Option<u32>,
-    alpn: Option<&'a [u8]>,
+    /// Whether early data is allowed.
+    ///
+    /// This is (max_early_data, _, ALPN)
+    early_data: Option<(u32, CipherSuite, Option<Vec<u8>>)>,
 }
 
-impl<'a> PresharedKey<'a> {
+impl PresharedKey {
     /// Creates an external preshared key.
     ///
     /// It returns `None` if either `identity` or `secret` are
@@ -684,7 +687,7 @@ impl<'a> PresharedKey<'a> {
     ///
     /// [RFC 8446]: https://www.rfc-editor.org/rfc/rfc8446.html
     /// [RFC 9257]: https://www.rfc-editor.org/rfc/rfc9257.html
-    pub fn external(identity: &'a [u8], secret: &'a [u8]) -> Option<Self> {
+    pub fn external(identity: &[u8], secret: &[u8]) -> Option<Self> {
         if bool::from(ct_eq_zero(secret)) {
             return None;
         }
@@ -692,11 +695,10 @@ impl<'a> PresharedKey<'a> {
             None
         } else {
             Some(Self {
-                identity,
-                secret,
+                identity: identity.to_vec(),
+                secret: secret.to_vec(),
                 hash_alg: hash::HashAlgorithm::SHA256,
-                max_early_data: None,
-                alpn: None,
+                early_data: None,
             })
         }
     }
@@ -712,38 +714,62 @@ impl<'a> PresharedKey<'a> {
     /// Sets the maximum amount of early data allowed that can be
     /// processed with the PSK.
     ///
-    /// By default the PSK defers to the server or client config.
-    pub fn with_max_early_data(mut self, n: u32) -> Self {
-        self.max_early_data = Some(n);
+    /// In order to use early data with a PSK, `n` must be
+    /// non-zero and both `suite` and `alpn` must match the
+    /// cipher suite and ALPN protocol, respectively, negotiated
+    /// by the TLS handshake.
+    ///
+    /// By default early data is not allowed.
+    pub fn with_early_data(mut self, n: u32, suite: CipherSuite, alpn: Option<&[u8]>) -> Self {
+        self.early_data = Some((n, suite, alpn.map(<[_]>::to_vec)));
         self
     }
 
-    /// Sets the ALPN protocol associated with the PSK.
-    pub fn with_alpn(mut self, alpn: &'a [u8]) -> Self {
-        self.alpn = Some(alpn);
-        self
+    /// Returns the PSK's identity.
+    pub fn identity(&self) -> &[u8] {
+        self.identity.as_slice()
+    }
+
+    /// Returns the secret.
+    pub(crate) fn secret(&self) -> &[u8] {
+        self.secret.as_slice()
+    }
+
+    /// Returns the maximum amount of early data allowed, the
+    /// cipher suite, and ALPN (if any).
+    pub(crate) fn early_data(&self) -> Option<(u32, CipherSuite, Option<&[u8]>)> {
+        self.early_data
+            .as_ref()
+            .map(|(max_early_data, suite, alpn)| {
+                (*max_early_data, *suite, alpn.as_ref().map(Vec::as_slice))
+            })
+    }
+
+    /// Returns the hash algorithm associated with the PSK.
+    pub(crate) fn hash_alg(&self) -> hash::HashAlgorithm {
+        self.hash_alg
     }
 }
 
-impl Debug for PresharedKey<'_> {
+impl Debug for PresharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Avoid displaying the secret.
         f.debug_struct("PresharedKey")
             .field("identity", &self.identity)
             .field("hash_alg", &self.hash_alg)
-            .field("max_early_data", &self.max_early_data)
-            .field("alpn", &self.alpn)
+            .field("early_data", &self.early_data)
             .finish_non_exhaustive()
     }
 }
 
-/// Reports in constant time whether every byte in `x` is zero.
+/// Reports in constant time whether every byte in `x` is zero,
+/// include if `x` is empty.
 fn ct_eq_zero(x: &[u8]) -> Choice {
-    let mut v = Choice::from(0u8);
+    let mut non_zero = Choice::from(0u8);
     for c in x {
-        v |= c.ct_ne(&0);
+        non_zero |= c.ct_ne(&0);
     }
-    v
+    !non_zero
 }
 
 /// This function returns a [`CryptoProvider`] that uses
@@ -828,6 +854,7 @@ mod tests {
     use std::vec;
 
     use super::SharedSecret;
+    use super::ct_eq_zero;
 
     #[test]
     fn test_shared_secret_strip_leading_zeros() {
@@ -844,6 +871,22 @@ mod tests {
             assert_eq!(secret.secret_bytes(), buf);
             secret.strip_leading_zeros();
             assert_eq!(secret.secret_bytes(), expected);
+        }
+    }
+
+    #[test]
+    fn test_ct_eq_zero() {
+        let tests: &[(&[u8], bool)] = &[
+            (&[], true),
+            (&[0], true),
+            (&[0, 0, 0], true),
+            (&[1], false),
+            (&[0, 0, 1], false),
+            (&[1, 0, 0], false),
+        ];
+        for (i, &(s, want)) in tests.iter().enumerate() {
+            let got = bool::from(ct_eq_zero(s));
+            assert_eq!(got, want, "#{i}");
         }
     }
 }
