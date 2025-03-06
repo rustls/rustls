@@ -10,12 +10,13 @@ use super::hs::ClientContext;
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchState, EchStatus};
+use crate::client::hs::PresharedKeys;
 use crate::client::{ClientConfig, ClientSessionStore, hs};
 use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
 };
 use crate::conn::ConnectionRandoms;
-use crate::crypto::{ActiveKeyExchange, SharedSecret};
+use crate::crypto::{ActiveKeyExchange, PresharedKey, SharedSecret};
 use crate::enums::{
     AlertDescription, ContentType, HandshakeType, ProtocolVersion, SignatureScheme,
 };
@@ -25,12 +26,12 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
+use crate::msgs::enums::{ExtensionType, KeyUpdateRequest, PSKKeyExchangeMode};
 use crate::msgs::handshake::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtension, EchConfigPayload,
     HandshakeMessagePayload, HandshakePayload, HasServerExtensions, KeyShareEntry,
-    NewSessionTicketPayloadTls13, PresharedKeyIdentity, PresharedKeyOffer, ServerExtension,
-    ServerHelloPayload,
+    NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
+    ServerExtension, ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -306,29 +307,37 @@ pub(super) fn initial_key_share(
 /// This implements the horrifying TLS1.3 hack where PSK binders have a
 /// data dependency on the message they are contained within.
 pub(super) fn fill_in_psk_binder(
-    resuming: &persist::Tls13ClientSessionValue,
+    psk: &PresharedKeys,
     transcript: &HandshakeHashBuffer,
     hmp: &mut HandshakeMessagePayload<'_>,
 ) -> KeyScheduleEarly {
-    // We need to know the hash function of the suite we're trying to resume into.
-    let suite = resuming.suite();
-    let suite_hash = suite.common.hash_provider;
+    match psk {
+        PresharedKeys::Resumption(resuming) => {
+            // We need to know the hash function of the suite we're trying to resume into.
+            let suite = resuming.suite();
+            let suite_hash = suite.common.hash_provider;
 
-    // The binder is calculated over the clienthello, but doesn't include itself or its
-    // length, or the length of its container.
-    let binder_plaintext = hmp.encoding_for_binder_signing();
-    let handshake_hash = transcript.hash_given(suite_hash, &binder_plaintext);
+            // The binder is calculated over the clienthello, but doesn't include itself or its
+            // length, or the length of its container.
+            let binder_plaintext = hmp.encoding_for_binder_signing();
+            let handshake_hash = transcript.hash_given(suite_hash, &binder_plaintext);
 
-    // Run a fake key_schedule to simulate what the server will do if it chooses
-    // to resume.
-    let key_schedule = KeyScheduleEarly::new(suite, resuming.secret());
-    let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
+            // Run a fake key_schedule to simulate what the server will do if it chooses
+            // to resume.
+            let key_schedule = KeyScheduleEarly::new(suite, resuming.secret());
+            let real_binder =
+                key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
-    if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
-        ch.set_psk_binder(real_binder.as_ref());
-    };
+            if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
+                ch.set_psk_binder(real_binder.as_ref());
+            };
 
-    key_schedule
+            key_schedule
+        }
+        PresharedKeys::External(v) => {
+            todo!()
+        }
+    }
 }
 
 pub(super) fn prepare_resumption(
@@ -343,6 +352,10 @@ pub(super) fn prepare_resumption(
     cx.data.resumption_ciphersuite = Some(resuming_suite.into());
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
+    //
+    // TODO(eric): IF we want to send early data we need to
+    // supply both the "pre_shared_key" and "early_data"
+    // extensions. So, I don't think this should be here.
     let max_early_data_size = resuming_session.max_early_data_size();
     if config.enable_early_data && max_early_data_size > 0 && !doing_retry {
         cx.data
@@ -368,6 +381,56 @@ pub(super) fn prepare_resumption(
         PresharedKeyIdentity::new(resuming_session.ticket().to_vec(), obfuscated_ticket_age);
     let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
     exts.push(ClientExtension::PresharedKey(psk_ext));
+}
+
+pub(super) fn prepare_preshared_keys(
+    config: &ClientConfig,
+    cx: &mut ClientContext<'_>,
+    psks: &[Arc<PresharedKey>],
+    exts: &mut Vec<ClientExtension>,
+    doing_retry: bool,
+) {
+    use PSKKeyExchangeMode::*;
+
+    if !config.supports_version(ProtocolVersion::TLSv1_3) {
+        return;
+    }
+
+    if psks.is_empty() {
+        return;
+    }
+
+    // TODO(eric): IF we want to send early data we need to
+    // supply both the "pre_shared_key" and "early_data"
+    // extensions. So, I don't think this should be here.
+    let max_early_data = psks
+        .iter()
+        .filter_map(|psk| psk.early_data().map(|(n, ..)| n))
+        .max()
+        .unwrap_or_default();
+
+    if max_early_data > 0 && !doing_retry {
+        cx.data
+            .early_data
+            .enable(usize::try_from(max_early_data).unwrap_or(usize::MAX));
+        exts.push(ClientExtension::EarlyData);
+    }
+
+    let offer = PresharedKeyOffer::from_iter(psks.iter().map(|psk| {
+        let ident = PresharedKeyIdentity::external(psk.identity().to_vec());
+        // Later code fills in the actual value of the binder
+        // because the binder value depends on the message it's
+        // inside of. So, just use zeros.
+        let binder = {
+            let size = psk.binder_size();
+            PresharedKeyBinder::from(vec![0; size])
+        };
+        (ident, binder)
+    }));
+    exts.push(ClientExtension::PresharedKey(offer));
+
+    // TODO(eric): Make this configurable.
+    exts.push(ClientExtension::PresharedKeyModes(vec![PSK_DHE_KE, PSK_KE]));
 }
 
 pub(super) fn derive_early_traffic_secret(

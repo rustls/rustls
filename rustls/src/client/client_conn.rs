@@ -168,8 +168,11 @@ pub struct ClientConfig {
     /// How and when the client can resume a previous session.
     pub resumption: Resumption,
 
-    /// TODO
+    /// Externally derived TLS 1.3 preshared keys.
     pub preshared_keys: Arc<dyn PresharedKeyStore>,
+
+    /// TODO
+    pub psk_kex_modes: Vec<()>,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
@@ -512,10 +515,10 @@ pub enum Tls12Resumption {
     SessionIdOrTickets,
 }
 
-/// Stores preshared keys.
+/// Stores externally derived TLS 1.3 preshared keys.
 pub trait PresharedKeyStore: fmt::Debug + Send + Sync {
-    /// Retrieves a preshared key from the store.
-    fn psk(&self, server_name: &ServerName<'_>) -> Option<PresharedKey>;
+    /// Retrieves the preshared keys for `server_name`.
+    fn psks(&self, server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>>;
 }
 
 /// Container for unsafe APIs

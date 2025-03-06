@@ -19,7 +19,7 @@ use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
 use crate::common_state::{CommonState, HandshakeKind, KxState, State};
 use crate::conn::ConnectionRandoms;
-use crate::crypto::{ActiveKeyExchange, KeyExchangeAlgorithm, PresharedKey};
+use crate::crypto::{self, ActiveKeyExchange, KeyExchangeAlgorithm};
 use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
@@ -142,10 +142,19 @@ pub(super) fn start_handshake(
         }
     };
 
-    let psk = if session_id.is_none() && config.supports_version(ProtocolVersion::TLSv1_3) {
-        config.preshared_keys.psk(&server_name)
-    } else {
-        None
+    // If we're not resuming a session then look for external
+    // PSKs to use.
+    let psk = match resuming {
+        Some(psk) => Some(PresharedKeys::Resumption(psk)),
+        None => {
+            if config.supports_version(ProtocolVersion::TLSv1_3) {
+                Some(PresharedKeys::External(
+                    config.preshared_keys.psks(&server_name),
+                ))
+            } else {
+                None
+            }
+        }
     };
 
     // https://tools.ietf.org/html/rfc8446#appendix-D.4
@@ -181,7 +190,7 @@ pub(super) fn start_handshake(
         None,
         ClientHelloInput {
             config,
-            resuming,
+            psk,
             random,
             #[cfg(feature = "tls12")]
             using_ems: false,
@@ -212,7 +221,8 @@ struct ExpectServerHelloOrHelloRetryRequest {
 
 struct ClientHelloInput {
     config: Arc<ClientConfig>,
-    resuming: Option<persist::Retrieved<ClientSessionValue>>,
+    /// Our chosen PSK(s).
+    psk: Option<PresharedKeys>,
     random: Random,
     #[cfg(feature = "tls12")]
     using_ems: bool,
@@ -223,9 +233,12 @@ struct ClientHelloInput {
     prev_ech_ext: Option<ClientExtension>,
 }
 
-enum ResumptionOrPsk {
+/// Preshared keys.
+pub(crate) enum PresharedKeys {
+    /// A resumption PSK.
     Resumption(persist::Retrieved<ClientSessionValue>),
-    PresharedKey(PresharedKey),
+    /// Externally derived PSKs.
+    External(Vec<Arc<crypto::PresharedKey>>),
 }
 
 fn emit_client_hello_for_retry(
@@ -412,8 +425,24 @@ fn emit_client_hello_for_retry(
         }
     }
 
+    // TODO(eric): clean this up.
     // Do we have a SessionID or ticket cached for this host?
-    let tls13_session = prepare_resumption(&input.resuming, &mut exts, suite, cx, config);
+    let tls13_session = {
+        let resuming = input
+            .psk
+            .as_ref()
+            .and_then(|psk| match psk {
+                PresharedKeys::Resumption(v) => Some(v),
+                _ => None,
+            });
+        prepare_resumption(resuming, &mut exts, suite, cx, config)
+    };
+    match (tls13_session.as_ref(), input.psk.as_ref()) {
+        (None, Some(PresharedKeys::External(psks))) => {
+            tls13::prepare_preshared_keys(config, cx, psks, &mut exts, false);
+        }
+        _ => {}
+    }
 
     // Extensions MAY be randomized
     // but they also need to keep the same order as the previous ClientHello
@@ -613,7 +642,7 @@ fn emit_client_hello_for_retry(
 ///
 /// If 1.3 resumption can continue, returns the 1.3 session value for further processing.
 fn prepare_resumption<'a>(
-    resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
+    resuming: Option<&'a persist::Retrieved<ClientSessionValue>>,
     exts: &mut Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,

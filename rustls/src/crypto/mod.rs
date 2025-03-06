@@ -658,9 +658,9 @@ impl From<Vec<u8>> for SharedSecret {
 /// A TLS 1.3 preshared key.
 #[derive(Clone)]
 pub struct PresharedKey {
-    identity: Zeroizing<Vec<u8>>,
-    secret: Zeroizing<Vec<u8>>,
-    hash_alg: hash::HashAlgorithm,
+    identity: Zeroizing<Box<[u8]>>,
+    secret: Zeroizing<Box<[u8]>>,
+    hash_alg: Tls13HashAlg,
     /// Whether early data is allowed.
     ///
     /// This is (max_early_data, _, ALPN)
@@ -695,9 +695,13 @@ impl PresharedKey {
             None
         } else {
             Some(Self {
-                identity: Zeroizing::new(identity.to_vec()),
-                secret: Zeroizing::new(secret.to_vec()),
-                hash_alg: hash::HashAlgorithm::SHA256,
+                identity: Zeroizing::new(identity.to_vec().into_boxed_slice()),
+                secret: Zeroizing::new(secret.to_vec().into_boxed_slice()),
+                // RFC 8446: "For externally established PSKs,
+                // the Hash algorithm MUST be set when the PSK is
+                // established or default to SHA-256 if no such
+                // algorithm is defined."
+                hash_alg: Tls13HashAlg::SHA256,
                 early_data: None,
             })
         }
@@ -706,9 +710,9 @@ impl PresharedKey {
     /// Sets the hash algorithm associated with the PSK.
     ///
     /// By default the PSK uses SHA-256.
-    pub fn with_hash_alg(mut self, hash: hash::HashAlgorithm) -> Self {
-        self.hash_alg = hash;
-        self
+    pub fn with_hash_alg(mut self, hash: hash::HashAlgorithm) -> Option<Self> {
+        self.hash_alg = Tls13HashAlg::try_from(hash).ok()?;
+        Some(self)
     }
 
     /// Sets the maximum amount of early data allowed that can be
@@ -731,7 +735,7 @@ impl PresharedKey {
         suite: CipherSuite,
         alpn: Option<&[u8]>,
     ) -> Option<Self> {
-        if suite.tls13_hash_alg() != Some(self.hash_alg) {
+        if Some(self.hash_alg.into()) != suite.tls13_hash_alg() {
             None
         } else {
             self.early_data = Some((n, suite, alpn.map(<[_]>::to_vec)));
@@ -741,12 +745,27 @@ impl PresharedKey {
 
     /// Returns the PSK's identity.
     pub fn identity(&self) -> &[u8] {
-        self.identity.as_slice()
+        &*self.identity
     }
 
     /// Returns the secret.
     pub(crate) fn secret(&self) -> &[u8] {
-        self.secret.as_slice()
+        &*self.secret
+    }
+
+    /// Returns the hash algorithm.
+    pub(crate) fn hash_alg(&self) -> hash::HashAlgorithm {
+        self.hash_alg.into()
+    }
+
+    /// Returns the size in bytes of the PSK's binder.
+    pub(crate) fn binder_size(&self) -> usize {
+        use Tls13HashAlg::*;
+
+        match self.hash_alg {
+            SHA256 => 32,
+            SHA384 => 64,
+        }
     }
 
     /// Returns the maximum amount of early data allowed, the
@@ -771,7 +790,7 @@ impl PresharedKey {
     /// matches the cipher suite's hash algorithm.
     pub(crate) fn is_compatible(&self, suite: CipherSuite) -> bool {
         std::println!("{:?} v {:?}", self.hash_alg, suite.tls13_hash_alg());
-        Some(self.hash_alg) == suite.tls13_hash_alg()
+        Some(self.hash_alg.into()) == suite.tls13_hash_alg()
     }
 }
 
@@ -794,6 +813,37 @@ fn ct_eq_zero(x: &[u8]) -> Choice {
         non_zero |= c.ct_ne(&0);
     }
     !non_zero
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum Tls13HashAlg {
+    SHA256,
+    SHA384,
+}
+
+impl From<Tls13HashAlg> for hash::HashAlgorithm {
+    fn from(alg: Tls13HashAlg) -> Self {
+        use hash::HashAlgorithm::*;
+
+        match alg {
+            Tls13HashAlg::SHA256 => SHA256,
+            Tls13HashAlg::SHA384 => SHA384,
+        }
+    }
+}
+
+impl TryFrom<hash::HashAlgorithm> for Tls13HashAlg {
+    type Error = ();
+    fn try_from(hash: hash::HashAlgorithm) -> Result<Self, Self::Error> {
+        use hash::HashAlgorithm::*;
+
+        let alg = match hash {
+            SHA256 => Self::SHA256,
+            SHA384 => Self::SHA384,
+            _ => return Err(()),
+        };
+        Ok(alg)
+    }
 }
 
 /// This function returns a [`CryptoProvider`] that uses

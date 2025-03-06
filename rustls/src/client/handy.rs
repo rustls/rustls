@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use pki_types::ServerName;
 
 use crate::crypto::PresharedKey;
@@ -37,8 +39,8 @@ impl client::ClientSessionStore for NoClientSessionStorage {
 pub(super) struct NoPresharedKeys;
 
 impl client::PresharedKeyStore for NoPresharedKeys {
-    fn psk(&self, _server_name: &ServerName<'_>) -> Option<PresharedKey> {
-        None
+    fn psks(&self, _server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>> {
+        Vec::new()
     }
 }
 

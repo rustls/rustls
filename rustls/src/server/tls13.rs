@@ -68,7 +68,9 @@ mod client_hello {
         pub(in crate::server) transcript: HandshakeHash,
         pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
+        /// Have we sent a HelloRetryRequest?
         pub(in crate::server) done_retry: bool,
+        /// How many session tickets to send.
         pub(in crate::server) send_tickets: usize,
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
     }
@@ -99,12 +101,14 @@ mod client_hello {
         }
     }
 
-    /// A chosen PSK, the PSK's wire index, and the chosen PSK
-    /// KEX mode.
+    /// A chosen PSK.
     #[derive(Debug)]
     struct ChosenPresharedKey {
+        /// The PSK identity index.
         index: u16,
+        /// The PSK.
         psk: PresharedKey,
+        /// The chosen PSK KEX mode.
         mode: PSKKeyExchangeMode,
     }
 
@@ -306,14 +310,16 @@ mod client_hello {
                 });
             }
 
-            // Check "psk_key_exchange_modes" before the
-            // "key_share" extension since the PSK KEX mode
-            // affects key share selection.
-            let psk_mode = self.psk_kex_modes(client_hello);
+            let psk = {
+                // Check "psk_key_exchange_modes" before the
+                // "key_share" extension since the PSK KEX mode
+                // affects key share selection.
+                let psk_mode = self.psk_kex_modes(client_hello);
 
-            // Always process the "pre_shared_key" extension
-            // last.
-            let psk = self.pre_shared_key(cx, chm, client_hello, psk_mode)?;
+                // Always process the "pre_shared_key" extension
+                // last.
+                self.pre_shared_key(cx, chm, client_hello, psk_mode)?
+            };
             if psk.is_none() && self.config.only_allow_preshared_keys {
                 // TODO(eric)
             }
@@ -334,11 +340,15 @@ mod client_hello {
                 let share = Self::key_share(cx, client_hello, selected_kxg)?;
                 let group = selected_kxg;
                 match (share, psk) {
-                    // Common case: we have a key share.
-                    (Some(share), psk) => InputSecrets::Ecdhe { share, group, psk },
                     // We don't need a key share when we have
                     // a PSK and we're not using (EC)DHE.
-                    (None, Some(psk)) if psk.mode == PSK_KE => InputSecrets::PskOnly(psk),
+                    (_, Some(psk)) if psk.mode == PSK_KE => InputSecrets::PskOnly(psk),
+                    // Common case: we're using (EC)DHE and we
+                    // have a key share.
+                    (Some(share), psk) => InputSecrets::Ecdhe { share, group, psk },
+                    // The if PSK_DHE_KE is selected then the
+                    // client must provide a key share.
+                    //
                     // RFC 8446: "psk_dhe_ke: PSK with (EC)DHE
                     // key establishment. In this mode, the
                     // client and server MUST supply "key_share"
@@ -532,9 +542,10 @@ mod client_hello {
             let mut chosen = None;
             for &mode in modes {
                 match (mode, chosen) {
-                    // Choose PSK_DHE_KE over anything else.
+                    // Choose PSK_DHE_KE over anything else since
+                    // it provides forward security.
                     (PSK_DHE_KE, _) => return Some(PSK_DHE_KE),
-                    // Otherwise, choose PSK_KE if provided.
+                    // Choose PSK_KE over an unknown mode.
                     (PSK_KE, Some(Unknown(_)) | None) => chosen = Some(PSK_KE),
                     // Otherwise, choose the first unknown mode.
                     (Unknown(_), None) => chosen = Some(mode),
@@ -601,18 +612,20 @@ mod client_hello {
             //  offers a "pre_shared_key" extension. If clients offer
             //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
             //  servers MUST abort the handshake." - RFC8446 4.2.9
-            let Some(mode) = mode else {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::MissingExtension,
-                    PeerMisbehaved::MissingPskModesExtension,
-                ));
+            let mode = match mode {
+                Some(mode @ (PSK_KE | PSK_DHE_KE)) => mode,
+                Some(Unknown(_)) => {
+                    // We don't recognize this mode, so we can't
+                    // do anything with this extension.
+                    return Ok(None);
+                }
+                None => {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::MissingExtension,
+                        PeerMisbehaved::MissingPskModesExtension,
+                    ));
+                }
             };
-            match mode {
-                PSK_KE | PSK_DHE_KE => {}
-                // We don't recognize this mode, so we can't do
-                // anything with this extension.
-                Unknown(_) => return Ok(None),
-            }
 
             // RFC 8446: "The "pre_shared_key" extension MUST be
             // the last extension in the ClientHello (this
@@ -657,6 +670,13 @@ mod client_hello {
                 .zip(&psk_offer.binders)
                 .enumerate()
                 .find_map(|(i, (psk_id, binder))| {
+                    // TODO(eric): Instead of checking both
+                    // resumption/external for each identity,
+                    // should we update ServerConfig to allow
+                    // resumption, external, or nothing?
+
+                    // TODO(eric): cap the maximum number of
+                    // failed ticket decryptions.
                     if let Some(resume) = self
                         .attempt_tls13_ticket_decryption(&psk_id.identity.0)
                         .map(|resumedata| {
@@ -670,13 +690,13 @@ mod client_hello {
                         return Some((psk, i, binder));
                     }
 
-                    if let Some(ext_psk) = self
+                    if let Some(psk) = self
                         .config
                         .preshared_keys
                         .load_psk(&psk_id.identity.0)
                         .filter(|psk| psk.is_compatible(self.suite.common.suite))
                     {
-                        let psk = PresharedKey::External(ext_psk);
+                        let psk = PresharedKey::External(psk);
                         return Some((psk, i, binder));
                     };
 
@@ -701,8 +721,9 @@ mod client_hello {
             }
 
             if let PresharedKey::Resumption(resume) = &psk {
-                // TODO(eric): just use `mode != PSK_DHE_KE`?
-                if !client_hello.psk_mode_offered(PSK_DHE_KE) {
+                // The client did not offer PSK_DHE_KE, so we
+                // can't resume.
+                if mode != PSK_DHE_KE {
                     debug!("Client unwilling to resume, DHE_KE not offered");
                     self.send_tickets = 0;
                     return Ok(None);

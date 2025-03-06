@@ -22,42 +22,40 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::Acceptor;
 
 fn main() -> Result<(), Box<dyn StdError>> {
-    let mut args = env::args();
-    args.next();
-    let cert_file = args
-        .next()
-        .expect("missing certificate file argument");
-    let private_key_file = args
-        .next()
-        .expect("missing private key file argument");
+    let config = {
+        let mut args = env::args();
+        args.next();
+        let cert_file = args
+            .next()
+            .expect("missing certificate file argument");
+        let private_key_file = args
+            .next()
+            .expect("missing private key file argument");
+        let identity = args.next().expect("missing identity");
+        let secret = args.next().expect("missing secret");
 
-    let identity = args.next().expect("missing identity");
-    let secret = args.next().expect("missing secret");
+        let certs = CertificateDer::pem_file_iter(cert_file)
+            .unwrap()
+            .map(|cert| cert.unwrap())
+            .collect();
+        let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
 
-    println!("secret = {:x?}", secret.as_bytes());
-
-    let certs = CertificateDer::pem_file_iter(cert_file)
-        .unwrap()
-        .map(|cert| cert.unwrap())
-        .collect();
-    let private_key = PrivateKeyDer::from_pem_file(private_key_file).unwrap();
-    let mut config =
-        rustls::ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
-            .with_no_client_auth()
-            .with_single_cert(certs, private_key)?;
-
-    config.preshared_keys = Arc::new({
-        let mut keys = PresharedKeys::new();
-        for alg in [HashAlgorithm::SHA256, HashAlgorithm::SHA384] {
-            let psk = PresharedKey::external(identity.as_bytes(), secret.as_bytes())
-                .unwrap()
-                .with_hash_alg(alg);
-            keys.insert(psk);
-        }
-        keys
-    });
-
-    let config = Arc::new(config);
+        let mut config =
+            rustls::ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+                .with_no_client_auth()
+                .with_single_cert(certs, private_key)?;
+        config.preshared_keys = Arc::new({
+            let mut keys = PresharedKeys::new();
+            for alg in [HashAlgorithm::SHA256, HashAlgorithm::SHA384] {
+                let psk = PresharedKey::external(identity.as_bytes(), secret.as_bytes())
+                    .unwrap()
+                    .with_hash_alg(alg);
+                keys.insert(psk);
+            }
+            keys
+        });
+        Arc::new(config)
+    };
 
     let listener = TcpListener::bind("localhost:4443")?;
 

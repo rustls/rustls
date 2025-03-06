@@ -109,7 +109,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             #[cfg(not(feature = "std"))]
             session_storage: Arc::new(handy::NoServerSessionStorage {}),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
-            preshared_keys: Arc::new(handy::NeverLoadsPsks {}),
+            preshared_keys: Arc::new(handy::NeverSelectsPsks {}),
             only_allow_preshared_keys: false,
             alpn_protocols: Vec::new(),
             versions: self.state.versions,

@@ -448,6 +448,24 @@ impl PresharedKeyOffer {
     }
 }
 
+impl FromIterator<(PresharedKeyIdentity, PresharedKeyBinder)> for PresharedKeyOffer {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (PresharedKeyIdentity, PresharedKeyBinder)>,
+    {
+        let mut identities = Vec::new();
+        let mut binders = Vec::new();
+        for (ident, binder) in iter {
+            identities.push(ident);
+            binders.push(binder);
+        }
+        Self {
+            identities,
+            binders,
+        }
+    }
+}
+
 impl Codec<'_> for PresharedKeyOffer {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.identities.encode(bytes);
