@@ -171,7 +171,7 @@ impl server::ProducesTickets for NeverProducesTickets {
 pub(super) struct NeverLoadsPsks {}
 
 impl server::SelectsPresharedKeys for NeverLoadsPsks {
-    fn load_psk(&self, _identity: &[u8]) -> Option<PresharedKey> {
+    fn load_psk(&self, _identity: &[u8]) -> Option<Arc<PresharedKey>> {
         None
     }
 }

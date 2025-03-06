@@ -4,7 +4,7 @@ use core::fmt::{self, Debug};
 
 use pki_types::PrivateKeyDer;
 use subtle::{Choice, ConstantTimeEq};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::CipherSuite;
 #[cfg(all(doc, feature = "tls12"))]
@@ -658,8 +658,8 @@ impl From<Vec<u8>> for SharedSecret {
 /// A TLS 1.3 preshared key.
 #[derive(Clone)]
 pub struct PresharedKey {
-    identity: Vec<u8>,
-    secret: Vec<u8>,
+    identity: Zeroizing<Vec<u8>>,
+    secret: Zeroizing<Vec<u8>>,
     hash_alg: hash::HashAlgorithm,
     /// Whether early data is allowed.
     ///
@@ -695,8 +695,8 @@ impl PresharedKey {
             None
         } else {
             Some(Self {
-                identity: identity.to_vec(),
-                secret: secret.to_vec(),
+                identity: Zeroizing::new(identity.to_vec()),
+                secret: Zeroizing::new(secret.to_vec()),
                 hash_alg: hash::HashAlgorithm::SHA256,
                 early_data: None,
             })
@@ -719,10 +719,24 @@ impl PresharedKey {
     /// cipher suite and ALPN protocol, respectively, negotiated
     /// by the TLS handshake.
     ///
+    /// It returns `None` if the hash algorithm used by `suite`
+    /// does not match the hash algorithm associated with the
+    /// PSK. See [`with_hash_alg`][Self::with_hash_alg] for more
+    /// information.
+    ///
     /// By default early data is not allowed.
-    pub fn with_early_data(mut self, n: u32, suite: CipherSuite, alpn: Option<&[u8]>) -> Self {
-        self.early_data = Some((n, suite, alpn.map(<[_]>::to_vec)));
-        self
+    pub fn with_early_data(
+        mut self,
+        n: u32,
+        suite: CipherSuite,
+        alpn: Option<&[u8]>,
+    ) -> Option<Self> {
+        if suite.tls13_hash_alg() != Some(self.hash_alg) {
+            None
+        } else {
+            self.early_data = Some((n, suite, alpn.map(<[_]>::to_vec)));
+            Some(self)
+        }
     }
 
     /// Returns the PSK's identity.
@@ -745,9 +759,19 @@ impl PresharedKey {
             })
     }
 
-    /// Returns the hash algorithm associated with the PSK.
-    pub(crate) fn hash_alg(&self) -> hash::HashAlgorithm {
-        self.hash_alg
+    /// Returns the supported protocol version.
+    pub(crate) fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
+    }
+
+    /// Reports whether the PSK is compatible with the cipher
+    /// suite.
+    ///
+    /// An external PSK is compatible if its hash algorithm
+    /// matches the cipher suite's hash algorithm.
+    pub(crate) fn is_compatible(&self, suite: CipherSuite) -> bool {
+        std::println!("{:?} v {:?}", self.hash_alg, suite.tls13_hash_alg());
+        Some(self.hash_alg) == suite.tls13_hash_alg()
     }
 }
 

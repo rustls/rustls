@@ -16,6 +16,7 @@ use std::str;
 use std::sync::Arc;
 
 use rustls::crypto::PresharedKey;
+use rustls::crypto::hash::HashAlgorithm;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::Acceptor;
@@ -33,6 +34,8 @@ fn main() -> Result<(), Box<dyn StdError>> {
     let identity = args.next().expect("missing identity");
     let secret = args.next().expect("missing secret");
 
+    println!("secret = {:x?}", secret.as_bytes());
+
     let certs = CertificateDer::pem_file_iter(cert_file)
         .unwrap()
         .map(|cert| cert.unwrap())
@@ -43,10 +46,14 @@ fn main() -> Result<(), Box<dyn StdError>> {
             .with_no_client_auth()
             .with_single_cert(certs, private_key)?;
 
-    let psk = PresharedKey::external(identity.as_bytes(), secret.as_bytes()).unwrap();
     config.preshared_keys = Arc::new({
         let mut keys = PresharedKeys::new();
-        keys.insert(psk);
+        for alg in [HashAlgorithm::SHA256, HashAlgorithm::SHA384] {
+            let psk = PresharedKey::external(identity.as_bytes(), secret.as_bytes())
+                .unwrap()
+                .with_hash_alg(alg);
+            keys.insert(psk);
+        }
         keys
     });
 
@@ -140,7 +147,7 @@ where
 
 #[derive(Debug)]
 struct PresharedKeys {
-    keys: HashMap<Vec<u8>, PresharedKey>,
+    keys: HashMap<Vec<u8>, Arc<PresharedKey>>,
 }
 
 impl PresharedKeys {
@@ -152,12 +159,13 @@ impl PresharedKeys {
 
     fn insert(&mut self, psk: PresharedKey) {
         let identity = psk.identity().to_vec();
-        self.keys.insert(identity, psk);
+        self.keys
+            .insert(identity, Arc::new(psk));
     }
 }
 
 impl rustls::server::SelectsPresharedKeys for PresharedKeys {
-    fn load_psk(&self, identity: &[u8]) -> Option<PresharedKey> {
+    fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
         self.keys.get(identity).cloned()
     }
 }

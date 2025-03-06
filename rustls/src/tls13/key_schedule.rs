@@ -145,10 +145,13 @@ impl KeyScheduleEarly {
         &self,
         hs_hash: &hash::Output,
     ) -> hmac::Tag {
-        let key = self
+        // Derive-Secret(., "ext binder", "")
+        //               = binder_key
+        let binder_key = self
             .ks
             .derive_for_empty_hash(SecretKind::ExternalPskBinderKey);
-        self.ks.sign_verify_data(&key, hs_hash)
+        self.ks
+            .sign_verify_data(&binder_key, hs_hash)
     }
 }
 
@@ -735,8 +738,9 @@ impl KeySchedule {
     ///
     /// More specifically:
     /// ```text
-    ///    Derive-Secret(., "derived", "")
+    /// Derive-Secret(., Label, "")
     /// ```
+    /// where `kind` is `Label`.
     ///
     /// Useful only for the following `SecretKind`s:
     /// - `SecretKind::ExternalPskBinderKey`
@@ -760,12 +764,16 @@ impl KeySchedule {
 
     /// Sign the finished message consisting of `hs_hash` using a current
     /// traffic secret.
+    ///
+    /// See RFC 8446 section 4.4.4.
     fn sign_finish(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
         self.sign_verify_data(base_key, hs_hash)
     }
 
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
+    ///
+    /// See RFC 8446 section 4.4.4.
     fn sign_verify_data(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
         let expander = self
             .suite

@@ -22,7 +22,6 @@ use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload,
     HandshakePayload, NewSessionTicketExtension, NewSessionTicketPayloadTls13,
-    PresharedKeyIdentity,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -40,8 +39,7 @@ use crate::{compress, rand, verify};
 mod client_hello {
     use super::*;
     use crate::compress::CertCompressor;
-    use crate::crypto::hash::HashAlgorithm;
-    use crate::crypto::{self, SharedSecret, SupportedKxGroup};
+    use crate::crypto::{self, SupportedKxGroup};
     use crate::enums::{CipherSuite, SignatureScheme};
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
@@ -76,6 +74,7 @@ mod client_hello {
     }
 
     /// The two input secrets in the key schedule.
+    #[derive(Debug)]
     enum InputSecrets<'a> {
         /// An (EC)DHE shared secret with an optional PSK.
         Ecdhe {
@@ -85,6 +84,8 @@ mod client_hello {
             psk: Option<ChosenPresharedKey>,
         },
         /// A PSK in PSK_KE mode.
+        ///
+        /// Invariant: `mode` *is* PSK_KE.
         PskOnly(ChosenPresharedKey),
     }
 
@@ -98,6 +99,9 @@ mod client_hello {
         }
     }
 
+    /// A chosen PSK, the PSK's wire index, and the chosen PSK
+    /// KEX mode.
+    #[derive(Debug)]
     struct ChosenPresharedKey {
         index: u16,
         psk: PresharedKey,
@@ -116,16 +120,17 @@ mod client_hello {
         }
     }
 
-    /// Either a resumption or externally configured PSK.
+    /// A resumption or externally configured PSK.
+    #[derive(Debug)]
     enum PresharedKey {
-        /// A PSK from session resumption.
+        /// A resumption PSK.
         Resumption(persist::ServerSessionValue),
         /// An externally provisioned PSK.
-        External(crypto::PresharedKey),
+        External(Arc<crypto::PresharedKey>),
     }
 
     impl PresharedKey {
-        /// Is this [`PresharedKey::External`]?
+        /// Is this an externally provisioned PSK?
         fn is_external(&self) -> bool {
             matches!(self, Self::External(_))
         }
@@ -156,13 +161,6 @@ mod client_hello {
             }
         }
 
-        fn hash_alg(&self) -> HashAlgorithm {
-            match self {
-                Self::Resumption(v) => todo!(),
-                Self::External(v) => v.hash_alg(),
-            }
-        }
-
         /// Returns the ALPN protocol associated with the PSK.
         fn alpn(&self) -> Option<&[u8]> {
             match self {
@@ -177,7 +175,7 @@ mod client_hello {
         fn version(&self) -> ProtocolVersion {
             match self {
                 Self::Resumption(v) => v.version,
-                Self::External(_) => ProtocolVersion::TLSv1_3,
+                Self::External(v) => v.version(),
             }
         }
 
@@ -231,8 +229,6 @@ mod client_hello {
 
             let key_schedule = KeyScheduleEarly::new(suite, psk.as_secret());
 
-            std::println!("psk = {:?}", psk.as_secret());
-            std::println!("binder = {:x?}", binder);
             let real_binder = match psk {
                 PresharedKey::Resumption(_) => {
                     key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash)
@@ -241,8 +237,6 @@ mod client_hello {
                     key_schedule.external_psk_binder_key_and_sign_verify_data(&handshake_hash)
                 }
             };
-            std::println!("suite = {:?}", suite.common.suite);
-            std::println!("real_binder = {:x?}", real_binder.as_ref());
 
             ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
         }
@@ -313,7 +307,8 @@ mod client_hello {
             }
 
             // Check "psk_key_exchange_modes" before the
-            // "key_share" extension.
+            // "key_share" extension since the PSK KEX mode
+            // affects key share selection.
             let psk_mode = self.psk_kex_modes(client_hello);
 
             // Always process the "pre_shared_key" extension
@@ -595,6 +590,7 @@ mod client_hello {
         ) -> Result<Option<ChosenPresharedKey>, Error> {
             use PSKKeyExchangeMode::*;
 
+            // `mode` should come from `self.psk_kex_modes`.
             debug_assert!(mode.is_some() == client_hello.psk_modes().is_some());
 
             let Some(psk_offer) = client_hello.psk() else {
@@ -618,6 +614,12 @@ mod client_hello {
                 Unknown(_) => return Ok(None),
             }
 
+            // RFC 8446: "The "pre_shared_key" extension MUST be
+            // the last extension in the ClientHello (this
+            // facilitates implementation as described below).
+            // Servers MUST check that it is the last extension
+            // and otherwise fail the handshake with an
+            // "illegal_parameter" alert."
             if !client_hello.check_psk_ext_is_last() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
@@ -641,49 +643,50 @@ mod client_hello {
 
             let now = self.config.current_time()?;
 
-            let mut chosen_offer = None;
-
             // RFC 8446 4.2.11: "Servers SHOULD NOT attempt to
             // validate multiple binders; rather, they SHOULD
             // select a single PSK and validate solely the binder
             // that corresponds to that PSK."
-            for (i, (psk_id, binder)) in psk_offer
+            //
+            // RFC 8446: "The server MUST ensure that it
+            // selects a compatible PSK (if any) and cipher
+            // suite."
+            let chosen_offer = psk_offer
                 .identities
                 .iter()
                 .zip(&psk_offer.binders)
                 .enumerate()
-            {
-                if let Some(resume) = self
-                    .attempt_tls13_ticket_decryption(&psk_id.identity.0)
-                    .map(|resumedata| resumedata.set_freshness(psk_id.obfuscated_ticket_age, now))
-                    .filter(|resumedata| {
-                        hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
-                    })
-                {
-                    let psk = PresharedKey::Resumption(resume);
-                    chosen_offer = Some((psk, i, binder));
-                    break;
-                }
+                .find_map(|(i, (psk_id, binder))| {
+                    if let Some(resume) = self
+                        .attempt_tls13_ticket_decryption(&psk_id.identity.0)
+                        .map(|resumedata| {
+                            resumedata.set_freshness(psk_id.obfuscated_ticket_age, now)
+                        })
+                        .filter(|resumedata| {
+                            hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
+                        })
+                    {
+                        let psk = PresharedKey::Resumption(resume);
+                        return Some((psk, i, binder));
+                    }
 
-                if let Some(ext_psk) = self
-                    .config
-                    .preshared_keys
-                    .load_psk(&psk_id.identity.0)
-                {
-                    let psk = PresharedKey::External(ext_psk);
-                    chosen_offer = Some((psk, i, binder));
-                    break;
-                };
-            }
+                    if let Some(ext_psk) = self
+                        .config
+                        .preshared_keys
+                        .load_psk(&psk_id.identity.0)
+                        .filter(|psk| psk.is_compatible(self.suite.common.suite))
+                    {
+                        let psk = PresharedKey::External(ext_psk);
+                        return Some((psk, i, binder));
+                    };
+
+                    None
+                });
 
             let Some((psk, index, binder)) = chosen_offer else {
                 // None of the offers were suitable.
                 return Ok(None);
             };
-
-            // RFC 8446: "The server MUST ensure that it selects
-            // a compatible PSK (if any) and cipher suite."
-            let _ = psk.hash_alg();
 
             // RFC 8446: "Prior to accepting PSK key
             // establishment, the server MUST validate the

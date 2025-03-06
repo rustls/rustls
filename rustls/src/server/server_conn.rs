@@ -113,7 +113,9 @@ pub trait ProducesTickets: Debug + Send + Sync {
 /// Selects TLS 1.3 external preshared keys.
 pub trait SelectsPresharedKeys: Debug + Send + Sync {
     /// Retrieves a preshared key.
-    fn load_psk(&self, identity: &[u8]) -> Option<PresharedKey>;
+    ///
+    /// TODO(eric): note about protecting server identities.
+    fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>>;
 }
 
 /// How to choose a certificate chain and signing key for use

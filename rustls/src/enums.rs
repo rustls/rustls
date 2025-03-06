@@ -1,5 +1,7 @@
 #![allow(non_camel_case_types)]
 #![allow(missing_docs)]
+
+use crate::crypto::hash::HashAlgorithm;
 use crate::msgs::codec::{Codec, Reader};
 
 enum_builder! {
@@ -491,6 +493,24 @@ enum_builder! {
         TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256 => 0xccae,
         SSL_RSA_FIPS_WITH_DES_CBC_SHA => 0xfefe,
         SSL_RSA_FIPS_WITH_3DES_EDE_CBC_SHA => 0xfeff,
+    }
+}
+
+impl CipherSuite {
+    /// Returns the TLS 1.3 hash algorithm used by the cipher
+    /// suite, or `None` if `self` is not a TLS 1.3 cipher suite.
+    pub(crate) fn tls13_hash_alg(self) -> Option<HashAlgorithm> {
+        use CipherSuite::*;
+
+        let alg = match self {
+            TLS13_AES_128_GCM_SHA256
+            | TLS13_CHACHA20_POLY1305_SHA256
+            | TLS13_AES_128_CCM_SHA256
+            | TLS13_AES_128_CCM_8_SHA256 => HashAlgorithm::SHA256,
+            TLS13_AES_256_GCM_SHA384 => HashAlgorithm::SHA384,
+            _ => return None,
+        };
+        Some(alg)
     }
 }
 
