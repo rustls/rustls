@@ -13,6 +13,7 @@ use super::server_conn::{ProducesTickets, ServerConfig, ServerConnectionData};
 use crate::check::inappropriate_message;
 use crate::common_state::{CommonState, HandshakeFlightTls12, HandshakeKind, Side, State};
 use crate::conn::ConnectionRandoms;
+use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::crypto::ActiveKeyExchange;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
@@ -23,14 +24,14 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::Codec;
 use crate::msgs::handshake::{
     CertificateChain, ClientKeyExchangeParams, HandshakeMessagePayload, HandshakePayload,
-    NewSessionTicketPayload, SessionId,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
 use crate::tls12::{self, ConnectionSecrets, Tls12CipherSuite};
-use crate::verify;
+use crate::{ConnectionTrafficSecrets, verify};
 
 mod client_hello {
     use pki_types::CertificateDer;
@@ -998,7 +999,29 @@ impl State<ServerConnectionData> for ExpectTraffic {
             .extract_secrets(Side::Server)
     }
 
+    fn into_external_state(self: Box<Self>) -> Result<Box<dyn KernelState + 'static>, Error> {
+        Ok(self)
+    }
+
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
+    }
+}
+
+impl KernelState for ExpectTraffic {
+    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+        Err(Error::General(
+            "TLS 1.2 connections do not support traffic secret updates".into(),
+        ))
+    }
+
+    fn handle_new_session_ticket(
+        &mut self,
+        _cx: &mut KernelContext<'_>,
+        _message: &NewSessionTicketPayloadTls13,
+    ) -> Result<(), Error> {
+        unreachable!(
+            "server connections should never have handle_new_session_ticket called on them"
+        )
     }
 }
