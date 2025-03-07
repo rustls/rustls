@@ -369,6 +369,35 @@ impl ClientConfig {
         is_fips
     }
 
+    /// Arranges that `self` shares the resumption store and security details
+    /// with `other`.
+    ///
+    /// After this call, `self` shares these fields of `other`:
+    ///
+    /// - `resumption`
+    /// - `client_auth_cert_resolver`
+    /// - `verifier`
+    ///
+    /// Old values of these fields in `self` are discarded.  Subsequent changes
+    /// to these fields in `other` are _not_ magically reflected in `self`.
+    ///
+    /// # Background
+    /// Resumption is only allowed between two `ClientConfig`s if their
+    /// `client_auth_cert_resolver` (ie, potential client authentication credentials)
+    /// and `verifier` (ie, server certificate verification settings) are
+    /// the same (according to `Arc::ptr_eq`).
+    ///
+    /// To illustrate, imagine two `ClientConfig`s `A` and `B`.  `A` fully validates
+    /// the server certificate, `B` does not.  If `A` and `B` shared a resumption store,
+    /// it would be possible for a session originated by `B` to be inserted into the
+    /// store, and then resumed by `A`.  This would give a false impression to the user
+    /// of `A` that the server certificate is fully validated.
+    pub fn share_resumption_with(&mut self, other: &Self) {
+        self.resumption = other.resumption.clone();
+        self.client_auth_cert_resolver = Arc::clone(&other.client_auth_cert_resolver);
+        self.verifier = Arc::clone(&other.verifier);
+    }
+
     /// Return the crypto provider used to construct this client configuration.
     pub fn crypto_provider(&self) -> &Arc<CryptoProvider> {
         &self.provider
