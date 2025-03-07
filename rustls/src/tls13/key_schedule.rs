@@ -10,7 +10,7 @@ use crate::crypto::{SharedSecret, hash, hmac};
 use crate::error::Error;
 use crate::msgs::message::Message;
 use crate::suites::PartiallyExtractedSecrets;
-use crate::{KeyLog, Tls13CipherSuite, quic};
+use crate::{ConnectionTrafficSecrets, KeyLog, Tls13CipherSuite, quic};
 
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -578,6 +578,22 @@ impl KeyScheduleTraffic {
             .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
 
+    pub(crate) fn refresh_traffic_secret(
+        &mut self,
+        side: Side,
+    ) -> Result<ConnectionTrafficSecrets, Error> {
+        let secret = self.next_application_traffic_secret(side);
+        let (key, iv) = expand_secret(
+            &secret,
+            self.ks.suite.hkdf_provider,
+            self.ks.suite.aead_alg.key_len(),
+        );
+        Ok(self
+            .ks
+            .suite
+            .aead_alg
+            .extract_keys(key, iv)?)
+    }
 
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         let (client_key, client_iv) = expand_secret(

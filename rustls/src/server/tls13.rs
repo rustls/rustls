@@ -13,6 +13,7 @@ use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, Protocol, Side, State,
 };
 use crate::conn::ConnectionRandoms;
+use crate::conn::kernel::{Direction, KernelContext, KernelState};
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHash;
@@ -34,7 +35,7 @@ use crate::tls13::key_schedule::{
 use crate::tls13::{
     Tls13CipherSuite, construct_client_verify_message, construct_server_verify_message,
 };
-use crate::{compress, rand, verify};
+use crate::{ConnectionTrafficSecrets, compress, rand, verify};
 
 mod client_hello {
     use super::*;
@@ -1499,8 +1500,32 @@ impl State<ServerConnectionData> for ExpectTraffic {
             .request_key_update_and_update_encrypter(common)
     }
 
+    fn into_external_state(self: Box<Self>) -> Result<Box<dyn KernelState + 'static>, Error> {
+        Ok(self)
+    }
+
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
+    }
+}
+
+impl KernelState for ExpectTraffic {
+    fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+        self.key_schedule
+            .refresh_traffic_secret(match dir {
+                Direction::Transmit => Side::Server,
+                Direction::Receive => Side::Client,
+            })
+    }
+
+    fn handle_new_session_ticket(
+        &mut self,
+        _cx: &mut KernelContext<'_>,
+        _message: &NewSessionTicketPayloadTls13,
+    ) -> Result<(), Error> {
+        unreachable!(
+            "server connections should never have handle_new_session_ticket called on them"
+        )
     }
 }
 
@@ -1534,5 +1559,21 @@ impl State<ServerConnectionData> for ExpectQuicTraffic {
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
+    }
+}
+
+impl KernelState for ExpectQuicTraffic {
+    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+        Err(Error::General(
+            "QUIC connections do not support key updates".into(),
+        ))
+    }
+
+    fn handle_new_session_ticket(
+        &mut self,
+        _cx: &mut KernelContext<'_>,
+        _message: &NewSessionTicketPayloadTls13,
+    ) -> Result<(), Error> {
+        unreachable!("handle_new_session_ticket should not be called for server-side connections")
     }
 }

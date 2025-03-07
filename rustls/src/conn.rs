@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut, Range};
+use kernel::KernelConnection;
 #[cfg(feature = "std")]
 use std::io;
 
@@ -15,9 +16,11 @@ use crate::msgs::deframer::handshake::HandshakeDeframer;
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::record_layer::Decrypted;
-use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
+use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
+// pub so that it can be re-exported from the crate root
+pub mod kernel;
 pub(crate) mod unbuffered;
 
 #[cfg(feature = "std")]
@@ -1158,6 +1161,14 @@ impl<Data> ConnectionCore<Data> {
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
+        Ok(self
+            .dangerous_into_kernel_connection()?
+            .0)
+    }
+
+    pub(crate) fn dangerous_into_kernel_connection(
+        self,
+    ) -> Result<(ExtractedSecrets, KernelConnection<Data>), Error> {
         if !self
             .common_state
             .enable_secret_extraction
@@ -1165,14 +1176,34 @@ impl<Data> ConnectionCore<Data> {
             return Err(Error::General("Secret extraction is disabled".into()));
         }
 
-        let st = self.state?;
+        if self.common_state.is_handshaking() {
+            return Err(Error::HandshakeNotComplete);
+        }
 
-        let record_layer = self.common_state.record_layer;
-        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
-        Ok(ExtractedSecrets {
-            tx: (record_layer.write_seq(), tx),
-            rx: (record_layer.read_seq(), rx),
-        })
+        if !self
+            .common_state
+            .sendable_tls
+            .is_empty()
+        {
+            return Err(Error::General(
+                "cannot convert into an KernelConnection while there are still buffered TLS records to send"
+                    .into()
+            ));
+        }
+
+        let state = self.state?;
+
+        let record_layer = &self.common_state.record_layer;
+        let secrets = state.extract_secrets()?;
+        let secrets = ExtractedSecrets {
+            tx: (record_layer.write_seq(), secrets.tx),
+            rx: (record_layer.read_seq(), secrets.rx),
+        };
+
+        let state = state.into_external_state()?;
+        let external = KernelConnection::new(state, self.common_state)?;
+
+        Ok((secrets, external))
     }
 
     pub(crate) fn export_keying_material<T: AsMut<[u8]>>(
