@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 
 use pki_types::CertificateDer;
 
+use crate::conn::kernel::KernelState;
 use crate::crypto::SupportedKxGroup;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
@@ -866,6 +867,10 @@ pub(crate) trait State<Data>: Send + Sync {
     }
 
     fn handle_decrypt_error(&self) {}
+
+    fn into_external_state(self: Box<Self>) -> Result<Box<dyn KernelState + 'static>, Error> {
+        Err(Error::HandshakeNotComplete)
+    }
 
     fn into_owned(self: Box<Self>) -> Box<dyn State<Data> + 'static>;
 }
