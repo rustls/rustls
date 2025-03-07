@@ -270,52 +270,56 @@ const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
 
 /// A key for an AEAD algorithm.
 ///
-/// This is a value type for a byte string up to `AeadKey::MAX_LEN` bytes in length.
-pub struct AeadKey {
-    buf: [u8; Self::MAX_LEN],
-    used: usize,
+/// This is a value type for a byte string of 128- or 256-bits.
+#[non_exhaustive]
+pub struct AeadKey(AeadKeyInner);
+
+#[non_exhaustive]
+enum AeadKeyInner {
+    /// 128-bit key
+    B128([u8; 16]),
+    /// 256-bit key
+    B256([u8; 32]),
 }
 
 impl AeadKey {
     #[cfg(feature = "tls12")]
-    pub(crate) fn new(buf: &[u8]) -> Self {
-        debug_assert!(buf.len() <= Self::MAX_LEN);
-        let mut key = Self::from([0u8; Self::MAX_LEN]);
-        key.buf[..buf.len()].copy_from_slice(buf);
-        key.used = buf.len();
-        key
-    }
-
-    pub(crate) fn with_length(self, len: usize) -> Self {
-        assert!(len <= self.used);
-        Self {
-            buf: self.buf,
-            used: len,
+    pub(crate) fn from_slice(buf: &[u8]) -> Self {
+        match buf.len() {
+            16 => Self(AeadKeyInner::B128(buf.try_into().unwrap())),
+            32 => Self(AeadKeyInner::B256(buf.try_into().unwrap())),
+            _ => unimplemented!("AeadKey must be 128- or 256-bits"),
         }
     }
-
-    /// Largest possible AEAD key in the ciphersuites we support.
-    pub(crate) const MAX_LEN: usize = 32;
 }
 
-impl Drop for AeadKey {
+impl Drop for AeadKeyInner {
     fn drop(&mut self) {
-        self.buf.zeroize();
+        match self {
+            Self::B128(b) => b.zeroize(),
+            Self::B256(b) => b.zeroize(),
+        }
     }
 }
 
 impl AsRef<[u8]> for AeadKey {
     fn as_ref(&self) -> &[u8] {
-        &self.buf[..self.used]
+        match &self.0 {
+            AeadKeyInner::B128(b) => b,
+            AeadKeyInner::B256(b) => b,
+        }
     }
 }
 
-impl From<[u8; Self::MAX_LEN]> for AeadKey {
-    fn from(bytes: [u8; Self::MAX_LEN]) -> Self {
-        Self {
-            buf: bytes,
-            used: Self::MAX_LEN,
-        }
+impl From<[u8; 16]> for AeadKey {
+    fn from(bytes: [u8; 16]) -> Self {
+        Self(AeadKeyInner::B128(bytes))
+    }
+}
+
+impl From<[u8; 32]> for AeadKey {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(AeadKeyInner::B256(bytes))
     }
 }
 
