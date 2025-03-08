@@ -218,7 +218,7 @@ impl KernelConnection<ClientConnectionData> {
     pub fn handle_new_session_ticket(&mut self, payload: &[u8]) -> Result<(), Error> {
         // We want to return a more specific error here first if this is called
         // on a non-TLS 1.3 connection since a parsing error isn't the real issue
-        // here. 
+        // here.
         if self.protocol_version() != ProtocolVersion::TLSv1_3 {
             return Err(Error::General(
                 "TLS 1.2 session tickets may not be sent once the handshake has completed".into(),
@@ -244,7 +244,7 @@ pub(crate) trait KernelState: Send + Sync {
     fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error>;
 
     /// Handle a new session ticket.
-    /// 
+    ///
     /// This will only ever be called for client connections, as [`KernelConnection`]
     /// only exposes the relevant API for client connections.
     fn handle_new_session_ticket(
