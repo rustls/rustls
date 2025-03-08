@@ -11,6 +11,8 @@ async-std = { workspace = true, optional = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
 hickory-resolver = { workspace = true }
+ktls-sys = "1.0.2"
+libc = "0.2"
 log = { workspace = true }
 mio = { workspace = true }
 rcgen = { workspace = true }
