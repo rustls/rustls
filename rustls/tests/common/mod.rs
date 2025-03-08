@@ -13,7 +13,8 @@ use pki_types::{
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
-    AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, WebPkiServerVerifier,
+    AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, UnbufferedClientConnection,
+    WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use rustls::crypto::{CryptoProvider, verify_tls13_signature_with_raw_key};
@@ -21,9 +22,13 @@ use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
-    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, WebPkiClientVerifier,
+    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, UnbufferedServerConnection,
+    WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
+use rustls::unbuffered::{
+    ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
+};
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
     DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
@@ -752,6 +757,87 @@ pub fn do_handshake(
         client.process_new_packets().unwrap();
     }
     (to_server, to_client)
+}
+
+// Drive a handshake using unbuffered connections.
+//
+// Note that this drives the connection beyond the handshake until both
+// connections are idle and there is no pending data waiting to be processed
+// by either. In practice this just means that session tickets are processed
+// by the client.
+pub fn do_unbuffered_handshake(
+    client: &mut UnbufferedClientConnection,
+    server: &mut UnbufferedServerConnection,
+) {
+    fn is_idle<Data>(conn: &UnbufferedConnectionCommon<Data>, data: &[u8]) -> bool {
+        !conn.is_handshaking() && !conn.wants_write() && data.is_empty()
+    }
+
+    let mut client_data = Vec::with_capacity(1024);
+    let mut server_data = Vec::with_capacity(1024);
+
+    while !is_idle(client, &client_data) || !is_idle(server, &server_data) {
+        loop {
+            let UnbufferedStatus { discard, state } = client.process_tls_records(&mut client_data);
+            let state = state.unwrap();
+
+            match state {
+                ConnectionState::BlockedHandshake | ConnectionState::WriteTraffic(_) => {
+                    client_data.drain(..discard);
+                    break;
+                }
+                ConnectionState::Closed | ConnectionState::PeerClosed => unreachable!(),
+                ConnectionState::ReadEarlyData(_) => (),
+                ConnectionState::EncodeTlsData(mut data) => {
+                    let required = match data.encode(&mut []) {
+                        Err(EncodeError::InsufficientSize(err)) => err.required_size,
+                        _ => unreachable!(),
+                    };
+
+                    let old_len = server_data.len();
+                    server_data.resize(old_len + required, 0);
+                    data.encode(&mut server_data[old_len..])
+                        .unwrap();
+                }
+                ConnectionState::TransmitTlsData(data) => data.done(),
+                st => unreachable!("unexpected connection state: {st:?}"),
+            }
+
+            client_data.drain(..discard);
+        }
+
+        loop {
+            let UnbufferedStatus { discard, state } = server.process_tls_records(&mut server_data);
+            let state = state.unwrap();
+
+            match state {
+                ConnectionState::BlockedHandshake | ConnectionState::WriteTraffic(_) => {
+                    server_data.drain(..discard);
+                    break;
+                }
+                ConnectionState::Closed | ConnectionState::PeerClosed => unreachable!(),
+                ConnectionState::ReadEarlyData(_) => unreachable!(),
+                ConnectionState::EncodeTlsData(mut data) => {
+                    let required = match data.encode(&mut []) {
+                        Err(EncodeError::InsufficientSize(err)) => err.required_size,
+                        _ => unreachable!(),
+                    };
+
+                    let old_len = client_data.len();
+                    client_data.resize(old_len + required, 0);
+                    data.encode(&mut client_data[old_len..])
+                        .unwrap();
+                }
+                ConnectionState::TransmitTlsData(data) => data.done(),
+                _ => unreachable!(),
+            }
+
+            server_data.drain(..discard);
+        }
+    }
+
+    assert!(server_data.is_empty());
+    assert!(client_data.is_empty());
 }
 
 #[derive(PartialEq, Debug)]
