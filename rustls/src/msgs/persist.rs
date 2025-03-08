@@ -35,6 +35,24 @@ impl<T> Retrieved<T> {
             retrieved_at: self.retrieved_at,
         })
     }
+
+    /// Maps `self` into `Retrieved<T>`, or returns `self` if `f`
+    /// fails.
+    pub(crate) fn try_map<M>(
+        self,
+        f: impl FnOnce(T) -> Result<M, T>,
+    ) -> Result<Retrieved<M>, Self> {
+        let retrieved_at = self.retrieved_at;
+        f(self.value)
+            .map(|value| Retrieved {
+                value,
+                retrieved_at,
+            })
+            .map_err(|value| Retrieved {
+                value,
+                retrieved_at,
+            })
+    }
 }
 
 impl Retrieved<&Tls13ClientSessionValue> {

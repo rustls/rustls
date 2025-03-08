@@ -80,7 +80,13 @@ struct KeySchedule {
 // with an empty or trivial secret, or extract the wrong kind of secrets
 // at a given point.
 
-/// KeySchedule for early data stage.
+/// The "early secret" stage of the key schedule WITH a PSK.
+///
+/// This is only useful when you need to use one of the binder
+/// keys, the "client_early_traffic_secret", or
+/// "early_exporter_master_secret".
+///
+/// See [`KeySchedulePreHandshake`] for more information.
 pub(crate) struct KeyScheduleEarly {
     ks: KeySchedule,
 }
@@ -92,7 +98,8 @@ impl KeyScheduleEarly {
         }
     }
 
-    /// Computes the `client_early_traffic_secret`.
+    /// Computes the `client_early_traffic_secret` and writes it
+    /// to `common`.
     ///
     /// `hs_hash` is `Transcript-Hash(ClientHello)`.
     ///
@@ -155,15 +162,35 @@ impl KeyScheduleEarly {
     }
 }
 
-/// Pre-handshake key schedule
+/// The "early secret" stage of the key schedule.
 ///
-/// The inner `KeySchedule` is either constructed without any secrets based on the HKDF algorithm
-/// or is extracted from a `KeyScheduleEarly`. This can then be used to derive the `KeyScheduleHandshakeStart`.
+/// Call [`KeySchedulePreHandshake::new`] to create it without
+/// a PSK or use [`From<KeyScheduleEarly`] to create it with
+/// a PSK.
+///
+/// ```text
+///          0
+///          |
+///          v
+/// PSK -> HKDF-Extract = Early Secret
+///          |
+///          +-----> Derive-Secret(., "ext binder" | "res binder", "")
+///          |                     = binder_key
+///          |
+///          +-----> Derive-Secret(., "c e traffic", ClientHello)
+///          |                     = client_early_traffic_secret
+///          |
+///          +-----> Derive-Secret(., "e exp master", ClientHello)
+///          |                     = early_exporter_master_secret
+///          v
+///    Derive-Secret(., "derived", "")
+/// ```
 pub(crate) struct KeySchedulePreHandshake {
     ks: KeySchedule,
 }
 
 impl KeySchedulePreHandshake {
+    /// Creates a key schedule without a PSK.
     pub(crate) fn new(suite: &'static Tls13CipherSuite) -> Self {
         Self {
             ks: KeySchedule::new_with_empty_secret(suite),
@@ -173,8 +200,9 @@ impl KeySchedulePreHandshake {
     /// `shared_secret` is the "(EC)DHE" secret input to
     /// "HKDF-Extract":
     ///
-    ///    (EC)DHE -> HKDF-Extract = Handshake Secret
-    ///
+    /// ```text
+    /// (EC)DHE -> HKDF-Extract = Handshake Secret
+    /// ```
     pub(crate) fn into_handshake(
         mut self,
         shared_secret: Option<SharedSecret>,
@@ -196,6 +224,8 @@ impl From<KeyScheduleEarly> for KeySchedulePreHandshake {
 }
 
 /// KeySchedule during handshake.
+///
+/// Created by [`KeySchedulePreHandshake`].
 pub(crate) struct KeyScheduleHandshakeStart {
     ks: KeySchedule,
 }
@@ -673,6 +703,7 @@ impl KeySchedule {
         self.suite.aead_alg.decrypter(key, iv)
     }
 
+    /// Creates a key schedule without a PSK.
     fn new_with_empty_secret(suite: &'static Tls13CipherSuite) -> Self {
         Self {
             current: suite
