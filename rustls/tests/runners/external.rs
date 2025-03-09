@@ -1,3 +1,5 @@
+#![allow(clippy::duplicate_mod)]
+
 #[macro_use]
 mod macros;
 
