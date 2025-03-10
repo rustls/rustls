@@ -331,6 +331,7 @@ mod tests {
     struct DummyServerCertVerifier;
 
     impl ServerCertVerifier for DummyServerCertVerifier {
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_server_cert(
             &self,
             _end_entity: &CertificateDer<'_>,
@@ -342,6 +343,7 @@ mod tests {
             unreachable!()
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls12_signature(
             &self,
             _message: &[u8],
@@ -351,6 +353,7 @@ mod tests {
             unreachable!()
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn verify_tls13_signature(
             &self,
             _message: &[u8],
@@ -360,6 +363,7 @@ mod tests {
             unreachable!()
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             unreachable!()
         }
@@ -369,6 +373,7 @@ mod tests {
     struct DummyResolvesClientCert;
 
     impl ResolvesClientCert for DummyResolvesClientCert {
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn resolve(
             &self,
             _root_hint_subjects: &[&[u8]],
@@ -377,6 +382,7 @@ mod tests {
             unreachable!()
         }
 
+        #[cfg_attr(coverage_nightly, coverage(off))]
         fn has_certs(&self) -> bool {
             unreachable!()
         }
