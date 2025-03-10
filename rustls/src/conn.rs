@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut, Range};
+use external::ExternalConnection;
 #[cfg(feature = "std")]
 use std::io;
 
@@ -18,6 +19,7 @@ use crate::record_layer::Decrypted;
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 use crate::vecbuf::ChunkVecBuffer;
 
+pub(crate) mod external;
 pub(crate) mod unbuffered;
 
 #[cfg(feature = "std")]
@@ -1173,6 +1175,46 @@ impl<Data> ConnectionCore<Data> {
             tx: (record_layer.write_seq(), tx),
             rx: (record_layer.read_seq(), rx),
         })
+    }
+
+    pub(crate) fn dangerous_into_external_connection(
+        self,
+    ) -> Result<(ExtractedSecrets, ExternalConnection), Error> {
+        if !self
+            .common_state
+            .enable_secret_extraction
+        {
+            return Err(Error::General("Secret extraction is disabled".into()));
+        }
+
+        if self.common_state.is_handshaking() {
+            return Err(Error::HandshakeNotComplete);
+        }
+
+        if !self
+            .common_state
+            .sendable_tls
+            .is_empty()
+        {
+            return Err(Error::General(
+                "cannot convert into an ExternalConnection while there are still buffered TLS records to send"
+                    .into()
+            ));
+        }
+
+        let state = self.state?;
+
+        let record_layer = &self.common_state.record_layer;
+        let secrets = state.extract_secrets()?;
+        let secrets = ExtractedSecrets {
+            tx: (record_layer.write_seq(), secrets.tx),
+            rx: (record_layer.read_seq(), secrets.rx),
+        };
+
+        let state = state.into_external_state()?;
+        let external = ExternalConnection::new(state, self.common_state)?;
+
+        Ok((secrets, external))
     }
 
     pub(crate) fn export_keying_material<T: AsMut<[u8]>>(
