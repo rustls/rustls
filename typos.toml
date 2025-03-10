@@ -1,0 +1,18 @@
+[default]
+extend-ignore-re = [
+  # Auto-fixing these patterns would introduce many changes to the source & potentially affect public API
+  ".*Encrypter.*",
+  ".*encrypter.*",
+  # packet number field names in: rustls/src/quic.rs
+  "pn_offset",
+  "pn_len",
+  "pn_mask",
+  "EDE_*", # needed for public enums
+  "Josh Aas", # This name shows up in README.md - do not auto-correct this
+  "hel.*lo", # split-up contents for a test binary pattern
+  "mis-encoded", # needed for some documentation
+  "thr", # shortened from "thread" in some bench code
+  "ture dat", # partial contents split from  "fixture data" in a binary data test
+]
+
+# NOTE: List of excluded file patterns is part of admin script: admin/typos
