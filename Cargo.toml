@@ -39,7 +39,7 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1.0.73"
-asn1 = "0.20"
+asn1 = "0.21"
 async-std = { version = "1.12.0", features = ["attributes"] }
 async-trait = "0.1.74"
 aws-lc-rs = { version = "1.12", default-features = false }
