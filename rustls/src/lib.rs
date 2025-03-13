@@ -592,7 +592,9 @@ pub mod unbuffered {
 ///
 /// [`ktls-client`]: https://github.com/rustls/rustls/blob/main/examples/src/bin/ktls-client.rs
 pub mod external {
-    pub use crate::conn::external::ExternalConnection;
+    pub use crate::conn::external::{
+        ExternalClientConnection, ExternalConnection, ExternalServerConnection,
+    };
 }
 
 // The public interface is:

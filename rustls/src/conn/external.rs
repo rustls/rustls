@@ -1,15 +1,31 @@
+use core::marker::PhantomData;
+
 use alloc::boxed::Box;
 
+use crate::client::ClientConnectionData;
 use crate::common_state::Protocol;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{CertificateChain, NewSessionTicketPayloadTls13};
 use crate::quic::Quic;
+use crate::server::ServerConnectionData;
 use crate::{CommonState, ConnectionTrafficSecrets, Error, ProtocolVersion, SupportedCipherSuite};
+
+/// An external client connection.
+///
+/// The only difference for external client vs server connections is that client
+/// connections have support for recording new session tickets.
+pub type ExternalClientConnection = ExternalConnection<ClientConnectionData>;
+
+/// An external server connection.
+///
+/// The only difference for external client vs server connections is that client
+/// connections have support for recording new session tickets.
+pub type ExternalServerConnection = ExternalConnection<ServerConnectionData>;
 
 /// An external connection.
 ///
 /// See the [`crate::external`] module docs for more details.
-pub struct ExternalConnection {
+pub struct ExternalConnection<Data> {
     state: Box<dyn ExternalState>,
 
     peer_certificates: Option<CertificateChain<'static>>,
@@ -18,9 +34,11 @@ pub struct ExternalConnection {
     negotiated_version: ProtocolVersion,
     protocol: Protocol,
     suite: SupportedCipherSuite,
+
+    _data: PhantomData<Data>,
 }
 
-impl ExternalConnection {
+impl<Data> ExternalConnection<Data> {
     pub(crate) fn new(state: Box<dyn ExternalState>, common: CommonState) -> Result<Self, Error> {
         Ok(Self {
             state,
@@ -34,6 +52,8 @@ impl ExternalConnection {
             suite: common
                 .suite
                 .ok_or(Error::HandshakeNotComplete)?,
+
+            _data: PhantomData,
         })
     }
 
@@ -82,7 +102,9 @@ impl ExternalConnection {
             .update_secrets(Direction::Receive)
             .map(|secret| (0, secret))
     }
+}
 
+impl ExternalConnection<ClientConnectionData> {
     /// Handle a `new_session_ticket` message from the peer.
     ///
     /// This will register the session ticket within with rustls so that it can

@@ -48,7 +48,7 @@ mod linux {
     use ktls_sys::bindings as sys;
     use rustls::client::UnbufferedClientConnection;
     use rustls::crypto::{CryptoProvider, aws_lc_rs};
-    use rustls::external::ExternalConnection;
+    use rustls::external::ExternalClientConnection;
     use rustls::pki_types::ServerName;
     use rustls::unbuffered::{ConnectionState, EncodeError, UnbufferedStatus};
     use rustls::version::TLS13;
@@ -130,7 +130,7 @@ mod linux {
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
         sock: &mut TcpStream,
-    ) -> Result<ExternalConnection, Box<dyn Error>> {
+    ) -> Result<ExternalClientConnection, Box<dyn Error>> {
         let mut conn = UnbufferedClientConnection::new(config, name)?;
 
         let mut incoming = vec![0u8; 8192];
@@ -232,7 +232,7 @@ mod linux {
     /// message pointer in order to read the message contents.
     fn handle_control_message(
         sock: &mut TcpStream,
-        conn: &mut ExternalConnection,
+        conn: &mut ExternalClientConnection,
         data: &mut Vec<u8>,
     ) -> Result<(), Box<dyn Error>> {
         // The kernel returns the TLS record content type using a control

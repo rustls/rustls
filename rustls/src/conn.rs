@@ -1179,7 +1179,7 @@ impl<Data> ConnectionCore<Data> {
 
     pub(crate) fn dangerous_into_external_connection(
         self,
-    ) -> Result<(ExtractedSecrets, ExternalConnection), Error> {
+    ) -> Result<(ExtractedSecrets, ExternalConnection<Data>), Error> {
         if !self
             .common_state
             .enable_secret_extraction

@@ -866,7 +866,7 @@ impl UnbufferedClientConnection {
     /// for calling this method.
     pub fn dangerous_into_external_connection(
         self,
-    ) -> Result<(ExtractedSecrets, ExternalConnection), Error> {
+    ) -> Result<(ExtractedSecrets, ExternalConnection<ClientConnectionData>), Error> {
         self.inner
             .core
             .dangerous_into_external_connection()
