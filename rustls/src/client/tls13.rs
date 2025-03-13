@@ -1676,12 +1676,26 @@ impl State<ClientConnectionData> for ExpectQuicTraffic {
     }
 
     fn into_external_state(self: Box<Self>) -> Result<Box<dyn ExternalState + 'static>, Error> {
-        Err(Error::General(
-            "External QUIC connections are not supported".into(),
-        ))
+        Ok(self)
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
+    }
+}
+
+impl ExternalState for ExpectQuicTraffic {
+    fn update_secrets(&mut self, _: Direction) -> Result<ConnectionTrafficSecrets, Error> {
+        Err(Error::General(
+            "KeyUpdate is not supported for QUIC connections".into(),
+        ))
+    }
+
+    fn handle_new_session_ticket(
+        &mut self,
+        cx: &mut ExternalContext<'_>,
+        nst: &NewSessionTicketPayloadTls13,
+    ) -> Result<(), Error> {
+        self.0.handle_new_ticket_impl(cx, nst)
     }
 }
