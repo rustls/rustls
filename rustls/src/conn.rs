@@ -16,7 +16,7 @@ use crate::msgs::deframer::handshake::HandshakeDeframer;
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::record_layer::Decrypted;
-use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
+use crate::suites::ExtractedSecrets;
 use crate::vecbuf::ChunkVecBuffer;
 
 pub(crate) mod external;
@@ -1160,21 +1160,9 @@ impl<Data> ConnectionCore<Data> {
     }
 
     pub(crate) fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
-        if !self
-            .common_state
-            .enable_secret_extraction
-        {
-            return Err(Error::General("Secret extraction is disabled".into()));
-        }
-
-        let st = self.state?;
-
-        let record_layer = self.common_state.record_layer;
-        let PartiallyExtractedSecrets { tx, rx } = st.extract_secrets()?;
-        Ok(ExtractedSecrets {
-            tx: (record_layer.write_seq(), tx),
-            rx: (record_layer.read_seq(), rx),
-        })
+        Ok(self
+            .dangerous_into_external_connection()?
+            .0)
     }
 
     pub(crate) fn dangerous_into_external_connection(
