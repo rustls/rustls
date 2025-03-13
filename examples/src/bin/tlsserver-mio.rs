@@ -90,7 +90,7 @@ impl TlsServer {
                     self.connections
                         .insert(token, connection);
                 }
-                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
                 Err(err) => {
                     println!(
                         "encountered error while accepting connection; err={:?}",

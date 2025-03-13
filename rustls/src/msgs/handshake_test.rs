@@ -749,7 +749,7 @@ fn can_clone_all_server_extensions() {
 
 #[test]
 fn can_round_trip_all_tls12_handshake_payloads() {
-    for ref hm in all_tls12_handshake_payloads().iter() {
+    for hm in all_tls12_handshake_payloads().iter() {
         println!("{:?}", hm.typ);
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);
@@ -813,7 +813,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
 
 #[test]
 fn can_round_trip_all_tls13_handshake_payloads() {
-    for ref hm in all_tls13_handshake_payloads().iter() {
+    for hm in all_tls13_handshake_payloads().iter() {
         println!("{:?}", hm.typ);
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);

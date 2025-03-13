@@ -92,7 +92,7 @@ impl ExtensionProcessing {
                 .iter()
                 .find(|protocol| their_protocols.contains(&protocol.as_slice()))
                 .cloned();
-            if let Some(ref selected_protocol) = cx.common.alpn_protocol {
+            if let Some(selected_protocol) = &cx.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.exts
                     .push(ServerExtension::make_alpn(&[selected_protocol]));

@@ -638,7 +638,7 @@ impl<Data> ConnectionCommon<Data> {
                         rdlen += n;
                         Some(n)
                     }
-                    Err(ref err) if err.kind() == io::ErrorKind::Interrupted => None, // nothing to do
+                    Err(err) if err.kind() == io::ErrorKind::Interrupted => None, // nothing to do
                     Err(err) => return Err(err),
                 };
                 if read_size.is_some() {

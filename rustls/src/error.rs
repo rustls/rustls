@@ -726,10 +726,10 @@ fn join<T: fmt::Debug>(items: &[T]) -> String {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             Self::InappropriateMessage {
-                ref expect_types,
-                ref got_type,
+                expect_types,
+                got_type,
             } => write!(
                 f,
                 "received unexpected message: got {:?} when expecting {}",
@@ -737,30 +737,30 @@ impl fmt::Display for Error {
                 join::<ContentType>(expect_types)
             ),
             Self::InappropriateHandshakeMessage {
-                ref expect_types,
-                ref got_type,
+                expect_types,
+                got_type,
             } => write!(
                 f,
                 "received unexpected handshake message: got {:?} when expecting {}",
                 got_type,
                 join::<HandshakeType>(expect_types)
             ),
-            Self::InvalidMessage(ref typ) => {
+            Self::InvalidMessage(typ) => {
                 write!(f, "received corrupt message of type {:?}", typ)
             }
-            Self::PeerIncompatible(ref why) => write!(f, "peer is incompatible: {:?}", why),
-            Self::PeerMisbehaved(ref why) => write!(f, "peer misbehaved: {:?}", why),
-            Self::AlertReceived(ref alert) => write!(f, "received fatal alert: {:?}", alert),
-            Self::InvalidCertificate(ref err) => {
+            Self::PeerIncompatible(why) => write!(f, "peer is incompatible: {:?}", why),
+            Self::PeerMisbehaved(why) => write!(f, "peer misbehaved: {:?}", why),
+            Self::AlertReceived(alert) => write!(f, "received fatal alert: {:?}", alert),
+            Self::InvalidCertificate(err) => {
                 write!(f, "invalid peer certificate: {}", err)
             }
-            Self::InvalidCertRevocationList(ref err) => {
+            Self::InvalidCertRevocationList(err) => {
                 write!(f, "invalid certificate revocation list: {:?}", err)
             }
             Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
             Self::DecryptError => write!(f, "cannot decrypt peer's message"),
-            Self::InvalidEncryptedClientHello(ref err) => {
+            Self::InvalidEncryptedClientHello(err) => {
                 write!(f, "encrypted client hello failure: {:?}", err)
             }
             Self::EncryptError => write!(f, "cannot encrypt message"),
@@ -772,11 +772,11 @@ impl fmt::Display for Error {
             Self::BadMaxFragmentSize => {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
-            Self::InconsistentKeys(ref why) => {
+            Self::InconsistentKeys(why) => {
                 write!(f, "keys may not be consistent: {:?}", why)
             }
-            Self::General(ref err) => write!(f, "unexpected error: {}", err),
-            Self::Other(ref err) => write!(f, "other error: {}", err),
+            Self::General(err) => write!(f, "unexpected error: {}", err),
+            Self::Other(err) => write!(f, "other error: {}", err),
         }
     }
 }

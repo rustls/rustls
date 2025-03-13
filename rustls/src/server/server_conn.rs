@@ -1087,9 +1087,7 @@ impl EarlyDataState {
     #[cfg(read_buf)]
     fn read_buf(&mut self, cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
         match self {
-            Self::Accepted {
-                ref mut received, ..
-            } => received.read_buf(cursor),
+            Self::Accepted { received, .. } => received.read_buf(cursor),
             _ => Err(io::Error::from(io::ErrorKind::BrokenPipe)),
         }
     }

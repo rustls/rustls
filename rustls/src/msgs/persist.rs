@@ -313,7 +313,7 @@ pub struct ServerSessionValue {
 
 impl Codec<'_> for ServerSessionValue {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        if let Some(ref sni) = self.sni {
+        if let Some(sni) = &self.sni {
             1u8.encode(bytes);
             let sni_bytes: &str = sni.as_ref();
             PayloadU8::new(Vec::from(sni_bytes)).encode(bytes);
@@ -324,13 +324,13 @@ impl Codec<'_> for ServerSessionValue {
         self.cipher_suite.encode(bytes);
         self.master_secret.encode(bytes);
         (u8::from(self.extended_ms)).encode(bytes);
-        if let Some(ref chain) = self.client_cert_chain {
+        if let Some(chain) = &self.client_cert_chain {
             1u8.encode(bytes);
             chain.encode(bytes);
         } else {
             0u8.encode(bytes);
         }
-        if let Some(ref alpn) = self.alpn {
+        if let Some(alpn) = &self.alpn {
             1u8.encode(bytes);
             alpn.encode(bytes);
         } else {
