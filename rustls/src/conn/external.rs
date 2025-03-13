@@ -1,15 +1,10 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
-use pki_types::CertificateDer;
 
 use crate::common_state::Protocol;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::handshake::{CertificateChain, NewSessionTicketPayloadTls13};
 use crate::quic::Quic;
-use crate::{
-    CommonState, ConnectionTrafficSecrets, Error, HandshakeKind, ProtocolVersion,
-    SupportedCipherSuite,
-};
+use crate::{CommonState, ConnectionTrafficSecrets, Error, ProtocolVersion, SupportedCipherSuite};
 
 /// An external connection.
 ///
@@ -22,9 +17,7 @@ pub struct ExternalConnection {
 
     negotiated_version: ProtocolVersion,
     protocol: Protocol,
-    handshake_kind: HandshakeKind,
     suite: SupportedCipherSuite,
-    alpn_protocol: Option<Vec<u8>>,
 }
 
 impl ExternalConnection {
@@ -38,46 +31,10 @@ impl ExternalConnection {
                 .negotiated_version
                 .ok_or(Error::HandshakeNotComplete)?,
             protocol: common.protocol,
-            handshake_kind: common
-                .handshake_kind
-                .ok_or(Error::HandshakeNotComplete)?,
             suite: common
                 .suite
                 .ok_or(Error::HandshakeNotComplete)?,
-            alpn_protocol: common.alpn_protocol,
         })
-    }
-
-    /// Retrieves the certificate chain or the raw public key used by the peer to authenticate.
-    ///
-    /// The order of the certificate chain is as it appears in the TLS
-    /// protocol: the first certificate relates to the peer, the
-    /// second certifies the first, the third certifies the second, and
-    /// so on.
-    ///
-    /// When using raw public keys, the first and only element is the raw public key.
-    ///
-    /// This is made available for both full and resumed handshakes.
-    ///
-    /// For clients, this is the certificate chain or the raw public key of the server.
-    ///
-    /// For servers, this is the certificate chain or the raw public key of the client,
-    /// if client authentication was completed.
-    ///
-    /// Note: the return type of the 'certificate', when using raw public keys is `CertificateDer<'static>`
-    /// even though this should technically be a `SubjectPublicKeyInfoDer<'static>`.
-    /// This choice simplifies the API and ensures backwards compatibility.
-    pub fn peer_certificates(&self) -> Option<&[CertificateDer<'static>]> {
-        self.peer_certificates.as_deref()
-    }
-
-    /// Retrieves the protocol agreed with the peer via ALPN.
-    ///
-    /// A return value of `None` after handshake completion
-    /// means no protocol was agreed (because no protocols
-    /// were offered or accepted by the peer).
-    pub fn alpn_protocol(&self) -> Option<&[u8]> {
-        self.alpn_protocol.as_deref()
     }
 
     /// Retrieves the ciphersuite agreed with the peer.
@@ -88,13 +45,6 @@ impl ExternalConnection {
     /// Retrieves the protocol version agreed with the peer.
     pub fn protocol_version(&self) -> ProtocolVersion {
         self.negotiated_version
-    }
-
-    /// Which kind of handshake was performed.
-    ///
-    /// This tells you whether the handshake was a resumption or not.
-    pub fn handshake_kind(&self) -> HandshakeKind {
-        self.handshake_kind
     }
 
     /// Update the traffic secret used for encrypting messages sent to the peer.
