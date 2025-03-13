@@ -282,8 +282,8 @@ pub(crate) fn read_opaque_message_header(
 
     let version = ProtocolVersion::read(r).map_err(|_| MessageError::TooShortForHeader)?;
     // Accept only versions 0x03XX for any XX.
-    match version {
-        ProtocolVersion::Unknown(ref v) if (v & 0xff00) != 0x0300 => {
+    match &version {
+        ProtocolVersion::Unknown(v) if (v & 0xff00) != 0x0300 => {
             return Err(MessageError::UnknownProtocolVersion);
         }
         _ => {}

@@ -45,11 +45,11 @@ impl KeyLogFileInner {
     }
 
     fn try_write(&mut self, label: &str, client_random: &[u8], secret: &[u8]) -> io::Result<()> {
-        let mut file = match self.file {
+        let file = match &mut self.file {
             None => {
                 return Ok(());
             }
-            Some(ref f) => f,
+            Some(f) => f,
         };
 
         self.buf.truncate(0);

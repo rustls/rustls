@@ -100,8 +100,8 @@ pub(super) fn handle_server_hello(
 
     let key_schedule_pre_handshake = match (server_hello.psk_index(), early_key_schedule) {
         (Some(selected_psk), Some(early_key_schedule)) => {
-            match resuming_session {
-                Some(ref resuming) => {
+            match &resuming_session {
+                Some(resuming) => {
                     let Some(resuming_suite) = suite.can_resume_from(resuming.suite()) else {
                         return Err({
                             cx.common.send_fatal_alert(
@@ -323,7 +323,7 @@ pub(super) fn fill_in_psk_binder(
     let key_schedule = KeyScheduleEarly::new(suite, resuming.secret());
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
-    if let HandshakePayload::ClientHello(ref mut ch) = hmp.payload {
+    if let HandshakePayload::ClientHello(ch) = &mut hmp.payload {
         ch.set_psk_binder(real_binder.as_ref());
     };
 
@@ -1555,19 +1555,19 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::NewSessionTicketTls13(ref new_ticket),
+                        payload: HandshakePayload::NewSessionTicketTls13(new_ticket),
                         ..
                     },
                 ..
-            } => self.handle_new_ticket_tls13(cx, new_ticket)?,
+            } => self.handle_new_ticket_tls13(cx, &new_ticket)?,
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::KeyUpdate(ref key_update),
+                        payload: HandshakePayload::KeyUpdate(key_update),
                         ..
                     },
                 ..
-            } => self.handle_key_update(cx.common, key_update)?,
+            } => self.handle_key_update(cx.common, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,

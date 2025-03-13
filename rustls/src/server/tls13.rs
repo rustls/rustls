@@ -324,7 +324,7 @@ mod client_hello {
                 self.send_tickets = self.config.send_tls13_tickets;
             }
 
-            if let Some(ref resume) = resumedata {
+            if let Some(resume) = &resumedata {
                 cx.data.received_resumption_data = Some(resume.application_data.0.clone());
                 cx.common
                     .peer_certificates
@@ -865,7 +865,7 @@ impl State<ServerConnectionData> for ExpectAndSkipRejectedEarlyData {
          *  content type of "application_data" (indicating that they are encrypted),
          *  up to the configured max_early_data_size."
          * (RFC8446, 14.2.10) */
-        if let MessagePayload::ApplicationData(ref skip_data) = m.payload {
+        if let MessagePayload::ApplicationData(skip_data) = &m.payload {
             if skip_data.bytes().len() <= self.skip_data_left {
                 self.skip_data_left -= skip_data.bytes().len();
                 return Ok(self);
