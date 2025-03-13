@@ -1735,6 +1735,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ktls-sys"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ed84c81d133bc00e291085cff51c15cb07d3cede0aade1f2d82dd33df82d7e7"
+
+[[package]]
 name = "kv-log-macro"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2669,6 +2675,8 @@ dependencies = [
  "clap",
  "env_logger",
  "hickory-resolver",
+ "ktls-sys",
+ "libc",
  "log",
  "mio",
  "rcgen",
