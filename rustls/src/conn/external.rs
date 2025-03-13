@@ -121,10 +121,10 @@ impl ExternalConnection<ClientConnectionData> {
     /// Code to parse out the payload should look something like this
     /// ```no_run
     /// use rustls::{ContentType, HandshakeType};
-    /// use rustls::external::ExternalConnection;
+    /// use rustls::external::ExternalClientConnection;
     ///
-    /// # fn doctest(conn: &mut ExternalConnection, typ: ContentType, message: &[u8]) -> Result<(), rustls::Error> {
-    /// let conn: &mut ExternalConnection = // ...
+    /// # fn doctest(conn: &mut ExternalClientConnection, typ: ContentType, message: &[u8]) -> Result<(), rustls::Error> {
+    /// let conn: &mut ExternalClientConnection = // ...
     /// #   conn;
     /// let typ: ContentType = // ...
     /// #   typ;
