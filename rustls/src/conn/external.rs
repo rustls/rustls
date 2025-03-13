@@ -195,7 +195,7 @@ pub(crate) enum Direction {
     Receive,
 }
 
-pub(crate) trait ExternalState {
+pub(crate) trait ExternalState: Send + Sync {
     /// Update the traffic secret for the specified direction on the connection.
     fn update_secrets(&mut self, dir: Direction) -> Result<ConnectionTrafficSecrets, Error>;
 
