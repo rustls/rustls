@@ -242,6 +242,31 @@ impl<'a> ClientHello<'a> {
 /// * [`ServerConfig::cert_compression_cache`]: caches the most recently used 4 compressions
 /// * [`ServerConfig::cert_decompressors`]: depends on the crate features, see [`compress::default_cert_decompressors()`].
 ///
+/// # Sharing resumption storage between `ServerConfig`s
+///
+/// In a program using many `ServerConfig`s it may improve resumption rates
+/// (which has a significant impact on connection performance) if those
+/// configs share [`ServerConfig::session_storage`] or [`ServerConfig::ticketer`].
+///
+/// However, caution is needed: other fields influence the security of a session
+/// and resumption between them can be surprising.  If sharing
+/// [`ServerConfig::session_storage`] or [`ServerConfig::ticketer`] between two
+/// `ServerConfig`s, you should also evaluate the following fields and ensure
+/// they are equivalent:
+///
+/// * `ServerConfig::verifier` -- client authentication requirements,
+/// * [`ServerConfig::cert_resolver`] -- server identities.
+///
+/// To illustrate, imagine two `ServerConfig`s `A` and `B`.  `A` requires
+/// client authentication, `B` does not.  If `A` and `B` shared a resumption store,
+/// it would be possible for a session originated by `B` (that is, an unauthenticated client)
+/// to be inserted into the store, and then resumed by `A`.  This would give a false
+/// impression to the user of `A` that the client was authenticated.  This is possible
+/// whether the resumption is performed statefully (via [`ServerConfig::session_storage`])
+/// or statelessly (via [`ServerConfig::ticketer`]).
+///
+/// _Unlike_ `ClientConfig`, rustls does not enforce any policy here.
+///
 /// [`RootCertStore`]: crate::RootCertStore
 /// [`ServerSessionMemoryCache`]: crate::server::handy::ServerSessionMemoryCache
 #[derive(Clone, Debug)]
@@ -268,9 +293,15 @@ pub struct ServerConfig {
     pub max_fragment_size: Option<usize>,
 
     /// How to store client sessions.
+    ///
+    /// See [ServerConfig#sharing-resumption-storage-between-serverconfigs]
+    /// for a warning related to this field.
     pub session_storage: Arc<dyn StoresServerSessions>,
 
     /// How to produce tickets.
+    ///
+    /// See [ServerConfig#sharing-resumption-storage-between-serverconfigs]
+    /// for a warning related to this field.
     pub ticketer: Arc<dyn ProducesTickets>,
 
     /// How to choose a server cert and key. This is usually set by
