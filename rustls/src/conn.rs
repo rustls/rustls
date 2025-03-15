@@ -135,6 +135,16 @@ mod connection {
             }
         }
 
+        /// Sets a limit on the internal plaintext buffer.
+        ///
+        /// See [`ConnectionCommon::set_plaintext_buffer_limit()`] for more information.
+        pub fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
+            match self {
+                Self::Client(client) => client.set_plaintext_buffer_limit(limit),
+                Self::Server(server) => server.set_plaintext_buffer_limit(limit),
+            }
+        }        
+
         /// Sends a TLS1.3 `key_update` message to refresh a connection's keys
         ///
         /// See [`ConnectionCommon::refresh_traffic_keys()`] for more information.
@@ -515,6 +525,13 @@ impl<Data> ConnectionCommon<Data> {
     pub fn set_buffer_limit(&mut self, limit: Option<usize>) {
         self.sendable_plaintext.set_limit(limit);
         self.sendable_tls.set_limit(limit);
+    }
+
+    /// Sets a limit on the internal buffers used to buffer decoded plaintext.
+    /// 
+    /// See [`Self::set_buffer_limit`] for more information on how limits are applied.
+    pub fn set_plaintext_buffer_limit(&mut self, limit: Option<usize>) {
+        self.core.common_state.received_plaintext.set_limit(limit);
     }
 
     /// Sends a TLS1.3 `key_update` message to refresh a connection's keys.
