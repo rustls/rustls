@@ -91,6 +91,8 @@ fn pki_error(error: webpki::Error) -> Error {
             CertRevocationListError::BadSignature.into()
         }
 
+        RequiredEkuNotFound => CertificateError::InvalidPurpose.into(),
+
         _ => CertificateError::Other(OtherError(
             #[cfg(feature = "std")]
             Arc::new(error),
