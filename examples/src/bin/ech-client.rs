@@ -35,7 +35,8 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::Arc;
 
 use clap::Parser;
-use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use hickory_resolver::config::ResolverConfig;
+use hickory_resolver::name_server::TokioConnectionProvider;
 use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
 use hickory_resolver::proto::rr::{RData, RecordType};
 use hickory_resolver::{ResolveError, Resolver, TokioResolver};
@@ -68,7 +69,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 ResolverConfig::google_https()
             };
             lookup_ech_configs(
-                &Resolver::tokio(resolver_config, ResolverOpts::default()),
+                &Resolver::builder_with_config(resolver_config, TokioConnectionProvider::default())
+                    .build(),
                 &args.inner_hostname,
                 args.port,
             )
