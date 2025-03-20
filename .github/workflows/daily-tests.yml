@@ -145,9 +145,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo hack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-hack@0.6.33
+        uses: taiki-e/install-action@cargo-hack
 
       - name: Check feature powerset
         run: >
