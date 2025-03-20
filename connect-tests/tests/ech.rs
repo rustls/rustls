@@ -1,5 +1,6 @@
 mod ech_config {
-    use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+    use hickory_resolver::config::ResolverConfig;
+    use hickory_resolver::name_server::TokioConnectionProvider;
     use hickory_resolver::proto::rr::rdata::svcb::{SvcParamKey, SvcParamValue};
     use hickory_resolver::proto::rr::{RData, RecordType};
     use hickory_resolver::{Resolver, TokioResolver};
@@ -24,7 +25,11 @@ mod ech_config {
 
     /// Lookup the ECH config list for a domain and deserialize it.
     async fn test_deserialize_ech_config_list(domain: &str) {
-        let resolver = Resolver::tokio(ResolverConfig::google_https(), ResolverOpts::default());
+        let resolver = Resolver::builder_with_config(
+            ResolverConfig::google_https(),
+            TokioConnectionProvider::default(),
+        )
+        .build();
         let tls_encoded_list = lookup_ech(&resolver, domain).await;
         let parsed_configs = Vec::<EchConfigPayload>::read(&mut Reader::init(&tls_encoded_list))
             .expect("failed to deserialize ECH config list");
