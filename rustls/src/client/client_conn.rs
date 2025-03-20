@@ -16,6 +16,7 @@ use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
 use crate::crypto::{CryptoProvider, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
+use crate::external::ExternalConnection;
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
 use crate::msgs::handshake::ClientExtension;
@@ -868,6 +869,23 @@ impl UnbufferedClientConnection {
     /// Should be used with care as it exposes secret key material.
     pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         self.inner.dangerous_extract_secrets()
+    }
+
+    /// Extract secrets and an [`ExternalConnection`] object.
+    ///
+    /// This allows you use rustls to manage keys and then manage encryption and
+    /// decryption yourself (e.g. for kTLS).
+    ///
+    /// Should be used with care as it exposes secret key material.
+    ///
+    /// See the [`crate::external`] documentations for details on prerequisites
+    /// for calling this method.
+    pub fn dangerous_into_external_connection(
+        self,
+    ) -> Result<(ExtractedSecrets, ExternalConnection<ClientConnectionData>), Error> {
+        self.inner
+            .core
+            .dangerous_into_external_connection()
     }
 }
 
