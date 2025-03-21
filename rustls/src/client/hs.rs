@@ -30,11 +30,12 @@ use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PskKeyExchangeMode,
 };
 use crate::msgs::handshake::ProtocolName;
-use crate::msgs::handshake::SupportedProtocolVersions;
+use crate::msgs::handshake::ServerNamePayload;
 use crate::msgs::handshake::{
-    CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
-    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryRequest,
-    KeyShareEntry, Random, SessionId,
+    CertificateStatusRequest, ClientExtensions, ClientExtensionsTemplate, ClientHelloPayload,
+    ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
+    HasServerExtensions, HelloRetryRequest, KeyShareEntry, Random, SessionId,
+    SupportedProtocolVersions,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -103,7 +104,7 @@ fn find_session(
 pub(super) fn start_handshake(
     server_name: ServerName<'static>,
     alpn_protocols: Vec<Vec<u8>>,
-    extra_exts: Vec<ClientExtension>,
+    extra_exts: ClientExtensionsTemplate<'_>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError<'static> {
@@ -216,7 +217,7 @@ struct ExpectServerHello {
 
 struct ExpectServerHelloOrHelloRetryRequest {
     next: ExpectServerHello,
-    extra_exts: Vec<ClientExtension>,
+    extra_exts: ClientExtensionsTemplate<'static>,
 }
 
 struct ClientHelloInput {
@@ -229,7 +230,7 @@ struct ClientHelloInput {
     hello: ClientHelloDetails,
     session_id: SessionId,
     server_name: ServerName<'static>,
-    prev_ech_ext: Option<ClientExtension>,
+    prev_ech_ext: Option<EncryptedClientHello>,
 }
 
 /// Emits the initial ClientHello or a ClientHello in response to
@@ -241,7 +242,7 @@ fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
     key_share: Option<Box<dyn ActiveKeyExchange>>,
-    extra_exts: Vec<ClientExtension>,
+    extra_exts: ClientExtensionsTemplate<'_>,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
@@ -260,30 +261,38 @@ fn emit_client_hello_for_retry(
     // should be unreachable thanks to config builder
     assert!(supported_versions.any(|_| true));
 
-    // offer groups which are usable for any offered version
-    let offered_groups = config
-        .provider
-        .kx_groups
-        .iter()
-        .filter(|skxg| supported_versions.any(|v| skxg.usable_for_version(v)))
-        .map(|skxg| skxg.name())
-        .collect();
+    let ClientExtensionsTemplate {
+        transport_parameters,
+        transport_parameters_draft,
+    } = extra_exts.clone().into_owned();
 
-    let mut exts = vec![
-        ClientExtension::SupportedVersions(supported_versions),
-        ClientExtension::NamedGroups(offered_groups),
-        ClientExtension::SignatureAlgorithms(
+    let mut exts = Box::new(ClientExtensions {
+        // offer groups which are usable for any offered version
+        named_groups: Some(
+            config
+                .provider
+                .kx_groups
+                .iter()
+                .filter(|skxg| supported_versions.any(|v| skxg.usable_for_version(v)))
+                .map(|skxg| skxg.name())
+                .collect(),
+        ),
+        supported_versions: Some(supported_versions),
+        signature_schemes: Some(
             config
                 .verifier
                 .supported_verify_schemes(),
         ),
-        ClientExtension::ExtendedMasterSecretRequest,
-        ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
-    ];
+        extended_master_secret_request: Some(()),
+        certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
+        transport_parameters,
+        transport_parameters_draft,
+        ..Default::default()
+    });
 
     if supported_versions.tls13 {
         if let Some(cas_extension) = config.verifier.root_hint_subjects() {
-            exts.push(ClientExtension::AuthorityNames(cas_extension.to_owned()));
+            exts.certificate_authority_names = Some(cas_extension.to_owned());
         }
     }
 
@@ -294,30 +303,28 @@ fn emit_client_hello_for_retry(
         .iter()
         .any(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::ECDHE)
     {
-        exts.push(ClientExtension::EcPointFormats(
-            ECPointFormat::SUPPORTED.to_vec(),
-        ));
+        exts.ec_point_formats = Some(ECPointFormat::SUPPORTED.to_vec());
     }
 
-    match (ech_state.as_ref(), config.enable_sni) {
+    exts.server_name = match (ech_state.as_ref(), config.enable_sni) {
         // If we have ECH state we have a "cover name" to send in the outer hello
         // as the SNI domain name. This happens unconditionally so we ignore the
         // `enable_sni` value. That will be used later to decide what to do for
         // the protected inner hello's SNI.
-        (Some(ech_state), _) => {
-            exts.push(ClientExtension::ServerName((&ech_state.outer_name).into()))
-        }
+        (Some(ech_state), _) => Some(ServerNamePayload::from(&ech_state.outer_name)),
 
         // If we have no ECH state, and SNI is enabled, try to use the input server_name
         // for the SNI domain name.
         (None, true) => {
             if let ServerName::DnsName(dns_name) = &input.server_name {
-                exts.push(ClientExtension::ServerName(dns_name.into()));
+                Some(ServerNamePayload::from(dns_name))
+            } else {
+                None
             }
         }
 
         // If we have no ECH state, and SNI is not enabled, there's nothing to do.
-        (None, false) => {}
+        (None, false) => None,
     };
 
     if let Some(key_share) = &key_share {
@@ -345,41 +352,41 @@ fn emit_client_hello_for_retry(
             }
         }
 
-        exts.push(ClientExtension::KeyShare(shares));
+        exts.key_shares = Some(shares);
     }
 
     if let Some(cookie) = retryreq.and_then(HelloRetryRequest::cookie) {
-        exts.push(ClientExtension::Cookie(cookie.clone()));
+        exts.cookie = Some(cookie.clone());
     }
 
     if supported_versions.tls13 {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
         let psk_modes = vec![PskKeyExchangeMode::PSK_DHE_KE];
-        exts.push(ClientExtension::PresharedKeyModes(psk_modes));
+        exts.preshared_key_modes = Some(psk_modes);
     }
 
     // Add ALPN extension if we have any protocols
     if !input.hello.alpn_protocols.is_empty() {
-        exts.push(ClientExtension::Protocols(
+        exts.protocols = Some(
             input
                 .hello
                 .alpn_protocols
                 .iter()
                 .map(|proto| ProtocolName::from(proto.clone()))
                 .collect::<Vec<_>>(),
-        ));
+        );
     }
 
     input.hello.offered_cert_compression =
         if supported_versions.tls13 && !config.cert_decompressors.is_empty() {
-            exts.push(ClientExtension::CertificateCompressionAlgorithms(
+            exts.certificate_compression_algorithms = Some(
                 config
                     .cert_decompressors
                     .iter()
                     .map(|dec| dec.algorithm())
                     .collect(),
-            ));
+            );
             true
         } else {
             false
@@ -389,29 +396,22 @@ fn emit_client_hello_for_retry(
         .client_auth_cert_resolver
         .only_raw_public_keys()
     {
-        exts.push(ClientExtension::ClientCertTypes(vec![
-            CertificateType::RawPublicKey,
-        ]));
+        exts.client_certificate_types = Some(vec![CertificateType::RawPublicKey]);
     }
 
     if config
         .verifier
         .requires_raw_public_keys()
     {
-        exts.push(ClientExtension::ServerCertTypes(vec![
-            CertificateType::RawPublicKey,
-        ]));
+        exts.server_certificate_types = Some(vec![CertificateType::RawPublicKey]);
     }
-
-    // Extra extensions must be placed before the PSK extension
-    exts.extend(extra_exts.iter().cloned());
 
     // If this is a second client hello we're constructing in response to an HRR, and
     // we've rejected ECH or sent GREASE ECH, then we need to carry forward the
     // exact same ECH extension we used in the first hello.
     if matches!(cx.data.ech_status, EchStatus::Rejected | EchStatus::Grease) & retryreq.is_some() {
         if let Some(prev_ech_ext) = input.prev_ech_ext.take() {
-            exts.push(prev_ech_ext);
+            exts.encrypted_client_hello = Some(prev_ech_ext);
         }
     }
 
@@ -420,24 +420,7 @@ fn emit_client_hello_for_retry(
 
     // Extensions MAY be randomized
     // but they also need to keep the same order as the previous ClientHello
-    exts.sort_by_cached_key(|new_ext| {
-        match (&cx.data.ech_status, new_ext) {
-            // When not offering ECH/GREASE, the PSK extension is always last.
-            (EchStatus::NotOffered, ClientExtension::PresharedKey(..)) => return u32::MAX,
-            // When ECH or GREASE are in-play, the ECH extension is always last.
-            (_, ClientExtension::EncryptedClientHello(_)) => return u32::MAX,
-            // ... and the PSK extension should be second-to-last.
-            (_, ClientExtension::PresharedKey(..)) => return u32::MAX - 1,
-            _ => {}
-        };
-
-        let seed = ((input.hello.extension_order_seed as u32) << 16)
-            | (u16::from(new_ext.ext_type()) as u32);
-        match low_quality_integer_hash(seed) {
-            u32::MAX => 0,
-            key => key,
-        }
-    });
+    exts.order_seed = input.hello.extension_order_seed;
 
     let mut cipher_suites: Vec<_> = config
         .provider
@@ -480,7 +463,10 @@ fn emit_client_hello_for_retry(
             chp_payload = ech_state.ech_hello(chp_payload, retryreq, &tls13_session)?;
             cx.data.ech_status = EchStatus::Offered;
             // Store the ECH extension in case we need to carry it forward in a subsequent hello.
-            input.prev_ech_ext = chp_payload.extensions.last().cloned();
+            input.prev_ech_ext = chp_payload
+                .extensions
+                .encrypted_client_hello
+                .clone();
         }
         // If we haven't offered ECH, and have no ECH state, then consider whether to use GREASE
         // ECH.
@@ -490,7 +476,7 @@ fn emit_client_hello_for_retry(
                 let grease_ext = grease_ext?;
                 chp_payload
                     .extensions
-                    .push(grease_ext.clone());
+                    .encrypted_client_hello = Some(grease_ext.clone());
                 cx.data.ech_status = EchStatus::Grease;
                 // Store the GREASE ECH extension in case we need to carry it forward in a
                 // subsequent hello.
@@ -503,9 +489,7 @@ fn emit_client_hello_for_retry(
     // Note what extensions we sent.
     input.hello.sent_extensions = chp_payload
         .extensions
-        .iter()
-        .map(ClientExtension::ext_type)
-        .collect();
+        .collect_used_extensions();
 
     let mut chp = HandshakeMessagePayload {
         typ: HandshakeType::ClientHello,
@@ -597,7 +581,10 @@ fn emit_client_hello_for_retry(
     };
 
     Ok(if supported_versions.tls13 && retryreq.is_none() {
-        Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
+        Box::new(ExpectServerHelloOrHelloRetryRequest {
+            next,
+            extra_exts: extra_exts.into_owned(),
+        })
     } else {
         Box::new(next)
     })
@@ -620,7 +607,7 @@ fn emit_client_hello_for_retry(
 /// It returns the TLS 1.3 PSKs, if any, for further processing.
 fn prepare_resumption<'a>(
     resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
-    exts: &mut Vec<ClientExtension>,
+    exts: &mut ClientExtensions<'_>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
@@ -633,7 +620,7 @@ fn prepare_resumption<'a>(
                 && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
             {
                 // If we don't have a ticket, request one.
-                exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Request));
+                exts.session_ticket = Some(ClientSessionTicket::Request);
             }
             return None;
         }
@@ -644,9 +631,7 @@ fn prepare_resumption<'a>(
         if config.supports_version(ProtocolVersion::TLSv1_2)
             && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
         {
-            exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
-                Payload::new(resuming.ticket()),
-            )));
+            exts.session_ticket = Some(ClientSessionTicket::Offer(Payload::new(resuming.ticket())));
         }
         return None; // TLS 1.2, so nothing to return here
     };
@@ -1287,20 +1272,4 @@ impl Deref for ClientSessionValue {
     fn deref(&self) -> &Self::Target {
         self.common()
     }
-}
-
-fn low_quality_integer_hash(mut x: u32) -> u32 {
-    x = x
-        .wrapping_add(0x7ed55d16)
-        .wrapping_add(x << 12);
-    x = (x ^ 0xc761c23c) ^ (x >> 19);
-    x = x
-        .wrapping_add(0x165667b1)
-        .wrapping_add(x << 5);
-    x = x.wrapping_add(0xd3a2646c) ^ (x << 9);
-    x = x
-        .wrapping_add(0xfd7046c5)
-        .wrapping_add(x << 3);
-    x = (x ^ 0xb55a4f09) ^ (x >> 16);
-    x
 }

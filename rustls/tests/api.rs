@@ -16,7 +16,7 @@ use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedK
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
-use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload, ServerExtension};
+use rustls::internal::msgs::handshake::{HandshakePayload, ServerExtension};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -312,24 +312,8 @@ mod test_raw_keys {
     ) -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for extension in ch.extensions.iter_mut() {
-                    if let ClientExtension::ClientCertTypes(cert_type) = extension {
-                        if let Some(client_cert_types) = client_cert_types {
-                            cert_type.clear();
-                            if !client_cert_types.is_empty() {
-                                cert_type.extend_from_slice(client_cert_types)
-                            }
-                        }
-                    };
-                    if let ClientExtension::ServerCertTypes(cert_type) = extension {
-                        if let Some(server_cert_types) = server_cert_types {
-                            cert_type.clear();
-                            if !server_cert_types.is_empty() {
-                                cert_type.extend_from_slice(server_cert_types)
-                            }
-                        }
-                    };
-                }
+                ch.extensions.server_certificate_types = server_cert_types.cloned();
+                ch.extensions.client_certificate_types = client_cert_types.cloned();
             }
             *encoded = Payload::new(parsed.get_encoding());
         }
@@ -5648,7 +5632,9 @@ fn test_client_does_not_offer_sha1() {
             };
 
             let sigalgs = client_hello
-                .sigalgs_extension()
+                .extensions
+                .signature_schemes
+                .as_ref()
                 .unwrap();
             assert!(
                 !sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1),
@@ -5805,7 +5791,9 @@ fn test_client_rejects_hrr_with_varied_session_id() {
             MessagePayload::Handshake { parsed, encoded } => match &mut parsed.payload {
                 HandshakePayload::ClientHello(ch) => {
                     let keyshares = ch
-                        .keyshare_extension()
+                        .extensions
+                        .key_shares
+                        .as_ref()
                         .expect("missing key share extension");
                     assert_eq!(keyshares.len(), 1);
                     assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
@@ -5961,7 +5949,9 @@ fn test_client_sends_share_for_less_preferred_group() {
             MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
                 HandshakePayload::ClientHello(ch) => {
                     let keyshares = ch
-                        .keyshare_extension()
+                        .extensions
+                        .key_shares
+                        .as_ref()
                         .expect("missing key share extension");
                     assert_eq!(keyshares.len(), 1);
                     assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
@@ -6303,11 +6293,10 @@ fn test_no_session_ticket_request_on_tls_1_3() {
             return Altered::InPlace;
         };
 
-        for ext in &ch.extensions {
-            if matches!(ext, ClientExtension::SessionTicket(_)) {
-                panic!("TLS 1.2 session_ticket extension in TLS 1.3 handshake detected.");
-            }
-        }
+        assert!(
+            ch.extensions.session_ticket.is_none(),
+            "TLS 1.2 session_ticket extension in TLS 1.3 handshake detected."
+        );
 
         Altered::InPlace
     }
@@ -6441,7 +6430,8 @@ fn remove_ems_request(msg: &mut Message) -> Altered {
     if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
         if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
             ch.extensions
-                .retain(|ext| !matches!(ext, ClientExtension::ExtendedMasterSecretRequest))
+                .extended_master_secret_request
+                .take();
         }
 
         *encoded = Payload::new(parsed.get_encoding());
@@ -8385,7 +8375,9 @@ fn assert_client_sends_hello_with_two_key_shares(msg: &mut Message) -> Altered {
         MessagePayload::Handshake { parsed, .. } => match &mut parsed.payload {
             HandshakePayload::ClientHello(ch) => {
                 let keyshares = ch
-                    .keyshare_extension()
+                    .extensions
+                    .key_shares
+                    .as_ref()
                     .expect("missing key share extension");
                 assert_eq!(keyshares.len(), 2);
                 assert_eq!(keyshares[0].group(), FakeHybrid.name());
@@ -8405,7 +8397,9 @@ fn assert_client_sends_hello_with_one_hybrid_key_share(msg: &mut Message) -> Alt
         MessagePayload::Handshake { parsed, .. } => match &mut parsed.payload {
             HandshakePayload::ClientHello(ch) => {
                 let keyshares = ch
-                    .keyshare_extension()
+                    .extensions
+                    .key_shares
+                    .as_ref()
                     .expect("missing key share extension");
                 assert_eq!(keyshares.len(), 1);
                 assert_eq!(keyshares[0].group(), FakeHybrid.name());

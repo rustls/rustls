@@ -17,7 +17,7 @@ use pki_types::{CertificateDer, ServerName};
 
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
+use rustls::internal::msgs::handshake::HandshakePayload;
 use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
@@ -207,8 +207,8 @@ fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
                 if let HandshakePayload::ClientHello(ch) = &parsed.payload {
                     assert_eq!(
                         ch.extensions
-                            .iter()
-                            .any(|ext| matches!(ext, ClientExtension::AuthorityNames(_))),
+                            .certificate_authority_names
+                            .is_some(),
                         cas_extension_expected
                     );
                     println!(
