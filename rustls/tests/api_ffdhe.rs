@@ -3,6 +3,7 @@
 #![allow(clippy::duplicate_mod)]
 
 mod common;
+
 use common::*;
 use rustls::crypto::CryptoProvider;
 use rustls::version::{TLS12, TLS13};
