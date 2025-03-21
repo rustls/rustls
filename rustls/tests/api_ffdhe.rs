@@ -76,11 +76,7 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() 
     fn clear_named_groups_ext(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for mut ext in ch.extensions.iter_mut() {
-                    if let ClientExtension::NamedGroups(ngs) = &mut ext {
-                        ngs.clear();
-                    }
-                }
+                ch.extensions.named_groups = Some(vec![]);
             }
             *encoded = Payload::new(parsed.get_encoding());
         }
@@ -111,8 +107,7 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
     fn remove_named_groups_ext(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                ch.extensions
-                    .retain(|ext| !matches!(ext, ClientExtension::NamedGroups(_)));
+                ch.extensions.named_groups.take();
             }
             *encoded = Payload::new(parsed.get_encoding());
         }
@@ -199,8 +194,7 @@ fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites
     fn remove_ecpoints_ext(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
             if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                ch.extensions
-                    .retain(|ext| !matches!(ext, ClientExtension::EcPointFormats(_)));
+                ch.extensions.ec_point_formats.take();
             }
             *encoded = Payload::new(parsed.get_encoding());
         }
