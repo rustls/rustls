@@ -808,6 +808,11 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
                     }
                 }
             };
+
+            // PreSharedKey offer must come last
+            if typ == ExtensionType::PreSharedKey && sub.any_left() {
+                return Err(InvalidMessage::PreSharedKeyIsNotFinalExtension);
+            }
         }
 
         Ok(out)
