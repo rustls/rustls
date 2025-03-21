@@ -5,11 +5,10 @@ use super::ServerConnectionData;
 use crate::common_state::Context;
 use crate::enums::{CipherSuite, SignatureScheme};
 use crate::msgs::base::PayloadU16;
-use crate::msgs::codec::{Codec, LengthPrefixedBuffer, ListLength};
-use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
+use crate::msgs::enums::{Compression, NamedGroup};
 use crate::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
-    Random, SessionId, SupportedProtocolVersions,
+    ClientExtensions, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
+    Random, ServerNamePayload, SessionId, SupportedProtocolVersions,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::{CommonState, Error, PeerIncompatible, PeerMisbehaved, ProtocolVersion, Side};
@@ -28,8 +27,7 @@ fn null_compression_required() {
 #[test]
 fn server_ignores_sni_with_ip_address() {
     let mut ch = minimal_client_hello();
-    ch.extensions
-        .push(ClientExtension::read_bytes(&sni_extension(&[b"1.1.1.1"])).unwrap());
+    ch.extensions.server_name = Some(ServerNamePayload::IpAddress);
     std::println!("{:?}", ch.extensions);
     assert_eq!(test_process_client_hello(ch), Ok(()));
 }
@@ -37,8 +35,7 @@ fn server_ignores_sni_with_ip_address() {
 #[test]
 fn server_rejects_sni_with_illegal_dns_name() {
     let mut ch = minimal_client_hello();
-    ch.extensions
-        .push(ClientExtension::read_bytes(&sni_extension(&[b"ab@cd.com"])).unwrap());
+    ch.extensions.server_name = Some(ServerNamePayload::Invalid);
     std::println!("{:?}", ch.extensions);
     assert_eq!(
         test_process_client_hello(ch),
@@ -100,7 +97,8 @@ mod tests {
 
         let mut ch = minimal_client_hello();
         ch.extensions
-            .retain(|ext| ext.ext_type() != ExtensionType::ExtendedMasterSecret);
+            .extended_master_secret_request
+            .take();
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -151,8 +149,7 @@ mod tests {
         let mut ch = minimal_client_hello();
         ch.cipher_suites
             .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
-        ch.extensions
-            .retain(|ext| ext.ext_type() != ExtensionType::EllipticCurves);
+        ch.extensions.named_groups.take();
 
         server_chooses_ffdhe_group_for_client_hello(
             ServerConnection::new(config.into()).unwrap(),
@@ -173,8 +170,7 @@ mod tests {
         let mut ch = minimal_client_hello();
         ch.cipher_suites
             .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
-        ch.extensions
-            .retain(|ext| ext.ext_type() != ExtensionType::ECPointFormats);
+        ch.extensions.ec_point_formats.take();
 
         server_chooses_ffdhe_group_for_client_hello(
             ServerConnection::new(config.into()).unwrap(),
@@ -205,10 +201,7 @@ mod tests {
     #[test]
     fn test_server_requiring_rpk_client_rejects_x509_client() {
         let mut ch = minimal_client_hello();
-        ch.extensions
-            .push(ClientExtension::ClientCertTypes(vec![
-                CertificateType::X509,
-            ]));
+        ch.extensions.client_certificate_types = Some(vec![CertificateType::X509]);
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -228,10 +221,7 @@ mod tests {
     #[test]
     fn test_rpk_only_server_rejects_x509_only_client() {
         let mut ch = minimal_client_hello();
-        ch.extensions
-            .push(ClientExtension::ServerCertTypes(vec![
-                CertificateType::X509,
-            ]));
+        ch.extensions.server_certificate_types = Some(vec![CertificateType::X509]);
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
@@ -361,34 +351,19 @@ fn minimal_client_hello() -> ClientHelloPayload {
             CipherSuite::TLS13_AES_128_GCM_SHA256,
         ],
         compression_methods: vec![Compression::Null],
-        extensions: vec![
-            ClientExtension::SignatureAlgorithms(vec![SignatureScheme::RSA_PSS_SHA256]),
-            ClientExtension::NamedGroups(vec![NamedGroup::X25519, NamedGroup::secp256r1]),
-            ClientExtension::SupportedVersions(SupportedProtocolVersions {
+        extensions: Box::new(ClientExtensions {
+            signature_schemes: Some(vec![SignatureScheme::RSA_PSS_SHA256]),
+            named_groups: Some(vec![NamedGroup::X25519, NamedGroup::secp256r1]),
+            supported_versions: Some(SupportedProtocolVersions {
                 tls12: true,
                 tls13: true,
             }),
-            ClientExtension::KeyShare(vec![KeyShareEntry {
+            key_shares: Some(vec![KeyShareEntry {
                 group: NamedGroup::X25519,
                 payload: PayloadU16::new(vec![0xab; 32]),
             }]),
-            ClientExtension::ExtendedMasterSecretRequest,
-        ],
+            extended_master_secret_request: Some(()),
+            ..ClientExtensions::default()
+        }),
     }
-}
-
-fn sni_extension(names: &[&[u8]]) -> Vec<u8> {
-    let mut r = Vec::new();
-    ExtensionType::ServerName.encode(&mut r);
-    let outer = LengthPrefixedBuffer::new(ListLength::U16, &mut r);
-    let name_items = LengthPrefixedBuffer::new(ListLength::U16, outer.buf);
-    for name in names {
-        name_items.buf.push(0);
-        let host_name = LengthPrefixedBuffer::new(ListLength::U16, name_items.buf);
-        host_name.buf.extend_from_slice(name);
-        drop(host_name);
-    }
-    drop(name_items);
-    drop(outer);
-    r
 }
