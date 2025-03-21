@@ -949,13 +949,18 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            out.read_one(&mut sub, |unknown| {
+            let typ = out.read_one(&mut sub, |unknown| {
                 let u = u16::from(unknown);
                 match unknown_extensions.insert(u) {
                     true => Ok(()),
                     false => Err(InvalidMessage::DuplicateExtension(u)),
                 }
             })?;
+
+            // PreSharedKey offer must come last
+            if typ == ExtensionType::PreSharedKey && sub.any_left() {
+                return Err(InvalidMessage::PreSharedKeyIsNotFinalExtension);
+            }
         }
 
         Ok(out)
