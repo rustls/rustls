@@ -196,6 +196,8 @@ pub enum InvalidMessage {
     IllegalEmptyValue,
     /// A peer sent a message where a given extension type was repeated
     DuplicateExtension,
+    /// A peer sent a message with a PSK offer extension in wrong position
+    PreSharedKeyIsNotFinalExtension,
 }
 
 impl From<InvalidMessage> for Error {
@@ -208,6 +210,7 @@ impl From<InvalidMessage> for Error {
 impl From<InvalidMessage> for AlertDescription {
     fn from(e: InvalidMessage) -> Self {
         match e {
+            InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
             _ => Self::DecodeError,
         }
     }
