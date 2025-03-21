@@ -18,7 +18,7 @@ use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::ClientExtensionsTemplate;
 use crate::msgs::persist;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::sync::Arc;
@@ -626,14 +626,13 @@ impl EarlyData {
 
 #[cfg(feature = "std")]
 mod connection {
-    use alloc::vec::Vec;
     use core::fmt;
     use core::ops::{Deref, DerefMut};
     use std::io;
 
     use pki_types::ServerName;
 
-    use super::ClientConnectionData;
+    use super::{ClientConnectionData, ClientExtensionsTemplate};
     use crate::ClientConfig;
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
@@ -703,7 +702,13 @@ mod connection {
         /// name of the server we want to talk to.
         pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
             Ok(Self {
-                inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
+                inner: ConnectionCore::for_client(
+                    config,
+                    name,
+                    ClientExtensionsTemplate::default(),
+                    Protocol::Tcp,
+                )?
+                .into(),
             })
         }
 
@@ -821,7 +826,7 @@ impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        extra_exts: Vec<ClientExtension>,
+        extra_exts: ClientExtensionsTemplate<'_>,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
@@ -860,7 +865,13 @@ impl UnbufferedClientConnection {
     /// the name of the server we want to talk to.
     pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
         Ok(Self {
-            inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
+            inner: ConnectionCore::for_client(
+                config,
+                name,
+                ClientExtensionsTemplate::default(),
+                Protocol::Tcp,
+            )?
+            .into(),
         })
     }
 
