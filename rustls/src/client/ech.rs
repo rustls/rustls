@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -7,6 +8,7 @@ use subtle::ConstantTimeEq;
 
 use crate::CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV;
 use crate::client::tls13;
+use crate::crypto::CryptoProvider;
 use crate::crypto::SecureRandom;
 use crate::crypto::hash::Hash;
 use crate::crypto::hpke::{EncapsulatedSecret, Hpke, HpkePublicKey, HpkeSealer, HpkeSuite};
@@ -200,6 +202,7 @@ impl EchGreaseConfig {
         secure_random: &'static dyn SecureRandom,
         inner_name: ServerName<'static>,
         outer_hello: &ClientHelloPayload,
+        provider: Arc<CryptoProvider>,
     ) -> Result<ClientExtension, Error> {
         trace!("Preparing GREASE ECH extension");
 
@@ -230,11 +233,12 @@ impl EchGreaseConfig {
             false,
             secure_random,
             false, // Does not matter if we enable/disable SNI here. Inner hello is not used.
+            provider,
         )?;
 
         // Construct an inner hello using the outer hello - this allows us to know the size of
         // dummy payload we should use for the GREASE extension.
-        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, None);
+        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, None)?;
 
         // Generate a payload of random data equivalent in length to a real inner hello.
         let payload_len = encoded_inner_hello.len()
@@ -309,6 +313,8 @@ pub(crate) struct EchState {
     enable_sni: bool,
     // The extensions sent in the inner hello.
     sent_extensions: Vec<ExtensionType>,
+    /// For filling in PSKs.
+    provider: Arc<CryptoProvider>,
 }
 
 impl EchState {
@@ -318,6 +324,7 @@ impl EchState {
         client_auth_enabled: bool,
         secure_random: &'static dyn SecureRandom,
         enable_sni: bool,
+        provider: Arc<CryptoProvider>,
     ) -> Result<Self, Error> {
         let EchConfigPayload::V18(config_contents) = &config.config else {
             // the public EchConfig::new() constructor ensures we only have supported
@@ -353,6 +360,7 @@ impl EchState {
             early_data_key_schedule: None,
             enable_sni,
             sent_extensions: Vec::new(),
+            provider,
         })
     }
 
@@ -376,7 +384,7 @@ impl EchState {
         );
 
         // Construct the encoded inner hello and update the transcript.
-        let encoded_inner_hello = self.encode_inner_hello(&outer_hello, retry_req, psk);
+        let encoded_inner_hello = self.encode_inner_hello(&outer_hello, retry_req, psk)?;
 
         // Complete the ClientHelloOuterAAD with an ech extension, the payload should be a placeholder
         // of size L, all zeroes. L == length of encrypting encoded client hello inner w/ the selected
@@ -551,7 +559,7 @@ impl EchState {
         outer_hello: &ClientHelloPayload,
         retryreq: Option<&HelloRetryRequest>,
         psk: Option<&tls13::PresharedKeysRef<'_>>,
-    ) -> Vec<u8> {
+    ) -> Result<Vec<u8>, Error> {
         // Start building an inner hello using the outer_hello as a template.
         let mut inner_hello = ClientHelloPayload {
             // Some information is copied over as-is.
@@ -667,8 +675,11 @@ impl EchState {
             };
 
             // Retain the early key schedule we get from processing the binder.
-            self.early_data_key_schedule =
-                Some(psk.fill_in_binders(&self.inner_hello_transcript, &mut chp));
+            self.early_data_key_schedule = Some(psk.fill_in_binders(
+                &self.inner_hello_transcript,
+                &mut chp,
+                &*self.provider,
+            )?);
 
             // `fill_in_binders` works on an owned HandshakeMessagePayload, so we need to
             // extract our inner hello back out of it to retain ownership.
@@ -737,7 +748,7 @@ impl EchState {
         self.inner_hello_transcript
             .add_message(&inner_hello_msg);
 
-        encoded_hello
+        Ok(encoded_hello)
     }
 
     // See https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#name-grease-psk

@@ -109,6 +109,8 @@ pub(super) fn start_handshake(
 
     let mut resuming = find_session(&server_name, &config, cx);
 
+    // TODO(eric): not needed if we're using an external PSK w/o
+    // PSK_DHE_KE.
     let key_share = if config.supports_version(ProtocolVersion::TLSv1_3) {
         Some(tls13::initial_key_share(
             &config,
@@ -148,9 +150,12 @@ pub(super) fn start_handshake(
         .map(PresharedKeys::Resumption)
         .or_else(|| {
             if config.supports_version(ProtocolVersion::TLSv1_3) {
-                Some(PresharedKeys::External(
-                    config.preshared_keys.psks(&server_name),
-                ))
+                let psks = config.preshared_keys.psks(&server_name);
+                if psks.is_empty() {
+                    None
+                } else {
+                    Some(PresharedKeys::External(psks))
+                }
             } else {
                 None
             }
@@ -177,6 +182,7 @@ pub(super) fn start_handshake(
                 .has_certs(),
             config.provider.secure_random,
             config.enable_sni,
+            config.provider.clone(),
         )?),
         _ => None,
     };
@@ -495,6 +501,7 @@ fn emit_client_hello_for_retry(
                 config.provider.secure_random,
                 input.server_name.clone(),
                 &chp_payload,
+                config.provider.clone(),
             )),
             _ => None,
         });
@@ -539,19 +546,28 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(chp_payload),
     };
 
-    let tls13_early_key_schedule = tls13_psk.and_then(|psk| {
-        let hash = psk.early_data_hash(config)?;
-        let ks = match ech_state.as_mut() {
-            // If we're performing ECH and using a PSK, then the PSK binder will have been dealt with
-            // separately, and we need to take the early_data_key_schedule computed for the inner hello.
-            Some(ech_state) => ech_state.early_data_key_schedule.take(),
+    let tls13_early_key_schedule = tls13_psk
+        .and_then(|psk| {
+            let Some(hash) = psk.early_data_hash(config) else {
+                return None;
+            };
+            let ks = match ech_state.as_mut() {
+                // If we're performing ECH and using a PSK, then the PSK binder will have been dealt with
+                // separately, and we need to take the early_data_key_schedule computed for the inner hello.
+                Some(ech_state) => ech_state.early_data_key_schedule.take(),
 
-            // When we're not doing ECH and using a PSK, then the PSK binder need to be filled in as
-            // normal.
-            None => Some(psk.fill_in_binders(&transcript_buffer, &mut chp)),
-        };
-        ks.map(|ks| (hash, ks))
-    });
+                // When we're not doing ECH and using a PSK, then the PSK binder need to be filled in as
+                // normal.
+                None => {
+                    match psk.fill_in_binders(&transcript_buffer, &mut chp, &*config.provider) {
+                        Ok(ks) => Some(ks),
+                        Err(err) => return Some(Err(err)),
+                    }
+                }
+            };
+            ks.map(|ks| Ok((hash, ks)))
+        })
+        .transpose()?;
 
     let ch = Message {
         version: match retryreq {
@@ -657,7 +673,9 @@ fn prepare_preshared_keys<'a>(
     });
 
     if let Some(psk) = &tls13_psk {
-        psk.add_extension(config, cx, exts, doing_retry);
+        if !psk.add_extension(config, cx, exts, doing_retry) {
+            return None;
+        }
     } else if config.supports_version(ProtocolVersion::TLSv1_2)
         && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
     {
@@ -953,6 +971,19 @@ impl State<ClientConnectionData> for ExpectServerHello {
                         PresharedKeys::External(v) => Some(tls13::PresharedKeys::External(v)),
                     });
 
+                // We don't need to offer a key share if we're
+                // - only offering external PSKs, and
+                // - not offering PSK_DHE_KE
+                let offered_key_share = if matches!(psk, Some(tls13::PresharedKeys::External(_)))
+                    && !self
+                        .psk_modes
+                        .contains(&PSKKeyExchangeMode::PSK_DHE_KE)
+                {
+                    self.offered_key_share
+                } else {
+                    Some(self.offered_key_share.unwrap())
+                };
+
                 tls13::handle_server_hello(
                     self.input.config,
                     cx,
@@ -965,11 +996,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     transcript,
                     self.early_key_schedule,
                     self.input.hello,
-                    // We always send a key share when TLS 1.3 is enabled.
-                    //
-                    // TODO(eric): We don't need to send a key
-                    // share if we're using a PSK w/ PSK_KE.
-                    self.offered_key_share.unwrap(),
+                    offered_key_share,
                     self.input.sent_tls13_fake_ccs,
                     &m,
                     self.ech_state,
@@ -1319,14 +1346,6 @@ impl ClientSessionValue {
             Self::Tls13(v) => Some(v),
             #[cfg(feature = "tls12")]
             Self::Tls12(_) => None,
-        }
-    }
-
-    fn try_into_tls13(self) -> Result<persist::Tls13ClientSessionValue, Self> {
-        match self {
-            Self::Tls13(v) => Ok(v),
-            #[cfg(feature = "tls12")]
-            Self::Tls12(_) => Err(self),
         }
     }
 }

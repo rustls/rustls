@@ -764,7 +764,7 @@ impl PresharedKey {
 
         match self.hash_alg {
             SHA256 => 32,
-            SHA384 => 64,
+            SHA384 => 48,
         }
     }
 

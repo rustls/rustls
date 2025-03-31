@@ -222,10 +222,12 @@ mod client_hello {
         ) -> bool {
             let binder_plaintext = match &client_hello.payload {
                 MessagePayload::Handshake { parsed, encoded } => {
+                    std::println!("binders len = {}", parsed.total_binder_length());
                     &encoded.bytes()[..encoded.bytes().len() - parsed.total_binder_length()]
                 }
                 _ => unreachable!(),
             };
+            std::println!("binder_pt = {binder_plaintext:02x?}");
 
             let handshake_hash = self
                 .transcript
@@ -242,6 +244,8 @@ mod client_hello {
                 }
             };
 
+            std::println!("real = {:02x?}", real_binder.as_ref());
+            std::println!("cand = {:02x?}", binder);
             ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
         }
 
@@ -321,7 +325,7 @@ mod client_hello {
                 self.pre_shared_key(cx, chm, client_hello, psk_mode)?
             };
             if psk.is_none() && self.config.only_allow_preshared_keys {
-                // TODO(eric)
+                // TODO(eric): handle this.
             }
 
             // It's not really clear whether sending session
@@ -670,6 +674,7 @@ mod client_hello {
                 .zip(&psk_offer.binders)
                 .enumerate()
                 .find_map(|(i, (psk_id, binder))| {
+                    std::println!("checking psk at index={i}");
                     // TODO(eric): Instead of checking both
                     // resumption/external for each identity,
                     // should we update ServerConfig to allow
@@ -696,6 +701,7 @@ mod client_hello {
                         .load_psk(&psk_id.identity.0)
                         .filter(|psk| psk.is_compatible(self.suite.common.suite))
                     {
+                        std::println!("psk = {psk:?}");
                         let psk = PresharedKey::External(psk);
                         return Some((psk, i, binder));
                     };
@@ -707,6 +713,8 @@ mod client_hello {
                 // None of the offers were suitable.
                 return Ok(None);
             };
+
+            std::println!("index = {index}");
 
             // RFC 8446: "Prior to accepting PSK key
             // establishment, the server MUST validate the

@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error as StdError;
 use std::io::{Read, Write};
+use std::iter;
 use std::net::TcpListener;
 use std::str;
 use std::sync::Arc;
@@ -31,8 +32,6 @@ fn main() -> Result<(), Box<dyn StdError>> {
         let private_key_file = args
             .next()
             .expect("missing private key file argument");
-        let identity = args.next().expect("missing identity");
-        let secret = args.next().expect("missing secret");
 
         let certs = CertificateDer::pem_file_iter(cert_file)
             .unwrap()
@@ -46,11 +45,19 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 .with_single_cert(certs, private_key)?;
         config.preshared_keys = Arc::new({
             let mut keys = PresharedKeys::new();
-            for alg in [HashAlgorithm::SHA256, HashAlgorithm::SHA384] {
-                let psk = PresharedKey::external(identity.as_bytes(), secret.as_bytes())
-                    .unwrap()
-                    .with_hash_alg(alg);
-                keys.insert(psk);
+            let mut algs = [HashAlgorithm::SHA256, HashAlgorithm::SHA384]
+                .into_iter()
+                .cycle();
+            for psk in args {
+                let (identity, secret) = psk.split_once(':').unwrap();
+                let alg = algs.next().unwrap();
+                println!("ident = {identity} alg = {alg:?}");
+                keys.insert(
+                    PresharedKey::external(identity.as_bytes(), secret.as_bytes())
+                        .unwrap()
+                        .with_hash_alg(alg)
+                        .unwrap(),
+                );
             }
             keys
         });
@@ -157,13 +164,19 @@ impl PresharedKeys {
 
     fn insert(&mut self, psk: PresharedKey) {
         let identity = psk.identity().to_vec();
-        self.keys
-            .insert(identity, Arc::new(psk));
+        if self
+            .keys
+            .insert(identity, Arc::new(psk))
+            .is_some()
+        {
+            panic!("duplicate identity")
+        }
     }
 }
 
 impl rustls::server::SelectsPresharedKeys for PresharedKeys {
     fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
+        println!("loading identity = {}", str::from_utf8(identity).unwrap());
         self.keys.get(identity).cloned()
     }
 }

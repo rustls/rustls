@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -15,6 +16,7 @@ use crate::common_state::{
     CommonState, HandshakeFlightTls13, HandshakeKind, KxState, Protocol, Side, State,
 };
 use crate::conn::ConnectionRandoms;
+use crate::crypto::CryptoProvider;
 use crate::crypto::hash::Hash;
 use crate::crypto::{ActiveKeyExchange, PresharedKey, SharedSecret};
 use crate::enums::{
@@ -76,7 +78,7 @@ pub(super) fn handle_server_hello(
     mut transcript: HandshakeHash,
     early_key_schedule: Option<KeyScheduleEarly>,
     mut hello: ClientHelloDetails,
-    our_key_share: Box<dyn ActiveKeyExchange>,
+    our_key_share: Option<Box<dyn ActiveKeyExchange>>,
     mut sent_tls13_fake_ccs: bool,
     server_hello_msg: &Message<'_>,
     ech_state: Option<EchState>,
@@ -87,6 +89,19 @@ pub(super) fn handle_server_hello(
     if early_key_schedule.is_some() {
         let n = psk.as_ref().map(|psk| psk.len());
         debug_assert!(!matches!(n, None | Some(0)));
+    }
+
+    // We don't need to offer a key share if we're
+    // - only offering external PSKs, and
+    // - not offering PSK_DHE_KE
+    // TODO(eric): Express this with types.
+    if our_key_share.is_none() {
+        debug_assert!(psk.is_none() || psk_modes.contains(&PSKKeyExchangeMode::PSK_DHE_KE));
+    }
+
+    // If we sent PSKs then we must also send PSK modes.
+    if psk.is_some() {
+        debug_assert!(!psk_modes.is_empty());
     }
 
     validate_server_hello(cx.common, server_hello)?;
@@ -219,10 +234,10 @@ pub(super) fn handle_server_hello(
 
     let key_schedule_pre_handshake = match (early_key_schedule, &psk) {
         (Some(ks), Some(_)) => KeySchedulePreHandshake::from(ks),
-        // It shouldn't be possible for us to get here since.
-        // These are the possible call stacks:
+        // It shouldn't be possible for us to get here. These are
+        // the possible call stacks:
         //
-        // emit_client_hello_for_retry` ->
+        // emit_client_hello_for_retry ->
         //   ExpectServerHello::handle ->
         //     handle_server_hello
         //
@@ -284,6 +299,12 @@ pub(super) fn handle_server_hello(
 
     let mut key_schedule = {
         let secret = if let Some(their_key_share) = their_key_share {
+            let our_key_share = our_key_share.ok_or_else(|| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::InternalError,
+                    Error::General(String::from("TODO")),
+                )
+            })?;
             let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
                 .map_err(|_| {
                     cx.common.send_fatal_alert(
@@ -382,11 +403,6 @@ enum ChosenPresharedKey {
 }
 
 impl ChosenPresharedKey {
-    /// Is this [`PresharedKey::External`]?
-    fn is_external(&self) -> bool {
-        matches!(self, Self::External { .. })
-    }
-
     /// Returns the underlying secret.
     fn as_secret(&self) -> &[u8] {
         match self {
@@ -515,21 +531,27 @@ pub(crate) enum PresharedKeysRef<'a> {
 }
 
 impl PresharedKeysRef<'_> {
-    /// Returns the chosen cipher suite.
-    pub(super) fn suite(&self) -> Option<&'static Tls13CipherSuite> {
-        match self {
-            Self::Resumption(v) => Some(v.suite()),
-            Self::External(_) => None,
-        }
-    }
-
     /// This implements the horrifying TLS1.3 hack where PSK binders have a
     /// data dependency on the message they are contained within.
+    ///
+    /// If `self` is a resumption PSK, it returns the key
+    /// schedule using that PSk.
+    ///
+    /// If `self` is a set of external PSKs, it returns the key
+    /// schedule for the *first* PSK. If `self` is empty, it
+    /// returns `Ok(None)`.
+    ///
+    /// It is an error if `hmp` is not
+    /// [`HandshakePayload::ClientHello`].
+    ///
+    /// It is an error if the number of external PSKs does not
+    /// match the number of binders in `hmp`.
     pub(super) fn fill_in_binders(
         &self,
         transcript: &HandshakeHashBuffer,
         hmp: &mut HandshakeMessagePayload<'_>,
-    ) -> KeyScheduleEarly {
+        provider: &CryptoProvider,
+    ) -> Result<KeyScheduleEarly, Error> {
         match self {
             Self::Resumption(resuming) => {
                 // We need to know the hash function of the suite we're trying to resume into.
@@ -551,16 +573,78 @@ impl PresharedKeysRef<'_> {
                     ch.set_psk_binder(real_binder.as_ref());
                 };
 
-                key_schedule
+                Ok(key_schedule)
             }
-            Self::External(_) => {
-                todo!()
+            Self::External(ext) => {
+                if ext.is_empty() {
+                    return Err(Error::General(String::from(
+                        "`fill_in_binders` called without any external PSKs",
+                    )));
+                }
+
+                // The binder is calculated over the ClientHello,
+                // but doesn't include itself, its length, or the
+                // length of its container.
+                let binder_plaintext = hmp.encoding_for_binder_signing();
+                std::println!("binder_pt = {binder_plaintext:02x?}");
+
+                let HandshakePayload::ClientHello(ref mut ch) = hmp.payload else {
+                    return Err(Error::General(String::from("expected `ClientHello`")));
+                };
+                if ext.len() != ch.psk_binders_mut().len() {
+                    return Err(Error::General(String::from(
+                        "mismatched PSK/binders lengths",
+                    )));
+                }
+
+                let mut key_schedule = None;
+                for (psk, binder) in ext.iter().zip(ch.psk_binders_mut()) {
+                    let want = psk.hash_alg();
+
+                    // TODO(eric): This is a little silly. Maybe
+                    // we should make `crypto::PresharedKey` take
+                    // `&'static dyn Hash` instead of taking
+                    // a `HashAlgorithm`?
+                    let suite = provider
+                        .cipher_suites
+                        .iter()
+                        .find_map(|&suite| {
+                            let SupportedCipherSuite::Tls13(suite) = suite else {
+                                return None;
+                            };
+                            if suite.common.hash_provider.algorithm() != want {
+                                None
+                            } else {
+                                Some(suite)
+                            }
+                        })
+                        .ok_or_else(|| {
+                            // We shouldn't ever get here: we
+                            // should've already checked that we
+                            // have providers for each PSK we
+                            // want to advertise to the server.
+                            Error::General(String::from("unable to find suite for binder"))
+                        })?;
+                    let suite_hash = suite.common.hash_provider;
+
+                    let handshake_hash = transcript.hash_given(suite_hash, &binder_plaintext);
+
+                    let ks = KeyScheduleEarly::new(suite, psk.secret());
+                    let real_binder =
+                        ks.external_psk_binder_key_and_sign_verify_data(&handshake_hash);
+                    *binder = PresharedKeyBinder::from(real_binder.as_ref().to_vec());
+                    if key_schedule.is_none() {
+                        key_schedule = Some(ks);
+                    }
+                }
+
+                key_schedule.ok_or_else(|| Error::General(String::from("`key_schedule` is `None`")))
             }
         }
     }
 
-    /// Adds the "pre_shared_key" extension to `exts` (if necessary)
-    /// and reports whether the extension was added.
+    /// Adds the "pre_shared_key" extension to `exts` (if
+    /// necessary) and reports whether the extension was added.
     #[must_use]
     pub(super) fn add_extension(
         &self,
@@ -572,8 +656,10 @@ impl PresharedKeysRef<'_> {
         debug_assert!(config.supports_version(ProtocolVersion::TLSv1_3));
 
         let Some(offer) = self.offer(cx) else {
+            // No offers.
             return false;
         };
+        std::println!("offer = {offer:?}");
         exts.push(ClientExtension::PresharedKey(offer));
 
         // RFC 8446: "When a PSK is used and early data is
@@ -628,10 +714,19 @@ impl PresharedKeysRef<'_> {
                 }
                 let offer = PresharedKeyOffer::from_iter(psks.iter().map(|psk| {
                     let ident = PresharedKeyIdentity::external(psk.identity().to_vec());
-                    // Later code fills in the actual value of
-                    // the binder because the binder value
-                    // depends on the message it's inside of. So,
-                    // just use zeros.
+                    // Later code calls `fill_in_binders` to
+                    // replace the actual value of the binder
+                    // because the binder value depends on the
+                    // message it's inside of. However, we need
+                    // to use correctly sized binders (even
+                    // though `fill_in_binders` re-allocates the
+                    // binder...) because
+                    // `HandshakeMessagePayload::encoding_for_binder_signing`
+                    // needs to know the binder lengths to
+                    // correctly truncate the payload.
+                    //
+                    // TODO(eric): There really isn't a reason to
+                    // allocate. Fix this.
                     let binder = {
                         let size = psk.binder_size();
                         PresharedKeyBinder::from(vec![0; size])
@@ -902,7 +997,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                     ech_retry_configs,
                 }))
             }
-            Some(ChosenPresharedKey::External { psk, .. }) => {
+            Some(ChosenPresharedKey::External { .. }) => {
                 let was_early_traffic = cx.common.early_traffic;
                 if was_early_traffic {
                     if exts.early_data_extension_offered() {
@@ -919,15 +1014,12 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         .set_handshake_encrypter(cx.common);
                 }
 
-                cx.common.peer_certificates = Some(
-                    resuming_session
-                        .server_cert_chain()
-                        .clone(),
-                );
+                // TODO(eric): should this be a different
+                // variant?
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
 
-                // We *don't* reverify the certificate chain here: resumption is a
-                // continuation of the previous session in terms of security policy.
+                // We *don't* verify the certificate chain here:
+                // we're using a PSK, not a certificate.
                 let cert_verified = verify::ServerCertVerified::assertion();
                 let sig_verified = verify::HandshakeSignatureValid::assertion();
                 Ok(Box::new(ExpectFinished {

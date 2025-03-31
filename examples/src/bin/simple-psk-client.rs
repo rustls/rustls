@@ -14,8 +14,6 @@ fn main() {
 
     let mut args = env::args();
     args.next();
-    let identity = args.next().expect("missing identity");
-    let secret = args.next().expect("missing secret");
 
     let root_store = rustls::RootCertStore::from_iter(
         webpki_roots::TLS_SERVER_ROOTS
@@ -31,11 +29,20 @@ fn main() {
             .with_no_client_auth();
     config.preshared_keys = Arc::new({
         let mut keys = PresharedKeys::new();
-        for alg in [HashAlgorithm::SHA256, HashAlgorithm::SHA384] {
-            let psk = PresharedKey::external(identity.as_bytes(), secret.as_bytes())
-                .unwrap()
-                .with_hash_alg(alg);
-            keys.insert(server_name.try_into().unwrap(), psk);
+        let mut algs = [HashAlgorithm::SHA256, HashAlgorithm::SHA384]
+            .into_iter()
+            .cycle();
+        for psk in args {
+            let (identity, secret) = psk.split_once(':').unwrap();
+            let alg = algs.next().unwrap();
+            println!("ident = {identity} alg = {alg:?}");
+            keys.insert(
+                server_name.try_into().unwrap(),
+                PresharedKey::external(identity.as_bytes(), secret.as_bytes())
+                    .unwrap()
+                    .with_hash_alg(alg)
+                    .unwrap(),
+            );
         }
         keys
     });
@@ -86,13 +93,23 @@ impl PresharedKeys {
         let psk = Arc::new(psk);
         self.keys
             .entry(server_name.to_owned())
-            .and_modify(|e| e.push(psk.clone()))
+            .and_modify(|e| {
+                if e.iter()
+                    .any(|v| v.identity() == psk.identity())
+                {
+                    panic!("duplicate identity: {:02x?}", psk.identity())
+                }
+                e.push(psk.clone())
+            })
             .or_insert_with(|| vec![psk.clone()]);
     }
 }
 
 impl rustls::client::PresharedKeyStore for PresharedKeys {
     fn psks(&self, server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>> {
-        self.keys.get(server_name).cloned()
+        self.keys
+            .get(server_name)
+            .cloned()
+            .unwrap_or_default()
     }
 }
