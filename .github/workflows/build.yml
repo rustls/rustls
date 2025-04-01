@@ -56,6 +56,12 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
 
+      - name: Install Cmake 3.x on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
+
       - name: Install NASM for aws-lc-rs on Windows
         if: runner.os == 'Windows'
         uses: ilammy/setup-nasm@v1
@@ -129,6 +135,11 @@ jobs:
         with:
           toolchain: "1.71"
 
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
+
       # zlib-rs is optional and requires a later MSRV
       - run: cargo check --locked --lib $(admin/all-features-except zlib rustls) -p rustls
 
@@ -151,6 +162,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           target: x86_64-unknown-none
+
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
 
       - name: cargo build (debug; default features)
         run: cargo build --locked
@@ -203,6 +219,11 @@ jobs:
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
 
       - name: Install golang toolchain
         uses: actions/setup-go@v5
@@ -270,6 +291,11 @@ jobs:
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@nightly
 
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
+
       - name: Smoke-test benchmark program (ring)
         run: cargo run -p rustls-bench --profile=bench --locked --features ring -- --multiplier 0.1
 
@@ -296,6 +322,11 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
+
       - name: cargo doc (rustls; all features)
         run: cargo doc --locked --all-features --no-deps --document-private-items --package rustls
         env:
@@ -321,6 +352,11 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools
+
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/cache-cargo-install-action@v2
@@ -414,6 +450,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
+
       - name: Check semver
         uses: obi1kenobi/cargo-semver-checks-action@v2
 
@@ -472,6 +513,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
+
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -495,6 +541,11 @@ jobs:
       - name: Install valgrind
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y valgrind
+
+      - name: Install Cmake 3.x
+        run: |
+          sudo apt-get install cmake=3.28.3-1build7
+          sudo ln -sf /usr/bin/cmake /usr/local/bin/cmake
 
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
