@@ -6201,7 +6201,7 @@ fn test_server_rejects_duplicate_sni_names() {
             typ: ExtensionType::ServerName,
             body: encoding::len_u16(body),
         },
-        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
+        Error::InvalidMessage(InvalidMessage::InvalidServerName),
     );
 }
 

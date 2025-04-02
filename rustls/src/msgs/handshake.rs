@@ -27,10 +27,10 @@ use crate::msgs::enums::{
     ECPointFormat, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest,
     NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
+use crate::rand;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 use crate::x509::wrap_in_sequence;
-use crate::{PeerMisbehaved, rand};
 
 /// Create a newtype wrapper around a given type.
 ///
@@ -219,15 +219,114 @@ impl TlsListElement for SignatureScheme {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// Lossy decoding for a `ServerName` extension to a single `DnsName`
 #[derive(Clone, Debug)]
-pub(crate) enum ServerNamePayload {
-    HostName(DnsName<'static>),
-    IpAddress(PayloadU16),
-    Unknown(Payload<'static>),
+pub(crate) enum LossyDnsName<'a> {
+    /// A successfully decoded value:
+    SingleDnsName(DnsName<'a>),
+
+    /// A DNS name which was actually an IP address
+    IpAddress,
+
+    /// A successfully decoded, but syntactically-invalid value.
+    Invalid,
 }
 
-impl ServerNamePayload {
-    fn read_hostname(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+impl LossyDnsName<'_> {
+    fn to_owned(&self) -> LossyDnsName<'static> {
+        match self {
+            Self::SingleDnsName(d) => LossyDnsName::SingleDnsName(d.to_owned()),
+            Self::IpAddress => LossyDnsName::IpAddress,
+            Self::Invalid => LossyDnsName::Invalid,
+        }
+    }
+}
+
+/// Simplified encoding/decoding for a `ServerName` extension payload to/from `DnsName`
+///
+/// This is possible because:
+///
+/// - the spec (RFC6066) disallows multiple names for a given name type
+/// - name types other than ServerNameType::HostName are not defined, and they and
+///   any data that follows them cannot be skipped over.
+impl<'a> Codec<'a> for LossyDnsName<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let server_name_list = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+
+        if let LossyDnsName::SingleDnsName(dns_name) = self {
+            ServerNameType::HostName.encode(server_name_list.buf);
+            let name_slice = dns_name.as_ref().as_bytes();
+            (name_slice.len() as u16).encode(server_name_list.buf);
+            server_name_list
+                .buf
+                .extend_from_slice(name_slice);
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let mut found = None;
+
+        let len = usize::from(u16::read(r)?);
+        let mut sub = r.sub(len)?;
+
+        while sub.any_left() {
+            let typ = ServerNameType::read(&mut sub)?;
+
+            let payload = match typ {
+                ServerNameType::HostName => HostNamePayload::read(&mut sub)?,
+                _ => {
+                    // Consume remainder of extension bytes.  Since the length of the item
+                    // is an unknown encoding, we cannot continue.
+                    sub.rest();
+                    break;
+                }
+            };
+
+            match payload {
+                // "The ServerNameList MUST NOT contain more than one name of
+                // the same name_type." - RFC6066
+                HostNamePayload::HostName(_) | HostNamePayload::IpAddress(_) => {
+                    if found.is_some() {
+                        warn!("Illegal SNI extension: duplicate host_name received");
+                        return Err(InvalidMessage::InvalidServerName);
+                    }
+                }
+            }
+
+            match payload {
+                HostNamePayload::HostName(dns_name) => {
+                    found = Some(Self::SingleDnsName(dns_name.to_owned()));
+                }
+
+                // Skip over hostname items that are actually IP addresses.
+                HostNamePayload::IpAddress(_invalid) => {
+                    warn!(
+                        "Illegal SNI extension: ignoring IP address presented as hostname ({:?})",
+                        _invalid
+                    );
+                    found = Some(Self::IpAddress);
+                }
+            }
+        }
+
+        Ok(found.unwrap_or(Self::Invalid))
+    }
+}
+
+impl<'a> From<&DnsName<'a>> for LossyDnsName<'static> {
+    fn from(value: &DnsName<'a>) -> Self {
+        Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum HostNamePayload {
+    HostName(DnsName<'static>),
+    IpAddress(PayloadU16),
+}
+
+impl HostNamePayload {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         use pki_types::ServerName;
         let raw = PayloadU16::read(r)?;
 
@@ -243,54 +342,6 @@ impl ServerNamePayload {
             }
         }
     }
-
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        match self {
-            Self::HostName(name) => {
-                (name.as_ref().len() as u16).encode(bytes);
-                bytes.extend_from_slice(name.as_ref().as_bytes());
-            }
-            Self::IpAddress(r) => r.encode(bytes),
-            Self::Unknown(r) => r.encode(bytes),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ServerName {
-    pub(crate) typ: ServerNameType,
-    pub(crate) payload: ServerNamePayload,
-}
-
-impl ServerName {
-    pub(crate) fn from_dns_name(dns_name: &DnsName<'_>) -> Vec<Self> {
-        vec![Self {
-            typ: ServerNameType::HostName,
-            payload: ServerNamePayload::HostName(trim_hostname_trailing_dot_for_sni(dns_name)),
-        }]
-    }
-}
-
-impl Codec<'_> for ServerName {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        self.payload.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = ServerNameType::read(r)?;
-
-        let payload = match typ {
-            ServerNameType::HostName => ServerNamePayload::read_hostname(r)?,
-            _ => ServerNamePayload::Unknown(Payload::read(r).into_owned()),
-        };
-
-        Ok(Self { typ, payload })
-    }
-}
-
-impl TlsListElement for ServerName {
-    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 wrapped_payload!(pub struct ProtocolName, PayloadU8,);
@@ -564,8 +615,16 @@ extension_struct! {
     /// Unknown extensions are dropped during parsing.
     pub struct ClientExtensions<'a> {
         /// Requested server name indication (RFC6066)
+        ///
+        /// The standard only supports DNS-type names, and only one name of
+        /// each type.  When parsing, unrecognised name types are discarded,
+        /// and duplicate DNS-type names cause an error.
+        ///
+        /// Syntactically-invalid DNS names also cause an error, unless they
+        /// are recognised as an IP address -- these are silently dropped to
+        /// work-around <https://github.com/openssl/openssl/issues/20041>
         ExtensionType::ServerName =>
-            pub(crate) server_name: Option<Vec<ServerName>>,
+            pub(crate) server_name: Option<LossyDnsName<'a>>,
 
         /// Certificate status is requested (RFC6066)
         ExtensionType::StatusRequest =>
@@ -693,7 +752,7 @@ impl ClientExtensions<'_> {
             contiguous_extensions,
         } = self;
         ClientExtensions {
-            server_name,
+            server_name: server_name.map(|x| x.to_owned()),
             certificate_status_request,
             named_groups,
             ec_point_formats,
@@ -718,32 +777,6 @@ impl ClientExtensions<'_> {
             encrypted_client_hello_outer,
             order_seed,
             contiguous_extensions,
-        }
-    }
-
-    pub(crate) fn server_name_single_dns_name(
-        &self,
-    ) -> Result<Option<&DnsName<'_>>, PeerMisbehaved> {
-        match self.server_name.as_deref() {
-            Some(
-                [
-                    ServerName {
-                        typ: ServerNameType::HostName,
-                        payload: ServerNamePayload::HostName(dns_name),
-                    },
-                ],
-            ) => Ok(Some(dns_name)),
-            // Ignore IP address entries
-            Some(
-                [
-                    ServerName {
-                        typ: ServerNameType::HostName,
-                        payload: ServerNamePayload::IpAddress(_),
-                    },
-                ],
-            ) => Ok(None),
-            Some(_) => Err(PeerMisbehaved::ServerNameMustContainOneHostName),
-            _ => Ok(None),
         }
     }
 

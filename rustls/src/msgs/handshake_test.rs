@@ -25,7 +25,7 @@ use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::InvalidMessage;
-use crate::msgs::handshake::ServerName;
+use crate::msgs::handshake::LossyDnsName;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 
@@ -160,27 +160,35 @@ fn refuses_new_session_ticket_ext_with_unparsed_bytes() {
 }
 
 #[test]
+fn parses_unknown_sni_type() {
+    let mut reader = Reader::init(&[0, 3, 1, 2, 3]);
+    let name = LossyDnsName::read(&mut reader).unwrap();
+    assert!(matches!(name, LossyDnsName::Invalid));
+    assert!(!reader.any_left());
+}
+
+#[test]
 fn rejects_truncated_sni() {
     let bytes = [0, 1, 0];
-    assert!(Vec::<ServerName>::read(&mut Reader::init(&bytes)).is_err());
+    assert!(LossyDnsName::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 2, 0, 1];
-    assert!(Vec::<ServerName>::read(&mut Reader::init(&bytes)).is_err());
+    assert!(LossyDnsName::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 3, 0, 1, 0];
-    assert!(Vec::<ServerName>::read(&mut Reader::init(&bytes)).is_err());
+    assert!(LossyDnsName::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 4, 0, 2, 0, 0];
-    assert!(Vec::<ServerName>::read(&mut Reader::init(&bytes)).is_err());
+    assert!(LossyDnsName::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 5, 0, 3, 0, 0, 0];
-    assert!(Vec::<ServerName>::read(&mut Reader::init(&bytes)).is_err());
+    assert!(LossyDnsName::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 5, 0, 3, 0, 0, 1];
-    assert!(Vec::<ServerName>::read(&mut Reader::init(&bytes)).is_err());
+    assert!(LossyDnsName::read(&mut Reader::init(&bytes)).is_err());
 
     let bytes = [0, 6, 0, 4, 0, 0, 2, 0x68];
-    assert!(Vec::<ServerName>::read(&mut Reader::init(&bytes)).is_err());
+    assert!(LossyDnsName::read(&mut Reader::init(&bytes)).is_err());
 }
 
 #[test]
@@ -867,9 +875,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
         extensions: Box::new(ClientExtensions {
-            server_name: Some(ServerName::from_dns_name(
-                &DnsName::try_from("hello").unwrap(),
-            )),
+            server_name: Some((&DnsName::try_from("hello").unwrap()).into()),
             cookie: Some(PayloadU16(vec![1, 2, 3])),
             signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             session_ticket: Some(ClientSessionTicket::Request),

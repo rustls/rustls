@@ -21,8 +21,8 @@ use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, ConvertProtocolNameList, HandshakePayload, KeyExchangeAlgorithm, Random,
-    ServerExtension,
+    ClientHelloPayload, ConvertProtocolNameList, HandshakePayload, KeyExchangeAlgorithm,
+    LossyDnsName, Random, ServerExtension,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -140,12 +140,9 @@ impl ExtensionProcessing {
 
         let for_resume = resumedata.is_some();
         // SNI
-        if let (false, Ok(Some(_))) = (
-            for_resume,
-            &hello
-                .extensions
-                .server_name_single_dns_name(),
-        ) {
+        if let (false, Some(LossyDnsName::SingleDnsName(_))) =
+            (for_resume, &hello.extensions.server_name)
+        {
             self.exts
                 .push(ServerExtension::ServerNameAck);
         }
@@ -725,10 +722,18 @@ pub(super) fn process_client_hello<'m>(
     // send an Illegal Parameter alert instead of the Internal Error alert
     // (or whatever) that we'd send if this were checked later or in a
     // different way.
-    let sni = client_hello
-        .extensions
-        .server_name_single_dns_name()?
-        .map(DnsName::to_lowercase_owned);
+
+    let sni = match &client_hello.extensions.server_name {
+        Some(LossyDnsName::SingleDnsName(dns_name)) => Some(dns_name.to_lowercase_owned()),
+        Some(LossyDnsName::IpAddress) => None,
+        Some(LossyDnsName::Invalid) => {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::ServerNameMustContainOneHostName,
+            ));
+        }
+        None => None,
+    };
 
     // save only the first SNI
     if let (Some(sni), false) = (&sni, done_retry) {
