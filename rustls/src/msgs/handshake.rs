@@ -218,6 +218,85 @@ impl TlsListElement for SignatureScheme {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// Lossy decoding for a `ServerName` extension to a single `DnsName`
+#[derive(Clone, Debug)]
+pub(crate) enum LossyDnsName<'a> {
+    SingleDnsName(DnsName<'a>),
+    Invalid,
+}
+
+impl<'a> LossyDnsName<'a> {
+    pub(crate) fn dns_name(&self) -> Option<DnsName<'a>> {
+        match self {
+            Self::SingleDnsName(d) => Some(d.clone()),
+            Self::Invalid => None,
+        }
+    }
+
+    fn to_owned(&self) -> LossyDnsName<'static> {
+        match self {
+            Self::SingleDnsName(d) => LossyDnsName::SingleDnsName(d.to_owned()),
+            Self::Invalid => LossyDnsName::Invalid,
+        }
+    }
+}
+
+/// Simplified encoding/decoding for a `ServerName` extension payload to/from `DnsName`
+///
+/// This is possible because:
+///
+/// - the spec (RFC6066) disallows multiple names for a given name type
+/// - name types other than ServerNameType::HostName are not defined, and so tend not
+///   to be used (and can be discarded during decoding)
+impl<'a> Codec<'a> for LossyDnsName<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let server_name_list = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+
+        if let LossyDnsName::SingleDnsName(dns_name) = self {
+            ServerNameType::HostName.encode(server_name_list.buf);
+            let name_slice = dns_name.as_ref().as_bytes();
+            (name_slice.len() as u16).encode(server_name_list.buf);
+            server_name_list
+                .buf
+                .extend_from_slice(name_slice);
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        // TODO: stream from `r` into iteration below
+        let names = Vec::<ServerName>::read(r)?;
+
+        let mut found_dns_name = Self::Invalid;
+
+        for n in names {
+            match n.payload {
+                ServerNamePayload::HostName(dns_name) => {
+                    // "The ServerNameList MUST NOT contain more than one name of
+                    // the same name_type." - RFC6066
+                    if let Self::SingleDnsName(_) = found_dns_name {
+                        warn!("Illegal SNI extension: duplicate host_name received");
+                        return Err(InvalidMessage::InvalidServerName);
+                    }
+
+                    found_dns_name = Self::SingleDnsName(dns_name.to_owned());
+                }
+
+                // Skip over hostname items that are actually IP addresses,
+                // and items of other types.
+                ServerNamePayload::IpAddress(_) | ServerNamePayload::Unknown(_) => {}
+            }
+        }
+
+        Ok(found_dns_name)
+    }
+}
+
+impl<'a> From<&DnsName<'a>> for LossyDnsName<'static> {
+    fn from(value: &DnsName<'a>) -> Self {
+        Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum ServerNamePayload {
     HostName(DnsName<'static>),
@@ -558,8 +637,16 @@ extension_struct! {
     /// Unknown extensions are dropped during parsing.
     pub(crate) struct ClientExtensions<'a> {
         /// Requested server name indication (RFC6066)
+        ///
+        /// The standard only supports DNS-type names, and only one name of
+        /// each type.  When parsing, unrecognised name types are discarded,
+        /// and duplicate DNS-type names cause an error.
+        ///
+        /// Syntactically-invalid DNS names also cause an error, unless they
+        /// are recognised as an IP address -- these are silently dropped to
+        /// work-around <https://github.com/openssl/openssl/issues/20041>
         ExtensionType::ServerName =>
-            pub(crate) server_name: Option<Vec<ServerName>>,
+            pub(crate) server_name: Option<LossyDnsName<'a>>,
 
         /// Certificate status is requested (RFC6066)
         ExtensionType::StatusRequest =>
@@ -687,7 +774,7 @@ impl ClientExtensions<'_> {
             contiguous_extensions,
         } = self;
         ClientExtensions {
-            server_name,
+            server_name: server_name.map(|x| x.to_owned()),
             certificate_status_request,
             named_groups,
             ec_point_formats,
