@@ -401,7 +401,7 @@ mod test_raw_keys {
             }
             Payload::new(parsed.get_encoding())
         } else {
-            panic!("Expected to succesfully encode handshake message");
+            panic!("Expected to successfully encode handshake message");
         };
 
         // // Re-encrypt
