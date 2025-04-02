@@ -222,7 +222,10 @@ impl TlsListElement for SignatureScheme {
 /// Lossy decoding for a `ServerName` extension to a single `DnsName`
 #[derive(Clone, Debug)]
 pub(crate) enum LossyDnsName<'a> {
+    /// A successfully decoded value:
     SingleDnsName(DnsName<'a>),
+
+    /// A successfully decoded, but syntactically-invalid value.
     Invalid,
 }
 
@@ -264,14 +267,26 @@ impl<'a> Codec<'a> for LossyDnsName<'a> {
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        // TODO: stream from `r` into iteration below
-        let names = Vec::<ServerName>::read(r)?;
-
         let mut found_dns_name = Self::Invalid;
 
-        for n in names {
-            match n.payload {
-                ServerNamePayload::HostName(dns_name) => {
+        let len = usize::from(u16::read(r)?);
+        let mut sub = r.sub(len)?;
+
+        while sub.any_left() {
+            let typ = ServerNameType::read(&mut sub)?;
+
+            let payload = match typ {
+                ServerNameType::HostName => HostNamePayload::read(&mut sub)?,
+                _ => {
+                    // Consume remainder of extension bytes.  Since the length of the item
+                    // is an unknown encoding, we cannot continue.
+                    sub.rest();
+                    break;
+                }
+            };
+
+            match payload {
+                HostNamePayload::HostName(dns_name) => {
                     // "The ServerNameList MUST NOT contain more than one name of
                     // the same name_type." - RFC6066
                     if let Self::SingleDnsName(_) = found_dns_name {
@@ -282,9 +297,13 @@ impl<'a> Codec<'a> for LossyDnsName<'a> {
                     found_dns_name = Self::SingleDnsName(dns_name.to_owned());
                 }
 
-                // Skip over hostname items that are actually IP addresses,
-                // and items of other types.
-                ServerNamePayload::IpAddress(_) | ServerNamePayload::Unknown(_) => {}
+                // Skip over hostname items that are actually IP addresses.
+                HostNamePayload::IpAddress(_invalid) => {
+                    warn!(
+                        "Illegal SNI extension: ignoring IP address presented as hostname ({:?})",
+                        _invalid
+                    );
+                }
             }
         }
 
@@ -299,14 +318,13 @@ impl<'a> From<&DnsName<'a>> for LossyDnsName<'static> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum ServerNamePayload {
+pub(crate) enum HostNamePayload {
     HostName(DnsName<'static>),
     IpAddress(PayloadU16),
-    Unknown(Payload<'static>),
 }
 
-impl ServerNamePayload {
-    fn read_hostname(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+impl HostNamePayload {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         use pki_types::ServerName;
         let raw = PayloadU16::read(r)?;
 
@@ -322,45 +340,6 @@ impl ServerNamePayload {
             }
         }
     }
-
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        match self {
-            Self::HostName(name) => {
-                (name.as_ref().len() as u16).encode(bytes);
-                bytes.extend_from_slice(name.as_ref().as_bytes());
-            }
-            Self::IpAddress(r) => r.encode(bytes),
-            Self::Unknown(r) => r.encode(bytes),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ServerName {
-    pub(crate) typ: ServerNameType,
-    pub(crate) payload: ServerNamePayload,
-}
-
-impl Codec<'_> for ServerName {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        self.payload.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = ServerNameType::read(r)?;
-
-        let payload = match typ {
-            ServerNameType::HostName => ServerNamePayload::read_hostname(r)?,
-            _ => ServerNamePayload::Unknown(Payload::read(r).into_owned()),
-        };
-
-        Ok(Self { typ, payload })
-    }
-}
-
-impl TlsListElement for ServerName {
-    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 wrapped_payload!(pub struct ProtocolName, PayloadU8,);
