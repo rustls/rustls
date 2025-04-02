@@ -30,7 +30,6 @@ use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode,
 };
 use crate::msgs::handshake::EncryptedClientHello;
-use crate::msgs::handshake::ServerName as SniServerName;
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsTemplate, ClientHelloPayload,
     ClientSessionTicket, ConvertProtocolNameList, HandshakeMessagePayload, HandshakePayload,
@@ -307,13 +306,13 @@ fn emit_client_hello_for_retry(
         // as the SNI domain name. This happens unconditionally so we ignore the
         // `enable_sni` value. That will be used later to decide what to do for
         // the protected inner hello's SNI.
-        (Some(ech_state), _) => Some(SniServerName::from_dns_name(&ech_state.outer_name)),
+        (Some(ech_state), _) => Some((&ech_state.outer_name).into()),
 
         // If we have no ECH state, and SNI is enabled, try to use the input server_name
         // for the SNI domain name.
         (None, true) => {
             if let ServerName::DnsName(dns_name) = &input.server_name {
-                Some(SniServerName::from_dns_name(dns_name))
+                Some(dns_name.into())
             } else {
                 None
             }
