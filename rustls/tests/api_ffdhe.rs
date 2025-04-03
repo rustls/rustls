@@ -3,12 +3,12 @@
 #![allow(clippy::duplicate_mod)]
 
 mod common;
+use core::ops::ControlFlow;
+
 use common::*;
 use rustls::crypto::CryptoProvider;
-use rustls::internal::msgs::base::Payload;
-use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::handshake::HandshakePayload;
-use rustls::internal::msgs::message::{Message, MessagePayload};
+use rustls::internal::msgs::enums::ExtensionType;
+use rustls::internal::msgs::message::Message;
 use rustls::version::{TLS12, TLS13};
 use rustls::{CipherSuite, ClientConfig, NamedGroup};
 
@@ -74,13 +74,12 @@ fn ffdhe_ciphersuite() {
 #[test]
 fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
     fn clear_named_groups_ext(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                ch.extensions.named_groups = Some(vec![]);
+        edit_client_hello_extensions(msg, |ext, body| match ext {
+            ExtensionType::EllipticCurves => {
+                ControlFlow::Continue(Some(encoding::len_u16(encoding::len_u16(vec![]))))
             }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
+            _ => ControlFlow::Continue(Some(body)),
+        })
     }
 
     let client_config = finish_client_config(
@@ -105,13 +104,10 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() 
 #[test]
 fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
     fn remove_named_groups_ext(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                ch.extensions.named_groups.take();
-            }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
+        edit_client_hello_extensions(msg, |ext, body| match ext {
+            ExtensionType::EllipticCurves => ControlFlow::Continue(None),
+            _ => ControlFlow::Continue(Some(body)),
+        })
     }
 
     let client_config = finish_client_config(
@@ -192,13 +188,10 @@ fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() 
 #[test]
 fn server_accepts_client_with_no_ecpoints_extension_and_only_ffdhe_cipher_suites() {
     fn remove_ecpoints_ext(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                ch.extensions.ec_point_formats.take();
-            }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
+        edit_client_hello_extensions(msg, |ext, body| match ext {
+            ExtensionType::ECPointFormats => ControlFlow::Continue(None),
+            _ => ControlFlow::Continue(Some(body)),
+        })
     }
 
     let client_config = finish_client_config(
