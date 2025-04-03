@@ -15,7 +15,7 @@ use super::handshake::{
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
     EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
+    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, NewSessionTicketExtension,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
     PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
     ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
@@ -144,13 +144,6 @@ fn refuses_certificate_req_ext_with_unparsed_bytes() {
     let bytes = [0x00u8, 0x0d, 0x00, 0x05, 0x00, 0x02, 0x01, 0x02, 0xff];
     let mut rd = Reader::init(&bytes);
     assert!(CertReqExtension::read(&mut rd).is_err());
-}
-
-#[test]
-fn refuses_helloreq_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x2b, 0x00, 0x03, 0x00, 0x00, 0x01];
-    let mut rd = Reader::init(&bytes);
-    assert!(HelloRetryExtension::read(&mut rd).is_err());
 }
 
 #[test]
@@ -475,66 +468,22 @@ fn test_truncated_client_extension_is_detected() {
 fn test_truncated_hello_retry_extension_is_detected() {
     let hrr = sample_hello_retry_request();
 
-    for ext in &hrr.extensions {
-        let mut enc = ext.get_encoding();
-        println!("testing {ext:?} enc {enc:?}");
+    let mut enc = hrr.extensions.get_encoding();
+    println!("testing enc {:?}", enc);
 
-        // "outer" truncation, i.e., where the extension-level length is longer than
-        // the input
-        for l in 0..enc.len() {
-            assert!(HelloRetryExtension::read_bytes(&enc[..l]).is_err());
-        }
-
-        // these extension types don't have any internal encoding that rustls validates:
-        if let ExtensionType::Unknown(_) = ext.ext_type() {
-            continue;
-        }
-
-        // "inner" truncation, where the extension-level length agrees with the input
-        // length, but isn't long enough for the type of extension
-        for l in 0..(enc.len() - 4) {
-            put_u16(l as u16, &mut enc[2..]);
-            println!("  encoding {enc:?} len {l:?}");
-            assert!(HelloRetryExtension::read_bytes(&enc).is_err());
-        }
+    // "outer" truncation, i.e., where the extension-level length is longer than
+    // the input
+    for l in 0..enc.len() {
+        assert!(HelloRetryRequestExtensions::read_bytes(&enc[..l]).is_err());
     }
-}
 
-#[test]
-fn hello_retry_requested_key_share_group() {
-    test_hello_retry_extension_getter(ExtensionType::KeyShare, |hrr| {
-        hrr.requested_key_share_group()
-            .is_some()
-    });
-}
-
-#[test]
-fn hello_retry_cookie() {
-    test_hello_retry_extension_getter(ExtensionType::Cookie, |hrr| hrr.cookie().is_some());
-}
-
-#[test]
-fn hello_retry_supported_versions() {
-    test_hello_retry_extension_getter(ExtensionType::SupportedVersions, |hrr| {
-        hrr.supported_versions().is_some()
-    });
-}
-
-fn test_hello_retry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRequest) -> bool) {
-    let mut hrr = sample_hello_retry_request();
-    let mut exts = core::mem::take(&mut hrr.extensions);
-    exts.retain(|ext| ext.ext_type() == typ);
-
-    assert!(!getter(&hrr));
-
-    hrr.extensions = exts;
-    assert!(getter(&hrr));
-
-    hrr.extensions = vec![HelloRetryExtension::Unknown(UnknownExtension {
-        typ,
-        payload: Payload::Borrowed(&[]),
-    })];
-    assert!(!getter(&hrr));
+    // "inner" truncation, where the extension-level length agrees with the input
+    // length, but isn't long enough for the type of extension
+    for l in 0..(enc.len() - 4) {
+        put_u16(l as u16, &mut enc);
+        println!("  encoding {:?} len {:?}", enc, l);
+        assert!(HelloRetryRequestExtensions::read_bytes(&enc).is_err());
+    }
 }
 
 #[test]
@@ -856,15 +805,13 @@ fn sample_hello_retry_request() -> HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
         session_id: SessionId::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
-        extensions: vec![
-            HelloRetryExtension::KeyShare(NamedGroup::X25519),
-            HelloRetryExtension::Cookie(PayloadU16::new(vec![0])),
-            HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
-            HelloRetryExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
-                payload: Payload::Borrowed(&[1, 2, 3]),
-            }),
-        ],
+        extensions: HelloRetryRequestExtensions {
+            key_share: Some(NamedGroup::X25519),
+            cookie: Some(PayloadU16::new(vec![0])),
+            supported_versions: Some(ProtocolVersion::TLSv1_2),
+            encrypted_client_hello: Some(Payload::new(vec![1, 2, 3])),
+            order: None,
+        },
     }
 }
 

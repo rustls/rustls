@@ -480,12 +480,12 @@ impl EchState {
         common: &mut CommonState,
     ) -> Result<bool, Error> {
         // The client checks for the "encrypted_client_hello" extension.
-        let ech_conf = match hrr.ech() {
+        let ech_conf = match &hrr.encrypted_client_hello {
             // If none is found, the server has implicitly rejected ECH.
             None => return Ok(false),
             // Otherwise, if it has a length other than 8, the client aborts the
             // handshake with a "decode_error" alert.
-            Some(ech_conf) if ech_conf.len() != 8 => {
+            Some(ech_conf) if ech_conf.bytes().len() != 8 => {
                 return Err({
                     common.send_fatal_alert(
                         AlertDescription::DecodeError,
@@ -510,7 +510,7 @@ impl EchState {
             confirmation_transcript.current_hash(),
         );
 
-        match ConstantTimeEq::ct_eq(derived.as_ref(), ech_conf).into() {
+        match ConstantTimeEq::ct_eq(derived.as_ref(), ech_conf.bytes()).into() {
             true => {
                 trace!("ECH accepted by server in hello retry request");
                 Ok(true)
