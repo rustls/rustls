@@ -1,0 +1,10 @@
+[licenses]
+version = 2
+allow = ["Apache-2.0", "BSD-3-Clause", "ISC", "MIT", "MPL-2.0", "OpenSSL", "Unicode-3.0", "Zlib"]
+private = { ignore = true }
+
+[advisories]
+ignore = [
+  "RUSTSEC-2023-0071", # Marvin Attack on rsa, dev-dependency only
+  "RUSTSEC-2024-0436", # Unmaintained paste via macro_rules_attributes; dev-dependency only
+]

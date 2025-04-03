@@ -590,3 +590,9 @@ jobs:
         run: cargo test --locked -- --include-ignored
         env:
           RUST_BACKTRACE: 1
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: EmbarkStudios/cargo-deny-action@v2
