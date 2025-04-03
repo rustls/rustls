@@ -4,7 +4,7 @@ use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ops::Deref;
+use core::ops::{ControlFlow, Deref};
 use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
@@ -632,15 +632,15 @@ extension_struct! {
 
         /// Supported groups (RFC4492/RFC8446)
         ExtensionType::EllipticCurves =>
-            pub named_groups: Option<Vec<NamedGroup>>,
+            pub(crate) named_groups: Option<Vec<NamedGroup>>,
 
         /// Supported EC point formats (RFC4492)
         ExtensionType::ECPointFormats =>
-            pub ec_point_formats: Option<Vec<ECPointFormat>>,
+            pub(crate) ec_point_formats: Option<Vec<ECPointFormat>>,
 
         /// Supported signature schemes (RFC5246/RFC8446)
         ExtensionType::SignatureAlgorithms =>
-            pub signature_schemes: Option<Vec<SignatureScheme>>,
+            pub(crate) signature_schemes: Option<Vec<SignatureScheme>>,
 
         /// Offered ALPN protocols (RFC6066)
         ExtensionType::ALProtocolNegotiation =>
@@ -648,15 +648,15 @@ extension_struct! {
 
         /// Available client certificate types (RFC7250)
         ExtensionType::ClientCertificateType =>
-            pub client_certificate_types: Option<Vec<CertificateType>>,
+            pub(crate) client_certificate_types: Option<Vec<CertificateType>>,
 
         /// Acceptable server certificate types (RFC7250)
         ExtensionType::ServerCertificateType =>
-            pub server_certificate_types: Option<Vec<CertificateType>>,
+            pub(crate) server_certificate_types: Option<Vec<CertificateType>>,
 
         /// Extended master secret is requested (RFC7627)
         ExtensionType::ExtendedMasterSecret =>
-            pub extended_master_secret_request: Option<()>,
+            pub(crate) extended_master_secret_request: Option<()>,
 
         /// Offered certificate compression methods (RFC8879)
         ExtensionType::CompressCertificate =>
@@ -664,7 +664,7 @@ extension_struct! {
 
         /// Session ticket offer or request (RFC5077/RFC8446)
         ExtensionType::SessionTicket =>
-            pub session_ticket: Option<ClientSessionTicket>,
+            pub(crate) session_ticket: Option<ClientSessionTicket>,
 
         /// Offered preshared keys (RFC8446)
         ExtensionType::PreSharedKey =>
@@ -688,11 +688,11 @@ extension_struct! {
 
         /// Certificate authority names (RFC8446)
         ExtensionType::CertificateAuthorities =>
-            pub certificate_authority_names: Option<Vec<DistinguishedName>>,
+            pub(crate) certificate_authority_names: Option<Vec<DistinguishedName>>,
 
         /// Offered key exchange shares (RFC8446)
         ExtensionType::KeyShare =>
-            pub key_shares: Option<Vec<KeyShareEntry>>,
+            pub(crate) key_shares: Option<Vec<KeyShareEntry>>,
 
         /// QUIC transport parameters (RFC9001)
         ExtensionType::TransportParameters =>
@@ -832,6 +832,47 @@ impl ClientExtensions<'_> {
         }
         exts
     }
+
+    /// Encode the extensions, offering each extension to a visitor function.
+    ///
+    /// This is a testing function internal to rustls.
+    ///
+    /// Each extension is presented to the visitor as an `ExtensionType` and
+    /// its body encoding.  The visitor may return:
+    ///
+    /// - `ControlFlow::Continue(Some(x))` to use `x` as the extension's body
+    /// - `ControlFlow::Continue(None)` to not encode this extension
+    /// - `ControlFlow::Break(y)` to return from this function with the value `Err(y)`
+    ///
+    /// Once all the extensions are visited, an encoding of this object
+    /// is returned.  This is equivalent to `self.get_encoding()` if
+    /// `visitor` always returns `Continue(Some(x))`.
+    #[doc(hidden)]
+    pub fn visit_encode<V, E>(&self, mut visitor: V) -> Result<Vec<u8>, E>
+    where
+        V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
+    {
+        let mut buffer = Vec::new();
+        let whole = LengthPrefixedBuffer::new(ListLength::U16, &mut buffer);
+
+        for item in self.used_extensions_in_encoding_order() {
+            let mut body = Vec::new();
+            self.encode_one_extension(item, &mut body);
+            body.drain(..2); // drop extension type
+
+            match visitor(item, body) {
+                ControlFlow::Continue(Some(body)) => {
+                    item.encode(whole.buf);
+                    whole.buf.extend(body);
+                }
+                ControlFlow::Continue(None) => {}
+                ControlFlow::Break(err) => return Err(err),
+            }
+        }
+
+        drop(whole);
+        Ok(buffer)
+    }
 }
 
 impl<'a> Codec<'a> for ClientExtensions<'a> {
@@ -900,7 +941,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientSessionTicket {
+pub(crate) enum ClientSessionTicket {
     Request,
     Offer(Payload<'static>),
 }
