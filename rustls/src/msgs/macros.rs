@@ -194,6 +194,7 @@ macro_rules! extension_struct {
             }
 
             /// Return a list of extensions whose items are `Some`
+            #[allow(dead_code)]
             pub(crate) fn collect_used_extensions(&self) -> Vec<ExtensionType> {
                 let mut r = Vec::with_capacity(Self::ALL_EXTENSIONS.len());
 
@@ -209,6 +210,7 @@ macro_rules! extension_struct {
             /// Clone the value of the extension identified by `typ` from `source` to `self`.
             ///
             /// Does nothing if `typ` is not an extension handled by this object.
+            #[allow(dead_code)]
             pub(crate) fn clone_one_from(
                 &mut self,
                 source: &Self,
@@ -223,6 +225,7 @@ macro_rules! extension_struct {
             }
 
             /// Remove the extension identified by `typ` from `self`.
+            #[allow(dead_code)]
             pub(crate) fn clear(&mut self, typ: ExtensionType) {
                 match typ {
                     $(

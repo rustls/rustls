@@ -853,6 +853,26 @@ pub fn extract_client_hello_extension(msg: &Message, typ: ExtensionType) -> Opti
         .err()
 }
 
+pub fn extract_hello_retry_request_extension(msg: &Message, typ: ExtensionType) -> Option<Vec<u8>> {
+    let MessagePayload::Handshake { parsed, encoded: _ } = &msg.payload else {
+        return None;
+    };
+
+    let HandshakePayload::HelloRetryRequest(hrr) = &parsed.payload else {
+        return None;
+    };
+
+    hrr.extensions
+        .visit_encode(|ext, body| {
+            if ext == typ {
+                ControlFlow::Break(body)
+            } else {
+                ControlFlow::Continue(Some(body))
+            }
+        })
+        .err()
+}
+
 pub fn do_handshake_until_both_error(
     client: &mut ClientConnection,
     server: &mut ServerConnection,
