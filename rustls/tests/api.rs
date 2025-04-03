@@ -5772,9 +5772,12 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         match &msg.payload {
             MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
                 HandshakePayload::HelloRetryRequest(hrr) => {
-                    let group = hrr.requested_key_share_group();
-                    assert_eq!(group, Some(rustls::NamedGroup::X25519));
-
+                    let group = extract_hello_retry_request_extension(msg, ExtensionType::KeyShare)
+                        .expect("server failed to request specific group");
+                    assert_eq!(
+                        group,
+                        encoding::len_u16(NamedGroup::X25519.to_array().to_vec())
+                    );
                     assert_eq!(hrr.session_id, different_session_id);
                 }
                 _ => panic!("unexpected handshake message {parsed:?}"),
@@ -5917,9 +5920,13 @@ fn test_client_sends_share_for_less_preferred_group() {
     let assert_server_requests_retry_to_x25519 = |msg: &mut Message| -> Altered {
         match &msg.payload {
             MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
-                HandshakePayload::HelloRetryRequest(hrr) => {
-                    let group = hrr.requested_key_share_group();
-                    assert_eq!(group, Some(rustls::NamedGroup::X25519));
+                HandshakePayload::HelloRetryRequest(_) => {
+                    let group = extract_hello_retry_request_extension(msg, ExtensionType::KeyShare)
+                        .expect("server failed to request specific group");
+                    assert_eq!(
+                        group,
+                        encoding::len_u16(NamedGroup::X25519.to_array().to_vec())
+                    );
                 }
                 _ => panic!("unexpected handshake message {:?}", parsed),
             },
