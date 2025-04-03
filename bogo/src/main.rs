@@ -927,6 +927,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(InvalidMessage::DuplicateExtension(_)) => {
             quit(":DUPLICATE_EXTENSION:")
         }
+        Error::InvalidMessage(InvalidMessage::UnknownHelloRetryRequestExtension) => {
+            quit(":UNEXPECTED_EXTENSION:")
+        }
         Error::InvalidMessage(InvalidMessage::UnexpectedMessage(_)) => quit(":GARBAGE:"),
         Error::InvalidMessage(InvalidMessage::PreSharedKeyIsNotFinalExtension) => {
             quit(":PRE_SHARED_KEY_MUST_BE_LAST:")

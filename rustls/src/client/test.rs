@@ -12,8 +12,8 @@ use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
 use crate::msgs::enums::{Compression, NamedGroup};
 use crate::msgs::handshake::{
-    ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, HelloRetryExtension,
-    HelloRetryRequest, Random, ServerHelloPayload, SessionId,
+    ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest, Random,
+    ServerHelloPayload, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
 use crate::sync::Arc;
@@ -31,8 +31,9 @@ mod tests {
     use crate::msgs::base::PayloadU8;
     use crate::msgs::enums::ECCurveType;
     use crate::msgs::handshake::{
-        CertificateChain, EcParameters, KeyShareEntry, ServerEcdhParams, ServerExtension,
-        ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+        CertificateChain, EcParameters, HelloRetryRequestExtensions, KeyShareEntry,
+        ServerEcdhParams, ServerExtension, ServerKeyExchange, ServerKeyExchangeParams,
+        ServerKeyExchangePayload,
     };
     use crate::msgs::message::PlainMessage;
     use crate::pki_types::pem::PemObject;
@@ -117,9 +118,10 @@ mod tests {
                     cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,
                     session_id: SessionId::empty(),
-                    extensions: vec![HelloRetryExtension::Cookie(PayloadU16::new(vec![
-                        1, 2, 3, 4,
-                    ]))],
+                    extensions: HelloRetryRequestExtensions {
+                        cookie: Some(PayloadU16::new(vec![1, 2, 3, 4])),
+                        ..HelloRetryRequestExtensions::default()
+                    },
                 }),
             )),
         };

@@ -338,7 +338,7 @@ fn emit_client_hello_for_retry(
         let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
 
         if !retryreq
-            .map(|rr| rr.requested_key_share_group().is_some())
+            .map(|rr| rr.extensions.key_share.is_some())
             .unwrap_or_default()
         {
             // Only for the initial client hello, or a HRR that does not specify a kx group,
@@ -361,7 +361,7 @@ fn emit_client_hello_for_retry(
         exts.key_shares = Some(shares);
     }
 
-    if let Some(cookie) = retryreq.and_then(HelloRetryRequest::cookie) {
+    if let Some(cookie) = retryreq.and_then(|hrr| hrr.extensions.cookie.as_ref()) {
         exts.cookie = Some(cookie.clone());
     }
 
@@ -964,8 +964,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         cx.common.check_aligned_handshake()?;
 
-        let cookie = hrr.cookie();
-        let req_group = hrr.requested_key_share_group();
+        let cookie = hrr.extensions.cookie.as_ref();
+        let req_group = hrr.extensions.key_share;
 
         // We always send a key share when TLS 1.3 is enabled.
         let offered_key_share = self.next.offered_key_share.unwrap();
@@ -1004,24 +1004,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
             }
         }
 
-        // Or has something unrecognised
-        if hrr.has_unknown_extension() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
-            ));
-        }
-
-        // Or has the same extensions more than once
-        if hrr.has_duplicate_extension() {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::DuplicateHelloRetryRequestExtensions,
-                )
-            });
-        }
-
         // Or asks us to change nothing.
         if cookie.is_none() && req_group.is_none() {
             return Err({
@@ -1055,7 +1037,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
-        match hrr.supported_versions() {
+        match hrr.extensions.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
                 cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
@@ -1080,7 +1062,12 @@ impl ExpectServerHelloOrHelloRetryRequest {
         };
 
         // Or offers ECH related extensions when we didn't offer ECH.
-        if cx.data.ech_status == EchStatus::NotOffered && hrr.ech().is_some() {
+        if cx.data.ech_status == EchStatus::NotOffered
+            && hrr
+                .extensions
+                .encrypted_client_hello
+                .is_some()
+        {
             return Err({
                 cx.common.send_fatal_alert(
                     AlertDescription::UnsupportedExtension,
