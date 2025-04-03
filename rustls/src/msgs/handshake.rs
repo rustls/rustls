@@ -1318,65 +1318,79 @@ impl TlsListElement for ExtensionType {
     };
 }
 
-#[derive(Clone, Debug)]
-pub(crate) enum HelloRetryExtension {
-    KeyShare(NamedGroup),
-    Cookie(PayloadU16<NonEmpty>),
-    SupportedVersions(ProtocolVersion),
-    EchHelloRetryRequest(Vec<u8>),
-    Unknown(UnknownExtension),
+extension_struct! {
+    /// A representation of extensions present in a `HelloRetryRequest` message
+    pub(crate) struct HelloRetryRequestExtensions<'a> {
+        ExtensionType::KeyShare =>
+            pub(crate) key_share: Option<NamedGroup>,
+
+        ExtensionType::Cookie =>
+            pub(crate) cookie: Option<PayloadU16<NonEmpty>>,
+
+        ExtensionType::SupportedVersions =>
+            pub(crate) supported_versions: Option<ProtocolVersion>,
+
+        ExtensionType::EncryptedClientHello =>
+            pub(crate) encrypted_client_hello: Option<Payload<'a>>,
+    } + {
+        /// Records decoding order of records, and controls encoding order.
+        pub(crate) order: Option<Vec<ExtensionType>>,
+    }
 }
 
-impl HelloRetryExtension {
-    pub(crate) fn ext_type(&self) -> ExtensionType {
-        match self {
-            Self::KeyShare(_) => ExtensionType::KeyShare,
-            Self::Cookie(_) => ExtensionType::Cookie,
-            Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
-            Self::EchHelloRetryRequest(_) => ExtensionType::EncryptedClientHello,
-            Self::Unknown(r) => r.typ,
+impl HelloRetryRequestExtensions<'_> {
+    fn into_owned(self) -> HelloRetryRequestExtensions<'static> {
+        let Self {
+            key_share,
+            cookie,
+            supported_versions,
+            encrypted_client_hello,
+            order,
+        } = self;
+        HelloRetryRequestExtensions {
+            key_share,
+            cookie,
+            supported_versions,
+            encrypted_client_hello: encrypted_client_hello.map(|x| x.into_owned()),
+            order,
         }
     }
 }
 
-impl Codec<'_> for HelloRetryExtension {
+impl<'a> Codec<'a> for HelloRetryRequestExtensions<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.ext_type().encode(bytes);
+        let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
-        match self {
-            Self::KeyShare(r) => r.encode(nested.buf),
-            Self::Cookie(r) => r.encode(nested.buf),
-            Self::SupportedVersions(r) => r.encode(nested.buf),
-            Self::EchHelloRetryRequest(r) => {
-                nested.buf.extend_from_slice(r);
-            }
-            Self::Unknown(r) => r.encode(nested.buf),
+        for ext in self
+            .order
+            .as_deref()
+            .unwrap_or(Self::ALL_EXTENSIONS)
+        {
+            self.encode_one(*ext, extensions.buf);
         }
     }
 
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = ExtensionType::read(r)?;
-        let len = u16::read(r)? as usize;
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let mut out = Self::default();
+
+        // we must record order, so re-encoding round trips.  this is needed,
+        // unfortunately, for ECH HRR confirmation
+        let mut order = vec![];
+
+        let len = usize::from(u16::read(r)?);
         let mut sub = r.sub(len)?;
 
-        let ext = match typ {
-            ExtensionType::KeyShare => Self::KeyShare(NamedGroup::read(&mut sub)?),
-            ExtensionType::Cookie => Self::Cookie(PayloadU16::read(&mut sub)?),
-            ExtensionType::SupportedVersions => {
-                Self::SupportedVersions(ProtocolVersion::read(&mut sub)?)
-            }
-            ExtensionType::EncryptedClientHello => Self::EchHelloRetryRequest(sub.rest().to_vec()),
-            _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
-        };
+        while sub.any_left() {
+            let typ = out.read_one(&mut sub, |_unk| {
+                Err(InvalidMessage::UnknownHelloRetryRequestExtension)
+            })?;
 
-        sub.expect_empty("HelloRetryExtension")
-            .map(|_| ext)
+            order.push(typ);
+        }
+
+        out.order = Some(order);
+        Ok(out)
     }
-}
-
-impl TlsListElement for HelloRetryExtension {
-    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Clone, Debug)]
@@ -1384,7 +1398,7 @@ pub(crate) struct HelloRetryRequest {
     pub(crate) legacy_version: ProtocolVersion,
     pub(crate) session_id: SessionId,
     pub(crate) cipher_suite: CipherSuite,
-    pub(crate) extensions: Vec<HelloRetryExtension>,
+    pub(crate) extensions: HelloRetryRequestExtensions<'static>,
 }
 
 impl Codec<'_> for HelloRetryRequest {
@@ -1405,69 +1419,12 @@ impl Codec<'_> for HelloRetryRequest {
             legacy_version: ProtocolVersion::Unknown(0),
             session_id,
             cipher_suite,
-            extensions: Vec::read(r)?,
+            extensions: HelloRetryRequestExtensions::read(r)?.into_owned(),
         })
     }
 }
 
 impl HelloRetryRequest {
-    /// Returns true if there is more than one extension of a given
-    /// type.
-    pub(crate) fn has_duplicate_extension(&self) -> bool {
-        has_duplicates::<_, _, u16>(
-            self.extensions
-                .iter()
-                .map(|ext| ext.ext_type()),
-        )
-    }
-
-    pub(crate) fn has_unknown_extension(&self) -> bool {
-        self.extensions.iter().any(|ext| {
-            ext.ext_type() != ExtensionType::KeyShare
-                && ext.ext_type() != ExtensionType::SupportedVersions
-                && ext.ext_type() != ExtensionType::Cookie
-                && ext.ext_type() != ExtensionType::EncryptedClientHello
-        })
-    }
-
-    fn find_extension(&self, ext: ExtensionType) -> Option<&HelloRetryExtension> {
-        self.extensions
-            .iter()
-            .find(|x| x.ext_type() == ext)
-    }
-
-    pub(crate) fn requested_key_share_group(&self) -> Option<NamedGroup> {
-        let ext = self.find_extension(ExtensionType::KeyShare)?;
-        match ext {
-            HelloRetryExtension::KeyShare(grp) => Some(*grp),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn cookie(&self) -> Option<&PayloadU16<NonEmpty>> {
-        let ext = self.find_extension(ExtensionType::Cookie)?;
-        match ext {
-            HelloRetryExtension::Cookie(ck) => Some(ck),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn supported_versions(&self) -> Option<ProtocolVersion> {
-        let ext = self.find_extension(ExtensionType::SupportedVersions)?;
-        match ext {
-            HelloRetryExtension::SupportedVersions(ver) => Some(*ver),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn ech(&self) -> Option<&Vec<u8>> {
-        let ext = self.find_extension(ExtensionType::EncryptedClientHello)?;
-        match ext {
-            HelloRetryExtension::EchHelloRetryRequest(ech) => Some(ech),
-            _ => None,
-        }
-    }
-
     fn payload_encode(&self, bytes: &mut Vec<u8>, purpose: Encoding) {
         self.legacy_version.encode(bytes);
         HELLO_RETRY_REQUEST_RANDOM.encode(bytes);
@@ -1481,24 +1438,34 @@ impl HelloRetryRequest {
             //
             // See draft-ietf-tls-esni-18 7.2.1:
             // <https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#name-sending-helloretryrequest-2>
-            Encoding::EchConfirmation => {
-                let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
-                for ext in &self.extensions {
-                    match ext.ext_type() {
-                        ExtensionType::EncryptedClientHello => {
-                            HelloRetryExtension::EchHelloRetryRequest(vec![0u8; 8])
-                                .encode(extensions.buf);
-                        }
-                        _ => {
-                            ext.encode(extensions.buf);
-                        }
-                    }
+            Encoding::EchConfirmation
+                if self
+                    .extensions
+                    .encrypted_client_hello
+                    .is_some() =>
+            {
+                let hrr_confirmation = [0u8; 8];
+                HelloRetryRequestExtensions {
+                    encrypted_client_hello: Some(Payload::Borrowed(&hrr_confirmation)),
+                    ..self.extensions.clone()
                 }
+                .encode(bytes);
             }
-            _ => {
-                self.extensions.encode(bytes);
-            }
+            _ => self.extensions.encode(bytes),
         }
+    }
+}
+
+impl Deref for HelloRetryRequest {
+    type Target = HelloRetryRequestExtensions<'static>;
+    fn deref(&self) -> &Self::Target {
+        &self.extensions
+    }
+}
+
+impl DerefMut for HelloRetryRequest {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.extensions
     }
 }
 
