@@ -140,7 +140,6 @@ impl From<InconsistentKeys> for Error {
 /// A corrupt TLS message payload that resulted in an error.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq)]
-
 pub enum InvalidMessage {
     /// A certificate payload exceeded rustls's 64KB limit
     CertificatePayloadTooLarge,
@@ -188,6 +187,8 @@ pub enum InvalidMessage {
     DuplicateExtension,
     /// A peer sent a message with a PSK offer extension in wrong position
     PreSharedKeyIsNotFinalExtension,
+    /// A server sent a HelloRetryRequest with an unknown extension
+    UnknownHelloRetryRequestExtension,
 }
 
 impl From<InvalidMessage> for Error {
@@ -201,6 +202,8 @@ impl From<InvalidMessage> for AlertDescription {
     fn from(e: InvalidMessage) -> Self {
         match e {
             InvalidMessage::PreSharedKeyIsNotFinalExtension => Self::IllegalParameter,
+            InvalidMessage::DuplicateExtension => Self::IllegalParameter,
+            InvalidMessage::UnknownHelloRetryRequestExtension => Self::UnsupportedExtension,
             _ => Self::DecodeError,
         }
     }
