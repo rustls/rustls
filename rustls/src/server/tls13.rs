@@ -47,7 +47,7 @@ mod client_hello {
     use crate::msgs::enums::{Compression, NamedGroup, PskKeyExchangeMode};
     use crate::msgs::handshake::{
         CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
-        ClientHelloPayload, HelloRetryExtension, HelloRetryRequest, KeyShareEntry, Random,
+        ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
         ServerExtension, ServerHelloPayload, SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
@@ -587,19 +587,16 @@ mod client_hello {
         common: &mut CommonState,
         group: NamedGroup,
     ) {
-        let mut req = HelloRetryRequest {
+        let req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id,
             cipher_suite: suite.common.suite,
-            extensions: Vec::new(),
+            extensions: HelloRetryRequestExtensions {
+                key_share: Some(group),
+                supported_versions: Some(ProtocolVersion::TLSv1_3),
+                ..Default::default()
+            },
         };
-
-        req.extensions
-            .push(HelloRetryExtension::KeyShare(group));
-        req.extensions
-            .push(HelloRetryExtension::SupportedVersions(
-                ProtocolVersion::TLSv1_3,
-            ));
 
         let m = Message {
             version: ProtocolVersion::TLSv1_2,

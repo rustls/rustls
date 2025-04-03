@@ -270,8 +270,6 @@
     "TrailingKeyShareData-TLS13": ":BAD_HANDSHAKE_MSG:",
     "HelloRetryRequestCurveMismatch-TLS13": ":PEER_MISBEHAVIOUR:",
     "HelloRetryRequestVersionMismatch-TLS13": ":INCOMPATIBLE:",
-    "HelloRetryRequest-DuplicateCookie-TLS13": ":PEER_MISBEHAVIOUR:",
-    "HelloRetryRequest-DuplicateCurve-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnknownUnencryptedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnexpectedUnencryptedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnofferedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -386,7 +384,9 @@
     "Downgrade-TLS10-Server": "remote error: protocol version not supported",
     "TrailingDataWithFinished-Client-TLS13": "local error: bad record MAC",
     "TrailingDataWithFinished-Resume-Client-TLS13": "local error: bad record MAC",
-    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter"
+    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter",
+    "DuplicateExtensionServer-TLS-TLS12": "remote error: illegal parameter",
+    "DuplicateExtensionServer-TLS-TLS13": "remote error: illegal parameter"
   },
   "HalfRTTTickets": 0
 }
