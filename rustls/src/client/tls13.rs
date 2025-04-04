@@ -1077,14 +1077,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
             ));
         }
 
-        if cert_chain.any_entry_has_duplicate_extension()
-            || cert_chain.any_entry_has_unknown_extension()
-        {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerMisbehaved::BadCertChainExtensions,
-            ));
-        }
         let end_entity_ocsp = cert_chain.end_entity_ocsp();
         let server_cert = ServerCertDetails::new(
             cert_chain
