@@ -46,7 +46,7 @@ mod client_hello {
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup, PskKeyExchangeMode};
     use crate::msgs::handshake::{
-        CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
+        CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
         ServerExtension, ServerHelloPayload, SessionId,
     };
@@ -703,33 +703,29 @@ mod client_hello {
             return Ok(false);
         }
 
-        let mut cr = CertificateRequestPayloadTls13 {
+        let cr = CertificateRequestPayloadTls13 {
             context: PayloadU8::empty(),
-            extensions: Vec::new(),
-        };
-
-        let schemes = config
-            .verifier
-            .supported_verify_schemes();
-        cr.extensions
-            .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
-
-        if !config.cert_decompressors.is_empty() {
-            cr.extensions
-                .push(CertReqExtension::CertificateCompressionAlgorithms(
+            extensions: CertificateRequestExtensions {
+                signature_algorithms: Some(
                     config
-                        .cert_decompressors
-                        .iter()
-                        .map(|decomp| decomp.algorithm())
-                        .collect(),
-                ));
-        }
-
-        let authorities = config.verifier.root_hint_subjects();
-        if !authorities.is_empty() {
-            cr.extensions
-                .push(CertReqExtension::AuthorityNames(authorities.to_vec()));
-        }
+                        .verifier
+                        .supported_verify_schemes(),
+                ),
+                certificate_compression_algorithms: match config.cert_decompressors.as_slice() {
+                    &[] => None,
+                    decomps => Some(
+                        decomps
+                            .iter()
+                            .map(|decomp| decomp.algorithm())
+                            .collect(),
+                    ),
+                },
+                authority_names: match config.verifier.root_hint_subjects() {
+                    &[] => None,
+                    authorities => Some(authorities.to_vec()),
+                },
+            },
+        };
 
         let creq = HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(cr));
 
