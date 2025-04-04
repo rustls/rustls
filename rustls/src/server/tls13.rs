@@ -1060,7 +1060,11 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
-        if certp.any_entry_has_extension() {
+        if certp
+            .entries
+            .iter()
+            .any(|e| !e.extensions.collect_used().is_empty())
+        {
             return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
         }
 
