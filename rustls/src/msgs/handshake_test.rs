@@ -10,7 +10,7 @@ use super::enums::{
     KeyUpdateRequest, NamedGroup, PskKeyExchangeMode,
 };
 use super::handshake::{
-    CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
+    CertReqExtension, CertificateChain, CertificateEntry, CertificateExtensions,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
@@ -134,9 +134,22 @@ fn refuses_server_ext_with_unparsed_bytes() {
 
 #[test]
 fn refuses_certificate_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x05, 0x00, 0x03, 0x00, 0x00, 0x01];
-    let mut rd = Reader::init(&bytes);
-    assert!(CertificateExtension::read(&mut rd).is_err());
+    let bytes = [
+        0x00u8, 0x09, 0x00, 0x05, 0x00, 0x05, 0x01, 0x00, 0x00, 0x00, 0x01,
+    ];
+    assert_eq!(
+        CertificateExtensions::read_bytes(&bytes).unwrap_err(),
+        InvalidMessage::TrailingData("CertificateExtensions")
+    );
+}
+
+#[test]
+fn refuses_certificate_ext_with_unknown_type() {
+    let bytes = [0x00u8, 0x08, 0x00, 0x05, 0x00, 0x03, 0x99, 0x00, 0x00, 0x00];
+    assert_eq!(
+        CertificateExtensions::read_bytes(&bytes).unwrap_err(),
+        InvalidMessage::InvalidCertificateStatusType
+    );
 }
 
 #[test]
@@ -574,32 +587,6 @@ fn server_server_certificate_type_extension() {
 }
 
 #[test]
-fn cert_entry_ocsp_response() {
-    test_cert_extension_getter(ExtensionType::StatusRequest, |ce| {
-        ce.ocsp_response().is_some()
-    });
-}
-
-fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry<'_>) -> bool) {
-    let mut ce = sample_certificate_payload_tls13()
-        .entries
-        .remove(0);
-    let mut exts = core::mem::take(&mut ce.exts);
-    exts.retain(|ext| ext.ext_type() == typ);
-
-    assert!(!getter(&ce));
-
-    ce.exts = exts;
-    assert!(getter(&ce));
-
-    ce.exts = vec![CertificateExtension::Unknown(UnknownExtension {
-        typ,
-        payload: Payload::Borrowed(&[]),
-    })];
-    assert!(!getter(&ce));
-}
-
-#[test]
 fn can_print_all_server_extensions() {
     println!("server hello {:?}", sample_server_hello_payload());
 }
@@ -1002,15 +989,11 @@ fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
         context: PayloadU8::new(vec![1, 2, 3]),
         entries: vec![CertificateEntry {
             cert: CertificateDer::from(vec![3, 4, 5]),
-            exts: vec![
-                CertificateExtension::CertificateStatus(CertificateStatus {
+            extensions: CertificateExtensions {
+                status: Some(CertificateStatus {
                     ocsp_response: PayloadU24(Payload::new(vec![1, 2, 3])),
                 }),
-                CertificateExtension::Unknown(UnknownExtension {
-                    typ: ExtensionType::Unknown(12345),
-                    payload: Payload::Borrowed(&[1, 2, 3]),
-                }),
-            ],
+            },
         }],
     }
 }
