@@ -325,8 +325,6 @@
     "Server-TooLongSessionID-TLS13": ":BAD_HANDSHAKE_MSG:",
     "Server-TooLongSessionID-TLS12": ":BAD_HANDSHAKE_MSG:",
     "Client-TooLongSessionID": ":BAD_HANDSHAKE_MSG:",
-    "SendUnknownExtensionOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
-    "SendDuplicateExtensionsOnCerts-TLS13": ":PEER_MISBEHAVIOUR:",
     "EMS-Forbidden-TLS13": ":PEER_MISBEHAVIOUR:",
     "Unclean-Shutdown": ":CLOSE_WITHOUT_CLOSE_NOTIFY:",
     "SendExtensionOnClientCertificate-TLS13": ":PEER_MISBEHAVIOUR:",

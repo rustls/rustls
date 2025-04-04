@@ -1626,84 +1626,62 @@ impl TlsListElement for CertificateDer<'_> {
 /// that is directly controllable by the peer.
 pub(crate) const CERTIFICATE_MAX_SIZE_LIMIT: usize = 0x1_0000;
 
-#[derive(Debug)]
-pub(crate) enum CertificateExtension<'a> {
-    CertificateStatus(CertificateStatus<'a>),
-    Unknown(UnknownExtension),
+extension_struct! {
+    pub(crate) struct CertificateExtensions<'a> {
+        ExtensionType::StatusRequest =>
+            pub(crate) status: Option<CertificateStatus<'a>>,
+    }
 }
 
-impl CertificateExtension<'_> {
-    pub(crate) fn ext_type(&self) -> ExtensionType {
-        match self {
-            Self::CertificateStatus(_) => ExtensionType::StatusRequest,
-            Self::Unknown(r) => r.typ,
-        }
-    }
-
-    pub(crate) fn cert_status(&self) -> Option<&[u8]> {
-        match self {
-            Self::CertificateStatus(cs) => Some(cs.ocsp_response.0.bytes()),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn into_owned(self) -> CertificateExtension<'static> {
-        match self {
-            Self::CertificateStatus(st) => CertificateExtension::CertificateStatus(st.into_owned()),
-            Self::Unknown(unk) => CertificateExtension::Unknown(unk),
+impl CertificateExtensions<'_> {
+    fn into_owned(self) -> CertificateExtensions<'static> {
+        CertificateExtensions {
+            status: self.status.map(|s| s.into_owned()),
         }
     }
 }
 
-impl<'a> Codec<'a> for CertificateExtension<'a> {
+impl<'a> Codec<'a> for CertificateExtensions<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.ext_type().encode(bytes);
+        let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
-        match self {
-            Self::CertificateStatus(r) => r.encode(nested.buf),
-            Self::Unknown(r) => r.encode(nested.buf),
+        for ext in Self::ALL_EXTENSIONS {
+            self.encode_one(*ext, extensions.buf);
         }
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let typ = ExtensionType::read(r)?;
-        let len = u16::read(r)? as usize;
+        let mut out = Self::default();
+
+        let len = usize::from(u16::read(r)?);
         let mut sub = r.sub(len)?;
 
-        let ext = match typ {
-            ExtensionType::StatusRequest => {
-                let st = CertificateStatus::read(&mut sub)?;
-                Self::CertificateStatus(st)
-            }
-            _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
-        };
+        while sub.any_left() {
+            out.read_one(&mut sub, |_unk| {
+                Err(InvalidMessage::UnknownCertificateExtension)
+            })?;
+        }
 
-        sub.expect_empty("CertificateExtension")
-            .map(|_| ext)
+        Ok(out)
     }
-}
-
-impl TlsListElement for CertificateExtension<'_> {
-    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Debug)]
 pub(crate) struct CertificateEntry<'a> {
     pub(crate) cert: CertificateDer<'a>,
-    pub(crate) exts: Vec<CertificateExtension<'a>>,
+    pub(crate) extensions: CertificateExtensions<'a>,
 }
 
 impl<'a> Codec<'a> for CertificateEntry<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.cert.encode(bytes);
-        self.exts.encode(bytes);
+        self.extensions.encode(bytes);
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         Ok(Self {
             cert: CertificateDer::read(r)?,
-            exts: Vec::read(r)?,
+            extensions: CertificateExtensions::read(r)?.into_owned(),
         })
     }
 }
@@ -1712,40 +1690,15 @@ impl<'a> CertificateEntry<'a> {
     pub(crate) fn new(cert: CertificateDer<'a>) -> Self {
         Self {
             cert,
-            exts: Vec::new(),
+            extensions: CertificateExtensions::default(),
         }
     }
 
     pub(crate) fn into_owned(self) -> CertificateEntry<'static> {
         CertificateEntry {
             cert: self.cert.into_owned(),
-            exts: self
-                .exts
-                .into_iter()
-                .map(CertificateExtension::into_owned)
-                .collect(),
+            extensions: self.extensions.into_owned(),
         }
-    }
-
-    pub(crate) fn has_duplicate_extension(&self) -> bool {
-        has_duplicates::<_, _, u16>(
-            self.exts
-                .iter()
-                .map(|ext| ext.ext_type()),
-        )
-    }
-
-    pub(crate) fn has_unknown_extension(&self) -> bool {
-        self.exts
-            .iter()
-            .any(|ext| ext.ext_type() != ExtensionType::StatusRequest)
-    }
-
-    pub(crate) fn ocsp_response(&self) -> Option<&[u8]> {
-        self.exts
-            .iter()
-            .find(|ext| ext.ext_type() == ExtensionType::StatusRequest)
-            .and_then(CertificateExtension::cert_status)
     }
 }
 
@@ -1795,10 +1748,7 @@ impl<'a> CertificatePayloadTls13<'a> {
                 .map(|(cert, ocsp)| {
                     let mut e = CertificateEntry::new(cert.clone());
                     if let Some(ocsp) = ocsp {
-                        e.exts
-                            .push(CertificateExtension::CertificateStatus(
-                                CertificateStatus::new(ocsp),
-                            ));
+                        e.extensions.status = Some(CertificateStatus::new(ocsp));
                     }
                     e
                 })
@@ -1817,40 +1767,21 @@ impl<'a> CertificatePayloadTls13<'a> {
         }
     }
 
-    pub(crate) fn any_entry_has_duplicate_extension(&self) -> bool {
-        for entry in &self.entries {
-            if entry.has_duplicate_extension() {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    pub(crate) fn any_entry_has_unknown_extension(&self) -> bool {
-        for entry in &self.entries {
-            if entry.has_unknown_extension() {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    pub(crate) fn any_entry_has_extension(&self) -> bool {
-        for entry in &self.entries {
-            if !entry.exts.is_empty() {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    pub(crate) fn end_entity_ocsp(&self) -> &[u8] {
-        self.entries
-            .first()
-            .and_then(CertificateEntry::ocsp_response)
+    pub(crate) fn end_entity_ocsp(&self) -> Vec<u8> {
+        let Some(entry) = self.entries.first() else {
+            return vec![];
+        };
+        entry
+            .extensions
+            .status
+            .as_ref()
+            .map(|status| {
+                status
+                    .ocsp_response
+                    .0
+                    .clone()
+                    .into_vec()
+            })
             .unwrap_or_default()
     }
 
@@ -2618,7 +2549,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
 // -- RFC6066 certificate status types
 
 /// Only supports OCSP
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct CertificateStatus<'a> {
     pub(crate) ocsp_response: PayloadU24<'a>,
 }

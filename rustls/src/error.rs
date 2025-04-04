@@ -199,6 +199,8 @@ pub enum InvalidMessage {
     PreSharedKeyIsNotFinalExtension,
     /// A server sent a HelloRetryRequest with an unknown extension
     UnknownHelloRetryRequestExtension,
+    /// The peer sent a TLS1.3 Certificate with an unknown extension
+    UnknownCertificateExtension,
 }
 
 impl From<InvalidMessage> for Error {

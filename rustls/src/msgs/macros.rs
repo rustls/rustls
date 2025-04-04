@@ -254,6 +254,20 @@ macro_rules! extension_struct {
                 }
             }
 
+            /// Return true if all present extensions are named in `allowed`
+            #[allow(dead_code)]
+            pub(crate) fn only_contains(&self, allowed: &[ExtensionType]) -> bool {
+                $(
+                    if let Some(_) = &self.$item_slot {
+                        if !allowed.contains(&$item_id) {
+                            return false;
+                        }
+                    }
+                )*
+
+                true
+            }
+
             /// Every `ExtensionType` this structure may encode/decode.
             const ALL_EXTENSIONS: &'static [ExtensionType] = &[
                 $($item_id,)*
