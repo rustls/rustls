@@ -1690,7 +1690,7 @@ impl<'a> CertificatePayloadTls13<'a> {
         }
     }
 
-    pub(crate) fn end_entity_ocsp(&self) -> Vec<u8> {
+    pub(crate) fn end_entity_ocsp(&self) -> &[u8] {
         self.entries
             .first()
             .and_then(|entry| {
@@ -1698,13 +1698,7 @@ impl<'a> CertificatePayloadTls13<'a> {
                     .extensions
                     .status
                     .as_ref()
-                    .map(|status| {
-                        status
-                            .ocsp_response
-                            .0
-                            .clone()
-                            .into_vec()
-                    })
+                    .map(|status| status.ocsp_response.0.bytes())
             })
             .unwrap_or_default()
     }
