@@ -1077,7 +1077,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
             ));
         }
 
-        let end_entity_ocsp = cert_chain.end_entity_ocsp();
+        let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
         let server_cert = ServerCertDetails::new(
             cert_chain
                 .into_certificate_chain()
