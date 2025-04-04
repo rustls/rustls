@@ -1526,11 +1526,13 @@ fn test_secret_extraction_enabled() {
 
         // The handshake is finished, we're now able to extract traffic secrets
         let client_secrets = client
-            .dangerous_extract_secrets()
-            .unwrap();
+            .dangerous_into_kernel_connection()
+            .unwrap()
+            .0;
         let server_secrets = server
-            .dangerous_extract_secrets()
-            .unwrap();
+            .dangerous_into_kernel_connection()
+            .unwrap()
+            .0;
 
         // Comparing secrets for equality is something you should never have to
         // do in production code, so ConnectionTrafficSecrets doesn't implement
