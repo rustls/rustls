@@ -2268,77 +2268,63 @@ impl Codec<'_> for CertificateRequestPayload {
     }
 }
 
-#[derive(Debug)]
-pub(crate) enum CertReqExtension {
-    SignatureAlgorithms(Vec<SignatureScheme>),
-    AuthorityNames(Vec<DistinguishedName>),
-    CertificateCompressionAlgorithms(Vec<CertificateCompressionAlgorithm>),
-    Unknown(UnknownExtension),
-}
+extension_struct! {
+    pub(crate) struct CertificateRequestExtensions {
+        ExtensionType::SignatureAlgorithms =>
+            pub(crate) signature_algorithms: Option<Vec<SignatureScheme>>,
 
-impl CertReqExtension {
-    pub(crate) fn ext_type(&self) -> ExtensionType {
-        match self {
-            Self::SignatureAlgorithms(_) => ExtensionType::SignatureAlgorithms,
-            Self::AuthorityNames(_) => ExtensionType::CertificateAuthorities,
-            Self::CertificateCompressionAlgorithms(_) => ExtensionType::CompressCertificate,
-            Self::Unknown(r) => r.typ,
-        }
+        ExtensionType::CertificateAuthorities =>
+            pub(crate) authority_names: Option<Vec<DistinguishedName>>,
+
+        ExtensionType::CompressCertificate =>
+            pub(crate) certificate_compression_algorithms: Option<Vec<CertificateCompressionAlgorithm>>,
     }
 }
 
-impl Codec<'_> for CertReqExtension {
+impl Codec<'_> for CertificateRequestExtensions {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.ext_type().encode(bytes);
+        let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
-        match self {
-            Self::SignatureAlgorithms(r) => r.encode(nested.buf),
-            Self::AuthorityNames(r) => r.encode(nested.buf),
-            Self::CertificateCompressionAlgorithms(r) => r.encode(nested.buf),
-            Self::Unknown(r) => r.encode(nested.buf),
+        for ext in Self::ALL_EXTENSIONS {
+            self.encode_one(*ext, extensions.buf);
         }
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = ExtensionType::read(r)?;
-        let len = u16::read(r)? as usize;
+        let mut out = Self::default();
+
+        let mut unknown_extensions = BTreeSet::new();
+
+        let len = usize::from(u16::read(r)?);
         let mut sub = r.sub(len)?;
 
-        let ext = match typ {
-            ExtensionType::SignatureAlgorithms => {
-                let schemes = Vec::read(&mut sub)?;
-                if schemes.is_empty() {
-                    return Err(InvalidMessage::NoSignatureSchemes);
+        while sub.any_left() {
+            out.read_one(&mut sub, |unknown| {
+                let u = u16::from(unknown);
+                match unknown_extensions.insert(u) {
+                    true => Ok(()),
+                    false => Err(InvalidMessage::DuplicateExtension(u)),
                 }
-                Self::SignatureAlgorithms(schemes)
-            }
-            ExtensionType::CertificateAuthorities => {
-                let cas = Vec::read(&mut sub)?;
-                if cas.is_empty() {
-                    return Err(InvalidMessage::IllegalEmptyList("DistinguishedNames"));
-                }
-                Self::AuthorityNames(cas)
-            }
-            ExtensionType::CompressCertificate => {
-                Self::CertificateCompressionAlgorithms(Vec::read(&mut sub)?)
-            }
-            _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
-        };
+            })?;
+        }
 
-        sub.expect_empty("CertReqExtension")
-            .map(|_| ext)
+        if out
+            .signature_algorithms
+            .as_ref()
+            .map(|algs| algs.is_empty())
+            .unwrap_or_default()
+        {
+            return Err(InvalidMessage::NoSignatureSchemes);
+        }
+
+        Ok(out)
     }
-}
-
-impl TlsListElement for CertReqExtension {
-    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Debug)]
 pub(crate) struct CertificateRequestPayloadTls13 {
     pub(crate) context: PayloadU8,
-    pub(crate) extensions: Vec<CertReqExtension>,
+    pub(crate) extensions: CertificateRequestExtensions,
 }
 
 impl Codec<'_> for CertificateRequestPayloadTls13 {
@@ -2349,46 +2335,12 @@ impl Codec<'_> for CertificateRequestPayloadTls13 {
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let context = PayloadU8::read(r)?;
-        let extensions = Vec::read(r)?;
+        let extensions = CertificateRequestExtensions::read(r)?;
 
         Ok(Self {
             context,
             extensions,
         })
-    }
-}
-
-impl CertificateRequestPayloadTls13 {
-    pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&CertReqExtension> {
-        self.extensions
-            .iter()
-            .find(|x| x.ext_type() == ext)
-    }
-
-    pub(crate) fn sigalgs_extension(&self) -> Option<&[SignatureScheme]> {
-        let ext = self.find_extension(ExtensionType::SignatureAlgorithms)?;
-        match ext {
-            CertReqExtension::SignatureAlgorithms(sa) => Some(sa),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn authorities_extension(&self) -> Option<&[DistinguishedName]> {
-        let ext = self.find_extension(ExtensionType::CertificateAuthorities)?;
-        match ext {
-            CertReqExtension::AuthorityNames(an) => Some(an),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn certificate_compression_extension(
-        &self,
-    ) -> Option<&[CertificateCompressionAlgorithm]> {
-        let ext = self.find_extension(ExtensionType::CompressCertificate)?;
-        match ext {
-            CertReqExtension::CertificateCompressionAlgorithms(comps) => Some(comps),
-            _ => None,
-        }
     }
 }
 
