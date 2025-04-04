@@ -927,7 +927,8 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(InvalidMessage::DuplicateExtension(_)) => {
             quit(":DUPLICATE_EXTENSION:")
         }
-        Error::InvalidMessage(InvalidMessage::UnknownHelloRetryRequestExtension) => {
+        Error::InvalidMessage(InvalidMessage::UnknownHelloRetryRequestExtension)
+        | Error::InvalidMessage(InvalidMessage::UnknownCertificateExtension) => {
             quit(":UNEXPECTED_EXTENSION:")
         }
         Error::InvalidMessage(InvalidMessage::UnexpectedMessage(_)) => quit(":GARBAGE:"),
