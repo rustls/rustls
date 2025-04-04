@@ -852,10 +852,11 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             ));
         }
 
-        let no_sigschemes = Vec::new();
         let compat_sigschemes = certreq
-            .sigalgs_extension()
-            .unwrap_or(&no_sigschemes)
+            .extensions
+            .signature_algorithms
+            .as_deref()
+            .unwrap_or_default()
             .iter()
             .cloned()
             .filter(SignatureScheme::supported_in_tls13)
@@ -869,7 +870,9 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         }
 
         let compat_compressor = certreq
-            .certificate_compression_extension()
+            .extensions
+            .certificate_compression_algorithms
+            .as_deref()
             .and_then(|offered| {
                 self.config
                     .cert_compressors
@@ -882,7 +885,10 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             self.config
                 .client_auth_cert_resolver
                 .as_ref(),
-            certreq.authorities_extension(),
+            certreq
+                .extensions
+                .authority_names
+                .as_deref(),
             &compat_sigschemes,
             Some(certreq.context.0.clone()),
             compat_compressor,

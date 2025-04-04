@@ -10,8 +10,8 @@ use super::enums::{
     KeyUpdateRequest, NamedGroup, PskKeyExchangeMode,
 };
 use super::handshake::{
-    CertReqExtension, CertificateChain, CertificateEntry, CertificateExtensions,
-    CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
+    CertificateChain, CertificateEntry, CertificateExtensions, CertificatePayloadTls13,
+    CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
     EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
@@ -154,9 +154,22 @@ fn refuses_certificate_ext_with_unknown_type() {
 
 #[test]
 fn refuses_certificate_req_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x0d, 0x00, 0x05, 0x00, 0x02, 0x01, 0x02, 0xff];
-    let mut rd = Reader::init(&bytes);
-    assert!(CertReqExtension::read(&mut rd).is_err());
+    let bytes = [
+        0x00u8, 0x09, 0x00, 0x0d, 0x00, 0x05, 0x00, 0x02, 0x01, 0x02, 0xff,
+    ];
+    assert_eq!(
+        CertificateRequestExtensions::read_bytes(&bytes).unwrap_err(),
+        InvalidMessage::TrailingData("CertificateRequestExtensions")
+    );
+}
+
+#[test]
+fn refuses_certificate_req_ext_with_duplicate() {
+    let bytes = [0x00u8, 0x08, 0x00, 0x99, 0x00, 0x00, 0x00, 0x99, 0x00, 0x00];
+    assert_eq!(
+        CertificateRequestExtensions::read_bytes(&bytes).unwrap_err(),
+        InvalidMessage::DuplicateExtension(0x0099)
+    );
 }
 
 #[test]
@@ -1045,14 +1058,11 @@ fn sample_certificate_request_payload() -> CertificateRequestPayload {
 fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 {
     CertificateRequestPayloadTls13 {
         context: PayloadU8::new(vec![1, 2, 3]),
-        extensions: vec![
-            CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            CertReqExtension::AuthorityNames(vec![DistinguishedName::from(vec![1, 2, 3])]),
-            CertReqExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
-                payload: Payload::Borrowed(&[1, 2, 3]),
-            }),
-        ],
+        extensions: CertificateRequestExtensions {
+            signature_algorithms: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
+            authority_names: Some(vec![DistinguishedName::from(vec![1, 2, 3])]),
+            certificate_compression_algorithms: Some(vec![CertificateCompressionAlgorithm::Zlib]),
+        },
     }
 }
 
