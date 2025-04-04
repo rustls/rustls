@@ -106,7 +106,7 @@ macro_rules! enum_builder {
 macro_rules! extension_struct {
     (
         $(#[doc = $comment:literal])*
-        $struct_vis:vis struct $struct_name:ident<'a>
+        $struct_vis:vis struct $struct_name:ident$(<$struct_lt:lifetime>)*
         {
           $(
             $(#[$item_attr:meta])*
@@ -122,7 +122,7 @@ macro_rules! extension_struct {
         $(#[doc = $comment])*
         #[non_exhaustive]
         #[derive(Clone, Debug, Default)]
-        $struct_vis struct $struct_name<'a> {
+        $struct_vis struct $struct_name$(<$struct_lt>)* {
             $(
               $(#[$item_attr])*
               $item_vis $item_slot: Option<$item_ty>,
@@ -133,7 +133,7 @@ macro_rules! extension_struct {
             )+)*
         }
 
-        impl<'a> $struct_name<'a> {
+        impl<'a> $struct_name$(<$struct_lt>)* {
             /// Decode `r` as `T` into `out`, only if `out` is `None`.
             fn read_once<T>(r: &mut Reader<'a>, out: &mut Option<T>) -> Result<(), InvalidMessage>
             where T: Codec<'a>,
