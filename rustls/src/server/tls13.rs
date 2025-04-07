@@ -48,7 +48,7 @@ mod client_hello {
     use crate::msgs::handshake::{
         CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
         ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
-        ServerExtension, ServerHelloPayload, SessionId,
+        ServerExtensions, ServerExtensionsInput, ServerHelloPayload, SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
@@ -71,7 +71,7 @@ mod client_hello {
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) done_retry: bool,
         pub(in crate::server) send_tickets: usize,
-        pub(in crate::server) extra_exts: Vec<ServerExtension>,
+        pub(in crate::server) extra_exts: ServerExtensionsInput<'static>,
     }
 
     fn max_early_data_size(configured: u32) -> usize {
@@ -495,8 +495,6 @@ mod client_hello {
         resuming_psk: Option<&[u8]>,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
-        let mut extensions = Vec::new();
-
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
@@ -508,15 +506,12 @@ mod client_hello {
             })?;
         cx.common.kx_state.complete();
 
-        extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(
-            ckx.group,
-            ckx.pub_key,
-        )));
-        extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
-
-        if let Some(psk_idx) = chosen_psk_idx {
-            extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
-        }
+        let extensions = Box::new(ServerExtensions {
+            key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
+            selected_version: Some(ProtocolVersion::TLSv1_3),
+            preshared_key: chosen_psk_idx.map(|idx| idx as u16),
+            ..Default::default()
+        });
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -677,18 +672,18 @@ mod client_hello {
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: ServerExtensionsInput<'static>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
-        let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;
+        let mut ep = hs::ExtensionProcessing::new(extra_exts);
+        ep.process_common(config, cx, ocsp_response, hello, resumedata)?;
 
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {
-            ep.exts.push(ServerExtension::EarlyData);
+            ep.extensions.early_data_ack = Some(());
         }
 
-        let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(ep.exts));
+        let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(ep.extensions));
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
