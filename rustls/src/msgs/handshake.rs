@@ -2367,49 +2367,36 @@ impl Codec<'_> for NewSessionTicketPayload {
 }
 
 // -- NewSessionTicket electric boogaloo --
-#[derive(Debug)]
-pub(crate) enum NewSessionTicketExtension {
-    EarlyData(u32),
-    Unknown(UnknownExtension),
-}
-
-impl NewSessionTicketExtension {
-    pub(crate) fn ext_type(&self) -> ExtensionType {
-        match self {
-            Self::EarlyData(_) => ExtensionType::EarlyData,
-            Self::Unknown(r) => r.typ,
-        }
+extension_struct! {
+    pub(crate) struct NewSessionTicketExtensions {
+        ExtensionType::EarlyData =>
+            pub(crate) max_early_data_size: Option<u32>,
     }
 }
 
-impl Codec<'_> for NewSessionTicketExtension {
+impl Codec<'_> for NewSessionTicketExtensions {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.ext_type().encode(bytes);
+        let extensions = LengthPrefixedBuffer::new(ListLength::U16, bytes);
 
-        let nested = LengthPrefixedBuffer::new(ListLength::U16, bytes);
-        match self {
-            Self::EarlyData(r) => r.encode(nested.buf),
-            Self::Unknown(r) => r.encode(nested.buf),
+        for ext in Self::ALL_EXTENSIONS {
+            self.encode_one(*ext, extensions.buf);
         }
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = ExtensionType::read(r)?;
-        let len = u16::read(r)? as usize;
+        let mut out = Self::default();
+
+        let mut checker = DuplicateExtensionChecker::new();
+
+        let len = usize::from(u16::read(r)?);
         let mut sub = r.sub(len)?;
 
-        let ext = match typ {
-            ExtensionType::EarlyData => Self::EarlyData(u32::read(&mut sub)?),
-            _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
-        };
+        while sub.any_left() {
+            out.read_one(&mut sub, |unknown| checker.check(unknown))?;
+        }
 
-        sub.expect_empty("NewSessionTicketExtension")
-            .map(|_| ext)
+        Ok(out)
     }
-}
-
-impl TlsListElement for NewSessionTicketExtension {
-    const SIZE_LEN: ListLength = ListLength::U16;
 }
 
 #[derive(Debug)]
@@ -2418,7 +2405,7 @@ pub(crate) struct NewSessionTicketPayloadTls13 {
     pub(crate) age_add: u32,
     pub(crate) nonce: PayloadU8,
     pub(crate) ticket: Arc<PayloadU16>,
-    pub(crate) exts: Vec<NewSessionTicketExtension>,
+    pub(crate) extensions: NewSessionTicketExtensions,
 }
 
 impl NewSessionTicketPayloadTls13 {
@@ -2428,29 +2415,7 @@ impl NewSessionTicketPayloadTls13 {
             age_add,
             nonce: PayloadU8::new(nonce),
             ticket: Arc::new(PayloadU16::new(ticket)),
-            exts: vec![],
-        }
-    }
-
-    pub(crate) fn has_duplicate_extension(&self) -> bool {
-        has_duplicates::<_, _, u16>(
-            self.exts
-                .iter()
-                .map(|ext| ext.ext_type()),
-        )
-    }
-
-    pub(crate) fn find_extension(&self, ext: ExtensionType) -> Option<&NewSessionTicketExtension> {
-        self.exts
-            .iter()
-            .find(|x| x.ext_type() == ext)
-    }
-
-    pub(crate) fn max_early_data_size(&self) -> Option<u32> {
-        let ext = self.find_extension(ExtensionType::EarlyData)?;
-        match ext {
-            NewSessionTicketExtension::EarlyData(sz) => Some(*sz),
-            _ => None,
+            extensions: NewSessionTicketExtensions::default(),
         }
     }
 }
@@ -2461,7 +2426,7 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         self.age_add.encode(bytes);
         self.nonce.encode(bytes);
         self.ticket.encode(bytes);
-        self.exts.encode(bytes);
+        self.extensions.encode(bytes);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
@@ -2474,14 +2439,14 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
             Err(err) => Err(err),
             Ok(pl) => Ok(PayloadU16::new(pl.0)),
         }?);
-        let exts = Vec::read(r)?;
+        let extensions = NewSessionTicketExtensions::read(r)?;
 
         Ok(Self {
             lifetime,
             age_add,
             nonce,
             ticket,
-            exts,
+            extensions,
         })
     }
 }
