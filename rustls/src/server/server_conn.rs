@@ -25,7 +25,7 @@ use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::base::Payload;
 use crate::msgs::enums::CertificateType;
-use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
+use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtensionsTemplate};
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -560,13 +560,15 @@ impl ServerConfig {
 #[cfg(feature = "std")]
 mod connection {
     use alloc::boxed::Box;
-    use alloc::vec::Vec;
     use core::fmt;
     use core::fmt::{Debug, Formatter};
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
+    use super::{
+        Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData,
+        ServerExtensionsTemplate,
+    };
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
@@ -614,7 +616,10 @@ mod connection {
         /// we behave in the TLS protocol.
         pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
             Ok(Self {
-                inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
+                inner: ConnectionCommon::from(ConnectionCore::for_server(
+                    config,
+                    ServerExtensionsTemplate::default(),
+                )?),
             })
         }
 
@@ -919,7 +924,7 @@ impl UnbufferedServerConnection {
         Ok(Self {
             inner: UnbufferedConnectionCommon::from(ConnectionCore::for_server(
                 config,
-                Vec::new(),
+                ServerExtensionsTemplate::default(),
             )?),
         })
     }
@@ -1001,6 +1006,8 @@ impl Accepted {
         mut self,
         config: Arc<ServerConfig>,
     ) -> Result<ServerConnection, (Error, AcceptedAlert)> {
+        use crate::msgs::handshake::ServerExtensionsTemplate;
+
         if let Err(err) = self
             .connection
             .set_max_fragment_size(config.max_fragment_size)
@@ -1012,7 +1019,7 @@ impl Accepted {
 
         self.connection.enable_secret_extraction = config.enable_secret_extraction;
 
-        let state = hs::ExpectClientHello::new(config, Vec::new());
+        let state = hs::ExpectClientHello::new(config, ServerExtensionsTemplate::default());
         let mut cx = hs::ServerContext::from(&mut self.connection);
 
         let ch = Self::client_hello_payload(&self.message);
@@ -1166,7 +1173,7 @@ impl Debug for EarlyDataState {
 impl ConnectionCore<ServerConnectionData> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: ServerExtensionsTemplate<'static>,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;

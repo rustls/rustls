@@ -42,8 +42,8 @@ mod client_hello {
     use crate::msgs::enums::{ClientCertificateType, Compression, ECPointFormat};
     use crate::msgs::handshake::{
         CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
-        Random, ServerExtension, ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams,
-        ServerKeyExchangePayload,
+        Random, ServerExtensionsTemplate, ServerHelloPayload, ServerKeyExchange,
+        ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::sign;
     use crate::verify::DigitallySignedStruct;
@@ -56,7 +56,7 @@ mod client_hello {
         pub(in crate::server) using_ems: bool,
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) send_ticket: bool,
-        pub(in crate::server) extra_exts: Vec<ServerExtension>,
+        pub(in crate::server) extra_exts: ServerExtensionsTemplate<'static>,
     }
 
     impl CompleteClientHelloHandling {
@@ -346,10 +346,10 @@ mod client_hello {
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
         randoms: &ConnectionRandoms,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: ServerExtensionsTemplate<'static>,
     ) -> Result<bool, Error> {
-        let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;
+        let mut ep = hs::ExtensionProcessing::new(extra_exts);
+        ep.process_common(config, cx, ocsp_response, hello, resumedata)?;
         ep.process_tls12(config, hello, using_ems);
 
         let sh = HandshakeMessagePayload {
@@ -360,7 +360,7 @@ mod client_hello {
                 session_id,
                 cipher_suite: suite.common.suite,
                 compression_method: Compression::Null,
-                extensions: ep.exts,
+                extensions: ep.extensions,
             }),
         };
         trace!("sending server hello {:?}", sh);

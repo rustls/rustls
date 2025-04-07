@@ -33,7 +33,7 @@ use crate::msgs::handshake::EncryptedClientHello;
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsTemplate, ClientHelloPayload,
     ClientSessionTicket, ConvertProtocolNameList, HandshakeMessagePayload, HandshakePayload,
-    HasServerExtensions, HelloRetryRequest, KeyShareEntry, Random, SessionId,
+    HelloRetryRequest, KeyShareEntry, Random, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -738,7 +738,8 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello
-                .supported_versions()
+                .extensions
+                .selected_version
                 .unwrap_or(server_hello.legacy_version)
         } else {
             server_hello.legacy_version
@@ -754,7 +755,8 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 }
 
                 if server_hello
-                    .supported_versions()
+                    .extensions
+                    .selected_version
                     .is_some()
                 {
                     return Err({
@@ -787,13 +789,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
             });
         }
 
-        if server_hello.has_duplicate_extension() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::DecodeError,
-                PeerMisbehaved::DuplicateServerHelloExtensions,
-            ));
-        }
-
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
         if self
             .input
@@ -810,12 +805,20 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
-            process_alpn_protocol(cx.common, config, server_hello.alpn_protocol())?;
+            process_alpn_protocol(
+                cx.common,
+                config,
+                server_hello
+                    .extensions
+                    .selected_protocol
+                    .as_ref()
+                    .and_then(|proto| proto.as_single_slice()),
+            )?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
-        if let Some(point_fmts) = server_hello.ecpoints_extension() {
+        if let Some(point_fmts) = &server_hello.extensions.ec_point_formats {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
