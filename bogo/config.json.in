@@ -382,6 +382,8 @@
     "TrailingDataWithFinished-Client-TLS13": "local error: bad record MAC",
     "TrailingDataWithFinished-Resume-Client-TLS13": "local error: bad record MAC",
     "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter",
+    "DuplicateExtensionClient-TLS-TLS12": "remote error: illegal parameter",
+    "DuplicateExtensionClient-TLS-TLS13": "remote error: illegal parameter",
     "DuplicateExtensionServer-TLS-TLS12": "remote error: illegal parameter",
     "DuplicateExtensionServer-TLS-TLS13": "remote error: illegal parameter"
   },

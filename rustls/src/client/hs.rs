@@ -31,8 +31,8 @@ use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType, PskKeyExchan
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HasServerExtensions, HelloRetryRequest, KeyShareEntry, ProtocolName, Random, ServerNamePayload,
-    SessionId, SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequest, KeyShareEntry, ProtocolName, Random, ServerNamePayload, SessionId,
+    SupportedProtocolVersions, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -731,7 +731,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello
-                .supported_versions()
+                .selected_version
                 .unwrap_or(server_hello.legacy_version)
         } else {
             server_hello.legacy_version
@@ -746,10 +746,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
                 }
 
-                if server_hello
-                    .supported_versions()
-                    .is_some()
-                {
+                if server_hello.selected_version.is_some() {
                     return Err({
                         cx.common.send_fatal_alert(
                             AlertDescription::IllegalParameter,
@@ -780,18 +777,11 @@ impl State<ClientConnectionData> for ExpectServerHello {
             });
         }
 
-        if server_hello.has_duplicate_extension() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::DecodeError,
-                PeerMisbehaved::DuplicateServerHelloExtensions,
-            ));
-        }
-
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
         if self
             .input
             .hello
-            .server_sent_unsolicited_extensions(&server_hello.extensions, &allowed_unsolicited)
+            .server_sent_unsolicited_extensions(server_hello, &allowed_unsolicited)
         {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
@@ -806,13 +796,16 @@ impl State<ClientConnectionData> for ExpectServerHello {
             process_alpn_protocol(
                 cx.common,
                 &self.input.hello.alpn_protocols,
-                server_hello.alpn_protocol(),
+                server_hello
+                    .selected_protocol
+                    .as_ref()
+                    .map(|s| s.as_ref()),
             )?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
-        if let Some(point_fmts) = server_hello.ecpoints_extension() {
+        if let Some(point_fmts) = &server_hello.ec_point_formats {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
