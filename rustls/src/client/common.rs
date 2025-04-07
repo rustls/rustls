@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use super::ResolvesClientCert;
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtension};
+use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
 use crate::sync::Arc;
 use crate::{SignatureScheme, compress, sign};
 
@@ -53,11 +53,17 @@ impl ClientHelloDetails {
 
     pub(super) fn server_sent_unsolicited_extensions(
         &self,
-        received_exts: &[ServerExtension],
+        received_exts: &ServerExtensions<'_>,
         allowed_unsolicited: &[ExtensionType],
     ) -> bool {
-        for ext in received_exts {
-            let ext_type = ext.ext_type();
+        let mut extensions = received_exts.collect_used();
+        extensions.extend(
+            received_exts
+                .unknown_extensions
+                .iter()
+                .map(|ext| ExtensionType::from(*ext)),
+        );
+        for ext_type in extensions {
             if !self.sent_extensions.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type)
             {
                 trace!("Unsolicited extension {ext_type:?}");

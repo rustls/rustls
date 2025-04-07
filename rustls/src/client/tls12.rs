@@ -38,8 +38,7 @@ use crate::verify::{self, DigitallySignedStruct};
 
 mod server_hello {
     use super::*;
-    use crate::msgs::enums::ExtensionType;
-    use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
+    use crate::msgs::handshake::ServerHelloPayload;
 
     pub(in crate::client) struct CompleteServerHelloHandling {
         pub(in crate::client) config: Arc<ClientConfig>,
@@ -76,7 +75,9 @@ mod server_hello {
             }
 
             // Doing EMS?
-            self.using_ems = server_hello.ems_support_acked();
+            self.using_ems = server_hello
+                .extended_master_secret_ack
+                .is_some();
             if self.config.require_ems && !self.using_ems {
                 return Err({
                     cx.common.send_fatal_alert(
@@ -88,7 +89,7 @@ mod server_hello {
 
             // Might the server send a ticket?
             let must_issue_new_ticket = if server_hello
-                .find_extension(ExtensionType::SessionTicket)
+                .session_ticket_ack
                 .is_some()
             {
                 debug!("Server supports tickets");
@@ -100,7 +101,7 @@ mod server_hello {
             // Might the server send a CertificateStatus between Certificate and
             // ServerKeyExchange?
             let may_send_cert_status = server_hello
-                .find_extension(ExtensionType::StatusRequest)
+                .certificate_status_request_ack
                 .is_some();
             if may_send_cert_status {
                 debug!("Server may staple OCSP response");
