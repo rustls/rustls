@@ -14,13 +14,13 @@ use super::handshake::{
     CertificateRequestExtensions, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
-    EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, NewSessionTicketExtensions,
+    EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
+    HelloRetryRequestExtensions, KeyShareEntry, NewSessionTicketExtensions,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
     PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
-    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
-    ServerKeyExchangeParams, ServerKeyExchangePayload, ServerNamePayload, SessionId,
-    SingleProtocolName, SupportedProtocolVersions, UnknownExtension,
+    ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions, ServerHelloPayload,
+    ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, ServerNamePayload,
+    SessionId, SingleProtocolName, SupportedProtocolVersions,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
@@ -127,9 +127,11 @@ fn refuses_client_exts_with_unparsed_bytes() {
 
 #[test]
 fn refuses_server_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
-    let mut rd = Reader::init(&bytes);
-    assert!(ServerExtension::read(&mut rd).is_err());
+    let bytes = [0x00u8, 0x08, 0x00, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    assert_eq!(
+        ServerExtensions::read_bytes(&bytes).unwrap_err(),
+        InvalidMessage::TrailingData("ServerExtensions")
+    );
 }
 
 #[test]
@@ -529,87 +531,22 @@ fn test_truncated_hello_retry_extension_is_detected() {
 fn test_truncated_server_extension_is_detected() {
     let shp = sample_server_hello_payload();
 
-    for ext in &shp.extensions {
-        let mut enc = ext.get_encoding();
-        println!("testing {ext:?} enc {enc:?}");
+    let mut enc = shp.extensions.get_encoding();
+    println!("testing enc {:?}", enc);
 
-        // "outer" truncation, i.e., where the extension-level length is longer than
-        // the input
-        for l in 0..enc.len() {
-            assert!(ServerExtension::read_bytes(&enc[..l]).is_err());
-        }
-
-        // these extension types don't have any internal encoding that rustls validates:
-        match ext.ext_type() {
-            ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
-                continue;
-            }
-            _ => {}
-        };
-
-        // "inner" truncation, where the extension-level length agrees with the input
-        // length, but isn't long enough for the type of extension
-        for l in 0..(enc.len() - 4) {
-            put_u16(l as u16, &mut enc[2..]);
-            println!("  encoding {enc:?} len {l:?}");
-            assert!(ServerExtension::read_bytes(&enc).is_err());
-        }
+    // "outer" truncation, i.e., where the extension-level length is longer than
+    // the input
+    for l in 0..enc.len() {
+        assert!(ServerExtensions::read_bytes(&enc[..l]).is_err());
     }
-}
 
-fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPayload) -> bool) {
-    let mut shp = sample_server_hello_payload();
-    let ext = shp.find_extension(typ).unwrap().clone();
-
-    shp.extensions = vec![];
-    assert!(!getter(&shp));
-
-    shp.extensions = vec![ext];
-    assert!(getter(&shp));
-
-    shp.extensions = vec![ServerExtension::Unknown(UnknownExtension {
-        typ,
-        payload: Payload::Borrowed(&[]),
-    })];
-    assert!(!getter(&shp));
-}
-
-#[test]
-fn server_key_share() {
-    test_server_extension_getter(ExtensionType::KeyShare, |shp| shp.key_share().is_some());
-}
-
-#[test]
-fn server_psk_index() {
-    test_server_extension_getter(ExtensionType::PreSharedKey, |shp| shp.psk_index().is_some());
-}
-
-#[test]
-fn server_ecpoints_extension() {
-    test_server_extension_getter(ExtensionType::ECPointFormats, |shp| {
-        shp.ecpoints_extension().is_some()
-    });
-}
-
-#[test]
-fn server_supported_versions() {
-    test_server_extension_getter(ExtensionType::SupportedVersions, |shp| {
-        shp.supported_versions().is_some()
-    });
-}
-
-#[test]
-fn server_client_certificate_type_extension() {
-    test_server_extension_getter(ExtensionType::ClientCertificateType, |shp| {
-        shp.client_cert_type().is_some()
-    });
-}
-
-#[test]
-fn server_server_certificate_type_extension() {
-    test_server_extension_getter(ExtensionType::ServerCertificateType, |shp| {
-        shp.server_cert_type().is_some()
-    });
+    // "inner" truncation, where the extension-level length agrees with the input
+    // length, but isn't long enough for the type of extension
+    for l in 0..(enc.len() - 4) {
+        put_u16(l as u16, &mut enc[..2]);
+        println!("  encoding {:?} len {:?}", enc, l);
+        assert!(ServerExtensions::read_bytes(&enc).is_err());
+    }
 }
 
 #[test]
@@ -882,25 +819,27 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
         session_id: SessionId::empty(),
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
-        extensions: vec![
-            ServerExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
-            ServerExtension::ServerNameAck,
-            ServerExtension::SessionTicketAck,
-            ServerExtension::RenegotiationInfo(PayloadU8::new(vec![0])),
-            ServerExtension::Protocols(SingleProtocolName::new(ProtocolName::from(vec![0]))),
-            ServerExtension::KeyShare(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
-            ServerExtension::PresharedKey(3),
-            ServerExtension::ExtendedMasterSecretAck,
-            ServerExtension::CertificateStatusAck,
-            ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
-            ServerExtension::TransportParameters(vec![1, 2, 3]),
-            ServerExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
-                payload: Payload::Borrowed(&[1, 2, 3]),
+        extensions: Box::new(ServerExtensions {
+            ec_point_formats: Some(ECPointFormat::SUPPORTED.to_vec()),
+            server_name_ack: Some(()),
+            session_ticket_ack: Some(()),
+            renegotiation_info: Some(PayloadU8::new(vec![0])),
+            selected_protocol: Some(SingleProtocolName::new(ProtocolName::from(vec![0]))),
+            key_share: Some(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
+            preshared_key: Some(3),
+            early_data_ack: Some(()),
+            encrypted_client_hello_ack: Some(ServerEncryptedClientHello {
+                retry_configs: vec![],
             }),
-            ServerExtension::ClientCertType(CertificateType::RawPublicKey),
-            ServerExtension::ServerCertType(CertificateType::RawPublicKey),
-        ],
+            extended_master_secret_ack: Some(()),
+            certificate_status_request_ack: Some(()),
+            selected_version: Some(ProtocolVersion::TLSv1_2),
+            transport_parameters: Some(Payload::new(vec![1, 2, 3])),
+            transport_parameters_draft: None,
+            client_certificate_type: Some(CertificateType::RawPublicKey),
+            server_certificate_type: Some(CertificateType::RawPublicKey),
+            unknown_extensions: Default::default(),
+        }),
     }
 }
 
@@ -1098,7 +1037,7 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
     }
 }
 
-fn sample_encrypted_extensions() -> Vec<ServerExtension> {
+fn sample_encrypted_extensions() -> Box<ServerExtensions<'static>> {
     sample_server_hello_payload().extensions
 }
 

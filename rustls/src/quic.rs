@@ -17,7 +17,6 @@ use crate::tls13::key_schedule::{
 
 #[cfg(feature = "std")]
 mod connection {
-    use alloc::vec;
     use alloc::vec::Vec;
     use core::fmt::{self, Debug};
     use core::ops::{Deref, DerefMut};
@@ -32,7 +31,9 @@ mod connection {
     use crate::error::Error;
     use crate::msgs::base::Payload;
     use crate::msgs::deframer::buffers::{DeframerVecBuffer, Locator};
-    use crate::msgs::handshake::{ClientExtensionsInput, ServerExtension, TransportParameters};
+    use crate::msgs::handshake::{
+        ClientExtensionsInput, ServerExtensionsInput, TransportParameters,
+    };
     use crate::msgs::message::InboundPlainMessage;
     use crate::server::{ServerConfig, ServerConnectionData};
     use crate::sync::Arc;
@@ -285,12 +286,14 @@ mod connection {
                 ));
             }
 
-            let ext = match quic_version {
-                Version::V1Draft => ServerExtension::TransportParametersDraft(params),
-                Version::V1 | Version::V2 => ServerExtension::TransportParameters(params),
+            let exts = ServerExtensionsInput {
+                transport_parameters: Some(match quic_version {
+                    Version::V1Draft => TransportParameters::QuicDraft(Payload::new(params)),
+                    Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
+                }),
             };
 
-            let mut core = ConnectionCore::for_server(config, vec![ext])?;
+            let mut core = ConnectionCore::for_server(config, exts)?;
             core.common_state.protocol = Protocol::Quic;
             core.common_state.quic.version = quic_version;
             Ok(Self { inner: core.into() })

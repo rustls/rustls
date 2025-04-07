@@ -32,7 +32,7 @@ mod tests {
     use crate::msgs::enums::ECCurveType;
     use crate::msgs::handshake::{
         CertificateChain, EcParameters, HelloRetryRequestExtensions, KeyShareEntry,
-        ServerEcdhParams, ServerExtension, ServerKeyExchange, ServerKeyExchangeParams,
+        ServerEcdhParams, ServerExtensions, ServerKeyExchange, ServerKeyExchangeParams,
         ServerKeyExchangePayload,
     };
     use crate::msgs::message::PlainMessage;
@@ -165,7 +165,7 @@ mod tests {
                     cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,
                     session_id: SessionId::empty(),
-                    extensions: vec![],
+                    extensions: Box::new(ServerExtensions::default()),
                 }),
             )),
         };
@@ -232,7 +232,10 @@ mod tests {
                     cipher_suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,
                     session_id: SessionId::empty(),
-                    extensions: vec![ServerExtension::ExtendedMasterSecretAck],
+                    extensions: Box::new(ServerExtensions {
+                        extended_master_secret_ack: Some(()),
+                        ..ServerExtensions::default()
+                    }),
                 }),
             )),
         };
@@ -340,7 +343,7 @@ mod tests {
     #[test]
     fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id_by_omission() {
         assert_eq!(
-            client_requiring_rpk_receives_server_ee(vec![]),
+            client_requiring_rpk_receives_server_ee(ServerExtensions::default()),
             Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
         );
     }
@@ -348,9 +351,10 @@ mod tests {
     #[test]
     fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id() {
         assert_eq!(
-            client_requiring_rpk_receives_server_ee(vec![ServerExtension::ServerCertType(
-                CertificateType::X509
-            )]),
+            client_requiring_rpk_receives_server_ee(ServerExtensions {
+                server_certificate_type: Some(CertificateType::X509),
+                ..ServerExtensions::default()
+            }),
             Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
         );
     }
@@ -358,9 +362,10 @@ mod tests {
     #[test]
     fn test_client_requiring_rpk_rejects_server_that_only_demands_x509_by_omission() {
         assert_eq!(
-            client_requiring_rpk_receives_server_ee(vec![ServerExtension::ServerCertType(
-                CertificateType::RawPublicKey
-            )]),
+            client_requiring_rpk_receives_server_ee(ServerExtensions {
+                server_certificate_type: Some(CertificateType::RawPublicKey),
+                ..ServerExtensions::default()
+            }),
             Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
         );
     }
@@ -368,10 +373,11 @@ mod tests {
     #[test]
     fn test_client_requiring_rpk_rejects_server_that_only_demands_x509() {
         assert_eq!(
-            client_requiring_rpk_receives_server_ee(vec![
-                ServerExtension::ClientCertType(CertificateType::X509),
-                ServerExtension::ServerCertType(CertificateType::RawPublicKey)
-            ]),
+            client_requiring_rpk_receives_server_ee(ServerExtensions {
+                client_certificate_type: Some(CertificateType::X509),
+                server_certificate_type: Some(CertificateType::RawPublicKey),
+                ..ServerExtensions::default()
+            }),
             Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
         );
     }
@@ -379,16 +385,17 @@ mod tests {
     #[test]
     fn test_client_requiring_rpk_accepts_rpk_server() {
         assert_eq!(
-            client_requiring_rpk_receives_server_ee(vec![
-                ServerExtension::ClientCertType(CertificateType::RawPublicKey),
-                ServerExtension::ServerCertType(CertificateType::RawPublicKey)
-            ]),
+            client_requiring_rpk_receives_server_ee(ServerExtensions {
+                client_certificate_type: Some(CertificateType::RawPublicKey),
+                server_certificate_type: Some(CertificateType::RawPublicKey),
+                ..ServerExtensions::default()
+            }),
             Ok(())
         );
     }
 
     fn client_requiring_rpk_receives_server_ee(
-        encrypted_extensions: Vec<ServerExtension>,
+        encrypted_extensions: ServerExtensions<'_>,
     ) -> Result<(), Error> {
         let fake_server_crypto = Arc::new(FakeServerCrypto::new());
         let mut conn = ClientConnection::new(
@@ -408,10 +415,13 @@ mod tests {
                     cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_3,
                     session_id: SessionId::empty(),
-                    extensions: vec![ServerExtension::KeyShare(KeyShareEntry {
-                        group: NamedGroup::X25519,
-                        payload: PayloadU16::new(vec![0xaa; 32]),
-                    })],
+                    extensions: Box::new(ServerExtensions {
+                        key_share: Some(KeyShareEntry {
+                            group: NamedGroup::X25519,
+                            payload: PayloadU16::new(vec![0xaa; 32]),
+                        }),
+                        ..ServerExtensions::default()
+                    }),
                 }),
             )),
         };
@@ -422,7 +432,7 @@ mod tests {
         let ee = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload(
-                HandshakePayload::EncryptedExtensions(encrypted_extensions),
+                HandshakePayload::EncryptedExtensions(Box::new(encrypted_extensions)),
             )),
         };
 

@@ -22,7 +22,8 @@ use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
     ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, ProtocolName, Random,
-    ServerExtension, ServerNamePayload, SingleProtocolName,
+    ServerExtensions, ServerExtensionsInput, ServerNamePayload, SingleProtocolName,
+    TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -59,14 +60,31 @@ pub(super) fn can_resume(
 #[derive(Default)]
 pub(super) struct ExtensionProcessing {
     // extensions to reply with
-    pub(super) exts: Vec<ServerExtension>,
+    pub(super) extensions: Box<ServerExtensions<'static>>,
     #[cfg(feature = "tls12")]
     pub(super) send_ticket: bool,
 }
 
 impl ExtensionProcessing {
-    pub(super) fn new() -> Self {
-        Default::default()
+    pub(super) fn new(extra_exts: ServerExtensionsInput<'static>) -> Self {
+        let ServerExtensionsInput {
+            transport_parameters,
+        } = extra_exts;
+
+        let mut extensions = Box::new(ServerExtensions::default());
+        match transport_parameters {
+            Some(TransportParameters::Quic(v)) => extensions.transport_parameters = Some(v),
+            Some(TransportParameters::QuicDraft(v)) => {
+                extensions.transport_parameters_draft = Some(v)
+            }
+            None => {}
+        }
+
+        Self {
+            extensions,
+            #[cfg(feature = "tls12")]
+            send_ticket: false,
+        }
     }
 
     pub(super) fn process_common(
@@ -76,7 +94,6 @@ impl ExtensionProcessing {
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-        extra_exts: Vec<ServerExtension>,
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
@@ -90,11 +107,10 @@ impl ExtensionProcessing {
                 })
                 .map(|bytes| ProtocolName::from(bytes.clone()));
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
-                debug!("Chosen ALPN protocol {selected_protocol:?}");
-                self.exts
-                    .push(ServerExtension::Protocols(SingleProtocolName::new(
-                        selected_protocol.clone(),
-                    )));
+                debug!("Chosen ALPN protocol {:?}", selected_protocol);
+
+                self.extensions.selected_protocol =
+                    Some(SingleProtocolName::new(selected_protocol.clone()));
             } else if !our_protocols.is_empty() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::NoApplicationProtocol,
@@ -140,8 +156,7 @@ impl ExtensionProcessing {
         // SNI
         if let (false, Some(ServerNamePayload::SingleDnsName(_))) = (for_resume, &hello.server_name)
         {
-            self.exts
-                .push(ServerExtension::ServerNameAck);
+            self.extensions.server_name_ack = Some(());
         }
 
         // Send status_request response if we have one.  This is not allowed
@@ -154,8 +169,8 @@ impl ExtensionProcessing {
         {
             if ocsp_response.is_some() && !cx.common.is_tls13() {
                 // Only TLS1.2 sends confirmation in ServerHello
-                self.exts
-                    .push(ServerExtension::CertificateStatusAck);
+                self.extensions
+                    .certificate_status_request_ack = Some(());
             }
         } else {
             // Throw away any OCSP response so we don't try to send it later.
@@ -164,8 +179,6 @@ impl ExtensionProcessing {
 
         self.validate_server_cert_type_extension(hello, config, cx)?;
         self.validate_client_cert_type_extension(hello, config, cx)?;
-
-        self.exts.extend(extra_exts);
 
         Ok(())
     }
@@ -179,17 +192,15 @@ impl ExtensionProcessing {
     ) {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
-        let secure_reneg_offered = hello
-            .extensions
-            .renegotiation_info
-            .is_some()
+
+        use crate::msgs::base::PayloadU8;
+        let secure_reneg_offered = hello.renegotiation_info.is_some()
             || hello
                 .cipher_suites
                 .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
         if secure_reneg_offered {
-            self.exts
-                .push(ServerExtension::make_empty_renegotiation_info());
+            self.extensions.renegotiation_info = Some(PayloadU8::new(Vec::new()));
         }
 
         // Tickets:
@@ -197,14 +208,13 @@ impl ExtensionProcessing {
         // we send an ack.
         if hello.session_ticket.is_some() && config.ticketer.enabled() {
             self.send_ticket = true;
-            self.exts
-                .push(ServerExtension::SessionTicketAck);
+            self.extensions.session_ticket_ack = Some(());
         }
 
         // Confirm use of EMS if offered.
         if using_ems {
-            self.exts
-                .push(ServerExtension::ExtendedMasterSecretAck);
+            self.extensions
+                .extended_master_secret_ack = Some(());
         }
     }
 
@@ -279,12 +289,10 @@ impl ExtensionProcessing {
 
         match raw_key_negotation_result {
             Ok((ExtensionType::ClientCertificateType, cert_type)) => {
-                self.exts
-                    .push(ServerExtension::ClientCertType(cert_type));
+                self.extensions.client_certificate_type = Some(cert_type);
             }
             Ok((ExtensionType::ServerCertificateType, cert_type)) => {
-                self.exts
-                    .push(ServerExtension::ServerCertType(cert_type));
+                self.extensions.server_certificate_type = Some(cert_type);
             }
             Err(err) => {
                 return Err(cx
@@ -299,7 +307,7 @@ impl ExtensionProcessing {
 
 pub(super) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
-    pub(super) extra_exts: Vec<ServerExtension>,
+    pub(super) extra_exts: ServerExtensionsInput<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
     #[cfg(feature = "tls12")]
     pub(super) session_id: SessionId,
@@ -310,7 +318,10 @@ pub(super) struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub(super) fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+    pub(super) fn new(
+        config: Arc<ServerConfig>,
+        extra_exts: ServerExtensionsInput<'static>,
+    ) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {
