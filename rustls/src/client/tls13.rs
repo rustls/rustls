@@ -27,10 +27,10 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtensions, ConvertProtocolNameList,
-    EchConfigPayload, HandshakeMessagePayload, HandshakePayload, KeyShareEntry,
-    NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    ServerExtensions, ServerHelloPayload,
+    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtensions, EchConfigPayload,
+    HandshakeMessagePayload, HandshakePayload, KeyShareEntry, NewSessionTicketPayloadTls13,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ServerExtensions,
+    ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -476,7 +476,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             &self.config,
             exts.selected_protocol
                 .as_ref()
-                .and_then(|proto| proto.as_single_slice()),
+                .map(|proto| proto.as_ref()),
         )?;
         hs::process_client_cert_type_extension(
             cx.common,

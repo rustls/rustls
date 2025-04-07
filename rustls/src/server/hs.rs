@@ -21,8 +21,8 @@ use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, ConvertProtocolNameList, HandshakePayload, KeyExchangeAlgorithm,
-    LossyDnsName, ProtocolName, Random, ServerExtensions, ServerExtensionsTemplate,
+    ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, LossyDnsName, Random,
+    ServerExtensions, ServerExtensionsTemplate, SingleProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -89,23 +89,25 @@ impl ExtensionProcessing {
         // ALPN
         let our_protocols = &config.alpn_protocols;
         if let Some(their_protocols) = &hello.extensions.protocols {
-            let their_protocols = their_protocols.to_slices();
-
             if their_protocols
                 .iter()
-                .any(|protocol| protocol.is_empty())
+                .any(|protocol| protocol.as_ref().is_empty())
             {
                 return Err(PeerMisbehaved::OfferedEmptyApplicationProtocol.into());
             }
 
             cx.common.alpn_protocol = our_protocols
                 .iter()
-                .find(|protocol| their_protocols.contains(&protocol.as_slice()))
+                .find(|protocol| {
+                    their_protocols
+                        .iter()
+                        .any(|other| other.as_ref() == protocol.as_slice())
+                })
                 .cloned();
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.extensions.selected_protocol =
-                    Some([ProtocolName::from(selected_protocol.clone())].to_vec());
+                    Some(SingleProtocolName::new(selected_protocol.clone()));
             } else if !our_protocols.is_empty() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::NoApplicationProtocol,
