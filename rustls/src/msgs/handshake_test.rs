@@ -15,7 +15,7 @@ use super::handshake::{
     CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
     EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, NewSessionTicketExtension,
+    HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, NewSessionTicketExtensions,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
     PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
     ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
@@ -147,9 +147,11 @@ fn refuses_certificate_req_ext_with_unparsed_bytes() {
 
 #[test]
 fn refuses_new_session_ticket_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x2a, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01];
+    let bytes = [
+        0x00u8, 0x09, 0x00, 0x2a, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x01,
+    ];
     let mut rd = Reader::init(&bytes);
-    assert!(NewSessionTicketExtension::read(&mut rd).is_err());
+    assert!(NewSessionTicketExtensions::read(&mut rd).is_err());
 }
 
 #[test]
@@ -1114,10 +1116,9 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
         age_add: 1234,
         nonce: PayloadU8(vec![1, 2, 3]),
         ticket: Arc::new(PayloadU16(vec![4, 5, 6])),
-        exts: vec![NewSessionTicketExtension::Unknown(UnknownExtension {
-            typ: ExtensionType::Unknown(12345),
-            payload: Payload::Borrowed(&[1, 2, 3]),
-        })],
+        extensions: NewSessionTicketExtensions {
+            max_early_data_size: Some(1234),
+        },
     }
 }
 
