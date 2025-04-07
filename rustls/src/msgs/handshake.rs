@@ -411,22 +411,18 @@ impl AsRef<[u8]> for SingleProtocolName {
 
 // --- TLS 1.3 Key shares ---
 #[derive(Clone, Debug)]
-pub struct KeyShareEntry {
+pub(crate) struct KeyShareEntry {
     pub(crate) group: NamedGroup,
     /// RFC8446: `opaque key_exchange<1..2^16-1>;`
     pub(crate) payload: PayloadU16<NonEmpty>,
 }
 
 impl KeyShareEntry {
-    pub fn new(group: NamedGroup, payload: impl Into<Vec<u8>>) -> Self {
+    pub(crate) fn new(group: NamedGroup, payload: impl Into<Vec<u8>>) -> Self {
         Self {
             group,
             payload: PayloadU16::new(payload.into()),
         }
-    }
-
-    pub fn group(&self) -> NamedGroup {
-        self.group
     }
 }
 
@@ -1602,7 +1598,7 @@ impl ServerHelloPayload {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct CertificateChain<'a>(pub Vec<CertificateDer<'a>>);
+pub struct CertificateChain<'a>(pub(crate) Vec<CertificateDer<'a>>);
 
 impl CertificateChain<'_> {
     pub(crate) fn into_owned(self) -> CertificateChain<'static> {
