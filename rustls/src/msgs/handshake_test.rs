@@ -20,6 +20,7 @@ use super::handshake::{
     PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
     ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions, ServerHelloPayload,
     ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId,
+    SingleProtocolName,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -777,7 +778,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             server_name_ack: Some(()),
             session_ticket_ack: Some(()),
             renegotiation_info: Some(PayloadU8(vec![0])),
-            selected_protocol: Some(vec![ProtocolName::from(vec![0])]),
+            selected_protocol: Some(SingleProtocolName::new(vec![0])),
             key_share: Some(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             preshared_key: Some(3),
             early_data_ack: Some(()),

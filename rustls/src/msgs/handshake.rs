@@ -350,35 +350,39 @@ impl TlsListElement for ProtocolName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-pub(crate) trait ConvertProtocolNameList {
-    fn from_slices(names: &[&[u8]]) -> Self;
-    fn to_slices(&self) -> Vec<&[u8]>;
-    fn as_single_slice(&self) -> Option<&[u8]>;
+/// RFC6066 encodes a single protocol name as `Vec<ProtocolName>`
+#[derive(Clone, Debug)]
+pub(crate) struct SingleProtocolName(ProtocolName);
+
+impl SingleProtocolName {
+    pub(crate) fn new(name: impl Into<Vec<u8>>) -> Self {
+        Self(ProtocolName::from(name.into()))
+    }
 }
 
-impl ConvertProtocolNameList for Vec<ProtocolName> {
-    fn from_slices(names: &[&[u8]]) -> Self {
-        let mut ret = Self::new();
-
-        for name in names {
-            ret.push(ProtocolName::from(name.to_vec()));
-        }
-
-        ret
+impl Codec<'_> for SingleProtocolName {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let body = LengthPrefixedBuffer::new(ListLength::U16, bytes);
+        self.0.encode(body.buf);
     }
 
-    fn to_slices(&self) -> Vec<&[u8]> {
-        self.iter()
-            .map(|proto| proto.as_ref())
-            .collect::<Vec<&[u8]>>()
-    }
+    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let len = u16::read(reader)?;
+        let mut sub = reader.sub(usize::from(len))?;
 
-    fn as_single_slice(&self) -> Option<&[u8]> {
-        if self.len() == 1 {
-            Some(self[0].as_ref())
+        let item = ProtocolName::read(&mut sub)?;
+
+        if sub.any_left() {
+            Err(InvalidMessage::TrailingData("SingleProtocolName"))
         } else {
-            None
+            Ok(Self(item))
         }
+    }
+}
+
+impl AsRef<[u8]> for SingleProtocolName {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
     }
 }
 
@@ -987,7 +991,7 @@ extension_struct! {
 
         /// Selected ALPN protocol (RFC7301)
         ExtensionType::ALProtocolNegotiation =>
-            pub(crate) selected_protocol: Option<Vec<ProtocolName>>, // TODO: OneProtocolName
+            pub(crate) selected_protocol: Option<SingleProtocolName>,
 
         /// Key exchange server share (RFC8446)
         ExtensionType::KeyShare =>
