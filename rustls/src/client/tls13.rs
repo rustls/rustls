@@ -1465,13 +1465,6 @@ impl ExpectTraffic {
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        if nst.has_duplicate_extension() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::DuplicateNewSessionTicketExtensions,
-            ));
-        }
-
         let handshake_hash = self.transcript.current_hash();
         let secret = ResumptionSecret::new(&self.key_schedule, &handshake_hash)
             .derive_ticket_psk(&nst.nonce.0);
@@ -1492,12 +1485,13 @@ impl ExpectTraffic {
             now,
             nst.lifetime,
             nst.age_add,
-            nst.max_early_data_size()
+            nst.extensions
+                .max_early_data_size
                 .unwrap_or_default(),
         );
 
         if cx.common.is_quic() {
-            if let Some(sz) = nst.max_early_data_size() {
+            if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
                 }
