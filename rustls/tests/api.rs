@@ -16,7 +16,7 @@ use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedK
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
-use rustls::internal::msgs::handshake::{HandshakePayload, ServerExtension};
+use rustls::internal::msgs::handshake::HandshakePayload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -356,32 +356,8 @@ mod test_raw_keys {
 
         let encoded = if let MessagePayload::Handshake { parsed, .. } = &mut msg.payload {
             if let HandshakePayload::EncryptedExtensions(enc_ext) = &mut parsed.payload {
-                let mut sct_present = false;
-                let mut cct_present = false;
-                for extension in enc_ext.iter_mut() {
-                    if let ServerExtension::ClientCertType(cert_type) = extension {
-                        if let Some(cct) = client_cert_type {
-                            *cert_type = *cct;
-                        }
-                        cct_present = true;
-                    };
-                    if let ServerExtension::ServerCertType(cert_type) = extension {
-                        if let Some(sct) = server_cert_type {
-                            *cert_type = *sct;
-                        }
-                        sct_present = true;
-                    };
-                }
-                if !sct_present {
-                    if let Some(sct) = server_cert_type {
-                        enc_ext.push(ServerExtension::ServerCertType(*sct));
-                    }
-                }
-                if !cct_present {
-                    if let Some(cct) = client_cert_type {
-                        enc_ext.push(ServerExtension::ClientCertType(*cct));
-                    }
-                }
+                enc_ext.server_certificate_type = server_cert_type.cloned();
+                enc_ext.client_certificate_type = client_cert_type.cloned();
             }
             Payload::new(parsed.get_encoding())
         } else {
