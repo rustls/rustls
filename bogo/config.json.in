@@ -338,7 +338,6 @@
     "ServerCipherFilter-Ed25519": ":INCOMPATIBLE:",
     "TLS13-OnlyPadding-TLS": ":PEER_MISBEHAVIOUR:",
     "TLS13-EmptyRecords-TLS": ":PEER_MISBEHAVIOUR:",
-    "TLS13-DuplicateTicketEarlyDataSupport": ":PEER_MISBEHAVIOUR:",
     "SupportedVersionSelection-TLS12": ":PEER_MISBEHAVIOUR:",
     "HelloRetryRequest-CipherChange-TLS13": ":PEER_MISBEHAVIOUR:",
     "CurveTest-Client-Compressed-P-256-TLS12": ":PEER_MISBEHAVIOUR:",
