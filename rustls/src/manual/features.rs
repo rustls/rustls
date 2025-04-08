@@ -12,7 +12,7 @@ APIs ([`CryptoProvider`] for example).
 * ECDSA, Ed25519 or RSA server authentication by clients `*`
 * ECDSA, Ed25519[^1] or RSA server authentication by servers `*`
 * Forward secrecy using ECDHE; with curve25519, nistp256 or nistp384 curves `*`
-* Post-quantum hybrid key exchange with [X25519MLKEM768](https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/) [^2] `*`
+* Post-quantum hybrid key exchange with [X25519MLKEM768](https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/) [^2] `*`
 * AES128-GCM and AES256-GCM bulk encryption, with safe nonces `*`
 * ChaCha20-Poly1305 bulk encryption ([RFC7905](https://tools.ietf.org/html/rfc7905)) `*`
 * ALPN support

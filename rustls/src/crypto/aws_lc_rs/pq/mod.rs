@@ -7,7 +7,7 @@ mod mlkem;
 
 /// This is the [X25519MLKEM768] key exchange.
 ///
-/// [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/>
+/// [X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
 pub static X25519MLKEM768: &dyn SupportedKxGroup = &hybrid::Hybrid {
     classical: kx_group::X25519,
     post_quantum: MLKEM768,

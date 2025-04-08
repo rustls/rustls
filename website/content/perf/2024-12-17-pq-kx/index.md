@@ -78,7 +78,7 @@ It's therefore advantageous for a client to avoid `HelloRetryRequest`s, by:
 [draft-ietf-tls-key-share-prediction]: https://datatracker.ietf.org/doc/draft-ietf-tls-key-share-prediction/
 [X25519]: https://datatracker.ietf.org/doc/html/rfc7748
 [ML-KEM]: https://csrc.nist.gov/pubs/fips/203/final
-[X25519MLKEM768]: https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/02/
+[X25519MLKEM768]: https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/
 [Xeon E-2386G]: https://www.intel.com/content/www/us/en/products/sku/214806/intel-xeon-e2386g-processor-12m-cache-3-50-ghz/specifications.html
 [draft-ietf-tls-hybrid-design]: https://www.ietf.org/archive/id/draft-ietf-tls-hybrid-design-11.html#name-transmitting-public-keys-an
 
