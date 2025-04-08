@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types)]
 #![allow(missing_docs)]
 use crate::msgs::codec::{Codec, Reader};
+use crate::msgs::enums::HashAlgorithm;
 
 enum_builder! {
     /// The `AlertDescription` TLS protocol enum.  Values in this enum are taken
@@ -542,17 +543,35 @@ impl SignatureScheme {
     /// This prevents (eg) RSA_PKCS1_SHA256 being offered or accepted, even if our
     /// verifier supports it for other protocol versions.
     ///
-    /// See RFC8446 s4.2.3.
+    /// See RFC8446 s4.2.3: <https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.3>
+    ///
+    /// This is a denylist so that newly-allocated `SignatureScheme`s values are
+    /// allowed in TLS1.3 by default.
     pub(crate) fn supported_in_tls13(&self) -> bool {
-        matches!(
-            *self,
-            Self::ECDSA_NISTP521_SHA512
-                | Self::ECDSA_NISTP384_SHA384
-                | Self::ECDSA_NISTP256_SHA256
-                | Self::RSA_PSS_SHA512
-                | Self::RSA_PSS_SHA384
-                | Self::RSA_PSS_SHA256
-                | Self::ED25519
+        let [hash, sign] = self.to_array();
+
+        // This covers both disallowing SHA1 items in `SignatureScheme`, and
+        // old hash functions.  See the section beginning "Legacy algorithms:"
+        // and item starting "In TLS 1.2, the extension contained hash/signature
+        // pairs" in RFC8446 section 4.2.3.
+        match HashAlgorithm::from(hash) {
+            HashAlgorithm::NONE
+            | HashAlgorithm::MD5
+            | HashAlgorithm::SHA1
+            | HashAlgorithm::SHA224 => return false,
+            _ => (),
+        };
+
+        // RSA-PKCS1 is also disallowed for TLS1.3, see the section beginning
+        // "RSASSA-PKCS1-v1_5 algorithms:" in RFC8446 section 4.2.3.
+        //
+        // (nb. SignatureAlgorithm::RSA is RSA-PKCS1, and does not cover RSA-PSS
+        // or RSAE-PSS.)
+        //
+        // This also covers the outlawing of DSA mentioned elsewhere in 4.2.3.
+        !matches!(
+            SignatureAlgorithm::from(sign),
+            SignatureAlgorithm::Anonymous | SignatureAlgorithm::RSA | SignatureAlgorithm::DSA
         )
     }
 }
@@ -616,5 +635,39 @@ mod tests {
             CertificateCompressionAlgorithm::Zlib,
             CertificateCompressionAlgorithm::Zstd,
         );
+    }
+
+    #[test]
+    fn tls13_signature_restrictions() {
+        // rsa-pkcs1 denied
+        assert!(!SignatureScheme::RSA_PKCS1_SHA1.supported_in_tls13());
+        assert!(!SignatureScheme::RSA_PKCS1_SHA256.supported_in_tls13());
+        assert!(!SignatureScheme::RSA_PKCS1_SHA384.supported_in_tls13());
+        assert!(!SignatureScheme::RSA_PKCS1_SHA512.supported_in_tls13());
+
+        // dsa denied
+        assert!(!SignatureScheme::from(0x0201).supported_in_tls13());
+        assert!(!SignatureScheme::from(0x0202).supported_in_tls13());
+        assert!(!SignatureScheme::from(0x0203).supported_in_tls13());
+        assert!(!SignatureScheme::from(0x0204).supported_in_tls13());
+        assert!(!SignatureScheme::from(0x0205).supported_in_tls13());
+        assert!(!SignatureScheme::from(0x0206).supported_in_tls13());
+
+        // common
+        assert!(SignatureScheme::ED25519.supported_in_tls13());
+        assert!(SignatureScheme::ED448.supported_in_tls13());
+        assert!(SignatureScheme::RSA_PSS_SHA256.supported_in_tls13());
+        assert!(SignatureScheme::RSA_PSS_SHA384.supported_in_tls13());
+        assert!(SignatureScheme::RSA_PSS_SHA512.supported_in_tls13());
+
+        // rsa_pss_rsae_*
+        assert!(SignatureScheme::from(0x0804).supported_in_tls13());
+        assert!(SignatureScheme::from(0x0805).supported_in_tls13());
+        assert!(SignatureScheme::from(0x0806).supported_in_tls13());
+
+        // ecdsa_brainpool*
+        assert!(SignatureScheme::from(0x081a).supported_in_tls13());
+        assert!(SignatureScheme::from(0x081b).supported_in_tls13());
+        assert!(SignatureScheme::from(0x081c).supported_in_tls13());
     }
 }
