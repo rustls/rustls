@@ -213,18 +213,32 @@ impl Nonce {
     /// This is `iv ^ seq` where `seq` is encoded as a 96-bit big-endian integer.
     #[inline]
     pub fn new(iv: &Iv, seq: u64) -> Self {
-        let mut nonce = Self([0u8; NONCE_LEN]);
-        codec::put_u64(seq, &mut nonce.0[4..]);
+        let mut seq_bytes = [0u8; NONCE_LEN];
+        codec::put_u64(seq, &mut seq_bytes[4..]);
+        Self::new_from_seq(iv, seq_bytes)
+    }
 
-        nonce
-            .0
-            .iter_mut()
+    /// Creates a unique nonce based on the `iv`, the packet number `pn` and multipath `path_id`.
+    ///
+    /// The nonce is computed as the XOR between the `iv` and the 96-bit big-ending integer formed
+    /// by concatenating `path_id` and `pn`.
+    pub fn for_path(path_id: u32, iv: &Iv, pn: u64) -> Self {
+        let mut seq_bytes = [0u8; NONCE_LEN];
+        seq_bytes[0..4].copy_from_slice(&path_id.to_be_bytes());
+        codec::put_u64(pn, &mut seq_bytes[4..]);
+        Self::new_from_seq(iv, seq_bytes)
+    }
+
+    /// Creates a unique nonce based on the `iv` and sequence number `seq`.
+    #[inline]
+    fn new_from_seq(iv: &Iv, mut seq: [u8; NONCE_LEN]) -> Self {
+        seq.iter_mut()
             .zip(iv.0.iter())
-            .for_each(|(nonce, iv)| {
-                *nonce ^= *iv;
+            .for_each(|(s, iv)| {
+                *s ^= *iv;
             });
 
-        nonce
+        Self(seq)
     }
 }
 
