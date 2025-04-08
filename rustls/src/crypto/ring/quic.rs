@@ -140,6 +140,23 @@ impl quic::PacketKey for PacketKey {
         Ok(quic::Tag::from(tag.as_ref()))
     }
 
+    fn encrypt_in_place_for_path(
+        &self,
+        path_id: u32,
+        packet_number: u64,
+        header: &[u8],
+        payload: &mut [u8],
+    ) -> Result<quic::Tag, Error> {
+        let aad = aead::Aad::from(header);
+        let nonce =
+            aead::Nonce::assume_unique_for_key(Nonce::for_path(path_id, &self.iv, packet_number).0);
+        let tag = self
+            .key
+            .seal_in_place_separate_tag(nonce, aad, payload)
+            .map_err(|_| Error::EncryptError)?;
+        Ok(quic::Tag::from(tag.as_ref()))
+    }
+
     /// Decrypt a QUIC packet
     ///
     /// Takes the packet `header`, which is used as the additional authenticated data, and the
@@ -156,6 +173,25 @@ impl quic::PacketKey for PacketKey {
         let payload_len = payload.len();
         let aad = aead::Aad::from(header);
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).0);
+        self.key
+            .open_in_place(nonce, aad, payload)
+            .map_err(|_| Error::DecryptError)?;
+
+        let plain_len = payload_len - self.key.algorithm().tag_len();
+        Ok(&payload[..plain_len])
+    }
+
+    fn decrypt_in_place_for_path<'a>(
+        &self,
+        path_id: u32,
+        packet_number: u64,
+        header: &[u8],
+        payload: &'a mut [u8],
+    ) -> Result<&'a [u8], Error> {
+        let payload_len = payload.len();
+        let aad = aead::Aad::from(header);
+        let nonce =
+            aead::Nonce::assume_unique_for_key(Nonce::for_path(path_id, &self.iv, packet_number).0);
         self.key
             .open_in_place(nonce, aad, payload)
             .map_err(|_| Error::DecryptError)?;
@@ -412,5 +448,86 @@ mod tests {
             0x7c, 0xa8, 0x4b, 0xed, 0x85, 0x21, 0xe2, 0xe1, 0x40,
         ];
         assert_eq!(server_packet[..], expected_server_packet[..]);
+    }
+
+    // This test is based on picoquic's output for `multipath_aead_test` in
+    // `picoquictest/multipath_test.c`.
+    //
+    // See <https://github.com/private-octopus/picoquic/blob/be0d99e6d4f8759cb7920425351c06a1c6f4a958/picoquictest/multipath_test.c#L1537-L1606>
+    #[test]
+    fn test_multipath_aead_basic() {
+        const SECRET: &[u8; 32] = &[
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 35, 26, 27, 28, 29, 30, 31,
+        ];
+        const PN: u64 = 12345;
+        const PATH_ID: u32 = 2;
+        const PAYLOAD: &[u8] = b"The quick brown fox jumps over the lazy dog";
+        const HEADER: &[u8] = b"This is a test";
+
+        const EXPECTED: &[u8] = &[
+            123, 139, 232, 52, 136, 25, 201, 143, 250, 89, 87, 39, 37, 63, 0, 210, 220, 227, 186,
+            140, 183, 251, 13, 203, 6, 116, 204, 100, 166, 64, 43, 185, 174, 85, 212, 163, 242,
+            141, 24, 166, 62, 228, 187, 137, 248, 31, 152, 126, 240, 151, 79, 51, 253, 130, 43,
+            114, 173, 234, 254,
+        ];
+
+        let secret = OkmBlock::new(SECRET);
+        let builder = KeyBuilder::new(
+            &secret,
+            Version::V1,
+            TLS13_AES_128_GCM_SHA256_INTERNAL
+                .quic
+                .unwrap(),
+            TLS13_AES_128_GCM_SHA256_INTERNAL.hkdf_provider,
+        );
+
+        let packet = builder.packet_key();
+        let mut buf = PAYLOAD.to_vec();
+        let tag = packet
+            .encrypt_in_place_for_path(PATH_ID, PN, HEADER, &mut buf)
+            .unwrap();
+        buf.extend_from_slice(tag.as_ref());
+
+        assert_eq!(buf.as_slice(), EXPECTED);
+    }
+
+    // This test is based on `multipath_aead_test` in `picoquictest/multipath_test.c`
+    //
+    // See <https://github.com/private-octopus/picoquic/blob/be0d99e6d4f8759cb7920425351c06a1c6f4a958/picoquictest/multipath_test.c#L1537-L1606>
+    #[test]
+    fn test_multipath_aead_roundtrip() {
+        const SECRET: &[u8; 32] = &[
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 35, 26, 27, 28, 29, 30, 31,
+        ];
+        const PAYLOAD: &[u8] = b"The quick brown fox jumps over the lazy dog";
+        const HEADER: &[u8] = b"This is a test";
+        const PN: u64 = 12345;
+
+        const TEST_PATH_IDS: &[u32] = &[0, 1, 2, 0xaead];
+
+        let secret = OkmBlock::new(SECRET);
+        let builder = KeyBuilder::new(
+            &secret,
+            Version::V1,
+            TLS13_AES_128_GCM_SHA256_INTERNAL
+                .quic
+                .unwrap(),
+            TLS13_AES_128_GCM_SHA256_INTERNAL.hkdf_provider,
+        );
+        let packet = builder.packet_key();
+
+        for &path_id in TEST_PATH_IDS {
+            let mut buf = PAYLOAD.to_vec();
+            let tag = packet
+                .encrypt_in_place_for_path(path_id, PN, HEADER, &mut buf)
+                .unwrap();
+            buf.extend_from_slice(tag.as_ref());
+            let decrypted = packet
+                .decrypt_in_place_for_path(path_id, PN, HEADER, &mut buf)
+                .unwrap();
+            assert_eq!(decrypted, PAYLOAD);
+        }
     }
 }
