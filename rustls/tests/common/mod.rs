@@ -1480,7 +1480,64 @@ mod plaintext {
 
 /// Deeply inefficient, test-only TLS encoding helpers
 pub mod encoding {
-    use rustls::{ContentType, HandshakeType, ProtocolVersion};
+    use rustls::internal::msgs::codec::Codec;
+    use rustls::internal::msgs::enums::ExtensionType;
+    use rustls::{
+        CipherSuite, ContentType, HandshakeType, NamedGroup, ProtocolVersion, SignatureScheme,
+    };
+
+    /// Return a client hello with mandatory extensions added to `extensions`
+    ///
+    /// The returned bytes are handshake-framed, but not message-framed.
+    pub fn basic_client_hello(mut extensions: Vec<Extension>) -> Vec<u8> {
+        extensions.push(Extension::new_kx_groups());
+        extensions.push(Extension::new_sig_algs());
+        extensions.push(Extension::new_versions());
+        extensions.push(Extension::new_dummy_key_share());
+        client_hello_with_extensions(extensions)
+    }
+
+    /// Return a client hello with exactly `extensions`
+    ///
+    /// The returned bytes are handshake-framed, but not message-framed.
+    pub fn client_hello_with_extensions(extensions: Vec<Extension>) -> Vec<u8> {
+        client_hello(
+            ProtocolVersion::TLSv1_2,
+            &[0u8; 32],
+            &[0],
+            vec![
+                CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                CipherSuite::TLS13_AES_128_GCM_SHA256,
+            ],
+            extensions,
+        )
+    }
+
+    pub fn client_hello(
+        legacy_version: ProtocolVersion,
+        random: &[u8; 32],
+        session_id: &[u8],
+        cipher_suites: Vec<CipherSuite>,
+        extensions: Vec<Extension>,
+    ) -> Vec<u8> {
+        let mut out = vec![];
+
+        legacy_version.encode(&mut out);
+        out.extend_from_slice(random);
+        out.extend_from_slice(session_id);
+        cipher_suites.to_vec().encode(&mut out);
+        out.extend_from_slice(&[0x01, 0x00]); // only null compression
+
+        let mut exts = vec![];
+        for e in extensions {
+            e.typ.encode(&mut exts);
+            exts.extend_from_slice(&(e.body.len() as u16).to_be_bytes());
+            exts.extend_from_slice(&e.body);
+        }
+
+        out.extend(len_u16(exts));
+        handshake_framing(HandshakeType::ClientHello, out)
+    }
 
     /// Apply handshake framing to `body`.
     ///
@@ -1499,6 +1556,81 @@ pub mod encoding {
         body
     }
 
+    #[derive(Clone)]
+    pub struct Extension {
+        pub typ: ExtensionType,
+        pub body: Vec<u8>,
+    }
+
+    impl Extension {
+        pub fn new_sni(name: &[u8]) -> Self {
+            let body = Self::sni_dns_hostname(name);
+            let body = len_u16(body);
+            Self {
+                typ: ExtensionType::ServerName,
+                body,
+            }
+        }
+
+        pub fn sni_dns_hostname(name: &[u8]) -> Vec<u8> {
+            const SNI_HOSTNAME_TYPE: u8 = 0;
+
+            let mut out = len_u16(name.to_vec());
+            out.insert(0, SNI_HOSTNAME_TYPE);
+            out
+        }
+
+        pub fn new_sig_algs() -> Extension {
+            Extension {
+                typ: ExtensionType::SignatureAlgorithms,
+                body: len_u16(
+                    SignatureScheme::RSA_PKCS1_SHA256
+                        .to_array()
+                        .to_vec(),
+                ),
+            }
+        }
+
+        pub fn new_kx_groups() -> Extension {
+            Extension {
+                typ: ExtensionType::EllipticCurves,
+                body: len_u16(vector_of([NamedGroup::secp256r1].into_iter())),
+            }
+        }
+
+        pub fn new_versions() -> Extension {
+            Extension {
+                typ: ExtensionType::SupportedVersions,
+                body: len_u8(vector_of(
+                    [ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2].into_iter(),
+                )),
+            }
+        }
+
+        pub fn new_dummy_key_share() -> Extension {
+            const SOME_POINT_ON_P256: &[u8] = &[
+                4, 41, 39, 177, 5, 18, 186, 227, 237, 220, 254, 70, 120, 40, 18, 139, 173, 41, 3,
+                38, 153, 25, 247, 8, 96, 105, 200, 196, 223, 108, 115, 40, 56, 199, 120, 121, 100,
+                234, 172, 0, 229, 146, 31, 177, 73, 138, 96, 244, 96, 103, 102, 179, 217, 104, 80,
+                1, 85, 141, 26, 151, 78, 115, 65, 81, 62,
+            ];
+
+            let mut share = len_u16(SOME_POINT_ON_P256.to_vec());
+            share.splice(0..0, NamedGroup::secp256r1.to_array());
+
+            Extension {
+                typ: ExtensionType::KeyShare,
+                body: len_u16(share),
+            }
+        }
+    }
+
+    /// Prefix with u8 length
+    pub fn len_u8(mut body: Vec<u8>) -> Vec<u8> {
+        body.splice(0..0, [body.len() as u8]);
+        body
+    }
+
     /// Prefix with u16 length
     pub fn len_u16(mut body: Vec<u8>) -> Vec<u8> {
         body.splice(0..0, (body.len() as u16).to_be_bytes());
@@ -1511,6 +1643,16 @@ pub mod encoding {
         body.insert(0, len[1]);
         body.insert(1, len[2]);
         body.insert(2, len[3]);
+        body
+    }
+
+    /// Encode each of `items`
+    pub fn vector_of<'a, T: Codec<'a>>(items: impl Iterator<Item = T>) -> Vec<u8> {
+        let mut body = Vec::new();
+
+        for i in items {
+            i.encode(&mut body);
+        }
         body
     }
 }
