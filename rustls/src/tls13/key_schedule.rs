@@ -578,26 +578,14 @@ impl KeyScheduleTraffic {
             .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
 
+
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
-        fn expand(
-            secret: &OkmBlock,
-            hkdf: &'static dyn Hkdf,
-            aead_key_len: usize,
-        ) -> (AeadKey, Iv) {
-            let expander = hkdf.expander_for_okm(secret);
-
-            (
-                hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, b"key", &[]),
-                hkdf_expand_label(expander.as_ref(), b"iv", &[]),
-            )
-        }
-
-        let (client_key, client_iv) = expand(
+        let (client_key, client_iv) = expand_secret(
             &self.current_client_traffic_secret,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
         );
-        let (server_key, server_iv) = expand(
+        let (server_key, server_iv) = expand_secret(
             &self.current_server_traffic_secret,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
@@ -619,6 +607,15 @@ impl KeyScheduleTraffic {
         };
         Ok(PartiallyExtractedSecrets { tx, rx })
     }
+}
+
+fn expand_secret(secret: &OkmBlock, hkdf: &'static dyn Hkdf, aead_key_len: usize) -> (AeadKey, Iv) {
+    let expander = hkdf.expander_for_okm(secret);
+
+    (
+        hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, b"key", &[]),
+        hkdf_expand_label(expander.as_ref(), b"iv", &[]),
+    )
 }
 
 pub(crate) struct ResumptionSecret<'a> {
