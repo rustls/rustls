@@ -5272,7 +5272,6 @@ mod test_quic {
     }
 
     #[test]
-    #[cfg(feature = "ring")] // uses ring APIs directly
     fn test_quic_server_no_params_received() {
         let server_config =
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
@@ -5285,48 +5284,7 @@ mod test_quic {
         )
         .unwrap();
 
-        use rustls::internal::msgs::enums::{Compression, NamedGroup};
-        use rustls::internal::msgs::handshake::{
-            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
-        };
-        use rustls::{CipherSuite, HandshakeType, SignatureScheme};
-
-        let provider = provider::default_provider();
-        let mut random = [0; 32];
-        provider
-            .secure_random
-            .fill(&mut random)
-            .unwrap();
-        let random = Random::from(random);
-
-        let rng = ring::rand::SystemRandom::new();
-        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::ECDH_P256, &rng)
-            .unwrap()
-            .compute_public_key()
-            .unwrap();
-
-        let client_hello = MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                client_version: ProtocolVersion::TLSv1_3,
-                random,
-                session_id: SessionId::random(provider.secure_random).unwrap(),
-                cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                compression_methods: vec![Compression::Null],
-                extensions: vec![
-                    ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
-                    ClientExtension::NamedGroups(vec![NamedGroup::secp256r1]),
-                    ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                    ClientExtension::KeyShare(vec![KeyShareEntry::new(
-                        NamedGroup::secp256r1,
-                        kx.as_ref(),
-                    )]),
-                ],
-            }),
-        });
-
-        let mut buf = Vec::with_capacity(512);
-        client_hello.encode(&mut buf);
+        let buf = encoding::basic_client_hello(vec![]);
         assert_eq!(
             server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerMisbehaved(
@@ -5336,32 +5294,11 @@ mod test_quic {
     }
 
     #[test]
-    #[cfg(feature = "ring")] // uses ring APIs directly
     fn test_quic_server_no_tls12() {
         let mut server_config =
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
         server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
-
-        use rustls::internal::msgs::enums::{Compression, NamedGroup};
-        use rustls::internal::msgs::handshake::{
-            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
-        };
-        use rustls::{CipherSuite, HandshakeType, SignatureScheme};
-
-        let provider = provider::default_provider();
-        let mut random = [0; 32];
-        provider
-            .secure_random
-            .fill(&mut random)
-            .unwrap();
-        let random = Random::from(random);
-
-        let rng = ring::rand::SystemRandom::new();
-        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::X25519, &rng)
-            .unwrap()
-            .compute_public_key()
-            .unwrap();
 
         let mut server = quic::ServerConnection::new(
             server_config,
@@ -5370,27 +5307,11 @@ mod test_quic {
         )
         .unwrap();
 
-        let client_hello = MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                client_version: ProtocolVersion::TLSv1_2,
-                random,
-                session_id: SessionId::random(provider.secure_random).unwrap(),
-                cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                compression_methods: vec![Compression::Null],
-                extensions: vec![
-                    ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-                    ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                    ClientExtension::KeyShare(vec![KeyShareEntry::new(
-                        NamedGroup::X25519,
-                        kx.as_ref(),
-                    )]),
-                ],
-            }),
-        });
-
-        let mut buf = Vec::with_capacity(512);
-        client_hello.encode(&mut buf);
+        let buf = encoding::client_hello_with_extensions(vec![
+            encoding::Extension::new_sig_algs(),
+            encoding::Extension::new_dummy_key_share(),
+            encoding::Extension::new_kx_groups(),
+        ]);
         assert_eq!(
             server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerIncompatible(
