@@ -15,11 +15,8 @@ use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_b
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::{AlertLevel, CertificateType, Compression, ExtensionType};
-use rustls::internal::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, Random,
-    ServerExtension, SessionId,
-};
+use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
+use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload, ServerExtension};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -6202,27 +6199,27 @@ fn test_server_rejects_empty_sni_extension() {
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_groups() {
-    fn delete_kx_groups(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for mut ext in ch.extensions.iter_mut() {
-                    if let ClientExtension::NamedGroups(ngs) = &mut ext {
-                        ngs.clear();
-                    }
-                    if let ClientExtension::KeyShare(ks) = &mut ext {
-                        ks.clear();
-                    }
-                }
-            }
-
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
-    }
-
-    let (client, server) = make_pair(KeyType::Rsa2048);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, delete_kx_groups, &mut server);
+    let (_, mut server) = make_pair(KeyType::Rsa2048);
+    server
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                encoding::client_hello_with_extensions(vec![
+                    encoding::Extension::new_sig_algs(),
+                    encoding::Extension {
+                        typ: ExtensionType::EllipticCurves,
+                        body: encoding::len_u16(vec![]),
+                    },
+                    encoding::Extension {
+                        typ: ExtensionType::KeyShare,
+                        body: encoding::len_u16(vec![]),
+                    },
+                ]),
+            )
+            .as_slice(),
+        )
+        .unwrap();
     assert_eq!(
         server.process_new_packets(),
         Err(Error::PeerIncompatible(
@@ -7838,13 +7835,10 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
     let msg = PlainMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: Payload::new(
-            HandshakeMessagePayload {
-                typ: HandshakeType::HelloRequest,
-                payload: HandshakePayload::HelloRequest,
-            }
-            .get_encoding(),
-        ),
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
     };
     raw_server.encrypt_and_send(&msg, &mut client);
     let err = client
@@ -7875,13 +7869,10 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     let msg = PlainMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: Payload::new(
-            HandshakeMessagePayload {
-                typ: HandshakeType::HelloRequest,
-                payload: HandshakePayload::HelloRequest,
-            }
-            .get_encoding(),
-        ),
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
     };
 
     // one is allowed (and elicits a warning alert)
@@ -7917,20 +7908,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
     let msg = PlainMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: Payload::new(
-            HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                    client_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from([0u8; 32]),
-                    session_id: SessionId::read_bytes(&[0u8]).unwrap(),
-                    cipher_suites: vec![],
-                    compression_methods: vec![Compression::Null],
-                    extensions: vec![ClientExtension::ExtendedMasterSecretRequest],
-                }),
-            }
-            .get_encoding(),
-        ),
+        payload: Payload::new(encoding::basic_client_hello(vec![])),
     };
     raw_client.encrypt_and_send(&msg, &mut server);
     let err = server
