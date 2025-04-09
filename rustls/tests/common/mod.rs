@@ -1477,3 +1477,40 @@ mod plaintext {
         }
     }
 }
+
+/// Deeply inefficient, test-only TLS encoding helpers
+pub mod encoding {
+    use rustls::{ContentType, HandshakeType, ProtocolVersion};
+
+    /// Apply handshake framing to `body`.
+    ///
+    /// This does not do fragmentation.
+    pub fn handshake_framing(ty: HandshakeType, body: Vec<u8>) -> Vec<u8> {
+        let mut body = len_u24(body);
+        body.splice(0..0, ty.to_array());
+        body
+    }
+
+    /// Apply message framing to `body`.
+    pub fn message_framing(ty: ContentType, vers: ProtocolVersion, body: Vec<u8>) -> Vec<u8> {
+        let mut body = len_u16(body);
+        body.splice(0..0, vers.to_array());
+        body.splice(0..0, ty.to_array());
+        body
+    }
+
+    /// Prefix with u16 length
+    pub fn len_u16(mut body: Vec<u8>) -> Vec<u8> {
+        body.splice(0..0, (body.len() as u16).to_be_bytes());
+        body
+    }
+
+    /// Prefix with u24 length
+    pub fn len_u24(mut body: Vec<u8>) -> Vec<u8> {
+        let len = (body.len() as u32).to_be_bytes();
+        body.insert(0, len[1]);
+        body.insert(1, len[2]);
+        body.insert(2, len[3]);
+        body
+    }
+}

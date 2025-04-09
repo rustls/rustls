@@ -6450,7 +6450,11 @@ fn test_client_rejects_illegal_tls13_ccs() {
     fn corrupt_ccs(msg: &mut Message) -> Altered {
         if let MessagePayload::ChangeCipherSpec(_) = &mut msg.payload {
             println!("seen CCS {:?}", msg);
-            return Altered::Raw(vec![0x14, 0x03, 0x03, 0x00, 0x02, 0x01, 0x02]);
+            return Altered::Raw(encoding::message_framing(
+                ContentType::ChangeCipherSpec,
+                ProtocolVersion::TLSv1_2,
+                vec![0x01, 0x02],
+            ));
         }
         Altered::InPlace
     }
@@ -6706,7 +6710,14 @@ fn test_acceptor() {
     let mut acceptor = Acceptor::default();
     // Minimal valid 1-byte application data message is not a handshake message
     acceptor
-        .read_tls(&mut [0x17, 0x03, 0x03, 0x00, 0x01, 0x00].as_ref())
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                vec![0x00],
+            )
+            .as_slice(),
+        )
         .unwrap();
     let (err, mut alert) = acceptor.accept().unwrap_err();
     assert!(matches!(err, Error::InappropriateMessage { .. }));
@@ -6717,7 +6728,14 @@ fn test_acceptor() {
     let mut acceptor = Acceptor::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message
     acceptor
-        .read_tls(&mut [0x16, 0x03, 0x03, 0x00, 0x05, 0x01, 0x00, 0x00, 0x01, 0x00].as_ref())
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                encoding::handshake_framing(HandshakeType::ClientHello, vec![0x00]),
+            )
+            .as_slice(),
+        )
         .unwrap();
     let (err, mut alert) = acceptor.accept().unwrap_err();
     assert!(matches!(
@@ -7261,9 +7279,16 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
     fn inject_corrupt_finished_message(msg: &mut Message) -> Altered {
         if let MessagePayload::ChangeCipherSpec(_) = msg.payload {
             // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
-            let mut raw_change_cipher_spec = [0x14u8, 0x03, 0x03, 0x00, 0x01, 0x01].to_vec();
-            let mut corrupt_finished = [0x16, 0x03, 0x03, 0x00, 0x28].to_vec();
-            corrupt_finished.extend([0u8; 0x28]);
+            let mut raw_change_cipher_spec = encoding::message_framing(
+                ContentType::ChangeCipherSpec,
+                ProtocolVersion::TLSv1_2,
+                vec![0x01],
+            );
+            let mut corrupt_finished = encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                vec![0u8; 0x28],
+            );
 
             let mut both = vec![];
             both.append(&mut raw_change_cipher_spec);
