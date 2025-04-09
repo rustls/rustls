@@ -2481,6 +2481,35 @@ fn client_respects_buffer_limit_post_handshake() {
 }
 
 #[test]
+fn client_detects_broken_write_vectored_impl() {
+    // see https://github.com/rustls/rustls/issues/2316
+    let (mut client, _) = make_pair(KeyType::Rsa2048);
+    let err = client
+        .write_tls(&mut BrokenWriteVectored)
+        .unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::Other);
+    assert!(format!("{err:?}").starts_with(
+        "Custom { kind: Other, error: \"illegal write_vectored return value (9999 > "
+    ));
+
+    struct BrokenWriteVectored;
+
+    impl io::Write for BrokenWriteVectored {
+        fn write_vectored(&mut self, _bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+            Ok(9999)
+        }
+
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            unreachable!()
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            unreachable!()
+        }
+    }
+}
+
+#[test]
 fn buf_read() {
     let (mut client, mut server) = make_pair(KeyType::Rsa2048);
 
