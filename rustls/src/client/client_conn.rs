@@ -171,9 +171,12 @@ pub struct ClientConfig {
     /// Externally derived TLS 1.3 preshared keys.
     pub preshared_keys: Arc<dyn PresharedKeyStore>,
 
-    /// Supported preshared key exchange modes.
+    /// Supported TLS 1.3 preshared key exchange modes.
     ///
-    /// If empty, [`PskKexMode::PskWithDhe`] is selected.
+    /// This is only needed when using external TLS 1.3 preshared
+    /// keys or when using TLS 1.3 session resumption.
+    ///
+    /// If empty, [`PskKexMode::PskWithDhe`] will be selected.
     pub psk_kex_modes: Vec<PskKexMode>,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
@@ -523,7 +526,7 @@ pub trait PresharedKeyStore: fmt::Debug + Send + Sync {
     fn psks(&self, server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>>;
 }
 
-/// Preshared key exchange modes.
+/// TLS1.3 preshared key exchange modes.
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum PskKexMode {

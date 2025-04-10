@@ -146,7 +146,7 @@ pub(super) fn start_handshake(
 
     // If we're not resuming a session then look for external
     // PSKs to use.
-    let psk = resuming
+    let psks = resuming
         .map(PresharedKeys::Resumption)
         .or_else(|| {
             if config.supports_version(ProtocolVersion::TLSv1_3) {
@@ -195,7 +195,7 @@ pub(super) fn start_handshake(
         None,
         ClientHelloInput {
             config,
-            psks: psk,
+            psks,
             random,
             #[cfg(feature = "tls12")]
             using_ems: false,
@@ -385,7 +385,7 @@ fn emit_client_hello_for_retry(
     }
 
     let psk_modes = if support_tls13 {
-        let modes = config
+        let mut modes = config
             .psk_kex_modes
             .iter()
             .map(|mode| match mode {
@@ -393,6 +393,10 @@ fn emit_client_hello_for_retry(
                 PskKexMode::PskWithDhe => PSKKeyExchangeMode::PSK_DHE_KE,
             })
             .collect::<Vec<_>>();
+        if modes.is_empty() {
+            // See the documentation for `config.psk_kex_modes`.
+            modes.push(PSKKeyExchangeMode::PSK_DHE_KE);
+        }
         exts.push(ClientExtension::PresharedKeyModes(modes.clone()));
         modes
     } else {
@@ -668,17 +672,21 @@ fn emit_client_hello_for_retry(
 ///
 /// It returns the TLS 1.3 PSKs, if any, for further processing.
 fn prepare_preshared_keys<'a>(
-    psk: Option<&'a PresharedKeys>,
+    psks: Option<&'a PresharedKeys>,
     exts: &mut Vec<ClientExtension>,
     suite: Option<SupportedCipherSuite>,
     cx: &mut ClientContext<'_>,
     config: &ClientConfig,
     doing_retry: bool,
 ) -> Option<tls13::PresharedKeysRef<'a>> {
-    let tls13_psk = psk.and_then(|psk| match psk {
+    let tls13_psk = psks.and_then(|psk| match psk {
         PresharedKeys::Resumption(resuming) => prepare_resumption(resuming, exts, suite, config)
             .map(tls13::PresharedKeysRef::Resumption),
         PresharedKeys::External(psks) => {
+            // If `psks` is `Some` then we should've always
+            // selected at least one PSK.
+            debug_assert!(!psks.is_empty());
+
             if config.supports_version(ProtocolVersion::TLSv1_3) {
                 Some(tls13::PresharedKeysRef::External(psks))
             } else {

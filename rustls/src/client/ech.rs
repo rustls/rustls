@@ -313,7 +313,7 @@ pub(crate) struct EchState {
     enable_sni: bool,
     // The extensions sent in the inner hello.
     sent_extensions: Vec<ExtensionType>,
-    /// For filling in PSKs.
+    /// For filling in PSK binders.
     provider: Arc<CryptoProvider>,
 }
 
