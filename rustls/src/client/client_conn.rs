@@ -176,7 +176,8 @@ pub struct ClientConfig {
     /// This is only needed when using external TLS 1.3 preshared
     /// keys or when using TLS 1.3 session resumption.
     ///
-    /// If empty, [`PskKexMode::PskWithDhe`] will be selected.
+    /// If empty and PSKs are used, [`PskKexMode::PskWithDhe`]
+    /// will be selected.
     pub psk_kex_modes: Vec<PskKexMode>,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
@@ -435,6 +436,30 @@ impl ClientConfig {
         self.time_provider
             .current_time()
             .ok_or(Error::FailedToGetCurrentTime)
+    }
+
+    /// Reports whether we need to send the "key_share"
+    /// extension.
+    ///
+    /// This only returns false if we're using the PSK-only key
+    /// exchange mode.
+    pub(super) fn need_key_share(&self) -> bool {
+        if !self.supports_version(ProtocolVersion::TLSv1_3) {
+            return false;
+        }
+        if self.psk_kex_modes.is_empty() {
+            // Defaults to `PskWithDhe`. See the documentation
+            // for `self.psk_kex_modes`.
+            return true;
+        }
+        // This could be simplified, but it ensures that we
+        // always handle new variants.
+        self.psk_kex_modes
+            .iter()
+            .any(|mode| match mode {
+                PskKexMode::PskOnly => false,
+                PskKexMode::PskWithDhe => true,
+            })
     }
 }
 

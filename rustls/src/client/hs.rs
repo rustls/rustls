@@ -109,9 +109,7 @@ pub(super) fn start_handshake(
 
     let mut resuming = find_session(&server_name, &config, cx);
 
-    // TODO(eric): not needed if we're using an external PSK w/o
-    // PSK_DHE_KE.
-    let key_share = if config.supports_version(ProtocolVersion::TLSv1_3) {
+    let key_share = if config.need_key_share() {
         Some(tls13::initial_key_share(
             &config,
             &server_name,
@@ -980,7 +978,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // handshake_traffic_secret.
         match suite {
             SupportedCipherSuite::Tls13(suite) => {
-                let psk = self
+                let psks = self
                     .input
                     .psks
                     .and_then(|psk| match psk {
@@ -997,25 +995,25 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 // We don't need to offer a key share if we're
                 // - only offering external PSKs, and
                 // - not offering PSK_DHE_KE
-                let offered_key_share = if matches!(psk, Some(tls13::PresharedKeys::External(_)))
-                    && !self
+                let offered_key_share = if psks.is_none()
+                    || self
                         .psk_modes
                         .contains(&PSKKeyExchangeMode::PSK_DHE_KE)
                 {
-                    // We don't need a key share, but if we have
-                    // one we might as well offer it.
-                    // TODO(eric): update the calling code and
-                    // then replace branch with `None`.
-                    self.offered_key_share
-                } else {
                     Some(self.offered_key_share.unwrap())
+                } else {
+                    // We don't need a key share, but if we have
+                    // one we might as well offer it. The calling
+                    // code should always ensure that this is
+                    // `None`, however.
+                    self.offered_key_share
                 };
 
                 tls13::handle_server_hello(
                     self.input.config,
                     cx,
                     server_hello,
-                    psk,
+                    psks,
                     self.psk_modes,
                     self.input.server_name,
                     randoms,
