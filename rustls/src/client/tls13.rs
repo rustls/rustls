@@ -609,6 +609,7 @@ impl PresharedKeysRef<'_> {
                         .cipher_suites
                         .iter()
                         .find_map(|&suite| {
+                            #[cfg_attr(not(feature = "tls12"), allow(irrefutable_let_patterns))]
                             let SupportedCipherSuite::Tls13(suite) = suite else {
                                 return None;
                             };
@@ -783,6 +784,7 @@ impl PresharedKeysRef<'_> {
                 // a `HashAlgorithm`?
                 let want = psk.hash_alg();
                 for suite in config.provider.cipher_suites.iter() {
+                    #[cfg_attr(not(feature = "tls12"), allow(irrefutable_let_patterns))]
                     let SupportedCipherSuite::Tls13(suite) = suite else {
                         continue;
                     };

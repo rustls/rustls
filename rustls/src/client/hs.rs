@@ -982,6 +982,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // handshake_traffic_secret.
         match suite {
             SupportedCipherSuite::Tls13(suite) => {
+                #[cfg_attr(not(feature = "tls12"), allow(clippy::bind_instead_of_map))]
                 let psks = self
                     .input
                     .psks
