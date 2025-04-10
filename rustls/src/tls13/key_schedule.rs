@@ -87,6 +87,7 @@ struct KeySchedule {
 /// "early_exporter_master_secret".
 ///
 /// See [`KeySchedulePreHandshake`] for more information.
+#[derive(Debug)] // TODO
 pub(crate) struct KeyScheduleEarly {
     ks: KeySchedule,
 }
@@ -165,7 +166,7 @@ impl KeyScheduleEarly {
 /// The "early secret" stage of the key schedule.
 ///
 /// Call [`KeySchedulePreHandshake::new`] to create it without
-/// a PSK or use [`From<KeyScheduleEarly`] to create it with
+/// a PSK, or use [`From<KeyScheduleEarly>`] to create it with
 /// a PSK.
 ///
 /// ```text
@@ -185,6 +186,7 @@ impl KeyScheduleEarly {
 ///          v
 ///    Derive-Secret(., "derived", "")
 /// ```
+#[derive(Debug)] // TODO
 pub(crate) struct KeySchedulePreHandshake {
     ks: KeySchedule,
 }
@@ -207,6 +209,8 @@ impl KeySchedulePreHandshake {
         mut self,
         shared_secret: Option<SharedSecret>,
     ) -> KeyScheduleHandshakeStart {
+        crate::log::debug!("self.ks = {:?}", self.ks);
+        crate::log::debug!("shared_secret = {shared_secret:?}");
         if let Some(shared_secret) = shared_secret {
             self.ks
                 .input_secret(shared_secret.secret_bytes());
@@ -217,6 +221,17 @@ impl KeySchedulePreHandshake {
     }
 }
 
+// TODO
+use core::fmt;
+impl fmt::Debug for KeySchedule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeySchedule")
+            .field("current", &self.current.expand_block(&[]).as_ref())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Creates a key schedule with a PSK.
 impl From<KeyScheduleEarly> for KeySchedulePreHandshake {
     fn from(KeyScheduleEarly { ks }: KeyScheduleEarly) -> Self {
         Self { ks }
@@ -226,6 +241,7 @@ impl From<KeyScheduleEarly> for KeySchedulePreHandshake {
 /// KeySchedule during handshake.
 ///
 /// Created by [`KeySchedulePreHandshake`].
+#[derive(Debug)] // TODO
 pub(crate) struct KeyScheduleHandshakeStart {
     ks: KeySchedule,
 }

@@ -195,7 +195,7 @@ pub(super) fn start_handshake(
         None,
         ClientHelloInput {
             config,
-            psk,
+            psks: psk,
             random,
             #[cfg(feature = "tls12")]
             using_ems: false,
@@ -214,7 +214,14 @@ struct ExpectServerHello {
     input: ClientHelloInput,
     psk_modes: Vec<PSKKeyExchangeMode>,
     transcript_buffer: HandshakeHashBuffer,
-    early_key_schedule: Option<KeyScheduleEarly>,
+    // The key schedule for sending early data.
+    //
+    // If the server accepts the PSK used for early data then
+    // this is used to compute the rest of the key schedule.
+    // Otherwise, it is thrown away.
+    //
+    // If this is `None` then we do not support early data.
+    early_data_key_schedule: Option<KeyScheduleEarly>,
     offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
     suite: Option<SupportedCipherSuite>,
     ech_state: Option<EchState>,
@@ -228,7 +235,7 @@ struct ExpectServerHelloOrHelloRetryRequest {
 struct ClientHelloInput {
     config: Arc<ClientConfig>,
     /// Our chosen PSK(s), if any.
-    psk: Option<PresharedKeys>,
+    psks: Option<PresharedKeys>,
     random: Random,
     #[cfg(feature = "tls12")]
     using_ems: bool,
@@ -443,7 +450,7 @@ fn emit_client_hello_for_retry(
     // Add the "pre_shared_keys" extension for TLS 1.3, or handle
     // TLS 1.2 resumption.
     let tls13_psk = prepare_preshared_keys(
-        input.psk.as_ref(),
+        input.psks.as_ref(),
         &mut exts,
         suite,
         cx,
@@ -546,7 +553,8 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(chp_payload),
     };
 
-    let tls13_early_key_schedule = tls13_psk
+    // Derive the TLS 1.3 key schedule for sending early data.
+    let tls13_early_data_key_schedule = tls13_psk
         .and_then(|psk| {
             let Some(hash) = psk.early_data_hash(config) else {
                 return None;
@@ -596,8 +604,10 @@ fn emit_client_hello_for_retry(
     transcript_buffer.add_message(&ch);
     cx.common.send_msg(ch, false);
 
+    // Derive the key schedule for sending early data.
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    let early_key_schedule = tls13_early_key_schedule.map(|(hash, schedule)| {
+    let early_data_key_schedule = tls13_early_data_key_schedule.map(|(hash, schedule)| {
+        debug!("schedule = {schedule:?}");
         if !cx.data.early_data.is_enabled() {
             return schedule;
         }
@@ -628,7 +638,7 @@ fn emit_client_hello_for_retry(
         input,
         psk_modes,
         transcript_buffer,
-        early_key_schedule,
+        early_data_key_schedule,
         offered_key_share: key_share,
         suite,
         ech_state,
@@ -959,7 +969,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
             SupportedCipherSuite::Tls13(suite) => {
                 let psk = self
                     .input
-                    .psk
+                    .psks
                     .and_then(|psk| match psk {
                         PresharedKeys::Resumption(v) => match v.value {
                             ClientSessionValue::Tls13(inner) => {
@@ -979,6 +989,10 @@ impl State<ClientConnectionData> for ExpectServerHello {
                         .psk_modes
                         .contains(&PSKKeyExchangeMode::PSK_DHE_KE)
                 {
+                    // We don't need a key share, but if we have
+                    // one we might as well offer it.
+                    // TODO(eric): update the calling code and
+                    // then replace branch with `None`.
                     self.offered_key_share
                 } else {
                     Some(self.offered_key_share.unwrap())
@@ -994,7 +1008,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     randoms,
                     suite,
                     transcript,
-                    self.early_key_schedule,
+                    self.early_data_key_schedule,
                     self.input.hello,
                     offered_key_share,
                     self.input.sent_tls13_fake_ccs,
@@ -1004,14 +1018,14 @@ impl State<ClientConnectionData> for ExpectServerHello {
             }
             #[cfg(feature = "tls12")]
             SupportedCipherSuite::Tls12(suite) => {
-                debug_assert!(!matches!(self.input.psk, Some(PresharedKeys::External(_))));
+                debug_assert!(!matches!(self.input.psks, Some(PresharedKeys::External(_))));
 
                 // If we didn't have an input session to resume, and we sent a session ID,
                 // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
                 // In this instance since we're now continuing a TLS 1.2 handshake the server
                 // should not have echoed it back: it's a randomly generated session ID it couldn't
                 // have known.
-                if self.input.psk.is_none()
+                if self.input.psks.is_none()
                     && !self.input.session_id.is_empty()
                     && self.input.session_id == server_hello.session_id
                 {
@@ -1025,7 +1039,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
                 let resuming_session = self
                     .input
-                    .psk
+                    .psks
                     .and_then(|psk| match psk {
                         PresharedKeys::Resumption(v) => Some(v),
                         PresharedKeys::External(_) => None,

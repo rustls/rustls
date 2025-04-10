@@ -66,41 +66,45 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
+/// `early_data_key_schedule` is `Some` if we sent the
+/// "early_data" extension to the server.
 pub(super) fn handle_server_hello(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
     server_hello: &ServerHelloPayload,
-    psk: Option<PresharedKeys>,
+    psks: Option<PresharedKeys>,
     psk_modes: Vec<PSKKeyExchangeMode>,
     server_name: ServerName<'static>,
     mut randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     mut transcript: HandshakeHash,
-    early_key_schedule: Option<KeyScheduleEarly>,
+    early_data_key_schedule: Option<KeyScheduleEarly>,
     mut hello: ClientHelloDetails,
     our_key_share: Option<Box<dyn ActiveKeyExchange>>,
     mut sent_tls13_fake_ccs: bool,
     server_hello_msg: &Message<'_>,
     ech_state: Option<EchState>,
 ) -> hs::NextStateOrError<'static> {
-    // An early key schedule requires a PSK.
+    // Early data requires a PSK.
     //
-    // TODO(eric): Express this with types.
-    if early_key_schedule.is_some() {
-        let n = psk.as_ref().map(|psk| psk.len());
+    // TODO(eric): Express this with types, like
+    // `../server/tls13::InputSecrets`.
+    if early_data_key_schedule.is_some() {
+        let n = psks.as_ref().map(|psk| psk.len());
         debug_assert!(!matches!(n, None | Some(0)));
     }
 
     // We don't need to offer a key share if we're
     // - only offering external PSKs, and
     // - not offering PSK_DHE_KE
-    // TODO(eric): Express this with types.
+    // TODO(eric): Express this with types, like
+    // `../server/tls13::InputSecrets`.
     if our_key_share.is_none() {
-        debug_assert!(psk.is_none() || psk_modes.contains(&PSKKeyExchangeMode::PSK_DHE_KE));
+        debug_assert!(psks.is_none() || psk_modes.contains(&PSKKeyExchangeMode::PSK_DHE_KE));
     }
 
     // If we sent PSKs then we must also send PSK modes.
-    if psk.is_some() {
+    if psks.is_some() {
         debug_assert!(!psk_modes.is_empty());
     }
 
@@ -155,9 +159,10 @@ pub(super) fn handle_server_hello(
         ));
     }
 
+    // Load the PSK chosen by the server, if any.
     let psk = if let Some(index) = psk_index {
         // The server sent a "pre_shared_key" extension.
-        let Some(psk) = psk else {
+        let Some(psk) = psks else {
             // However, we did not.
             return Err(PeerMisbehaved::SelectedUnofferedPsk.into());
         };
@@ -232,44 +237,18 @@ pub(super) fn handle_server_hello(
         None
     };
 
-    let key_schedule_pre_handshake = match (early_key_schedule, &psk) {
-        (Some(ks), Some(_)) => KeySchedulePreHandshake::from(ks),
-        // It shouldn't be possible for us to get here. These are
-        // the possible call stacks:
-        //
-        // emit_client_hello_for_retry ->
-        //   ExpectServerHello::handle ->
-        //     handle_server_hello
-        //
-        // or
-        //
-        // emit_client_hello_for_retry ->
-        //   ExpectServerHelloOrRetryRequest::handle_hello_retry_request ->
-        //     emit_client_hello_for_retry ->
-        //       ExpectServerHello::handle ->
-        //         handle_server_hello
-        //
-        // `early_key_schedule` is created inside
-        // `emit_client_hello_for_retry`. It is only `None` if
-        // `tls13_early_key_schedule` (also inside
-        // `emit_client_hello_for_retry`) is `None`.
-        // `tls13_early_key_schedule` is only `None` if
-        // `tls13_psk` is `None` (or if we don't have
-        // a `KeyScheduleEarly` inside the ECH code). `tls13_psk`
-        // is only `None` if we don't have a valid TLS 1.3 to
-        // send to the server. In other words,
-        // `early_key_schedule` should be `Some` if we offer the
-        // server PSKs.
-        //
-        // At this point `psk` is `Some`, which means that the
-        // server selected one of the PSKs that we offered (since
-        // we've already validated the server's response, etc.).
-        // This implies that `tls13_psk` *must* have been `Some`.
-        // (Or the ECH code didn't create a `KeyScheduleEarly`.)
-        //
-        // But the type system says that it is 100% possible to
-        // reach this case, so let's handle it anyway.
-        (None, Some(psk)) => KeyScheduleEarly::new(suite, psk.as_secret()).into(),
+    let key_schedule_pre_handshake = match (early_data_key_schedule, &psk) {
+        // We offered early data and the server chose one of our
+        // PSKs. The client and server can only use the first PSK
+        // for early data. If the server chose the first PSK then
+        // we can use `ks` to compute the rest of the key
+        // schedule.
+        (Some(ks), Some(psk)) if psk.is_first() => KeySchedulePreHandshake::from(ks),
+        // Either we did not offer early data or the server
+        // did not choose the first PSK as required for early
+        // data. In either case, we need to compute the key
+        // schedule using the chosen PSK.
+        (_, Some(psk)) => KeyScheduleEarly::new(suite, psk.as_secret()).into(),
         // One of two cases:
         // - The server rejected the PSKs we offered
         // - We didn't offer any PSKs.
@@ -299,10 +278,23 @@ pub(super) fn handle_server_hello(
 
     let mut key_schedule = {
         let secret = if let Some(their_key_share) = their_key_share {
+            debug_assert_eq!(mode, PSKKeyExchangeMode::PSK_DHE_KE);
+            debug!("server selected PSK_DHE_KE");
+            // The server elected to perform DHE_KE, so we need
+            // to have a key share.
+            //
+            // We should only fail here if our code is buggy
+            // elsewhere since caling code should ensure that we
+            // have provide a key share when either (a) not
+            // offering external PSKs, or (b) offering external
+            // PSKs with the PSK_DHE_KE mode.
+            //
+            // TODO(eric): Express this with types, like
+            // `../server/tls13::InputSecrets`.
             let our_key_share = our_key_share.ok_or_else(|| {
                 cx.common.send_fatal_alert(
                     AlertDescription::InternalError,
-                    Error::General(String::from("TODO")),
+                    Error::General(String::from("missing `our_key_share`")),
                 )
             })?;
             let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
@@ -417,6 +409,15 @@ impl ChosenPresharedKey {
             Self::Resumption { index, .. } => *index,
             Self::External { index, .. } => *index,
         }
+    }
+
+    /// Reports whether this is the first PSK offered by the
+    /// client.
+    ///
+    /// Servers MUST only use the first PSK offered by the
+    /// client for early data.
+    fn is_first(&self) -> bool {
+        self.index() == 0
     }
 }
 
@@ -586,7 +587,6 @@ impl PresharedKeysRef<'_> {
                 // but doesn't include itself, its length, or the
                 // length of its container.
                 let binder_plaintext = hmp.encoding_for_binder_signing();
-                std::println!("binder_pt = {binder_plaintext:02x?}");
 
                 let HandshakePayload::ClientHello(ref mut ch) = hmp.payload else {
                     return Err(Error::General(String::from("expected `ClientHello`")));
@@ -659,7 +659,6 @@ impl PresharedKeysRef<'_> {
             // No offers.
             return false;
         };
-        std::println!("offer = {offer:?}");
         exts.push(ClientExtension::PresharedKey(offer));
 
         // RFC 8446: "When a PSK is used and early data is
@@ -684,7 +683,6 @@ impl PresharedKeysRef<'_> {
             Self::Resumption(resuming_session) => {
                 let resuming_suite = resuming_session.suite();
                 cx.common.suite = Some(resuming_suite.into());
-                cx.data.resumption_ciphersuite = Some(resuming_suite.into());
 
                 // Finally, and only for TLS1.3 with a ticket resumption, include a binder
                 // for our ticket.  This must go last.

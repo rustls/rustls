@@ -608,6 +608,7 @@ pub struct CompletedKeyExchange {
 }
 
 /// The result from [`ActiveKeyExchange::complete`] or [`ActiveKeyExchange::complete_hybrid_component`].
+#[derive(Debug)] // TODO: remove
 pub struct SharedSecret {
     buf: Vec<u8>,
     offset: usize,
@@ -789,7 +790,6 @@ impl PresharedKey {
     /// An external PSK is compatible if its hash algorithm
     /// matches the cipher suite's hash algorithm.
     pub(crate) fn is_compatible(&self, suite: CipherSuite) -> bool {
-        std::println!("{:?} v {:?}", self.hash_alg, suite.tls13_hash_alg());
         Some(self.hash_alg.into()) == suite.tls13_hash_alg()
     }
 }

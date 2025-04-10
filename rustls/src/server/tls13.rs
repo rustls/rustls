@@ -1,6 +1,9 @@
 use alloc::boxed::Box;
+use alloc::string::ToString;
 use alloc::vec;
 use alloc::vec::Vec;
+
+use core::ops::Deref;
 
 pub(super) use client_hello::CompleteClientHelloHandling;
 use pki_types::{CertificateDer, UnixTime};
@@ -55,12 +58,23 @@ mod client_hello {
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
+    use core::fmt;
 
-    #[derive(PartialEq)]
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     pub(super) enum EarlyDataDecision {
         Disabled,
         RequestedButRejected,
         Accepted,
+    }
+
+    impl fmt::Display for EarlyDataDecision {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::Disabled => write!(f, "disabled"),
+                Self::RequestedButRejected => write!(f, "requested but rejected"),
+                Self::Accepted => write!(f, "accepted"),
+            }
+        }
     }
 
     pub(in crate::server) struct CompleteClientHelloHandling {
@@ -104,23 +118,31 @@ mod client_hello {
     /// A chosen PSK.
     #[derive(Debug)]
     struct ChosenPresharedKey {
-        /// The PSK identity index.
+        /// The index of the PSK from the client's
+        /// "pre_shared_key" extension.
         index: u16,
         /// The PSK.
         psk: PresharedKey,
-        /// The chosen PSK KEX mode.
+        /// The chosen PSK key exchange mode.
         mode: PSKKeyExchangeMode,
     }
 
     impl ChosenPresharedKey {
-        /// Is this [`PresharedKey::External`]?
-        fn is_external(&self) -> bool {
-            self.psk.is_external()
+        /// Reports whether this is the first PSK offered by the
+        /// client.
+        ///
+        /// Servers MUST only use the first PSK offered by the
+        /// client for early data.
+        fn is_first(&self) -> bool {
+            self.index == 0
         }
+    }
 
-        /// Returns the underlying secret.
-        fn as_secret(&self) -> &[u8] {
-            self.psk.as_secret()
+    impl Deref for ChosenPresharedKey {
+        type Target = PresharedKey;
+
+        fn deref(&self) -> &Self::Target {
+            &self.psk
         }
     }
 
@@ -134,9 +156,14 @@ mod client_hello {
     }
 
     impl PresharedKey {
-        /// Is this an externally provisioned PSK?
-        fn is_external(&self) -> bool {
-            matches!(self, Self::External(_))
+        /// Returns the ALPN protocol associated with the PSK.
+        fn alpn(&self) -> Option<&[u8]> {
+            match self {
+                Self::Resumption(v) => v.alpn.as_ref().map(|v| v.0.as_slice()),
+                Self::External(v) => v
+                    .early_data()
+                    .and_then(|(_, _, alpn)| alpn),
+            }
         }
 
         /// Returns the underlying secret.
@@ -144,6 +171,35 @@ mod client_hello {
             match self {
                 Self::Resumption(v) => v.master_secret.0.as_slice(),
                 Self::External(v) => v.secret(),
+            }
+        }
+
+        /// Returns the cipher suite associated with the PSK, if
+        /// any.
+        ///
+        /// It returns `None` if the PSK is external and does not
+        /// support early data.
+        fn cipher_suite(&self) -> Option<CipherSuite> {
+            match self {
+                Self::Resumption(v) => Some(v.cipher_suite),
+                Self::External(v) => v
+                    .early_data()
+                    .map(|(_, suite, ..)| suite),
+            }
+        }
+
+        /// Is this an externally provisioned PSK?
+        fn is_external(&self) -> bool {
+            matches!(self, Self::External(_))
+        }
+
+        /// Reports whether the PSK is fresh.
+        fn is_fresh(&self) -> bool {
+            match self {
+                Self::Resumption(v) => v.is_fresh(),
+                // External PSKs do not have a ticket age, so
+                // they're always fresh.
+                Self::External(_) => true,
             }
         }
 
@@ -155,41 +211,11 @@ mod client_hello {
             }
         }
 
-        /// Returns the cipher suite associated with the PSK.
-        fn cipher_suite(&self) -> Option<CipherSuite> {
-            match self {
-                Self::Resumption(v) => Some(v.cipher_suite),
-                Self::External(v) => v
-                    .early_data()
-                    .map(|(_, suite, ..)| suite),
-            }
-        }
-
-        /// Returns the ALPN protocol associated with the PSK.
-        fn alpn(&self) -> Option<&[u8]> {
-            match self {
-                Self::Resumption(v) => v.alpn.as_ref().map(|v| v.0.as_slice()),
-                Self::External(v) => v
-                    .early_data()
-                    .and_then(|(_, _, alpn)| alpn),
-            }
-        }
-
         /// Returns TLS protocol version associated with the PSK.
         fn version(&self) -> ProtocolVersion {
             match self {
                 Self::Resumption(v) => v.version,
                 Self::External(v) => v.version(),
-            }
-        }
-
-        /// Reports whether the PSK is fresh.
-        fn is_fresh(&self) -> bool {
-            match self {
-                Self::Resumption(v) => v.is_fresh(),
-                // External PSKs do not have a ticket age, so
-                // they're always fresh.
-                Self::External(_) => true,
             }
         }
     }
@@ -222,12 +248,10 @@ mod client_hello {
         ) -> bool {
             let binder_plaintext = match &client_hello.payload {
                 MessagePayload::Handshake { parsed, encoded } => {
-                    std::println!("binders len = {}", parsed.total_binder_length());
                     &encoded.bytes()[..encoded.bytes().len() - parsed.total_binder_length()]
                 }
                 _ => unreachable!(),
             };
-            std::println!("binder_pt = {binder_plaintext:02x?}");
 
             let handshake_hash = self
                 .transcript
@@ -244,8 +268,6 @@ mod client_hello {
                 }
             };
 
-            std::println!("real = {:02x?}", real_binder.as_ref());
-            std::println!("cand = {:02x?}", binder);
             ConstantTimeEq::ct_eq(real_binder.as_ref(), binder).into()
         }
 
@@ -333,7 +355,7 @@ mod client_hello {
             // for now.
             if !psk
                 .as_ref()
-                .is_some_and(ChosenPresharedKey::is_external)
+                .is_some_and(|psk| psk.is_external())
             {
                 self.send_tickets = self.config.send_tls13_tickets;
             }
@@ -418,10 +440,11 @@ mod client_hello {
                 cx,
                 &mut ocsp_response,
                 client_hello,
-                input_secrets.psk().map(|psk| &psk.psk),
+                input_secrets.psk(),
                 self.extra_exts,
                 &self.config,
             )?;
+            debug!("early data decision: {doing_early_data}");
 
             let doing_client_auth = if full_handshake {
                 let client_auth = emit_certificate_req_tls13(&mut flight, &self.config)?;
@@ -674,7 +697,8 @@ mod client_hello {
                 .zip(&psk_offer.binders)
                 .enumerate()
                 .find_map(|(i, (psk_id, binder))| {
-                    std::println!("checking psk at index={i}");
+                    trace!("checking PSK at index {i}");
+
                     // TODO(eric): Instead of checking both
                     // resumption/external for each identity,
                     // should we update ServerConfig to allow
@@ -701,7 +725,6 @@ mod client_hello {
                         .load_psk(&psk_id.identity.0)
                         .filter(|psk| psk.is_compatible(self.suite.common.suite))
                     {
-                        std::println!("psk = {psk:?}");
                         let psk = PresharedKey::External(psk);
                         return Some((psk, i, binder));
                     };
@@ -713,8 +736,14 @@ mod client_hello {
                 // None of the offers were suitable.
                 return Ok(None);
             };
+            let index = u16::try_from(index).map_err(|err| {
+                cx.common.send_fatal_alert(
+                    AlertDescription::InternalError,
+                    Error::General(err.to_string()),
+                )
+            })?;
 
-            std::println!("index = {index}");
+            debug!("chose PSK at index {index}");
 
             // RFC 8446: "Prior to accepting PSK key
             // establishment, the server MUST validate the
@@ -742,12 +771,7 @@ mod client_hello {
                     .clone_from(&resume.client_cert_chain);
             }
 
-            Ok(Some(ChosenPresharedKey {
-                // TODO(eric): cast or use try_into?
-                index: index as u16,
-                psk,
-                mode,
-            }))
+            Ok(Some(ChosenPresharedKey { index, psk, mode }))
         }
 
         /// Sends a "HelloRetryRequest".
@@ -875,7 +899,10 @@ mod client_hello {
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some(psk) = psk {
+            debug!("# early suite = {suite:?}");
+            debug!("# early psk = {:?}", psk.as_secret());
             let early_key_schedule = KeyScheduleEarly::new(suite, psk.as_secret());
+            debug!("early_key_schedule = {early_key_schedule:?}");
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -890,6 +917,9 @@ mod client_hello {
 
         // Do key exchange
         let key_schedule = key_schedule_pre_handshake.into_handshake(secret);
+        debug!("have psk = {}", psk.is_some());
+        debug!("suite = {suite:?}");
+        debug!("key_schedule = {key_schedule:?}");
 
         let handshake_hash = transcript.current_hash();
         let key_schedule = key_schedule.derive_server_handshake_secrets(
@@ -952,7 +982,7 @@ mod client_hello {
     fn decide_if_early_data_allowed(
         cx: &mut ServerContext<'_>,
         client_hello: &ClientHelloPayload,
-        psk: Option<&PresharedKey>,
+        psk: Option<&ChosenPresharedKey>,
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
@@ -967,7 +997,7 @@ mod client_hello {
             return rejected_or_disabled;
         };
 
-        let early_data_configured = match psk {
+        let early_data_configured = match &psk.psk {
             /* Non-zero max_early_data_size controls whether early_data is allowed at all.
              * We also require stateful resumption. */
             PresharedKey::Resumption(_) => {
@@ -985,9 +1015,12 @@ mod client_hello {
          *  was issued (see Section 8)." -- this is implemented in ServerSessionValue::set_freshness()
          *  and related.
          *
-         * "In order to accept early data, the server [...] MUST verify that the
-         *  following values are the same as those associated with the
-         *  selected PSK:
+         * "In order to accept early data, the server MUST have
+         * accepted a PSK cipher suite and selected the first key
+         * offered in the client's "pre_shared_key" extension.
+         * In addition, it MUST verify that the following values
+         * are the same as those associated with the selected
+         * PSK:
          *
          *  - The TLS version number
          *  - The selected cipher suite
@@ -995,6 +1028,7 @@ mod client_hello {
          *
          * (RFC8446, 4.2.10) */
         let early_data_possible = early_data_requested
+            && psk.is_first()
             && psk.is_fresh()
             && Some(psk.version()) == cx.common.negotiated_version
             && psk.cipher_suite() == Some(suite.common.suite)
@@ -1018,11 +1052,11 @@ mod client_hello {
         cx: &mut ServerContext<'_>,
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
-        psk: Option<&PresharedKey>,
+        psk: Option<&ChosenPresharedKey>,
         extra_exts: Vec<ServerExtension>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
-        let resumedata = psk.and_then(|v| v.resume_data());
+        let resumedata = psk.and_then(|psk| psk.psk.resume_data());
 
         let mut ep = hs::ExtensionProcessing::new();
         ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;

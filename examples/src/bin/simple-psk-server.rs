@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use std::env;
 use std::error::Error as StdError;
 use std::io::{Read, Write};
-use std::iter;
 use std::net::TcpListener;
 use std::str;
 use std::sync::Arc;
@@ -23,6 +22,8 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls::server::Acceptor;
 
 fn main() -> Result<(), Box<dyn StdError>> {
+    env_logger::init();
+
     let config = {
         let mut args = env::args();
         args.next();
