@@ -823,14 +823,14 @@ mod client_hello {
                 extra_exts: self.extra_exts,
             });
 
-            return if early_data_requested {
+            if early_data_requested {
                 Ok(Box::new(ExpectAndSkipRejectedEarlyData {
                     skip_data_left: skip_early_data,
                     next,
                 }))
             } else {
                 Ok(next)
-            };
+            }
         }
     }
 

@@ -701,7 +701,7 @@ impl PresharedKey {
                 // the Hash algorithm MUST be set when the PSK is
                 // established or default to SHA-256 if no such
                 // algorithm is defined."
-                hash_alg: Tls13HashAlg::SHA256,
+                hash_alg: Tls13HashAlg::Sha256,
                 early_data: None,
             })
         }
@@ -745,12 +745,12 @@ impl PresharedKey {
 
     /// Returns the PSK's identity.
     pub fn identity(&self) -> &[u8] {
-        &*self.identity
+        &self.identity
     }
 
     /// Returns the secret.
     pub(crate) fn secret(&self) -> &[u8] {
-        &*self.secret
+        &self.secret
     }
 
     /// Returns the hash algorithm.
@@ -763,8 +763,8 @@ impl PresharedKey {
         use Tls13HashAlg::*;
 
         match self.hash_alg {
-            SHA256 => 32,
-            SHA384 => 48,
+            Sha256 => 32,
+            Sha384 => 48,
         }
     }
 
@@ -816,8 +816,8 @@ fn ct_eq_zero(x: &[u8]) -> Choice {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum Tls13HashAlg {
-    SHA256,
-    SHA384,
+    Sha256,
+    Sha384,
 }
 
 impl From<Tls13HashAlg> for hash::HashAlgorithm {
@@ -825,8 +825,8 @@ impl From<Tls13HashAlg> for hash::HashAlgorithm {
         use hash::HashAlgorithm::*;
 
         match alg {
-            Tls13HashAlg::SHA256 => SHA256,
-            Tls13HashAlg::SHA384 => SHA384,
+            Tls13HashAlg::Sha256 => SHA256,
+            Tls13HashAlg::Sha384 => SHA384,
         }
     }
 }
@@ -837,8 +837,8 @@ impl TryFrom<hash::HashAlgorithm> for Tls13HashAlg {
         use hash::HashAlgorithm::*;
 
         let alg = match hash {
-            SHA256 => Self::SHA256,
-            SHA384 => Self::SHA384,
+            SHA256 => Self::Sha256,
+            SHA384 => Self::Sha384,
             _ => return Err(()),
         };
         Ok(alg)

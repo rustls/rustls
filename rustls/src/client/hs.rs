@@ -180,7 +180,7 @@ pub(super) fn start_handshake(
                 .has_certs(),
             config.provider.secure_random,
             config.enable_sni,
-            config.provider.clone(),
+            Arc::clone(&config.provider),
         )?),
         _ => None,
     };
@@ -516,7 +516,7 @@ fn emit_client_hello_for_retry(
                 config.provider.secure_random,
                 input.server_name.clone(),
                 &chp_payload,
-                config.provider.clone(),
+                Arc::clone(&config.provider),
             )),
             _ => None,
         });
@@ -564,9 +564,7 @@ fn emit_client_hello_for_retry(
     // Derive the TLS 1.3 key schedule for sending early data.
     let tls13_early_data_key_schedule = tls13_psk
         .and_then(|psk| {
-            let Some(hash) = psk.early_data_hash(config) else {
-                return None;
-            };
+            let hash = psk.early_data_hash(config)?;
             let ks = match ech_state.as_mut() {
                 // If we're performing ECH and using a PSK, then the PSK binder will have been dealt with
                 // separately, and we need to take the early_data_key_schedule computed for the inner hello.
@@ -574,12 +572,10 @@ fn emit_client_hello_for_retry(
 
                 // When we're not doing ECH and using a PSK, then the PSK binder need to be filled in as
                 // normal.
-                None => {
-                    match psk.fill_in_binders(&transcript_buffer, &mut chp, &*config.provider) {
-                        Ok(ks) => Some(ks),
-                        Err(err) => return Some(Err(err)),
-                    }
-                }
+                None => match psk.fill_in_binders(&transcript_buffer, &mut chp, &config.provider) {
+                    Ok(ks) => Some(ks),
+                    Err(err) => return Some(Err(err)),
+                },
             };
             ks.map(|ks| Ok((hash, ks)))
         })

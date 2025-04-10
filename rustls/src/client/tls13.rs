@@ -753,17 +753,17 @@ impl PresharedKeysRef<'_> {
                 //
                 // Therefore, we use that PSK's early data
                 // configuration.
-                psks.get(0)
+                psks.first()
                     .and_then(|psk| psk.early_data().map(|(n, ..)| n))
                     .unwrap_or_default()
             }
         }
     }
 
-    /// Returns the hash function used for early data.
+    /// Returns the hash function used for early data, if any.
     ///
     /// It returns `None` if the hash function is not found in
-    /// `config`.
+    /// `config` or if the PSK does not support early data.
     pub(super) fn early_data_hash(&self, config: &ClientConfig) -> Option<&'static dyn Hash> {
         match self {
             Self::Resumption(v) => Some(v.suite().common.hash_provider),
@@ -774,10 +774,9 @@ impl PresharedKeysRef<'_> {
                 //
                 // Therefore, we use that PSK's early data
                 // configuration.
-                let psk = psks.get(0)?;
-                if !psk.early_data().is_none() {
-                    return None;
-                }
+                let psk = psks.first()?;
+                // Is early data supported?
+                psk.early_data()?;
                 // TODO(eric): This is a little silly. Maybe we
                 // should make `crypto::PresharedKey` take
                 // `&'static dyn Hash` instead of taking

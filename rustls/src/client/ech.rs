@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -24,6 +23,7 @@ use crate::msgs::handshake::{
     PresharedKeyOffer, Random, ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
+use crate::sync::Arc;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
@@ -678,7 +678,7 @@ impl EchState {
             self.early_data_key_schedule = Some(psk.fill_in_binders(
                 &self.inner_hello_transcript,
                 &mut chp,
-                &*self.provider,
+                &self.provider,
             )?);
 
             // `fill_in_binders` works on an owned HandshakeMessagePayload, so we need to
