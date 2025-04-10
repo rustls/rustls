@@ -52,7 +52,6 @@ fn main() -> Result<(), Box<dyn StdError>> {
             for psk in args {
                 let (identity, secret) = psk.split_once(':').unwrap();
                 let alg = algs.next().unwrap();
-                println!("ident = {identity} alg = {alg:?}");
                 keys.insert(
                     PresharedKey::external(identity.as_bytes(), secret.as_bytes())
                         .unwrap()
@@ -77,29 +76,26 @@ fn main() -> Result<(), Box<dyn StdError>> {
             match acceptor.accept() {
                 Ok(Some(accepted)) => break accepted,
                 Ok(None) => continue,
-                Err((e, mut alert)) => {
+                Err((err, mut alert)) => {
                     alert.write_all(&mut stream).unwrap();
-                    println!("error accepting connection: {e}");
+                    println!("error accepting connection: {err}");
                     continue 'incoming;
                 }
             }
         };
         let mut conn = match accepted.into_connection(config.clone()) {
             Ok(conn) => conn,
-            Err((e, mut alert)) => {
+            Err((err, mut alert)) => {
                 alert.write_all(&mut stream).unwrap();
-                println!("error completing accepting connection: {e}");
+                println!("error completing accepting connection: {err}");
                 continue;
             }
         };
 
-        let (nr, nw) = conn.complete_io(&mut stream)?;
-        println!("complete_io: ({nr}, {nw})");
-
+        conn.complete_io(&mut stream)?;
         conn.read_tls(&mut stream)?;
 
         let state = conn.process_new_packets()?;
-        println!("state = {state:?}");
 
         let mut buf = vec![0; state.plaintext_bytes_to_read()];
         retry(|| conn.reader().read_exact(&mut buf))?;
@@ -139,7 +135,6 @@ where
         match f() {
             Ok(v) => return Ok(v),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                println!("continue");
                 continue;
             }
             Err(err) => return Err(err),
@@ -177,7 +172,6 @@ impl PresharedKeys {
 
 impl rustls::server::SelectsPresharedKeys for PresharedKeys {
     fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
-        println!("loading identity = {}", str::from_utf8(identity).unwrap());
         self.keys.get(identity).cloned()
     }
 }

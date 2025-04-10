@@ -35,7 +35,6 @@ fn main() {
         for psk in args {
             let (identity, secret) = psk.split_once(':').unwrap();
             let alg = algs.next().unwrap();
-            println!("ident = {identity} alg = {alg:?}");
             keys.insert(
                 server_name.try_into().unwrap(),
                 PresharedKey::external(identity.as_bytes(), secret.as_bytes())

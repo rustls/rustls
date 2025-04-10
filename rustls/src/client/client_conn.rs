@@ -171,8 +171,10 @@ pub struct ClientConfig {
     /// Externally derived TLS 1.3 preshared keys.
     pub preshared_keys: Arc<dyn PresharedKeyStore>,
 
-    /// TODO
-    pub psk_kex_modes: Vec<()>,
+    /// Supported preshared key exchange modes.
+    ///
+    /// If empty, [`PskKexMode::PskWithDhe`] is selected.
+    pub psk_kex_modes: Vec<PskKexMode>,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
@@ -519,6 +521,27 @@ pub enum Tls12Resumption {
 pub trait PresharedKeyStore: fmt::Debug + Send + Sync {
     /// Retrieves the preshared keys for `server_name`.
     fn psks(&self, server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>>;
+}
+
+/// Preshared key exchange modes.
+#[derive(Copy, Clone, Default, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum PskKexMode {
+    /// PSK-only key establishment.
+    ///
+    /// # Warning
+    ///
+    /// This mode lacks forward security. Unless you know that
+    /// you need PSK-only key establishment, you should use
+    /// [`PskWithDhe`][Self::PskWithDhe].
+    ///
+    /// See [RFC 9257] for more guidance.
+    ///
+    /// [RFC 9257]: https://www.rfc-editor.org/rfc/rfc9257.html
+    PskOnly,
+    /// PSK with (EC)DHE key establishment.
+    #[default]
+    PskWithDhe,
 }
 
 /// Container for unsafe APIs

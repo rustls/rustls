@@ -608,7 +608,6 @@ pub struct CompletedKeyExchange {
 }
 
 /// The result from [`ActiveKeyExchange::complete`] or [`ActiveKeyExchange::complete_hybrid_component`].
-#[derive(Debug)] // TODO: remove
 pub struct SharedSecret {
     buf: Vec<u8>,
     offset: usize,

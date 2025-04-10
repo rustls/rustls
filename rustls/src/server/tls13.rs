@@ -899,10 +899,7 @@ mod client_hello {
 
         // Start key schedule
         let key_schedule_pre_handshake = if let Some(psk) = psk {
-            debug!("# early suite = {suite:?}");
-            debug!("# early psk = {:?}", psk.as_secret());
             let early_key_schedule = KeyScheduleEarly::new(suite, psk.as_secret());
-            debug!("early_key_schedule = {early_key_schedule:?}");
             early_key_schedule.client_early_traffic_secret(
                 &client_hello_hash,
                 &*config.key_log,
@@ -917,9 +914,6 @@ mod client_hello {
 
         // Do key exchange
         let key_schedule = key_schedule_pre_handshake.into_handshake(secret);
-        debug!("have psk = {}", psk.is_some());
-        debug!("suite = {suite:?}");
-        debug!("key_schedule = {key_schedule:?}");
 
         let handshake_hash = transcript.current_hash();
         let key_schedule = key_schedule.derive_server_handshake_secrets(

@@ -1,9 +1,10 @@
+use alloc::vec;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
 
-use super::client_conn::Resumption;
+use super::client_conn::{PskKexMode, Resumption};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::client::{ClientConfig, EchMode, ResolvesClientCert, handy};
 use crate::error::Error;
@@ -167,8 +168,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
             alpn_protocols: Vec::new(),
             resumption: Resumption::default(),
             preshared_keys: Arc::new(handy::NoPresharedKeys),
-            // TODO
-            psk_kex_modes: Vec::new(),
+            psk_kex_modes: vec![PskKexMode::PskWithDhe],
             max_fragment_size: None,
             client_auth_cert_resolver,
             versions: self.state.versions,

@@ -13,7 +13,7 @@ use crate::SupportedCipherSuite;
 #[cfg(feature = "logging")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
-use crate::client::client_conn::ClientConnectionData;
+use crate::client::client_conn::{ClientConnectionData, PskKexMode};
 use crate::client::common::ClientHelloDetails;
 use crate::client::ech::EchState;
 use crate::client::{ClientConfig, EchMode, EchStatus, tls13};
@@ -385,8 +385,14 @@ fn emit_client_hello_for_retry(
     }
 
     let psk_modes = if support_tls13 {
-        // TODO(eric): Make this configurable.
-        let modes = vec![PSKKeyExchangeMode::PSK_DHE_KE, PSKKeyExchangeMode::PSK_KE];
+        let modes = config
+            .psk_kex_modes
+            .iter()
+            .map(|mode| match mode {
+                PskKexMode::PskOnly => PSKKeyExchangeMode::PSK_KE,
+                PskKexMode::PskWithDhe => PSKKeyExchangeMode::PSK_DHE_KE,
+            })
+            .collect::<Vec<_>>();
         exts.push(ClientExtension::PresharedKeyModes(modes.clone()));
         modes
     } else {
@@ -607,7 +613,6 @@ fn emit_client_hello_for_retry(
     // Derive the key schedule for sending early data.
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
     let early_data_key_schedule = tls13_early_data_key_schedule.map(|(hash, schedule)| {
-        debug!("schedule = {schedule:?}");
         if !cx.data.early_data.is_enabled() {
             return schedule;
         }

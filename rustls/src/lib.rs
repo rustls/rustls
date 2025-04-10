@@ -584,7 +584,7 @@ pub mod client {
     pub use builder::WantsClientCert;
     pub use client_conn::{
         ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, PresharedKeyStore,
-        ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
+        PskKexMode, ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
