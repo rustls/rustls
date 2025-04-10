@@ -878,28 +878,40 @@ mod tests {
             not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
         };
         assert_eq!(context, context);
-        assert_ne!(context, ExpiredContext {
-            time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
-            not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
-        });
-        assert_ne!(context, ExpiredContext {
-            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
-            not_after: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
-        });
+        assert_ne!(
+            context,
+            ExpiredContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            context,
+            ExpiredContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_after: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(NotValidYet, NotValidYet);
         let context = NotValidYetContext {
             time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
             not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
         };
         assert_eq!(context, context);
-        assert_ne!(context, NotValidYetContext {
-            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
-            not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
-        });
-        assert_ne!(context, NotValidYetContext {
-            time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
-            not_before: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
-        });
+        assert_ne!(
+            context,
+            NotValidYetContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
+        assert_ne!(
+            context,
+            NotValidYetContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+                not_before: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+            }
+        );
         assert_eq!(Revoked, Revoked);
         assert_eq!(UnhandledCriticalExtension, UnhandledCriticalExtension);
         assert_eq!(UnknownIssuer, UnknownIssuer);
@@ -910,14 +922,20 @@ mod tests {
             next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
         };
         assert_eq!(context, context);
-        assert_ne!(context, ExpiredRevocationListContext {
-            time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
-            next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
-        });
-        assert_ne!(context, ExpiredRevocationListContext {
-            time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
-            next_update: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
-        });
+        assert_ne!(
+            context,
+            ExpiredRevocationListContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(12345)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(123)),
+            }
+        );
+        assert_ne!(
+            context,
+            ExpiredRevocationListContext {
+                time: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+                next_update: UnixTime::since_unix_epoch(Duration::from_secs(1234)),
+            }
+        );
         assert_eq!(BadSignature, BadSignature);
         assert_eq!(NotValidForName, NotValidForName);
         let context = NotValidForNameContext {
@@ -927,18 +945,24 @@ mod tests {
             presented: vec!["other.com".into()],
         };
         assert_eq!(context, context);
-        assert_ne!(context, NotValidForNameContext {
-            expected: ServerName::try_from("example.com")
-                .unwrap()
-                .to_owned(),
-            presented: vec![]
-        });
-        assert_ne!(context, NotValidForNameContext {
-            expected: ServerName::try_from("huh.com")
-                .unwrap()
-                .to_owned(),
-            presented: vec!["other.com".into()],
-        });
+        assert_ne!(
+            context,
+            NotValidForNameContext {
+                expected: ServerName::try_from("example.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec![]
+            }
+        );
+        assert_ne!(
+            context,
+            NotValidForNameContext {
+                expected: ServerName::try_from("huh.com")
+                    .unwrap()
+                    .to_owned(),
+                presented: vec!["other.com".into()],
+            }
+        );
         assert_eq!(InvalidPurpose, InvalidPurpose);
         assert_eq!(
             ApplicationVerificationFailure,
