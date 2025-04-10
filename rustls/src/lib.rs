@@ -265,6 +265,10 @@
 //!
 //! [`mio`]: https://docs.rs/mio/latest/mio/
 //!
+//! # Manual
+//!
+//! The [rustls manual](crate::manual) explains design decisions and includes how-to guidance.
+//!
 //! # Crate features
 //! Here's a list of what features are exposed by the rustls crate and what
 //! they mean.
@@ -324,7 +328,7 @@
 
 // Require docs for public APIs, deny unsafe code, etc.
 #![forbid(unsafe_code, unused_must_use)]
-#![cfg_attr(not(any(read_buf, bench)), forbid(unstable_features))]
+#![cfg_attr(not(any(read_buf, bench, coverage_nightly)), forbid(unstable_features))]
 #![warn(
     clippy::alloc_instead_of_core,
     clippy::clone_on_ref_ptr,
@@ -360,6 +364,10 @@
 )]
 // Enable documentation for all features on docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+// Enable coverage() attr for nightly coverage builds, see
+// <https://github.com/rust-lang/rust/issues/84605>
+// (`coverage_nightly` is a cfg set by `cargo-llvm-cov`)
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 // XXX: Because of https://github.com/rust-lang/rust/issues/54726, we cannot
 // write `#![rustversion::attr(nightly, feature(read_buf))]` here. Instead,
 // build.rs set `read_buf` for (only) Rust Nightly to get the same effect.
@@ -408,11 +416,13 @@ mod log {
 mod test_macros;
 
 /// This internal `sync` module aliases the `Arc` implementation to allow downstream forks
-/// of rustls targetting architectures without atomic pointers to replace the implementation
+/// of rustls targeting architectures without atomic pointers to replace the implementation
 /// with another implementation such as `portable_atomic_util::Arc` in one central location.
 mod sync {
     #[allow(clippy::disallowed_types)]
     pub(crate) type Arc<T> = alloc::sync::Arc<T>;
+    #[allow(clippy::disallowed_types)]
+    pub(crate) type Weak<T> = alloc::sync::Weak<T>;
 }
 
 #[macro_use]
@@ -466,8 +476,8 @@ pub mod internal {
         }
         pub mod enums {
             pub use crate::msgs::enums::{
-                AlertLevel, CertificateType, Compression, EchVersion, HpkeAead, HpkeKdf, HpkeKem,
-                NamedGroup,
+                AlertLevel, CertificateType, Compression, EchVersion, ExtensionType, HpkeAead,
+                HpkeKdf, HpkeKem, NamedGroup,
             };
         }
         pub mod fragmenter {

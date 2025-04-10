@@ -59,7 +59,7 @@ by default out of conservatism.
       do not currently exist, and may never exist, but current traffic could be captured
       now and attacked later.
 
-[X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-kwiatkowski-tls-ecdhe-mlkem/>
+[X25519MLKEM768]: <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
 [`X25519MLKEM768`]: crate::crypto::aws_lc_rs::kx_group::X25519MLKEM768
 [`MLKEM768`]: crate::crypto::aws_lc_rs::kx_group::MLKEM768
 [FIPS203]: <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.203.pdf>

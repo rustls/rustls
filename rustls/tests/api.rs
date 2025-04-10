@@ -15,11 +15,8 @@ use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_b
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::{AlertLevel, CertificateType, Compression};
-use rustls::internal::msgs::handshake::{
-    ClientExtension, ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, Random,
-    ServerExtension, ServerName as ServerNameExtensionItem, SessionId,
-};
+use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
+use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload, ServerExtension};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -401,7 +398,7 @@ mod test_raw_keys {
             }
             Payload::new(parsed.get_encoding())
         } else {
-            panic!("Expected to succesfully encode handshake message");
+            panic!("Expected to successfully encode handshake message");
         };
 
         // // Re-encrypt
@@ -861,17 +858,84 @@ fn client_can_get_server_cert_after_resumption() {
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
+            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
 
             let original_certs = client.peer_certificates();
 
             let (mut client, mut server) =
                 make_pair_for_configs(client_config.clone(), server_config.clone());
             do_handshake(&mut client, &mut server);
+            assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
 
             let resumed_certs = client.peer_certificates();
 
             assert_eq!(original_certs, resumed_certs);
         }
+    }
+}
+
+#[test]
+fn client_only_attempts_resumption_with_compatible_security() {
+    let kt = KeyType::Rsa2048;
+    CountingLogger::install();
+    CountingLogger::reset();
+
+    let server_config = make_server_config(kt);
+    for version in rustls::ALL_VERSIONS {
+        let base_client_config = make_client_config_with_versions(kt, &[version]);
+        let (mut client, mut server) =
+            make_pair_for_configs(base_client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+
+        // base case
+        let (mut client, mut server) =
+            make_pair_for_configs(base_client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        // allowed case, using `clone`
+        let client_config = ClientConfig::clone(&base_client_config);
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
+
+        // disallowed case: unmatching `client_auth_cert_resolver`
+        let mut client_config = ClientConfig::clone(&base_client_config);
+        client_config.client_auth_cert_resolver =
+            make_client_config_with_versions_with_auth(kt, &[version]).client_auth_cert_resolver;
+
+        CountingLogger::reset();
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        #[cfg(feature = "logging")]
+        assert!(COUNTS.with(|c| {
+            c.borrow().trace.iter().any(|item| {
+                item == "resumption not allowed between different ResolvesClientCert values"
+            })
+        }));
+
+        // disallowed case: unmatching `verifier`
+        let mut client_config = make_client_config_with_versions_with_auth(kt, &[version]);
+        client_config.resumption = base_client_config.resumption.clone();
+        client_config.client_auth_cert_resolver =
+            Arc::clone(&base_client_config.client_auth_cert_resolver);
+
+        CountingLogger::reset();
+        let (mut client, mut server) =
+            make_pair_for_configs(client_config.clone(), server_config.clone());
+        do_handshake(&mut client, &mut server);
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        #[cfg(feature = "logging")]
+        assert!(COUNTS.with(|c| {
+            c.borrow()
+                .trace
+                .iter()
+                .any(|item| item == "resumption not allowed between different ServerCertVerifiers")
+        }));
     }
 }
 
@@ -1451,87 +1515,39 @@ fn client_trims_terminating_dot() {
 
 #[test]
 fn server_ignores_sni_with_ip_address() {
-    fn insert_ip_address_server_name(msg: &mut Message) -> Altered {
-        alter_sni_extension(
-            msg,
-            |snr| {
-                snr.clear();
-                snr.push(ServerNameExtensionItem::read_bytes(b"\x00\x00\x071.1.1.1").unwrap());
-            },
-            |parsed, _encoded| Payload::new(parsed.get_encoding()),
-        )
-    }
-
     check_sni_error(
-        insert_ip_address_server_name,
+        encoding::Extension::new_sni(b"1.1.1.1"),
         Error::General("no server certificate chain resolved".to_string()),
     );
 }
 
 #[test]
 fn server_rejects_sni_with_illegal_dns_name() {
-    fn insert_illegal_server_name(msg: &mut Message) -> Altered {
-        alter_sni_extension(
-            msg,
-            |_| (),
-            |_, encoded| {
-                // replace "localhost" with invalid DNS name
-                let mut altered = encoded.clone().into_vec();
-                let needle = b"localhost";
-                let index = altered
-                    .windows(needle.len())
-                    .position(|window| window == needle)
-                    .unwrap();
-                altered[index..index + needle.len()].copy_from_slice(b"ab@cd.com");
-                Payload::new(altered)
-            },
-        )
-    }
-
     check_sni_error(
-        insert_illegal_server_name,
+        encoding::Extension::new_sni(b"ab@cd.com"),
         Error::InvalidMessage(InvalidMessage::InvalidServerName),
     );
 }
 
-fn alter_sni_extension(
-    msg: &mut Message,
-    alter_inner: impl Fn(&mut Vec<ServerNameExtensionItem>),
-    alter_encoding: impl Fn(&mut HandshakeMessagePayload, &mut Payload) -> Payload<'static>,
-) -> Altered {
-    if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-        if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-            for mut ext in ch.extensions.iter_mut() {
-                if let ClientExtension::ServerName(snr) = &mut ext {
-                    alter_inner(snr);
-                }
-            }
-            *encoded = alter_encoding(parsed, encoded);
-        }
-    }
-
-    Altered::InPlace
-}
-
-fn check_sni_error(alteration: impl Fn(&mut Message) -> Altered, expected_error: Error) {
+fn check_sni_error(sni_extension: encoding::Extension, expected_error: Error) {
     for kt in ALL_KEY_TYPES {
-        let client_config = make_client_config(*kt);
         let mut server_config = make_server_config(*kt);
-
         server_config.cert_resolver = Arc::new(ServerCheckNoSni {});
 
-        let client =
-            ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-        let server = ServerConnection::new(Arc::new(server_config)).unwrap();
-        let (mut client, mut server) = (client.into(), server.into());
+        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
+        server
+            .read_tls(
+                &mut encoding::message_framing(
+                    ContentType::Handshake,
+                    ProtocolVersion::TLSv1_2,
+                    encoding::basic_client_hello(vec![sni_extension.clone()]),
+                )
+                .as_slice(),
+            )
+            .unwrap();
 
-        transfer_altered(&mut client, &alteration, &mut server);
         assert_eq!(server.process_new_packets(), Err(expected_error.clone()),);
-
-        let rustls::Connection::Server(server_inner) = server else {
-            unreachable!();
-        };
-        assert_eq!(None, server_inner.server_name());
+        assert_eq!(None, server.server_name());
     }
 }
 
@@ -2462,6 +2478,35 @@ fn client_respects_buffer_limit_post_handshake() {
     server.process_new_packets().unwrap();
 
     check_read(&mut server.reader(), b"01234567890123456789012345");
+}
+
+#[test]
+fn client_detects_broken_write_vectored_impl() {
+    // see https://github.com/rustls/rustls/issues/2316
+    let (mut client, _) = make_pair(KeyType::Rsa2048);
+    let err = client
+        .write_tls(&mut BrokenWriteVectored)
+        .unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::Other);
+    assert!(format!("{err:?}").starts_with(
+        "Custom { kind: Other, error: \"illegal write_vectored return value (9999 > "
+    ));
+
+    struct BrokenWriteVectored;
+
+    impl io::Write for BrokenWriteVectored {
+        fn write_vectored(&mut self, _bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+            Ok(9999)
+        }
+
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            unreachable!()
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            unreachable!()
+        }
+    }
 }
 
 #[test]
@@ -5253,7 +5298,6 @@ mod test_quic {
     }
 
     #[test]
-    #[cfg(feature = "ring")] // uses ring APIs directly
     fn test_quic_server_no_params_received() {
         let server_config =
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
@@ -5266,48 +5310,7 @@ mod test_quic {
         )
         .unwrap();
 
-        use rustls::internal::msgs::enums::{Compression, NamedGroup};
-        use rustls::internal::msgs::handshake::{
-            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
-        };
-        use rustls::{CipherSuite, HandshakeType, SignatureScheme};
-
-        let provider = provider::default_provider();
-        let mut random = [0; 32];
-        provider
-            .secure_random
-            .fill(&mut random)
-            .unwrap();
-        let random = Random::from(random);
-
-        let rng = ring::rand::SystemRandom::new();
-        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::ECDH_P256, &rng)
-            .unwrap()
-            .compute_public_key()
-            .unwrap();
-
-        let client_hello = MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                client_version: ProtocolVersion::TLSv1_3,
-                random,
-                session_id: SessionId::random(provider.secure_random).unwrap(),
-                cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                compression_methods: vec![Compression::Null],
-                extensions: vec![
-                    ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
-                    ClientExtension::NamedGroups(vec![NamedGroup::secp256r1]),
-                    ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                    ClientExtension::KeyShare(vec![KeyShareEntry::new(
-                        NamedGroup::secp256r1,
-                        kx.as_ref(),
-                    )]),
-                ],
-            }),
-        });
-
-        let mut buf = Vec::with_capacity(512);
-        client_hello.encode(&mut buf);
+        let buf = encoding::basic_client_hello(vec![]);
         assert_eq!(
             server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerMisbehaved(
@@ -5317,32 +5320,11 @@ mod test_quic {
     }
 
     #[test]
-    #[cfg(feature = "ring")] // uses ring APIs directly
     fn test_quic_server_no_tls12() {
         let mut server_config =
             make_server_config_with_versions(KeyType::Ed25519, &[&rustls::version::TLS13]);
         server_config.alpn_protocols = vec!["foo".into()];
         let server_config = Arc::new(server_config);
-
-        use rustls::internal::msgs::enums::{Compression, NamedGroup};
-        use rustls::internal::msgs::handshake::{
-            ClientHelloPayload, HandshakeMessagePayload, KeyShareEntry, Random, SessionId,
-        };
-        use rustls::{CipherSuite, HandshakeType, SignatureScheme};
-
-        let provider = provider::default_provider();
-        let mut random = [0; 32];
-        provider
-            .secure_random
-            .fill(&mut random)
-            .unwrap();
-        let random = Random::from(random);
-
-        let rng = ring::rand::SystemRandom::new();
-        let kx = ring::agreement::EphemeralPrivateKey::generate(&ring::agreement::X25519, &rng)
-            .unwrap()
-            .compute_public_key()
-            .unwrap();
 
         let mut server = quic::ServerConnection::new(
             server_config,
@@ -5351,27 +5333,11 @@ mod test_quic {
         )
         .unwrap();
 
-        let client_hello = MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                client_version: ProtocolVersion::TLSv1_2,
-                random,
-                session_id: SessionId::random(provider.secure_random).unwrap(),
-                cipher_suites: vec![CipherSuite::TLS13_AES_128_GCM_SHA256],
-                compression_methods: vec![Compression::Null],
-                extensions: vec![
-                    ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-                    ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ED25519]),
-                    ClientExtension::KeyShare(vec![KeyShareEntry::new(
-                        NamedGroup::X25519,
-                        kx.as_ref(),
-                    )]),
-                ],
-            }),
-        });
-
-        let mut buf = Vec::with_capacity(512);
-        client_hello.encode(&mut buf);
+        let buf = encoding::client_hello_with_extensions(vec![
+            encoding::Extension::new_sig_algs(),
+            encoding::Extension::new_dummy_key_share(),
+            encoding::Extension::new_kx_groups(),
+        ]);
         assert_eq!(
             server.read_hs(buf.as_slice()).err(),
             Some(Error::PeerIncompatible(
@@ -6238,71 +6204,51 @@ fn connection_types_are_not_huge() {
 
 #[test]
 fn test_server_rejects_duplicate_sni_names() {
-    fn duplicate_sni_payload(msg: &mut Message) -> Altered {
-        alter_sni_extension(
-            msg,
-            |snr| {
-                snr.push(snr[0].clone());
-            },
-            |parsed, _encoded| Payload::new(parsed.get_encoding()),
-        )
-    }
-
-    let (client, server) = make_pair(KeyType::Rsa2048);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, duplicate_sni_payload, &mut server);
-    assert_eq!(
-        server.process_new_packets(),
-        Err(Error::PeerMisbehaved(
-            PeerMisbehaved::DuplicateServerNameTypes
-        ))
+    let mut body = encoding::Extension::sni_dns_hostname(b"example.com");
+    body.extend_from_slice(&encoding::Extension::sni_dns_hostname(b"example.com"));
+    check_sni_error(
+        encoding::Extension {
+            typ: ExtensionType::ServerName,
+            body: encoding::len_u16(body),
+        },
+        Error::PeerMisbehaved(PeerMisbehaved::DuplicateServerNameTypes),
     );
 }
 
 #[test]
 fn test_server_rejects_empty_sni_extension() {
-    fn empty_sni_payload(msg: &mut Message) -> Altered {
-        alter_sni_extension(
-            msg,
-            |snr| snr.clear(),
-            |parsed, _encoded| Payload::new(parsed.get_encoding()),
-        )
-    }
-
-    let (client, server) = make_pair(KeyType::Rsa2048);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, empty_sni_payload, &mut server);
-    assert_eq!(
-        server.process_new_packets(),
-        Err(Error::PeerMisbehaved(
-            PeerMisbehaved::ServerNameMustContainOneHostName
-        ))
+    check_sni_error(
+        encoding::Extension {
+            typ: ExtensionType::ServerName,
+            body: encoding::len_u16(vec![]),
+        },
+        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
     );
 }
 
 #[test]
 fn test_server_rejects_clients_without_any_kx_groups() {
-    fn delete_kx_groups(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for mut ext in ch.extensions.iter_mut() {
-                    if let ClientExtension::NamedGroups(ngs) = &mut ext {
-                        ngs.clear();
-                    }
-                    if let ClientExtension::KeyShare(ks) = &mut ext {
-                        ks.clear();
-                    }
-                }
-            }
-
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
-    }
-
-    let (client, server) = make_pair(KeyType::Rsa2048);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, delete_kx_groups, &mut server);
+    let (_, mut server) = make_pair(KeyType::Rsa2048);
+    server
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                encoding::client_hello_with_extensions(vec![
+                    encoding::Extension::new_sig_algs(),
+                    encoding::Extension {
+                        typ: ExtensionType::EllipticCurves,
+                        body: encoding::len_u16(vec![]),
+                    },
+                    encoding::Extension {
+                        typ: ExtensionType::KeyShare,
+                        body: encoding::len_u16(vec![]),
+                    },
+                ]),
+            )
+            .as_slice(),
+        )
+        .unwrap();
     assert_eq!(
         server.process_new_packets(),
         Err(Error::PeerIncompatible(
@@ -6383,7 +6329,11 @@ fn test_client_rejects_illegal_tls13_ccs() {
     fn corrupt_ccs(msg: &mut Message) -> Altered {
         if let MessagePayload::ChangeCipherSpec(_) = &mut msg.payload {
             println!("seen CCS {:?}", msg);
-            return Altered::Raw(vec![0x14, 0x03, 0x03, 0x00, 0x02, 0x01, 0x02]);
+            return Altered::Raw(encoding::message_framing(
+                ContentType::ChangeCipherSpec,
+                ProtocolVersion::TLSv1_2,
+                vec![0x01, 0x02],
+            ));
         }
         Altered::InPlace
     }
@@ -6639,7 +6589,14 @@ fn test_acceptor() {
     let mut acceptor = Acceptor::default();
     // Minimal valid 1-byte application data message is not a handshake message
     acceptor
-        .read_tls(&mut [0x17, 0x03, 0x03, 0x00, 0x01, 0x00].as_ref())
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::ApplicationData,
+                ProtocolVersion::TLSv1_2,
+                vec![0x00],
+            )
+            .as_slice(),
+        )
         .unwrap();
     let (err, mut alert) = acceptor.accept().unwrap_err();
     assert!(matches!(err, Error::InappropriateMessage { .. }));
@@ -6650,7 +6607,14 @@ fn test_acceptor() {
     let mut acceptor = Acceptor::default();
     // Minimal 1-byte ClientHello message is not a legal handshake message
     acceptor
-        .read_tls(&mut [0x16, 0x03, 0x03, 0x00, 0x05, 0x01, 0x00, 0x00, 0x01, 0x00].as_ref())
+        .read_tls(
+            &mut encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                encoding::handshake_framing(HandshakeType::ClientHello, vec![0x00]),
+            )
+            .as_slice(),
+        )
         .unwrap();
     let (err, mut alert) = acceptor.accept().unwrap_err();
     assert!(matches!(
@@ -6722,20 +6686,20 @@ fn test_no_warning_logging_during_successful_sessions() {
     if cfg!(feature = "logging") {
         COUNTS.with(|c| {
             println!("After tests: {:?}", c.borrow());
-            assert_eq!(c.borrow().warn, 0);
-            assert_eq!(c.borrow().error, 0);
-            assert_eq!(c.borrow().info, 0);
-            assert!(c.borrow().trace > 0);
-            assert!(c.borrow().debug > 0);
+            assert!(c.borrow().warn.is_empty());
+            assert!(c.borrow().error.is_empty());
+            assert!(c.borrow().info.is_empty());
+            assert!(!c.borrow().trace.is_empty());
+            assert!(!c.borrow().debug.is_empty());
         });
     } else {
         COUNTS.with(|c| {
             println!("After tests: {:?}", c.borrow());
-            assert_eq!(c.borrow().warn, 0);
-            assert_eq!(c.borrow().error, 0);
-            assert_eq!(c.borrow().info, 0);
-            assert_eq!(c.borrow().trace, 0);
-            assert_eq!(c.borrow().debug, 0);
+            assert!(c.borrow().warn.is_empty());
+            assert!(c.borrow().error.is_empty());
+            assert!(c.borrow().info.is_empty());
+            assert!(c.borrow().trace.is_empty());
+            assert!(c.borrow().debug.is_empty());
         });
     }
 }
@@ -7194,9 +7158,16 @@ fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message
     fn inject_corrupt_finished_message(msg: &mut Message) -> Altered {
         if let MessagePayload::ChangeCipherSpec(_) = msg.payload {
             // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
-            let mut raw_change_cipher_spec = [0x14u8, 0x03, 0x03, 0x00, 0x01, 0x01].to_vec();
-            let mut corrupt_finished = [0x16, 0x03, 0x03, 0x00, 0x28].to_vec();
-            corrupt_finished.extend([0u8; 0x28]);
+            let mut raw_change_cipher_spec = encoding::message_framing(
+                ContentType::ChangeCipherSpec,
+                ProtocolVersion::TLSv1_2,
+                vec![0x01],
+            );
+            let mut corrupt_finished = encoding::message_framing(
+                ContentType::Handshake,
+                ProtocolVersion::TLSv1_2,
+                vec![0u8; 0x28],
+            );
 
             let mut both = vec![];
             both.append(&mut raw_change_cipher_spec);
@@ -7893,13 +7864,10 @@ fn test_illegal_server_renegotiation_attempt_after_tls13_handshake() {
     let msg = PlainMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: Payload::new(
-            HandshakeMessagePayload {
-                typ: HandshakeType::HelloRequest,
-                payload: HandshakePayload::HelloRequest,
-            }
-            .get_encoding(),
-        ),
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
     };
     raw_server.encrypt_and_send(&msg, &mut client);
     let err = client
@@ -7930,13 +7898,10 @@ fn test_illegal_server_renegotiation_attempt_after_tls12_handshake() {
     let msg = PlainMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: Payload::new(
-            HandshakeMessagePayload {
-                typ: HandshakeType::HelloRequest,
-                payload: HandshakePayload::HelloRequest,
-            }
-            .get_encoding(),
-        ),
+        payload: Payload::new(encoding::handshake_framing(
+            HandshakeType::HelloRequest,
+            vec![],
+        )),
     };
 
     // one is allowed (and elicits a warning alert)
@@ -7972,20 +7937,7 @@ fn test_illegal_client_renegotiation_attempt_after_tls13_handshake() {
     let msg = PlainMessage {
         typ: ContentType::Handshake,
         version: ProtocolVersion::TLSv1_3,
-        payload: Payload::new(
-            HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ClientHelloPayload {
-                    client_version: ProtocolVersion::TLSv1_2,
-                    random: Random::from([0u8; 32]),
-                    session_id: SessionId::read_bytes(&[0u8]).unwrap(),
-                    cipher_suites: vec![],
-                    compression_methods: vec![Compression::Null],
-                    extensions: vec![ClientExtension::ExtendedMasterSecretRequest],
-                }),
-            }
-            .get_encoding(),
-        ),
+        payload: Payload::new(encoding::basic_client_hello(vec![])),
     };
     raw_client.encrypt_and_send(&msg, &mut server);
     let err = server

@@ -166,6 +166,22 @@ pub struct ClientConfig {
     pub alpn_protocols: Vec<Vec<u8>>,
 
     /// How and when the client can resume a previous session.
+    ///
+    /// # Sharing `resumption` between `ClientConfig`s
+    /// In a program using many `ClientConfig`s it may improve resumption rates
+    /// (which has a significant impact on connection performance) if those
+    /// configs share a single `Resumption`.
+    ///
+    /// However, resumption is only allowed between two `ClientConfig`s if their
+    /// `client_auth_cert_resolver` (ie, potential client authentication credentials)
+    /// and `verifier` (ie, server certificate verification settings) are
+    /// the same (according to `Arc::ptr_eq`).
+    ///
+    /// To illustrate, imagine two `ClientConfig`s `A` and `B`.  `A` fully validates
+    /// the server certificate, `B` does not.  If `A` and `B` shared a resumption store,
+    /// it would be possible for a session originated by `B` to be inserted into the
+    /// store, and then resumed by `A`.  This would give a false impression to the user
+    /// of `A` that the server certificate is fully validated.
     pub resumption: Resumption,
 
     /// Externally derived TLS 1.3 preshared keys.

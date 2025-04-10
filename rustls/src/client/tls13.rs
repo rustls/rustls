@@ -1969,6 +1969,8 @@ impl ExpectTraffic {
                 .peer_certificates
                 .clone()
                 .unwrap_or_default(),
+            &self.config.verifier,
+            &self.config.client_auth_cert_resolver,
             now,
             nst.lifetime,
             nst.age_add,
@@ -2036,19 +2038,19 @@ impl State<ClientConnectionData> for ExpectTraffic {
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::NewSessionTicketTls13(ref new_ticket),
+                        payload: HandshakePayload::NewSessionTicketTls13(new_ticket),
                         ..
                     },
                 ..
-            } => self.handle_new_ticket_tls13(cx, new_ticket)?,
+            } => self.handle_new_ticket_tls13(cx, &new_ticket)?,
             MessagePayload::Handshake {
                 parsed:
                     HandshakeMessagePayload {
-                        payload: HandshakePayload::KeyUpdate(ref key_update),
+                        payload: HandshakePayload::KeyUpdate(key_update),
                         ..
                     },
                 ..
-            } => self.handle_key_update(cx.common, key_update)?,
+            } => self.handle_key_update(cx.common, &key_update)?,
             payload => {
                 return Err(inappropriate_handshake_message(
                     &payload,

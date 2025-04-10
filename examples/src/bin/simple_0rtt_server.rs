@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
                 match conn.read_tls(&mut stream) {
                     Ok(0) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into()),
                     Ok(_) => break,
-                    Err(ref err) if err.kind() == io::ErrorKind::Interrupted => {}
+                    Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
                     Err(err) => return Err(err.into()),
                 };
             }

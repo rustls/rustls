@@ -39,7 +39,7 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1.0.73"
-asn1 = "0.20"
+asn1 = "0.21"
 async-std = { version = "1.12.0", features = ["attributes"] }
 async-trait = "0.1.74"
 aws-lc-rs = { version = "1.12", default-features = false }
@@ -57,7 +57,7 @@ env_logger = "0.11"
 fxhash = "0.2.1"
 hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
 hex = "0.4"
-hickory-resolver = { version = "0.25.0-alpha.5", features = ["dns-over-https-rustls", "webpki-roots"] }
+hickory-resolver = { version = "0.25", features = ["https-aws-lc-rs", "webpki-roots"] }
 hmac = "0.12"
 hpke-rs = "0.2"
 hpke-rs-crypto = "0.2"
@@ -91,7 +91,7 @@ webpki-roots = "0.26"
 x25519-dalek = "2"
 x509-parser = "0.17"
 zeroize = "1.7"
-zlib-rs = "0.4"
+zlib-rs = "0.5"
 
 [profile.bench]
 codegen-units = 1

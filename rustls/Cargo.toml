@@ -1,6 +1,6 @@
 [package]
 name = "rustls"
-version = "0.23.23"
+version = "0.23.26"
 edition = "2021"
 rust-version = "1.71"
 license = "Apache-2.0 OR ISC OR MIT"
@@ -121,3 +121,9 @@ allowed_external_types = [
   "rustls_pki_types",
   "rustls_pki_types::*",
 ]
+
+[package.metadata.cargo-semver-checks.lints]
+enum_no_repr_variant_discriminant_changed = "warn"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(bench)", "cfg(coverage_nightly)", "cfg(read_buf)"] }

@@ -68,7 +68,7 @@ jobs:
         if: runner.os == 'MacOS'
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.2"
+          go-version: "1.24.2"
 
       - name: cargo build (debug; default features)
         run: cargo build --locked
@@ -207,7 +207,7 @@ jobs:
       - name: Install golang toolchain
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.24"
           cache: false
 
       - name: Run test suite (ring)
@@ -318,7 +318,7 @@ jobs:
           persist-credentials: false
 
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools
 
@@ -590,3 +590,9 @@ jobs:
         run: cargo test --locked -- --include-ignored
         env:
           RUST_BACKTRACE: 1
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: EmbarkStudios/cargo-deny-action@v2

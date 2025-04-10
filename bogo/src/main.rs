@@ -1026,7 +1026,7 @@ fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream
             sess.read_tls(&mut io::Cursor::new(&mut bytes[..count]))
                 .expect("read_tls not expected to fail reading from buffer");
         }
-        Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => {}
+        Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
         Err(err) => panic!("invalid read: {}", err),
     };
 
@@ -1036,7 +1036,7 @@ fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream
 fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
     match sess.read_tls(conn) {
         Ok(_) => {}
-        Err(ref err) if err.kind() == io::ErrorKind::ConnectionReset => {}
+        Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
         Err(err) => panic!("invalid read: {}", err),
     };
 
@@ -1097,7 +1097,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
         }
 
         if opts.side == Side::Server && opts.enable_early_data {
-            if let Some(ref mut ed) = server(&mut sess).early_data() {
+            if let Some(ed) = &mut server(&mut sess).early_data() {
                 let mut data = Vec::new();
                 let data_len = ed
                     .read_to_end(&mut data)
