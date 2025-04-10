@@ -58,9 +58,10 @@ mod client_hello {
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
+    use alloc::string::String;
     use core::fmt;
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    #[derive(PartialEq)]
     pub(super) enum EarlyDataDecision {
         Disabled,
         RequestedButRejected,
@@ -347,7 +348,12 @@ mod client_hello {
                 self.pre_shared_key(cx, chm, client_hello, psk_mode)?
             };
             if psk.is_none() && self.config.only_allow_preshared_keys {
-                // TODO(eric): handle this.
+                return Err(cx.common.send_fatal_alert(
+                    AlertDescription::HandshakeFailure,
+                    Error::General(String::from(
+                        "no compatible PSKs found and only PSKs supported",
+                    )),
+                ));
             }
 
             // It's not really clear whether sending session

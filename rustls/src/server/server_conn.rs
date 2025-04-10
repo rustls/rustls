@@ -114,7 +114,9 @@ pub trait ProducesTickets: Debug + Send + Sync {
 pub trait SelectsPresharedKeys: Debug + Send + Sync {
     /// Retrieves a preshared key.
     ///
-    /// TODO(eric): note about protecting server identities.
+    /// To help prevent adversaries from discovering identities
+    /// supported by the server, identity comparisons should be
+    /// performed in constant time.
     fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>>;
 }
 

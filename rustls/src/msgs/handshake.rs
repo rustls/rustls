@@ -453,12 +453,7 @@ impl FromIterator<(PresharedKeyIdentity, PresharedKeyBinder)> for PresharedKeyOf
     where
         I: IntoIterator<Item = (PresharedKeyIdentity, PresharedKeyBinder)>,
     {
-        let mut identities = Vec::new();
-        let mut binders = Vec::new();
-        for (ident, binder) in iter {
-            identities.push(ident);
-            binders.push(binder);
-        }
+        let (identities, binders) = iter.into_iter().unzip();
         Self {
             identities,
             binders,

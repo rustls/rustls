@@ -1034,10 +1034,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 }))
             }
             None => {
-                // TODO(eric): already checked this
-                if exts.early_data_extension_offered() {
-                    return Err(PeerMisbehaved::EarlyDataExtensionWithoutPsk.into());
-                }
                 cx.common
                     .handshake_kind
                     .get_or_insert(HandshakeKind::Full);
