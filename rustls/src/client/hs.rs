@@ -569,7 +569,6 @@ fn emit_client_hello_for_retry(
     // Derive the TLS 1.3 key schedule for sending early data.
     let tls13_early_data_key_schedule = tls13_psk
         .and_then(|psk| {
-            let hash = psk.early_data_hash(config)?;
             let ks = match ech_state.as_mut() {
                 // If we're performing ECH and using a PSK, then the PSK binder will have been dealt with
                 // separately, and we need to take the early_data_key_schedule computed for the inner hello.
@@ -582,6 +581,10 @@ fn emit_client_hello_for_retry(
                     Err(err) => return Some(Err(err)),
                 },
             };
+            // NB: This needs to come *after* `ks` since that
+            // expression has side effects (filling in PSK
+            // binders, etc.).
+            let hash = psk.early_data_hash(config)?;
             ks.map(|ks| Ok((hash, ks)))
         })
         .transpose()?;
