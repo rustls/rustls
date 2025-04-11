@@ -252,7 +252,7 @@ fn emit_client_hello_for_retry(
         transport_parameters_draft,
     } = extra_exts.clone().into_owned();
 
-    let mut exts = ClientExtensions {
+    let mut exts = Box::new(ClientExtensions {
         // offer groups which are usable for any offered version
         named_groups: Some(
             config
@@ -274,7 +274,7 @@ fn emit_client_hello_for_retry(
         transport_parameters,
         transport_parameters_draft,
         ..Default::default()
-    };
+    });
 
     if support_tls13 {
         if let Some(cas_extension) = config.verifier.root_hint_subjects() {
@@ -424,7 +424,7 @@ fn emit_client_hello_for_retry(
         session_id: input.session_id,
         cipher_suites,
         compression_methods: vec![Compression::Null],
-        extensions: Box::new(exts),
+        extensions: exts,
     };
 
     let ech_grease_ext = config
