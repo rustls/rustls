@@ -21,8 +21,8 @@ use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, HandshakePayload,
-    KeyExchangeAlgorithm, Random, ServerExtension,
+    ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, LossyDnsName, Random,
+    ServerExtensions, ServerExtensionsTemplate, SingleProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -56,14 +56,26 @@ pub(super) fn can_resume(
 #[derive(Default)]
 pub(super) struct ExtensionProcessing {
     // extensions to reply with
-    pub(super) exts: Vec<ServerExtension>,
+    pub(super) extensions: Box<ServerExtensions<'static>>,
     #[cfg(feature = "tls12")]
     pub(super) send_ticket: bool,
 }
 
 impl ExtensionProcessing {
-    pub(super) fn new() -> Self {
-        Default::default()
+    pub(super) fn new(extra_exts: ServerExtensionsTemplate<'static>) -> Self {
+        let ServerExtensionsTemplate {
+            transport_parameters,
+            transport_parameters_draft,
+        } = extra_exts;
+        Self {
+            extensions: Box::new(ServerExtensions {
+                transport_parameters,
+                transport_parameters_draft,
+                ..Default::default()
+            }),
+            #[cfg(feature = "tls12")]
+            send_ticket: false,
+        }
     }
 
     pub(super) fn process_common(
@@ -73,29 +85,29 @@ impl ExtensionProcessing {
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-        extra_exts: Vec<ServerExtension>,
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
-        let maybe_their_protocols = hello.alpn_extension();
-        if let Some(their_protocols) = maybe_their_protocols {
-            let their_protocols = their_protocols.to_slices();
-
+        if let Some(their_protocols) = &hello.extensions.protocols {
             if their_protocols
                 .iter()
-                .any(|protocol| protocol.is_empty())
+                .any(|protocol| protocol.as_ref().is_empty())
             {
                 return Err(PeerMisbehaved::OfferedEmptyApplicationProtocol.into());
             }
 
             cx.common.alpn_protocol = our_protocols
                 .iter()
-                .find(|protocol| their_protocols.contains(&protocol.as_slice()))
+                .find(|protocol| {
+                    their_protocols
+                        .iter()
+                        .any(|other| other.as_ref() == protocol.as_slice())
+                })
                 .cloned();
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
-                self.exts
-                    .push(ServerExtension::make_alpn(&[selected_protocol]));
+                self.extensions.selected_protocol =
+                    Some(SingleProtocolName::new(selected_protocol.clone()));
             } else if !our_protocols.is_empty() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::NoApplicationProtocol,
@@ -113,7 +125,7 @@ impl ExtensionProcessing {
             // successful establishment of connections between peers that can't understand
             // each other.
             if cx.common.alpn_protocol.is_none()
-                && (!our_protocols.is_empty() || maybe_their_protocols.is_some())
+                && (!our_protocols.is_empty() || hello.extensions.protocols.is_some())
             {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::NoApplicationProtocol,
@@ -121,8 +133,16 @@ impl ExtensionProcessing {
                 ));
             }
 
-            match hello.quic_params_extension() {
-                Some(params) => cx.common.quic.params = Some(params),
+            match hello
+                .extensions
+                .transport_parameters
+                .as_ref()
+                .or(hello
+                    .extensions
+                    .transport_parameters_draft
+                    .as_ref())
+            {
+                Some(params) => cx.common.quic.params = Some(params.to_owned().into_vec()),
                 None => {
                     return Err(cx
                         .common
@@ -133,9 +153,10 @@ impl ExtensionProcessing {
 
         let for_resume = resumedata.is_some();
         // SNI
-        if !for_resume && hello.sni_extension().is_some() {
-            self.exts
-                .push(ServerExtension::ServerNameAck);
+        if let (false, Some(LossyDnsName::SingleDnsName(_))) =
+            (for_resume, &hello.extensions.server_name)
+        {
+            self.extensions.server_name_ack = Some(());
         }
 
         // Send status_request response if we have one.  This is not allowed
@@ -143,13 +164,14 @@ impl ExtensionProcessing {
         // to send.
         if !for_resume
             && hello
-                .find_extension(ExtensionType::StatusRequest)
+                .extensions
+                .certificate_status_request
                 .is_some()
         {
             if ocsp_response.is_some() && !cx.common.is_tls13() {
                 // Only TLS1.2 sends confirmation in ServerHello
-                self.exts
-                    .push(ServerExtension::CertificateStatusAck);
+                self.extensions
+                    .certificate_status_request_ack = Some(());
             }
         } else {
             // Throw away any OCSP response so we don't try to send it later.
@@ -158,8 +180,6 @@ impl ExtensionProcessing {
 
         self.validate_server_cert_type_extension(hello, config, cx)?;
         self.validate_client_cert_type_extension(hello, config, cx)?;
-
-        self.exts.extend(extra_exts);
 
         Ok(())
     }
@@ -173,35 +193,37 @@ impl ExtensionProcessing {
     ) {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
+
+        use crate::msgs::base::PayloadU8;
         let secure_reneg_offered = hello
-            .find_extension(ExtensionType::RenegotiationInfo)
+            .extensions
+            .renegotiation_info
             .is_some()
             || hello
                 .cipher_suites
                 .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
 
         if secure_reneg_offered {
-            self.exts
-                .push(ServerExtension::make_empty_renegotiation_info());
+            self.extensions.renegotiation_info = Some(PayloadU8::new(Vec::new()));
         }
 
         // Tickets:
         // If we get any SessionTicket extension and have tickets enabled,
         // we send an ack.
         if hello
-            .find_extension(ExtensionType::SessionTicket)
+            .extensions
+            .session_ticket
             .is_some()
             && config.ticketer.enabled()
         {
             self.send_ticket = true;
-            self.exts
-                .push(ServerExtension::SessionTicketAck);
+            self.extensions.session_ticket_ack = Some(());
         }
 
         // Confirm use of EMS if offered.
         if using_ems {
-            self.exts
-                .push(ServerExtension::ExtendedMasterSecretAck);
+            self.extensions
+                .extended_master_secret_ack = Some(());
         }
     }
 
@@ -212,8 +234,9 @@ impl ExtensionProcessing {
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         let client_supports = hello
-            .server_certificate_extension()
-            .map(|certificate_types| certificate_types.to_vec())
+            .extensions
+            .server_certificate_types
+            .as_deref()
             .unwrap_or_default();
 
         self.process_cert_type_extension(
@@ -233,8 +256,9 @@ impl ExtensionProcessing {
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         let client_supports = hello
-            .client_certificate_extension()
-            .map(|certificate_types| certificate_types.to_vec())
+            .extensions
+            .client_certificate_types
+            .as_deref()
             .unwrap_or_default();
 
         self.process_cert_type_extension(
@@ -249,7 +273,7 @@ impl ExtensionProcessing {
 
     fn process_cert_type_extension(
         &mut self,
-        client_supports: Vec<CertificateType>,
+        client_supports: &[CertificateType],
         requires_raw_keys: bool,
         extension_type: ExtensionType,
         cx: &mut ServerContext<'_>,
@@ -276,12 +300,10 @@ impl ExtensionProcessing {
 
         match raw_key_negotation_result {
             Ok((ExtensionType::ClientCertificateType, cert_type)) => {
-                self.exts
-                    .push(ServerExtension::ClientCertType(cert_type));
+                self.extensions.client_certificate_type = Some(cert_type);
             }
             Ok((ExtensionType::ServerCertificateType, cert_type)) => {
-                self.exts
-                    .push(ServerExtension::ServerCertType(cert_type));
+                self.extensions.server_certificate_type = Some(cert_type);
             }
             Err(err) => {
                 return Err(cx
@@ -296,7 +318,7 @@ impl ExtensionProcessing {
 
 pub(super) struct ExpectClientHello {
     pub(super) config: Arc<ServerConfig>,
-    pub(super) extra_exts: Vec<ServerExtension>,
+    pub(super) extra_exts: ServerExtensionsTemplate<'static>,
     pub(super) transcript: HandshakeHashOrBuffer,
     #[cfg(feature = "tls12")]
     pub(super) session_id: SessionId,
@@ -307,7 +329,10 @@ pub(super) struct ExpectClientHello {
 }
 
 impl ExpectClientHello {
-    pub(super) fn new(config: Arc<ServerConfig>, extra_exts: Vec<ServerExtension>) -> Self {
+    pub(super) fn new(
+        config: Arc<ServerConfig>,
+        extra_exts: ServerExtensionsTemplate<'static>,
+    ) -> Self {
         let mut transcript_buffer = HandshakeHashBuffer::new();
 
         if config.verifier.offer_client_auth() {
@@ -343,11 +368,13 @@ impl ExpectClientHello {
             .supports_version(ProtocolVersion::TLSv1_2);
 
         // Are we doing TLS1.3?
-        let maybe_versions_ext = client_hello.versions_extension();
-        let version = if let Some(versions) = maybe_versions_ext {
-            if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
+        let version = if let Some(versions) = &client_hello
+            .extensions
+            .supported_versions
+        {
+            if versions.tls13 && tls13_enabled {
                 ProtocolVersion::TLSv1_3
-            } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
+            } else if !versions.tls12 || !tls12_enabled {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::ProtocolVersion,
                     PeerIncompatible::Tls12NotOfferedOrEnabled,
@@ -405,16 +432,28 @@ impl ExpectClientHello {
         // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
         let certificate_authorities = match version {
             ProtocolVersion::TLSv1_2 => None,
-            _ => client_hello.certificate_authorities_extension(),
+            _ => client_hello
+                .extensions
+                .certificate_authority_names
+                .as_deref(),
         };
         // Choose a certificate.
         let certkey = {
             let client_hello = ClientHello {
                 server_name: &cx.data.sni,
                 signature_schemes: &sig_schemes,
-                alpn: client_hello.alpn_extension(),
-                client_cert_types: client_hello.server_certificate_extension(),
-                server_cert_types: client_hello.client_certificate_extension(),
+                alpn: client_hello
+                    .extensions
+                    .protocols
+                    .as_ref(),
+                client_cert_types: client_hello
+                    .extensions
+                    .client_certificate_types
+                    .as_deref(),
+                server_cert_types: client_hello
+                    .extensions
+                    .server_certificate_types
+                    .as_deref(),
                 cipher_suites: &client_hello.cipher_suites,
                 certificate_authorities,
             };
@@ -440,8 +479,10 @@ impl ExpectClientHello {
                 certkey.get_key().algorithm(),
                 cx.common.protocol,
                 client_hello
-                    .namedgroups_extension()
-                    .unwrap_or(&[]),
+                    .extensions
+                    .named_groups
+                    .as_deref()
+                    .unwrap_or_default(),
                 &client_hello.cipher_suites,
             )
             .map_err(|incompat| {
@@ -684,13 +725,6 @@ pub(super) fn process_client_hello<'m>(
         ));
     }
 
-    if client_hello.has_duplicate_extension() {
-        return Err(cx.common.send_fatal_alert(
-            AlertDescription::DecodeError,
-            PeerMisbehaved::DuplicateClientHelloExtensions,
-        ));
-    }
-
     // No handshake messages should follow this one in this flight.
     cx.common.check_aligned_handshake()?;
 
@@ -699,23 +733,15 @@ pub(super) fn process_client_hello<'m>(
     // send an Illegal Parameter alert instead of the Internal Error alert
     // (or whatever) that we'd send if this were checked later or in a
     // different way.
-    let sni: Option<DnsName<'_>> = match client_hello.sni_extension() {
-        Some(sni) => {
-            if sni.has_duplicate_names_for_type() {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::DecodeError,
-                    PeerMisbehaved::DuplicateServerNameTypes,
-                ));
-            }
 
-            if let Some(hostname) = sni.single_hostname() {
-                Some(hostname.to_lowercase_owned())
-            } else {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::ServerNameMustContainOneHostName,
-                ));
-            }
+    let sni = match &client_hello.extensions.server_name {
+        Some(LossyDnsName::SingleDnsName(dns_name)) => Some(dns_name.to_lowercase_owned()),
+        Some(LossyDnsName::IpAddress) => None,
+        Some(LossyDnsName::Invalid) => {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::ServerNameMustContainOneHostName,
+            ));
         }
         None => None,
     };
@@ -731,7 +757,9 @@ pub(super) fn process_client_hello<'m>(
     }
 
     let sig_schemes = client_hello
-        .sigalgs_extension()
+        .extensions
+        .signature_schemes
+        .as_ref()
         .ok_or_else(|| {
             cx.common.send_fatal_alert(
                 AlertDescription::HandshakeFailure,

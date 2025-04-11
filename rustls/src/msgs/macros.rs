@@ -83,3 +83,162 @@ macro_rules! enum_builder {
         }
     };
 }
+
+/// A macro which defines a structure containing TLS extensions
+///
+/// The contents are defined by two blocks, which are merged to
+/// give the struct's items.  The second block is optional.
+///
+/// The first block defines the items read-into by decoding,
+/// and used for encoding.
+///
+/// The type of each item in the first block _must_ be an `Option`.
+/// This records the presence of that extension.
+///
+/// Each item in the first block is prefixed with a match arm,
+/// which must match an `ExtensionType` variant.  This maps
+/// the item to its extension type.
+///
+/// Items in the second block are not encoded or decoded-to.
+/// They therefore must have a reasonable `Default` value.
+///
+/// All items must have a `Default`, `Debug` and `Clone`.
+macro_rules! extension_struct {
+    (
+        $(#[doc = $comment:literal])*
+        $struct_vis:vis struct $struct_name:ident$(<$struct_lt:lifetime>)*
+        {
+          $(
+            $(#[$item_attr:meta])*
+            $item_id:path => $item_vis:vis $item_slot:ident : Option<$item_ty:ty>,
+          )+
+        } $( + {
+          $(
+            $(#[$meta_attr:meta])*
+            $meta_vis:vis $meta_slot:ident : $meta_ty:ty,
+          )+
+        })*
+    ) => {
+        $(#[doc = $comment])*
+        #[non_exhaustive]
+        #[derive(Clone, Debug, Default)]
+        $struct_vis struct $struct_name$(<$struct_lt>)* {
+            $(
+              $(#[$item_attr])*
+              $item_vis $item_slot: Option<$item_ty>,
+            )+
+            $($(
+              $(#[$meta_attr])*
+              $meta_vis $meta_slot: $meta_ty,
+            )+)*
+        }
+
+        impl<'a> $struct_name$(<$struct_lt>)* {
+            /// Decode `r` as `T` into `out`, only if `out` is `None`.
+            fn read_once<T>(r: &mut Reader<'a>, out: &mut Option<T>) -> Result<(), InvalidMessage>
+            where T: Codec<'a>,
+            {
+                if let Some(_) = out {
+                    return Err(InvalidMessage::DuplicateExtension);
+                }
+
+                *out = Some(T::read(r)?);
+                Ok(())
+            }
+
+            /// Reads one extension body for an extension named by `typ`.
+            ///
+            /// Returns `true` if handled, `false` otherwise.
+            ///
+            /// `r` is fully consumed if `typ` is unhandled.
+            fn read_extension_body(
+                &mut self,
+                typ: ExtensionType,
+                r: &mut Reader<'a>,
+            ) -> Result<bool, InvalidMessage> {
+                match typ {
+                   $(
+                      $item_id => Self::read_once(r, &mut self.$item_slot)?,
+                   )*
+
+                   // read and ignore unhandled extensions
+                   _ => {
+                       r.rest();
+                       return Ok(false);
+                   }
+                }
+
+                Ok(true)
+            }
+
+            /// Encode one extension body for `typ` into `output`.
+            ///
+            /// Adds nothing to `output` if `typ` is absent from this
+            /// struct, either because it is `None` or unhandled by
+            /// this struct.
+            fn encode_one_extension(
+                &self,
+                typ: ExtensionType,
+                output: &mut Vec<u8>,
+            ) {
+                match typ {
+                    $(
+                        $item_id => if let Some(item) = &self.$item_slot {
+                            typ.encode(output);
+                            item.encode(LengthPrefixedBuffer::new(ListLength::U16, output).buf);
+                        },
+
+                    )*
+                    _ => {},
+                }
+            }
+
+            /// Return a list of extensions whose items are `Some`
+            #[allow(dead_code)]
+            pub(crate) fn collect_used_extensions(&self) -> Vec<ExtensionType> {
+                let mut r = Vec::with_capacity(Self::ALL_EXTENSIONS.len());
+
+                $(
+                    if let Some(_) = &self.$item_slot {
+                        r.push($item_id);
+                    }
+                )*
+
+                r
+            }
+
+            /// Clone the value of the extension identified by `typ` from `source` to `self`.
+            ///
+            /// Does nothing if `typ` is not an extension handled by this object.
+            #[allow(dead_code)]
+            pub(crate) fn clone_one_from(
+                &mut self,
+                source: &Self,
+                typ: ExtensionType,
+            )  {
+                match typ {
+                    $(
+                        $item_id => self.$item_slot = source.$item_slot.clone(),
+                    )*
+                    _ => {},
+                }
+            }
+
+            /// Remove the extension identified by `typ` from `self`.
+            #[allow(dead_code)]
+            pub(crate) fn clear(&mut self, typ: ExtensionType) {
+                match typ {
+                    $(
+                        $item_id => self.$item_slot = None,
+                    )*
+                    _ => {},
+                }
+            }
+
+            /// Every `ExtensionType` this structure may encode/decode.
+            const ALL_EXTENSIONS: &'static [ExtensionType] = &[
+                $($item_id,)*
+            ];
+        }
+    }
+}

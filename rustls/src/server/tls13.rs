@@ -21,7 +21,7 @@ use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::KeyUpdateRequest;
 use crate::msgs::handshake::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificateChain, CertificatePayloadTls13, HandshakeMessagePayload,
-    HandshakePayload, NewSessionTicketExtension, NewSessionTicketPayloadTls13,
+    HandshakePayload, NewSessionTicketPayloadTls13,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -45,9 +45,9 @@ mod client_hello {
     use crate::msgs::ccs::ChangeCipherSpecPayload;
     use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
     use crate::msgs::handshake::{
-        CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
-        ClientHelloPayload, HelloRetryExtension, HelloRetryRequest, KeyShareEntry, Random,
-        ServerExtension, ServerHelloPayload, SessionId,
+        CertificatePayloadTls13, CertificateRequestExtensions, CertificateRequestPayloadTls13,
+        ClientHelloPayload, HelloRetryRequest, HelloRetryRequestExtensions, KeyShareEntry, Random,
+        ServerExtensions, ServerExtensionsTemplate, ServerHelloPayload, SessionId,
     };
     use crate::server::common::ActiveCertifiedKey;
     use crate::sign;
@@ -70,7 +70,7 @@ mod client_hello {
         pub(in crate::server) randoms: ConnectionRandoms,
         pub(in crate::server) done_retry: bool,
         pub(in crate::server) send_tickets: usize,
-        pub(in crate::server) extra_exts: Vec<ServerExtension>,
+        pub(in crate::server) extra_exts: ServerExtensionsTemplate<'static>,
     }
 
     fn max_early_data_size(configured: u32) -> usize {
@@ -150,7 +150,9 @@ mod client_hello {
             sigschemes_ext.retain(SignatureScheme::supported_in_tls13);
 
             let shares_ext = client_hello
-                .keyshare_extension()
+                .extensions
+                .key_shares
+                .as_ref()
                 .ok_or_else(|| {
                     cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
@@ -173,7 +175,9 @@ mod client_hello {
             }
 
             let cert_compressor = client_hello
-                .certificate_compression_extension()
+                .extensions
+                .certificate_compression_algorithms
+                .as_ref()
                 .and_then(|offered|
                     // prefer server order when choosing a compression: the client's
                     // extension here does not denote any preference.
@@ -183,7 +187,10 @@ mod client_hello {
                         .find(|compressor| offered.contains(&compressor.algorithm()))
                         .cloned());
 
-            let early_data_requested = client_hello.early_data_extension_offered();
+            let early_data_requested = client_hello
+                .extensions
+                .early_data_request
+                .is_some();
 
             // EarlyData extension is illegal in second ClientHello
             if self.done_retry && early_data_requested {
@@ -248,19 +255,19 @@ mod client_hello {
             let mut chosen_psk_index = None;
             let mut resumedata = None;
 
-            if let Some(psk_offer) = client_hello.psk() {
-                if !client_hello.check_psk_ext_is_last() {
-                    return Err(cx.common.send_fatal_alert(
-                        AlertDescription::IllegalParameter,
-                        PeerMisbehaved::PskExtensionMustBeLast,
-                    ));
-                }
-
+            if let Some(psk_offer) = &client_hello
+                .extensions
+                .preshared_key_offer
+            {
                 // "A client MUST provide a "psk_key_exchange_modes" extension if it
                 //  offers a "pre_shared_key" extension. If clients offer
                 //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
                 //  servers MUST abort the handshake." - RFC8446 4.2.9
-                if client_hello.psk_modes().is_none() {
+                if client_hello
+                    .extensions
+                    .preshared_key_modes
+                    .is_none()
+                {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::MissingExtension,
                         PeerMisbehaved::MissingPskModesExtension,
@@ -315,7 +322,13 @@ mod client_hello {
                 }
             }
 
-            if !client_hello.psk_mode_offered(PSKKeyExchangeMode::PSK_DHE_KE) {
+            if !client_hello
+                .extensions
+                .preshared_key_modes
+                .as_ref()
+                .map(|offer| offer.contains(&PSKKeyExchangeMode::PSK_DHE_KE))
+                .unwrap_or_default()
+            {
                 debug!("Client unwilling to resume, DHE_KE not offered");
                 self.send_tickets = 0;
                 chosen_psk_index = None;
@@ -489,8 +502,6 @@ mod client_hello {
         resuming_psk: Option<&[u8]>,
         config: &ServerConfig,
     ) -> Result<KeyScheduleHandshake, Error> {
-        let mut extensions = Vec::new();
-
         // Prepare key exchange; the caller already found the matching SupportedKxGroup
         let (share, kxgroup) = share_and_kxgroup;
         debug_assert_eq!(kxgroup.name(), share.group);
@@ -502,15 +513,12 @@ mod client_hello {
             })?;
         cx.common.kx_state.complete();
 
-        extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(
-            ckx.group,
-            ckx.pub_key,
-        )));
-        extensions.push(ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_3));
-
-        if let Some(psk_idx) = chosen_psk_idx {
-            extensions.push(ServerExtension::PresharedKey(psk_idx as u16));
-        }
+        let extensions = Box::new(ServerExtensions {
+            key_share: Some(KeyShareEntry::new(ckx.group, ckx.pub_key)),
+            selected_version: Some(ProtocolVersion::TLSv1_3),
+            preshared_key: chosen_psk_idx.map(|idx| idx as u16),
+            ..Default::default()
+        });
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -582,19 +590,16 @@ mod client_hello {
         common: &mut CommonState,
         group: NamedGroup,
     ) {
-        let mut req = HelloRetryRequest {
+        let req = HelloRetryRequest {
             legacy_version: ProtocolVersion::TLSv1_2,
             session_id,
             cipher_suite: suite.common.suite,
-            extensions: Vec::new(),
+            extensions: HelloRetryRequestExtensions {
+                key_share: Some(group),
+                supported_versions: Some(ProtocolVersion::TLSv1_3),
+                ..Default::default()
+            },
         };
-
-        req.extensions
-            .push(HelloRetryExtension::KeyShare(group));
-        req.extensions
-            .push(HelloRetryExtension::SupportedVersions(
-                ProtocolVersion::TLSv1_3,
-            ));
 
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
@@ -618,7 +623,10 @@ mod client_hello {
         suite: &'static Tls13CipherSuite,
         config: &ServerConfig,
     ) -> EarlyDataDecision {
-        let early_data_requested = client_hello.early_data_extension_offered();
+        let early_data_requested = client_hello
+            .extensions
+            .early_data_request
+            .is_some();
         let rejected_or_disabled = match early_data_requested {
             true => EarlyDataDecision::RequestedButRejected,
             false => EarlyDataDecision::Disabled,
@@ -674,20 +682,20 @@ mod client_hello {
         ocsp_response: &mut Option<&[u8]>,
         hello: &ClientHelloPayload,
         resumedata: Option<&persist::ServerSessionValue>,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: ServerExtensionsTemplate<'static>,
         config: &ServerConfig,
     ) -> Result<EarlyDataDecision, Error> {
-        let mut ep = hs::ExtensionProcessing::new();
-        ep.process_common(config, cx, ocsp_response, hello, resumedata, extra_exts)?;
+        let mut ep = hs::ExtensionProcessing::new(extra_exts);
+        ep.process_common(config, cx, ocsp_response, hello, resumedata)?;
 
         let early_data = decide_if_early_data_allowed(cx, hello, resumedata, suite, config);
         if early_data == EarlyDataDecision::Accepted {
-            ep.exts.push(ServerExtension::EarlyData);
+            ep.extensions.early_data_ack = Some(());
         }
 
         let ee = HandshakeMessagePayload {
             typ: HandshakeType::EncryptedExtensions,
-            payload: HandshakePayload::EncryptedExtensions(ep.exts),
+            payload: HandshakePayload::EncryptedExtensions(ep.extensions),
         };
 
         trace!("sending encrypted extensions {:?}", ee);
@@ -703,33 +711,29 @@ mod client_hello {
             return Ok(false);
         }
 
-        let mut cr = CertificateRequestPayloadTls13 {
+        let cr = CertificateRequestPayloadTls13 {
             context: PayloadU8::empty(),
-            extensions: Vec::new(),
-        };
-
-        let schemes = config
-            .verifier
-            .supported_verify_schemes();
-        cr.extensions
-            .push(CertReqExtension::SignatureAlgorithms(schemes.to_vec()));
-
-        if !config.cert_decompressors.is_empty() {
-            cr.extensions
-                .push(CertReqExtension::CertificateCompressionAlgorithms(
+            extensions: CertificateRequestExtensions {
+                signature_algorithms: Some(
                     config
-                        .cert_decompressors
-                        .iter()
-                        .map(|decomp| decomp.algorithm())
-                        .collect(),
-                ));
-        }
-
-        let authorities = config.verifier.root_hint_subjects();
-        if !authorities.is_empty() {
-            cr.extensions
-                .push(CertReqExtension::AuthorityNames(authorities.to_vec()));
-        }
+                        .verifier
+                        .supported_verify_schemes(),
+                ),
+                certificate_compression_algorithms: match config.cert_decompressors.as_slice() {
+                    &[] => None,
+                    decomps => Some(
+                        decomps
+                            .iter()
+                            .map(|decomp| decomp.algorithm())
+                            .collect(),
+                    ),
+                },
+                authority_names: match config.verifier.root_hint_subjects() {
+                    &[] => None,
+                    authorities => Some(authorities.to_vec()),
+                },
+            },
+        };
 
         let creq = HandshakeMessagePayload {
             typ: HandshakeType::CertificateRequest,
@@ -1074,7 +1078,11 @@ impl State<ServerConnectionData> for ExpectCertificate {
 
         // We don't send any CertificateRequest extensions, so any extensions
         // here are illegal.
-        if certp.any_entry_has_extension() {
+        if certp.entries.iter().any(|e| {
+            !e.extensions
+                .collect_used_extensions()
+                .is_empty()
+        }) {
             return Err(PeerMisbehaved::UnsolicitedCertExtension.into());
         }
 
@@ -1327,11 +1335,7 @@ impl ExpectFinished {
 
         if config.max_early_data_size > 0 {
             if !stateless {
-                payload
-                    .exts
-                    .push(NewSessionTicketExtension::EarlyData(
-                        config.max_early_data_size,
-                    ));
+                payload.extensions.max_early_data_size = Some(config.max_early_data_size);
             } else {
                 // We implement RFC8446 section 8.1: by enforcing that 0-RTT is
                 // only possible if using stateful resumption
