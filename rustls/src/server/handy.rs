@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
+use crate::crypto::PresharedKey;
 use crate::server::ClientHello;
 use crate::sync::Arc;
 use crate::{server, sign};
@@ -162,6 +163,15 @@ impl server::ProducesTickets for NeverProducesTickets {
         None
     }
     fn decrypt(&self, _bytes: &[u8]) -> Option<Vec<u8>> {
+        None
+    }
+}
+
+#[derive(Debug)]
+pub(super) struct NeverSelectsPsks {}
+
+impl server::SelectsPresharedKeys for NeverSelectsPsks {
+    fn load_psk(&self, _identity: &[u8]) -> Option<Arc<PresharedKey>> {
         None
     }
 }

@@ -6,6 +6,7 @@
 
 #![allow(clippy::disallowed_types)]
 
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::io::{self, Read, Write};
 use std::sync::Arc;
@@ -23,7 +24,7 @@ use rustls::client::{
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
+use rustls::crypto::{CryptoProvider, PresharedKey, aws_lc_rs, ring};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
@@ -114,6 +115,8 @@ struct Options {
     on_initial_expect_curve_id: Option<NamedGroup>,
     on_resume_expect_curve_id: Option<NamedGroup>,
     wait_for_debugger: bool,
+    psk: Option<Vec<u8>>,
+    psk_identity: Option<Vec<u8>>,
 }
 
 impl Options {
@@ -184,6 +187,8 @@ impl Options {
             on_initial_expect_curve_id: None,
             on_resume_expect_curve_id: None,
             wait_for_debugger: false,
+            psk: None,
+            psk_identity: None,
         }
     }
 
@@ -669,6 +674,18 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
         cfg.send_half_rtt_data = true;
     }
 
+    if let Some(psk) = &opts.psk {
+        let identity = opts
+            .psk_identity
+            .as_ref()
+            .map(|v| v.as_slice())
+            .unwrap_or_default();
+        let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
+        let mut keys = ServerPresharedKeys::new();
+        keys.insert(psk);
+        cfg.preshared_keys = Arc::new(keys);
+    }
+
     match opts.install_cert_compression_algs {
         CompressionAlgs::All => {
             cfg.cert_compressors = vec![&ExpandingAlgorithm, &ShrinkingAlgorithm, &RandomAlgorithm];
@@ -831,6 +848,21 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     if opts.enable_early_data {
         cfg.enable_early_data = true;
+    }
+
+    if let Some(psk) = &opts.psk {
+        let server_name = ServerName::try_from(opts.host_name.as_str())
+            .unwrap()
+            .to_owned();
+        let identity = opts
+            .psk_identity
+            .as_ref()
+            .map(|v| v.as_slice())
+            .unwrap_or_default();
+        let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
+        let mut keys = ClientPresharedKeys::new();
+        keys.insert(server_name, psk);
+        cfg.preshared_keys = Arc::new(keys);
     }
 
     match opts.install_cert_compression_algs {
@@ -1618,6 +1650,12 @@ pub fn main() {
                     opts.wait_for_debugger = true;
                 }
             }
+            "-psk" => {
+                opts.psk = Some(args.remove(0).into_bytes())
+            }
+            "-psk-identity" => {
+                opts.psk_identity= Some(args.remove(0).into_bytes())
+            }
 
             // defaults:
             "-enable-all-curves" |
@@ -1641,7 +1679,6 @@ pub fn main() {
             // Not implemented things
             "-dtls" |
             "-cipher" |
-            "-psk" |
             "-renegotiate-freely" |
             "-false-start" |
             "-fallback-scsv" |
@@ -1930,3 +1967,70 @@ static ALL_HPKE_SUITES: &[&dyn Hpke] = &[
     hpke::DH_KEM_X25519_HKDF_SHA256_AES_256,
     hpke::DH_KEM_X25519_HKDF_SHA256_CHACHA20_POLY1305,
 ];
+
+#[derive(Debug)]
+struct ServerPresharedKeys {
+    keys: HashMap<Vec<u8>, Arc<PresharedKey>>,
+}
+
+impl ServerPresharedKeys {
+    fn new() -> Self {
+        Self {
+            keys: HashMap::new(),
+        }
+    }
+
+    fn insert(&mut self, psk: PresharedKey) {
+        let identity = psk.identity().to_vec();
+        if self
+            .keys
+            .insert(identity, Arc::new(psk))
+            .is_some()
+        {
+            panic!("duplicate identity")
+        }
+    }
+}
+
+impl rustls::server::SelectsPresharedKeys for ServerPresharedKeys {
+    fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
+        self.keys.get(identity).cloned()
+    }
+}
+
+#[derive(Debug)]
+struct ClientPresharedKeys {
+    keys: HashMap<ServerName<'static>, Vec<Arc<PresharedKey>>>,
+}
+
+impl ClientPresharedKeys {
+    fn new() -> Self {
+        Self {
+            keys: HashMap::new(),
+        }
+    }
+
+    fn insert(&mut self, server_name: ServerName<'_>, psk: PresharedKey) {
+        let psk = Arc::new(psk);
+        self.keys
+            .entry(server_name.to_owned())
+            .and_modify(|e| {
+                if e.iter()
+                    .any(|v| v.identity() == psk.identity())
+                {
+                    panic!("duplicate identity: {:02x?}", psk.identity())
+                }
+                e.push(psk.clone())
+            })
+            .or_insert_with(|| vec![psk.clone()]);
+    }
+}
+
+impl rustls::client::PresharedKeyStore for ClientPresharedKeys {
+    fn psks(&self, server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>> {
+        self.keys
+            .get(server_name)
+            .cloned()
+            .unwrap_or_default()
+    }
+}

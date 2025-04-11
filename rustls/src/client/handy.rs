@@ -1,5 +1,8 @@
+use alloc::vec::Vec;
+
 use pki_types::ServerName;
 
+use crate::crypto::PresharedKey;
 use crate::enums::SignatureScheme;
 use crate::msgs::persist;
 use crate::sync::Arc;
@@ -28,6 +31,16 @@ impl client::ClientSessionStore for NoClientSessionStorage {
 
     fn take_tls13_ticket(&self, _: &ServerName<'_>) -> Option<persist::Tls13ClientSessionValue> {
         None
+    }
+}
+
+/// An implementation of `PresharedKeyStore` that does nothing.
+#[derive(Debug)]
+pub(super) struct NoPresharedKeys;
+
+impl client::PresharedKeyStore for NoPresharedKeys {
+    fn psks(&self, _server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>> {
+        Vec::new()
     }
 }
 
