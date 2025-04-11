@@ -298,6 +298,7 @@ mod client_hello {
             selected_kxg: &'static dyn SupportedKxGroup,
             mut sigschemes_ext: Vec<SignatureScheme>,
         ) -> hs::NextStateOrError<'static> {
+            debug!("handle_client_hello");
             if client_hello.compression_methods.len() != 1 {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
@@ -337,40 +338,80 @@ mod client_hello {
                 });
             }
 
-            let psk = {
-                // Check "psk_key_exchange_modes" before the
-                // "key_share" extension since the PSK KEX mode
-                // affects key share selection.
-                let psk_mode = self.psk_kex_modes(client_hello);
-
-                // Always process the "pre_shared_key" extension
-                // last.
-                self.pre_shared_key(cx, chm, client_hello, psk_mode)?
-            };
-            if psk.is_none() && self.config.only_allow_preshared_keys {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::HandshakeFailure,
-                    Error::General(String::from(
-                        "no compatible PSKs found and only PSKs supported",
-                    )),
-                ));
-            }
-
-            // It's not really clear whether sending session
-            // tickets is useful for external PSKs, so avoid it
-            // for now.
-            if !psk
-                .as_ref()
-                .is_some_and(|psk| psk.is_external())
-            {
-                self.send_tickets = self.config.send_tls13_tickets;
-            }
-
             let input_secrets = {
                 use PSKKeyExchangeMode::*;
 
-                let share = Self::key_share(cx, client_hello, selected_kxg)?;
+                let share = self.key_share(cx, client_hello, selected_kxg)?;
                 let group = selected_kxg;
+
+                // NB: This extension affects whether we need
+                // a client key share.
+                let psk_mode = self.psk_kex_modes(client_hello);
+
+                // We need a key share from the client in any of
+                // the following cases:
+                //
+                // 1. We're using (EC)DHE.
+                // 2. The client did not send any PSK modes,
+                //    which means the client isn't using a PSK,
+                //    which means we're using (EC)DHE (see (1)).
+                //
+                // Note that this overlaps a little with the
+                // `match (share, group) { ... }` logic below,
+                // but we need to explicitly handle this case
+                // first because decrypting a resumption PSK is
+                // destructive.
+                //
+                // For example, consider the case where a client
+                // sends a valid resumption PSK with the mode
+                // PSK_DHE_KE, but doesn't send any key shares.
+                // Because PSK_DHE_KE requires a key share, we
+                // have to send an HRR.
+                //
+                // If we decrypt the PSK before sending the HRR,
+                // we accidentally prevent the client from
+                // reusing that PSK in its corrected ClientHello
+                // because decryption is destructive and removes
+                // the PSK from the database.
+                //
+                // This is caught by, e.g., bogo's
+                // `EarlyData-HRR-Server-TLS13` test.
+                if matches!(psk_mode, Some(PSK_DHE_KE) | None) && share.is_none() {
+                    return self.send_hello_retry(
+                        cx,
+                        chm,
+                        client_hello,
+                        selected_kxg,
+                        early_data_requested,
+                    );
+                }
+
+                // Always process the "pre_shared_key" extension
+                // last.
+                let psk = self.pre_shared_key(cx, chm, client_hello, psk_mode)?;
+                if psk.is_none() && self.config.only_allow_preshared_keys {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        Error::General(String::from(
+                            "no compatible PSKs found and only PSKs supported",
+                        )),
+                    ));
+                }
+
+                // It's not really clear whether sending session
+                // tickets is useful for external PSKs, so avoid it
+                // for now.
+                if !psk
+                    .as_ref()
+                    .is_some_and(|psk| psk.is_external())
+                {
+                    self.send_tickets = self.config.send_tls13_tickets;
+                }
+
+                debug!("mode = {:?}", psk.as_ref().map(|psk| psk.mode));
+                debug!("share = {share:?}");
+                debug!("group = {group:?}");
+                debug!("psk = {psk:?}");
                 match (share, psk) {
                     // We don't need a key share when we have
                     // a PSK and we're not using (EC)DHE.
@@ -378,8 +419,8 @@ mod client_hello {
                     // Common case: we're using (EC)DHE and we
                     // have a key share.
                     (Some(share), psk) => InputSecrets::Ecdhe { share, group, psk },
-                    // The if PSK_DHE_KE is selected then the
-                    // client must provide a key share.
+                    // If PSK_DHE_KE is selected then the client
+                    // must provide a key share.
                     //
                     // RFC 8446: "psk_dhe_ke: PSK with (EC)DHE
                     // key establishment. In this mode, the
@@ -400,7 +441,9 @@ mod client_hello {
                     // - We chose a (EC)DHE PSK mode
                     // - We do not have a PSK and are falling
                     //   back to a full handshake.
-                    // Ask the client to correct the issue.
+                    // But the client did not provide a key
+                    // share. Ask the client to correct the
+                    // issue.
                     (None, _) => {
                         return self.send_hello_retry(
                             cx,
@@ -434,6 +477,11 @@ mod client_hello {
                 cx.common
                     .handshake_kind
                     .get_or_insert(HandshakeKind::Full);
+            } else if input_secrets
+                .psk()
+                .is_some_and(|psk| psk.is_external())
+            {
+                cx.common.handshake_kind = Some(HandshakeKind::Psk);
             } else {
                 cx.common.handshake_kind = Some(HandshakeKind::Resumed);
             }
@@ -571,6 +619,7 @@ mod client_hello {
             let modes = client_hello
                 .psk_modes()
                 .unwrap_or_default();
+            debug!("modes = {modes:?}");
 
             let mut chosen = None;
             for &mode in modes {
@@ -591,13 +640,24 @@ mod client_hello {
 
         /// Process the "key_share" extension.
         fn key_share<'a>(
+            &self,
             cx: &mut ServerContext<'_>,
             client_hello: &'a ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
         ) -> Result<Option<&'a KeyShareEntry>, Error> {
             let Some(shares_ext) = client_hello.keyshare_extension() else {
+                debug!("client did not send key share");
+                // TODO(eric): only if we sent a key share in the
+                // HRR.
+                if self.done_retry {
+                    return Err(cx.common.send_fatal_alert(
+                        AlertDescription::HandshakeFailure,
+                        PeerIncompatible::KeyShareExtensionRequired,
+                    ));
+                }
                 return Ok(None);
             };
+            debug!("shares_ext = {shares_ext:?}");
 
             if client_hello.has_keyshare_extension_with_duplicates() {
                 return Err(cx.common.send_fatal_alert(
@@ -638,6 +698,7 @@ mod client_hello {
             debug_assert!(mode.is_some() == client_hello.psk_modes().is_some());
 
             let Some(psk_offer) = client_hello.psk() else {
+                debug!("client did not offer any PSKs");
                 return Ok(None);
             };
 
@@ -650,6 +711,7 @@ mod client_hello {
                 Some(Unknown(_)) => {
                     // We don't recognize this mode, so we can't
                     // do anything with this extension.
+                    debug!("unrecognized PSK KEX mode");
                     return Ok(None);
                 }
                 None => {
@@ -703,7 +765,7 @@ mod client_hello {
                 .zip(&psk_offer.binders)
                 .enumerate()
                 .find_map(|(i, (psk_id, binder))| {
-                    trace!("checking PSK at index {i}");
+                    debug!("checking PSK at index {i}");
 
                     // TODO(eric): Instead of checking both
                     // resumption/external for each identity,
@@ -740,6 +802,7 @@ mod client_hello {
 
             let Some((psk, index, binder)) = chosen_offer else {
                 // None of the offers were suitable.
+                debug!("no suitable offers found");
                 return Ok(None);
             };
             let index = u16::try_from(index).map_err(|err| {
@@ -789,6 +852,7 @@ mod client_hello {
             selected_kxg: &'static dyn SupportedKxGroup,
             early_data_requested: bool,
         ) -> hs::NextStateOrError<'static> {
+            debug!("sending HRR");
             // We don't have a suitable key share.  Send a HelloRetryRequest
             // for the mutually_preferred_group.
             self.transcript.add_message(chm);

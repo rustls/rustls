@@ -798,6 +798,9 @@ pub enum HandshakeKind {
     /// full ones, but can only happen when the peers have previously done a full
     /// handshake together, and then remember data about it.
     Resumed,
+
+    /// A PSK-based handshake.
+    Psk,
 }
 
 /// Values of this structure are returned from [`Connection::process_new_packets`]

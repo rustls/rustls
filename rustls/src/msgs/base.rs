@@ -122,6 +122,11 @@ impl PayloadU16 {
         Self::new(Vec::new())
     }
 
+    /// Reports whether the payload is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
         (slice.len() as u16).encode(bytes);
         bytes.extend_from_slice(slice);

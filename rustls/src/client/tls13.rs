@@ -322,6 +322,7 @@ pub(super) fn handle_server_hello(
         key_schedule_pre_handshake.into_handshake(secret)
     };
 
+    debug!("ech_state = {}", ech_state.is_some());
     // If we have ECH state, check that the server accepted our offer.
     if let Some(ech_state) = ech_state {
         cx.data.ech_status = match ech_state.confirm_acceptance(
@@ -344,6 +345,7 @@ pub(super) fn handle_server_hello(
             // The server rejected our ECH offer.
             None => EchStatus::Rejected,
         };
+        debug!("ech status = {:?}", cx.data.ech_status);
     }
 
     // Remember what KX group the server liked for next time.
@@ -524,6 +526,7 @@ impl PresharedKeys {
 }
 
 /// Borrowed TLS 1.3 preshared keys.
+#[derive(Debug)]
 pub(crate) enum PresharedKeysRef<'a> {
     /// A resumption PSK.
     Resumption(persist::Retrieved<&'a persist::Tls13ClientSessionValue>),
@@ -644,21 +647,24 @@ impl PresharedKeysRef<'_> {
         }
     }
 
-    /// Adds the "pre_shared_key" extension to `exts` (if
-    /// necessary) and reports whether the extension was added.
-    #[must_use]
-    pub(super) fn add_extension(
+    /// Adds the "pre_shared_key" extension to `exts` and, if
+    /// necessary, adds the "early_data" extension.
+    pub(super) fn add_extensions(
         &self,
         config: &ClientConfig,
         cx: &mut ClientContext<'_>,
         exts: &mut Vec<ClientExtension>,
         doing_retry: bool,
-    ) -> bool {
+    ) -> Result<(), Error> {
         debug_assert!(config.supports_version(ProtocolVersion::TLSv1_3));
 
         let Some(offer) = self.offer(cx) else {
-            // No offers.
-            return false;
+            // No offers, which means that we don't have any
+            // PSKs.
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::InternalError,
+                Error::General(String::from("bug: no PSKs to add")),
+            ));
         };
         exts.push(ClientExtension::PresharedKey(offer));
 
@@ -669,16 +675,20 @@ impl PresharedKeysRef<'_> {
         // "pre_shared_key" and "early_data" extensions."
         let max_early_data = self.max_early_data(config);
         if max_early_data > 0 && !doing_retry {
+            debug!("adding `early_data` extension: {max_early_data}");
             cx.data
                 .early_data
                 .enable(usize::try_from(max_early_data).unwrap_or(usize::MAX));
             exts.push(ClientExtension::EarlyData);
         }
 
-        true
+        Ok(())
     }
 
     /// Returns the PSK offer.
+    ///
+    /// This only returns `None` if `self` doesn't contain any
+    /// PSKs, which indicates a bug in the calling code.
     fn offer(&self, cx: &mut ClientContext<'_>) -> Option<PresharedKeyOffer> {
         match self {
             Self::Resumption(resuming_session) => {
@@ -1015,7 +1025,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
                 // TODO(eric): should this be a different
                 // variant?
-                cx.common.handshake_kind = Some(HandshakeKind::Resumed);
+                cx.common.handshake_kind = Some(HandshakeKind::Psk);
 
                 // We *don't* verify the certificate chain here:
                 // we're using a PSK, not a certificate.

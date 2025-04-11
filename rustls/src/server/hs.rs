@@ -41,6 +41,11 @@ pub(super) fn can_resume(
     using_ems: bool,
     resumedata: &persist::ServerSessionValue,
 ) -> bool {
+    debug!("resumedata = {resumedata:?}");
+    debug!(
+        "suite = {:?}, sni = {sni:?}, ems = {using_ems}",
+        suite.suite()
+    );
     // The RFCs underspecify what happens if we try to resume to
     // an unoffered/varying suite.  We merely don't resume in weird cases.
     //

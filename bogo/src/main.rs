@@ -677,10 +677,13 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     if let Some(psk) = &opts.psk {
         let identity = opts
             .psk_identity
-            .as_ref()
-            .map(|v| v.as_slice())
+            .as_deref()
             .unwrap_or_default();
         let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
+        // TODO
+        // if opts.enable_early_data {
+        //     psk = psk.with_early_data()
+        // }
         let mut keys = ServerPresharedKeys::new();
         keys.insert(psk);
         cfg.preshared_keys = Arc::new(keys);
@@ -856,8 +859,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
             .to_owned();
         let identity = opts
             .psk_identity
-            .as_ref()
-            .map(|v| v.as_slice())
+            .as_deref()
             .unwrap_or_default();
         let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
         let mut keys = ClientPresharedKeys::new();
