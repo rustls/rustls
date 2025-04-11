@@ -15,7 +15,7 @@ exclude = ["src/testdata", "tests/**"]
 build = "build.rs"
 
 [features]
-default = ["aws_lc_rs", "logging", "std", "tls12"]
+default = ["aws_lc_rs", "logging", "prefer-post-quantum", "std", "tls12"]
 
 aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
 aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
