@@ -20,7 +20,7 @@ use super::handshake::{
     PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
     ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions, ServerHelloPayload,
     ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId,
-    SingleProtocolName,
+    SingleProtocolName, SupportedProtocolVersions,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -741,7 +741,10 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ec_point_formats: Some(ECPointFormat::SUPPORTED.to_vec()),
             named_groups: Some(vec![NamedGroup::X25519]),
             protocols: Some(vec![ProtocolName::from(vec![0])]),
-            supported_versions: Some(vec![ProtocolVersion::TLSv1_3]),
+            supported_versions: Some(SupportedProtocolVersions {
+                tls13: true,
+                ..Default::default()
+            }),
             key_shares: Some(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
             preshared_key_modes: Some(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
             preshared_key_offer: Some(PresharedKeyOffer {

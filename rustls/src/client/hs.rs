@@ -31,6 +31,7 @@ use crate::msgs::enums::{
 };
 use crate::msgs::handshake::EncryptedClientHello;
 use crate::msgs::handshake::ProtocolName;
+use crate::msgs::handshake::SupportedProtocolVersions;
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsTemplate, ClientHelloPayload,
     ClientSessionTicket, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
@@ -241,17 +242,10 @@ fn emit_client_hello_for_retry(
     let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !forbids_tls12;
     let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
-    let mut supported_versions = Vec::new();
-    if support_tls13 {
-        supported_versions.push(ProtocolVersion::TLSv1_3);
-    }
-
-    if support_tls12 {
-        supported_versions.push(ProtocolVersion::TLSv1_2);
-    }
-
-    // should be unreachable thanks to config builder
-    assert!(!supported_versions.is_empty());
+    let supported_versions = SupportedProtocolVersions {
+        tls12: support_tls12,
+        tls13: support_tls13,
+    };
 
     let ClientExtensionsTemplate {
         transport_parameters,
@@ -265,11 +259,7 @@ fn emit_client_hello_for_retry(
                 .provider
                 .kx_groups
                 .iter()
-                .filter(|skxg| {
-                    supported_versions
-                        .iter()
-                        .any(|v| skxg.usable_for_version(*v))
-                })
+                .filter(|skxg| supported_versions.any(|v| skxg.usable_for_version(v)))
                 .map(|skxg| skxg.name())
                 .collect(),
         ),

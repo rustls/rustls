@@ -372,9 +372,9 @@ impl ExpectClientHello {
             .extensions
             .supported_versions
         {
-            if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
+            if versions.tls13 && tls13_enabled {
                 ProtocolVersion::TLSv1_3
-            } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
+            } else if !versions.tls12 || !tls12_enabled {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::ProtocolVersion,
                     PeerIncompatible::Tls12NotOfferedOrEnabled,
