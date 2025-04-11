@@ -567,8 +567,57 @@ impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
-impl TlsListElement for ProtocolVersion {
-    const SIZE_LEN: ListLength = ListLength::U8;
+/// The body of the `SupportedVersions` extension when it appears in a
+/// `ClientHello`
+///
+/// This is documented as a preference-order vector, but we (as a server)
+/// ignore the preference of the client.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SupportedProtocolVersions {
+    pub(crate) tls13: bool,
+    pub(crate) tls12: bool,
+}
+
+impl SupportedProtocolVersions {
+    pub(crate) fn any(&self, func: impl Fn(ProtocolVersion) -> bool) -> bool {
+        if self.tls13 && func(ProtocolVersion::TLSv1_3) {
+            return true;
+        }
+        if self.tls12 && func(ProtocolVersion::TLSv1_2) {
+            return true;
+        }
+        false
+    }
+}
+
+impl Codec<'_> for SupportedProtocolVersions {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let inner = LengthPrefixedBuffer::new(ListLength::U8, bytes);
+        if self.tls13 {
+            ProtocolVersion::TLSv1_3.encode(inner.buf);
+        }
+        if self.tls12 {
+            ProtocolVersion::TLSv1_2.encode(inner.buf);
+        }
+    }
+
+    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let len = u8::read(reader)?;
+        let mut sub = reader.sub(usize::from(len))?;
+
+        let mut tls12 = false;
+        let mut tls13 = false;
+
+        while sub.any_left() {
+            match ProtocolVersion::read(&mut sub)? {
+                ProtocolVersion::TLSv1_3 => tls13 = true,
+                ProtocolVersion::TLSv1_2 => tls12 = true,
+                _ => continue,
+            };
+        }
+
+        Ok(Self { tls13, tls12 })
+    }
 }
 
 impl TlsListElement for CertificateType {
@@ -676,7 +725,7 @@ extension_struct! {
 
         /// Supported TLS versions (RFC8446)
         ExtensionType::SupportedVersions =>
-            pub(crate) supported_versions: Option<Vec<ProtocolVersion>>,
+            pub(crate) supported_versions: Option<SupportedProtocolVersions>,
 
         /// Stateless HelloRetryRequest cookie (RFC8446)
         ExtensionType::Cookie =>
