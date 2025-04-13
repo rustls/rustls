@@ -91,6 +91,7 @@ fn pki_error(error: webpki::Error) -> Error {
             CertRevocationListError::BadSignature.into()
         }
 
+        #[allow(deprecated)]
         RequiredEkuNotFound => CertificateError::InvalidPurpose.into(),
 
         _ => CertificateError::Other(OtherError(
