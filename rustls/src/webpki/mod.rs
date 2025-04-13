@@ -4,7 +4,9 @@ use core::fmt;
 use pki_types::CertificateRevocationListDer;
 use webpki::{CertRevocationList, InvalidNameContext, OwnedCertRevocationList};
 
-use crate::error::{CertRevocationListError, CertificateError, Error, OtherError};
+use crate::error::{
+    CertRevocationListError, CertificateError, Error, ExtendedKeyPurpose, OtherError,
+};
 #[cfg(feature = "std")]
 use crate::sync::Arc;
 
@@ -91,7 +93,18 @@ fn pki_error(error: webpki::Error) -> Error {
             CertRevocationListError::BadSignature.into()
         }
 
+        #[allow(deprecated)]
         RequiredEkuNotFound => CertificateError::InvalidPurpose.into(),
+        RequiredEkuNotFoundContext(webpki::RequiredEkuNotFoundContext { required, present }) => {
+            CertificateError::InvalidPurposeContext {
+                required: ExtendedKeyPurpose::for_values(required.oid_values()),
+                presented: present
+                    .into_iter()
+                    .map(|eku| ExtendedKeyPurpose::for_values(eku.into_iter()))
+                    .collect(),
+            }
+            .into()
+        }
 
         _ => CertificateError::Other(OtherError(
             #[cfg(feature = "std")]
