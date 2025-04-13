@@ -49,3 +49,6 @@ path = "fuzzers/server_name.rs"
 [[bin]]
 name = "unbuffered"
 path = "fuzzers/unbuffered.rs"
+
+[patch."crates-io"]
+rustls-webpki = { git = "https://github.com/rustls/webpki", branch = "main" }
