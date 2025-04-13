@@ -22,9 +22,10 @@ use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
     AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
-    HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog, NamedGroup,
-    PeerIncompatible, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, SideData,
-    SignatureScheme, Stream, StreamOwned, SupportedCipherSuite, SupportedProtocolVersion, sign,
+    ExtendedKeyPurpose, HandshakeKind, HandshakeType, InconsistentKeys, InvalidMessage, KeyLog,
+    NamedGroup, PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, ServerConfig,
+    ServerConnection, SideData, SignatureScheme, Stream, StreamOwned, SupportedCipherSuite,
+    SupportedProtocolVersion, sign,
 };
 #[cfg(feature = "aws_lc_rs")]
 use rustls::{
@@ -36,6 +37,7 @@ use rustls::{
     },
     pki_types::{DnsName, EchConfigListBytes},
 };
+use webpki::anchor_from_trusted_cert;
 
 use super::*;
 
@@ -1974,6 +1976,41 @@ fn client_check_server_certificate_helper_api() {
             Error::InvalidCertificate(CertificateError::UnknownIssuer)
         );
     }
+}
+
+#[test]
+fn client_check_server_valid_purpose() {
+    let chain = KeyType::EcdsaP256.get_client_chain();
+    let trust_anchor = chain.last().unwrap();
+    let roots = RootCertStore {
+        roots: vec![
+            anchor_from_trusted_cert(trust_anchor)
+                .unwrap()
+                .to_owned(),
+        ],
+    };
+
+    let error = verify_server_cert_signed_by_trust_anchor(
+        &ParsedCertificate::try_from(chain.first().unwrap()).unwrap(),
+        &roots,
+        &[chain.get(1).unwrap().clone()],
+        UnixTime::now(),
+        webpki::ALL_VERIFICATION_ALGS,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error,
+        Error::InvalidCertificate(CertificateError::InvalidPurposeContext {
+            required: ExtendedKeyPurpose::ServerAuth,
+            presented: vec![ExtendedKeyPurpose::ClientAuth],
+        })
+    );
+
+    assert_eq!(
+        format!("{error}"),
+        "invalid peer certificate: certificate does not allow extended key usage for \
+         server authentication, allows client authentication"
+    );
 }
 
 #[derive(Debug)]
