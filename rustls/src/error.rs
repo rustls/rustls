@@ -2,9 +2,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
-use pki_types::{ServerName, UnixTime};
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
+
+use pki_types::{ServerName, UnixTime};
+use webpki::KeyUsage;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{EchConfigPayload, KeyExchangeAlgorithm};
@@ -434,6 +436,17 @@ pub enum CertificateError {
     /// The certificate is being used for a different purpose than allowed.
     InvalidPurpose,
 
+    /// The certificate is being used for a different purpose than allowed.
+    ///
+    /// This variant is semantically the same as `InvalidPurpose`, but includes
+    /// extra data to improve error reports.
+    InvalidPurposeContext {
+        /// Extended key purpose that was required by the application.
+        required: ExtendedKeyPurpose,
+        /// Extended key purposes that were presented in the peer's certificate.
+        presented: Vec<ExtendedKeyPurpose>,
+    },
+
     /// The certificate is valid, but the handshake is rejected for other
     /// reasons.
     ApplicationVerificationFailure,
@@ -495,6 +508,16 @@ impl PartialEq<Self> for CertificateError {
                 },
             ) => (left_expected, left_presented) == (right_expected, right_presented),
             (InvalidPurpose, InvalidPurpose) => true,
+            (
+                InvalidPurposeContext {
+                    required: left_required,
+                    presented: left_presented,
+                },
+                InvalidPurposeContext {
+                    required: right_required,
+                    presented: right_presented,
+                },
+            ) => (left_required, left_presented) == (right_required, right_presented),
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
             (UnknownRevocationStatus, UnknownRevocationStatus) => true,
             (ExpiredRevocationList, ExpiredRevocationList) => true,
@@ -538,7 +561,7 @@ impl From<CertificateError> for AlertDescription {
             | ExpiredRevocationList
             | ExpiredRevocationListContext { .. } => Self::UnknownCA,
             BadSignature => Self::DecryptError,
-            InvalidPurpose => Self::UnsupportedCertificate,
+            InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
             // RFC 5246/RFC 8446
             // certificate_unknown
@@ -622,6 +645,23 @@ impl fmt::Display for CertificateError {
                     .saturating_sub(next_update.as_secs())
             ),
 
+            Self::InvalidPurposeContext {
+                required,
+                presented,
+            } => {
+                write!(
+                    f,
+                    "certificate does not allow extended key usage for {required}, allows "
+                )?;
+                for (i, eku) in presented.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{eku}")?;
+                }
+                Ok(())
+            }
+
             other => write!(f, "{:?}", other),
         }
     }
@@ -631,6 +671,51 @@ impl From<CertificateError> for Error {
     #[inline]
     fn from(e: CertificateError) -> Self {
         Self::InvalidCertificate(e)
+    }
+}
+
+/// Extended Key Usage (EKU) purpose values.
+///
+/// These are usually represented as OID values in the certificate's extension (if present), but
+/// we represent the values that are most relevant to rustls as named enum variants.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExtendedKeyPurpose {
+    /// Client authentication
+    ClientAuth,
+    /// Server authentication
+    ServerAuth,
+    /// Other EKU values
+    ///
+    /// Represented here as a `Vec<usize>` for human readability.
+    Other(Vec<usize>),
+}
+
+impl ExtendedKeyPurpose {
+    pub(crate) fn for_values(values: impl Iterator<Item = usize>) -> Self {
+        let values = values.collect::<Vec<_>>();
+        match &*values {
+            KeyUsage::CLIENT_AUTH_REPR => Self::ClientAuth,
+            KeyUsage::SERVER_AUTH_REPR => Self::ServerAuth,
+            _ => Self::Other(values),
+        }
+    }
+}
+
+impl fmt::Display for ExtendedKeyPurpose {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ClientAuth => write!(f, "client authentication"),
+            Self::ServerAuth => write!(f, "server authentication"),
+            Self::Other(values) => {
+                for (i, value) in values.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{value}")?;
+                }
+                Ok(())
+            }
+        }
     }
 }
 
