@@ -192,8 +192,6 @@
     "DuplicateKeyShares-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyData-CipherMismatch-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyData-SkipEndOfEarlyData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
-    "EarlyDataVersionDowngrade-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "EarlyDataVersionDowngrade-Client-TLS13-WarningAlert": ":PEER_MISBEHAVIOUR:",
     "EarlyDataWithoutResume-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EmptyCertificateList": ":NO_CERTS:",
     "EmptyEncryptedExtensions-TLS13": ":BAD_HANDSHAKE_MSG:",

@@ -1157,6 +1157,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":EXCESS_HANDSHAKE_DATA:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::NoCertificatesPresented) => quit(":NO_CERTS:"),
+        Error::PeerMisbehaved(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion) => {
+            quit(":WRONG_VERSION_ON_EARLY_DATA:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
