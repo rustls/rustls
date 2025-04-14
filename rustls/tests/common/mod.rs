@@ -2,7 +2,7 @@
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
 use std::io;
-use std::ops::DerefMut;
+use std::ops::{ControlFlow, DerefMut};
 use std::sync::OnceLock;
 
 use pki_types::pem::PemObject;
@@ -15,10 +15,15 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::client::{
     AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, WebPkiServerVerifier,
 };
-use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
+use rustls::crypto::cipher::{
+    InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, PlainMessage,
+};
 use rustls::crypto::{CryptoProvider, verify_tls13_signature_with_raw_key};
+use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::{Codec, Reader};
-use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use rustls::internal::msgs::enums::ExtensionType;
+use rustls::internal::msgs::handshake::HandshakePayload;
+use rustls::internal::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, WebPkiClientVerifier,
@@ -802,6 +807,70 @@ pub fn do_handshake_altered(
     }
 
     Ok(())
+}
+
+pub fn edit_client_hello_extensions(
+    msg: &mut Message,
+    visitor: impl Fn(ExtensionType, Vec<u8>) -> ControlFlow<(), Option<Vec<u8>>>,
+) -> Altered {
+    if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
+        if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
+            let original_extensions = ch.extensions.get_encoding();
+            let altered_extensions = ch
+                .extensions
+                .visit_encode(visitor)
+                .unwrap();
+
+            let mut encoded_vec = encoded.clone().into_vec();
+            encoded_vec.truncate(encoded_vec.len() - original_extensions.len());
+            encoded_vec.extend_from_slice(&altered_extensions);
+
+            let adjusted_len = ((encoded_vec.len() - 1 - 3) as u32).to_be_bytes();
+            encoded_vec[1..4].copy_from_slice(&adjusted_len[1..]);
+            *encoded = Payload::new(encoded_vec);
+        }
+    }
+    Altered::InPlace
+}
+
+pub fn extract_client_hello_extension(msg: &Message, typ: ExtensionType) -> Option<Vec<u8>> {
+    let MessagePayload::Handshake { parsed, encoded: _ } = &msg.payload else {
+        return None;
+    };
+
+    let HandshakePayload::ClientHello(ch) = &parsed.payload else {
+        return None;
+    };
+
+    ch.extensions
+        .visit_encode(|ext, body| {
+            if ext == typ {
+                ControlFlow::Break(body)
+            } else {
+                ControlFlow::Continue(Some(body))
+            }
+        })
+        .err()
+}
+
+pub fn extract_hello_retry_request_extension(msg: &Message, typ: ExtensionType) -> Option<Vec<u8>> {
+    let MessagePayload::Handshake { parsed, encoded: _ } = &msg.payload else {
+        return None;
+    };
+
+    let HandshakePayload::HelloRetryRequest(hrr) = &parsed.payload else {
+        return None;
+    };
+
+    hrr.extensions
+        .visit_encode(|ext, body| {
+            if ext == typ {
+                ControlFlow::Break(body)
+            } else {
+                ControlFlow::Continue(Some(body))
+            }
+        })
+        .err()
 }
 
 pub fn do_handshake_until_both_error(
@@ -1654,5 +1723,62 @@ pub mod encoding {
             i.encode(&mut body);
         }
         body
+    }
+}
+
+pub mod decoding {
+    use rustls::NamedGroup;
+
+    /// Dissect a u16-delimited item, returning the item and the bytes after it
+    pub fn len_u16(body: &[u8]) -> (&[u8], &[u8]) {
+        assert!(body.len() >= 2);
+        let len = u16::from_be_bytes(body[..2].try_into().unwrap()) as usize;
+
+        (&body[2..2 + len], &body[2 + len..])
+    }
+
+    /// Take a u16 from the front, and return the rest
+    pub fn take_u16(body: &[u8]) -> (u16, &[u8]) {
+        assert!(body.len() >= 2);
+        let item = u16::from_be_bytes(body[..2].try_into().unwrap());
+        (item, &body[2..])
+    }
+
+    pub struct KeyShareEntry {
+        pub group: NamedGroup,
+        pub share: Vec<u8>,
+    }
+
+    pub fn decode_client_hello_key_shares(body: &[u8]) -> Vec<KeyShareEntry> {
+        let mut ret = vec![];
+
+        let (extension_body, _) = len_u16(body);
+        let (mut entries, _) = len_u16(extension_body);
+        while !entries.is_empty() {
+            let (group, rest) = take_u16(entries);
+            let (share, next) = len_u16(rest);
+            entries = next;
+
+            ret.push(KeyShareEntry {
+                group: NamedGroup::from(group),
+                share: share.to_vec(),
+            });
+        }
+
+        ret
+    }
+
+    pub fn decode_client_hello_signature_schemes(body: &[u8]) -> Vec<u16> {
+        let mut ret = vec![];
+
+        let (extension_body, _) = len_u16(body);
+        let (mut entries, _) = len_u16(extension_body);
+        while !entries.is_empty() {
+            let (scheme, rest) = take_u16(entries);
+            entries = rest;
+            ret.push(scheme);
+        }
+
+        ret
     }
 }

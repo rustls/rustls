@@ -903,7 +903,15 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         {
             quit(":ERROR_PARSING_EXTENSION:")
         }
+        Error::InvalidMessage(InvalidMessage::DuplicateExtension) => quit(":DUPLICATE_EXTENSION:"),
+        Error::InvalidMessage(InvalidMessage::UnknownHelloRetryRequestExtension)
+        | Error::InvalidMessage(InvalidMessage::UnknownCertificateExtension) => {
+            quit(":UNEXPECTED_EXTENSION:")
+        }
         Error::InvalidMessage(InvalidMessage::UnexpectedMessage(_)) => quit(":GARBAGE:"),
+        Error::InvalidMessage(InvalidMessage::PreSharedKeyIsNotFinalExtension) => {
+            quit(":PRE_SHARED_KEY_MUST_BE_LAST:")
+        }
         Error::DecryptError if opts.ech_config_list.is_some() => {
             quit(":INCONSISTENT_ECH_NEGOTIATION:")
         }
