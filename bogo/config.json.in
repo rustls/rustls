@@ -141,7 +141,11 @@
 #endif
     "*-QUIC-*" :"",
     "QUIC-*": "",
-    "*-QUIC": ""
+    "*-QUIC": "",
+	"TLS-TLS12-ECDHE_PSK*": "TLS 1.2 PSKs are not supported",
+	"*PSKHint*": "TLS 1.2 PSKs are not supported",
+	"ClientAuth-*PSK": "TLS 1.2 PSKs are not supported",
+	"CheckECDSACurve-PSK-TLS12": "TLS 1.2 PSKs are not supported"
   },
   "ErrorMap": {
     ":HTTP_REQUEST:": ":GARBAGE:",
@@ -185,7 +189,6 @@
     "TrailingMessageData-TLS13-EndOfEarlyData-TLS": ":BAD_HANDSHAKE_MSG:",
     "Server-NonEmptyEndOfEarlyData-TLS13": ":BAD_HANDSHAKE_MSG:",
     "MissingKeyShare-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "MissingKeyShare-Server-TLS13": ":INCOMPATIBLE:",
     "EmptyEncryptedExtensions-TLS13": ":BAD_HANDSHAKE_MSG:",
     "NoSupportedCurves": ":INCOMPATIBLE:",
     "VersionTooLow": ":INCOMPATIBLE:",
@@ -247,7 +250,6 @@
     "ClientAuth-NoFallback-TLS13": ":BAD_HANDSHAKE_MSG:",
     "ServerAuth-NoFallback-TLS13": ":INCOMPATIBLE:",
     "SecondClientHelloWrongCurve-TLS13": ":PEER_MISBEHAVIOUR:",
-    "SecondClientHelloMissingKeyShare-TLS13": ":INCOMPATIBLE:",
     "Resume-Server-BinderWrongLength-SecondBinder": ":PEER_MISBEHAVIOUR:",
     "Resume-Server-NoPSKBinder-SecondBinder": ":PEER_MISBEHAVIOUR:",
     "Resume-Server-ExtraPSKBinder-SecondBinder": ":PEER_MISBEHAVIOUR:",

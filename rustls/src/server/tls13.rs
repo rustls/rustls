@@ -85,6 +85,11 @@ mod client_hello {
         pub(in crate::server) randoms: ConnectionRandoms,
         /// Have we sent a HelloRetryRequest?
         pub(in crate::server) done_retry: bool,
+        /// Did we send a "key_share" extension in our
+        /// HelloRetryRequest?
+        ///
+        /// Only has meaning if `self.done_retry` is true.
+        pub(in crate::server) sent_key_share: bool,
         /// How many session tickets to send.
         pub(in crate::server) send_tickets: usize,
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
@@ -341,12 +346,33 @@ mod client_hello {
             let input_secrets = {
                 use PSKKeyExchangeMode::*;
 
-                let share = self.key_share(cx, client_hello, selected_kxg)?;
-                let group = selected_kxg;
-
                 // NB: This extension affects whether we need
                 // a client key share.
                 let psk_mode = self.psk_kex_modes(client_hello);
+
+                let share = {
+                    // The client MUST send the "key_share"
+                    // extension if:
+                    //
+                    // - PSK_DHE_KE mode is selected.
+                    // RFC 8446: "psk_dhe_ke: PSK with (EC)DHE
+                    // key establishment. In this mode, the
+                    // client and server MUST supply "key_share"
+                    // values..."
+                    //
+                    // - We sent an HRR with a key share.
+                    // RFC 8446: "[...] the client MUST send the
+                    // same ClientHello without modification,
+                    // except as follows: - If a "key_share"
+                    // extension was supplied in the
+                    // HelloRetryRequest, replacing the list of
+                    // shares with a list containing a single
+                    // KeyShareEntry from the indicated group."
+                    let required = matches!(psk_mode, Some(PSK_DHE_KE))
+                        || (self.done_retry && self.sent_key_share);
+                    self.key_share(cx, client_hello, selected_kxg, required)?
+                };
+                let group = selected_kxg;
 
                 // We need a key share from the client in any of
                 // the following cases:
@@ -376,7 +402,8 @@ mod client_hello {
                 //
                 // This is caught by, e.g., bogo's
                 // `EarlyData-HRR-Server-TLS13` test.
-                if matches!(psk_mode, Some(PSK_DHE_KE) | None) && share.is_none() {
+                if matches!(psk_mode, None | Some(PSK_DHE_KE)) && share.is_none() {
+                    debug!("xxxxx");
                     return self.send_hello_retry(
                         cx,
                         chm,
@@ -399,13 +426,20 @@ mod client_hello {
                 }
 
                 // It's not really clear whether sending session
-                // tickets is useful for external PSKs, so avoid it
-                // for now.
+                // tickets is useful for external PSKs, so avoid
+                // it for now.
                 if !psk
                     .as_ref()
                     .is_some_and(|psk| psk.is_external())
                 {
                     self.send_tickets = self.config.send_tls13_tickets;
+                }
+
+                // RFC 8446: "Servers SHOULD NOT send
+                // NewSessionTicket with tickets that are not
+                // compatible with the advertised modes [...]"
+                if matches!(psk_mode, Some(Unknown(_))) {
+                    self.send_tickets = 0;
                 }
 
                 debug!("mode = {:?}", psk.as_ref().map(|psk| psk.mode));
@@ -419,31 +453,13 @@ mod client_hello {
                     // Common case: we're using (EC)DHE and we
                     // have a key share.
                     (Some(share), psk) => InputSecrets::Ecdhe { share, group, psk },
-                    // If PSK_DHE_KE is selected then the client
-                    // must provide a key share.
-                    //
-                    // RFC 8446: "psk_dhe_ke: PSK with (EC)DHE
-                    // key establishment. In this mode, the
-                    // client and server MUST supply "key_share"
-                    // values..."
-                    (None, Some(psk))
-                        if psk.mode == PSK_DHE_KE
-                            && client_hello
-                                .keyshare_extension()
-                                .is_none() =>
-                    {
-                        return Err(cx.common.send_fatal_alert(
-                            AlertDescription::MissingExtension,
-                            PeerMisbehaved::MissingKeyShare,
-                        ));
-                    }
-                    // We *are* using DHE because either:
-                    // - We chose a (EC)DHE PSK mode
+                    // We *are* using DHE because one of the
+                    // following is true
+                    // - We chose a (EC)DHE PSK mode.
                     // - We do not have a PSK and are falling
                     //   back to a full handshake.
-                    // But the client did not provide a key
-                    // share. Ask the client to correct the
-                    // issue.
+                    // and we did not find a suitable key share.
+                    // Ask the client to correct the issue.
                     (None, _) => {
                         return self.send_hello_retry(
                             cx,
@@ -644,15 +660,14 @@ mod client_hello {
             cx: &mut ServerContext<'_>,
             client_hello: &'a ClientHelloPayload,
             selected_kxg: &'static dyn SupportedKxGroup,
+            required: bool,
         ) -> Result<Option<&'a KeyShareEntry>, Error> {
             let Some(shares_ext) = client_hello.keyshare_extension() else {
                 debug!("client did not send key share");
-                // TODO(eric): only if we sent a key share in the
-                // HRR.
-                if self.done_retry {
+                if required {
                     return Err(cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::KeyShareExtensionRequired,
+                        AlertDescription::MissingExtension,
+                        PeerMisbehaved::MissingKeyShare,
                     ));
                 }
                 return Ok(None);
@@ -883,6 +898,7 @@ mod client_hello {
                 #[cfg(feature = "tls12")]
                 using_ems: false,
                 done_retry: true,
+                sent_key_share: true,
                 send_tickets: self.send_tickets,
                 extra_exts: self.extra_exts,
             });

@@ -675,17 +675,11 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     }
 
     if let Some(psk) = &opts.psk {
-        let identity = opts
-            .psk_identity
-            .as_deref()
-            .unwrap_or_default();
-        let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
-        // TODO
-        // if opts.enable_early_data {
-        //     psk = psk.with_early_data()
-        // }
         let mut keys = ServerPresharedKeys::new();
-        keys.insert(psk);
+        if let Some(identity) = opts.psk_identity.as_deref() {
+            let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
+            keys.insert(psk);
+        }
         cfg.preshared_keys = Arc::new(keys);
     }
 
@@ -854,16 +848,14 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     }
 
     if let Some(psk) = &opts.psk {
+        let mut keys = ClientPresharedKeys::new();
         let server_name = ServerName::try_from(opts.host_name.as_str())
             .unwrap()
             .to_owned();
-        let identity = opts
-            .psk_identity
-            .as_deref()
-            .unwrap_or_default();
-        let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
-        let mut keys = ClientPresharedKeys::new();
-        keys.insert(server_name, psk);
+        if let Some(identity) = opts.psk_identity.as_deref() {
+            let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
+            keys.insert(server_name, psk);
+        }
         cfg.preshared_keys = Arc::new(keys);
     }
 
@@ -957,6 +949,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":ECH_REJECTED:")
         }
         Error::PeerIncompatible(_) => quit(":INCOMPATIBLE:"),
+        Error::PeerMisbehaved(PeerMisbehaved::MissingKeyShare) => quit(":MISSING_KEY_SHARE:"),
         Error::PeerMisbehaved(PeerMisbehaved::MissingPskModesExtension) => {
             quit(":MISSING_EXTENSION:")
         }

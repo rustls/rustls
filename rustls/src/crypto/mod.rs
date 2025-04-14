@@ -691,7 +691,11 @@ impl PresharedKey {
         if bool::from(ct_eq_zero(secret)) {
             return None;
         }
-        if identity.len() > u16::MAX as usize || secret.len() > u16::MAX as usize {
+        // `identity` is `opaque<1..2^16-1>`.
+        if identity.is_empty()
+            || identity.len() > u16::MAX as usize
+            || secret.len() > u16::MAX as usize
+        {
             None
         } else {
             Some(Self {
