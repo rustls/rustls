@@ -184,6 +184,8 @@ pub enum InvalidMessage {
     UnsupportedCurveType,
     /// A peer sent an unsupported key exchange algorithm.
     UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
+    /// A server sent an empty ticket
+    EmptyTicketValue,
 }
 
 impl From<InvalidMessage> for Error {
