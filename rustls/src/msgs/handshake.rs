@@ -2472,6 +2472,10 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         let ticket = Arc::new(PayloadU16::read(r)?);
         let exts = Vec::read(r)?;
 
+        if ticket.0.is_empty() {
+            return Err(InvalidMessage::EmptyTicketValue);
+        }
+
         Ok(Self {
             lifetime,
             age_add,
