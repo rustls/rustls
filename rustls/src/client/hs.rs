@@ -25,6 +25,7 @@ use crate::enums::{AlertDescription, CipherSuite, ContentType, HandshakeType, Pr
 use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
+#[cfg(feature = "tls12")]
 use crate::msgs::base::Payload;
 use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PSKKeyExchangeMode,
@@ -708,6 +709,7 @@ fn prepare_preshared_keys<'a>(
                 //
                 // Fall through to request a session ticket, if
                 // needed.
+                #[cfg(feature = "tls12")]
                 _ => {}
             }
         }
