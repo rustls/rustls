@@ -1629,6 +1629,7 @@ pub fn main() {
             "-handoff" |
             "-ipv6" |
             "-decline-alpn" |
+            "-permute-extensions" |
             "-expect-no-session" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
@@ -1688,7 +1689,6 @@ pub fn main() {
             "-wpa-202304" |
             "-cnsa-202407" |
             "-srtp-profiles" |
-            "-permute-extensions" |
             "-use-ticket-aead-callback" |
             "-signed-cert-timestamps" |
             "-on-initial-expect-peer-cert-file" |

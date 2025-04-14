@@ -23,6 +23,7 @@
     "DuplicateCertCompressionExt*-TLS12": "RFC8879: if TLS 1.2 or earlier is negotiated, the peers MUST ignore this extension",
 #if defined(RING)
     "TLS-ECH-*": "*ring* has no HPKE provider for ECH",
+    "AllExtensions-Client-Permute-ECH-HelloRetryRequest-TLS-TLS13": "requires ECH",
 #elif defined(AWS_LC_RS) && defined(FIPS)
     "TLS-ECH-*": "ECH test suites use non-FIPS approved algos",
 #else
