@@ -161,7 +161,6 @@
   "TestErrorMap": {
     "AppDataBeforeTLS13KeyChange": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "AppDataBeforeTLS13KeyChange-Empty": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
-    "EchoTLS13CompatibilitySessionID": ":PEER_MISBEHAVIOUR:",
     "EmptyCertificateList": ":NO_CERTS:",
     "SendInvalidRecordType": ":GARBAGE:",
     "NoSharedCipher": ":HANDSHAKE_FAILURE:",
