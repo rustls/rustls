@@ -19,7 +19,7 @@ use nix::unistd::Pid;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
-    WebPkiServerVerifier,
+    Tls12Resumption, WebPkiServerVerifier,
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
@@ -816,7 +816,11 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         });
     }
 
-    cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay));
+    cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay))
+        .tls12_resumption(match opts.tickets {
+            true => Tls12Resumption::SessionIdOrTickets,
+            false => Tls12Resumption::SessionIdOnly,
+        });
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
     cfg.require_ems = opts.require_ems;
@@ -951,6 +955,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         }
         Error::PeerMisbehaved(PeerMisbehaved::TooManyKeyUpdateRequests) => {
             quit(":TOO_MANY_KEY_UPDATES:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::ServerEchoedCompatibilitySessionId) => {
+            quit(":SERVER_ECHOED_INVALID_SESSION_ID:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::TooManyEmptyFragments) => {
             quit(":TOO_MANY_EMPTY_FRAGMENTS:")
@@ -1762,7 +1769,11 @@ pub fn main() {
         exec(&opts, sess, i);
         if opts.resume_with_tickets_disabled {
             opts.tickets = false;
-            server_cfg = Some(make_server_cfg(&opts));
+
+            match opts.side {
+                Side::Server => server_cfg = Some(make_server_cfg(&opts)),
+                Side::Client => client_cfg = Some(make_client_cfg(&opts)),
+            };
         }
         if opts.on_resume_ech_config_list.is_some() {
             opts.ech_config_list
