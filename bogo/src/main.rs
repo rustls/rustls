@@ -883,6 +883,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidMessage(
             InvalidMessage::TrailingData("ChangeCipherSpecPayload") | InvalidMessage::InvalidCcs,
         ) => quit(":BAD_CHANGE_CIPHER_SPEC:"),
+        Error::InvalidMessage(InvalidMessage::EmptyTicketValue) => quit(":DECODE_ERROR:"),
         Error::InvalidMessage(
             InvalidMessage::InvalidKeyUpdate
             | InvalidMessage::MissingData(_)
@@ -1688,8 +1689,12 @@ pub fn main() {
             "-cnsa-202407" |
             "-srtp-profiles" |
             "-permute-extensions" |
+            "-use-ticket-aead-callback" |
             "-signed-cert-timestamps" |
             "-on-initial-expect-peer-cert-file" |
+            "-resumption-across-names-enabled" |
+            "-expect-resumable-across-names" |
+            "-expect-not-resumable-across-names" |
             "-use-custom-verify-callback" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
