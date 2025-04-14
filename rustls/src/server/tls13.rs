@@ -303,7 +303,6 @@ mod client_hello {
             selected_kxg: &'static dyn SupportedKxGroup,
             mut sigschemes_ext: Vec<SignatureScheme>,
         ) -> hs::NextStateOrError<'static> {
-            debug!("handle_client_hello");
             if client_hello.compression_methods.len() != 1 {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
@@ -403,7 +402,6 @@ mod client_hello {
                 // This is caught by, e.g., bogo's
                 // `EarlyData-HRR-Server-TLS13` test.
                 if matches!(psk_mode, None | Some(PSK_DHE_KE)) && share.is_none() {
-                    debug!("xxxxx");
                     return self.send_hello_retry(
                         cx,
                         chm,
@@ -442,10 +440,6 @@ mod client_hello {
                     self.send_tickets = 0;
                 }
 
-                debug!("mode = {:?}", psk.as_ref().map(|psk| psk.mode));
-                debug!("share = {share:?}");
-                debug!("group = {group:?}");
-                debug!("psk = {psk:?}");
                 match (share, psk) {
                     // We don't need a key share when we have
                     // a PSK and we're not using (EC)DHE.
@@ -514,7 +508,6 @@ mod client_hello {
                 self.extra_exts,
                 &self.config,
             )?;
-            debug!("early data decision: {doing_early_data}");
 
             let doing_client_auth = if full_handshake {
                 let client_auth = emit_certificate_req_tls13(&mut flight, &self.config)?;
@@ -635,7 +628,6 @@ mod client_hello {
             let modes = client_hello
                 .psk_modes()
                 .unwrap_or_default();
-            debug!("modes = {modes:?}");
 
             let mut chosen = None;
             for &mode in modes {
@@ -664,6 +656,7 @@ mod client_hello {
         ) -> Result<Option<&'a KeyShareEntry>, Error> {
             let Some(shares_ext) = client_hello.keyshare_extension() else {
                 debug!("client did not send key share");
+
                 if required {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::MissingExtension,
@@ -672,7 +665,6 @@ mod client_hello {
                 }
                 return Ok(None);
             };
-            debug!("shares_ext = {shares_ext:?}");
 
             if client_hello.has_keyshare_extension_with_duplicates() {
                 return Err(cx.common.send_fatal_alert(
@@ -780,7 +772,7 @@ mod client_hello {
                 .zip(&psk_offer.binders)
                 .enumerate()
                 .find_map(|(i, (psk_id, binder))| {
-                    debug!("checking PSK at index {i}");
+                    trace!("checking PSK at index {i}");
 
                     // TODO(eric): Instead of checking both
                     // resumption/external for each identity,
@@ -867,7 +859,6 @@ mod client_hello {
             selected_kxg: &'static dyn SupportedKxGroup,
             early_data_requested: bool,
         ) -> hs::NextStateOrError<'static> {
-            debug!("sending HRR");
             // We don't have a suitable key share.  Send a HelloRetryRequest
             // for the mutually_preferred_group.
             self.transcript.add_message(chm);

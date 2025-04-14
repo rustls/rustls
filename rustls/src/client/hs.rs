@@ -147,7 +147,6 @@ pub(super) fn start_handshake(
             None
         }
     };
-    debug!("session_id = {session_id:?}");
 
     // If we're not resuming a session then look for external
     // PSKs to use.
@@ -165,7 +164,6 @@ pub(super) fn start_handshake(
                 None
             }
         });
-    debug!("psks = {psks:?}");
 
     // https://tools.ietf.org/html/rfc8446#appendix-D.4
     // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
@@ -474,7 +472,6 @@ fn emit_client_hello_for_retry(
         config,
         retryreq.is_some(),
     )?;
-    debug!("tls13_psk = {tls13_psk:?}");
 
     // Extensions MAY be randomized
     // but they also need to keep the same order as the previous ClientHello

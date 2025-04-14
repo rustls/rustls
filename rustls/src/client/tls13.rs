@@ -322,7 +322,6 @@ pub(super) fn handle_server_hello(
         key_schedule_pre_handshake.into_handshake(secret)
     };
 
-    debug!("ech_state = {}", ech_state.is_some());
     // If we have ECH state, check that the server accepted our offer.
     if let Some(ech_state) = ech_state {
         cx.data.ech_status = match ech_state.confirm_acceptance(
@@ -345,7 +344,6 @@ pub(super) fn handle_server_hello(
             // The server rejected our ECH offer.
             None => EchStatus::Rejected,
         };
-        debug!("ech status = {:?}", cx.data.ech_status);
     }
 
     // Remember what KX group the server liked for next time.
@@ -675,7 +673,6 @@ impl PresharedKeysRef<'_> {
         // "pre_shared_key" and "early_data" extensions."
         let max_early_data = self.max_early_data(config);
         if max_early_data > 0 && !doing_retry {
-            debug!("adding `early_data` extension: {max_early_data}");
             cx.data
                 .early_data
                 .enable(usize::try_from(max_early_data).unwrap_or(usize::MAX));

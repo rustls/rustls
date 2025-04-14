@@ -142,10 +142,10 @@
     "*-QUIC-*" :"",
     "QUIC-*": "",
     "*-QUIC": "",
-	"TLS-TLS12-ECDHE_PSK*": "TLS 1.2 PSKs are not supported",
-	"*PSKHint*": "TLS 1.2 PSKs are not supported",
-	"ClientAuth-*PSK": "TLS 1.2 PSKs are not supported",
-	"CheckECDSACurve-PSK-TLS12": "TLS 1.2 PSKs are not supported"
+    "TLS-TLS12-ECDHE_PSK*": "TLS 1.2 PSKs are not supported",
+    "*PSKHint*": "TLS 1.2 PSKs are not supported",
+    "ClientAuth-*PSK": "TLS 1.2 PSKs are not supported",
+    "CheckECDSACurve-PSK-TLS12": "TLS 1.2 PSKs are not supported"
   },
   "ErrorMap": {
     ":HTTP_REQUEST:": ":GARBAGE:",
