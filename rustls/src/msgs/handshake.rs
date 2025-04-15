@@ -430,8 +430,11 @@ impl Codec<'_> for PresharedKeyIdentity {
     }
 }
 
+/// RFC8446: `PskIdentity identities<7..2^16-1>;`
 impl TlsListElement for PresharedKeyIdentity {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskIdentities"),
+    };
 }
 
 wrapped_payload!(pub(crate) struct PresharedKeyBinder, PayloadU8,);
