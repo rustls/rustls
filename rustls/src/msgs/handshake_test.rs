@@ -267,7 +267,7 @@ fn rejects_truncated_sni() {
 
 #[test]
 fn can_round_trip_psk_identity() {
-    let bytes = [0, 0, 0x11, 0x22, 0x33, 0x44];
+    let bytes = [0, 1, 0x99, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
     println!("{:?}", psk_id);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
