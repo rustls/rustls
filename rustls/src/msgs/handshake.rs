@@ -943,8 +943,11 @@ impl TlsListElement for ClientExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// draft-ietf-tls-esni-17: `ExtensionType OuterExtensions<2..254>;`
 impl TlsListElement for ExtensionType {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ExtensionTypes"),
+    };
 }
 
 impl ClientHelloPayload {
