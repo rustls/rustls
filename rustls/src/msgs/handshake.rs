@@ -1976,9 +1976,12 @@ impl Codec<'_> for ServerEcdhParams {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub(crate) struct ServerDhParams {
-    pub(crate) dh_p: PayloadU16,
-    pub(crate) dh_g: PayloadU16,
-    pub(crate) dh_Ys: PayloadU16,
+    /// RFC5246: `opaque dh_p<1..2^16-1>;`
+    pub(crate) dh_p: PayloadU16<NonEmpty>,
+    /// RFC5246: `opaque dh_g<1..2^16-1>;`
+    pub(crate) dh_g: PayloadU16<NonEmpty>,
+    /// RFC5246: `opaque dh_Ys<1..2^16-1>;`
+    pub(crate) dh_Ys: PayloadU16<NonEmpty>,
 }
 
 impl ServerDhParams {
