@@ -226,7 +226,6 @@ impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
         let len = match T::SIZE_LEN {
-            ListLength::U8 => usize::from(u8::read(r)?),
             ListLength::NonZeroU8 { empty_error } => match usize::from(u8::read(r)?) {
                 0 => return Err(empty_error),
                 len => len,
@@ -268,9 +267,6 @@ pub(crate) trait TlsListElement {
 /// 1, 2, and 3 bytes. For the latter kind, we require a `TlsListElement` implementer
 /// to specify a maximum length and error if the actual length is larger.
 pub(crate) enum ListLength {
-    /// U8, perhaps empty
-    U8,
-
     /// U8 but non-empty
     NonZeroU8 { empty_error: InvalidMessage },
 
@@ -299,7 +295,7 @@ impl<'a> LengthPrefixedBuffer<'a> {
     pub(crate) fn new(size_len: ListLength, buf: &'a mut Vec<u8>) -> Self {
         let len_offset = buf.len();
         buf.extend(match size_len {
-            ListLength::U8 | ListLength::NonZeroU8 { .. } => &[0xff][..],
+            ListLength::NonZeroU8 { .. } => &[0xff][..],
             ListLength::U16 | ListLength::NonZeroU16 { .. } => &[0xff, 0xff],
             ListLength::U24 { .. } => &[0xff, 0xff, 0xff],
         });
@@ -316,7 +312,7 @@ impl Drop for LengthPrefixedBuffer<'_> {
     /// Goes back and corrects the length previously inserted at the start of the structure.
     fn drop(&mut self) {
         match self.size_len {
-            ListLength::U8 | ListLength::NonZeroU8 { .. } => {
+            ListLength::NonZeroU8 { .. } => {
                 let len = self.buf.len() - self.len_offset - 1;
                 debug_assert!(len <= 0xff);
                 self.buf[self.len_offset] = len as u8;
