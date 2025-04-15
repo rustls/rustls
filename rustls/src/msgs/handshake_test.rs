@@ -946,7 +946,7 @@ fn sample_hello_retry_request() -> HelloRetryRequest {
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         extensions: vec![
             HelloRetryExtension::KeyShare(NamedGroup::X25519),
-            HelloRetryExtension::Cookie(PayloadU16(vec![0])),
+            HelloRetryExtension::Cookie(PayloadU16::new(vec![0])),
             HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             HelloRetryExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
@@ -984,7 +984,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
                     PresharedKeyBinder::from(vec![3, 4, 5]),
                 ],
             }),
-            ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
+            ClientExtension::Cookie(PayloadU16::new(vec![1, 2, 3])),
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
             ClientExtension::ServerCertTypes(vec![CertificateType::RawPublicKey]),
@@ -1249,9 +1249,9 @@ fn sample_ecdhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
 fn sample_dhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Known(ServerKeyExchange {
         params: ServerKeyExchangeParams::Dh(ServerDhParams {
-            dh_p: PayloadU16(vec![1, 2, 3]),
-            dh_g: PayloadU16(vec![2]),
-            dh_Ys: PayloadU16(vec![1, 2]),
+            dh_p: PayloadU16::new(vec![1, 2, 3]),
+            dh_g: PayloadU16::new(vec![2]),
+            dh_Ys: PayloadU16::new(vec![1, 2]),
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
@@ -1286,7 +1286,7 @@ fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 
 fn sample_new_session_ticket_payload() -> NewSessionTicketPayload {
     NewSessionTicketPayload {
         lifetime_hint: 1234,
-        ticket: Arc::new(PayloadU16(vec![1, 2, 3])),
+        ticket: Arc::new(PayloadU16::new(vec![1, 2, 3])),
     }
 }
 
@@ -1295,7 +1295,7 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
         lifetime: 123,
         age_add: 1234,
         nonce: PayloadU8::new(vec![1, 2, 3]),
-        ticket: Arc::new(PayloadU16(vec![4, 5, 6])),
+        ticket: Arc::new(PayloadU16::new(vec![4, 5, 6])),
         exts: vec![NewSessionTicketExtension::Unknown(UnknownExtension {
             typ: ExtensionType::Unknown(12345),
             payload: Payload::Borrowed(&[1, 2, 3]),
