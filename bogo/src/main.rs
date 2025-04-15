@@ -1137,6 +1137,12 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec) => {
             quit(":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::EarlyDataExtensionWithoutResumption) => {
+            quit(":UNEXPECTED_EXTENSION:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite) => {
+            quit(":CIPHER_MISMATCH_ON_EARLY_DATA:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::ServerEchoedCompatibilitySessionId) => {
             quit(":SERVER_ECHOED_INVALID_SESSION_ID:")
         }
