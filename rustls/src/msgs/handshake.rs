@@ -2223,8 +2223,10 @@ wrapped_payload!(
     ///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
     /// }
     /// ```
+    ///
+    /// The TLS encoding is defined in RFC5246: `opaque DistinguishedName<1..2^16-1>;`
     pub struct DistinguishedName,
-    PayloadU16,
+    PayloadU16<NonEmpty>,
 );
 
 impl DistinguishedName {
