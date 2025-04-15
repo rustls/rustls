@@ -550,8 +550,11 @@ impl CertificateStatusRequest {
 
 // ---
 
+/// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
 impl TlsListElement for PSKKeyExchangeMode {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskKeyExchangeModes"),
+    };
 }
 
 impl TlsListElement for KeyShareEntry {
