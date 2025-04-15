@@ -2908,8 +2908,11 @@ impl Codec<'_> for HpkeSymmetricCipherSuite {
     }
 }
 
+/// draft-ietf-tls-esni-24: `HpkeSymmetricCipherSuite cipher_suites<4..2^16-4>;`
 impl TlsListElement for HpkeSymmetricCipherSuite {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("HpkeSymmetricCipherSuites"),
+    };
 }
 
 #[derive(Clone, Debug, PartialEq)]
