@@ -22,6 +22,10 @@ unimpl_tests = set()
 disabled_tests = set()
 passed_tests = set()
 
+# avoid use of the `Error::PeerMisbehaved(_)` fall-through;
+# prefer to add a more specific error
+lazy_error_maps = set([":PEER_MISBEHAVIOUR:"])
+
 for line in sys.stdin:
     m = re.match(r"^(PASSED|UNIMPLEMENTED|FAILED|DISABLED) \((.*)\)$", line.strip())
     if m:
@@ -58,6 +62,10 @@ if test_error_set:
     print("unknown TestErrorMap keys", list(sorted(test_error_set)))
 if test_local_error_set:
     print("unknown TestLocalErrorMap keys", list(sorted(test_local_error_set)))
+
+for test, expect in sorted(config["TestErrorMap"].items()):
+    if expect in lazy_error_maps:
+        print("test", test, "uses lazy error", expect)
 
 MENTION_DISABLED_TESTS_PATCH = """
 diff --git a/ssl/test/runner/runner.go b/ssl/test/runner/runner.go
