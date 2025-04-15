@@ -925,8 +925,11 @@ impl Codec<'_> for ClientHelloPayload {
     }
 }
 
+/// RFC8446: `CipherSuite cipher_suites<2..2^16-2>;`
 impl TlsListElement for CipherSuite {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("CipherSuites"),
+    };
 }
 
 impl TlsListElement for Compression {
