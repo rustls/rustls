@@ -220,8 +220,11 @@ impl TlsListElement for NamedGroup {
     };
 }
 
+/// RFC8446: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`
 impl TlsListElement for SignatureScheme {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::NoSignatureSchemes,
+    };
 }
 
 #[derive(Clone, Debug)]
