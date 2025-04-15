@@ -19,7 +19,7 @@ use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
-use crate::msgs::base::{MaybeEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, CertificateType, ClientCertificateType, Compression, ECCurveType,
@@ -1893,7 +1893,8 @@ impl KxDecode<'_> for ClientKeyExchangeParams {
 #[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientEcdhParams {
-    pub(crate) public: PayloadU8,
+    /// RFC4492: `opaque point <1..2^8-1>;`
+    pub(crate) public: PayloadU8<NonEmpty>,
 }
 
 #[cfg(feature = "tls12")]
