@@ -605,7 +605,7 @@ pub enum ClientExtension {
     KeyShare(Vec<KeyShareEntry>),
     PresharedKeyModes(Vec<PSKKeyExchangeMode>),
     PresharedKey(PresharedKeyOffer),
-    Cookie(PayloadU16),
+    Cookie(PayloadU16<NonEmpty>),
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest),
     ServerCertTypes(Vec<CertificateType>),
@@ -1235,7 +1235,7 @@ impl ClientHelloPayload {
 #[derive(Clone, Debug)]
 pub(crate) enum HelloRetryExtension {
     KeyShare(NamedGroup),
-    Cookie(PayloadU16),
+    Cookie(PayloadU16<NonEmpty>),
     SupportedVersions(ProtocolVersion),
     EchHelloRetryRequest(Vec<u8>),
     Unknown(UnknownExtension),
@@ -1358,7 +1358,7 @@ impl HelloRetryRequest {
         }
     }
 
-    pub(crate) fn cookie(&self) -> Option<&PayloadU16> {
+    pub(crate) fn cookie(&self) -> Option<&PayloadU16<NonEmpty>> {
         let ext = self.find_extension(ExtensionType::Cookie)?;
         match ext {
             HelloRetryExtension::Cookie(ck) => Some(ck),
