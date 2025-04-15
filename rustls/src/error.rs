@@ -190,6 +190,8 @@ pub enum InvalidMessage {
     ///
     /// The argument names the context.
     IllegalEmptyList(&'static str),
+    /// A peer sent an empty value, but a non-empty value is required.
+    IllegalEmptyValue,
 }
 
 impl From<InvalidMessage> for Error {

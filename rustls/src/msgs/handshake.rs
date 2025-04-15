@@ -19,7 +19,7 @@ use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
-use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{MaybeEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, CertificateType, ClientCertificateType, Compression, ECCurveType,
@@ -2989,7 +2989,7 @@ impl Codec<'_> for EchConfigContents {
         self.key_config.encode(bytes);
         self.maximum_name_length.encode(bytes);
         let dns_name = &self.public_name.borrow();
-        PayloadU8::encode_slice(dns_name.as_ref().as_ref(), bytes);
+        PayloadU8::<MaybeEmpty>::encode_slice(dns_name.as_ref().as_ref(), bytes);
         self.extensions.encode(bytes);
     }
 
@@ -2998,9 +2998,13 @@ impl Codec<'_> for EchConfigContents {
             key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u8::read(r)?,
             public_name: {
-                DnsName::try_from(PayloadU8::read(r)?.0.as_slice())
-                    .map_err(|_| InvalidMessage::InvalidServerName)?
-                    .to_owned()
+                DnsName::try_from(
+                    PayloadU8::<MaybeEmpty>::read(r)?
+                        .0
+                        .as_slice(),
+                )
+                .map_err(|_| InvalidMessage::InvalidServerName)?
+                .to_owned()
             },
             extensions: Vec::read(r)?,
         })

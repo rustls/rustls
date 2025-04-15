@@ -1014,7 +1014,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             ServerExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
-            ServerExtension::RenegotiationInfo(PayloadU8(vec![0])),
+            ServerExtension::RenegotiationInfo(PayloadU8::new(vec![0])),
             ServerExtension::Protocols(vec![ProtocolName::from(vec![0])]),
             ServerExtension::KeyShare(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             ServerExtension::PresharedKey(3),
@@ -1209,7 +1209,7 @@ fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
 
 fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
     CertificatePayloadTls13 {
-        context: PayloadU8(vec![1, 2, 3]),
+        context: PayloadU8::new(vec![1, 2, 3]),
         entries: vec![CertificateEntry {
             cert: CertificateDer::from(vec![3, 4, 5]),
             exts: vec![
@@ -1240,7 +1240,7 @@ fn sample_ecdhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: NamedGroup::X25519,
             },
-            public: PayloadU8(vec![1, 2, 3]),
+            public: PayloadU8::new(vec![1, 2, 3]),
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
@@ -1271,7 +1271,7 @@ fn sample_certificate_request_payload() -> CertificateRequestPayload {
 
 fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 {
     CertificateRequestPayloadTls13 {
-        context: PayloadU8(vec![1, 2, 3]),
+        context: PayloadU8::new(vec![1, 2, 3]),
         extensions: vec![
             CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             CertReqExtension::AuthorityNames(vec![DistinguishedName::from(vec![1, 2, 3])]),
@@ -1294,7 +1294,7 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
     NewSessionTicketPayloadTls13 {
         lifetime: 123,
         age_add: 1234,
-        nonce: PayloadU8(vec![1, 2, 3]),
+        nonce: PayloadU8::new(vec![1, 2, 3]),
         ticket: Arc::new(PayloadU16(vec![4, 5, 6])),
         exts: vec![NewSessionTicketExtension::Unknown(UnknownExtension {
             typ: ExtensionType::Unknown(12345),
