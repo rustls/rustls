@@ -963,6 +963,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::OfferedDuplicateKeyShares) => {
             quit(":DUPLICATE_KEY_SHARE:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::MessageInterleavedWithHandshakeMessage) => {
+            quit(":MESSAGE_INTERLEAVED_WITH_HANDSHAKE_MESSAGE:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::ServerEchoedCompatibilitySessionId) => {
             quit(":SERVER_ECHOED_INVALID_SESSION_ID:")
         }
