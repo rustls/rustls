@@ -1937,7 +1937,8 @@ impl Codec<'_> for ClientDhParams {
 #[derive(Debug)]
 pub(crate) struct ServerEcdhParams {
     pub(crate) curve_params: EcParameters,
-    pub(crate) public: PayloadU8,
+    /// RFC4492: `opaque point <1..2^8-1>;`
+    pub(crate) public: PayloadU8<NonEmpty>,
 }
 
 impl ServerEcdhParams {
