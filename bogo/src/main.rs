@@ -1132,6 +1132,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::OfferedDuplicateKeyShares) => {
             quit(":DUPLICATE_KEY_SHARE:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec) => {
+            quit(":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::ServerEchoedCompatibilitySessionId) => {
             quit(":SERVER_ECHOED_INVALID_SESSION_ID:")
         }
