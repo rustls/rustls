@@ -440,7 +440,10 @@ impl TlsListElement for PresharedKeyIdentity {
     };
 }
 
-wrapped_payload!(pub(crate) struct PresharedKeyBinder, PayloadU8,);
+wrapped_payload!(
+    /// RFC8446: `opaque PskBinderEntry<32..255>;`
+    pub(crate) struct PresharedKeyBinder, PayloadU8<NonEmpty>,
+);
 
 /// RFC8446: `PskBinderEntry binders<33..2^16-1>;`
 impl TlsListElement for PresharedKeyBinder {
