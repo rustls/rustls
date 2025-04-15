@@ -37,10 +37,10 @@ use crate::x509::wrap_in_sequence;
 /// the `PayloadU8` or `PayloadU16` types. This is typically used for types where we don't need
 /// anything other than access to the underlying bytes.
 macro_rules! wrapped_payload(
-  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident,) => {
+  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident$(<$inner_ty:ty>)?,) => {
     $(#[$comment])*
     #[derive(Clone, Debug)]
-    $vis struct $name($inner);
+    $vis struct $name($inner$(<$inner_ty>)?);
 
     impl From<Vec<u8>> for $name {
         fn from(v: Vec<u8>) -> Self {
@@ -325,7 +325,10 @@ impl ConvertServerNameList for [ServerName] {
     }
 }
 
-wrapped_payload!(pub struct ProtocolName, PayloadU8,);
+wrapped_payload!(
+    /// RFC7301: `opaque ProtocolName<1..2^8-1>;`
+    pub struct ProtocolName, PayloadU8<NonEmpty>,
+);
 
 /// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
 impl TlsListElement for ProtocolName {
