@@ -479,6 +479,7 @@ impl Codec<'_> for PresharedKeyOffer {
 // --- RFC6066 certificate status request ---
 wrapped_payload!(pub(crate) struct ResponderId, PayloadU16,);
 
+/// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
