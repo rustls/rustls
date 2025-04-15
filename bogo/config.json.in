@@ -287,7 +287,7 @@
     "UnknownCurve-HelloRetryRequest-TLS13": ":PEER_MISBEHAVIOUR:",
     "DisabledCurve-HelloRetryRequest-TLS13": ":PEER_MISBEHAVIOUR:",
     "HelloRetryRequest-Empty-TLS13": ":PEER_MISBEHAVIOUR:",
-    "HelloRetryRequest-EmptyCookie-TLS13": ":PEER_MISBEHAVIOUR:",
+    "HelloRetryRequest-EmptyCookie-TLS13": ":ILLEGAL_EMPTY_VALUE:",
     "TrailingDataWithFinished-Client-TLS12": ":PEER_MISBEHAVIOUR:",
     "TrailingDataWithFinished-Resume-Client-TLS12": ":PEER_MISBEHAVIOUR:",
     "TrailingDataWithFinished-Server-TLS12": ":PEER_MISBEHAVIOUR:",
