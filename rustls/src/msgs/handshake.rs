@@ -373,7 +373,8 @@ impl ConvertProtocolNameList for Vec<ProtocolName> {
 #[derive(Clone, Debug)]
 pub struct KeyShareEntry {
     pub(crate) group: NamedGroup,
-    pub(crate) payload: PayloadU16,
+    /// RFC8446: `opaque key_exchange<1..2^16-1>;`
+    pub(crate) payload: PayloadU16<NonEmpty>,
 }
 
 impl KeyShareEntry {
