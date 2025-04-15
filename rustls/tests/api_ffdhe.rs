@@ -79,6 +79,7 @@ fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() 
                 for mut ext in ch.extensions.iter_mut() {
                     if let ClientExtension::NamedGroups(ngs) = &mut ext {
                         ngs.clear();
+                        ngs.push(NamedGroup::X448);
                     }
                 }
             }
