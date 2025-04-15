@@ -339,8 +339,6 @@
     "SecondServerHelloWrongVersion-TLS13": ":INCOMPATIBLE:",
     "TooManyChangeCipherSpec-Client-TLS13": ":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:",
     "TooManyChangeCipherSpec-Server-TLS13": ":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:",
-    "EarlyData-CipherMismatch-Client-TLS13": ":PEER_MISBEHAVIOUR:",
-    "EarlyDataWithoutResume-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "EarlyData-SkipEndOfEarlyData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
     "CertCompressionTooLargeClient-TLS13": ":GARBAGE:",
     "SkipEarlyData-Interleaved-TLS13": ":PEER_MISBEHAVIOUR:",
