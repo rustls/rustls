@@ -8,7 +8,7 @@ use super::codec::Reader;
 use super::enums::AlertLevel;
 use super::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use crate::enums::{AlertDescription, HandshakeType};
-use crate::msgs::base::{PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{NonEmpty, PayloadU8, PayloadU16, PayloadU24};
 
 #[test]
 fn test_read_fuzz_corpus() {
@@ -100,7 +100,10 @@ fn construct_all_types() {
 #[test]
 fn debug_payload() {
     assert_eq!("01020304", format!("{:?}", Payload::new(vec![1, 2, 3, 4])));
-    assert_eq!("01020304", format!("{:?}", PayloadU8(vec![1, 2, 3, 4])));
+    assert_eq!(
+        "01020304",
+        format!("{:?}", PayloadU8::<NonEmpty>::new(vec![1, 2, 3, 4]))
+    );
     assert_eq!("01020304", format!("{:?}", PayloadU16(vec![1, 2, 3, 4])));
     assert_eq!(
         "01020304",
