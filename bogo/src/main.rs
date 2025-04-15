@@ -966,6 +966,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::MessageInterleavedWithHandshakeMessage) => {
             quit(":MESSAGE_INTERLEAVED_WITH_HANDSHAKE_MESSAGE:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalMiddleboxChangeCipherSpec) => {
+            quit(":ILLEGAL_MIDDLEBOX_CHANGE_CIPHER_SPEC:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::ServerEchoedCompatibilitySessionId) => {
             quit(":SERVER_ECHOED_INVALID_SESSION_ID:")
         }
