@@ -569,8 +569,13 @@ impl TlsListElement for ProtocolVersion {
     };
 }
 
+/// RFC7250: `CertificateType client_certificate_types<1..2^8-1>;`
+///
+/// Ditto `CertificateType server_certificate_types<1..2^8-1>;`
 impl TlsListElement for CertificateType {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("CertificateTypes"),
+    };
 }
 
 impl TlsListElement for CertificateCompressionAlgorithm {
