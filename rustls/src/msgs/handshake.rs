@@ -2184,8 +2184,11 @@ impl HasServerExtensions for Vec<ServerExtension> {
     }
 }
 
+/// RFC5246: `ClientCertificateType certificate_types<1..2^8-1>;`
 impl TlsListElement for ClientCertificateType {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ClientCertificateTypes"),
+    };
 }
 
 wrapped_payload!(
