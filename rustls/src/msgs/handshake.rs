@@ -557,6 +557,7 @@ impl TlsListElement for PSKKeyExchangeMode {
     };
 }
 
+/// RFC8446: `KeyShareEntry client_shares<0..2^16-1>;`
 impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
