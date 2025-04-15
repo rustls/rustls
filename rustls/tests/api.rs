@@ -6222,7 +6222,7 @@ fn test_server_rejects_empty_sni_extension() {
             typ: ExtensionType::ServerName,
             body: encoding::len_u16(vec![]),
         },
-        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
+        Error::InvalidMessage(InvalidMessage::IllegalEmptyList("ServerNames")),
     );
 }
 

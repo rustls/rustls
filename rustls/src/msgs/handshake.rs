@@ -292,8 +292,11 @@ impl Codec<'_> for ServerName {
     }
 }
 
+/// RFC6066: `ServerName server_name_list<1..2^16-1>`
 impl TlsListElement for ServerName {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("ServerNames"),
+    };
 }
 
 pub(crate) trait ConvertServerNameList {
