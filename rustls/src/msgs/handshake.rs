@@ -327,8 +327,11 @@ impl ConvertServerNameList for [ServerName] {
 
 wrapped_payload!(pub struct ProtocolName, PayloadU8,);
 
+/// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
 impl TlsListElement for ProtocolName {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("ProtocolNames"),
+    };
 }
 
 pub(crate) trait ConvertProtocolNameList {
