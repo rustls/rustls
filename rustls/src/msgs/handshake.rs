@@ -562,8 +562,11 @@ impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// RFC8446: `ProtocolVersion versions<2..254>;`
 impl TlsListElement for ProtocolVersion {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ProtocolVersions"),
+    };
 }
 
 impl TlsListElement for CertificateType {
