@@ -1919,7 +1919,8 @@ impl Codec<'_> for ClientEcdhParams {
 #[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientDhParams {
-    pub(crate) public: PayloadU16,
+    /// RFC5246: `opaque dh_Yc<1..2^16-1>;`
+    pub(crate) public: PayloadU16<NonEmpty>,
 }
 
 #[cfg(feature = "tls12")]
