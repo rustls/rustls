@@ -104,7 +104,7 @@ impl Tls13ClientSessionValue {
                 server_cert_verifier,
                 client_creds,
             ),
-            quic_params: PayloadU16(Vec::new()),
+            quic_params: PayloadU16::new(Vec::new()),
         }
     }
 
@@ -129,7 +129,7 @@ impl Tls13ClientSessionValue {
     }
 
     pub fn set_quic_params(&mut self, quic_params: &[u8]) {
-        self.quic_params = PayloadU16(quic_params.to_vec());
+        self.quic_params = PayloadU16::new(quic_params.to_vec());
     }
 
     pub fn quic_params(&self) -> Vec<u8> {

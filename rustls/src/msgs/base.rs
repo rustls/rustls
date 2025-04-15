@@ -111,38 +111,44 @@ impl fmt::Debug for PayloadU24<'_> {
 }
 
 /// An arbitrary, unknown-content, u16-length-prefixed payload
+///
+/// The `C` type parameter controls whether decoded values may
+/// be empty.
 #[derive(Clone, Eq, PartialEq)]
-pub struct PayloadU16(pub Vec<u8>);
+pub struct PayloadU16<C: Cardinality = MaybeEmpty>(pub(crate) Vec<u8>, PhantomData<C>);
 
-impl PayloadU16 {
+impl<C: Cardinality> PayloadU16<C> {
     pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    pub fn empty() -> Self {
-        Self::new(Vec::new())
-    }
-
-    pub fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
-        (slice.len() as u16).encode(bytes);
-        bytes.extend_from_slice(slice);
+        debug_assert!(bytes.len() >= C::MIN);
+        Self(bytes, PhantomData)
     }
 }
 
-impl Codec<'_> for PayloadU16 {
+impl PayloadU16<MaybeEmpty> {
+    pub(crate) fn empty() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+impl<C: Cardinality> Codec<'_> for PayloadU16<C> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        Self::encode_slice(&self.0, bytes);
+        debug_assert!(self.0.len() >= C::MIN);
+        (self.0.len() as u16).encode(bytes);
+        bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = u16::read(r)? as usize;
+        if len < C::MIN {
+            return Err(InvalidMessage::IllegalEmptyValue);
+        }
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Ok(Self(body))
+        Ok(Self(body, PhantomData))
     }
 }
 
-impl fmt::Debug for PayloadU16 {
+impl<C: Cardinality> fmt::Debug for PayloadU16<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, &self.0)
     }

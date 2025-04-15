@@ -3275,7 +3275,7 @@ mod tests {
             key_config: HpkeKeyConfig {
                 config_id: 0,
                 kem_id: HpkeKem::DHKEM_P256_HKDF_SHA256,
-                public_key: PayloadU16(b"xxx".into()),
+                public_key: PayloadU16::new(b"xxx".into()),
                 symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
                     kdf_id: HpkeKdf::HKDF_SHA256,
                     aead_id: HpkeAead::AES_128_GCM,

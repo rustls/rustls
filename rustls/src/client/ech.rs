@@ -219,7 +219,7 @@ impl EchGreaseConfig {
                     key_config: HpkeKeyConfig {
                         config_id: config_id[0],
                         kem_id: HpkeKem::DHKEM_P256_HKDF_SHA256,
-                        public_key: PayloadU16(self.placeholder_key.0.clone()),
+                        public_key: PayloadU16::new(self.placeholder_key.0.clone()),
                         symmetric_cipher_suites: vec![suite.sym],
                     },
                     maximum_name_length: 0,
@@ -255,7 +255,7 @@ impl EchGreaseConfig {
             EncryptedClientHello::Outer(EncryptedClientHelloOuter {
                 cipher_suite: suite.sym,
                 config_id: config_id[0],
-                enc: PayloadU16(grease_state.enc.0),
+                enc: PayloadU16::new(grease_state.enc.0),
                 payload: PayloadU16::new(payload),
             }),
         ))
