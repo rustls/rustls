@@ -722,7 +722,13 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::EncryptedClientHelloOuterExtensions => {
                 Self::EncryptedClientHelloOuterExtensions(Vec::read(&mut sub)?)
             }
-            ExtensionType::CertificateAuthorities => Self::AuthorityNames(Vec::read(&mut sub)?),
+            ExtensionType::CertificateAuthorities => Self::AuthorityNames({
+                let items = Vec::read(&mut sub)?;
+                if items.is_empty() {
+                    return Err(InvalidMessage::IllegalEmptyList("DistinguishedNames"));
+                }
+                items
+            }),
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -2222,6 +2228,8 @@ impl DistinguishedName {
     }
 }
 
+/// RFC8446: `DistinguishedName authorities<3..2^16-1>;` however,
+/// RFC5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
 impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -2305,6 +2313,9 @@ impl Codec<'_> for CertReqExtension {
             }
             ExtensionType::CertificateAuthorities => {
                 let cas = Vec::read(&mut sub)?;
+                if cas.is_empty() {
+                    return Err(InvalidMessage::IllegalEmptyList("DistinguishedNames"));
+                }
                 Self::AuthorityNames(cas)
             }
             ExtensionType::CompressCertificate => {
