@@ -2544,12 +2544,13 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         let lifetime = u32::read(r)?;
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
-        let ticket = Arc::new(PayloadU16::read(r)?);
+        // nb. RFC8446: `opaque ticket<1..2^16-1>;`
+        let ticket = Arc::new(match PayloadU16::<NonEmpty>::read(r) {
+            Err(InvalidMessage::IllegalEmptyValue) => Err(InvalidMessage::EmptyTicketValue),
+            Err(err) => Err(err),
+            Ok(pl) => Ok(PayloadU16::new(pl.0)),
+        }?);
         let exts = Vec::read(r)?;
-
-        if ticket.0.is_empty() {
-            return Err(InvalidMessage::EmptyTicketValue);
-        }
 
         Ok(Self {
             lifetime,
