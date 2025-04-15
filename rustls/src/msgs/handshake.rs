@@ -439,8 +439,11 @@ impl TlsListElement for PresharedKeyIdentity {
 
 wrapped_payload!(pub(crate) struct PresharedKeyBinder, PayloadU8,);
 
+/// RFC8446: `PskBinderEntry binders<33..2^16-1>;`
 impl TlsListElement for PresharedKeyBinder {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskBinders"),
+    };
 }
 
 #[derive(Clone, Debug)]
