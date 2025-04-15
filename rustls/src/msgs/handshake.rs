@@ -213,8 +213,11 @@ impl TlsListElement for ECPointFormat {
     };
 }
 
+/// RFC8422: `NamedCurve named_curve_list<2..2^16-1>`
 impl TlsListElement for NamedGroup {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("NamedGroups"),
+    };
 }
 
 impl TlsListElement for SignatureScheme {

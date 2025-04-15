@@ -6251,9 +6251,9 @@ fn test_server_rejects_clients_without_any_kx_groups() {
         .unwrap();
     assert_eq!(
         server.process_new_packets(),
-        Err(Error::PeerIncompatible(
-            PeerIncompatible::NoKxGroupsInCommon
-        ))
+        Err(Error::InvalidMessage(InvalidMessage::IllegalEmptyList(
+            "NamedGroups"
+        )))
     );
 }
 
