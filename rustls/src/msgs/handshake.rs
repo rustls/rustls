@@ -3177,7 +3177,7 @@ pub struct EncryptedClientHelloOuter {
     /// This field is empty in a ClientHelloOuter sent in response to a HelloRetryRequest.
     pub enc: PayloadU16,
     /// The serialized and encrypted ClientHelloInner structure, encrypted using HPKE.
-    pub payload: PayloadU16,
+    pub payload: PayloadU16<NonEmpty>,
 }
 
 impl Codec<'_> for EncryptedClientHelloOuter {
