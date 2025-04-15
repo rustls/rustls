@@ -407,7 +407,8 @@ impl Codec<'_> for KeyShareEntry {
 // --- TLS 1.3 PresharedKey offers ---
 #[derive(Clone, Debug)]
 pub(crate) struct PresharedKeyIdentity {
-    pub(crate) identity: PayloadU16,
+    /// RFC8446: `opaque identity<1..2^16-1>;`
+    pub(crate) identity: PayloadU16<NonEmpty>,
     pub(crate) obfuscated_ticket_age: u32,
 }
 
