@@ -298,7 +298,6 @@
     "MinimumVersion-Client2-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
     "MinimumVersion-Server-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
     "MinimumVersion-Server2-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
-    "DuplicateKeyShares-TLS13": ":PEER_MISBEHAVIOUR:",
     "PartialEncryptedExtensionsWithServerHello": ":PEER_MISBEHAVIOUR:",
     "PartialClientFinishedWithClientHello": ":PEER_MISBEHAVIOUR:",
     "PointFormat-EncryptedExtensions-TLS13": ":PEER_MISBEHAVIOUR:",
