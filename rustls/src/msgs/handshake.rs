@@ -2947,7 +2947,8 @@ impl TlsListElement for HpkeSymmetricCipherSuite {
 pub struct HpkeKeyConfig {
     pub config_id: u8,
     pub kem_id: HpkeKem,
-    pub public_key: PayloadU16,
+    /// draft-ietf-tls-esni-24: `opaque HpkePublicKey<1..2^16-1>;`
+    pub public_key: PayloadU16<NonEmpty>,
     pub symmetric_cipher_suites: Vec<HpkeSymmetricCipherSuite>,
 }
 
