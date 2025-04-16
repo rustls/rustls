@@ -63,8 +63,8 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
-/// `early_key_schedule` is `Some` if we sent the "early_data"
-/// extension to the server.
+/// `early_data_key_schedule` is `Some` if we sent the
+/// "early_data" extension to the server.
 pub(super) fn handle_server_hello(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -74,7 +74,7 @@ pub(super) fn handle_server_hello(
     mut randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     mut transcript: HandshakeHash,
-    early_key_schedule: Option<KeyScheduleEarly>,
+    early_data_key_schedule: Option<KeyScheduleEarly>,
     mut hello: ClientHelloDetails,
     our_key_share: Box<dyn ActiveKeyExchange>,
     mut sent_tls13_fake_ccs: bool,
@@ -100,7 +100,7 @@ pub(super) fn handle_server_hello(
             )
         })?;
 
-    let key_schedule_pre_handshake = match (server_hello.psk_index(), early_key_schedule) {
+    let key_schedule_pre_handshake = match (server_hello.psk_index(), early_data_key_schedule) {
         (Some(selected_psk), Some(early_key_schedule)) => {
             match &resuming_session {
                 Some(resuming) => {
