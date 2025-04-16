@@ -576,37 +576,17 @@ fn emit_client_hello_for_retry(
             .early_data_key_schedule
             .take()
             .map(|ks| (ks, psk)),
+
         // When we're not doing ECH and using a PSK, then the PSK binder need to be filled in as
         // normal.
         (_, Some(psk)) => {
             let ks = psk.fill_in_binders(&transcript_buffer, &mut chp, &config.provider)?;
             Some((ks, psk))
         }
+
+        // No early key schedule in other cases.
         _ => None,
     };
-
-    // // Derive the TLS 1.3 key schedule for sending early data.
-    // let tls13_early_data_key_schedule = tls13_psk
-    //     .and_then(|psk| {
-    //         let ks = match ech_state.as_mut() {
-    //             // If we're performing ECH and using a PSK, then the PSK binder will have been dealt with
-    //             // separately, and we need to take the early_data_key_schedule computed for the inner hello.
-    //             Some(ech_state) => ech_state.early_data_key_schedule.take(),
-
-    //             // When we're not doing ECH and using a PSK, then the PSK binder need to be filled in as
-    //             // normal.
-    //             None => match psk.fill_in_binders(&transcript_buffer, &mut chp, &config.provider) {
-    //                 Ok(ks) => Some(ks),
-    //                 Err(err) => return Some(Err(err)),
-    //             },
-    //         };
-    //         // NB: This needs to come *after* `ks` since that
-    //         // expression has side effects (filling in PSK
-    //         // binders, etc.).
-    //         let hash = psk.early_data_hash(config)?;
-    //         ks.map(|ks| Ok((hash, ks)))
-    //     })
-    //     .transpose()?;
 
     let ch = Message {
         version: match retryreq {
@@ -773,16 +753,17 @@ fn tls13_resumption<'a>(
     }
 
     // If the selected cipher suite can't select from the session's, we can't resume.
-    if suite.is_some_and(|suite| {
-        suite
+    if let Some(suite) = suite {
+        if suite
             .can_resume_from(resuming.suite())
             .is_none()
-    }) {
-        debug!(
-            "cannot resume: cipher suites differ {suite:?} != {:?}",
-            resuming.suite()
-        );
-        return Ok(None);
+        {
+            debug!(
+                "cannot resume: cipher suites differ {suite:?} != {:?}",
+                resuming.suite()
+            );
+            return Ok(None);
+        }
     }
 
     let psks = tls13::PresharedKeysRef::Resumption(resuming);
