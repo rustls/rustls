@@ -36,7 +36,7 @@ use crate::msgs::handshake::{
     HelloRetryRequest, KeyShareEntry, Random, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist::{self, Retrieved};
+use crate::msgs::persist;
 use crate::sync::Arc;
 use crate::tls13::Tls13CipherSuite;
 use crate::tls13::key_schedule::KeyScheduleEarly;
@@ -50,7 +50,7 @@ fn find_session(
     server_name: &ServerName<'static>,
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
-) -> Option<Retrieved<ClientSessionValue>> {
+) -> Option<persist::Retrieved<ClientSessionValue>> {
     let found = config
         .resumption
         .store
@@ -78,7 +78,7 @@ fn find_session(
                 .map_err(|_err| debug!("Could not get current time: {_err}"))
                 .ok()?;
 
-            let retrieved = Retrieved::new(resuming, now);
+            let retrieved = persist::Retrieved::new(resuming, now);
             match retrieved.has_expired() {
                 false => Some(retrieved),
                 true => None,
@@ -255,7 +255,7 @@ struct ClientHelloInput {
 #[derive(Debug)]
 enum PresharedKeys {
     /// A resumption PSK.
-    Resumption(Retrieved<ClientSessionValue>),
+    Resumption(persist::Retrieved<ClientSessionValue>),
     /// Externally derived PSKs.
     ///
     /// Only supported for TLS 1.3.
@@ -743,7 +743,7 @@ fn prepare_preshared_keys<'a>(
 
 /// Handles TLS 1.3 resumption.
 fn tls13_resumption<'a>(
-    resuming: Retrieved<&'a persist::Tls13ClientSessionValue>,
+    resuming: persist::Retrieved<&'a persist::Tls13ClientSessionValue>,
     exts: &mut Vec<ClientExtension>,
     suite: Option<&'static Tls13CipherSuite>,
     cx: &mut ClientContext<'_>,
@@ -776,7 +776,7 @@ fn tls13_resumption<'a>(
 /// Handles TLS 1.2 resumption.
 #[cfg(feature = "tls12")]
 fn tls12_resumption(
-    resuming: Retrieved<&persist::Tls12ClientSessionValue>,
+    resuming: persist::Retrieved<&persist::Tls12ClientSessionValue>,
     exts: &mut Vec<ClientExtension>,
     config: &ClientConfig,
 ) {
@@ -1393,17 +1393,17 @@ fn process_cert_type_extension(
 }
 
 enum RetrievedClientSessionValue<'a> {
-    Tls13(Retrieved<&'a persist::Tls13ClientSessionValue>),
+    Tls13(persist::Retrieved<&'a persist::Tls13ClientSessionValue>),
     #[cfg(feature = "tls12")]
-    Tls12(Retrieved<&'a persist::Tls12ClientSessionValue>),
+    Tls12(persist::Retrieved<&'a persist::Tls12ClientSessionValue>),
 }
 
-impl<'a> From<&'a Retrieved<ClientSessionValue>> for RetrievedClientSessionValue<'a> {
-    fn from(csv: &'a Retrieved<ClientSessionValue>) -> Self {
+impl<'a> From<&'a persist::Retrieved<ClientSessionValue>> for RetrievedClientSessionValue<'a> {
+    fn from(csv: &'a persist::Retrieved<ClientSessionValue>) -> Self {
         csv.map_into(|value, retrieved_at| match value {
-            ClientSessionValue::Tls13(v) => Self::Tls13(Retrieved::new(v, retrieved_at)),
+            ClientSessionValue::Tls13(v) => Self::Tls13(persist::Retrieved::new(v, retrieved_at)),
             #[cfg(feature = "tls12")]
-            ClientSessionValue::Tls12(v) => Self::Tls12(Retrieved::new(v, retrieved_at)),
+            ClientSessionValue::Tls12(v) => Self::Tls12(persist::Retrieved::new(v, retrieved_at)),
         })
     }
 }
