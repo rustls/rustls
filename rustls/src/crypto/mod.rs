@@ -661,9 +661,9 @@ pub struct PresharedKey {
     identity: Zeroizing<Box<[u8]>>,
     secret: Zeroizing<Box<[u8]>>,
     hash_alg: Tls13HashAlg,
-    /// Whether early data is allowed.
+    /// The PSK's early data configuration, if any.
     ///
-    /// This is (max_early_data, _, ALPN)
+    /// If `None`, then early data is not allowed for this PSK.
     early_data: Option<PskEarlyData>,
 }
 
@@ -715,7 +715,13 @@ impl PresharedKey {
     ///
     /// By default the PSK uses SHA-256.
     pub fn with_hash_alg(mut self, hash: hash::HashAlgorithm) -> Option<Self> {
-        self.hash_alg = Tls13HashAlg::try_from(hash).ok()?;
+        use hash::HashAlgorithm::*;
+
+        self.hash_alg = match hash {
+            SHA256 => Tls13HashAlg::Sha256,
+            SHA384 => Tls13HashAlg::Sha384,
+            _ => return None,
+        };
         Some(self)
     }
 
@@ -839,20 +845,6 @@ impl From<Tls13HashAlg> for hash::HashAlgorithm {
             Tls13HashAlg::Sha256 => SHA256,
             Tls13HashAlg::Sha384 => SHA384,
         }
-    }
-}
-
-impl TryFrom<hash::HashAlgorithm> for Tls13HashAlg {
-    type Error = ();
-    fn try_from(hash: hash::HashAlgorithm) -> Result<Self, Self::Error> {
-        use hash::HashAlgorithm::*;
-
-        let alg = match hash {
-            SHA256 => Self::Sha256,
-            SHA384 => Self::Sha384,
-            _ => return Err(()),
-        };
-        Ok(alg)
     }
 }
 

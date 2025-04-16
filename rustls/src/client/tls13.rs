@@ -1020,8 +1020,6 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                         .set_handshake_encrypter(cx.common);
                 }
 
-                // TODO(eric): should this be a different
-                // variant?
                 cx.common.handshake_kind = Some(HandshakeKind::Psk);
 
                 // We *don't* verify the certificate chain here:
