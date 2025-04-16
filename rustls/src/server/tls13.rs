@@ -84,12 +84,7 @@ mod client_hello {
         pub(in crate::server) suite: &'static Tls13CipherSuite,
         pub(in crate::server) randoms: ConnectionRandoms,
         /// Have we sent a HelloRetryRequest?
-        pub(in crate::server) done_retry: bool,
-        /// Did we send a "key_share" extension in our
-        /// HelloRetryRequest?
-        ///
-        /// Only has meaning if `self.done_retry` is true.
-        pub(in crate::server) sent_key_share: bool,
+        pub(in crate::server) done_retry: Option<SentHelloRetryRequest>,
         /// How many session tickets to send.
         pub(in crate::server) send_tickets: usize,
         pub(in crate::server) extra_exts: Vec<ServerExtension>,
@@ -329,7 +324,7 @@ mod client_hello {
             let early_data_requested = client_hello.early_data_extension_offered();
 
             // EarlyData extension is illegal in second ClientHello
-            if self.done_retry && early_data_requested {
+            if self.done_retry.is_some() && early_data_requested {
                 return Err({
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
@@ -364,7 +359,9 @@ mod client_hello {
                     // shares with a list containing a single
                     // KeyShareEntry from the indicated group."
                     let required = matches!(psk_mode, Some(PSK_DHE_KE))
-                        || (self.done_retry && self.sent_key_share);
+                        || self
+                            .done_retry
+                            .is_some_and(|v| v.sent_key_share);
                     self.key_share(cx, client_hello, selected_kxg, required)?
                 };
                 let group = selected_kxg;
@@ -475,7 +472,7 @@ mod client_hello {
                 &input_secrets,
                 &self.config,
             )?;
-            if !self.done_retry {
+            if self.done_retry.is_none() {
                 emit_fake_ccs(cx.common);
             }
 
@@ -859,7 +856,7 @@ mod client_hello {
             // for the mutually_preferred_group.
             self.transcript.add_message(chm);
 
-            if self.done_retry {
+            if self.done_retry.is_some() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerMisbehaved::RefusedToFollowHelloRetryRequest,
@@ -884,8 +881,9 @@ mod client_hello {
                 session_id: SessionId::empty(),
                 #[cfg(feature = "tls12")]
                 using_ems: false,
-                done_retry: true,
-                sent_key_share: true,
+                done_retry: Some(SentHelloRetryRequest {
+                    sent_key_share: true,
+                }),
                 send_tickets: self.send_tickets,
                 extra_exts: self.extra_exts,
             });
@@ -1293,6 +1291,13 @@ mod client_hello {
             cx.common,
         )
     }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub(super) struct SentHelloRetryRequest {
+    /// Did we send a "key_share" extension in our
+    /// HelloRetryRequest?
+    pub sent_key_share: bool,
 }
 
 struct ExpectAndSkipRejectedEarlyData {

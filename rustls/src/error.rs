@@ -219,6 +219,8 @@ pub enum PeerMisbehaved {
     DuplicateServerHelloExtensions,
     DuplicateServerNameTypes,
     EarlyDataAttemptedInSecondClientHello,
+    #[deprecated]
+    EarlyDataExtensionWithoutResumption,
     EarlyDataExtensionWithoutPsk,
     EarlyDataOfferedWithVariedCipherSuite,
     HandshakeHashVariedAfterRetry,

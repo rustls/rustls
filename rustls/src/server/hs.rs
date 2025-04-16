@@ -311,12 +311,7 @@ pub(super) struct ExpectClientHello {
     #[cfg(feature = "tls12")]
     pub(super) using_ems: bool,
     /// Have we sent a HelloRetryRequest?
-    pub(super) done_retry: bool,
-    /// Did we send a "key_share" extension in our
-    /// HelloRetryRequest?
-    ///
-    /// Only has meaning if `self.done_retry` is true.
-    pub(super) sent_key_share: bool,
+    pub(super) done_retry: Option<tls13::SentHelloRetryRequest>,
     pub(super) send_tickets: usize,
 }
 
@@ -336,8 +331,7 @@ impl ExpectClientHello {
             session_id: SessionId::empty(),
             #[cfg(feature = "tls12")]
             using_ems: false,
-            done_retry: false,
-            sent_key_share: false,
+            done_retry: None,
             send_tickets: 0,
         }
     }
@@ -497,7 +491,6 @@ impl ExpectClientHello {
                 suite,
                 randoms,
                 done_retry: self.done_retry,
-                sent_key_share: self.sent_key_share,
                 send_tickets: self.send_tickets,
                 extra_exts: self.extra_exts,
             }
@@ -663,7 +656,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
     where
         Self: 'm,
     {
-        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
+        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry.is_some(), cx)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 
