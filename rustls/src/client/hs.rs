@@ -186,7 +186,6 @@ pub(super) fn start_handshake(
                 .has_certs(),
             config.provider.secure_random,
             config.enable_sni,
-            Arc::clone(&config.provider),
         )?),
         _ => None,
     };
@@ -523,7 +522,7 @@ fn emit_client_hello_for_retry(
                 config.provider.secure_random,
                 input.server_name.clone(),
                 &chp_payload,
-                Arc::clone(&config.provider),
+                &config.provider,
             )),
             _ => None,
         });
@@ -533,7 +532,8 @@ fn emit_client_hello_for_retry(
         // we need to replace the client hello payload with an ECH client hello payload.
         (EchStatus::NotOffered | EchStatus::Offered, Some(ech_state)) => {
             // Replace the client hello payload with an ECH client hello payload.
-            chp_payload = ech_state.ech_hello(chp_payload, retryreq, tls13_psk.as_ref())?;
+            chp_payload =
+                ech_state.ech_hello(chp_payload, retryreq, tls13_psk.as_ref(), &config.provider)?;
             cx.data.ech_status = EchStatus::Offered;
             // Store the ECH extension in case we need to carry it forward in a subsequent hello.
             input.prev_ech_ext = chp_payload.extensions.last().cloned();
