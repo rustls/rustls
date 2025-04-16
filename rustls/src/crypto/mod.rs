@@ -799,7 +799,7 @@ impl PresharedKey {
 
 impl Debug for PresharedKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Avoid displaying the secret.
+        // Manually implemented to avoid displaying the secret.
         f.debug_struct("PresharedKey")
             .field("identity", &self.identity)
             .field("hash_alg", &self.hash_alg)
@@ -816,7 +816,7 @@ pub(crate) struct PskEarlyData {
 }
 
 /// Reports in constant time whether every byte in `x` is zero,
-/// include if `x` is empty.
+/// including if `x` is empty.
 fn ct_eq_zero(x: &[u8]) -> Choice {
     let mut non_zero = Choice::from(0u8);
     for c in x {

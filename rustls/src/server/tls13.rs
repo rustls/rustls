@@ -59,23 +59,12 @@ mod client_hello {
     };
     use crate::verify::DigitallySignedStruct;
     use alloc::string::String;
-    use core::fmt;
 
     #[derive(PartialEq)]
     pub(super) enum EarlyDataDecision {
         Disabled,
         RequestedButRejected,
         Accepted,
-    }
-
-    impl fmt::Display for EarlyDataDecision {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Self::Disabled => write!(f, "disabled"),
-                Self::RequestedButRejected => write!(f, "requested but rejected"),
-                Self::Accepted => write!(f, "accepted"),
-            }
-        }
     }
 
     pub(in crate::server) struct CompleteClientHelloHandling {

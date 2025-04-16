@@ -186,7 +186,7 @@ impl Tls12ClientSessionValue {
         }
     }
 
-    pub(crate) fn ticket(&self) -> Arc<PayloadU16> {
+    pub(crate) fn ticket(&mut self) -> Arc<PayloadU16> {
         Arc::clone(&self.common.ticket)
     }
 
