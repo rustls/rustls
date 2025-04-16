@@ -502,15 +502,14 @@ impl CipherSuite {
     pub(crate) fn tls13_hash_alg(self) -> Option<HashAlgorithm> {
         use CipherSuite::*;
 
-        let alg = match self {
+        match self {
             TLS13_AES_128_GCM_SHA256
             | TLS13_CHACHA20_POLY1305_SHA256
             | TLS13_AES_128_CCM_SHA256
-            | TLS13_AES_128_CCM_8_SHA256 => HashAlgorithm::SHA256,
-            TLS13_AES_256_GCM_SHA384 => HashAlgorithm::SHA384,
-            _ => return None,
-        };
-        Some(alg)
+            | TLS13_AES_128_CCM_8_SHA256 => Some(HashAlgorithm::SHA256),
+            TLS13_AES_256_GCM_SHA384 => Some(HashAlgorithm::SHA384),
+            _ => None,
+        }
     }
 }
 
