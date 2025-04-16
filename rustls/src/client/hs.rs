@@ -205,7 +205,7 @@ struct ExpectServerHello {
     // Otherwise, it is thrown away.
     //
     // If this is `None` then we do not support early data.
-    early_key_schedule: Option<KeyScheduleEarly>,
+    early_data_key_schedule: Option<KeyScheduleEarly>,
     offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
     suite: Option<SupportedCipherSuite>,
     ech_state: Option<EchState>,
@@ -515,7 +515,7 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(chp_payload),
     };
 
-    let early_key_schedule = match (ech_state.as_mut(), tls13_session) {
+    let tls13_early_data_key_schedule = match (ech_state.as_mut(), tls13_session) {
         // If we're performing ECH and resuming, then the PSK binder will have been dealt with
         // separately, and we need to take the early_data_key_schedule computed for the inner hello.
         (Some(ech_state), Some(tls13_session)) => ech_state
@@ -562,37 +562,38 @@ fn emit_client_hello_for_retry(
     cx.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    let early_key_schedule = early_key_schedule.map(|(resuming_suite, schedule)| {
-        if !cx.data.early_data.is_enabled() {
-            return schedule;
-        }
+    let early_data_key_schedule =
+        tls13_early_data_key_schedule.map(|(resuming_suite, schedule)| {
+            if !cx.data.early_data.is_enabled() {
+                return schedule;
+            }
 
-        let (transcript_buffer, random) = match &ech_state {
-            // When using ECH the early data key schedule is derived based on the inner
-            // hello transcript and random.
-            Some(ech_state) => (
-                &ech_state.inner_hello_transcript,
-                &ech_state.inner_hello_random.0,
-            ),
-            None => (&transcript_buffer, &input.random.0),
-        };
+            let (transcript_buffer, random) = match &ech_state {
+                // When using ECH the early data key schedule is derived based on the inner
+                // hello transcript and random.
+                Some(ech_state) => (
+                    &ech_state.inner_hello_transcript,
+                    &ech_state.inner_hello_random.0,
+                ),
+                None => (&transcript_buffer, &input.random.0),
+            };
 
-        tls13::derive_early_traffic_secret(
-            &*config.key_log,
-            cx,
-            resuming_suite,
-            &schedule,
-            &mut input.sent_tls13_fake_ccs,
-            transcript_buffer,
-            random,
-        );
-        schedule
-    });
+            tls13::derive_early_traffic_secret(
+                &*config.key_log,
+                cx,
+                resuming_suite,
+                &schedule,
+                &mut input.sent_tls13_fake_ccs,
+                transcript_buffer,
+                random,
+            );
+            schedule
+        });
 
     let next = ExpectServerHello {
         input,
         transcript_buffer,
-        early_key_schedule,
+        early_data_key_schedule,
         offered_key_share: key_share,
         suite,
         ech_state,
@@ -915,7 +916,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     randoms,
                     suite,
                     transcript,
-                    self.early_key_schedule,
+                    self.early_data_key_schedule,
                     self.input.hello,
                     // We always send a key share when TLS 1.3 is enabled.
                     self.offered_key_share.unwrap(),
