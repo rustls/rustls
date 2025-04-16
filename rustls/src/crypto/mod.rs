@@ -664,7 +664,7 @@ pub struct PresharedKey {
     /// Whether early data is allowed.
     ///
     /// This is (max_early_data, _, ALPN)
-    early_data: Option<(u32, CipherSuite, Option<Vec<u8>>)>,
+    early_data: Option<PskEarlyData>,
 }
 
 impl PresharedKey {
@@ -722,10 +722,10 @@ impl PresharedKey {
     /// Sets the maximum amount of early data allowed that can be
     /// processed with the PSK.
     ///
-    /// In order to use early data with a PSK, `n` must be
-    /// non-zero and both `suite` and `alpn` must match the
-    /// cipher suite and ALPN protocol, respectively, negotiated
-    /// by the TLS handshake.
+    /// In order to use early data with a PSK, `max_early_data`
+    /// must be non-zero and both `suite` and `alpn` must match
+    /// the cipher suite and ALPN protocol, respectively,
+    /// negotiated by the TLS handshake.
     ///
     /// It returns `None` if the hash algorithm used by `suite`
     /// does not match the hash algorithm associated with the
@@ -735,14 +735,18 @@ impl PresharedKey {
     /// By default early data is not allowed.
     pub fn with_early_data(
         mut self,
-        n: u32,
+        max_early_data: u32,
         suite: CipherSuite,
         alpn: Option<&[u8]>,
     ) -> Option<Self> {
         if Some(self.hash_alg.into()) != suite.tls13_hash_alg() {
             None
         } else {
-            self.early_data = Some((n, suite, alpn.map(<[_]>::to_vec)));
+            self.early_data = Some(PskEarlyData {
+                max_early_data,
+                suite,
+                alpn: alpn.map(<[_]>::to_vec),
+            });
             Some(self)
         }
     }
@@ -774,12 +778,8 @@ impl PresharedKey {
 
     /// Returns the maximum amount of early data allowed, the
     /// cipher suite, and ALPN (if any).
-    pub(crate) fn early_data(&self) -> Option<(u32, CipherSuite, Option<&[u8]>)> {
-        self.early_data
-            .as_ref()
-            .map(|(max_early_data, suite, alpn)| {
-                (*max_early_data, *suite, alpn.as_ref().map(Vec::as_slice))
-            })
+    pub(crate) fn early_data(&self) -> Option<&PskEarlyData> {
+        self.early_data.as_ref()
     }
 
     /// Returns the supported protocol version.
@@ -806,6 +806,13 @@ impl Debug for PresharedKey {
             .field("early_data", &self.early_data)
             .finish_non_exhaustive()
     }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PskEarlyData {
+    pub(crate) max_early_data: u32,
+    pub(crate) suite: CipherSuite,
+    pub(crate) alpn: Option<Vec<u8>>,
 }
 
 /// Reports in constant time whether every byte in `x` is zero,

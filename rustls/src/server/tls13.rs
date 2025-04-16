@@ -166,9 +166,7 @@ mod client_hello {
         fn alpn(&self) -> Option<&[u8]> {
             match self {
                 Self::Resumption(v) => v.alpn.as_ref().map(|v| v.0.as_slice()),
-                Self::External(v) => v
-                    .early_data()
-                    .and_then(|(_, _, alpn)| alpn),
+                Self::External(v) => v.early_data()?.alpn.as_deref(),
             }
         }
 
@@ -188,9 +186,7 @@ mod client_hello {
         fn cipher_suite(&self) -> Option<CipherSuite> {
             match self {
                 Self::Resumption(v) => Some(v.cipher_suite),
-                Self::External(v) => v
-                    .early_data()
-                    .map(|(_, suite, ..)| suite),
+                Self::External(v) => v.early_data().map(|v| v.suite),
             }
         }
 
@@ -1076,7 +1072,7 @@ mod client_hello {
             }
             PresharedKey::External(v) => v
                 .early_data()
-                .is_some_and(|(n, ..)| n > 0),
+                .is_some_and(|v| v.max_early_data > 0),
         };
 
         /* "For PSKs provisioned via NewSessionTicket, a server MUST validate

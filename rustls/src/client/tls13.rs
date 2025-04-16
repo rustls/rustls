@@ -761,7 +761,8 @@ impl PresharedKeysRef<'_> {
                 // Therefore, we use that PSK's early data
                 // configuration.
                 psks.first()
-                    .and_then(|psk| psk.early_data().map(|(n, ..)| n))
+                    .and_then(|psk| psk.early_data())
+                    .map(|v| v.max_early_data)
                     .unwrap_or_default()
             }
         }
