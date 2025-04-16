@@ -198,6 +198,13 @@ pub(super) fn start_handshake(
 struct ExpectServerHello {
     input: ClientHelloInput,
     transcript_buffer: HandshakeHashBuffer,
+    // The key schedule for sending early data.
+    //
+    // If the server accepts the PSK used for early data then
+    // this is used to compute the rest of the key schedule.
+    // Otherwise, it is thrown away.
+    //
+    // If this is `None` then we do not support early data.
     early_key_schedule: Option<KeyScheduleEarly>,
     offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
     suite: Option<SupportedCipherSuite>,
@@ -222,6 +229,11 @@ struct ClientHelloInput {
     prev_ech_ext: Option<ClientExtension>,
 }
 
+/// Emits the initial ClientHello or a ClientHello in response to
+/// a HelloRetryRequest.
+///
+/// `retryreq` and `suite` are `None` if this is the initial
+/// ClientHello.
 fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
@@ -593,7 +605,12 @@ fn emit_client_hello_for_retry(
     })
 }
 
-/// Prepare resumption with the session state retrieved from storage.
+/// Prepares `exts` and `cx` with TLS 1.2 or TLS 1.3 session
+/// resumption.
+///
+/// - `suite` is `None` if this is the initial ClientHello, or
+///   `Some` if we're retrying in response to
+///   a HelloRetryRequest.
 ///
 /// This function will push onto `exts` to
 ///
@@ -602,10 +619,7 @@ fn emit_client_hello_for_retry(
 /// (c) send a request for 1.3 early data if allowed and
 /// (d) send a 1.3 preshared key if we have one.
 ///
-/// For resumption to work, the currently negotiated cipher suite (if available) must be
-/// able to resume from the resuming session's cipher suite.
-///
-/// If 1.3 resumption can continue, returns the 1.3 session value for further processing.
+/// It returns the TLS 1.3 PSKs, if any, for further processing.
 fn prepare_resumption<'a>(
     resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
     exts: &mut Vec<ClientExtension>,

@@ -48,6 +48,9 @@ pub(super) fn can_resume(
     // the request to resume the session if the server_name extension contains
     // a different name. Instead, it proceeds with a full handshake to
     // establish a new session."
+    //
+    // RFC 8446: "The server MUST ensure that it selects
+    // a compatible PSK (if any) and cipher suite."
     resumedata.cipher_suite == suite.suite()
         && (resumedata.extended_ms == using_ems || (resumedata.extended_ms && !using_ems))
         && &resumedata.sni == sni
