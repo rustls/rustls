@@ -130,10 +130,9 @@ pub(super) fn handle_server_hello(
     // mode was selected by the server; at present, this is
     // indicated by the presence of the "key_share" in the
     // ServerHello."
-    let mode = if their_key_share.is_some() {
-        PSKKeyExchangeMode::PSK_DHE_KE
-    } else {
-        PSKKeyExchangeMode::PSK_KE
+    let mode = match their_key_share {
+        Some(_) => PSKKeyExchangeMode::PSK_DHE_KE,
+        None => PSKKeyExchangeMode::PSK_KE,
     };
 
     // RFC 8446: "Servers MUST NOT select a key exchange mode
