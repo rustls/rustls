@@ -32,7 +32,8 @@ use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, UnixTime};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
-    ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
+    ClientHello, PresharedKeySelection, ProducesTickets, ServerConfig, ServerConnection,
+    WebPkiClientVerifier,
 };
 use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
@@ -680,7 +681,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
             let psk = PresharedKey::external(identity, psk.as_slice()).unwrap();
             keys.insert(psk);
         }
-        cfg.preshared_keys = Arc::new(keys);
+        cfg.preshared_keys = PresharedKeySelection::Enabled(Arc::new(keys));
     }
 
     match opts.install_cert_compression_algs {

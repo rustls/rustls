@@ -120,6 +120,34 @@ pub trait SelectsPresharedKeys: Debug + Send + Sync {
     fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>>;
 }
 
+/// Determines how TLS 1.3 preshared keys are supported.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum PresharedKeySelection {
+    /// Preshared keys are enabled.
+    Enabled(Arc<dyn SelectsPresharedKeys>),
+    /// Preshared keys are required.
+    ///
+    /// The server will abort the connection if the client does
+    /// not provide a valid preshared key.
+    Required(Arc<dyn SelectsPresharedKeys>),
+    /// Preshared keys are disabled.
+    Disabled,
+}
+
+impl PresharedKeySelection {
+    pub(crate) fn is_required(&self) -> bool {
+        matches!(self, Self::Required(_))
+    }
+
+    pub(crate) fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
+        match self {
+            Self::Enabled(v) | Self::Required(v) => v.load_psk(identity),
+            Self::Disabled => None,
+        }
+    }
+}
+
 /// How to choose a certificate chain and signing key for use
 /// in server authentication.
 ///
@@ -315,13 +343,7 @@ pub struct ServerConfig {
     pub ticketer: Arc<dyn ProducesTickets>,
 
     /// Retrieves external preshared keys.
-    pub preshared_keys: Arc<dyn SelectsPresharedKeys>,
-
-    /// Only allow preshared key handshakes.
-    ///
-    /// The server will abort the connection if the client does
-    /// not provide a valid preshared key.
-    pub only_allow_preshared_keys: bool,
+    pub preshared_keys: PresharedKeySelection,
 
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].

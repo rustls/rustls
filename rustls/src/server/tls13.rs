@@ -410,7 +410,7 @@ mod client_hello {
                 // Always process the "pre_shared_key" extension
                 // last.
                 let psk = self.pre_shared_key(cx, chm, client_hello, psk_mode)?;
-                if psk.is_none() && self.config.only_allow_preshared_keys {
+                if psk.is_none() && self.config.preshared_keys.is_required() {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
                         Error::General(String::from(

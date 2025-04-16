@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 
 use pki_types::{CertificateDer, PrivateKeyDer};
 
-use super::{ResolvesServerCert, ServerConfig, handy};
+use super::{PresharedKeySelection, ResolvesServerCert, ServerConfig, handy};
 use crate::builder::{ConfigBuilder, WantsVerifier};
 use crate::error::Error;
 use crate::sign::{CertifiedKey, SingleCertAndKey};
@@ -109,8 +109,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             #[cfg(not(feature = "std"))]
             session_storage: Arc::new(handy::NoServerSessionStorage {}),
             ticketer: Arc::new(handy::NeverProducesTickets {}),
-            preshared_keys: Arc::new(handy::NeverSelectsPsks {}),
-            only_allow_preshared_keys: false,
+            preshared_keys: PresharedKeySelection::Disabled,
             alpn_protocols: Vec::new(),
             versions: self.state.versions,
             key_log: Arc::new(NoKeyLog {}),
