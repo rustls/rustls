@@ -190,8 +190,15 @@ impl Tls12ClientSessionValue {
         Arc::clone(&self.common.ticket)
     }
 
-    pub(crate) fn ticket_bytes(&self) -> &[u8] {
-        self.common.ticket.0.as_slice()
+    /// Returns the ticket bytes, or `None` if the ticket is
+    /// empty.
+    pub(crate) fn ticket_bytes(&self) -> Option<&[u8]> {
+        let ticket = self.common.ticket.0.as_slice();
+        if ticket.is_empty() {
+            None
+        } else {
+            Some(ticket)
+        }
     }
 
     pub(crate) fn extended_ms(&self) -> bool {

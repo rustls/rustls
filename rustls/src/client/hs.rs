@@ -804,10 +804,9 @@ fn tls12_resumption(
         return;
     }
 
-    let ticket = resuming.ticket_bytes();
-    if ticket.is_empty() {
+    let Some(ticket) = resuming.ticket_bytes() else {
         return;
-    }
+    };
     exts.push(ClientExtension::SessionTicket(ClientSessionTicket::Offer(
         Payload::new(ticket),
     )));
