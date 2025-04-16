@@ -63,6 +63,8 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
     ExtensionType::ExtendedMasterSecret,
 ];
 
+/// `early_key_schedule` is `Some` if we sent the "early_data"
+/// extension to the server.
 pub(super) fn handle_server_hello(
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
