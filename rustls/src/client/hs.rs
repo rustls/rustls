@@ -154,15 +154,14 @@ pub(super) fn start_handshake(
     let psks = resuming
         .map(PresharedKeys::Resumption)
         .or_else(|| {
-            if config.supports_version(ProtocolVersion::TLSv1_3) {
-                let psks = config.preshared_keys.psks(&server_name);
-                if psks.is_empty() {
-                    None
-                } else {
-                    Some(PresharedKeys::External(psks))
-                }
-            } else {
+            if !config.supports_version(ProtocolVersion::TLSv1_3) {
+                return None;
+            }
+            let psks = config.preshared_keys.psks(&server_name);
+            if psks.is_empty() {
                 None
+            } else {
+                Some(PresharedKeys::External(psks))
             }
         });
 
