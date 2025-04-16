@@ -969,7 +969,6 @@ impl std::error::Error for EarlyDataError {}
 #[derive(Debug)]
 pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
-    pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
     pub(super) ech_status: EchStatus,
 }
 
@@ -977,7 +976,6 @@ impl ClientConnectionData {
     fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
-            resumption_ciphersuite: None,
             ech_status: EchStatus::NotOffered,
         }
     }

@@ -341,7 +341,6 @@ pub(super) fn prepare_resumption(
 ) {
     let resuming_suite = resuming_session.suite();
     cx.common.suite = Some(resuming_suite.into());
-    cx.data.resumption_ciphersuite = Some(resuming_suite.into());
     // The EarlyData extension MUST be supplied together with the
     // PreSharedKey extension.
     let max_early_data_size = resuming_session.max_early_data_size();
