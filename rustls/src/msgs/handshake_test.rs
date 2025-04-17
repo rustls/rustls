@@ -7,7 +7,7 @@ use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     CertificateType, ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
-    KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
+    KeyUpdateRequest, NamedGroup, PskKeyExchangeMode, ServerNameType,
 };
 use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
@@ -973,7 +973,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
             ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
             ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
-            ClientExtension::PresharedKeyModes(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
+            ClientExtension::PresharedKeyModes(vec![PskKeyExchangeMode::PSK_DHE_KE]),
             ClientExtension::PresharedKey(PresharedKeyOffer {
                 identities: vec![
                     PresharedKeyIdentity::new(vec![3, 4, 5], 123456),

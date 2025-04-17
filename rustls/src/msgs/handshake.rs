@@ -24,7 +24,7 @@ use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, 
 use crate::msgs::enums::{
     CertificateStatusType, CertificateType, ClientCertificateType, Compression, ECCurveType,
     ECPointFormat, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest,
-    NamedGroup, PSKKeyExchangeMode, ServerNameType,
+    NamedGroup, PskKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
 use crate::sync::Arc;
@@ -559,7 +559,7 @@ impl CertificateStatusRequest {
 // ---
 
 /// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
-impl TlsListElement for PSKKeyExchangeMode {
+impl TlsListElement for PskKeyExchangeMode {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("PskKeyExchangeModes"),
     };
@@ -603,7 +603,7 @@ pub enum ClientExtension {
     Protocols(Vec<ProtocolName>),
     SupportedVersions(Vec<ProtocolVersion>),
     KeyShare(Vec<KeyShareEntry>),
-    PresharedKeyModes(Vec<PSKKeyExchangeMode>),
+    PresharedKeyModes(Vec<PskKeyExchangeMode>),
     PresharedKey(PresharedKeyOffer),
     Cookie(PayloadU16<NonEmpty>),
     ExtendedMasterSecretRequest,
@@ -1174,7 +1174,7 @@ impl ClientHelloPayload {
             .is_some_and(|ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
-    pub(crate) fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
+    pub(crate) fn psk_modes(&self) -> Option<&[PskKeyExchangeMode]> {
         let ext = self.find_extension(ExtensionType::PSKKeyExchangeModes)?;
         match ext {
             ClientExtension::PresharedKeyModes(psk_modes) => Some(psk_modes),
@@ -1182,7 +1182,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
+    pub(crate) fn psk_mode_offered(&self, mode: PskKeyExchangeMode) -> bool {
         self.psk_modes()
             .map(|modes| modes.contains(&mode))
             .unwrap_or(false)
