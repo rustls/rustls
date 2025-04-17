@@ -495,6 +495,23 @@ enum_builder! {
     }
 }
 
+impl CipherSuite {
+    /// Returns the TLS 1.3 hash algorithm used by the cipher
+    /// suite, or `None` if `self` is not a TLS 1.3 cipher suite.
+    pub(crate) fn tls13_hash_alg(self) -> Option<HashAlgorithm> {
+        use CipherSuite::*;
+
+        match self {
+            TLS13_AES_128_GCM_SHA256
+            | TLS13_CHACHA20_POLY1305_SHA256
+            | TLS13_AES_128_CCM_SHA256
+            | TLS13_AES_128_CCM_8_SHA256 => Some(HashAlgorithm::SHA256),
+            TLS13_AES_256_GCM_SHA384 => Some(HashAlgorithm::SHA384),
+            _ => None,
+        }
+    }
+}
+
 enum_builder! {
     /// The `SignatureScheme` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.

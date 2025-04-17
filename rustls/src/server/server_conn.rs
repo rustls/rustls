@@ -19,7 +19,7 @@ use crate::common_state::{Protocol, State};
 use crate::conn::{ConnectionCommon, ConnectionCore, UnbufferedConnectionCommon};
 #[cfg(doc)]
 use crate::crypto;
-use crate::crypto::CryptoProvider;
+use crate::crypto::{CryptoProvider, PresharedKey};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::log::trace;
@@ -108,6 +108,44 @@ pub trait ProducesTickets: Debug + Send + Sync {
     /// panic-proof, and otherwise bullet-proof.  If the decryption
     /// fails, return None.
     fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>>;
+}
+
+/// Selects TLS 1.3 external preshared keys.
+pub trait SelectsPresharedKeys: Debug + Send + Sync {
+    /// Retrieves a preshared key.
+    ///
+    /// To help prevent adversaries from discovering identities
+    /// supported by the server, identity comparisons should be
+    /// performed in constant time.
+    fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>>;
+}
+
+/// Determines how TLS 1.3 preshared keys are supported.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub enum PresharedKeySelection {
+    /// Preshared keys are enabled.
+    Enabled(Arc<dyn SelectsPresharedKeys>),
+    /// Preshared keys are required.
+    ///
+    /// The server will abort the connection if the client does
+    /// not provide a valid preshared key.
+    Required(Arc<dyn SelectsPresharedKeys>),
+    /// Preshared keys are disabled.
+    Disabled,
+}
+
+impl PresharedKeySelection {
+    pub(crate) fn is_required(&self) -> bool {
+        matches!(self, Self::Required(_))
+    }
+
+    pub(crate) fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
+        match self {
+            Self::Enabled(v) | Self::Required(v) => v.load_psk(identity),
+            Self::Disabled => None,
+        }
+    }
 }
 
 /// How to choose a certificate chain and signing key for use
@@ -303,6 +341,9 @@ pub struct ServerConfig {
     /// See [ServerConfig#sharing-resumption-storage-between-serverconfigs]
     /// for a warning related to this field.
     pub ticketer: Arc<dyn ProducesTickets>,
+
+    /// Retrieves external preshared keys.
+    pub preshared_keys: PresharedKeySelection,
 
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].

@@ -15,6 +15,7 @@ use crate::{KeyLog, Tls13CipherSuite, quic};
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SecretKind {
+    ExternalPskBinderKey,
     ResumptionPskBinderKey,
     ClientEarlyTrafficSecret,
     ClientHandshakeTrafficSecret,
@@ -32,6 +33,7 @@ impl SecretKind {
     fn to_bytes(self) -> &'static [u8] {
         use self::SecretKind::*;
         match self {
+            ExternalPskBinderKey => b"ext binder",
             ResumptionPskBinderKey => b"res binder",
             ClientEarlyTrafficSecret => b"c e traffic",
             ClientHandshakeTrafficSecret => b"c hs traffic",
@@ -78,18 +80,33 @@ struct KeySchedule {
 // with an empty or trivial secret, or extract the wrong kind of secrets
 // at a given point.
 
-/// KeySchedule for early data stage.
+/// The "early secret" stage of the key schedule WITH a PSK.
+///
+/// This is only useful when you need to use one of the binder
+/// keys, the "client_early_traffic_secret", or
+/// "early_exporter_master_secret".
+///
+/// See [`KeySchedulePreHandshake`] for more information.
 pub(crate) struct KeyScheduleEarly {
     ks: KeySchedule,
 }
 
 impl KeyScheduleEarly {
-    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+    pub(crate) fn new(suite: &'static Tls13CipherSuite, psk: &[u8]) -> Self {
         Self {
-            ks: KeySchedule::new(suite, secret),
+            ks: KeySchedule::new(suite, psk),
         }
     }
 
+    /// Computes the `client_early_traffic_secret` and writes it
+    /// to `common`.
+    ///
+    /// `hs_hash` is `Transcript-Hash(ClientHello)`.
+    ///
+    /// ```text
+    /// Derive-Secret(., "c e traffic", ClientHello)
+    ///               = client_early_traffic_secret
+    /// ```
     pub(crate) fn client_early_traffic_secret(
         &self,
         hs_hash: &hash::Output,
@@ -130,33 +147,77 @@ impl KeyScheduleEarly {
         self.ks
             .sign_verify_data(&resumption_psk_binder_key, hs_hash)
     }
+
+    pub(crate) fn external_psk_binder_key_and_sign_verify_data(
+        &self,
+        hs_hash: &hash::Output,
+    ) -> hmac::Tag {
+        // Derive-Secret(., "ext binder", "")
+        //               = binder_key
+        let binder_key = self
+            .ks
+            .derive_for_empty_hash(SecretKind::ExternalPskBinderKey);
+        self.ks
+            .sign_verify_data(&binder_key, hs_hash)
+    }
 }
 
-/// Pre-handshake key schedule
+/// The "early secret" stage of the key schedule.
 ///
-/// The inner `KeySchedule` is either constructed without any secrets based on the HKDF algorithm
-/// or is extracted from a `KeyScheduleEarly`. This can then be used to derive the `KeyScheduleHandshakeStart`.
+/// Call [`KeySchedulePreHandshake::new`] to create it without
+/// a PSK, or use [`From<KeyScheduleEarly>`] to create it with
+/// a PSK.
+///
+/// ```text
+///          0
+///          |
+///          v
+/// PSK -> HKDF-Extract = Early Secret
+///          |
+///          +-----> Derive-Secret(., "ext binder" | "res binder", "")
+///          |                     = binder_key
+///          |
+///          +-----> Derive-Secret(., "c e traffic", ClientHello)
+///          |                     = client_early_traffic_secret
+///          |
+///          +-----> Derive-Secret(., "e exp master", ClientHello)
+///          |                     = early_exporter_master_secret
+///          v
+///    Derive-Secret(., "derived", "")
+/// ```
 pub(crate) struct KeySchedulePreHandshake {
     ks: KeySchedule,
 }
 
 impl KeySchedulePreHandshake {
+    /// Creates a key schedule without a PSK.
     pub(crate) fn new(suite: &'static Tls13CipherSuite) -> Self {
         Self {
             ks: KeySchedule::new_with_empty_secret(suite),
         }
     }
 
+    /// `shared_secret` is the "(EC)DHE" secret input to
+    /// "HKDF-Extract":
+    ///
+    /// ```text
+    /// (EC)DHE -> HKDF-Extract = Handshake Secret
+    /// ```
     pub(crate) fn into_handshake(
         mut self,
-        shared_secret: SharedSecret,
+        shared_secret: Option<SharedSecret>,
     ) -> KeyScheduleHandshakeStart {
-        self.ks
-            .input_secret(shared_secret.secret_bytes());
+        if let Some(shared_secret) = shared_secret {
+            self.ks
+                .input_secret(shared_secret.secret_bytes());
+        } else {
+            self.ks.input_empty()
+        }
         KeyScheduleHandshakeStart { ks: self.ks }
     }
 }
 
+/// Creates a key schedule with a PSK.
 impl From<KeyScheduleEarly> for KeySchedulePreHandshake {
     fn from(KeyScheduleEarly { ks }: KeyScheduleEarly) -> Self {
         Self { ks }
@@ -164,6 +225,8 @@ impl From<KeyScheduleEarly> for KeySchedulePreHandshake {
 }
 
 /// KeySchedule during handshake.
+///
+/// Created by [`KeySchedulePreHandshake`].
 pub(crate) struct KeyScheduleHandshakeStart {
     ks: KeySchedule,
 }
@@ -600,11 +663,11 @@ impl<'a> ResumptionSecret<'a> {
 }
 
 impl KeySchedule {
-    fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, psk: &[u8]) -> Self {
         Self {
             current: suite
                 .hkdf_provider
-                .extract_from_secret(None, secret),
+                .extract_from_secret(None, psk),
             suite,
         }
     }
@@ -641,6 +704,7 @@ impl KeySchedule {
         self.suite.aead_alg.decrypter(key, iv)
     }
 
+    /// Creates a key schedule without a PSK.
     fn new_with_empty_secret(suite: &'static Tls13CipherSuite) -> Self {
         Self {
             current: suite
@@ -651,6 +715,10 @@ impl KeySchedule {
     }
 
     /// Input the empty secret.
+    ///
+    /// RFC 8446: "If a given secret is not available, then the
+    /// 0-value consisting of a string of Hash.length bytes set
+    /// to zeros is used."
     fn input_empty(&mut self) {
         let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
         self.current = self
@@ -669,6 +737,12 @@ impl KeySchedule {
     }
 
     /// Derive a secret of given `kind`, using current handshake hash `hs_hash`.
+    ///
+    /// More specifically
+    /// ```text
+    ///    Derive-Secret(., "derived", Messages)
+    /// ```
+    /// where `hs_hash` is `Messages`.
     fn derive(&self, kind: SecretKind, hs_hash: &[u8]) -> OkmBlock {
         hkdf_expand_label_block(self.current.as_ref(), kind.to_bytes(), hs_hash)
     }
@@ -692,10 +766,25 @@ impl KeySchedule {
     }
 
     /// Derive a secret of given `kind` using the hash of the empty string
-    /// for the handshake hash.  Useful only for
-    /// `SecretKind::ResumptionPSKBinderKey` and
-    /// `SecretKind::DerivedSecret`.
+    /// for the handshake hash.
+    ///
+    /// More specifically:
+    /// ```text
+    /// Derive-Secret(., Label, "")
+    /// ```
+    /// where `kind` is `Label`.
+    ///
+    /// Useful only for the following `SecretKind`s:
+    /// - `SecretKind::ExternalPskBinderKey`
+    /// - `SecretKind::ResumptionPSKBinderKey`
+    /// - `SecretKind::DerivedSecret`
     fn derive_for_empty_hash(&self, kind: SecretKind) -> OkmBlock {
+        debug_assert!(
+            kind == SecretKind::ExternalPskBinderKey
+                || kind == SecretKind::ResumptionPskBinderKey
+                || kind == SecretKind::DerivedSecret
+        );
+
         let empty_hash = self
             .suite
             .common
@@ -707,12 +796,16 @@ impl KeySchedule {
 
     /// Sign the finished message consisting of `hs_hash` using a current
     /// traffic secret.
+    ///
+    /// See RFC 8446 section 4.4.4.
     fn sign_finish(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
         self.sign_verify_data(base_key, hs_hash)
     }
 
     /// Sign the finished message consisting of `hs_hash` using the key material
     /// `base_key`.
+    ///
+    /// See RFC 8446 section 4.4.4.
     fn sign_verify_data(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
         let expander = self
             .suite

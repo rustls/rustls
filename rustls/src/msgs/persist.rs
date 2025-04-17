@@ -18,6 +18,7 @@ use crate::tls12::Tls12CipherSuite;
 use crate::tls13::Tls13CipherSuite;
 use crate::verify::ServerCertVerifier;
 
+#[derive(Debug)]
 pub(crate) struct Retrieved<T> {
     pub(crate) value: T,
     retrieved_at: UnixTime,
@@ -31,11 +32,8 @@ impl<T> Retrieved<T> {
         }
     }
 
-    pub(crate) fn map<M>(&self, f: impl FnOnce(&T) -> Option<&M>) -> Option<Retrieved<&M>> {
-        Some(Retrieved {
-            value: f(&self.value)?,
-            retrieved_at: self.retrieved_at,
-        })
+    pub(crate) fn map_into<'a, M>(&'a self, f: impl FnOnce(&'a T, UnixTime) -> M) -> M {
+        f(&self.value, self.retrieved_at)
     }
 }
 
@@ -190,6 +188,17 @@ impl Tls12ClientSessionValue {
 
     pub(crate) fn ticket(&mut self) -> Arc<PayloadU16> {
         Arc::clone(&self.common.ticket)
+    }
+
+    /// Returns the ticket bytes, or `None` if the ticket is
+    /// empty.
+    pub(crate) fn ticket_bytes(&self) -> Option<&[u8]> {
+        let ticket = self.common.ticket.0.as_slice();
+        if ticket.is_empty() {
+            None
+        } else {
+            Some(ticket)
+        }
     }
 
     pub(crate) fn extended_ms(&self) -> bool {

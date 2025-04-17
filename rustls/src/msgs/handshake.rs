@@ -399,6 +399,13 @@ impl PresharedKeyIdentity {
             obfuscated_ticket_age: age,
         }
     }
+
+    pub(crate) fn external(id: Vec<u8>) -> Self {
+        // See 4.2.11 of RFC 8446: "For identities established
+        // externally, an obfuscated_ticket_age of 0 SHOULD be
+        // used..."
+        Self::new(id, 0)
+    }
 }
 
 impl Codec<'_> for PresharedKeyIdentity {
@@ -437,6 +444,19 @@ impl PresharedKeyOffer {
         Self {
             identities: vec![id],
             binders: vec![PresharedKeyBinder::from(binder)],
+        }
+    }
+}
+
+impl FromIterator<(PresharedKeyIdentity, PresharedKeyBinder)> for PresharedKeyOffer {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (PresharedKeyIdentity, PresharedKeyBinder)>,
+    {
+        let (identities, binders) = iter.into_iter().unzip();
+        Self {
+            identities,
+            binders,
         }
     }
 }
@@ -1122,16 +1142,24 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
-        self.psk_modes()
-            .map(|modes| modes.contains(&mode))
-            .unwrap_or(false)
-    }
-
     pub(crate) fn set_psk_binder(&mut self, binder: impl Into<Vec<u8>>) {
         let last_extension = self.extensions.last_mut();
         if let Some(ClientExtension::PresharedKey(offer)) = last_extension {
             offer.binders[0] = PresharedKeyBinder::from(binder.into());
+        }
+    }
+
+    /// Returns the PSK binders.
+    ///
+    /// Only useful when "filling in" the binders for an external
+    /// PSK.
+    pub(crate) fn psk_binders_mut(&mut self) -> &mut [PresharedKeyBinder] {
+        // The "pre_shared_key" extension is always last.
+        let last_extension = self.extensions.last_mut();
+        if let Some(ClientExtension::PresharedKey(offer)) = last_extension {
+            &mut offer.binders
+        } else {
+            &mut []
         }
     }
 
@@ -2771,6 +2799,8 @@ impl<'a> HandshakeMessagePayload<'a> {
             .map(|_| Self { typ, payload })
     }
 
+    /// Returns the encoding of `self`, less the PSK binders,
+    /// which are always the final bytes in the ClientHello.
     pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
         let ret_len = ret.len() - self.total_binder_length();
@@ -2778,6 +2808,7 @@ impl<'a> HandshakeMessagePayload<'a> {
         ret
     }
 
+    /// Returns the total encoded length of the PSK binders.
     pub(crate) fn total_binder_length(&self) -> usize {
         match &self.payload {
             HandshakePayload::ClientHello(ch) => match ch.extensions.last() {
