@@ -164,6 +164,36 @@ mod connection {
             name: ServerName<'static>,
             params: Vec<u8>,
         ) -> Result<Self, Error> {
+            Self::new_with_alpn(
+                Arc::clone(&config),
+                quic_version,
+                name,
+                params,
+                config.alpn_protocols.clone(),
+            )
+        }
+
+        /// Make a new QUIC ClientConnection with custom ALPN protocols.
+        ///
+        /// This method allows specifying ALPN protocols at the connection level.
+        ///
+        /// * `config` controls how we behave in the TLS protocol
+        /// * `quic_version` is the QUIC version to use
+        /// * `name` is the name of the server we want to talk to
+        /// * `params` contains the TLS-encoded transport parameters to send
+        /// * `alpn_protocols` are the ALPN protocols to use for this specific connection
+        ///
+        /// Examples:
+        /// * `new_with_alpn(..., vec![])` - Turn off ALPN for this connection
+        /// * `new_with_alpn(..., vec![b"h3".to_vec()])` - Use a specific ALPN protocol
+        /// * `new_with_alpn(..., config.alpn_protocols.clone())` - Use config's ALPN protocols
+        pub fn new_with_alpn(
+            config: Arc<ClientConfig>,
+            quic_version: Version,
+            name: ServerName<'static>,
+            params: Vec<u8>,
+            alpn_protocols: Vec<Vec<u8>>,
+        ) -> Result<Self, Error> {
             if !config.supports_version(ProtocolVersion::TLSv1_3) {
                 return Err(Error::General(
                     "TLS 1.3 support is required for QUIC".into(),
@@ -181,7 +211,13 @@ mod connection {
                 Version::V1 | Version::V2 => ClientExtension::TransportParameters(params),
             };
 
-            let mut inner = ConnectionCore::for_client(config, name, vec![ext], Protocol::Quic)?;
+            let mut inner = ConnectionCore::for_client(
+                config,
+                name,
+                vec![ext],
+                Protocol::Quic,
+                alpn_protocols,
+            )?;
             inner.common_state.quic.version = quic_version;
             Ok(Self {
                 inner: inner.into(),

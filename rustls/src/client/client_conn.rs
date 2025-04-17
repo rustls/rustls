@@ -698,15 +698,46 @@ mod connection {
     }
 
     impl ClientConnection {
-        /// Make a new ClientConnection.  `config` controls how
+        /// Make a new ClientConnection. `config` controls how
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
         pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-            Ok(Self {
-                inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
-            })
+            Self::new_with_alpn(Arc::clone(&config), name, config.alpn_protocols.clone())
         }
 
+        /// Make a new ClientConnection with custom ALPN protocols.
+        ///
+        /// This method allows specifying ALPN protocols at the connection level.
+        ///
+        /// * `config` controls how we behave in the TLS protocol
+        /// * `name` is the name of the server we want to talk to
+        /// * `alpn_protocols` are the ALPN protocols to use for this specific connection
+        ///
+        /// Examples:
+        /// * `new_with_alpn(..., vec![])` - Turn off ALPN for this connection
+        /// * `new_with_alpn(..., vec![b"http/1.1".to_vec()])` - Use a specific ALPN protocol
+        /// * `new_with_alpn(..., config.alpn_protocols.clone())` - Use config's ALPN protocols
+        pub fn new_with_alpn(
+            config: Arc<ClientConfig>,
+            name: ServerName<'static>,
+            alpn_protocols: Vec<Vec<u8>>,
+        ) -> Result<Self, Error> {
+            if let Some(sz) = config.max_fragment_size {
+                if sz < 32 {
+                    return Err(Error::BadMaxFragmentSize);
+                }
+            }
+
+            Ok(Self {
+                inner: ConnectionCommon::from(ConnectionCore::for_client(
+                    config,
+                    name,
+                    Vec::new(),
+                    Protocol::Tcp,
+                    alpn_protocols,
+                )?),
+            })
+        }
         /// Returns an `io::Write` implementer you can write bytes to
         /// to send TLS1.3 early data (a.k.a. "0-RTT data") to the server.
         ///
@@ -823,13 +854,14 @@ impl ConnectionCore<ClientConnectionData> {
         name: ServerName<'static>,
         extra_exts: Vec<ClientExtension>,
         proto: Protocol,
+        alpn_protocols: Vec<Vec<u8>>,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
         common_state.fips = config.fips();
-        let mut data = ClientConnectionData::new();
+        let mut data = ClientConnectionData::new(alpn_protocols.clone());
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -838,7 +870,7 @@ impl ConnectionCore<ClientConnectionData> {
             sendable_plaintext: None,
         };
 
-        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        let state = hs::start_handshake(name, extra_exts, config, alpn_protocols, &mut cx)?;
         Ok(Self::new(state, data, common_state))
     }
 
@@ -859,15 +891,41 @@ impl UnbufferedClientConnection {
     /// Make a new ClientConnection. `config` controls how we behave in the TLS protocol, `name` is
     /// the name of the server we want to talk to.
     pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-        Ok(Self {
-            inner: ConnectionCore::for_client(config, name, Vec::new(), Protocol::Tcp)?.into(),
-        })
+        Self::new_with_alpn(Arc::clone(&config), name, config.alpn_protocols.clone())
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
     /// Should be used with care as it exposes secret key material.
     pub fn dangerous_extract_secrets(self) -> Result<ExtractedSecrets, Error> {
         self.inner.dangerous_extract_secrets()
+    }
+
+    /// Make a new UnbufferedClientConnection with custom ALPN protocols.
+    ///
+    /// This method allows specifying ALPN protocols at the connection level.
+    ///
+    /// * `config` controls how we behave in the TLS protocol
+    /// * `name` is the name of the server we want to talk to
+    /// * `alpn_protocols` are the ALPN protocols to use for this specific connection
+    ///
+    /// Examples:
+    /// * `new_with_alpn(..., vec![])` - Turn off ALPN for this connection
+    /// * `new_with_alpn(..., vec![b"http/1.1".to_vec()])` - Use a specific ALPN protocol
+    /// * `new_with_alpn(..., config.alpn_protocols.clone())` - Use config's ALPN protocols
+    pub fn new_with_alpn(
+        config: Arc<ClientConfig>,
+        name: ServerName<'static>,
+        alpn_protocols: Vec<Vec<u8>>,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            inner: UnbufferedConnectionCommon::from(ConnectionCore::for_client(
+                config,
+                name,
+                Vec::new(),
+                Protocol::Tcp,
+                alpn_protocols,
+            )?),
+        })
     }
 }
 
@@ -971,14 +1029,16 @@ pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
     pub(super) ech_status: EchStatus,
+    pub(super) alpn_protocols: Vec<Vec<u8>>,
 }
 
 impl ClientConnectionData {
-    fn new() -> Self {
+    fn new(alpn_protocols: Vec<Vec<u8>>) -> Self {
         Self {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
             ech_status: EchStatus::NotOffered,
+            alpn_protocols,
         }
     }
 }
