@@ -198,7 +198,14 @@ pub(super) fn start_handshake(
 struct ExpectServerHello {
     input: ClientHelloInput,
     transcript_buffer: HandshakeHashBuffer,
-    early_key_schedule: Option<KeyScheduleEarly>,
+    // The key schedule for sending early data.
+    //
+    // If the server accepts the PSK used for early data then
+    // this is used to compute the rest of the key schedule.
+    // Otherwise, it is thrown away.
+    //
+    // If this is `None` then we do not support early data.
+    early_data_key_schedule: Option<KeyScheduleEarly>,
     offered_key_share: Option<Box<dyn ActiveKeyExchange>>,
     suite: Option<SupportedCipherSuite>,
     ech_state: Option<EchState>,
@@ -222,6 +229,11 @@ struct ClientHelloInput {
     prev_ech_ext: Option<ClientExtension>,
 }
 
+/// Emits the initial ClientHello or a ClientHello in response to
+/// a HelloRetryRequest.
+///
+/// `retryreq` and `suite` are `None` if this is the initial
+/// ClientHello.
 fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
@@ -503,7 +515,7 @@ fn emit_client_hello_for_retry(
         payload: HandshakePayload::ClientHello(chp_payload),
     };
 
-    let early_key_schedule = match (ech_state.as_mut(), tls13_session) {
+    let tls13_early_data_key_schedule = match (ech_state.as_mut(), tls13_session) {
         // If we're performing ECH and resuming, then the PSK binder will have been dealt with
         // separately, and we need to take the early_data_key_schedule computed for the inner hello.
         (Some(ech_state), Some(tls13_session)) => ech_state
@@ -550,37 +562,38 @@ fn emit_client_hello_for_retry(
     cx.common.send_msg(ch, false);
 
     // Calculate the hash of ClientHello and use it to derive EarlyTrafficSecret
-    let early_key_schedule = early_key_schedule.map(|(resuming_suite, schedule)| {
-        if !cx.data.early_data.is_enabled() {
-            return schedule;
-        }
+    let early_data_key_schedule =
+        tls13_early_data_key_schedule.map(|(resuming_suite, schedule)| {
+            if !cx.data.early_data.is_enabled() {
+                return schedule;
+            }
 
-        let (transcript_buffer, random) = match &ech_state {
-            // When using ECH the early data key schedule is derived based on the inner
-            // hello transcript and random.
-            Some(ech_state) => (
-                &ech_state.inner_hello_transcript,
-                &ech_state.inner_hello_random.0,
-            ),
-            None => (&transcript_buffer, &input.random.0),
-        };
+            let (transcript_buffer, random) = match &ech_state {
+                // When using ECH the early data key schedule is derived based on the inner
+                // hello transcript and random.
+                Some(ech_state) => (
+                    &ech_state.inner_hello_transcript,
+                    &ech_state.inner_hello_random.0,
+                ),
+                None => (&transcript_buffer, &input.random.0),
+            };
 
-        tls13::derive_early_traffic_secret(
-            &*config.key_log,
-            cx,
-            resuming_suite,
-            &schedule,
-            &mut input.sent_tls13_fake_ccs,
-            transcript_buffer,
-            random,
-        );
-        schedule
-    });
+            tls13::derive_early_traffic_secret(
+                &*config.key_log,
+                cx,
+                resuming_suite,
+                &schedule,
+                &mut input.sent_tls13_fake_ccs,
+                transcript_buffer,
+                random,
+            );
+            schedule
+        });
 
     let next = ExpectServerHello {
         input,
         transcript_buffer,
-        early_key_schedule,
+        early_data_key_schedule,
         offered_key_share: key_share,
         suite,
         ech_state,
@@ -593,7 +606,12 @@ fn emit_client_hello_for_retry(
     })
 }
 
-/// Prepare resumption with the session state retrieved from storage.
+/// Prepares `exts` and `cx` with TLS 1.2 or TLS 1.3 session
+/// resumption.
+///
+/// - `suite` is `None` if this is the initial ClientHello, or
+///   `Some` if we're retrying in response to
+///   a HelloRetryRequest.
 ///
 /// This function will push onto `exts` to
 ///
@@ -602,10 +620,7 @@ fn emit_client_hello_for_retry(
 /// (c) send a request for 1.3 early data if allowed and
 /// (d) send a 1.3 preshared key if we have one.
 ///
-/// For resumption to work, the currently negotiated cipher suite (if available) must be
-/// able to resume from the resuming session's cipher suite.
-///
-/// If 1.3 resumption can continue, returns the 1.3 session value for further processing.
+/// It returns the TLS 1.3 PSKs, if any, for further processing.
 fn prepare_resumption<'a>(
     resuming: &'a Option<persist::Retrieved<ClientSessionValue>>,
     exts: &mut Vec<ClientExtension>,
@@ -901,7 +916,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     randoms,
                     suite,
                     transcript,
-                    self.early_key_schedule,
+                    self.early_data_key_schedule,
                     self.input.hello,
                     // We always send a key share when TLS 1.3 is enabled.
                     self.offered_key_share.unwrap(),
