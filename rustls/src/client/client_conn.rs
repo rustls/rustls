@@ -861,7 +861,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
         common_state.fips = config.fips();
-        let mut data = ClientConnectionData::new(alpn_protocols.clone());
+        let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,
@@ -1029,16 +1029,14 @@ pub struct ClientConnectionData {
     pub(super) early_data: EarlyData,
     pub(super) resumption_ciphersuite: Option<SupportedCipherSuite>,
     pub(super) ech_status: EchStatus,
-    pub(super) alpn_protocols: Vec<Vec<u8>>,
 }
 
 impl ClientConnectionData {
-    fn new(alpn_protocols: Vec<Vec<u8>>) -> Self {
+    fn new() -> Self {
         Self {
             early_data: EarlyData::new(),
             resumption_ciphersuite: None,
             ech_status: EchStatus::NotOffered,
-            alpn_protocols,
         }
     }
 }

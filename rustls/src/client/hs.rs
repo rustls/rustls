@@ -826,7 +826,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         if !cx.common.is_tls13() {
             process_alpn_protocol(
                 cx.common,
-                &cx.data.alpn_protocols,
+                &self.input.alpn_protocols,
                 server_hello.alpn_protocol(),
             )?;
         }
