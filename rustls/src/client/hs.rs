@@ -364,6 +364,9 @@ fn emit_client_hello_for_retry(
                 .map(|proto| &proto[..])
                 .collect::<Vec<_>>(),
         )));
+
+        // Save alpn_protocols for future reference
+        input.hello.alpn_protocols = input.alpn_protocols.clone();
     }
 
     input.hello.offered_cert_compression = if support_tls13 && !config.cert_decompressors.is_empty()
