@@ -5,6 +5,7 @@ use core::fmt;
 use pki_types::{ServerName, UnixTime};
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
+use webpki::KeyUsage;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
 use crate::msgs::handshake::{EchConfigPayload, KeyExchangeAlgorithm};
@@ -434,6 +435,17 @@ pub enum CertificateError {
     /// The certificate is being used for a different purpose than allowed.
     InvalidPurpose,
 
+    /// The certificate is being used for a different purpose than allowed.
+    ///
+    /// This variant is semantically the same as `InvalidPurpose`, but includes
+    /// extra data to improve error reports.
+    InvalidPurposeContext {
+        /// Extended key purpose that was required by the application.
+        required: ExtendedKeyPurpose,
+        /// Extended key purposes that were presented in the peer's certificate.
+        presented: Vec<ExtendedKeyPurpose>,
+    },
+
     /// The certificate is valid, but the handshake is rejected for other
     /// reasons.
     ApplicationVerificationFailure,
@@ -538,7 +550,7 @@ impl From<CertificateError> for AlertDescription {
             | ExpiredRevocationList
             | ExpiredRevocationListContext { .. } => Self::UnknownCA,
             BadSignature => Self::DecryptError,
-            InvalidPurpose => Self::UnsupportedCertificate,
+            InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
             // RFC 5246/RFC 8446
             // certificate_unknown
@@ -631,6 +643,24 @@ impl From<CertificateError> for Error {
     #[inline]
     fn from(e: CertificateError) -> Self {
         Self::InvalidCertificate(e)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExtendedKeyPurpose {
+    ClientAuth,
+    ServerAuth,
+    Other(Vec<usize>),
+}
+
+impl ExtendedKeyPurpose {
+    pub(crate) fn for_values(values: impl Iterator<Item = usize>) -> Self {
+        let values = values.collect::<Vec<_>>();
+        match &*values {
+            KeyUsage::CLIENT_AUTH_REPR => Self::ClientAuth,
+            KeyUsage::SERVER_AUTH_REPR => Self::ServerAuth,
+            _ => Self::Other(values),
+        }
     }
 }
 

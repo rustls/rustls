@@ -96,3 +96,6 @@ zlib-rs = "0.5"
 [profile.bench]
 codegen-units = 1
 lto = true
+
+[patch."crates-io"]
+rustls-webpki = { git = "https://github.com/rustls/webpki", branch = "eku-not-found-context" }
