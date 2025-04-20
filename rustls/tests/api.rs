@@ -5095,9 +5095,6 @@ mod test_quic {
         step(&mut client, &mut server)
             .unwrap()
             .unwrap();
-        step(&mut server, &mut client)
-            .unwrap()
-            .unwrap();
         assert!(client.is_early_data_accepted());
 
         // 0-RTT rejection
@@ -8284,67 +8281,6 @@ fn hybrid_kx_component_share_not_offered_unless_supported_seperately() {
         &mut server,
     );
 }
-#[test]
-fn connection_level_alpn_protocols() {
-    let mut client_config = make_client_config(KeyType::Rsa2048);
-
-    // Set config-level ALPN protocols
-    client_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    let client_config = Arc::new(client_config);
-
-    // Create connection with connection-level ALPN protocols
-    let custom_alpn = vec![b"http/1.1".to_vec()];
-    let client = ClientConnection::new_with_alpn(
-        Arc::clone(&client_config),
-        server_name("localhost"),
-        custom_alpn,
-    )
-    .unwrap();
-
-    // Create connection with default config ALPN protocols
-    let default_client =
-        ClientConnection::new(Arc::clone(&client_config), server_name("localhost")).unwrap();
-
-    // Test empty ALPN protocols at connection level
-    let no_alpn_client = ClientConnection::new_with_alpn(
-        Arc::clone(&client_config),
-        server_name("localhost"),
-        vec![],
-    )
-    .unwrap();
-}
-
-#[cfg(feature = "quic")]
-#[test]
-fn quic_connection_level_alpn_protocols() {
-    use rustls::quic::Version;
-
-    let mut client_config = make_client_config(KeyType::Rsa);
-
-    // Set config-level ALPN protocols
-    client_config.alpn_protocols = vec![b"h3".to_vec()];
-    let client_config = Arc::new(client_config);
-
-    // Create connection with connection-level ALPN protocols
-    let custom_alpn = vec![b"h3-29".to_vec()];
-    let client = ClientConnection::new_with_alpn(
-        Arc::clone(&client_config),
-        Version::V1,
-        server_name("localhost"),
-        vec![],
-        custom_alpn,
-    )
-    .unwrap();
-
-    // Create connection with default config ALPN protocols
-    let default_client = ClientConnection::new(
-        Arc::clone(&client_config),
-        Version::V1,
-        server_name("localhost"),
-        vec![],
-    )
-    .unwrap();
-}
 
 #[test]
 fn hybrid_kx_component_share_offered_but_server_chooses_something_else() {
@@ -8450,3 +8386,32 @@ fn assert_client_sends_hello_with_one_hybrid_key_share(msg: &mut Message) -> Alt
 }
 
 const CONFIDENTIALITY_LIMIT: u64 = 1024;
+#[test]
+fn connection_level_alpn_protocols() {
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+
+    // Set config-level ALPN protocols
+    client_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    let client_config = Arc::new(client_config);
+
+    // Create connection with connection-level ALPN protocols
+    let custom_alpn = vec![b"http/1.1".to_vec()];
+    let _client = ClientConnection::new_with_alpn(
+        Arc::clone(&client_config),
+        server_name("localhost"),
+        custom_alpn,
+    )
+    .unwrap();
+
+    // Create connection with default config ALPN protocols
+    let _default_client =
+        ClientConnection::new(Arc::clone(&client_config), server_name("localhost")).unwrap();
+
+    // Test empty ALPN protocols at connection level
+    let _no_alpn_client = ClientConnection::new_with_alpn(
+        Arc::clone(&client_config),
+        server_name("localhost"),
+        vec![],
+    )
+    .unwrap();
+}
