@@ -85,27 +85,24 @@ pub(super) fn handle_server_hello(
     server_hello_msg: &Message<'_>,
     ech_state: Option<EchState>,
 ) -> hs::NextStateOrError<'static> {
-    // Early data requires a PSK.
-    //
-    // TODO(eric): Express this with types, like
-    // `../server/tls13::InputSecrets`.
-    if early_data_key_schedule.is_some() {
-        let n = psks.as_ref().map(|psk| psk.len());
-        debug_assert!(!matches!(n, None | Some(0)));
-    }
+    if cfg!(debug_assertions) {
+        // Early data requires a PSK.
+        if early_data_key_schedule.is_some() {
+            let n = psks.as_ref().map(|psk| psk.len());
+            debug_assert!(!matches!(n, None | Some(0)));
+        }
 
-    // We don't need to offer a key share if we're
-    // - only offering external PSKs, and
-    // - not offering PSK_DHE_KE
-    // TODO(eric): Express this with types, like
-    // `../server/tls13::InputSecrets`.
-    if our_key_share.is_none() {
-        debug_assert!(psks.is_none() || psk_modes.contains(&PSKKeyExchangeMode::PSK_DHE_KE));
-    }
+        // We don't need to offer a key share if we're
+        // - only offering external PSKs, and
+        // - not offering PSK_DHE_KE
+        if our_key_share.is_none() {
+            debug_assert!(psks.is_none() || psk_modes.contains(&PSKKeyExchangeMode::PSK_DHE_KE));
+        }
 
-    // If we sent PSKs then we must also send PSK modes.
-    if psks.is_some() {
-        debug_assert!(!psk_modes.is_empty());
+        // If we sent PSKs then we must also send PSK modes.
+        if psks.is_some() {
+            debug_assert!(!psk_modes.is_empty());
+        }
     }
 
     validate_server_hello(cx.common, server_hello)?;
