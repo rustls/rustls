@@ -5095,6 +5095,9 @@ mod test_quic {
         step(&mut client, &mut server)
             .unwrap()
             .unwrap();
+        step(&mut server, &mut client)
+            .unwrap()
+            .unwrap();
         assert!(client.is_early_data_accepted());
 
         // 0-RTT rejection
