@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt;
+use core::marker::PhantomData;
 
 use pki_types::CertificateDer;
 use zeroize::Zeroize;
@@ -110,86 +111,119 @@ impl fmt::Debug for PayloadU24<'_> {
 }
 
 /// An arbitrary, unknown-content, u16-length-prefixed payload
+///
+/// The `C` type parameter controls whether decoded values may
+/// be empty.
 #[derive(Clone, Eq, PartialEq)]
-pub struct PayloadU16(pub Vec<u8>);
+pub struct PayloadU16<C: Cardinality = MaybeEmpty>(pub(crate) Vec<u8>, PhantomData<C>);
 
-impl PayloadU16 {
+impl<C: Cardinality> PayloadU16<C> {
     pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    pub fn empty() -> Self {
-        Self::new(Vec::new())
-    }
-
-    pub fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
-        (slice.len() as u16).encode(bytes);
-        bytes.extend_from_slice(slice);
+        debug_assert!(bytes.len() >= C::MIN);
+        Self(bytes, PhantomData)
     }
 }
 
-impl Codec<'_> for PayloadU16 {
+impl PayloadU16<MaybeEmpty> {
+    pub(crate) fn empty() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+impl<C: Cardinality> Codec<'_> for PayloadU16<C> {
     fn encode(&self, bytes: &mut Vec<u8>) {
-        Self::encode_slice(&self.0, bytes);
+        debug_assert!(self.0.len() >= C::MIN);
+        (self.0.len() as u16).encode(bytes);
+        bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = u16::read(r)? as usize;
+        if len < C::MIN {
+            return Err(InvalidMessage::IllegalEmptyValue);
+        }
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Ok(Self(body))
+        Ok(Self(body, PhantomData))
     }
 }
 
-impl fmt::Debug for PayloadU16 {
+impl<C: Cardinality> fmt::Debug for PayloadU16<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, &self.0)
     }
 }
 
 /// An arbitrary, unknown-content, u8-length-prefixed payload
+///
+/// `C` controls the minimum length accepted when decoding.
 #[derive(Clone, Eq, PartialEq)]
-pub struct PayloadU8(pub(crate) Vec<u8>);
+pub struct PayloadU8<C: Cardinality = MaybeEmpty>(pub(crate) Vec<u8>, PhantomData<C>);
 
-impl PayloadU8 {
+impl<C: Cardinality> PayloadU8<C> {
     pub(crate) fn encode_slice(slice: &[u8], bytes: &mut Vec<u8>) {
         (slice.len() as u8).encode(bytes);
         bytes.extend_from_slice(slice);
     }
 
     pub(crate) fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    pub(crate) fn empty() -> Self {
-        Self(Vec::new())
+        debug_assert!(bytes.len() >= C::MIN);
+        Self(bytes, PhantomData)
     }
 }
 
-impl Codec<'_> for PayloadU8 {
+impl PayloadU8<MaybeEmpty> {
+    pub(crate) fn empty() -> Self {
+        Self(Vec::new(), PhantomData)
+    }
+}
+
+impl<C: Cardinality> Codec<'_> for PayloadU8<C> {
     fn encode(&self, bytes: &mut Vec<u8>) {
+        debug_assert!(self.0.len() >= C::MIN);
         (self.0.len() as u8).encode(bytes);
         bytes.extend_from_slice(&self.0);
     }
 
     fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
         let len = u8::read(r)? as usize;
+        if len < C::MIN {
+            return Err(InvalidMessage::IllegalEmptyValue);
+        }
         let mut sub = r.sub(len)?;
         let body = sub.rest().to_vec();
-        Ok(Self(body))
+        Ok(Self(body, PhantomData))
     }
 }
 
-impl Zeroize for PayloadU8 {
+impl<C: Cardinality> Zeroize for PayloadU8<C> {
     fn zeroize(&mut self) {
         self.0.zeroize();
     }
 }
 
-impl fmt::Debug for PayloadU8 {
+impl<C: Cardinality> fmt::Debug for PayloadU8<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         hex(f, &self.0)
     }
+}
+
+pub trait Cardinality: Clone + Eq + PartialEq {
+    const MIN: usize;
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct MaybeEmpty;
+
+impl Cardinality for MaybeEmpty {
+    const MIN: usize = 0;
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct NonEmpty;
+
+impl Cardinality for NonEmpty {
+    const MIN: usize = 1;
 }
 
 // Format an iterator of u8 into a hex string

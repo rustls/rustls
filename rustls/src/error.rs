@@ -184,6 +184,14 @@ pub enum InvalidMessage {
     UnsupportedCurveType,
     /// A peer sent an unsupported key exchange algorithm.
     UnsupportedKeyExchangeAlgorithm(KeyExchangeAlgorithm),
+    /// A server sent an empty ticket
+    EmptyTicketValue,
+    /// A peer sent an empty list of items, but a non-empty list is required.
+    ///
+    /// The argument names the context.
+    IllegalEmptyList(&'static str),
+    /// A peer sent an empty value, but a non-empty value is required.
+    IllegalEmptyValue,
 }
 
 impl From<InvalidMessage> for Error {

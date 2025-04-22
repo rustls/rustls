@@ -6222,7 +6222,7 @@ fn test_server_rejects_empty_sni_extension() {
             typ: ExtensionType::ServerName,
             body: encoding::len_u16(vec![]),
         },
-        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
+        Error::InvalidMessage(InvalidMessage::IllegalEmptyList("ServerNames")),
     );
 }
 
@@ -6251,9 +6251,9 @@ fn test_server_rejects_clients_without_any_kx_groups() {
         .unwrap();
     assert_eq!(
         server.process_new_packets(),
-        Err(Error::PeerIncompatible(
-            PeerIncompatible::NoKxGroupsInCommon
-        ))
+        Err(Error::InvalidMessage(InvalidMessage::IllegalEmptyList(
+            "NamedGroups"
+        )))
     );
 }
 
@@ -7283,7 +7283,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
             key_config: HpkeKeyConfig {
                 config_id: 10,
                 kem_id: suite_id.kem,
-                public_key: PayloadU16(public_key.0.clone()),
+                public_key: PayloadU16::new(public_key.0.clone()),
                 symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
                     kdf_id: suite_id.sym.kdf_id,
                     aead_id: suite_id.sym.aead_id,

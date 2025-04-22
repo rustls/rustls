@@ -7,7 +7,7 @@ use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     CertificateType, ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
-    KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
+    KeyUpdateRequest, NamedGroup, PskKeyExchangeMode, ServerNameType,
 };
 use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
@@ -267,7 +267,7 @@ fn rejects_truncated_sni() {
 
 #[test]
 fn can_round_trip_psk_identity() {
-    let bytes = [0, 0, 0x11, 0x22, 0x33, 0x44];
+    let bytes = [0, 1, 0x99, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
     println!("{:?}", psk_id);
     assert_eq!(psk_id.obfuscated_ticket_age, 0x11223344);
@@ -946,7 +946,7 @@ fn sample_hello_retry_request() -> HelloRetryRequest {
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         extensions: vec![
             HelloRetryExtension::KeyShare(NamedGroup::X25519),
-            HelloRetryExtension::Cookie(PayloadU16(vec![0])),
+            HelloRetryExtension::Cookie(PayloadU16::new(vec![0])),
             HelloRetryExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             HelloRetryExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
@@ -973,7 +973,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
             ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
             ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
-            ClientExtension::PresharedKeyModes(vec![PSKKeyExchangeMode::PSK_DHE_KE]),
+            ClientExtension::PresharedKeyModes(vec![PskKeyExchangeMode::PSK_DHE_KE]),
             ClientExtension::PresharedKey(PresharedKeyOffer {
                 identities: vec![
                     PresharedKeyIdentity::new(vec![3, 4, 5], 123456),
@@ -984,7 +984,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
                     PresharedKeyBinder::from(vec![3, 4, 5]),
                 ],
             }),
-            ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
+            ClientExtension::Cookie(PayloadU16::new(vec![1, 2, 3])),
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
             ClientExtension::ServerCertTypes(vec![CertificateType::RawPublicKey]),
@@ -1014,7 +1014,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             ServerExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
-            ServerExtension::RenegotiationInfo(PayloadU8(vec![0])),
+            ServerExtension::RenegotiationInfo(PayloadU8::new(vec![0])),
             ServerExtension::Protocols(vec![ProtocolName::from(vec![0])]),
             ServerExtension::KeyShare(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             ServerExtension::PresharedKey(3),
@@ -1209,7 +1209,7 @@ fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
 
 fn sample_certificate_payload_tls13() -> CertificatePayloadTls13<'static> {
     CertificatePayloadTls13 {
-        context: PayloadU8(vec![1, 2, 3]),
+        context: PayloadU8::new(vec![1, 2, 3]),
         entries: vec![CertificateEntry {
             cert: CertificateDer::from(vec![3, 4, 5]),
             exts: vec![
@@ -1240,7 +1240,7 @@ fn sample_ecdhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
                 curve_type: ECCurveType::NamedCurve,
                 named_group: NamedGroup::X25519,
             },
-            public: PayloadU8(vec![1, 2, 3]),
+            public: PayloadU8::new(vec![1, 2, 3]),
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
@@ -1249,9 +1249,9 @@ fn sample_ecdhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
 fn sample_dhe_server_key_exchange_payload() -> ServerKeyExchangePayload {
     ServerKeyExchangePayload::Known(ServerKeyExchange {
         params: ServerKeyExchangeParams::Dh(ServerDhParams {
-            dh_p: PayloadU16(vec![1, 2, 3]),
-            dh_g: PayloadU16(vec![2]),
-            dh_Ys: PayloadU16(vec![1, 2]),
+            dh_p: PayloadU16::new(vec![1, 2, 3]),
+            dh_g: PayloadU16::new(vec![2]),
+            dh_Ys: PayloadU16::new(vec![1, 2]),
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
@@ -1271,7 +1271,7 @@ fn sample_certificate_request_payload() -> CertificateRequestPayload {
 
 fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 {
     CertificateRequestPayloadTls13 {
-        context: PayloadU8(vec![1, 2, 3]),
+        context: PayloadU8::new(vec![1, 2, 3]),
         extensions: vec![
             CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             CertReqExtension::AuthorityNames(vec![DistinguishedName::from(vec![1, 2, 3])]),
@@ -1286,7 +1286,7 @@ fn sample_certificate_request_payload_tls13() -> CertificateRequestPayloadTls13 
 fn sample_new_session_ticket_payload() -> NewSessionTicketPayload {
     NewSessionTicketPayload {
         lifetime_hint: 1234,
-        ticket: Arc::new(PayloadU16(vec![1, 2, 3])),
+        ticket: Arc::new(PayloadU16::new(vec![1, 2, 3])),
     }
 }
 
@@ -1294,8 +1294,8 @@ fn sample_new_session_ticket_payload_tls13() -> NewSessionTicketPayloadTls13 {
     NewSessionTicketPayloadTls13 {
         lifetime: 123,
         age_add: 1234,
-        nonce: PayloadU8(vec![1, 2, 3]),
-        ticket: Arc::new(PayloadU16(vec![4, 5, 6])),
+        nonce: PayloadU8::new(vec![1, 2, 3]),
+        ticket: Arc::new(PayloadU16::new(vec![4, 5, 6])),
         exts: vec![NewSessionTicketExtension::Unknown(UnknownExtension {
             typ: ExtensionType::Unknown(12345),
             payload: Payload::Borrowed(&[1, 2, 3]),

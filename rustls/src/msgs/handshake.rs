@@ -19,12 +19,12 @@ use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
-use crate::msgs::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
+use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
     CertificateStatusType, CertificateType, ClientCertificateType, Compression, ECCurveType,
     ECPointFormat, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest,
-    NamedGroup, PSKKeyExchangeMode, ServerNameType,
+    NamedGroup, PskKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
 use crate::sync::Arc;
@@ -37,10 +37,10 @@ use crate::x509::wrap_in_sequence;
 /// the `PayloadU8` or `PayloadU16` types. This is typically used for types where we don't need
 /// anything other than access to the underlying bytes.
 macro_rules! wrapped_payload(
-  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident,) => {
+  ($(#[$comment:meta])* $vis:vis struct $name:ident, $inner:ident$(<$inner_ty:ty>)?,) => {
     $(#[$comment])*
     #[derive(Clone, Debug)]
-    $vis struct $name($inner);
+    $vis struct $name($inner$(<$inner_ty>)?);
 
     impl From<Vec<u8>> for $name {
         fn from(v: Vec<u8>) -> Self {
@@ -206,16 +206,25 @@ impl UnknownExtension {
     }
 }
 
+/// RFC8422: `ECPointFormat ec_point_format_list<1..2^8-1>`
 impl TlsListElement for ECPointFormat {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ECPointFormats"),
+    };
 }
 
+/// RFC8422: `NamedCurve named_curve_list<2..2^16-1>`
 impl TlsListElement for NamedGroup {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("NamedGroups"),
+    };
 }
 
+/// RFC8446: `SignatureScheme supported_signature_algorithms<2..2^16-2>;`
 impl TlsListElement for SignatureScheme {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::NoSignatureSchemes,
+    };
 }
 
 #[derive(Clone, Debug)]
@@ -283,8 +292,11 @@ impl Codec<'_> for ServerName {
     }
 }
 
+/// RFC6066: `ServerName server_name_list<1..2^16-1>`
 impl TlsListElement for ServerName {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("ServerNames"),
+    };
 }
 
 pub(crate) trait ConvertServerNameList {
@@ -313,10 +325,16 @@ impl ConvertServerNameList for [ServerName] {
     }
 }
 
-wrapped_payload!(pub struct ProtocolName, PayloadU8,);
+wrapped_payload!(
+    /// RFC7301: `opaque ProtocolName<1..2^8-1>;`
+    pub struct ProtocolName, PayloadU8<NonEmpty>,
+);
 
+/// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
 impl TlsListElement for ProtocolName {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("ProtocolNames"),
+    };
 }
 
 pub(crate) trait ConvertProtocolNameList {
@@ -355,7 +373,8 @@ impl ConvertProtocolNameList for Vec<ProtocolName> {
 #[derive(Clone, Debug)]
 pub struct KeyShareEntry {
     pub(crate) group: NamedGroup,
-    pub(crate) payload: PayloadU16,
+    /// RFC8446: `opaque key_exchange<1..2^16-1>;`
+    pub(crate) payload: PayloadU16<NonEmpty>,
 }
 
 impl KeyShareEntry {
@@ -388,7 +407,8 @@ impl Codec<'_> for KeyShareEntry {
 // --- TLS 1.3 PresharedKey offers ---
 #[derive(Clone, Debug)]
 pub(crate) struct PresharedKeyIdentity {
-    pub(crate) identity: PayloadU16,
+    /// RFC8446: `opaque identity<1..2^16-1>;`
+    pub(crate) identity: PayloadU16<NonEmpty>,
     pub(crate) obfuscated_ticket_age: u32,
 }
 
@@ -415,14 +435,23 @@ impl Codec<'_> for PresharedKeyIdentity {
     }
 }
 
+/// RFC8446: `PskIdentity identities<7..2^16-1>;`
 impl TlsListElement for PresharedKeyIdentity {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskIdentities"),
+    };
 }
 
-wrapped_payload!(pub(crate) struct PresharedKeyBinder, PayloadU8,);
+wrapped_payload!(
+    /// RFC8446: `opaque PskBinderEntry<32..255>;`
+    pub(crate) struct PresharedKeyBinder, PayloadU8<NonEmpty>,
+);
 
+/// RFC8446: `PskBinderEntry binders<33..2^16-1>;`
 impl TlsListElement for PresharedKeyBinder {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskBinders"),
+    };
 }
 
 #[derive(Clone, Debug)]
@@ -458,6 +487,7 @@ impl Codec<'_> for PresharedKeyOffer {
 // --- RFC6066 certificate status request ---
 wrapped_payload!(pub(crate) struct ResponderId, PayloadU16,);
 
+/// RFC6066: `ResponderID responder_id_list<0..2^16-1>;`
 impl TlsListElement for ResponderId {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -528,24 +558,39 @@ impl CertificateStatusRequest {
 
 // ---
 
-impl TlsListElement for PSKKeyExchangeMode {
-    const SIZE_LEN: ListLength = ListLength::U8;
+/// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
+impl TlsListElement for PskKeyExchangeMode {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("PskKeyExchangeModes"),
+    };
 }
 
+/// RFC8446: `KeyShareEntry client_shares<0..2^16-1>;`
 impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// RFC8446: `ProtocolVersion versions<2..254>;`
 impl TlsListElement for ProtocolVersion {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ProtocolVersions"),
+    };
 }
 
+/// RFC7250: `CertificateType client_certificate_types<1..2^8-1>;`
+///
+/// Ditto `CertificateType server_certificate_types<1..2^8-1>;`
 impl TlsListElement for CertificateType {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("CertificateTypes"),
+    };
 }
 
+/// RFC8879: `CertificateCompressionAlgorithm algorithms<2..2^8-2>;`
 impl TlsListElement for CertificateCompressionAlgorithm {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("CertificateCompressionAlgorithms"),
+    };
 }
 
 #[derive(Clone, Debug)]
@@ -558,9 +603,9 @@ pub enum ClientExtension {
     Protocols(Vec<ProtocolName>),
     SupportedVersions(Vec<ProtocolVersion>),
     KeyShare(Vec<KeyShareEntry>),
-    PresharedKeyModes(Vec<PSKKeyExchangeMode>),
+    PresharedKeyModes(Vec<PskKeyExchangeMode>),
     PresharedKey(PresharedKeyOffer),
-    Cookie(PayloadU16),
+    Cookie(PayloadU16<NonEmpty>),
     ExtendedMasterSecretRequest,
     CertificateStatusRequest(CertificateStatusRequest),
     ServerCertTypes(Vec<CertificateType>),
@@ -685,7 +730,13 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::EncryptedClientHelloOuterExtensions => {
                 Self::EncryptedClientHelloOuterExtensions(Vec::read(&mut sub)?)
             }
-            ExtensionType::CertificateAuthorities => Self::AuthorityNames(Vec::read(&mut sub)?),
+            ExtensionType::CertificateAuthorities => Self::AuthorityNames({
+                let items = Vec::read(&mut sub)?;
+                if items.is_empty() {
+                    return Err(InvalidMessage::IllegalEmptyList("DistinguishedNames"));
+                }
+                items
+            }),
             _ => Self::Unknown(UnknownExtension::read(typ, &mut sub)),
         };
 
@@ -888,20 +939,29 @@ impl Codec<'_> for ClientHelloPayload {
     }
 }
 
+/// RFC8446: `CipherSuite cipher_suites<2..2^16-2>;`
 impl TlsListElement for CipherSuite {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("CipherSuites"),
+    };
 }
 
+/// RFC5246: `CompressionMethod compression_methods<1..2^8-1>;`
 impl TlsListElement for Compression {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("Compressions"),
+    };
 }
 
 impl TlsListElement for ClientExtension {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// draft-ietf-tls-esni-17: `ExtensionType OuterExtensions<2..254>;`
 impl TlsListElement for ExtensionType {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ExtensionTypes"),
+    };
 }
 
 impl ClientHelloPayload {
@@ -1114,7 +1174,7 @@ impl ClientHelloPayload {
             .is_some_and(|ext| ext.ext_type() == ExtensionType::PreSharedKey)
     }
 
-    pub(crate) fn psk_modes(&self) -> Option<&[PSKKeyExchangeMode]> {
+    pub(crate) fn psk_modes(&self) -> Option<&[PskKeyExchangeMode]> {
         let ext = self.find_extension(ExtensionType::PSKKeyExchangeModes)?;
         match ext {
             ClientExtension::PresharedKeyModes(psk_modes) => Some(psk_modes),
@@ -1122,7 +1182,7 @@ impl ClientHelloPayload {
         }
     }
 
-    pub(crate) fn psk_mode_offered(&self, mode: PSKKeyExchangeMode) -> bool {
+    pub(crate) fn psk_mode_offered(&self, mode: PskKeyExchangeMode) -> bool {
         self.psk_modes()
             .map(|modes| modes.contains(&mode))
             .unwrap_or(false)
@@ -1175,7 +1235,7 @@ impl ClientHelloPayload {
 #[derive(Clone, Debug)]
 pub(crate) enum HelloRetryExtension {
     KeyShare(NamedGroup),
-    Cookie(PayloadU16),
+    Cookie(PayloadU16<NonEmpty>),
     SupportedVersions(ProtocolVersion),
     EchHelloRetryRequest(Vec<u8>),
     Unknown(UnknownExtension),
@@ -1298,7 +1358,7 @@ impl HelloRetryRequest {
         }
     }
 
-    pub(crate) fn cookie(&self) -> Option<&PayloadU16> {
+    pub(crate) fn cookie(&self) -> Option<&PayloadU16<NonEmpty>> {
         let ext = self.find_extension(ExtensionType::Cookie)?;
         match ext {
             HelloRetryExtension::Cookie(ck) => Some(ck),
@@ -1841,7 +1901,8 @@ impl KxDecode<'_> for ClientKeyExchangeParams {
 #[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientEcdhParams {
-    pub(crate) public: PayloadU8,
+    /// RFC4492: `opaque point <1..2^8-1>;`
+    pub(crate) public: PayloadU8<NonEmpty>,
 }
 
 #[cfg(feature = "tls12")]
@@ -1859,7 +1920,8 @@ impl Codec<'_> for ClientEcdhParams {
 #[cfg(feature = "tls12")]
 #[derive(Debug)]
 pub(crate) struct ClientDhParams {
-    pub(crate) public: PayloadU16,
+    /// RFC5246: `opaque dh_Yc<1..2^16-1>;`
+    pub(crate) public: PayloadU16<NonEmpty>,
 }
 
 #[cfg(feature = "tls12")]
@@ -1878,7 +1940,8 @@ impl Codec<'_> for ClientDhParams {
 #[derive(Debug)]
 pub(crate) struct ServerEcdhParams {
     pub(crate) curve_params: EcParameters,
-    pub(crate) public: PayloadU8,
+    /// RFC4492: `opaque point <1..2^8-1>;`
+    pub(crate) public: PayloadU8<NonEmpty>,
 }
 
 impl ServerEcdhParams {
@@ -1914,9 +1977,12 @@ impl Codec<'_> for ServerEcdhParams {
 #[derive(Debug)]
 #[allow(non_snake_case)]
 pub(crate) struct ServerDhParams {
-    pub(crate) dh_p: PayloadU16,
-    pub(crate) dh_g: PayloadU16,
-    pub(crate) dh_Ys: PayloadU16,
+    /// RFC5246: `opaque dh_p<1..2^16-1>;`
+    pub(crate) dh_p: PayloadU16<NonEmpty>,
+    /// RFC5246: `opaque dh_g<1..2^16-1>;`
+    pub(crate) dh_g: PayloadU16<NonEmpty>,
+    /// RFC5246: `opaque dh_Ys<1..2^16-1>;`
+    pub(crate) dh_Ys: PayloadU16<NonEmpty>,
 }
 
 impl ServerDhParams {
@@ -2138,8 +2204,11 @@ impl HasServerExtensions for Vec<ServerExtension> {
     }
 }
 
+/// RFC5246: `ClientCertificateType certificate_types<1..2^8-1>;`
 impl TlsListElement for ClientCertificateType {
-    const SIZE_LEN: ListLength = ListLength::U8;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ClientCertificateTypes"),
+    };
 }
 
 wrapped_payload!(
@@ -2155,8 +2224,10 @@ wrapped_payload!(
     ///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
     /// }
     /// ```
+    ///
+    /// The TLS encoding is defined in RFC5246: `opaque DistinguishedName<1..2^16-1>;`
     pub struct DistinguishedName,
-    PayloadU16,
+    PayloadU16<NonEmpty>,
 );
 
 impl DistinguishedName {
@@ -2173,6 +2244,8 @@ impl DistinguishedName {
     }
 }
 
+/// RFC8446: `DistinguishedName authorities<3..2^16-1>;` however,
+/// RFC5246: `DistinguishedName certificate_authorities<0..2^16-1>;`
 impl TlsListElement for DistinguishedName {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
@@ -2256,6 +2329,9 @@ impl Codec<'_> for CertReqExtension {
             }
             ExtensionType::CertificateAuthorities => {
                 let cas = Vec::read(&mut sub)?;
+                if cas.is_empty() {
+                    return Err(InvalidMessage::IllegalEmptyList("DistinguishedNames"));
+                }
                 Self::AuthorityNames(cas)
             }
             ExtensionType::CompressCertificate => {
@@ -2469,7 +2545,12 @@ impl Codec<'_> for NewSessionTicketPayloadTls13 {
         let lifetime = u32::read(r)?;
         let age_add = u32::read(r)?;
         let nonce = PayloadU8::read(r)?;
-        let ticket = Arc::new(PayloadU16::read(r)?);
+        // nb. RFC8446: `opaque ticket<1..2^16-1>;`
+        let ticket = Arc::new(match PayloadU16::<NonEmpty>::read(r) {
+            Err(InvalidMessage::IllegalEmptyValue) => Err(InvalidMessage::EmptyTicketValue),
+            Err(err) => Err(err),
+            Ok(pl) => Ok(PayloadU16::new(pl.0)),
+        }?);
         let exts = Vec::read(r)?;
 
         Ok(Self {
@@ -2855,15 +2936,19 @@ impl Codec<'_> for HpkeSymmetricCipherSuite {
     }
 }
 
+/// draft-ietf-tls-esni-24: `HpkeSymmetricCipherSuite cipher_suites<4..2^16-4>;`
 impl TlsListElement for HpkeSymmetricCipherSuite {
-    const SIZE_LEN: ListLength = ListLength::U16;
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("HpkeSymmetricCipherSuites"),
+    };
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct HpkeKeyConfig {
     pub config_id: u8,
     pub kem_id: HpkeKem,
-    pub public_key: PayloadU16,
+    /// draft-ietf-tls-esni-24: `opaque HpkePublicKey<1..2^16-1>;`
+    pub public_key: PayloadU16<NonEmpty>,
     pub symmetric_cipher_suites: Vec<HpkeSymmetricCipherSuite>,
 }
 
@@ -2922,7 +3007,7 @@ impl Codec<'_> for EchConfigContents {
         self.key_config.encode(bytes);
         self.maximum_name_length.encode(bytes);
         let dns_name = &self.public_name.borrow();
-        PayloadU8::encode_slice(dns_name.as_ref().as_ref(), bytes);
+        PayloadU8::<MaybeEmpty>::encode_slice(dns_name.as_ref().as_ref(), bytes);
         self.extensions.encode(bytes);
     }
 
@@ -2931,9 +3016,13 @@ impl Codec<'_> for EchConfigContents {
             key_config: HpkeKeyConfig::read(r)?,
             maximum_name_length: u8::read(r)?,
             public_name: {
-                DnsName::try_from(PayloadU8::read(r)?.0.as_slice())
-                    .map_err(|_| InvalidMessage::InvalidServerName)?
-                    .to_owned()
+                DnsName::try_from(
+                    PayloadU8::<MaybeEmpty>::read(r)?
+                        .0
+                        .as_slice(),
+                )
+                .map_err(|_| InvalidMessage::InvalidServerName)?
+                .to_owned()
             },
             extensions: Vec::read(r)?,
         })
@@ -3088,7 +3177,7 @@ pub struct EncryptedClientHelloOuter {
     /// This field is empty in a ClientHelloOuter sent in response to a HelloRetryRequest.
     pub enc: PayloadU16,
     /// The serialized and encrypted ClientHelloInner structure, encrypted using HPKE.
-    pub payload: PayloadU16,
+    pub payload: PayloadU16<NonEmpty>,
 }
 
 impl Codec<'_> for EncryptedClientHelloOuter {
@@ -3196,7 +3285,7 @@ mod tests {
             key_config: HpkeKeyConfig {
                 config_id: 0,
                 kem_id: HpkeKem::DHKEM_P256_HKDF_SHA256,
-                public_key: PayloadU16(b"xxx".into()),
+                public_key: PayloadU16::new(b"xxx".into()),
                 symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
                     kdf_id: HpkeKdf::HKDF_SHA256,
                     aead_id: HpkeAead::AES_128_GCM,

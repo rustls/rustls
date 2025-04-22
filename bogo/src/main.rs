@@ -19,7 +19,7 @@ use nix::unistd::Pid;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
     ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
-    WebPkiServerVerifier,
+    Tls12Resumption, WebPkiServerVerifier,
 };
 use rustls::crypto::aws_lc_rs::hpke;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
@@ -816,7 +816,11 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
         });
     }
 
-    cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay));
+    cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay))
+        .tls12_resumption(match opts.tickets {
+            true => Tls12Resumption::SessionIdOrTickets,
+            false => Tls12Resumption::SessionIdOnly,
+        });
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
     cfg.require_ems = opts.require_ems;
@@ -884,6 +888,10 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             InvalidMessage::TrailingData("ChangeCipherSpecPayload") | InvalidMessage::InvalidCcs,
         ) => quit(":BAD_CHANGE_CIPHER_SPEC:"),
         Error::InvalidMessage(
+            InvalidMessage::EmptyTicketValue | InvalidMessage::IllegalEmptyList(_),
+        ) => quit(":DECODE_ERROR:"),
+        Error::InvalidMessage(InvalidMessage::IllegalEmptyValue) => quit(":ILLEGAL_EMPTY_VALUE:"),
+        Error::InvalidMessage(
             InvalidMessage::InvalidKeyUpdate
             | InvalidMessage::MissingData(_)
             | InvalidMessage::TrailingData(_)
@@ -950,6 +958,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         }
         Error::PeerMisbehaved(PeerMisbehaved::TooManyKeyUpdateRequests) => {
             quit(":TOO_MANY_KEY_UPDATES:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::ServerEchoedCompatibilitySessionId) => {
+            quit(":SERVER_ECHOED_INVALID_SESSION_ID:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::TooManyEmptyFragments) => {
             quit(":TOO_MANY_EMPTY_FRAGMENTS:")
@@ -1628,6 +1639,7 @@ pub fn main() {
             "-handoff" |
             "-ipv6" |
             "-decline-alpn" |
+            "-permute-extensions" |
             "-expect-no-session" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
@@ -1687,9 +1699,12 @@ pub fn main() {
             "-wpa-202304" |
             "-cnsa-202407" |
             "-srtp-profiles" |
-            "-permute-extensions" |
+            "-use-ticket-aead-callback" |
             "-signed-cert-timestamps" |
             "-on-initial-expect-peer-cert-file" |
+            "-resumption-across-names-enabled" |
+            "-expect-resumable-across-names" |
+            "-expect-not-resumable-across-names" |
             "-use-custom-verify-callback" => {
                 println!("NYI option {:?}", arg);
                 process::exit(BOGO_NACK);
@@ -1757,7 +1772,11 @@ pub fn main() {
         exec(&opts, sess, i);
         if opts.resume_with_tickets_disabled {
             opts.tickets = false;
-            server_cfg = Some(make_server_cfg(&opts));
+
+            match opts.side {
+                Side::Server => server_cfg = Some(make_server_cfg(&opts)),
+                Side::Client => client_cfg = Some(make_client_cfg(&opts)),
+            };
         }
         if opts.on_resume_ech_config_list.is_some() {
             opts.ech_config_list
