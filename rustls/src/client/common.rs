@@ -35,14 +35,16 @@ impl<'a> ServerCertDetails<'a> {
 }
 
 pub(super) struct ClientHelloDetails {
+    pub(super) alpn_protocols: Vec<Vec<u8>>,
     pub(super) sent_extensions: Vec<ExtensionType>,
     pub(super) extension_order_seed: u16,
     pub(super) offered_cert_compression: bool,
 }
 
 impl ClientHelloDetails {
-    pub(super) fn new(extension_order_seed: u16) -> Self {
+    pub(super) fn new(alpn_protocols: Vec<Vec<u8>>, extension_order_seed: u16) -> Self {
         Self {
+            alpn_protocols,
             sent_extensions: Vec::new(),
             extension_order_seed,
             offered_cert_compression: false,

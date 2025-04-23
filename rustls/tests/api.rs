@@ -510,6 +510,36 @@ fn alpn() {
     );
 }
 
+#[test]
+fn connection_level_alpn_protocols() {
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    let server_config = Arc::new(server_config);
+
+    // Config specifies `h2`
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+    client_config.alpn_protocols = vec![b"h2".to_vec()];
+    let client_config = Arc::new(client_config);
+
+    // Client relies on config-specified `h2`, server agrees
+    let mut client =
+        ClientConnection::new(client_config.clone(), server_name("localhost")).unwrap();
+    let mut server = ServerConnection::new(server_config.clone()).unwrap();
+    do_handshake_until_error(&mut client, &mut server).unwrap();
+    assert_eq!(client.alpn_protocol(), Some(&b"h2"[..]));
+
+    // Specify `http/1.1` for the connection, server agrees
+    let mut client = ClientConnection::new_with_alpn(
+        client_config,
+        server_name("localhost"),
+        vec![b"http/1.1".to_vec()],
+    )
+    .unwrap();
+    let mut server = ServerConnection::new(server_config).unwrap();
+    do_handshake_until_error(&mut client, &mut server).unwrap();
+    assert_eq!(client.alpn_protocol(), Some(&b"http/1.1"[..]));
+}
+
 fn version_test(
     client_versions: &[&'static rustls::SupportedProtocolVersion],
     server_versions: &[&'static rustls::SupportedProtocolVersion],

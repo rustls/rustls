@@ -100,6 +100,7 @@ fn find_session(
 
 pub(super) fn start_handshake(
     server_name: ServerName<'static>,
+    alpn_protocols: Vec<Vec<u8>>,
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -185,7 +186,7 @@ pub(super) fn start_handshake(
             #[cfg(feature = "tls12")]
             using_ems: false,
             sent_tls13_fake_ccs: false,
-            hello: ClientHelloDetails::new(extension_order_seed),
+            hello: ClientHelloDetails::new(alpn_protocols, extension_order_seed),
             session_id,
             server_name,
             prev_ech_ext: None,
@@ -364,9 +365,11 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::PresharedKeyModes(psk_modes));
     }
 
-    if !config.alpn_protocols.is_empty() {
+    // Add ALPN extension if we have any protocols
+    if !input.hello.alpn_protocols.is_empty() {
         exts.push(ClientExtension::Protocols(Vec::from_slices(
-            &config
+            &input
+                .hello
                 .alpn_protocols
                 .iter()
                 .map(|proto| &proto[..])
@@ -677,16 +680,13 @@ fn prepare_resumption<'a>(
 
 pub(super) fn process_alpn_protocol(
     common: &mut CommonState,
-    config: &ClientConfig,
+    offered_protocols: &[Vec<u8>],
     proto: Option<&[u8]>,
 ) -> Result<(), Error> {
     common.alpn_protocol = proto.map(ToOwned::to_owned);
 
     if let Some(alpn_protocol) = &common.alpn_protocol {
-        if !config
-            .alpn_protocols
-            .contains(alpn_protocol)
-        {
+        if !offered_protocols.contains(alpn_protocol) {
             return Err(common.send_fatal_alert(
                 AlertDescription::IllegalParameter,
                 PeerMisbehaved::SelectedUnofferedApplicationProtocol,
@@ -700,7 +700,7 @@ pub(super) fn process_alpn_protocol(
     // mechanism) if and only if any ALPN protocols were configured. This defends against badly-behaved
     // servers which accept a connection that requires an application-layer protocol they do not
     // understand.
-    if common.is_quic() && common.alpn_protocol.is_none() && !config.alpn_protocols.is_empty() {
+    if common.is_quic() && common.alpn_protocol.is_none() && !offered_protocols.is_empty() {
         return Err(common.send_fatal_alert(
             AlertDescription::NoApplicationProtocol,
             Error::NoApplicationProtocol,
@@ -838,7 +838,11 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // Extract ALPN protocol
         if !cx.common.is_tls13() {
-            process_alpn_protocol(cx.common, config, server_hello.alpn_protocol())?;
+            process_alpn_protocol(
+                cx.common,
+                &self.input.hello.alpn_protocols,
+                server_hello.alpn_protocol(),
+            )?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
