@@ -164,6 +164,23 @@ mod connection {
             name: ServerName<'static>,
             params: Vec<u8>,
         ) -> Result<Self, Error> {
+            Self::new_with_alpn(
+                Arc::clone(&config),
+                quic_version,
+                name,
+                params,
+                config.alpn_protocols.clone(),
+            )
+        }
+
+        /// Make a new QUIC ClientConnection with custom ALPN protocols.
+        pub fn new_with_alpn(
+            config: Arc<ClientConfig>,
+            quic_version: Version,
+            name: ServerName<'static>,
+            params: Vec<u8>,
+            alpn_protocols: Vec<Vec<u8>>,
+        ) -> Result<Self, Error> {
             if !config.supports_version(ProtocolVersion::TLSv1_3) {
                 return Err(Error::General(
                     "TLS 1.3 support is required for QUIC".into(),
@@ -181,7 +198,13 @@ mod connection {
                 Version::V1 | Version::V2 => ClientExtension::TransportParameters(params),
             };
 
-            let mut inner = ConnectionCore::for_client(config, name, vec![ext], Protocol::Quic)?;
+            let mut inner = ConnectionCore::for_client(
+                config,
+                name,
+                alpn_protocols,
+                vec![ext],
+                Protocol::Quic,
+            )?;
             inner.common_state.quic.version = quic_version;
             Ok(Self {
                 inner: inner.into(),
