@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 
 use crate::common_state::{CommonState, Side};
-use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, Tls13AeadAlgorithm};
+use crate::crypto::cipher::{AeadKey, Iv, MessageDecrypter, NONCE_LEN, Tls13AeadAlgorithm};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError, expand};
 use crate::crypto::{SharedSecret, hash, hmac};
 use crate::error::Error;
@@ -583,12 +583,13 @@ impl KeyScheduleTraffic {
             secret: &OkmBlock,
             hkdf: &'static dyn Hkdf,
             aead_key_len: usize,
+            aead_iv_len: Option<usize>,
         ) -> (AeadKey, Iv) {
             let expander = hkdf.expander_for_okm(secret);
 
             (
                 hkdf_expand_label_aead_key(expander.as_ref(), aead_key_len, b"key", &[]),
-                hkdf_expand_label(expander.as_ref(), b"iv", &[]),
+                hkdf_expand_label_aead_iv_ex(expander.as_ref(), aead_iv_len, b"iv", &[]),
             )
         }
 
@@ -596,11 +597,13 @@ impl KeyScheduleTraffic {
             &self.current_client_traffic_secret,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
+            self.ks.suite.aead_alg.expander_iv_len(),
         );
         let (server_key, server_iv) = expand(
             &self.current_server_traffic_secret,
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
+            self.ks.suite.aead_alg.expander_iv_len(),
         );
         let client_secrets = self
             .ks
@@ -659,7 +662,7 @@ impl KeySchedule {
             .hkdf_provider
             .expander_for_okm(secret);
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
+        let iv = derive_traffic_iv_ex(expander.as_ref(), self.suite.aead_alg);
 
         common
             .record_layer
@@ -681,7 +684,7 @@ impl KeySchedule {
             .hkdf_provider
             .expander_for_okm(secret);
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
+        let iv = derive_traffic_iv_ex(expander.as_ref(), self.suite.aead_alg);
         self.suite.aead_alg.decrypter(key, iv)
     }
 
@@ -862,7 +865,11 @@ pub fn derive_traffic_key(
 ///
 /// [HKDF-Expand-Label]: <https://www.rfc-editor.org/rfc/rfc8446#section-7.1>
 pub fn derive_traffic_iv(expander: &dyn HkdfExpander) -> Iv {
-    hkdf_expand_label(expander, b"iv", &[])
+    hkdf_expand_label_aead_iv_ex(expander, None, b"iv", &[])
+}
+
+fn derive_traffic_iv_ex(expander: &dyn HkdfExpander, aead_alg: &dyn Tls13AeadAlgorithm) -> Iv {
+    hkdf_expand_label_aead_iv_ex(expander, aead_alg.expander_iv_len(), b"iv", &[])
 }
 
 /// [HKDF-Expand-Label] where the output length is a compile-time constant, and therefore
@@ -899,6 +906,23 @@ pub(crate) fn hkdf_expand_label_aead_key(
         let key: AeadKey = expand(e, info);
         key.with_length(key_len)
     })
+}
+
+pub(crate) fn hkdf_expand_label_aead_iv_ex(
+    expander: &dyn HkdfExpander,
+    iv_len: Option<usize>,
+    label: &[u8],
+    context: &[u8],
+) -> Iv {
+    if let Some(iv_len) = iv_len {
+        hkdf_expand_label_inner(expander, label, context, iv_len, |e, info| {
+            let iv: Iv = expand(e, info);
+            iv.with_length(iv_len)
+        })
+    } else {
+        let iv: [u8; NONCE_LEN] = hkdf_expand_label(expander, label, &[]);
+        Iv::new(&iv)
+    }
 }
 
 /// [HKDF-Expand-Label] where the output is a slice.

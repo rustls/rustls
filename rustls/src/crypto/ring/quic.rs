@@ -132,7 +132,7 @@ impl quic::PacketKey for PacketKey {
         payload: &mut [u8],
     ) -> Result<quic::Tag, Error> {
         let aad = aead::Aad::from(header);
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).0);
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).into());
         let tag = self
             .key
             .seal_in_place_separate_tag(nonce, aad, payload)
@@ -155,7 +155,7 @@ impl quic::PacketKey for PacketKey {
     ) -> Result<&'a [u8], Error> {
         let payload_len = payload.len();
         let aad = aead::Aad::from(header);
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).0);
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, packet_number).into());
         self.key
             .open_in_place(nonce, aad, payload)
             .map_err(|_| Error::DecryptError)?;

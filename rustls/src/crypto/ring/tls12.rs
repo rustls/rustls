@@ -184,7 +184,7 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         );
         Box::new(ChaCha20Poly1305MessageDecrypter {
             dec_key,
-            dec_offset: Iv::copy(iv),
+            dec_offset: Iv::new(iv),
         })
     }
 
@@ -194,7 +194,7 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         );
         Box::new(ChaCha20Poly1305MessageEncrypter {
             enc_key,
-            enc_offset: Iv::copy(enc_iv),
+            enc_offset: Iv::new(enc_iv),
         })
     }
 
@@ -216,7 +216,7 @@ impl Tls12AeadAlgorithm for ChaCha20Poly1305 {
         debug_assert_eq!(aead::NONCE_LEN, iv.len());
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 {
             key,
-            iv: Iv::new(iv[..].try_into().unwrap()),
+            iv: Iv::new(iv),
         })
     }
 
@@ -290,7 +290,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).0);
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq).into());
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
         payload.extend_from_slice(&nonce.as_ref()[4..]);
         payload.extend_from_chunks(&msg.payload);
@@ -338,7 +338,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
             return Err(Error::DecryptError);
         }
 
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.dec_offset, seq).0);
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.dec_offset, seq).into());
         let aad = aead::Aad::from(make_tls12_aad(
             seq,
             msg.typ,
@@ -371,7 +371,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         let total_len = self.encrypted_payload_len(msg.payload.len());
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
-        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).0);
+        let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.enc_offset, seq).into());
         let aad = aead::Aad::from(make_tls12_aad(seq, msg.typ, msg.version, msg.payload.len()));
         payload.extend_from_chunks(&msg.payload);
 
@@ -402,5 +402,5 @@ fn gcm_iv(write_iv: &[u8], explicit: &[u8]) -> Iv {
     iv[..4].copy_from_slice(write_iv);
     iv[4..].copy_from_slice(explicit);
 
-    Iv::new(iv)
+    Iv::new(&iv)
 }

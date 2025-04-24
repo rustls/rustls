@@ -6,7 +6,7 @@ use core::fmt::Debug;
 
 /// This module contains optional APIs for implementing QUIC TLS.
 use crate::common_state::Side;
-use crate::crypto::cipher::{AeadKey, Iv};
+use crate::crypto::cipher::{AeadKey, Iv, NONCE_LEN};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock};
 use crate::enums::AlertDescription;
 use crate::error::Error;
@@ -790,10 +790,10 @@ impl<'a> KeyBuilder<'a> {
             &[],
         );
 
-        let packet_iv =
+        let packet_iv: [u8; NONCE_LEN] =
             hkdf_expand_label(self.expander.as_ref(), self.version.packet_iv_label(), &[]);
         self.alg
-            .packet_key(packet_key, packet_iv)
+            .packet_key(packet_key, Iv::new(&packet_iv))
     }
 
     /// Derive header protection keys

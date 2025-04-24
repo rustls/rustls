@@ -44,14 +44,14 @@ impl Tls12AeadAlgorithm for Chacha20Poly1305 {
     fn encrypter(&self, key: AeadKey, iv: &[u8], _: &[u8]) -> Box<dyn MessageEncrypter> {
         Box::new(Tls12Cipher(
             chacha20poly1305::ChaCha20Poly1305::new_from_slice(key.as_ref()).unwrap(),
-            Iv::copy(iv),
+            Iv::new(iv),
         ))
     }
 
     fn decrypter(&self, key: AeadKey, iv: &[u8]) -> Box<dyn MessageDecrypter> {
         Box::new(Tls12Cipher(
             chacha20poly1305::ChaCha20Poly1305::new_from_slice(key.as_ref()).unwrap(),
-            Iv::copy(iv),
+            Iv::new(iv),
         ))
     }
 
@@ -73,7 +73,7 @@ impl Tls12AeadAlgorithm for Chacha20Poly1305 {
         debug_assert_eq!(NONCE_LEN, iv.len());
         Ok(ConnectionTrafficSecrets::Chacha20Poly1305 {
             key,
-            iv: Iv::new(iv[..].try_into().unwrap()),
+            iv: Iv::new(iv),
         })
     }
 }
@@ -91,7 +91,8 @@ impl MessageEncrypter for Tls13Cipher {
 
         payload.extend_from_chunks(&m.payload);
         payload.extend_from_slice(&m.typ.to_array());
-        let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
+        let nonce: [u8; NONCE_LEN] = Nonce::new(&self.1, seq).into();
+        let nonce = chacha20poly1305::Nonce::from(nonce);
         let aad = make_tls13_aad(total_len);
 
         self.0
@@ -118,7 +119,8 @@ impl MessageDecrypter for Tls13Cipher {
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
         let payload = &mut m.payload;
-        let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
+        let nonce: [u8; NONCE_LEN] = Nonce::new(&self.1, seq).into();
+        let nonce = chacha20poly1305::Nonce::from(nonce);
         let aad = make_tls13_aad(payload.len());
 
         self.0
@@ -141,7 +143,8 @@ impl MessageEncrypter for Tls12Cipher {
         let mut payload = PrefixedPayload::with_capacity(total_len);
 
         payload.extend_from_chunks(&m.payload);
-        let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
+        let nonce: [u8; NONCE_LEN] = Nonce::new(&self.1, seq).into();
+        let nonce = chacha20poly1305::Nonce::from(nonce);
         let aad = make_tls12_aad(seq, m.typ, m.version, m.payload.len());
 
         self.0
@@ -162,7 +165,8 @@ impl MessageDecrypter for Tls12Cipher {
         seq: u64,
     ) -> Result<InboundPlainMessage<'a>, rustls::Error> {
         let payload = &m.payload;
-        let nonce = chacha20poly1305::Nonce::from(Nonce::new(&self.1, seq).0);
+        let nonce: [u8; NONCE_LEN] = Nonce::new(&self.1, seq).into();
+        let nonce = chacha20poly1305::Nonce::from(nonce);
         let aad = make_tls12_aad(
             seq,
             m.typ,

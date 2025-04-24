@@ -24,6 +24,14 @@ pub trait Tls13AeadAlgorithm: Send + Sync {
     /// The length of key in bytes required by `encrypter()` and `decrypter()`.
     fn key_len(&self) -> usize;
 
+    /// The provider-specific iv length in bytes (differs from `NONCE_LEN`).
+    ///
+    /// Can be used to set up `L` to use in `HKDF-Expand(PRK, info, L)` while deriving iv.
+    /// If not specify, `NONCE_LEN` will be used by default.
+    fn expander_iv_len(&self) -> Option<usize> {
+        None
+    }
+
     /// Convert the key material from `key`/`iv`, into a `ConnectionTrafficSecrets` item.
     ///
     /// May return [`UnsupportedOperationError`] if the AEAD algorithm is not a supported
@@ -172,59 +180,85 @@ impl dyn MessageDecrypter {
 }
 
 /// A write or read IV.
-#[derive(Default)]
-pub struct Iv([u8; NONCE_LEN]);
-
-impl Iv {
-    /// Create a new `Iv` from a byte array, of precisely `NONCE_LEN` bytes.
-    #[cfg(feature = "tls12")]
-    pub fn new(value: [u8; NONCE_LEN]) -> Self {
-        Self(value)
-    }
-
-    /// Create a new `Iv` from a byte slice, of precisely `NONCE_LEN` bytes.
-    #[cfg(feature = "tls12")]
-    pub fn copy(value: &[u8]) -> Self {
-        debug_assert_eq!(value.len(), NONCE_LEN);
-        let mut iv = Self::new(Default::default());
-        iv.0.copy_from_slice(value);
-        iv
-    }
+pub struct Iv {
+    buf: [u8; Self::MAX_LEN],
+    used: usize,
 }
 
-impl From<[u8; NONCE_LEN]> for Iv {
-    fn from(bytes: [u8; NONCE_LEN]) -> Self {
-        Self(bytes)
+impl Iv {
+    /// Create a new `Iv` from a byte array.
+    #[cfg(feature = "tls12")]
+    pub fn new(bytes: &[u8]) -> Self {
+        debug_assert!(bytes.len() <= Self::MAX_LEN);
+        let mut iv = Self {
+            buf: [0u8; Self::MAX_LEN],
+            used: bytes.len(),
+        };
+        iv.buf[..bytes.len()].copy_from_slice(bytes);
+        iv
+    }
+
+    pub(crate) fn with_length(self, len: usize) -> Self {
+        assert!(len <= self.used);
+        Self {
+            buf: self.buf,
+            used: len,
+        }
+    }
+
+    pub(crate) const MAX_LEN: usize = 16;
+}
+
+impl From<[u8; Self::MAX_LEN]> for Iv {
+    fn from(bytes: [u8; Self::MAX_LEN]) -> Self {
+        Self {
+            buf: bytes,
+            used: Self::MAX_LEN,
+        }
     }
 }
 
 impl AsRef<[u8]> for Iv {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+        &self.buf[..self.used]
     }
 }
 
 /// A nonce.  This is unique for all messages on a connection.
-pub struct Nonce(pub [u8; NONCE_LEN]);
+pub struct Nonce([u8; Self::MAX_LEN]);
 
 impl Nonce {
     /// Combine an `Iv` and sequence number to produce a unique nonce.
     ///
-    /// This is `iv ^ seq` where `seq` is encoded as a 96-bit big-endian integer.
+    /// This is `iv ^ seq` where `seq` is encoded as a (128 - Iv.Length)-bit big-endian integer.
     #[inline]
     pub fn new(iv: &Iv, seq: u64) -> Self {
-        let mut nonce = Self([0u8; NONCE_LEN]);
-        codec::put_u64(seq, &mut nonce.0[4..]);
+        assert!(SEQ_NUM_LEN <= iv.used);
+        let seq_offset = iv.used - SEQ_NUM_LEN;
+        let mut nonce = Self([0u8; Self::MAX_LEN]);
+        codec::put_u64(seq, &mut nonce.0[seq_offset..]);
 
-        nonce
-            .0
+        nonce.0[..iv.used]
             .iter_mut()
-            .zip(iv.0.iter())
+            .zip(iv.buf.iter())
             .for_each(|(nonce, iv)| {
                 *nonce ^= *iv;
             });
 
         nonce
+    }
+
+    pub(crate) const MAX_LEN: usize = 16;
+}
+
+const SEQ_NUM_LEN: usize = 8;
+
+impl Into<[u8; NONCE_LEN]> for Nonce {
+    fn into(self) -> [u8; NONCE_LEN] {
+        // safety: is safe because NONCE_LEN <= Nonce::MAX_LEN
+        self.0.as_slice()[..NONCE_LEN]
+            .try_into()
+            .unwrap()
     }
 }
 
