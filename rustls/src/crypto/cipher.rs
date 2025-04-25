@@ -253,10 +253,10 @@ impl Nonce {
 
 const SEQ_NUM_LEN: usize = 8;
 
-impl Into<[u8; NONCE_LEN]> for Nonce {
-    fn into(self) -> [u8; NONCE_LEN] {
+impl From<Nonce> for [u8; NONCE_LEN] {
+    fn from(nonce: Nonce) -> Self {
         // safety: is safe because NONCE_LEN <= Nonce::MAX_LEN
-        self.0.as_slice()[..NONCE_LEN]
+        nonce.0.as_slice()[..NONCE_LEN]
             .try_into()
             .unwrap()
     }
