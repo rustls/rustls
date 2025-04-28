@@ -305,7 +305,7 @@
     "TLS13-OnlyPadding-TLS": ":ILLEGAL_TLS_INNER_PLAINTEXT:",
     "TLS13-EmptyRecords-TLS": ":ILLEGAL_TLS_INNER_PLAINTEXT:",
     "TLS13-DuplicateTicketEarlyDataSupport": ":PEER_MISBEHAVIOUR:",
-    "SupportedVersionSelection-TLS12": ":PEER_MISBEHAVIOUR:",
+    "SupportedVersionSelection-TLS12": ":SELECTED_TLS12_USING_TLS13_VERSION_EXTENSION:",
     "HelloRetryRequest-CipherChange-TLS13": ":SELECTED_DIFFERENT_CIPHERSUITE_AFTER_RETRY:",
     "ExtendedMasterSecret-NoToYes-Client": ":RESUMED_SESSION_WITH_VARIED_EMS:",
     "ExtendedMasterSecret-YesToNo-Client": ":RESUMED_SESSION_WITH_VARIED_EMS:",
