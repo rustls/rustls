@@ -1020,6 +1020,10 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnusableCipherSuiteForVersion) => {
             quit(":WRONG_CIPHER_RETURNED:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::ResumptionAttemptedWithVariedEms)
+        | Error::PeerMisbehaved(PeerMisbehaved::ResumptionOfferedWithVariedEms) => {
+            quit(":RESUMED_SESSION_WITH_VARIED_EMS:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
