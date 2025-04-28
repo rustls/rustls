@@ -1193,6 +1193,10 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry) => {
             quit(":SELECTED_DIFFERENT_CIPHERSUITE_AFTER_RETRY:")
         }
+        Error::PeerMisbehaved(
+            PeerMisbehaved::ResumptionAttemptedWithVariedEms
+            | PeerMisbehaved::ResumptionOfferedWithVariedEms,
+        ) => quit(":RESUMED_SESSION_WITH_VARIED_EMS:"),
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
