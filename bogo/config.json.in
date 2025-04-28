@@ -251,7 +251,7 @@
     "SkipEarlyData-Interleaved-TLS13": ":PEER_MISBEHAVIOUR:",
     "SkipEarlyData-SecondClientHelloEarlyData-TLS13": ":PEER_MISBEHAVIOUR:",
     "SkipEarlyData-TooMuchData-TLS13": ":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:",
-    "SupportedVersionSelection-TLS12": ":PEER_MISBEHAVIOUR:",
+    "SupportedVersionSelection-TLS12": ":SELECTED_TLS12_USING_TLS13_VERSION_EXTENSION:",
     "TicketSessionIDLength-33-TLS-TLS12": ":BAD_HANDSHAKE_MSG:",
     "TLS-TLS12-AES_128_GCM_SHA256-server": ":INCOMPATIBLE:",
     "TLS-TLS12-AES_256_GCM_SHA384-server": ":INCOMPATIBLE:",
