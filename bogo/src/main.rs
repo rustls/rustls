@@ -1162,6 +1162,19 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::DisallowedEncryptedExtension) => {
             quit(":ERROR_PARSING_EXTENSION:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalHelloRetryRequestWithOfferedGroup) => {
+            quit(":ILLEGAL_HELLO_RETRY_REQUEST_WITH_OFFERED_GROUP:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalHelloRetryRequestWithUnofferedNamedGroup) => {
+            quit(":ILLEGAL_HELLO_RETRY_REQUEST_WITH_UNOFFERED_GROUP:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalHelloRetryRequestWithNoChanges) => {
+            quit(":EMPTY_HELLO_RETRY_REQUEST:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::DuplicateHelloRetryRequestExtensions) => {
+            quit(":DUPLICATE_HELLO_RETRY_REQUEST_EXTENSIONS:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::WrongGroupForKeyShare) => quit(":WRONG_CURVE:"),
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedKxGroup) => quit(":WRONG_CURVE:"),
         Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare) => quit(":BAD_ECPOINT:"),
         Error::PeerMisbehaved(PeerMisbehaved::MessageInterleavedWithHandshakeMessage) => {
@@ -1176,6 +1189,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         }
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedApplicationProtocol) => {
             quit(":INVALID_ALPN_PROTOCOL:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry) => {
+            quit(":SELECTED_DIFFERENT_CIPHERSUITE_AFTER_RETRY:")
         }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
