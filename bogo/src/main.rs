@@ -1024,6 +1024,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         | Error::PeerMisbehaved(PeerMisbehaved::ResumptionOfferedWithVariedEms) => {
             quit(":RESUMED_SESSION_WITH_VARIED_EMS:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalTlsInnerPlaintext) => {
+            quit(":ILLEGAL_TLS_INNER_PLAINTEXT:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
