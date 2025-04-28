@@ -1039,6 +1039,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::KeyEpochWithPendingFragment) => {
             quit(":KEY_EPOCH_WITH_PENDING_FRAGMENT:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedInvalidPsk) => {
+            quit(":PSK_IDENTITY_NOT_FOUND:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),

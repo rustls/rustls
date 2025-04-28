@@ -239,7 +239,6 @@
     "Resume-Client-PRFMismatch-TLS13": ":PEER_MISBEHAVIOUR:",
     "Resume-Client-Mismatch-TLS13-TLS12-TLS": ":WRONG_CIPHER_RETURNED:",
     "NoSupportedCurves-TLS13": ":INCOMPATIBLE:",
-    "InvalidPSKIdentity-TLS13": ":PEER_MISBEHAVIOUR:",
     "TrailingKeyShareData-TLS13": ":BAD_HANDSHAKE_MSG:",
     "HelloRetryRequestVersionMismatch-TLS13": ":INCOMPATIBLE:",
     "HelloRetryRequest-DuplicateCookie-TLS13": ":DUPLICATE_HELLO_RETRY_REQUEST_EXTENSIONS:",
