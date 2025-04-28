@@ -1016,6 +1016,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         }
         Error::PeerMisbehaved(PeerMisbehaved::WrongGroupForKeyShare) => quit(":WRONG_CURVE:"),
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedKxGroup) => quit(":WRONG_CURVE:"),
+        Error::PeerMisbehaved(PeerMisbehaved::RefusedToFollowHelloRetryRequest) => {
+            quit(":WRONG_CURVE:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare) => quit(":BAD_ECPOINT:"),
         Error::PeerMisbehaved(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion) => {
             quit(":WRONG_VERSION_ON_EARLY_DATA:")

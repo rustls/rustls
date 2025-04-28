@@ -224,7 +224,6 @@
     "ClientAuth-NoFallback-ECDSA": ":BAD_HANDSHAKE_MSG:",
     "ClientAuth-NoFallback-TLS13": ":BAD_HANDSHAKE_MSG:",
     "ServerAuth-NoFallback-TLS13": ":INCOMPATIBLE:",
-    "SecondClientHelloWrongCurve-TLS13": ":PEER_MISBEHAVIOUR:",
     "SecondClientHelloMissingKeyShare-TLS13": ":INCOMPATIBLE:",
     "Resume-Server-BinderWrongLength": ":DIGEST_CHECK_FAILED:",
     "Resume-Server-BinderWrongLength-SecondBinder": ":DIGEST_CHECK_FAILED:",
