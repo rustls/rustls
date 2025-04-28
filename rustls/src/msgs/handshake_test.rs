@@ -13,12 +13,12 @@ use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
-    ClientSessionTicket, CompressedCertificatePayload, ConvertProtocolNameList,
-    ConvertServerNameList, DistinguishedName, EcParameters, HandshakeMessagePayload,
-    HandshakePayload, HasServerExtensions, HelloRetryExtension, HelloRetryRequest, KeyShareEntry,
-    NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
-    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
-    ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
+    ClientSessionTicket, CompressedCertificatePayload, ConvertServerNameList, DistinguishedName,
+    EcParameters, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
+    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
+    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
     ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SingleProtocolName,
     SupportedProtocolVersions, UnknownExtension,
 };
@@ -339,7 +339,12 @@ fn can_round_trip_multi_proto() {
     match ext {
         ClientExtension::Protocols(prot) => {
             assert_eq!(2, prot.len());
-            assert_eq!(vec![b"hi", b"lo"], prot.to_slices());
+            assert_eq!(
+                vec![b"hi", b"lo"],
+                prot.iter()
+                    .map(|p| p.as_ref())
+                    .collect::<Vec<_>>()
+            );
         }
         _ => unreachable!(),
     }
@@ -357,7 +362,12 @@ fn can_round_trip_single_proto() {
     match ext {
         ClientExtension::Protocols(prot) => {
             assert_eq!(1, prot.len());
-            assert_eq!(vec![b"hi"], prot.to_slices());
+            assert_eq!(
+                vec![b"hi"],
+                prot.iter()
+                    .map(|p| p.as_ref())
+                    .collect::<Vec<_>>()
+            );
         }
         _ => unreachable!(),
     }
