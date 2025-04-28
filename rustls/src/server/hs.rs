@@ -21,8 +21,8 @@ use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, HandshakePayload,
-    KeyExchangeAlgorithm, Random, ServerExtension, SingleProtocolName,
+    ClientHelloPayload, ConvertServerNameList, HandshakePayload, KeyExchangeAlgorithm, Random,
+    ServerExtension, SingleProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -82,18 +82,13 @@ impl ExtensionProcessing {
         let our_protocols = &config.alpn_protocols;
         let maybe_their_protocols = hello.alpn_extension();
         if let Some(their_protocols) = maybe_their_protocols {
-            let their_protocols = their_protocols.to_slices();
-
-            if their_protocols
-                .iter()
-                .any(|protocol| protocol.is_empty())
-            {
-                return Err(PeerMisbehaved::OfferedEmptyApplicationProtocol.into());
-            }
-
             cx.common.alpn_protocol = our_protocols
                 .iter()
-                .find(|protocol| their_protocols.contains(&protocol.as_slice()))
+                .find(|ours| {
+                    their_protocols
+                        .iter()
+                        .any(|theirs| theirs.as_ref() == ours.as_slice())
+                })
                 .cloned();
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);

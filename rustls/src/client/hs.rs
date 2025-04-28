@@ -29,11 +29,12 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PskKeyExchangeMode,
 };
+use crate::msgs::handshake::ProtocolName;
 use crate::msgs::handshake::SupportedProtocolVersions;
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
-    ConvertProtocolNameList, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryRequest, KeyShareEntry, Random, SessionId,
+    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryRequest,
+    KeyShareEntry, Random, SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -358,14 +359,14 @@ fn emit_client_hello_for_retry(
 
     // Add ALPN extension if we have any protocols
     if !input.hello.alpn_protocols.is_empty() {
-        exts.push(ClientExtension::Protocols(Vec::from_slices(
-            &input
+        exts.push(ClientExtension::Protocols(
+            input
                 .hello
                 .alpn_protocols
                 .iter()
-                .map(|proto| &proto[..])
+                .map(|proto| ProtocolName::from(proto.clone()))
                 .collect::<Vec<_>>(),
-        )));
+        ));
     }
 
     input.hello.offered_cert_compression =

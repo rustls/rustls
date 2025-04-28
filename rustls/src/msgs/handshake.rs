@@ -337,29 +337,6 @@ impl TlsListElement for ProtocolName {
     };
 }
 
-pub(crate) trait ConvertProtocolNameList {
-    fn from_slices(names: &[&[u8]]) -> Self;
-    fn to_slices(&self) -> Vec<&[u8]>;
-}
-
-impl ConvertProtocolNameList for Vec<ProtocolName> {
-    fn from_slices(names: &[&[u8]]) -> Self {
-        let mut ret = Self::new();
-
-        for name in names {
-            ret.push(ProtocolName::from(name.to_vec()));
-        }
-
-        ret
-    }
-
-    fn to_slices(&self) -> Vec<&[u8]> {
-        self.iter()
-            .map(|proto| proto.as_ref())
-            .collect::<Vec<&[u8]>>()
-    }
-}
-
 /// RFC7301 encodes a single protocol name as `Vec<ProtocolName>`
 #[derive(Clone, Debug)]
 pub struct SingleProtocolName(ProtocolName);
