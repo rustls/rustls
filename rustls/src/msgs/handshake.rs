@@ -570,7 +570,66 @@ impl TlsListElement for KeyShareEntry {
     const SIZE_LEN: ListLength = ListLength::U16;
 }
 
+/// The body of the `SupportedVersions` extension when it appears in a
+/// `ClientHello`
+///
+/// This is documented as a preference-order vector, but we (as a server)
+/// ignore the preference of the client.
+///
 /// RFC8446: `ProtocolVersion versions<2..254>;`
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SupportedProtocolVersions {
+    pub(crate) tls13: bool,
+    pub(crate) tls12: bool,
+}
+
+impl SupportedProtocolVersions {
+    /// Return true if `filter` returns true for any enabled version.
+    pub(crate) fn any(&self, filter: impl Fn(ProtocolVersion) -> bool) -> bool {
+        if self.tls13 && filter(ProtocolVersion::TLSv1_3) {
+            return true;
+        }
+        if self.tls12 && filter(ProtocolVersion::TLSv1_2) {
+            return true;
+        }
+        false
+    }
+
+    const LIST_LENGTH: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ProtocolVersions"),
+    };
+}
+
+impl Codec<'_> for SupportedProtocolVersions {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let inner = LengthPrefixedBuffer::new(Self::LIST_LENGTH, bytes);
+        if self.tls13 {
+            ProtocolVersion::TLSv1_3.encode(inner.buf);
+        }
+        if self.tls12 {
+            ProtocolVersion::TLSv1_2.encode(inner.buf);
+        }
+    }
+
+    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let len = Self::LIST_LENGTH.read(reader)?;
+        let mut sub = reader.sub(len)?;
+
+        let mut tls12 = false;
+        let mut tls13 = false;
+
+        while sub.any_left() {
+            match ProtocolVersion::read(&mut sub)? {
+                ProtocolVersion::TLSv1_3 => tls13 = true,
+                ProtocolVersion::TLSv1_2 => tls12 = true,
+                _ => continue,
+            };
+        }
+
+        Ok(Self { tls13, tls12 })
+    }
+}
+
 impl TlsListElement for ProtocolVersion {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("ProtocolVersions"),
@@ -601,7 +660,7 @@ pub enum ClientExtension {
     ServerName(Vec<ServerName>),
     SessionTicket(ClientSessionTicket),
     Protocols(Vec<ProtocolName>),
-    SupportedVersions(Vec<ProtocolVersion>),
+    SupportedVersions(SupportedProtocolVersions),
     KeyShare(Vec<KeyShareEntry>),
     PresharedKeyModes(Vec<PskKeyExchangeMode>),
     PresharedKey(PresharedKeyOffer),
@@ -705,7 +764,9 @@ impl Codec<'_> for ClientExtension {
                 }
             }
             ExtensionType::ALProtocolNegotiation => Self::Protocols(Vec::read(&mut sub)?),
-            ExtensionType::SupportedVersions => Self::SupportedVersions(Vec::read(&mut sub)?),
+            ExtensionType::SupportedVersions => {
+                Self::SupportedVersions(SupportedProtocolVersions::read(&mut sub)?)
+            }
             ExtensionType::KeyShare => Self::KeyShare(Vec::read(&mut sub)?),
             ExtensionType::PSKKeyExchangeModes => Self::PresharedKeyModes(Vec::read(&mut sub)?),
             ExtensionType::PreSharedKey => Self::PresharedKey(PresharedKeyOffer::read(&mut sub)?),
@@ -1132,10 +1193,10 @@ impl ClientHelloPayload {
         self.find_extension(ExtensionType::SessionTicket)
     }
 
-    pub(crate) fn versions_extension(&self) -> Option<&[ProtocolVersion]> {
+    pub(crate) fn versions_extension(&self) -> Option<SupportedProtocolVersions> {
         let ext = self.find_extension(ExtensionType::SupportedVersions)?;
         match ext {
-            ClientExtension::SupportedVersions(vers) => Some(vers),
+            ClientExtension::SupportedVersions(vers) => Some(*vers),
             _ => None,
         }
     }

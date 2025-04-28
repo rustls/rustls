@@ -348,9 +348,9 @@ impl ExpectClientHello {
         // Are we doing TLS1.3?
         let maybe_versions_ext = client_hello.versions_extension();
         let version = if let Some(versions) = maybe_versions_ext {
-            if versions.contains(&ProtocolVersion::TLSv1_3) && tls13_enabled {
+            if versions.tls13 && tls13_enabled {
                 ProtocolVersion::TLSv1_3
-            } else if !versions.contains(&ProtocolVersion::TLSv1_2) || !tls12_enabled {
+            } else if !versions.tls12 || !tls12_enabled {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::ProtocolVersion,
                     PeerIncompatible::Tls12NotOfferedOrEnabled,
