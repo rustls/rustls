@@ -1036,6 +1036,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::IllegalTlsInnerPlaintext) => {
             quit(":ILLEGAL_TLS_INNER_PLAINTEXT:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::KeyEpochWithPendingFragment) => {
+            quit(":KEY_EPOCH_WITH_PENDING_FRAGMENT:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
