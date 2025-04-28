@@ -985,7 +985,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         | Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEchExtension) => {
             quit(":UNEXPECTED_EXTENSION:")
         }
-        Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension) => {
+        Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension)
+        | Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedServerHelloExtension)
+        | Error::PeerMisbehaved(PeerMisbehaved::UnexpectedCleartextExtension) => {
             quit(":UNEXPECTED_EXTENSION:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::DisallowedEncryptedExtension) => {
