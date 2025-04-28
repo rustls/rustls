@@ -189,8 +189,6 @@
     "EmptyEncryptedExtensions-TLS13": ":BAD_HANDSHAKE_MSG:",
     "NoSupportedCurves": ":INCOMPATIBLE:",
     "VersionTooLow": ":INCOMPATIBLE:",
-    "ALPNClient-RejectUnknown-TLS-TLS12": ":PEER_MISBEHAVIOUR:",
-    "ALPNClient-RejectUnknown-TLS-TLS13": ":PEER_MISBEHAVIOUR:",
     "ALPNClient-EmptyProtocolName-TLS-TLS12": ":ILLEGAL_EMPTY_VALUE:",
     "ALPNClient-EmptyProtocolName-TLS-TLS13": ":ILLEGAL_EMPTY_VALUE:",
     "ALPNServer-EmptyProtocolName-TLS-TLS12": ":ILLEGAL_EMPTY_VALUE:",
