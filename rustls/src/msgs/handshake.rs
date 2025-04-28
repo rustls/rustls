@@ -340,7 +340,6 @@ impl TlsListElement for ProtocolName {
 pub(crate) trait ConvertProtocolNameList {
     fn from_slices(names: &[&[u8]]) -> Self;
     fn to_slices(&self) -> Vec<&[u8]>;
-    fn as_single_slice(&self) -> Option<&[u8]>;
 }
 
 impl ConvertProtocolNameList for Vec<ProtocolName> {
@@ -359,13 +358,45 @@ impl ConvertProtocolNameList for Vec<ProtocolName> {
             .map(|proto| proto.as_ref())
             .collect::<Vec<&[u8]>>()
     }
+}
 
-    fn as_single_slice(&self) -> Option<&[u8]> {
-        if self.len() == 1 {
-            Some(self[0].as_ref())
+/// RFC7301 encodes a single protocol name as `Vec<ProtocolName>`
+#[derive(Clone, Debug)]
+pub struct SingleProtocolName(ProtocolName);
+
+impl SingleProtocolName {
+    pub(crate) fn new(bytes: Vec<u8>) -> Self {
+        Self(ProtocolName::from(bytes))
+    }
+
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("ProtocolNames"),
+    };
+}
+
+impl Codec<'_> for SingleProtocolName {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let body = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
+        self.0.encode(body.buf);
+    }
+
+    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let len = Self::SIZE_LEN.read(reader)?;
+        let mut sub = reader.sub(len)?;
+
+        let item = ProtocolName::read(&mut sub)?;
+
+        if sub.any_left() {
+            Err(InvalidMessage::TrailingData("SingleProtocolName"))
         } else {
-            None
+            Ok(Self(item))
         }
+    }
+}
+
+impl AsRef<[u8]> for SingleProtocolName {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
     }
 }
 
@@ -845,7 +876,7 @@ pub enum ServerExtension {
     ServerNameAck,
     SessionTicketAck,
     RenegotiationInfo(PayloadU8),
-    Protocols(Vec<ProtocolName>),
+    Protocols(SingleProtocolName),
     KeyShare(KeyShareEntry),
     PresharedKey(u16),
     ExtendedMasterSecretAck,
@@ -922,7 +953,9 @@ impl Codec<'_> for ServerExtension {
             ExtensionType::SessionTicket => Self::SessionTicketAck,
             ExtensionType::StatusRequest => Self::CertificateStatusAck,
             ExtensionType::RenegotiationInfo => Self::RenegotiationInfo(PayloadU8::read(&mut sub)?),
-            ExtensionType::ALProtocolNegotiation => Self::Protocols(Vec::read(&mut sub)?),
+            ExtensionType::ALProtocolNegotiation => {
+                Self::Protocols(SingleProtocolName::read(&mut sub)?)
+            }
             ExtensionType::ClientCertificateType => {
                 Self::ClientCertType(CertificateType::read(&mut sub)?)
             }
@@ -952,10 +985,6 @@ impl Codec<'_> for ServerExtension {
 }
 
 impl ServerExtension {
-    pub(crate) fn make_alpn(proto: &[&[u8]]) -> Self {
-        Self::Protocols(Vec::from_slices(proto))
-    }
-
     #[cfg(feature = "tls12")]
     pub(crate) fn make_empty_renegotiation_info() -> Self {
         let empty = Vec::new();
@@ -2212,7 +2241,7 @@ pub(crate) trait HasServerExtensions {
     fn alpn_protocol(&self) -> Option<&[u8]> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match ext {
-            ServerExtension::Protocols(protos) => protos.as_single_slice(),
+            ServerExtension::Protocols(protos) => Some(protos.as_ref()),
             _ => None,
         }
     }

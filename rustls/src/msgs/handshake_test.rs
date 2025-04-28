@@ -19,8 +19,8 @@ use super::handshake::{
     NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
     PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
     ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
-    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SupportedProtocolVersions,
-    UnknownExtension,
+    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SingleProtocolName,
+    SupportedProtocolVersions, UnknownExtension,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -340,7 +340,6 @@ fn can_round_trip_multi_proto() {
         ClientExtension::Protocols(prot) => {
             assert_eq!(2, prot.len());
             assert_eq!(vec![b"hi", b"lo"], prot.to_slices());
-            assert_eq!(prot.as_single_slice(), None);
         }
         _ => unreachable!(),
     }
@@ -359,7 +358,6 @@ fn can_round_trip_single_proto() {
         ClientExtension::Protocols(prot) => {
             assert_eq!(1, prot.len());
             assert_eq!(vec![b"hi"], prot.to_slices());
-            assert_eq!(prot.as_single_slice(), Some(&b"hi"[..]));
         }
         _ => unreachable!(),
     }
@@ -1019,7 +1017,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
             ServerExtension::RenegotiationInfo(PayloadU8::new(vec![0])),
-            ServerExtension::Protocols(vec![ProtocolName::from(vec![0])]),
+            ServerExtension::Protocols(SingleProtocolName::new(vec![0])),
             ServerExtension::KeyShare(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             ServerExtension::PresharedKey(3),
             ServerExtension::ExtendedMasterSecretAck,

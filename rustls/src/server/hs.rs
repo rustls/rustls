@@ -22,7 +22,7 @@ use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
     ClientHelloPayload, ConvertProtocolNameList, ConvertServerNameList, HandshakePayload,
-    KeyExchangeAlgorithm, Random, ServerExtension,
+    KeyExchangeAlgorithm, Random, ServerExtension, SingleProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -98,7 +98,9 @@ impl ExtensionProcessing {
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {:?}", selected_protocol);
                 self.exts
-                    .push(ServerExtension::make_alpn(&[selected_protocol]));
+                    .push(ServerExtension::Protocols(SingleProtocolName::new(
+                        selected_protocol.clone(),
+                    )));
             } else if !our_protocols.is_empty() {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::NoApplicationProtocol,
