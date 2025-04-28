@@ -985,14 +985,11 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         | Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEchExtension) => {
             quit(":UNEXPECTED_EXTENSION:")
         }
-        // The TLS-ECH-Client-UnsolicitedInnerServerNameAck test is expected to fail with
-        // :UNEXPECTED_EXTENSION: when we receive an unsolicited inner hello SNI extension.
-        // We treat this the same as any unexpected enc'd ext and return :PEER_MISBEHAVIOUR:.
-        // Convert to the expected if this error occurs when we're configured w/ ECH.
-        Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension)
-            if opts.ech_config_list.is_some() =>
-        {
+        Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension) => {
             quit(":UNEXPECTED_EXTENSION:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::DisallowedEncryptedExtension) => {
+            quit(":ERROR_PARSING_EXTENSION:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedKxGroup) => quit(":WRONG_CURVE:"),
         Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare) => quit(":BAD_ECPOINT:"),
