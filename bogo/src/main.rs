@@ -1172,6 +1172,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion) => {
             quit(":WRONG_VERSION_ON_EARLY_DATA:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedApplicationProtocol) => {
+            quit(":INVALID_ALPN_PROTOCOL:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
