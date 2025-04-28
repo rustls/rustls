@@ -228,100 +228,131 @@ impl TlsListElement for SignatureScheme {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum ServerNamePayload {
-    HostName(DnsName<'static>),
-    IpAddress(PayloadU16),
-    Unknown(Payload<'static>),
+pub enum ServerNamePayload<'a> {
+    /// A successfully decoded value:
+    SingleDnsName(DnsName<'a>),
+
+    /// A DNS name which was actually an IP address
+    IpAddress,
+
+    /// A successfully decoded, but syntactically-invalid value.
+    Invalid,
 }
 
-impl ServerNamePayload {
-    pub(crate) fn new_hostname(hostname: DnsName<'static>) -> Self {
-        Self::HostName(hostname)
-    }
-
-    fn read_hostname(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        use pki_types::ServerName;
-        let raw = PayloadU16::read(r)?;
-
-        match ServerName::try_from(raw.0.as_slice()) {
-            Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.to_owned())),
-            Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw)),
-            Ok(_) | Err(_) => {
-                warn!(
-                    "Illegal SNI hostname received {:?}",
-                    String::from_utf8_lossy(&raw.0)
-                );
-                Err(InvalidMessage::InvalidServerName)
-            }
-        }
-    }
-
-    fn encode(&self, bytes: &mut Vec<u8>) {
+impl ServerNamePayload<'_> {
+    fn into_owned(self) -> ServerNamePayload<'static> {
         match self {
-            Self::HostName(name) => {
-                (name.as_ref().len() as u16).encode(bytes);
-                bytes.extend_from_slice(name.as_ref().as_bytes());
-            }
-            Self::IpAddress(r) => r.encode(bytes),
-            Self::Unknown(r) => r.encode(bytes),
+            Self::SingleDnsName(d) => ServerNamePayload::SingleDnsName(d.to_owned()),
+            Self::IpAddress => ServerNamePayload::IpAddress,
+            Self::Invalid => ServerNamePayload::Invalid,
         }
     }
-}
 
-#[derive(Clone, Debug)]
-pub struct ServerName {
-    pub(crate) typ: ServerNameType,
-    pub(crate) payload: ServerNamePayload,
-}
-
-impl Codec<'_> for ServerName {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.typ.encode(bytes);
-        self.payload.encode(bytes);
-    }
-
-    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let typ = ServerNameType::read(r)?;
-
-        let payload = match typ {
-            ServerNameType::HostName => ServerNamePayload::read_hostname(r)?,
-            _ => ServerNamePayload::Unknown(Payload::read(r).into_owned()),
-        };
-
-        Ok(Self { typ, payload })
-    }
-}
-
-/// RFC6066: `ServerName server_name_list<1..2^16-1>`
-impl TlsListElement for ServerName {
+    /// RFC6066: `ServerName server_name_list<1..2^16-1>`
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
         empty_error: InvalidMessage::IllegalEmptyList("ServerNames"),
     };
 }
 
-pub(crate) trait ConvertServerNameList {
-    fn has_duplicate_names_for_type(&self) -> bool;
-    fn single_hostname(&self) -> Option<DnsName<'_>>;
-}
+/// Simplified encoding/decoding for a `ServerName` extension payload to/from `DnsName`
+///
+/// This is possible because:
+///
+/// - the spec (RFC6066) disallows multiple names for a given name type
+/// - name types other than ServerNameType::HostName are not defined, and they and
+///   any data that follows them cannot be skipped over.
+impl<'a> Codec<'a> for ServerNamePayload<'a> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let server_name_list = LengthPrefixedBuffer::new(Self::SIZE_LEN, bytes);
 
-impl ConvertServerNameList for [ServerName] {
-    /// RFC6066: "The ServerNameList MUST NOT contain more than one name of the same name_type."
-    fn has_duplicate_names_for_type(&self) -> bool {
-        has_duplicates::<_, _, u8>(self.iter().map(|name| name.typ))
+        let ServerNamePayload::SingleDnsName(dns_name) = self else {
+            return;
+        };
+
+        ServerNameType::HostName.encode(server_name_list.buf);
+        let name_slice = dns_name.as_ref().as_bytes();
+        (name_slice.len() as u16).encode(server_name_list.buf);
+        server_name_list
+            .buf
+            .extend_from_slice(name_slice);
     }
 
-    fn single_hostname(&self) -> Option<DnsName<'_>> {
-        fn only_dns_hostnames(name: &ServerName) -> Option<DnsName<'_>> {
-            if let ServerNamePayload::HostName(dns) = &name.payload {
-                Some(dns.borrow())
-            } else {
-                None
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let mut found = None;
+
+        let len = Self::SIZE_LEN.read(r)?;
+        let mut sub = r.sub(len)?;
+
+        while sub.any_left() {
+            let typ = ServerNameType::read(&mut sub)?;
+
+            let payload = match typ {
+                ServerNameType::HostName => HostNamePayload::read(&mut sub)?,
+                _ => {
+                    // Consume remainder of extension bytes.  Since the length of the item
+                    // is an unknown encoding, we cannot continue.
+                    sub.rest();
+                    break;
+                }
+            };
+
+            // "The ServerNameList MUST NOT contain more than one name of
+            // the same name_type." - RFC6066
+            if found.is_some() {
+                warn!("Illegal SNI extension: duplicate host_name received");
+                return Err(InvalidMessage::InvalidServerName);
             }
+
+            found = match payload {
+                HostNamePayload::HostName(dns_name) => {
+                    Some(Self::SingleDnsName(dns_name.to_owned()))
+                }
+
+                HostNamePayload::IpAddress(_invalid) => {
+                    warn!(
+                        "Illegal SNI extension: ignoring IP address presented as hostname ({:?})",
+                        _invalid
+                    );
+                    Some(Self::IpAddress)
+                }
+
+                HostNamePayload::Invalid(_invalid) => {
+                    warn!(
+                        "Illegal SNI hostname received {:?}",
+                        String::from_utf8_lossy(&_invalid.0)
+                    );
+                    Some(Self::Invalid)
+                }
+            };
         }
 
-        self.iter()
-            .filter_map(only_dns_hostnames)
-            .next()
+        Ok(found.unwrap_or(Self::Invalid))
+    }
+}
+
+impl<'a> From<&DnsName<'a>> for ServerNamePayload<'static> {
+    fn from(value: &DnsName<'a>) -> Self {
+        Self::SingleDnsName(trim_hostname_trailing_dot_for_sni(value))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum HostNamePayload {
+    HostName(DnsName<'static>),
+    IpAddress(PayloadU16<NonEmpty>),
+    Invalid(PayloadU16<NonEmpty>),
+}
+
+impl HostNamePayload {
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        use pki_types::ServerName;
+        let raw = PayloadU16::<NonEmpty>::read(r)?;
+
+        match ServerName::try_from(raw.0.as_slice()) {
+            Ok(ServerName::DnsName(d)) => Ok(Self::HostName(d.to_owned())),
+            Ok(ServerName::IpAddress(_)) => Ok(Self::IpAddress(raw)),
+            Ok(_) | Err(_) => Ok(Self::Invalid(raw)),
+        }
     }
 }
 
@@ -665,7 +696,7 @@ pub enum ClientExtension {
     EcPointFormats(Vec<ECPointFormat>),
     NamedGroups(Vec<NamedGroup>),
     SignatureAlgorithms(Vec<SignatureScheme>),
-    ServerName(Vec<ServerName>),
+    ServerName(ServerNamePayload<'static>),
     SessionTicket(ClientSessionTicket),
     Protocols(Vec<ProtocolName>),
     SupportedVersions(SupportedProtocolVersions),
@@ -762,7 +793,9 @@ impl Codec<'_> for ClientExtension {
             ExtensionType::ECPointFormats => Self::EcPointFormats(Vec::read(&mut sub)?),
             ExtensionType::EllipticCurves => Self::NamedGroups(Vec::read(&mut sub)?),
             ExtensionType::SignatureAlgorithms => Self::SignatureAlgorithms(Vec::read(&mut sub)?),
-            ExtensionType::ServerName => Self::ServerName(Vec::read(&mut sub)?),
+            ExtensionType::ServerName => {
+                Self::ServerName(ServerNamePayload::read(&mut sub)?.into_owned())
+            }
             ExtensionType::SessionTicket => {
                 if sub.any_left() {
                     let contents = Payload::read(&mut sub).into_owned();
@@ -826,18 +859,6 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
             .to_owned()
     } else {
         dns_name.to_owned()
-    }
-}
-
-impl ClientExtension {
-    /// Make a basic SNI ServerNameRequest quoting `hostname`.
-    pub(crate) fn make_sni(dns_name: &DnsName<'_>) -> Self {
-        let name = ServerName {
-            typ: ServerNameType::HostName,
-            payload: ServerNamePayload::new_hostname(trim_hostname_trailing_dot_for_sni(dns_name)),
-        };
-
-        Self::ServerName(vec![name])
     }
 }
 
@@ -1110,26 +1131,10 @@ impl ClientHelloPayload {
             .find(|x| x.ext_type() == ext)
     }
 
-    pub(crate) fn sni_extension(&self) -> Option<&[ServerName]> {
+    pub(crate) fn sni_extension(&self) -> Option<&ServerNamePayload<'_>> {
         let ext = self.find_extension(ExtensionType::ServerName)?;
         match ext {
-            // Does this comply with RFC6066?
-            //
-            // [RFC6066][] specifies that literal IP addresses are illegal in
-            // `ServerName`s with a `name_type` of `host_name`.
-            //
-            // Some clients incorrectly send such extensions: we choose to
-            // successfully parse these (into `ServerNamePayload::IpAddress`)
-            // but then act like the client sent no `server_name` extension.
-            //
-            // [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
-            ClientExtension::ServerName(req)
-                if !req
-                    .iter()
-                    .any(|name| matches!(name.payload, ServerNamePayload::IpAddress(_))) =>
-            {
-                Some(req)
-            }
+            ClientExtension::ServerName(req) => Some(req),
             _ => None,
         }
     }

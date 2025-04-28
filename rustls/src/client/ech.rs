@@ -19,7 +19,7 @@ use crate::msgs::handshake::{
     ClientExtension, ClientHelloPayload, EchConfigContents, EchConfigPayload, Encoding,
     EncryptedClientHello, EncryptedClientHelloOuter, HandshakeMessagePayload, HandshakePayload,
     HelloRetryRequest, HpkeKeyConfig, HpkeSymmetricCipherSuite, PresharedKeyBinder,
-    PresharedKeyOffer, Random, ServerHelloPayload,
+    PresharedKeyOffer, Random, ServerHelloPayload, ServerNamePayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -620,7 +620,9 @@ impl EchState {
                 if let Some(sni_value) = inner_sni {
                     inner_hello
                         .extensions
-                        .push(ClientExtension::make_sni(&sni_value.borrow()));
+                        .push(ClientExtension::ServerName(ServerNamePayload::from(
+                            sni_value,
+                        )));
                 }
                 // We don't want to add, or compress, the SNI from the outer hello.
                 continue;

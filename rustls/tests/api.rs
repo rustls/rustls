@@ -1555,7 +1555,7 @@ fn server_ignores_sni_with_ip_address() {
 fn server_rejects_sni_with_illegal_dns_name() {
     check_sni_error(
         encoding::Extension::new_sni(b"ab@cd.com"),
-        Error::InvalidMessage(InvalidMessage::InvalidServerName),
+        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
     );
 }
 
@@ -6241,7 +6241,7 @@ fn test_server_rejects_duplicate_sni_names() {
             typ: ExtensionType::ServerName,
             body: encoding::len_u16(body),
         },
-        Error::PeerMisbehaved(PeerMisbehaved::DuplicateServerNameTypes),
+        Error::InvalidMessage(InvalidMessage::InvalidServerName),
     );
 }
 
