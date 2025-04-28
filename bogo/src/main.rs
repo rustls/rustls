@@ -1055,7 +1055,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":PRE_SHARED_KEY_MUST_BE_LAST:")
         }
         Error::PeerMisbehaved(PeerMisbehaved::IncorrectBinder) => quit(":DIGEST_CHECK_FAILED:"),
-        Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
+        Error::PeerMisbehaved(which) => quit(&format!(":PEER_MISBEHAVIOUR-{which:?}:")),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
