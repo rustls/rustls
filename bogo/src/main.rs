@@ -1177,6 +1177,12 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedTls12UsingTls13VersionExtension) => {
             quit(":SELECTED_TLS12_USING_TLS13_VERSION_EXTENSION:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::OfferedIncorrectCompressions) => {
+            quit(":INVALID_COMPRESSION_LIST:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedCompression) => {
+            quit(":UNSUPPORTED_COMPRESSION_ALGORITHM:")
+        }
         Error::PeerMisbehaved(PeerMisbehaved::WrongGroupForKeyShare) => quit(":WRONG_CURVE:"),
         Error::PeerMisbehaved(PeerMisbehaved::SelectedUnofferedKxGroup) => quit(":WRONG_CURVE:"),
         Error::PeerMisbehaved(PeerMisbehaved::InvalidKeyShare) => quit(":BAD_ECPOINT:"),
