@@ -1195,6 +1195,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             PeerMisbehaved::ResumptionAttemptedWithVariedEms
             | PeerMisbehaved::ResumptionOfferedWithVariedEms,
         ) => quit(":RESUMED_SESSION_WITH_VARIED_EMS:"),
+        Error::PeerMisbehaved(PeerMisbehaved::IllegalTlsInnerPlaintext) => {
+            quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
