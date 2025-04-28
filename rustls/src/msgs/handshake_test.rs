@@ -19,7 +19,8 @@ use super::handshake::{
     NewSessionTicketExtension, NewSessionTicketPayload, NewSessionTicketPayloadTls13,
     PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random,
     ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
-    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, UnknownExtension,
+    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SupportedProtocolVersions,
+    UnknownExtension,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
@@ -971,7 +972,10 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ClientExtension::SessionTicket(ClientSessionTicket::Request),
             ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload::Borrowed(&[]))),
             ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
-            ClientExtension::SupportedVersions(vec![ProtocolVersion::TLSv1_3]),
+            ClientExtension::SupportedVersions(SupportedProtocolVersions {
+                tls13: true,
+                ..Default::default()
+            }),
             ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
             ClientExtension::PresharedKeyModes(vec![PskKeyExchangeMode::PSK_DHE_KE]),
             ClientExtension::PresharedKey(PresharedKeyOffer {

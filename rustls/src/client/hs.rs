@@ -29,6 +29,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PskKeyExchangeMode,
 };
+use crate::msgs::handshake::SupportedProtocolVersions;
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
     ConvertProtocolNameList, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
@@ -249,31 +250,21 @@ fn emit_client_hello_for_retry(
     // Defense in depth: the ECH state should be None if ECH is disabled based on config
     // builder semantics.
     let forbids_tls12 = cx.common.is_quic() || ech_state.is_some();
-    let support_tls12 = config.supports_version(ProtocolVersion::TLSv1_2) && !forbids_tls12;
-    let support_tls13 = config.supports_version(ProtocolVersion::TLSv1_3);
 
-    let mut supported_versions = Vec::new();
-    if support_tls13 {
-        supported_versions.push(ProtocolVersion::TLSv1_3);
-    }
-
-    if support_tls12 {
-        supported_versions.push(ProtocolVersion::TLSv1_2);
-    }
+    let supported_versions = SupportedProtocolVersions {
+        tls12: config.supports_version(ProtocolVersion::TLSv1_2) && !forbids_tls12,
+        tls13: config.supports_version(ProtocolVersion::TLSv1_3),
+    };
 
     // should be unreachable thanks to config builder
-    assert!(!supported_versions.is_empty());
+    assert!(supported_versions.any(|_| true));
 
     // offer groups which are usable for any offered version
     let offered_groups = config
         .provider
         .kx_groups
         .iter()
-        .filter(|skxg| {
-            supported_versions
-                .iter()
-                .any(|v| skxg.usable_for_version(*v))
-        })
+        .filter(|skxg| supported_versions.any(|v| skxg.usable_for_version(v)))
         .map(|skxg| skxg.name())
         .collect();
 
@@ -289,7 +280,7 @@ fn emit_client_hello_for_retry(
         ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
 
-    if support_tls13 {
+    if supported_versions.tls13 {
         if let Some(cas_extension) = config.verifier.root_hint_subjects() {
             exts.push(ClientExtension::AuthorityNames(cas_extension.to_owned()));
         }
@@ -327,7 +318,7 @@ fn emit_client_hello_for_retry(
     };
 
     if let Some(key_share) = &key_share {
-        debug_assert!(support_tls13);
+        debug_assert!(supported_versions.tls13);
         let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
 
         if !retryreq
@@ -358,7 +349,7 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::Cookie(cookie.clone()));
     }
 
-    if support_tls13 {
+    if supported_versions.tls13 {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
         let psk_modes = vec![PskKeyExchangeMode::PSK_DHE_KE];
@@ -377,19 +368,19 @@ fn emit_client_hello_for_retry(
         )));
     }
 
-    input.hello.offered_cert_compression = if support_tls13 && !config.cert_decompressors.is_empty()
-    {
-        exts.push(ClientExtension::CertificateCompressionAlgorithms(
-            config
-                .cert_decompressors
-                .iter()
-                .map(|dec| dec.algorithm())
-                .collect(),
-        ));
-        true
-    } else {
-        false
-    };
+    input.hello.offered_cert_compression =
+        if supported_versions.tls13 && !config.cert_decompressors.is_empty() {
+            exts.push(ClientExtension::CertificateCompressionAlgorithms(
+                config
+                    .cert_decompressors
+                    .iter()
+                    .map(|dec| dec.algorithm())
+                    .collect(),
+            ));
+            true
+        } else {
+            false
+        };
 
     if config
         .client_auth_cert_resolver
@@ -602,7 +593,7 @@ fn emit_client_hello_for_retry(
         ech_state,
     };
 
-    Ok(if support_tls13 && retryreq.is_none() {
+    Ok(if supported_versions.tls13 && retryreq.is_none() {
         Box::new(ExpectServerHelloOrHelloRetryRequest { next, extra_exts })
     } else {
         Box::new(next)
