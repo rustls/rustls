@@ -7,25 +7,25 @@ use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     CertificateType, ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
-    KeyUpdateRequest, NamedGroup, PskKeyExchangeMode, ServerNameType,
+    KeyUpdateRequest, NamedGroup, PskKeyExchangeMode,
 };
 use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
-    ClientSessionTicket, CompressedCertificatePayload, ConvertServerNameList, DistinguishedName,
-    EcParameters, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
-    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
-    NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
-    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
-    ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId, SingleProtocolName,
-    SupportedProtocolVersions, UnknownExtension,
+    ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
+    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryExtension,
+    HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension, NewSessionTicketPayload,
+    NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
+    ProtocolName, Random, ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload,
+    ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId,
+    SingleProtocolName, SupportedProtocolVersions, UnknownExtension,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::InvalidMessage;
+use crate::msgs::handshake::ServerNamePayload;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 
@@ -191,17 +191,6 @@ fn can_round_trip_mixed_case_sni() {
 }
 
 #[test]
-fn can_round_trip_other_sni_name_types() {
-    let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 2, 0x6c, 0x6f];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-    println!("{:?}", ext);
-
-    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
-    assert_eq!(bytes.to_vec(), ext.get_encoding());
-}
-
-#[test]
 fn single_hostname_returns_none_for_other_sni_name_types() {
     let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 2, 0x6c, 0x6f];
     let mut rd = Reader::init(&bytes);
@@ -209,37 +198,10 @@ fn single_hostname_returns_none_for_other_sni_name_types() {
     println!("{:?}", ext);
 
     assert_eq!(ext.ext_type(), ExtensionType::ServerName);
-    if let ClientExtension::ServerName(snr) = ext {
-        assert!(!snr.has_duplicate_names_for_type());
-        assert!(snr.single_hostname().is_none());
-    } else {
-        unreachable!();
-    }
-}
-
-#[test]
-fn can_round_trip_multi_name_sni() {
-    let bytes = [0, 0, 0, 12, 0, 10, 0, 0, 2, 0x68, 0x69, 0, 0, 2, 0x6c, 0x6f];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-    println!("{:?}", ext);
-
-    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
-    assert_eq!(bytes.to_vec(), ext.get_encoding());
-    match ext {
-        ClientExtension::ServerName(req) => {
-            assert_eq!(2, req.len());
-
-            assert!(req.has_duplicate_names_for_type());
-
-            let dns_name = req.single_hostname().unwrap();
-            assert_eq!(dns_name.as_ref(), "hi");
-
-            assert_eq!(req[0].typ, ServerNameType::HostName);
-            assert_eq!(req[1].typ, ServerNameType::HostName);
-        }
-        _ => unreachable!(),
-    }
+    assert!(matches!(
+        ext,
+        ClientExtension::ServerName(ServerNamePayload::Invalid)
+    ));
 }
 
 #[test]
@@ -976,7 +938,9 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            ClientExtension::make_sni(&DnsName::try_from("hello").unwrap()),
+            ClientExtension::ServerName(ServerNamePayload::from(
+                &DnsName::try_from("hello").unwrap(),
+            )),
             ClientExtension::SessionTicket(ClientSessionTicket::Request),
             ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload::Borrowed(&[]))),
             ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),

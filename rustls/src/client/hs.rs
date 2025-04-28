@@ -304,13 +304,15 @@ fn emit_client_hello_for_retry(
         // as the SNI domain name. This happens unconditionally so we ignore the
         // `enable_sni` value. That will be used later to decide what to do for
         // the protected inner hello's SNI.
-        (Some(ech_state), _) => exts.push(ClientExtension::make_sni(&ech_state.outer_name)),
+        (Some(ech_state), _) => {
+            exts.push(ClientExtension::ServerName((&ech_state.outer_name).into()))
+        }
 
         // If we have no ECH state, and SNI is enabled, try to use the input server_name
         // for the SNI domain name.
         (None, true) => {
             if let ServerName::DnsName(dns_name) = &input.server_name {
-                exts.push(ClientExtension::make_sni(dns_name))
+                exts.push(ClientExtension::ServerName(dns_name.into()));
             }
         }
 

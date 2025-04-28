@@ -21,8 +21,8 @@ use crate::msgs::enums::{CertificateType, Compression, ExtensionType, NamedGroup
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, ConvertServerNameList, HandshakePayload, KeyExchangeAlgorithm, Random,
-    ServerExtension, SingleProtocolName,
+    ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, Random, ServerExtension,
+    ServerNamePayload, SingleProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -699,23 +699,23 @@ pub(super) fn process_client_hello<'m>(
     // send an Illegal Parameter alert instead of the Internal Error alert
     // (or whatever) that we'd send if this were checked later or in a
     // different way.
+    //
+    // [RFC6066][] specifies that literal IP addresses are illegal in
+    // `ServerName`s with a `name_type` of `host_name`.
+    //
+    // Some clients incorrectly send such extensions: we choose to
+    // successfully parse these (into `ServerNamePayload::IpAddress`)
+    // but then act like the client sent no `server_name` extension.
+    //
+    // [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
     let sni: Option<DnsName<'_>> = match client_hello.sni_extension() {
-        Some(sni) => {
-            if sni.has_duplicate_names_for_type() {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::DecodeError,
-                    PeerMisbehaved::DuplicateServerNameTypes,
-                ));
-            }
-
-            if let Some(hostname) = sni.single_hostname() {
-                Some(hostname.to_lowercase_owned())
-            } else {
-                return Err(cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::ServerNameMustContainOneHostName,
-                ));
-            }
+        Some(ServerNamePayload::SingleDnsName(dns_name)) => Some(dns_name.to_lowercase_owned()),
+        Some(ServerNamePayload::IpAddress) => None,
+        Some(ServerNamePayload::Invalid) => {
+            return Err(cx.common.send_fatal_alert(
+                AlertDescription::IllegalParameter,
+                PeerMisbehaved::ServerNameMustContainOneHostName,
+            ));
         }
         None => None,
     };
