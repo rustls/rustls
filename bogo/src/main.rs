@@ -1017,6 +1017,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedDifferentCipherSuiteAfterRetry) => {
             quit(":SELECTED_DIFFERENT_CIPHERSUITE_AFTER_RETRY:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::SelectedUnusableCipherSuiteForVersion) => {
+            quit(":WRONG_CIPHER_RETURNED:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
