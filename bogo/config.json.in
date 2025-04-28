@@ -194,7 +194,6 @@
     "HelloRetryRequest-CipherChange-TLS13": ":SELECTED_DIFFERENT_CIPHERSUITE_AFTER_RETRY:",
     "HelloRetryRequest-EmptyCookie-TLS13": ":ILLEGAL_EMPTY_VALUE:",
     "HelloRetryRequestVersionMismatch-TLS13": ":INCOMPATIBLE:",
-    "InvalidPSKIdentity-TLS13": ":PEER_MISBEHAVIOUR:",
     "KeyUpdate-InvalidRequestMode": ":BAD_HANDSHAKE_MSG:",
     "MinimumVersion-Client-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
     "MinimumVersion-Client2-TLS13-TLS12-TLS": ":INCOMPATIBLE:",
