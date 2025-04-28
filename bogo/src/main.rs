@@ -1210,6 +1210,18 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::SelectedInvalidPsk) => {
             quit(":PSK_IDENTITY_NOT_FOUND:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::PskExtensionWithMismatchedIdsAndBinders) => {
+            quit(":PSK_IDENTITY_BINDER_COUNT_MISMATCH:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite) => {
+            quit(":OLD_SESSION_PRF_HASH_MISMATCH:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::PskExtensionMustBeLast) => {
+            quit(":PRE_SHARED_KEY_MUST_BE_LAST:")
+        }
+        Error::PeerMisbehaved(PeerMisbehaved::IncorrectBinder) => {
+            quit(":DECRYPTION_FAILED_OR_BAD_RECORD_MAC:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
         Error::AlertReceived(AlertDescription::DecompressionFailure) => {
