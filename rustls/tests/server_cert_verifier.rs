@@ -9,16 +9,16 @@ mod common;
 use common::{
     ALL_KEY_TYPES, Altered, Arc, ErrorFromPeer, KeyType, MockServerVerifier, client_config_builder,
     client_config_builder_with_versions, do_handshake, do_handshake_until_both_error,
-    do_handshake_until_error, make_client_config_with_versions, make_pair_for_arc_configs,
-    make_server_config, server_config_builder, transfer_altered,
+    do_handshake_until_error, extract_client_hello_extension, make_client_config_with_versions,
+    make_pair_for_arc_configs, make_server_config, server_config_builder, transfer_altered,
 };
 
 use pki_types::{CertificateDer, ServerName};
 
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
-use rustls::internal::msgs::message::{Message, MessagePayload};
+use rustls::internal::msgs::enums::ExtensionType;
+use rustls::internal::msgs::message::Message;
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
 use rustls::version::{TLS12, TLS13};
@@ -203,16 +203,12 @@ fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
         );
 
         let expect_cas_extension = |msg: &mut Message<'_>| -> Altered {
-            if let MessagePayload::Handshake { parsed, .. } = &msg.payload {
-                if let HandshakePayload::ClientHello(ch) = &parsed.payload {
-                    assert_eq!(
-                        ch.extensions
-                            .iter()
-                            .any(|ext| matches!(ext, ClientExtension::AuthorityNames(_))),
-                        cas_extension_expected
-                    );
-                    println!(
-                        "cas extension expectation met! cas_extension_expected: {cas_extension_expected}"
+            match extract_client_hello_extension(msg, ExtensionType::CertificateAuthorities) {
+                Some(_) if cas_extension_expected => {}
+                None if !cas_extension_expected => {}
+                _ => {
+                    panic!(
+                        "client hello unexpected CA extension (wanted {cas_extension_expected})"
                     );
                 }
             }

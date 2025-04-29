@@ -16,10 +16,15 @@ use rustls::client::{
     AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, UnbufferedClientConnection,
     WebPkiServerVerifier,
 };
-use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
+use rustls::crypto::cipher::{
+    InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, PlainMessage,
+};
 use rustls::crypto::{CryptoProvider, verify_tls13_signature_with_raw_key};
+use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::{Codec, Reader};
-use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use rustls::internal::msgs::enums::ExtensionType;
+use rustls::internal::msgs::handshake::HandshakeMessagePayload;
+use rustls::internal::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
     AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, UnbufferedServerConnection,
@@ -31,8 +36,9 @@ use rustls::unbuffered::{
 };
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
-    DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
-    RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
+    DigitallySignedStruct, DistinguishedName, Error, HandshakeType, InconsistentKeys, NamedGroup,
+    ProtocolVersion, RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme,
+    SupportedCipherSuite,
 };
 
 use webpki::anchor_from_trusted_cert;
@@ -890,6 +896,89 @@ pub fn do_handshake_altered(
     Ok(())
 }
 
+pub fn edit_client_hello_extensions(msg: &mut Message, edits: &[ExtensionEdit]) -> Altered {
+    let MessagePayload::Handshake {
+        parsed:
+            parsed @ HandshakeMessagePayload {
+                typ: HandshakeType::ClientHello,
+                ..
+            },
+        encoded,
+    } = &mut msg.payload
+    else {
+        return Altered::InPlace;
+    };
+
+    let mut hello = encoding::ClientHello::decode(&parsed.get_encoding());
+    edit_extensions(&mut hello.extensions, edits).unwrap();
+    *encoded = Payload::new(hello.encode());
+
+    Altered::InPlace
+}
+
+pub fn edit_encrypted_extensions(msg: &mut Message, edits: &[ExtensionEdit]) -> Altered {
+    let MessagePayload::Handshake {
+        parsed:
+            HandshakeMessagePayload {
+                typ: HandshakeType::EncryptedExtensions,
+                ..
+            },
+        encoded,
+    } = &mut msg.payload
+    else {
+        return Altered::InPlace;
+    };
+
+    let bytes = encoded.bytes();
+    let mut ee = encoding::EncryptedExtensions::decode(bytes);
+    edit_extensions(&mut ee.extensions, edits).unwrap();
+    *encoded = Payload::new(ee.encode());
+
+    Altered::InPlace
+}
+
+pub fn extract_client_hello_extension(msg: &Message, typ: ExtensionType) -> Option<Vec<u8>> {
+    let MessagePayload::Handshake {
+        parsed:
+            parsed @ HandshakeMessagePayload {
+                typ: HandshakeType::ClientHello,
+                ..
+            },
+        ..
+    } = &msg.payload
+    else {
+        return None;
+    };
+
+    let hello = encoding::ClientHello::decode(&parsed.get_encoding());
+    hello
+        .extensions
+        .iter()
+        .find(|ext| ext.typ == typ)
+        .map(|ext| ext.body.clone())
+}
+
+pub fn extract_hello_retry_request_extension(msg: &Message, typ: ExtensionType) -> Option<Vec<u8>> {
+    let MessagePayload::Handshake {
+        parsed:
+            parsed @ HandshakeMessagePayload {
+                typ: HandshakeType::HelloRetryRequest,
+                ..
+            },
+        ..
+    } = &msg.payload
+    else {
+        return None;
+    };
+
+    let hello = encoding::ServerHello::decode(&parsed.get_encoding());
+    hello
+        .extensions
+        .iter()
+        .find(|ext| ext.typ == typ)
+        .map(|ext| ext.body.clone())
+}
+
 pub fn do_handshake_until_both_error(
     client: &mut ClientConnection,
     server: &mut ServerConnection,
@@ -1587,42 +1676,151 @@ pub mod encoding {
     ///
     /// The returned bytes are handshake-framed, but not message-framed.
     pub fn client_hello_with_extensions(extensions: Vec<Extension>) -> Vec<u8> {
-        client_hello(
-            ProtocolVersion::TLSv1_2,
-            &[0u8; 32],
-            &[0],
-            vec![
+        ClientHello {
+            legacy_version: ProtocolVersion::TLSv1_2,
+            random: [0u8; 32],
+            session_id: vec![0],
+            cipher_suites: vec![
                 CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
                 CipherSuite::TLS13_AES_128_GCM_SHA256,
             ],
             extensions,
-        )
+        }
+        .encode()
     }
 
-    pub fn client_hello(
-        legacy_version: ProtocolVersion,
-        random: &[u8; 32],
-        session_id: &[u8],
-        cipher_suites: Vec<CipherSuite>,
-        extensions: Vec<Extension>,
-    ) -> Vec<u8> {
-        let mut out = vec![];
+    pub struct ClientHello {
+        pub legacy_version: ProtocolVersion,
+        pub random: [u8; 32],
+        pub session_id: Vec<u8>,
+        pub cipher_suites: Vec<CipherSuite>,
+        pub extensions: Vec<Extension>,
+    }
 
-        legacy_version.encode(&mut out);
-        out.extend_from_slice(random);
-        out.extend_from_slice(session_id);
-        cipher_suites.to_vec().encode(&mut out);
-        out.extend_from_slice(&[0x01, 0x00]); // only null compression
+    impl ClientHello {
+        pub fn decode(bytes: &[u8]) -> Self {
+            let (handshake_typ, bytes) = super::decoding::take_u8(bytes);
+            assert_eq!(
+                HandshakeType::from(handshake_typ),
+                HandshakeType::ClientHello
+            );
 
-        let mut exts = vec![];
-        for e in extensions {
-            e.typ.encode(&mut exts);
-            exts.extend_from_slice(&(e.body.len() as u16).to_be_bytes());
-            exts.extend_from_slice(&e.body);
+            let (bytes, rest) = super::decoding::len_u24(bytes);
+            assert!(rest.is_empty());
+
+            let (legacy_version, bytes) = super::decoding::take_u16(bytes);
+            let legacy_version = ProtocolVersion::from(legacy_version);
+
+            let (random, bytes) = bytes.split_at(32);
+            let random = random.try_into().unwrap();
+
+            let (session_id, bytes) = super::decoding::len_u8(bytes);
+            let session_id = session_id.to_vec();
+
+            let (cipher_suites, bytes) = super::decoding::len_u16(bytes);
+            let cipher_suites = cipher_suites
+                .chunks_exact(2)
+                .map(|v| CipherSuite::read_bytes(v).unwrap())
+                .collect();
+
+            let (compression, bytes) = super::decoding::len_u8(bytes);
+            assert_eq!(compression, &[0]);
+
+            let extensions = super::decoding::decode_extensions(bytes);
+
+            Self {
+                legacy_version,
+                random,
+                session_id,
+                cipher_suites,
+                extensions,
+            }
         }
 
-        out.extend(len_u16(exts));
-        handshake_framing(HandshakeType::ClientHello, out)
+        pub fn encode(&self) -> Vec<u8> {
+            let mut out = vec![];
+
+            self.legacy_version.encode(&mut out);
+            out.extend_from_slice(&self.random);
+            out.extend_from_slice(&len_u8(self.session_id.clone()));
+            self.cipher_suites.encode(&mut out);
+            out.extend_from_slice(&[0x01, 0x00]); // only null compression
+            out.extend(&encode_extensions(&self.extensions));
+            handshake_framing(HandshakeType::ClientHello, out)
+        }
+    }
+
+    pub struct ServerHello {
+        pub legacy_version: ProtocolVersion,
+        pub random: [u8; 32],
+        pub session_id: Vec<u8>,
+        pub cipher_suite: CipherSuite,
+        pub extensions: Vec<Extension>,
+    }
+
+    impl ServerHello {
+        pub fn decode(bytes: &[u8]) -> Self {
+            let (handshake_typ, bytes) = super::decoding::take_u8(bytes);
+            assert_eq!(
+                HandshakeType::from(handshake_typ),
+                HandshakeType::ServerHello
+            );
+
+            let (bytes, rest) = super::decoding::len_u24(bytes);
+            assert!(rest.is_empty());
+
+            let (legacy_version, bytes) = super::decoding::take_u16(bytes);
+            let legacy_version = ProtocolVersion::from(legacy_version);
+
+            let (random, bytes) = bytes.split_at(32);
+            let random = random.try_into().unwrap();
+
+            let (session_id, bytes) = super::decoding::len_u8(bytes);
+            let session_id = session_id.to_vec();
+
+            let (cipher_suite, bytes) = super::decoding::take_u16(bytes);
+            let cipher_suite = CipherSuite::from(cipher_suite);
+
+            let (compression, bytes) = super::decoding::take_u8(bytes);
+            assert_eq!(compression, 0);
+
+            let extensions = super::decoding::decode_extensions(bytes);
+
+            Self {
+                legacy_version,
+                random,
+                session_id,
+                cipher_suite,
+                extensions,
+            }
+        }
+    }
+
+    pub struct EncryptedExtensions {
+        pub extensions: Vec<Extension>,
+    }
+
+    impl EncryptedExtensions {
+        pub fn decode(bytes: &[u8]) -> Self {
+            let (handshake_typ, bytes) = super::decoding::take_u8(bytes);
+            assert_eq!(
+                HandshakeType::from(handshake_typ),
+                HandshakeType::EncryptedExtensions
+            );
+
+            let (bytes, _) = super::decoding::len_u24(bytes);
+
+            Self {
+                extensions: super::decoding::decode_extensions(bytes),
+            }
+        }
+
+        pub fn encode(&self) -> Vec<u8> {
+            handshake_framing(
+                HandshakeType::EncryptedExtensions,
+                encode_extensions(&self.extensions),
+            )
+        }
     }
 
     /// Apply handshake framing to `body`.
@@ -1642,7 +1840,7 @@ pub mod encoding {
         body
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct Extension {
         pub typ: ExtensionType,
         pub body: Vec<u8>,
@@ -1711,6 +1909,17 @@ pub mod encoding {
         }
     }
 
+    pub fn encode_extensions(extensions: &[Extension]) -> Vec<u8> {
+        let mut exts = vec![];
+        for e in extensions.iter() {
+            e.typ.encode(&mut exts);
+            exts.extend_from_slice(&(e.body.len() as u16).to_be_bytes());
+            exts.extend_from_slice(&e.body);
+        }
+
+        len_u16(exts)
+    }
+
     /// Prefix with u8 length
     pub fn len_u8(mut body: Vec<u8>) -> Vec<u8> {
         body.splice(0..0, [body.len() as u8]);
@@ -1741,4 +1950,174 @@ pub mod encoding {
         }
         body
     }
+}
+
+pub mod decoding {
+    use rustls::NamedGroup;
+    use rustls::internal::msgs::enums::ExtensionType;
+
+    /// Dissect a u24-delimited item, returning the item and the bytes after it
+    pub fn len_u24(body: &[u8]) -> (&[u8], &[u8]) {
+        assert!(body.len() >= 3);
+        let mut len = [0u8; 4];
+        len[1..].copy_from_slice(&body[..3]);
+        let len = u32::from_be_bytes(len) as usize;
+
+        (&body[3..3 + len], &body[3 + len..])
+    }
+
+    /// Dissect a u16-delimited item, returning the item and the bytes after it
+    pub fn len_u16(body: &[u8]) -> (&[u8], &[u8]) {
+        assert!(body.len() >= 2);
+        let len = u16::from_be_bytes(body[..2].try_into().unwrap()) as usize;
+
+        (&body[2..2 + len], &body[2 + len..])
+    }
+
+    /// Dissect a u8-delimited item, returning the item and the bytes after it
+    pub fn len_u8(body: &[u8]) -> (&[u8], &[u8]) {
+        assert!(!body.is_empty());
+        let len = body[0] as usize;
+
+        (&body[1..1 + len], &body[1 + len..])
+    }
+
+    /// Take a u16 from the front, and return the rest
+    pub fn take_u16(body: &[u8]) -> (u16, &[u8]) {
+        assert!(body.len() >= 2);
+        let item = u16::from_be_bytes(body[..2].try_into().unwrap());
+        (item, &body[2..])
+    }
+
+    /// Take a u8 from the front, and return the rest
+    pub fn take_u8(body: &[u8]) -> (u8, &[u8]) {
+        assert!(!body.is_empty());
+        let item = body[0];
+        (item, &body[1..])
+    }
+
+    pub fn decode_extensions(bytes: &[u8]) -> Vec<super::encoding::Extension> {
+        let (mut extensions_items, _) = super::decoding::len_u16(bytes);
+        let mut extensions = vec![];
+        while !extensions_items.is_empty() {
+            let (typ, next) = super::decoding::take_u16(extensions_items);
+            let typ = ExtensionType::from(typ);
+            let (body, next) = super::decoding::len_u16(next);
+            let body = body.to_vec();
+            extensions_items = next;
+
+            extensions.push(super::encoding::Extension { typ, body });
+        }
+        extensions
+    }
+
+    pub struct KeyShareEntry {
+        pub group: NamedGroup,
+        pub share: Vec<u8>,
+    }
+
+    pub fn decode_client_hello_key_shares(body: &[u8]) -> Vec<KeyShareEntry> {
+        let mut ret = vec![];
+
+        let (mut entries, _) = len_u16(body);
+        while !entries.is_empty() {
+            let (group, rest) = take_u16(entries);
+            let (share, next) = len_u16(rest);
+            entries = next;
+
+            ret.push(KeyShareEntry {
+                group: NamedGroup::from(group),
+                share: share.to_vec(),
+            });
+        }
+
+        ret
+    }
+
+    pub fn decode_client_hello_signature_schemes(body: &[u8]) -> Vec<u16> {
+        let mut ret = vec![];
+
+        let (mut entries, _) = len_u16(body);
+        while !entries.is_empty() {
+            let (scheme, rest) = take_u16(entries);
+            entries = rest;
+            ret.push(scheme);
+        }
+
+        ret
+    }
+}
+
+#[derive(Debug)]
+pub enum ExtensionEdit {
+    /// Inserts the specified extension.
+    ///
+    /// No check is performed if the extension already exists.
+    /// Use `Insert(t, v), `Skip(t)` to insert an extension
+    /// and avoid a duplicate extension in this case.
+    Insert(ExtensionType, Vec<u8>),
+
+    /// Skips the specified extension if it appears.
+    ///
+    /// It is not an error if the extension is not present.
+    Skip(ExtensionType),
+
+    /// Replace the specified extension's body with the given value.
+    ///
+    /// An error is returned if the extension is not present.
+    Replace(ExtensionType, Vec<u8>),
+}
+
+fn edit_extensions(
+    extensions: &mut Vec<encoding::Extension>,
+    edits: &[ExtensionEdit],
+) -> Result<(), String> {
+    let mut done: Vec<Option<bool>> = edits
+        .iter()
+        .map(|e| match e {
+            ExtensionEdit::Replace { .. } => Some(false),
+            _ => None,
+        })
+        .collect();
+
+    for e in edits.iter() {
+        match e {
+            ExtensionEdit::Insert(typ, body) => {
+                extensions.push(encoding::Extension {
+                    typ: *typ,
+                    body: body.clone(),
+                });
+            }
+
+            ExtensionEdit::Skip(typ) => {
+                extensions.retain(|ext| ext.typ != *typ);
+            }
+
+            _ => {}
+        }
+    }
+
+    'skip: for ext in extensions.iter_mut() {
+        for (edit, done) in edits.iter().zip(done.iter_mut()) {
+            match edit {
+                ExtensionEdit::Skip(t) if *t == ext.typ => {
+                    continue 'skip;
+                }
+                ExtensionEdit::Replace(t, new) if *t == ext.typ => {
+                    ext.body = new.clone();
+                    *done = Some(true);
+                    continue 'skip;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    for (edit, done) in edits.iter().zip(done) {
+        if let Some(false) = done {
+            return Err(format!("edit {edit:?} not performed"));
+        }
+    }
+
+    Ok(())
 }
