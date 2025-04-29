@@ -229,7 +229,7 @@ impl TlsListElement for SignatureScheme {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerNamePayload<'a> {
+pub(crate) enum ServerNamePayload<'a> {
     /// A successfully decoded value:
     SingleDnsName(DnsName<'a>),
 
@@ -359,7 +359,7 @@ impl HostNamePayload {
 
 wrapped_payload!(
     /// RFC7301: `opaque ProtocolName<1..2^8-1>;`
-    pub struct ProtocolName, PayloadU8<NonEmpty>,
+    pub(crate) struct ProtocolName, PayloadU8<NonEmpty>,
 );
 
 /// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
@@ -371,7 +371,7 @@ impl TlsListElement for ProtocolName {
 
 /// RFC7301 encodes a single protocol name as `Vec<ProtocolName>`
 #[derive(Clone, Debug)]
-pub struct SingleProtocolName(ProtocolName);
+pub(crate) struct SingleProtocolName(ProtocolName);
 
 impl SingleProtocolName {
     pub(crate) fn new(bytes: Vec<u8>) -> Self {
@@ -614,7 +614,7 @@ impl TlsListElement for KeyShareEntry {
 ///
 /// RFC8446: `ProtocolVersion versions<2..254>;`
 #[derive(Clone, Copy, Debug, Default)]
-pub struct SupportedProtocolVersions {
+pub(crate) struct SupportedProtocolVersions {
     pub(crate) tls13: bool,
     pub(crate) tls12: bool,
 }
