@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 use std::io::{self, BufRead, IoSlice, Read, Write};
-use std::ops::{Deref, DerefMut};
+use std::ops::{ControlFlow, Deref, DerefMut};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{fmt, mem};
@@ -16,7 +16,7 @@ use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedK
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
-use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload, ServerExtension};
+use rustls::internal::msgs::handshake::HandshakePayload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -310,30 +310,26 @@ mod test_raw_keys {
         server_cert_types: Option<&Vec<CertificateType>>,
         client_cert_types: Option<&Vec<CertificateType>>,
     ) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for extension in ch.extensions.iter_mut() {
-                    if let ClientExtension::ClientCertTypes(cert_type) = extension {
-                        if let Some(client_cert_types) = client_cert_types {
-                            cert_type.clear();
-                            if !client_cert_types.is_empty() {
-                                cert_type.extend_from_slice(client_cert_types)
-                            }
-                        }
-                    };
-                    if let ClientExtension::ServerCertTypes(cert_type) = extension {
-                        if let Some(server_cert_types) = server_cert_types {
-                            cert_type.clear();
-                            if !server_cert_types.is_empty() {
-                                cert_type.extend_from_slice(server_cert_types)
-                            }
-                        }
-                    };
+        edit_client_hello_extensions(
+            msg,
+            &[
+                ExtensionType::ServerCertificateType,
+                ExtensionType::ClientCertificateType,
+            ],
+            |ext, body| match ext {
+                ExtensionType::ServerCertificateType => {
+                    ControlFlow::Continue(server_cert_types.map(|v| {
+                        encoding::len_u16(encoding::len_u8(encoding::vector_of(v.iter().cloned())))
+                    }))
                 }
-            }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
+                ExtensionType::ClientCertificateType => {
+                    ControlFlow::Continue(client_cert_types.map(|v| {
+                        encoding::len_u16(encoding::len_u8(encoding::vector_of(v.iter().cloned())))
+                    }))
+                }
+                _ => ControlFlow::Continue(Some(body)),
+            },
+        )
     }
 
     fn alter_server_hello_message(
@@ -366,46 +362,30 @@ mod test_raw_keys {
 
         // Manipulate Message
         let mut msg = Message::try_from(decrypted_msg).unwrap();
-
-        let encoded = if let MessagePayload::Handshake { parsed, .. } = &mut msg.payload {
-            if let HandshakePayload::EncryptedExtensions(enc_ext) = &mut parsed.payload {
-                let mut sct_present = false;
-                let mut cct_present = false;
-                for extension in enc_ext.iter_mut() {
-                    if let ServerExtension::ClientCertType(cert_type) = extension {
-                        if let Some(cct) = client_cert_type {
-                            *cert_type = *cct;
-                        }
-                        cct_present = true;
-                    };
-                    if let ServerExtension::ServerCertType(cert_type) = extension {
-                        if let Some(sct) = server_cert_type {
-                            *cert_type = *sct;
-                        }
-                        sct_present = true;
-                    };
-                }
-                if !sct_present {
-                    if let Some(sct) = server_cert_type {
-                        enc_ext.push(ServerExtension::ServerCertType(*sct));
-                    }
-                }
-                if !cct_present {
-                    if let Some(cct) = client_cert_type {
-                        enc_ext.push(ServerExtension::ClientCertType(*cct));
-                    }
-                }
-            }
-            Payload::new(parsed.get_encoding())
-        } else {
-            panic!("Expected to successfully encode handshake message");
-        };
+        edit_encrypted_extensions(
+            &mut msg,
+            &[
+                ExtensionType::ClientCertificateType,
+                ExtensionType::ServerCertificateType,
+            ],
+            |ext, body| {
+                ControlFlow::Continue(match ext {
+                    ExtensionType::ClientCertificateType => client_cert_type
+                        .map(|cert_type| encoding::len_u16(cert_type.to_array().to_vec())),
+                    ExtensionType::ServerCertificateType => server_cert_type
+                        .map(|cert_type| encoding::len_u16(cert_type.to_array().to_vec())),
+                    _ => Some(body),
+                })
+            },
+        );
+        let mut encoded = Vec::new();
+        msg.payload.encode(&mut encoded);
 
         // // Re-encrypt
         let outgoing = OutboundPlainMessage {
             typ: ContentType::Handshake,
             version: ProtocolVersion::TLSv1_3,
-            payload: OutboundChunks::Single(encoded.bytes()),
+            payload: OutboundChunks::Single(&encoded),
         };
         Altered::Raw(
             encrypter
@@ -5622,8 +5602,7 @@ mod test_quic {
 fn test_client_does_not_offer_sha1() {
     use rustls::HandshakeType;
     use rustls::internal::msgs::codec::Reader;
-    use rustls::internal::msgs::handshake::HandshakePayload;
-    use rustls::internal::msgs::message::{MessagePayload, OutboundOpaqueMessage};
+    use rustls::internal::msgs::message::OutboundOpaqueMessage;
 
     for kt in ALL_KEY_TYPES {
         for version in rustls::ALL_VERSIONS {
@@ -5639,19 +5618,11 @@ fn test_client_does_not_offer_sha1() {
             let msg = Message::try_from(msg.into_plain_message()).unwrap();
             assert!(msg.is_handshake_type(HandshakeType::ClientHello));
 
-            let client_hello = match msg.payload {
-                MessagePayload::Handshake { parsed, .. } => match parsed.payload {
-                    HandshakePayload::ClientHello(ch) => ch,
-                    _ => unreachable!(),
-                },
-                _ => unreachable!(),
-            };
-
-            let sigalgs = client_hello
-                .sigalgs_extension()
-                .unwrap();
+            let sigalgs =
+                extract_client_hello_extension(&msg, ExtensionType::SignatureAlgorithms).unwrap();
+            let sigalgs = decoding::decode_client_hello_signature_schemes(&sigalgs);
             assert!(
-                !sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1),
+                !sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1.into()),
                 "sha1 unexpectedly offered"
             );
         }
@@ -5801,15 +5772,15 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         SessionId::random(provider::default_provider().secure_random).unwrap();
 
     let assert_client_sends_hello_with_secp384 = |msg: &mut Message| -> Altered {
+        let key_shares = extract_client_hello_extension(msg, ExtensionType::KeyShare)
+            .expect("missing key share extension");
+        let key_shares = decoding::decode_client_hello_key_shares(&key_shares);
+        assert_eq!(key_shares.len(), 1);
+        assert_eq!(key_shares[0].group, rustls::NamedGroup::secp384r1);
+
         match &mut msg.payload {
             MessagePayload::Handshake { parsed, encoded } => match &mut parsed.payload {
                 HandshakePayload::ClientHello(ch) => {
-                    let keyshares = ch
-                        .keyshare_extension()
-                        .expect("missing key share extension");
-                    assert_eq!(keyshares.len(), 1);
-                    assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
-
                     ch.session_id = different_session_id;
                     *encoded = Payload::new(parsed.get_encoding());
                 }
@@ -5824,9 +5795,12 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         match &msg.payload {
             MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
                 HandshakePayload::HelloRetryRequest(hrr) => {
-                    let group = hrr.requested_key_share_group();
-                    assert_eq!(group, Some(rustls::NamedGroup::X25519));
-
+                    let group = extract_hello_retry_request_extension(msg, ExtensionType::KeyShare)
+                        .expect("server failed to request specific group");
+                    assert_eq!(
+                        group,
+                        encoding::len_u16(NamedGroup::X25519.to_array().to_vec())
+                    );
                     assert_eq!(hrr.session_id, different_session_id);
                 }
                 _ => panic!("unexpected handshake message {parsed:?}"),
@@ -5957,28 +5931,25 @@ fn test_client_sends_share_for_less_preferred_group() {
 
     // second handshake (this must HRR to the most-preferred group)
     let assert_client_sends_secp384_share = |msg: &mut Message| -> Altered {
-        match &msg.payload {
-            MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
-                HandshakePayload::ClientHello(ch) => {
-                    let keyshares = ch
-                        .keyshare_extension()
-                        .expect("missing key share extension");
-                    assert_eq!(keyshares.len(), 1);
-                    assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
-                }
-                _ => panic!("unexpected handshake message {:?}", parsed),
-            },
-            _ => panic!("unexpected non-handshake message {:?}", msg),
-        };
+        let key_shares = extract_client_hello_extension(msg, ExtensionType::KeyShare)
+            .expect("missing key share extension");
+        let key_shares = decoding::decode_client_hello_key_shares(&key_shares);
+        assert_eq!(key_shares.len(), 1);
+        assert_eq!(key_shares[0].group, NamedGroup::secp384r1);
+
         Altered::InPlace
     };
 
     let assert_server_requests_retry_to_x25519 = |msg: &mut Message| -> Altered {
         match &msg.payload {
             MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
-                HandshakePayload::HelloRetryRequest(hrr) => {
-                    let group = hrr.requested_key_share_group();
-                    assert_eq!(group, Some(rustls::NamedGroup::X25519));
+                HandshakePayload::HelloRetryRequest(_) => {
+                    let group = extract_hello_retry_request_extension(msg, ExtensionType::KeyShare)
+                        .expect("server failed to request specific group");
+                    assert_eq!(
+                        group,
+                        encoding::len_u16(NamedGroup::X25519.to_array().to_vec())
+                    );
                 }
                 _ => panic!("unexpected handshake message {:?}", parsed),
             },
@@ -6295,19 +6266,10 @@ fn test_no_session_ticket_request_on_tls_1_3() {
     ///
     /// Does not actually alter the payload.
     fn panic_on_session_ticket(msg: &mut Message) -> Altered {
-        let MessagePayload::Handshake { parsed, encoded: _ } = &msg.payload else {
-            return Altered::InPlace;
-        };
-
-        let HandshakePayload::ClientHello(ch) = &parsed.payload else {
-            return Altered::InPlace;
-        };
-
-        for ext in &ch.extensions {
-            if matches!(ext, ClientExtension::SessionTicket(_)) {
-                panic!("TLS 1.2 session_ticket extension in TLS 1.3 handshake detected.");
-            }
-        }
+        assert!(
+            extract_client_hello_extension(msg, ExtensionType::SessionTicket).is_none(),
+            "TLS 1.2 session_ticket extension in TLS 1.3 handshake detected."
+        );
 
         Altered::InPlace
     }
@@ -6438,16 +6400,10 @@ fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_f
 
 #[cfg(feature = "tls12")]
 fn remove_ems_request(msg: &mut Message) -> Altered {
-    if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-        if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-            ch.extensions
-                .retain(|ext| !matches!(ext, ClientExtension::ExtendedMasterSecretRequest))
-        }
-
-        *encoded = Payload::new(parsed.get_encoding());
-    }
-
-    Altered::InPlace
+    edit_client_hello_extensions(msg, &[], |ext, body| match ext {
+        ExtensionType::ExtendedMasterSecret => ControlFlow::Continue(None),
+        _ => ControlFlow::Continue(Some(body)),
+    })
 }
 
 /// https://github.com/rustls/rustls/issues/797
@@ -8381,40 +8337,25 @@ impl ActiveKeyExchange for FakeHybridActive {
 }
 
 fn assert_client_sends_hello_with_two_key_shares(msg: &mut Message) -> Altered {
-    match &mut msg.payload {
-        MessagePayload::Handshake { parsed, .. } => match &mut parsed.payload {
-            HandshakePayload::ClientHello(ch) => {
-                let keyshares = ch
-                    .keyshare_extension()
-                    .expect("missing key share extension");
-                assert_eq!(keyshares.len(), 2);
-                assert_eq!(keyshares[0].group(), FakeHybrid.name());
-                assert_eq!(keyshares[0].get_encoding(), b"\x12\x34\x00\x06hybrid");
-                assert_eq!(keyshares[1].group(), NamedGroup::secp384r1);
-                assert_eq!(keyshares[1].get_encoding(), b"\x00\x18\x00\x09classical");
-            }
-            _ => panic!("unexpected handshake message {parsed:?}"),
-        },
-        _ => panic!("unexpected non-handshake message {msg:?}"),
-    };
+    let key_shares = extract_client_hello_extension(msg, ExtensionType::KeyShare)
+        .expect("missing key share extension");
+    let key_shares = decoding::decode_client_hello_key_shares(&key_shares);
+    assert_eq!(key_shares.len(), 2);
+    assert_eq!(key_shares[0].group, FakeHybrid.name());
+    assert_eq!(key_shares[0].share, b"hybrid");
+    assert_eq!(key_shares[1].group, NamedGroup::secp384r1);
+    assert_eq!(key_shares[1].share, b"classical");
+
     Altered::InPlace
 }
 
 fn assert_client_sends_hello_with_one_hybrid_key_share(msg: &mut Message) -> Altered {
-    match &mut msg.payload {
-        MessagePayload::Handshake { parsed, .. } => match &mut parsed.payload {
-            HandshakePayload::ClientHello(ch) => {
-                let keyshares = ch
-                    .keyshare_extension()
-                    .expect("missing key share extension");
-                assert_eq!(keyshares.len(), 1);
-                assert_eq!(keyshares[0].group(), FakeHybrid.name());
-                assert_eq!(keyshares[0].get_encoding(), b"\x12\x34\x00\x06hybrid");
-            }
-            _ => panic!("unexpected handshake message {parsed:?}"),
-        },
-        _ => panic!("unexpected non-handshake message {msg:?}"),
-    };
+    let key_shares = extract_client_hello_extension(msg, ExtensionType::KeyShare)
+        .expect("missing key share extension");
+    let key_shares = decoding::decode_client_hello_key_shares(&key_shares);
+    assert_eq!(key_shares.len(), 1);
+    assert_eq!(key_shares[0].group, FakeHybrid.name());
+    assert_eq!(key_shares[0].share, b"hybrid");
     Altered::InPlace
 }
 

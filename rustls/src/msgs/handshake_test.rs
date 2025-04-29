@@ -1,3 +1,4 @@
+use core::ops::ControlFlow;
 use std::prelude::v1::*;
 use std::{format, println, vec};
 
@@ -591,6 +592,48 @@ fn test_hello_retry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryR
         payload: Payload::Borrowed(&[]),
     })];
     assert!(!getter(&hrr));
+}
+
+#[test]
+fn test_hello_retry_encode_extensions_fix_point() {
+    let hrr = HandshakeMessagePayload {
+        typ: HandshakeType::HelloRetryRequest,
+        payload: HandshakePayload::HelloRetryRequest(sample_hello_retry_request()),
+    };
+
+    assert_eq!(
+        hrr.visit_extensions_encode(&[], |_, body| ControlFlow::<(), _>::Continue(Some(body)))
+            .unwrap(),
+        hrr.get_encoding()
+    );
+}
+
+#[test]
+fn test_server_hello_encode_extensions_fix_point() {
+    let sh = HandshakeMessagePayload {
+        typ: HandshakeType::ServerHello,
+        payload: HandshakePayload::ServerHello(sample_server_hello_payload()),
+    };
+
+    assert_eq!(
+        sh.visit_extensions_encode(&[], |_, body| ControlFlow::<(), _>::Continue(Some(body)))
+            .unwrap(),
+        sh.get_encoding()
+    );
+}
+
+#[test]
+fn test_client_hello_encode_extensions_fix_point() {
+    let ch = HandshakeMessagePayload {
+        typ: HandshakeType::ClientHello,
+        payload: HandshakePayload::ClientHello(sample_client_hello_payload()),
+    };
+
+    assert_eq!(
+        ch.visit_extensions_encode(&[], |_, body| ControlFlow::<(), _>::Continue(Some(body)))
+            .unwrap(),
+        ch.get_encoding()
+    );
 }
 
 #[test]

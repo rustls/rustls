@@ -3,7 +3,7 @@ use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ops::Deref;
+use core::ops::{ControlFlow, Deref};
 use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
@@ -997,7 +997,31 @@ pub struct ClientHelloPayload {
     pub session_id: SessionId,
     pub cipher_suites: Vec<CipherSuite>,
     pub compression_methods: Vec<Compression>,
-    pub extensions: Vec<ClientExtension>,
+    pub(crate) extensions: Vec<ClientExtension>,
+}
+
+impl ClientHelloPayload {
+    fn visit_encode<V, E>(&self, extras: &[ExtensionType], visitor: V) -> Result<Vec<u8>, E>
+    where
+        V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
+    {
+        let exts = visit_extensions_encode(
+            self.extensions
+                .iter()
+                .map(|ext| (ext.ext_type(), ext.get_encoding()))
+                .collect(),
+            extras,
+            visitor,
+        )?;
+
+        let mut bytes = Self {
+            extensions: vec![],
+            ..self.clone()
+        }
+        .get_encoding();
+        bytes.extend_from_slice(&exts);
+        Ok(bytes)
+    }
 }
 
 impl Codec<'_> for ClientHelloPayload {
@@ -1397,6 +1421,29 @@ impl Codec<'_> for HelloRetryRequest {
 }
 
 impl HelloRetryRequest {
+    fn visit_encode<V, E>(&self, extras: &[ExtensionType], visitor: V) -> Result<Vec<u8>, E>
+    where
+        V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
+    {
+        let extensions = visit_extensions_encode(
+            self.extensions
+                .iter()
+                .map(|ext| (ext.ext_type(), ext.get_encoding()))
+                .collect(),
+            extras,
+            visitor,
+        )?;
+
+        let mut bytes = Self {
+            extensions: vec![],
+            ..self.clone()
+        }
+        .get_encoding();
+        bytes.drain(bytes.len() - 2..); // drop extensions length
+        bytes.extend_from_slice(&extensions);
+        Ok(bytes)
+    }
+
     /// Returns true if there is more than one extension of a given
     /// type.
     pub(crate) fn has_duplicate_extension(&self) -> bool {
@@ -1490,7 +1537,7 @@ impl HelloRetryRequest {
 
 #[derive(Clone, Debug)]
 pub struct ServerHelloPayload {
-    pub extensions: Vec<ServerExtension>,
+    pub(crate) extensions: Vec<ServerExtension>,
     pub(crate) legacy_version: ProtocolVersion,
     pub(crate) random: Random,
     pub(crate) session_id: SessionId,
@@ -2919,6 +2966,77 @@ impl<'a> HandshakeMessagePayload<'a> {
             .map(|_| Self { typ, payload })
     }
 
+    /// Encode the object, offering each extension to a visitor function.
+    ///
+    /// This is a testing function internal to rustls.
+    ///
+    /// For types with no extensions, this is equivalent to `encode()` and
+    /// the visitor is not called.
+    ///
+    /// The set of extensions are those present in the receiving object, plus
+    /// those named in `extras`.  An item in `extras` is ignored if it is
+    /// also present in the receiving object.  The `extras` parameter means
+    /// a caller can set a given extension, without knowing whether it is
+    /// already present.
+    ///
+    /// Each extension is presented to the visitor as an `ExtensionType` and
+    /// its body encoding.  The visitor may return:
+    ///
+    /// - `ControlFlow::Continue(Some(x))` to use `x` as the extension's body
+    /// - `ControlFlow::Continue(None)` to not encode this extension
+    /// - `ControlFlow::Break(y)` to return from this function with the value `Err(y)`
+    ///
+    /// Any extension is presented at most once.  An extension presented because
+    /// it is specified in `extras` is presented with a body encoding of `0x0000`.
+    ///
+    /// Once all the extensions are visited, an encoding of this object
+    /// is returned.  This is equivalent to `self.get_encoding()` if
+    /// `visitor` always returns `Continue(Some(x))` and `extras` is empty.
+    #[doc(hidden)]
+    pub fn visit_extensions_encode<V, E>(
+        &self,
+        extras: &[ExtensionType],
+        visitor: V,
+    ) -> Result<Vec<u8>, E>
+    where
+        V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
+    {
+        let body = match &self.payload {
+            HandshakePayload::ClientHello(ch) => ch.visit_encode(extras, visitor)?,
+            HandshakePayload::HelloRetryRequest(hrr) => hrr.visit_encode(extras, visitor)?,
+            HandshakePayload::EncryptedExtensions(ee) => visit_extensions_encode(
+                ee.iter()
+                    .map(|ext| (ext.ext_type(), ext.get_encoding()))
+                    .collect(),
+                extras,
+                visitor,
+            )?,
+            _ => {
+                let mut bytes = Vec::new();
+                self.encode(&mut bytes);
+                return Ok(bytes);
+            }
+        };
+
+        let mut bytes = Vec::new();
+        match self.typ {
+            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
+            _ => self.typ,
+        }
+        .encode(&mut bytes);
+
+        let nested = LengthPrefixedBuffer::new(
+            ListLength::U24 {
+                max: usize::MAX,
+                error: InvalidMessage::MessageTooLarge,
+            },
+            &mut bytes,
+        );
+        nested.buf.extend_from_slice(&body);
+        drop(nested);
+        Ok(bytes)
+    }
+
     pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
         let mut ret = self.get_encoding();
         let ret_len = ret.len() - self.total_binder_length();
@@ -3316,6 +3434,39 @@ fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>(iter: I) -
     false
 }
 
+fn visit_extensions_encode<V, E>(
+    mut items: Vec<(ExtensionType, Vec<u8>)>,
+    extras: &[ExtensionType],
+    mut visitor: V,
+) -> Result<Vec<u8>, E>
+where
+    V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
+{
+    let mut buffer = Vec::new();
+    let whole = LengthPrefixedBuffer::new(ListLength::U16, &mut buffer);
+
+    for e in extras {
+        if !items.iter().any(|(ee, _)| ee == e) {
+            items.insert(0, (*e, vec![0x00, 0x00, 0x00, 0x00]));
+        }
+    }
+
+    for (ty, mut body) in items.into_iter() {
+        body.drain(..2); // drop extension type
+
+        match visitor(ty, body) {
+            ControlFlow::Continue(Some(body)) => {
+                ty.encode(whole.buf);
+                whole.buf.extend(body);
+            }
+            ControlFlow::Continue(None) => {}
+            ControlFlow::Break(err) => return Err(err),
+        }
+    }
+
+    drop(whole);
+    Ok(buffer)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
