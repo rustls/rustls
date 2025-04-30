@@ -114,7 +114,7 @@ mod client_hello {
         /// The PSK.
         psk: PresharedKey,
         /// The chosen PSK key exchange mode.
-        mode: PSKKeyExchangeMode,
+        mode: PskKeyExchangeMode,
     }
 
     impl ChosenPresharedKey {
@@ -323,7 +323,7 @@ mod client_hello {
             }
 
             let input_secrets = {
-                use PSKKeyExchangeMode::*;
+                use PskKeyExchangeMode::*;
 
                 // NB: This extension affects whether we need
                 // a client key share.
@@ -604,8 +604,8 @@ mod client_hello {
         fn psk_kex_modes(
             &mut self,
             client_hello: &ClientHelloPayload,
-        ) -> Option<PSKKeyExchangeMode> {
-            use PSKKeyExchangeMode::*;
+        ) -> Option<PskKeyExchangeMode> {
+            use PskKeyExchangeMode::*;
 
             let modes = client_hello
                 .psk_modes()
@@ -679,9 +679,9 @@ mod client_hello {
             cx: &mut ServerContext<'_>,
             chm: &Message<'_>,
             client_hello: &ClientHelloPayload,
-            mode: Option<PSKKeyExchangeMode>,
+            mode: Option<PskKeyExchangeMode>,
         ) -> Result<Option<ChosenPresharedKey>, Error> {
-            use PSKKeyExchangeMode::*;
+            use PskKeyExchangeMode::*;
 
             // `mode` should come from `self.psk_kex_modes`.
             debug_assert!(mode.is_some() == client_hello.psk_modes().is_some());
@@ -915,7 +915,7 @@ mod client_hello {
                 // NOT supply a "key_share" value."
                 debug_assert_ne!(
                     psk.as_ref().map(|psk| psk.mode),
-                    Some(PSKKeyExchangeMode::PSK_KE)
+                    Some(PskKeyExchangeMode::PSK_KE)
                 );
 
                 extensions.push(ServerExtension::KeyShare(KeyShareEntry::new(

@@ -218,7 +218,7 @@ pub(super) fn start_handshake(
 
 struct ExpectServerHello {
     input: ClientHelloInput,
-    psk_modes: Vec<PSKKeyExchangeMode>,
+    psk_modes: Vec<PskKeyExchangeMode>,
     transcript_buffer: HandshakeHashBuffer,
     // The key schedule for sending early data.
     //
@@ -383,18 +383,18 @@ fn emit_client_hello_for_retry(
         exts.push(ClientExtension::Cookie(cookie.clone()));
     }
 
-    let psk_modes = if support_tls13 {
+    let psk_modes = if supported_versions.tls13 {
         let mut modes = config
             .psk_kex_modes
             .iter()
             .map(|mode| match mode {
-                PskKexMode::PskOnly => PSKKeyExchangeMode::PSK_KE,
-                PskKexMode::PskWithDhe => PSKKeyExchangeMode::PSK_DHE_KE,
+                PskKexMode::PskOnly => PskKeyExchangeMode::PSK_KE,
+                PskKexMode::PskWithDhe => PskKeyExchangeMode::PSK_DHE_KE,
             })
             .collect::<Vec<_>>();
         if modes.is_empty() {
             // See the documentation for `config.psk_kex_modes`.
-            modes.push(PSKKeyExchangeMode::PSK_DHE_KE);
+            modes.push(PskKeyExchangeMode::PSK_DHE_KE);
         }
         exts.push(ClientExtension::PresharedKeyModes(modes.clone()));
         modes
@@ -620,15 +620,15 @@ fn emit_client_hello_for_retry(
         }
         let hash = psk.early_data_hash(config)?;
 
-            let (transcript_buffer, random) = match &ech_state {
-                // When using ECH the early data key schedule is derived based on the inner
-                // hello transcript and random.
-                Some(ech_state) => (
-                    &ech_state.inner_hello_transcript,
-                    &ech_state.inner_hello_random.0,
-                ),
-                None => (&transcript_buffer, &input.random.0),
-            };
+        let (transcript_buffer, random) = match &ech_state {
+            // When using ECH the early data key schedule is derived based on the inner
+            // hello transcript and random.
+            Some(ech_state) => (
+                &ech_state.inner_hello_transcript,
+                &ech_state.inner_hello_random.0,
+            ),
+            None => (&transcript_buffer, &input.random.0),
+        };
 
         tls13::derive_early_traffic_secret(
             &*config.key_log,
@@ -1034,7 +1034,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 let offered_key_share = if psks.is_none()
                     || self
                         .psk_modes
-                        .contains(&PSKKeyExchangeMode::PSK_DHE_KE)
+                        .contains(&PskKeyExchangeMode::PSK_DHE_KE)
                 {
                     Some(self.offered_key_share.unwrap())
                 } else {

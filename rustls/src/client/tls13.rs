@@ -28,7 +28,7 @@ use crate::log::{debug, trace, warn};
 use crate::msgs::base::{Payload, PayloadU8};
 use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::enums::{ExtensionType, KeyUpdateRequest, PSKKeyExchangeMode};
+use crate::msgs::enums::{ExtensionType, KeyUpdateRequest, PskKeyExchangeMode};
 use crate::msgs::handshake::{
     CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtension, EchConfigPayload,
     HandshakeMessagePayload, HandshakePayload, HasServerExtensions, KeyShareEntry,
@@ -73,7 +73,7 @@ pub(super) fn handle_server_hello(
     cx: &mut ClientContext<'_>,
     server_hello: &ServerHelloPayload,
     psks: Option<PresharedKeys>,
-    psk_modes: Vec<PSKKeyExchangeMode>,
+    psk_modes: Vec<PskKeyExchangeMode>,
     server_name: ServerName<'static>,
     mut randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
@@ -96,7 +96,7 @@ pub(super) fn handle_server_hello(
         // - only offering external PSKs, and
         // - not offering PSK_DHE_KE
         if our_key_share.is_none() {
-            debug_assert!(psks.is_none() || psk_modes.contains(&PSKKeyExchangeMode::PSK_DHE_KE));
+            debug_assert!(psks.is_none() || psk_modes.contains(&PskKeyExchangeMode::PSK_DHE_KE));
         }
 
         // If we sent PSKs then we must also send PSK modes.
@@ -128,8 +128,8 @@ pub(super) fn handle_server_hello(
     // indicated by the presence of the "key_share" in the
     // ServerHello."
     let mode = match their_key_share {
-        Some(_) => PSKKeyExchangeMode::PSK_DHE_KE,
-        None => PSKKeyExchangeMode::PSK_KE,
+        Some(_) => PskKeyExchangeMode::PSK_DHE_KE,
+        None => PskKeyExchangeMode::PSK_KE,
     };
 
     // RFC 8446: "Servers MUST NOT select a key exchange mode
@@ -274,7 +274,7 @@ pub(super) fn handle_server_hello(
 
     let mut key_schedule = {
         let secret = if let Some(their_key_share) = their_key_share {
-            debug_assert_eq!(mode, PSKKeyExchangeMode::PSK_DHE_KE);
+            debug_assert_eq!(mode, PskKeyExchangeMode::PSK_DHE_KE);
             debug!("server selected PSK_DHE_KE");
             // The server elected to perform DHE_KE, so we need
             // to have a key share.

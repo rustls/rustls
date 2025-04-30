@@ -148,15 +148,15 @@ impl<C: Cardinality> Codec<'_> for PayloadU16<C> {
     }
 }
 
-impl Zeroize for PayloadU16 {
-    fn zeroize(&mut self) {
-        self.0.zeroize();
+impl<C: Cardinality> fmt::Debug for PayloadU16<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        hex(f, &self.0)
     }
 }
 
-impl fmt::Debug for PayloadU16 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        hex(f, &self.0)
+impl<C: Cardinality> Zeroize for PayloadU16<C> {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
     }
 }
 
