@@ -158,11 +158,11 @@ pub(super) fn handle_server_hello(
     // Load the PSK chosen by the server, if any.
     let psk = if let Some(index) = psk_index {
         // The server sent a "pre_shared_key" extension.
-        let Some(psk) = psks else {
+        let Some(psks) = psks else {
             // However, we did not.
             return Err(PeerMisbehaved::SelectedUnofferedPsk.into());
         };
-        match psk {
+        match psks {
             PresharedKeys::Resumption(resuming) => {
                 let Some(resuming_suite) = suite.can_resume_from(resuming.suite()) else {
                     return Err({
@@ -232,6 +232,10 @@ pub(super) fn handle_server_hello(
     } else {
         None
     };
+
+    cx.common.chosen_psk_identity = psk
+        .as_ref()
+        .map(|psk| psk.identity().to_vec());
 
     let key_schedule_pre_handshake = match (early_data_key_schedule, &psk) {
         // We offered early data and the server chose one of our
@@ -378,7 +382,7 @@ pub(super) fn handle_server_hello(
     }))
 }
 
-/// A chosen PSK.
+/// The PSK offered by the client and chosen by the server.
 #[derive(Debug)]
 enum ChosenPresharedKey {
     /// A resumption PSK.
@@ -396,6 +400,14 @@ impl ChosenPresharedKey {
         match self {
             Self::Resumption { resuming, .. } => resuming.secret(),
             Self::External { psk, .. } => psk.secret(),
+        }
+    }
+
+    /// Returns the PSK identity.
+    fn identity(&self) -> &[u8] {
+        match self {
+            Self::Resumption { resuming, .. } => resuming.common.ticket(),
+            Self::External { psk, .. } => psk.identity(),
         }
     }
 
@@ -513,7 +525,7 @@ impl PresharedKeys {
     /// Returns the number of preshared keys.
     fn len(&self) -> usize {
         match self {
-            Self::Resumption(_) => 1,
+            Self::Resumption { .. } => 1,
             Self::External(psks) => psks.len(),
         }
     }

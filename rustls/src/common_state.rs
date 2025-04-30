@@ -29,6 +29,7 @@ use crate::{quic, record_layer};
 /// Connection state common to both client and server connections.
 pub struct CommonState {
     pub(crate) negotiated_version: Option<ProtocolVersion>,
+    pub(crate) chosen_psk_identity: Option<Vec<u8>>,
     pub(crate) handshake_kind: Option<HandshakeKind>,
     pub(crate) side: Side,
     pub(crate) record_layer: record_layer::RecordLayer,
@@ -65,6 +66,7 @@ impl CommonState {
     pub(crate) fn new(side: Side) -> Self {
         Self {
             negotiated_version: None,
+            chosen_psk_identity: None,
             handshake_kind: None,
             side,
             record_layer: record_layer::RecordLayer::new(),
@@ -184,6 +186,15 @@ impl CommonState {
     /// handshake occurred.
     pub fn handshake_kind(&self) -> Option<HandshakeKind> {
         self.handshake_kind
+    }
+
+    /// Returns the identity of the PSK agreed with the peer, if
+    /// any.
+    ///
+    /// It returns `None` before a PSK has been negotiated, or if
+    /// a PSK wasn't used.
+    pub fn chosen_psk_identity(&self) -> Option<&[u8]> {
+        self.chosen_psk_identity.as_deref()
     }
 
     pub(crate) fn is_tls13(&self) -> bool {

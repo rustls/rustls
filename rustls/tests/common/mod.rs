@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(clippy::disallowed_types, clippy::duplicate_mod)]
 
+use std::collections::HashMap;
 use std::io;
 use std::ops::DerefMut;
 use std::sync::OnceLock;
@@ -13,19 +14,24 @@ use pki_types::{
 
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
-    AlwaysResolvesClientRawPublicKeys, ServerCertVerifierBuilder, WebPkiServerVerifier,
+    AlwaysResolvesClientRawPublicKeys, PresharedKeyStore, ServerCertVerifierBuilder,
+    WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
-use rustls::crypto::{CryptoProvider, verify_tls13_signature_with_raw_key};
+use rustls::crypto::hash::HashAlgorithm;
+use rustls::crypto::{
+    CryptoProvider, PresharedKey, SecureRandom, verify_tls13_signature_with_raw_key,
+};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
-    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, WebPkiClientVerifier,
+    AlwaysResolvesServerRawPublicKeys, ClientCertVerifierBuilder, SelectsPresharedKeys,
+    WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
+    CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
     DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
     RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
@@ -1655,4 +1661,213 @@ pub mod encoding {
         }
         body
     }
+}
+
+/// A test implementation of [`PresharedKeyStore`].
+#[derive(Debug)]
+pub struct ClientPresharedKeys {
+    keys: HashMap<ServerName<'static>, Vec<Arc<PresharedKey>>>,
+}
+
+impl ClientPresharedKeys {
+    /// Creates an empty PSK database.
+    pub fn new() -> Self {
+        Self {
+            keys: HashMap::new(),
+        }
+    }
+
+    /// Adds the PSK to the database.
+    pub fn insert(&mut self, server_name: ServerName<'_>, psk: PresharedKey) -> Result<(), Error> {
+        use std::collections::hash_map::Entry;
+
+        let psk = Arc::new(psk);
+        let entry = self.keys.entry(server_name.to_owned());
+        match entry {
+            Entry::Occupied(mut entry) => {
+                if entry
+                    .get()
+                    .iter()
+                    .any(|v| v.identity() == psk.identity())
+                {
+                    return Err(Error::General(format!(
+                        "duplicate identity: {:02x?}",
+                        psk.identity(),
+                    )));
+                }
+                entry.get_mut().push(psk.clone());
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(vec![psk.clone()]);
+            }
+        }
+        Ok(())
+    }
+
+    /// Adds `n` random PSKs.
+    pub fn insert_random(&mut self, server_name: ServerName<'_>, n: usize) {
+        for _ in 0..n {
+            self.insert(server_name.clone(), random_psk())
+                .unwrap();
+        }
+    }
+}
+
+impl PresharedKeyStore for ClientPresharedKeys {
+    fn psks(&self, server_name: &ServerName<'_>) -> Vec<Arc<PresharedKey>> {
+        self.keys
+            .get(server_name)
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
+/// A test implementation of [`SelectsPresharedKeys`].
+#[derive(Debug)]
+pub struct ServerPresharedKeys {
+    keys: HashMap<Vec<u8>, Arc<PresharedKey>>,
+}
+
+impl ServerPresharedKeys {
+    /// Creates an empty PSK database.
+    pub fn new() -> Self {
+        Self {
+            keys: HashMap::new(),
+        }
+    }
+
+    /// Creates a random PSK database.
+    pub fn random(n: usize) -> Self {
+        let mut keys = Self::new();
+        keys.insert_random(n);
+        keys
+    }
+
+    /// Adds the PSK to the database.
+    pub fn insert(&mut self, psk: PresharedKey) -> Result<(), Error> {
+        let psk = Arc::new(psk);
+        let identity = psk.identity().to_vec();
+        if self
+            .keys
+            .insert(identity, Arc::clone(&psk))
+            .is_some()
+        {
+            return Err(Error::General(format!(
+                "duplicate identity: {:02x?}",
+                psk.identity(),
+            )));
+        }
+        Ok(())
+    }
+
+    /// Adds `n` random PSKs.
+    pub fn insert_random(&mut self, n: usize) {
+        for _ in 0..n {
+            self.insert(random_psk()).unwrap();
+        }
+    }
+}
+
+impl SelectsPresharedKeys for ServerPresharedKeys {
+    fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
+        self.keys.get(identity).cloned()
+    }
+}
+
+/// An extension trait for [`SecureRandom`].
+pub trait SecureRandomExt {
+    /// Returns a random `bool`.
+    fn rand_bool(&self) -> bool;
+    /// Returns a random `u32`.
+    fn rand_u32(&self) -> u32;
+    /// Returns a random `usize`.
+    fn rand_usize(&self) -> usize;
+    /// Returns a random element in `data`, or `None` if `data`
+    /// is empty.
+    fn rand_elem<'a, T>(&self, data: &'a [T]) -> Option<&'a T>;
+    /// Returns `N` random bytes.
+    fn rand_bytes<const N: usize>(&self) -> [u8; N];
+}
+
+impl SecureRandomExt for &dyn SecureRandom {
+    fn rand_bool(&self) -> bool {
+        self.rand_bytes::<1>()[0] % 2 == 0
+    }
+
+    fn rand_u32(&self) -> u32 {
+        u32::from_le_bytes(self.rand_bytes::<4>())
+    }
+
+    fn rand_usize(&self) -> usize {
+        usize::from_le_bytes(self.rand_bytes::<{ size_of::<usize>() }>())
+    }
+
+    fn rand_elem<'a, T>(&self, data: &'a [T]) -> Option<&'a T> {
+        if data.len() <= 1 {
+            // [0, 1)
+            return data.first();
+        }
+        let max = data.len();
+        // 2^n % max = (2^n - max) % max
+        let min = usize::wrapping_sub(0, max) % max;
+        loop {
+            let r = self.rand_usize();
+            if r >= min {
+                return data.get(r % max);
+            }
+        }
+    }
+
+    fn rand_bytes<const N: usize>(&self) -> [u8; N] {
+        let mut b = [0; N];
+        self.fill(&mut b).unwrap();
+        b
+    }
+}
+
+/// Creates a random PSK.
+pub fn random_psk() -> PresharedKey {
+    let rng = provider::default_provider().secure_random;
+
+    let identity = rng.rand_bytes::<32>();
+    let secret = rng.rand_bytes::<32>();
+
+    let alg = {
+        let algs = [HashAlgorithm::SHA256, HashAlgorithm::SHA384];
+        *rng.rand_elem(&algs).unwrap()
+    };
+
+    let mut psk = PresharedKey::external(&identity, &secret)
+        .unwrap()
+        .with_hash_alg(alg)
+        .unwrap();
+
+    // Should we add early data?
+    if rng.rand_bool() {
+        let suite = {
+            use CipherSuite::*;
+            // Make sure we select a cipher suite that matches
+            // the configured hash algorithm.
+            let suites: &[CipherSuite] = match alg {
+                HashAlgorithm::SHA256 => &[
+                    TLS13_AES_128_GCM_SHA256,
+                    TLS13_CHACHA20_POLY1305_SHA256,
+                    TLS13_AES_128_CCM_8_SHA256,
+                    TLS13_AES_128_CCM_SHA256,
+                ],
+                HashAlgorithm::SHA384 => &[TLS13_AES_256_GCM_SHA384],
+                _ => unreachable!("should be either SHA-256 or SHA-384"),
+            };
+            *rng.rand_elem(suites).unwrap()
+        };
+        let alpn = if rng.rand_bool() {
+            None
+        } else {
+            Some(rng.rand_bytes::<16>())
+        };
+        psk = psk
+            .with_early_data(rng.rand_u32(), suite, alpn.as_ref().map(|v| &v[..]))
+            .unwrap()
+    }
+    psk
 }

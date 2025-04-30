@@ -8419,3 +8419,277 @@ fn assert_client_sends_hello_with_one_hybrid_key_share(msg: &mut Message) -> Alt
 }
 
 const CONFIDENTIALITY_LIMIT: u64 = 1024;
+
+mod psk {
+    use super::*;
+    use rustls::crypto::PresharedKey;
+    use rustls::crypto::hash::HashAlgorithm;
+    use rustls::server::PresharedKeySelection;
+
+    /// Performs a handshake then checks that the client and
+    /// server can send data to each other.
+    ///
+    /// It asserts that the handshake used a PSK with
+    /// a particular identity.
+    fn do_round_trip_psk(
+        client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        identity: &[u8],
+    ) {
+        do_handshake(client, server);
+
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Psk));
+        assert_eq!(client.chosen_psk_identity(), Some(identity));
+
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Psk));
+        assert_eq!(server.chosen_psk_identity(), Some(identity));
+
+        do_round_trip(client, server);
+    }
+
+    /// Performs a handshake then checks that the client and
+    /// server can send data to each other.
+    ///
+    /// It asserts that the client and server performed a full
+    /// handshake *without* using a PSK.
+    fn do_round_trip_no_psk(
+        client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    ) {
+        do_handshake(client, server);
+
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(client.chosen_psk_identity(), None);
+
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(server.chosen_psk_identity(), None);
+
+        do_round_trip(client, server);
+    }
+
+    /// Ensures that the client and server can send data to each
+    /// other.
+    fn do_round_trip(
+        client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+    ) {
+        let data = b"hello, server!";
+        assert_eq!(data.len(), client.writer().write(data).unwrap());
+        transfer(client, server);
+        server.process_new_packets().unwrap();
+        check_read(&mut server.reader(), data);
+
+        let data = b"hello, client!";
+        assert_eq!(data.len(), server.writer().write(data).unwrap());
+        transfer(server, client);
+        client.process_new_packets().unwrap();
+        check_read(&mut client.reader(), data);
+    }
+
+    /// The client and the server only support one TLS 1.3 PSK.
+    /// They have one PSK in common.
+    #[test]
+    fn server_one_client_one() {
+        let identity = b"identity";
+        let (mut client, mut server) = {
+            let psk = PresharedKey::external(identity, b"secret")
+                .unwrap()
+                .with_hash_alg(HashAlgorithm::SHA384)
+                .unwrap();
+            let server_cfg = {
+                let mut cfg = make_server_config(KeyType::Ed25519);
+                cfg.preshared_keys = PresharedKeySelection::Enabled(Arc::new({
+                    let mut keys = ServerPresharedKeys::new();
+                    keys.insert(psk.clone()).unwrap();
+                    keys
+                }));
+                cfg
+            };
+            let client_cfg = {
+                let mut cfg = make_client_config(KeyType::Ed25519);
+                cfg.preshared_keys = Arc::new({
+                    let mut keys = ClientPresharedKeys::new();
+                    keys.insert(server_name("localhost"), psk)
+                        .unwrap();
+                    keys
+                });
+                cfg
+            };
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+        do_round_trip_psk(&mut client, &mut server, identity);
+    }
+
+    /// The server supports many TLS 1.3 PSKs, the client only
+    /// supports one. They have one PSK in common.
+    #[test]
+    fn server_many_client_one() {
+        let identity = b"identity";
+        let (mut client, mut server) = {
+            let shared_psk = PresharedKey::external(identity, b"secret")
+                .unwrap()
+                .with_hash_alg(HashAlgorithm::SHA384)
+                .unwrap();
+
+            let server_cfg = {
+                let mut cfg = make_server_config(KeyType::Ed25519);
+                cfg.preshared_keys = PresharedKeySelection::Enabled(Arc::new({
+                    let mut keys = ServerPresharedKeys::new();
+                    keys.insert_random(10);
+                    keys.insert(shared_psk.clone()).unwrap();
+                    keys
+                }));
+                cfg
+            };
+
+            let client_cfg = {
+                let mut cfg = make_client_config(KeyType::Ed25519);
+                cfg.preshared_keys = Arc::new({
+                    let mut keys = ClientPresharedKeys::new();
+                    keys.insert(server_name("localhost"), shared_psk)
+                        .unwrap();
+                    keys
+                });
+                cfg
+            };
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+        do_round_trip_psk(&mut client, &mut server, identity);
+    }
+
+    /// The server supports one TLS 1.3 PSK, the client supports
+    /// many. They have one PSK in common.
+    #[test]
+    fn server_one_client_many() {
+        let identity = b"identity";
+        let (mut client, mut server) = {
+            let shared_psk = PresharedKey::external(identity, b"secret")
+                .unwrap()
+                .with_hash_alg(HashAlgorithm::SHA384)
+                .unwrap();
+
+            let server_cfg = {
+                let mut cfg = make_server_config(KeyType::Ed25519);
+                cfg.preshared_keys = PresharedKeySelection::Enabled(Arc::new({
+                    let mut keys = ServerPresharedKeys::new();
+                    keys.insert(shared_psk.clone()).unwrap();
+                    keys
+                }));
+                cfg
+            };
+
+            let client_cfg = {
+                let mut cfg = make_client_config(KeyType::Ed25519);
+                cfg.preshared_keys = Arc::new({
+                    let mut keys = ClientPresharedKeys::new();
+                    keys.insert_random(server_name("localhost"), 10);
+                    keys.insert(server_name("localhost"), shared_psk)
+                        .unwrap();
+                    keys
+                });
+                cfg
+            };
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+        do_round_trip_psk(&mut client, &mut server, identity);
+    }
+
+    /// The client and server do not have any TLS 1.3 PSKs in
+    /// common. They fall back to ECDHE.
+    #[test]
+    fn no_shared_psks_fallback_to_ecdhe() {
+        let (mut client, mut server) = {
+            let server_cfg = {
+                let mut cfg = make_server_config(KeyType::Ed25519);
+                cfg.preshared_keys =
+                    PresharedKeySelection::Enabled(Arc::new(ServerPresharedKeys::random(10)));
+                cfg
+            };
+
+            let client_cfg = {
+                let mut cfg = make_client_config(KeyType::Ed25519);
+                cfg.preshared_keys = Arc::new({
+                    let mut keys = ClientPresharedKeys::new();
+                    keys.insert_random(server_name("localhost"), 10);
+                    keys
+                });
+                cfg
+            };
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+        do_round_trip_no_psk(&mut client, &mut server);
+    }
+
+    /// The client and server do not have any TLS 1.3 PSKs in common.
+    /// The server requires PSKs, so it aborts the connection.
+    #[test]
+    fn no_shared_psks_and_psks_are_required() {
+        let (mut client, mut server) = {
+            let server_cfg = {
+                let mut cfg = make_server_config(KeyType::Ed25519);
+                cfg.preshared_keys =
+                    PresharedKeySelection::Required(Arc::new(ServerPresharedKeys::random(10)));
+                cfg
+            };
+
+            let client_cfg = {
+                let mut cfg = make_client_config(KeyType::Ed25519);
+                cfg.preshared_keys = Arc::new({
+                    let mut keys = ClientPresharedKeys::new();
+                    keys.insert_random(server_name("localhost"), 10);
+                    keys
+                });
+                cfg
+            };
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+
+        let err =
+            do_handshake_until_error(&mut client, &mut server).expect_err("connection should fail");
+        assert_eq!(err, ErrorFromPeer::Server(Error::NoCompatiblePresharedKeys));
+    }
+
+    /// The client and server have a TLS 1.3 PSK with the same
+    /// identity, but different hash function.
+    #[test]
+    fn same_identity_wrong_hash() {
+        let psk = PresharedKey::external(b"identity", b"secret").unwrap();
+
+        let (mut client, mut server) = {
+            // The server uses SHA-256.
+            let server_cfg = {
+                let mut cfg = make_server_config(KeyType::Ed25519);
+                cfg.preshared_keys = PresharedKeySelection::Required(Arc::new({
+                    let psk = psk
+                        .clone()
+                        .with_hash_alg(HashAlgorithm::SHA256)
+                        .unwrap();
+                    let mut keys = ServerPresharedKeys::new();
+                    keys.insert(psk).unwrap();
+                    keys
+                }));
+                cfg
+            };
+
+            // The server uses SHA-384.
+            let client_cfg = {
+                let mut cfg = make_client_config(KeyType::Ed25519);
+                cfg.preshared_keys = Arc::new({
+                    let psk = psk
+                        .with_hash_alg(HashAlgorithm::SHA384)
+                        .unwrap();
+                    let mut keys = ClientPresharedKeys::new();
+                    keys.insert(server_name("localhost"), psk)
+                        .unwrap();
+                    keys
+                });
+                cfg
+            };
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+
+        let err =
+            do_handshake_until_error(&mut client, &mut server).expect_err("connection should fail");
+        assert_eq!(err, ErrorFromPeer::Server(Error::NoCompatiblePresharedKeys));
+    }
+} // mod psk

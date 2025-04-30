@@ -713,9 +713,22 @@ impl PresharedKey {
 
     /// Sets the hash algorithm associated with the PSK.
     ///
+    /// It returns `None` if early data has been configured and
+    /// `hash` does not match the configured cipher suite's hash
+    /// algorithm. See [`with_early_data`][Self::with_early_data]
+    /// for more information.
+    ///
     /// By default the PSK uses SHA-256.
     pub fn with_hash_alg(mut self, hash: hash::HashAlgorithm) -> Option<Self> {
         use hash::HashAlgorithm::*;
+
+        if self
+            .early_data
+            .as_ref()
+            .is_some_and(|v| Some(hash) != v.suite.tls13_hash_alg())
+        {
+            return None;
+        }
 
         self.hash_alg = match hash {
             SHA256 => Tls13HashAlg::Sha256,

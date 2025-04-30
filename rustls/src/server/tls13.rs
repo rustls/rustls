@@ -58,7 +58,6 @@ mod client_hello {
         KeyScheduleEarly, KeyScheduleHandshake, KeySchedulePreHandshake,
     };
     use crate::verify::DigitallySignedStruct;
-    use alloc::string::String;
 
     #[derive(PartialEq)]
     pub(super) enum EarlyDataDecision {
@@ -140,7 +139,10 @@ mod client_hello {
     #[derive(Debug)]
     enum PresharedKey {
         /// A resumption PSK.
-        Resumption(persist::ServerSessionValue),
+        Resumption {
+            identity: Vec<u8>,
+            value: persist::ServerSessionValue,
+        },
         /// An externally provisioned PSK.
         External(Arc<crypto::PresharedKey>),
     }
@@ -149,7 +151,10 @@ mod client_hello {
         /// Returns the ALPN protocol associated with the PSK.
         fn alpn(&self) -> Option<&[u8]> {
             match self {
-                Self::Resumption(v) => v.alpn.as_ref().map(|v| v.0.as_slice()),
+                Self::Resumption { value, .. } => value
+                    .alpn
+                    .as_ref()
+                    .map(|v| v.0.as_slice()),
                 Self::External(v) => v.early_data()?.alpn.as_deref(),
             }
         }
@@ -157,7 +162,7 @@ mod client_hello {
         /// Returns the underlying secret.
         fn as_secret(&self) -> &[u8] {
             match self {
-                Self::Resumption(v) => v.master_secret.0.as_slice(),
+                Self::Resumption { value, .. } => value.master_secret.0.as_slice(),
                 Self::External(v) => v.secret(),
             }
         }
@@ -169,8 +174,16 @@ mod client_hello {
         /// support early data.
         fn cipher_suite(&self) -> Option<CipherSuite> {
             match self {
-                Self::Resumption(v) => Some(v.cipher_suite),
+                Self::Resumption { value, .. } => Some(value.cipher_suite),
                 Self::External(v) => v.early_data().map(|v| v.suite),
+            }
+        }
+
+        /// Returns the PSK identity.
+        fn identity(&self) -> &[u8] {
+            match self {
+                Self::Resumption { identity, .. } => identity.as_slice(),
+                Self::External(psk) => psk.identity(),
             }
         }
 
@@ -182,7 +195,7 @@ mod client_hello {
         /// Reports whether the PSK is fresh.
         fn is_fresh(&self) -> bool {
             match self {
-                Self::Resumption(v) => v.is_fresh(),
+                Self::Resumption { value, .. } => value.is_fresh(),
                 // External PSKs do not have a ticket age, so
                 // they're always fresh.
                 Self::External(_) => true,
@@ -192,7 +205,7 @@ mod client_hello {
         /// Returns the session resumption data, if any.
         fn resume_data(&self) -> Option<&persist::ServerSessionValue> {
             match self {
-                Self::Resumption(v) => Some(v),
+                Self::Resumption { value, .. } => Some(value),
                 Self::External(_) => None,
             }
         }
@@ -200,7 +213,7 @@ mod client_hello {
         /// Returns TLS protocol version associated with the PSK.
         fn version(&self) -> ProtocolVersion {
             match self {
-                Self::Resumption(v) => v.version,
+                Self::Resumption { value, .. } => value.version,
                 Self::External(v) => v.version(),
             }
         }
@@ -246,7 +259,7 @@ mod client_hello {
             let key_schedule = KeyScheduleEarly::new(suite, psk.as_secret());
 
             let real_binder = match psk {
-                PresharedKey::Resumption(_) => {
+                PresharedKey::Resumption { .. } => {
                     key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash)
                 }
                 PresharedKey::External(_) => {
@@ -399,9 +412,7 @@ mod client_hello {
                 if psk.is_none() && self.config.preshared_keys.is_required() {
                     return Err(cx.common.send_fatal_alert(
                         AlertDescription::HandshakeFailure,
-                        Error::General(String::from(
-                            "no compatible PSKs found and only PSKs supported",
-                        )),
+                        Error::NoCompatiblePresharedKeys,
                     ));
                 }
 
@@ -447,6 +458,10 @@ mod client_hello {
                     }
                 }
             };
+
+            cx.common.chosen_psk_identity = input_secrets
+                .psk()
+                .map(|psk| psk.identity().to_vec());
 
             // A PSK obviates the need for a full handshake.
             let full_handshake = input_secrets.psk().is_none();
@@ -772,7 +787,10 @@ mod client_hello {
                             hs::can_resume(self.suite.into(), &cx.data.sni, false, resumedata)
                         })
                     {
-                        let psk = PresharedKey::Resumption(resume);
+                        let psk = PresharedKey::Resumption {
+                            identity: psk_id.identity.0.clone(),
+                            value: resume,
+                        };
                         return Some((psk, i, binder));
                     }
 
@@ -815,7 +833,7 @@ mod client_hello {
                 ));
             }
 
-            if let PresharedKey::Resumption(resume) = &psk {
+            if let PresharedKey::Resumption { value, .. } = &psk {
                 // The client did not offer PSK_DHE_KE, so we
                 // can't resume.
                 if mode != PSK_DHE_KE {
@@ -823,10 +841,10 @@ mod client_hello {
                     self.send_tickets = 0;
                     return Ok(None);
                 }
-                cx.data.received_resumption_data = Some(resume.application_data.0.clone());
+                cx.data.received_resumption_data = Some(value.application_data.0.clone());
                 cx.common
                     .peer_certificates
-                    .clone_from(&resume.client_cert_chain);
+                    .clone_from(&value.client_cert_chain);
             }
 
             Ok(Some(ChosenPresharedKey { index, psk, mode }))
@@ -1054,7 +1072,7 @@ mod client_hello {
         let early_data_configured = match &psk.psk {
             /* Non-zero max_early_data_size controls whether early_data is allowed at all.
              * We also require stateful resumption. */
-            PresharedKey::Resumption(_) => {
+            PresharedKey::Resumption { .. } => {
                 config.max_early_data_size > 0 && !config.ticketer.enabled()
             }
             PresharedKey::External(v) => v

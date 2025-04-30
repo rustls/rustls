@@ -103,6 +103,10 @@ pub enum Error {
     /// [`keys_match`]: crate::crypto::signer::CertifiedKey::keys_match
     InconsistentKeys(InconsistentKeys),
 
+    /// None of the PSKs offered by the client were compatible,
+    /// and we're configured to only support PSKs.
+    NoCompatiblePresharedKeys,
+
     /// Any other error.
     ///
     /// This variant should only be used when the error is not better described by a more
@@ -788,6 +792,9 @@ impl fmt::Display for Error {
             }
             Self::InconsistentKeys(why) => {
                 write!(f, "keys may not be consistent: {:?}", why)
+            }
+            Self::NoCompatiblePresharedKeys => {
+                write!(f, "no compatible PSKs found and only PSKs supported")
             }
             Self::General(err) => write!(f, "unexpected error: {}", err),
             Self::Other(err) => write!(f, "other error: {}", err),
