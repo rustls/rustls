@@ -46,7 +46,7 @@ mod client_hello {
     use crate::enums::{CipherSuite, SignatureScheme};
     use crate::msgs::base::{Payload, PayloadU8};
     use crate::msgs::ccs::ChangeCipherSpecPayload;
-    use crate::msgs::enums::{Compression, NamedGroup, PSKKeyExchangeMode};
+    use crate::msgs::enums::{Compression, NamedGroup, PskKeyExchangeMode};
     use crate::msgs::handshake::{
         CertReqExtension, CertificatePayloadTls13, CertificateRequestPayloadTls13,
         ClientHelloPayload, HelloRetryExtension, HelloRetryRequest, KeyShareEntry, Random,

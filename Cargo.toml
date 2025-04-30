@@ -45,8 +45,8 @@ async-trait = "0.1.74"
 aws-lc-rs = { version = "1.12", default-features = false }
 base64 = "0.22"
 bencher = "0.1.5"
-brotli = { version = "7", default-features = false, features = ["std"] }
-brotli-decompressor = "4.0.1" # 4.0.1 required for panic fix
+brotli = { version = "8", default-features = false, features = ["std"] }
+brotli-decompressor = "5.0.0"
 byteorder = "1.4.3"
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 clap = { version = "4.3.21", features = ["derive", "env"] }

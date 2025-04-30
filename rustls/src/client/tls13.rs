@@ -911,7 +911,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         self.transcript.add_message(&m);
 
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
-        hs::process_alpn_protocol(cx.common, &self.config, exts.alpn_protocol())?;
+        hs::process_alpn_protocol(cx.common, &self.hello.alpn_protocols, exts.alpn_protocol())?;
         hs::process_client_cert_type_extension(cx.common, &self.config, exts.client_cert_type())?;
         hs::process_server_cert_type_extension(cx.common, &self.config, exts.server_cert_type())?;
 
@@ -1570,7 +1570,7 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 PeerMisbehaved::BadCertChainExtensions,
             ));
         }
-        let end_entity_ocsp = cert_chain.end_entity_ocsp();
+        let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
         let server_cert = ServerCertDetails::new(
             cert_chain
                 .into_certificate_chain()

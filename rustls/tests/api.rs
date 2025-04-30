@@ -510,6 +510,36 @@ fn alpn() {
     );
 }
 
+#[test]
+fn connection_level_alpn_protocols() {
+    let mut server_config = make_server_config(KeyType::Rsa2048);
+    server_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    let server_config = Arc::new(server_config);
+
+    // Config specifies `h2`
+    let mut client_config = make_client_config(KeyType::Rsa2048);
+    client_config.alpn_protocols = vec![b"h2".to_vec()];
+    let client_config = Arc::new(client_config);
+
+    // Client relies on config-specified `h2`, server agrees
+    let mut client =
+        ClientConnection::new(client_config.clone(), server_name("localhost")).unwrap();
+    let mut server = ServerConnection::new(server_config.clone()).unwrap();
+    do_handshake_until_error(&mut client, &mut server).unwrap();
+    assert_eq!(client.alpn_protocol(), Some(&b"h2"[..]));
+
+    // Specify `http/1.1` for the connection, server agrees
+    let mut client = ClientConnection::new_with_alpn(
+        client_config,
+        server_name("localhost"),
+        vec![b"http/1.1".to_vec()],
+    )
+    .unwrap();
+    let mut server = ServerConnection::new(server_config).unwrap();
+    do_handshake_until_error(&mut client, &mut server).unwrap();
+    assert_eq!(client.alpn_protocol(), Some(&b"http/1.1"[..]));
+}
+
 fn version_test(
     client_versions: &[&'static rustls::SupportedProtocolVersion],
     server_versions: &[&'static rustls::SupportedProtocolVersion],
@@ -1525,7 +1555,7 @@ fn server_ignores_sni_with_ip_address() {
 fn server_rejects_sni_with_illegal_dns_name() {
     check_sni_error(
         encoding::Extension::new_sni(b"ab@cd.com"),
-        Error::InvalidMessage(InvalidMessage::InvalidServerName),
+        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
     );
 }
 
@@ -6211,7 +6241,7 @@ fn test_server_rejects_duplicate_sni_names() {
             typ: ExtensionType::ServerName,
             body: encoding::len_u16(body),
         },
-        Error::PeerMisbehaved(PeerMisbehaved::DuplicateServerNameTypes),
+        Error::InvalidMessage(InvalidMessage::InvalidServerName),
     );
 }
 
@@ -6222,7 +6252,7 @@ fn test_server_rejects_empty_sni_extension() {
             typ: ExtensionType::ServerName,
             body: encoding::len_u16(vec![]),
         },
-        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
+        Error::InvalidMessage(InvalidMessage::IllegalEmptyList("ServerNames")),
     );
 }
 
@@ -6251,9 +6281,9 @@ fn test_server_rejects_clients_without_any_kx_groups() {
         .unwrap();
     assert_eq!(
         server.process_new_packets(),
-        Err(Error::PeerIncompatible(
-            PeerIncompatible::NoKxGroupsInCommon
-        ))
+        Err(Error::InvalidMessage(InvalidMessage::IllegalEmptyList(
+            "NamedGroups"
+        )))
     );
 }
 
@@ -7283,7 +7313,7 @@ fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
             key_config: HpkeKeyConfig {
                 config_id: 10,
                 kem_id: suite_id.kem,
-                public_key: PayloadU16(public_key.0.clone()),
+                public_key: PayloadU16::new(public_key.0.clone()),
                 symmetric_cipher_suites: vec![HpkeSymmetricCipherSuite {
                     kdf_id: suite_id.sym.kdf_id,
                     aead_id: suite_id.sym.aead_id,
