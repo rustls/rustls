@@ -228,7 +228,7 @@ impl TlsListElement for SignatureScheme {
 }
 
 #[derive(Clone, Debug)]
-pub enum ServerNamePayload<'a> {
+pub(crate) enum ServerNamePayload<'a> {
     /// A successfully decoded value:
     SingleDnsName(DnsName<'a>),
 
@@ -358,7 +358,7 @@ impl HostNamePayload {
 
 wrapped_payload!(
     /// RFC7301: `opaque ProtocolName<1..2^8-1>;`
-    pub struct ProtocolName, PayloadU8<NonEmpty>,
+    pub(crate) struct ProtocolName, PayloadU8<NonEmpty>,
 );
 
 /// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
@@ -494,7 +494,7 @@ impl TlsListElement for PresharedKeyBinder {
 }
 
 #[derive(Clone, Debug)]
-pub struct PresharedKeyOffer {
+pub(crate) struct PresharedKeyOffer {
     pub(crate) identities: Vec<PresharedKeyIdentity>,
     pub(crate) binders: Vec<PresharedKeyBinder>,
 }
@@ -532,7 +532,7 @@ impl TlsListElement for ResponderId {
 }
 
 #[derive(Clone, Debug)]
-pub struct OcspCertificateStatusRequest {
+pub(crate) struct OcspCertificateStatusRequest {
     pub(crate) responder_ids: Vec<ResponderId>,
     pub(crate) extensions: PayloadU16,
 }
@@ -553,7 +553,7 @@ impl Codec<'_> for OcspCertificateStatusRequest {
 }
 
 #[derive(Clone, Debug)]
-pub enum CertificateStatusRequest {
+pub(crate) enum CertificateStatusRequest {
     Ocsp(OcspCertificateStatusRequest),
     Unknown((CertificateStatusType, Payload<'static>)),
 }
@@ -617,7 +617,7 @@ impl TlsListElement for KeyShareEntry {
 ///
 /// RFC8446: `ProtocolVersion versions<2..254>;`
 #[derive(Clone, Copy, Debug, Default)]
-pub struct SupportedProtocolVersions {
+pub(crate) struct SupportedProtocolVersions {
     pub(crate) tls13: bool,
     pub(crate) tls12: bool,
 }
@@ -692,7 +692,7 @@ impl TlsListElement for CertificateCompressionAlgorithm {
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientExtension {
+pub(crate) enum ClientExtension {
     EcPointFormats(Vec<ECPointFormat>),
     NamedGroups(Vec<NamedGroup>),
     SignatureAlgorithms(Vec<SignatureScheme>),
@@ -863,7 +863,7 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
 }
 
 #[derive(Clone, Debug)]
-pub enum ClientSessionTicket {
+pub(crate) enum ClientSessionTicket {
     Request,
     Offer(Payload<'static>),
 }
@@ -997,7 +997,7 @@ pub struct ClientHelloPayload {
     pub session_id: SessionId,
     pub cipher_suites: Vec<CipherSuite>,
     pub compression_methods: Vec<Compression>,
-    pub extensions: Vec<ClientExtension>,
+    pub(crate) extensions: Vec<ClientExtension>,
 }
 
 impl Codec<'_> for ClientHelloPayload {
@@ -1490,7 +1490,7 @@ impl HelloRetryRequest {
 
 #[derive(Clone, Debug)]
 pub struct ServerHelloPayload {
-    pub extensions: Vec<ServerExtension>,
+    pub(crate) extensions: Vec<ServerExtension>,
     pub(crate) legacy_version: ProtocolVersion,
     pub(crate) random: Random,
     pub(crate) session_id: SessionId,
@@ -3199,7 +3199,7 @@ impl TlsListElement for EchConfigExtension {
 ///
 /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
 #[derive(Clone, Debug)]
-pub enum EncryptedClientHello {
+pub(crate) enum EncryptedClientHello {
     /// A `ECHClientHello` with type [EchClientHelloType::ClientHelloOuter].
     Outer(EncryptedClientHelloOuter),
     /// An empty `ECHClientHello` with type [EchClientHelloType::ClientHelloInner].
@@ -3238,7 +3238,7 @@ impl Codec<'_> for EncryptedClientHello {
 ///
 /// [draft-ietf-tls-esni Section 5]: <https://www.ietf.org/archive/id/draft-ietf-tls-esni-18.html#section-5>
 #[derive(Clone, Debug)]
-pub struct EncryptedClientHelloOuter {
+pub(crate) struct EncryptedClientHelloOuter {
     /// The cipher suite used to encrypt ClientHelloInner. Must match a value from
     /// ECHConfigContents.cipher_suites list.
     pub cipher_suite: HpkeSymmetricCipherSuite,
