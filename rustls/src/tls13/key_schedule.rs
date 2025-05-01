@@ -15,6 +15,7 @@ use crate::{KeyLog, Tls13CipherSuite, quic};
 /// The kinds of secret we can extract from `KeySchedule`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum SecretKind {
+    ExternalPskBinderKey,
     ResumptionPskBinderKey,
     ClientEarlyTrafficSecret,
     ClientHandshakeTrafficSecret,
@@ -32,6 +33,7 @@ impl SecretKind {
     fn to_bytes(self) -> &'static [u8] {
         use self::SecretKind::*;
         match self {
+            ExternalPskBinderKey => b"ext binder",
             ResumptionPskBinderKey => b"res binder",
             ClientEarlyTrafficSecret => b"c e traffic",
             ClientHandshakeTrafficSecret => b"c hs traffic",
@@ -90,9 +92,9 @@ pub(crate) struct KeyScheduleEarly {
 }
 
 impl KeyScheduleEarly {
-    pub(crate) fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+    pub(crate) fn new(suite: &'static Tls13CipherSuite, psk: &[u8]) -> Self {
         Self {
-            ks: KeySchedule::new(suite, secret),
+            ks: KeySchedule::new(suite, psk),
         }
     }
 
@@ -145,6 +147,19 @@ impl KeyScheduleEarly {
         self.ks
             .sign_verify_data(&resumption_psk_binder_key, hs_hash)
     }
+
+    pub(crate) fn external_psk_binder_key_and_sign_verify_data(
+        &self,
+        hs_hash: &hash::Output,
+    ) -> hmac::Tag {
+        // Derive-Secret(., "ext binder", "")
+        //               = binder_key
+        let binder_key = self
+            .ks
+            .derive_for_empty_hash(SecretKind::ExternalPskBinderKey);
+        self.ks
+            .sign_verify_data(&binder_key, hs_hash)
+    }
 }
 
 /// The "early secret" stage of the key schedule.
@@ -190,10 +205,14 @@ impl KeySchedulePreHandshake {
     /// ```
     pub(crate) fn into_handshake(
         mut self,
-        shared_secret: SharedSecret,
+        shared_secret: Option<SharedSecret>,
     ) -> KeyScheduleHandshakeStart {
-        self.ks
-            .input_secret(shared_secret.secret_bytes());
+        if let Some(shared_secret) = shared_secret {
+            self.ks
+                .input_secret(shared_secret.secret_bytes());
+        } else {
+            self.ks.input_empty()
+        }
         KeyScheduleHandshakeStart { ks: self.ks }
     }
 }
@@ -644,11 +663,11 @@ impl<'a> ResumptionSecret<'a> {
 }
 
 impl KeySchedule {
-    fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
+    fn new(suite: &'static Tls13CipherSuite, psk: &[u8]) -> Self {
         Self {
             current: suite
                 .hkdf_provider
-                .extract_from_secret(None, secret),
+                .extract_from_secret(None, psk),
             suite,
         }
     }
@@ -760,6 +779,12 @@ impl KeySchedule {
     /// - `SecretKind::ResumptionPSKBinderKey`
     /// - `SecretKind::DerivedSecret`
     fn derive_for_empty_hash(&self, kind: SecretKind) -> OkmBlock {
+        debug_assert!(
+            kind == SecretKind::ExternalPskBinderKey
+                || kind == SecretKind::ResumptionPskBinderKey
+                || kind == SecretKind::DerivedSecret
+        );
+
         let empty_hash = self
             .suite
             .common

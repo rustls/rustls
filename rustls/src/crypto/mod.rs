@@ -1,10 +1,12 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::Debug;
+use core::fmt::{self, Debug};
 
 use pki_types::PrivateKeyDer;
-use zeroize::Zeroize;
+use subtle::{Choice, ConstantTimeEq};
+use zeroize::{Zeroize, Zeroizing};
 
+use crate::CipherSuite;
 #[cfg(all(doc, feature = "tls12"))]
 use crate::Tls12CipherSuite;
 use crate::msgs::ffdhe_groups::FfdheGroup;
@@ -653,6 +655,212 @@ impl From<Vec<u8>> for SharedSecret {
     }
 }
 
+/// A TLS 1.3 preshared key.
+#[derive(Clone)]
+pub struct PresharedKey {
+    identity: Zeroizing<Box<[u8]>>,
+    secret: Zeroizing<Box<[u8]>>,
+    hash_alg: Tls13HashAlg,
+    /// The PSK's early data configuration, if any.
+    ///
+    /// If `None`, then early data is not allowed for this PSK.
+    early_data: Option<PskEarlyData>,
+}
+
+impl PresharedKey {
+    /// Creates an external preshared key.
+    ///
+    /// It returns `None` if either `identity` or `secret` are
+    /// longer than (2^16)-1 bytes or if `secret` is all zeros.
+    ///
+    /// `identity` is a non-secret value sent as plaintext over
+    /// the network.
+    ///
+    /// # Warning
+    ///
+    /// `secret` must be cryptographically secure. It is also
+    /// generally unsafe for multiple clients or servers to share
+    /// preshared keys.
+    ///
+    /// See [RFC 8446] section 2.2 and [RFC 9257] for more
+    /// information.
+    ///
+    /// [RFC 8446]: https://www.rfc-editor.org/rfc/rfc8446.html
+    /// [RFC 9257]: https://www.rfc-editor.org/rfc/rfc9257.html
+    pub fn external(identity: &[u8], secret: &[u8]) -> Option<Self> {
+        if bool::from(ct_eq_zero(secret)) {
+            return None;
+        }
+        // `identity` is `opaque<1..2^16-1>`.
+        if identity.is_empty()
+            || identity.len() > u16::MAX as usize
+            || secret.len() > u16::MAX as usize
+        {
+            None
+        } else {
+            Some(Self {
+                identity: Zeroizing::new(identity.to_vec().into_boxed_slice()),
+                secret: Zeroizing::new(secret.to_vec().into_boxed_slice()),
+                // RFC 8446: "For externally established PSKs,
+                // the Hash algorithm MUST be set when the PSK is
+                // established or default to SHA-256 if no such
+                // algorithm is defined."
+                hash_alg: Tls13HashAlg::Sha256,
+                early_data: None,
+            })
+        }
+    }
+
+    /// Sets the hash algorithm associated with the PSK.
+    ///
+    /// It returns `None` if early data has been configured and
+    /// `hash` does not match the configured cipher suite's hash
+    /// algorithm. See [`with_early_data`][Self::with_early_data]
+    /// for more information.
+    ///
+    /// By default the PSK uses SHA-256.
+    pub fn with_hash_alg(mut self, hash: hash::HashAlgorithm) -> Option<Self> {
+        use hash::HashAlgorithm::*;
+
+        if self
+            .early_data
+            .as_ref()
+            .is_some_and(|v| Some(hash) != v.suite.tls13_hash_alg())
+        {
+            return None;
+        }
+
+        self.hash_alg = match hash {
+            SHA256 => Tls13HashAlg::Sha256,
+            SHA384 => Tls13HashAlg::Sha384,
+            _ => return None,
+        };
+        Some(self)
+    }
+
+    /// Sets the maximum amount of early data allowed that can be
+    /// processed with the PSK.
+    ///
+    /// In order to use early data with a PSK, `max_early_data`
+    /// must be non-zero and both `suite` and `alpn` must match
+    /// the cipher suite and ALPN protocol, respectively,
+    /// negotiated by the TLS handshake.
+    ///
+    /// It returns `None` if the hash algorithm used by `suite`
+    /// does not match the hash algorithm associated with the
+    /// PSK. See [`with_hash_alg`][Self::with_hash_alg] for more
+    /// information.
+    ///
+    /// By default early data is not allowed.
+    pub fn with_early_data(
+        mut self,
+        max_early_data: u32,
+        suite: CipherSuite,
+        alpn: Option<&[u8]>,
+    ) -> Option<Self> {
+        if Some(self.hash_alg.into()) != suite.tls13_hash_alg() {
+            None
+        } else {
+            self.early_data = Some(PskEarlyData {
+                max_early_data,
+                suite,
+                alpn: alpn.map(<[_]>::to_vec),
+            });
+            Some(self)
+        }
+    }
+
+    /// Returns the PSK's identity.
+    pub fn identity(&self) -> &[u8] {
+        &self.identity
+    }
+
+    /// Returns the secret.
+    pub(crate) fn secret(&self) -> &[u8] {
+        &self.secret
+    }
+
+    /// Returns the hash algorithm.
+    pub(crate) fn hash_alg(&self) -> hash::HashAlgorithm {
+        self.hash_alg.into()
+    }
+
+    /// Returns the size in bytes of the PSK's binder.
+    pub(crate) fn binder_size(&self) -> usize {
+        use Tls13HashAlg::*;
+
+        match self.hash_alg {
+            Sha256 => 32,
+            Sha384 => 48,
+        }
+    }
+
+    /// Returns the maximum amount of early data allowed, the
+    /// cipher suite, and ALPN (if any).
+    pub(crate) fn early_data(&self) -> Option<&PskEarlyData> {
+        self.early_data.as_ref()
+    }
+
+    /// Returns the supported protocol version.
+    pub(crate) fn version(&self) -> ProtocolVersion {
+        ProtocolVersion::TLSv1_3
+    }
+
+    /// Reports whether the PSK is compatible with the cipher
+    /// suite.
+    ///
+    /// An external PSK is compatible if its hash algorithm
+    /// matches the cipher suite's hash algorithm.
+    pub(crate) fn is_compatible(&self, suite: CipherSuite) -> bool {
+        Some(self.hash_alg.into()) == suite.tls13_hash_alg()
+    }
+}
+
+impl Debug for PresharedKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Manually implemented to avoid displaying the secret.
+        f.debug_struct("PresharedKey")
+            .field("identity", &self.identity)
+            .field("hash_alg", &self.hash_alg)
+            .field("early_data", &self.early_data)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PskEarlyData {
+    pub(crate) max_early_data: u32,
+    pub(crate) suite: CipherSuite,
+    pub(crate) alpn: Option<Vec<u8>>,
+}
+
+/// Reports in constant time whether every byte in `x` is zero,
+/// including if `x` is empty.
+fn ct_eq_zero(x: &[u8]) -> Choice {
+    let mut non_zero = Choice::from(0u8);
+    for c in x {
+        non_zero |= c.ct_ne(&0);
+    }
+    !non_zero
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum Tls13HashAlg {
+    Sha256,
+    Sha384,
+}
+
+impl From<Tls13HashAlg> for hash::HashAlgorithm {
+    fn from(alg: Tls13HashAlg) -> Self {
+        use hash::HashAlgorithm::*;
+
+        match alg {
+            Tls13HashAlg::Sha256 => SHA256,
+            Tls13HashAlg::Sha384 => SHA384,
+        }
+    }
+}
+
 /// This function returns a [`CryptoProvider`] that uses
 /// FIPS140-3-approved cryptography.
 ///
@@ -735,6 +943,7 @@ mod tests {
     use std::vec;
 
     use super::SharedSecret;
+    use super::ct_eq_zero;
 
     #[test]
     fn test_shared_secret_strip_leading_zeros() {
@@ -751,6 +960,22 @@ mod tests {
             assert_eq!(secret.secret_bytes(), buf);
             secret.strip_leading_zeros();
             assert_eq!(secret.secret_bytes(), expected);
+        }
+    }
+
+    #[test]
+    fn test_ct_eq_zero() {
+        let tests: &[(&[u8], bool)] = &[
+            (&[], true),
+            (&[0], true),
+            (&[0, 0, 0], true),
+            (&[1], false),
+            (&[0, 0, 1], false),
+            (&[1, 0, 0], false),
+        ];
+        for (i, &(s, want)) in tests.iter().enumerate() {
+            let got = bool::from(ct_eq_zero(s));
+            assert_eq!(got, want, "#{i}");
         }
     }
 }

@@ -154,6 +154,12 @@ impl<C: Cardinality> fmt::Debug for PayloadU16<C> {
     }
 }
 
+impl<C: Cardinality> Zeroize for PayloadU16<C> {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 /// An arbitrary, unknown-content, u8-length-prefixed payload
 ///
 /// `C` controls the minimum length accepted when decoding.

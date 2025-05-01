@@ -302,7 +302,8 @@ pub(super) struct ExpectClientHello {
     pub(super) session_id: SessionId,
     #[cfg(feature = "tls12")]
     pub(super) using_ems: bool,
-    pub(super) done_retry: bool,
+    /// Have we sent a HelloRetryRequest?
+    pub(super) done_retry: Option<tls13::SentHelloRetryRequest>,
     pub(super) send_tickets: usize,
 }
 
@@ -322,7 +323,7 @@ impl ExpectClientHello {
             session_id: SessionId::empty(),
             #[cfg(feature = "tls12")]
             using_ems: false,
-            done_retry: false,
+            done_retry: None,
             send_tickets: 0,
         }
     }
@@ -647,7 +648,7 @@ impl State<ServerConnectionData> for ExpectClientHello {
     where
         Self: 'm,
     {
-        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry, cx)?;
+        let (client_hello, sig_schemes) = process_client_hello(&m, self.done_retry.is_some(), cx)?;
         self.with_certified_key(sig_schemes, client_hello, &m, cx)
     }
 
