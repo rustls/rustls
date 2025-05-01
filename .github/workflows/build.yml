@@ -5,8 +5,7 @@ permissions:
 
 on:
   push:
-    branches-ignore:
-    - 'gh-readonly-queue/**'
+    branches: ['main', 'rel-*', 'ci/*']
     tags:
     - '**'
   pull_request:
