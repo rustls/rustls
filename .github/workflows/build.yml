@@ -12,6 +12,7 @@ on:
   merge_group:
   schedule:
     - cron: '0 18 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
