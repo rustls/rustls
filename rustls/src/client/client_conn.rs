@@ -18,7 +18,7 @@ use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::ClientExtensionsTemplate;
 use crate::msgs::persist;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::sync::Arc;
@@ -633,7 +633,7 @@ mod connection {
 
     use pki_types::ServerName;
 
-    use super::ClientConnectionData;
+    use super::{ClientConnectionData, ClientExtensionsTemplate};
     use crate::ClientConfig;
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
@@ -716,7 +716,7 @@ mod connection {
                     config,
                     name,
                     alpn_protocols,
-                    Vec::new(),
+                    ClientExtensionsTemplate::default(),
                     Protocol::Tcp,
                 )?),
             })
@@ -836,7 +836,7 @@ impl ConnectionCore<ClientConnectionData> {
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
         alpn_protocols: Vec<Vec<u8>>,
-        extra_exts: Vec<ClientExtension>,
+        extra_exts: ClientExtensionsTemplate<'_>,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
@@ -888,7 +888,7 @@ impl UnbufferedClientConnection {
                 config,
                 name,
                 alpn_protocols,
-                Vec::new(),
+                ClientExtensionsTemplate::default(),
                 Protocol::Tcp,
             )?),
         })
