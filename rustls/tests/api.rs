@@ -8422,9 +8422,27 @@ const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
 mod psk {
     use super::*;
+    use rustls::client::PresharedKeyStore;
     use rustls::crypto::PresharedKey;
     use rustls::crypto::hash::HashAlgorithm;
+    use rustls::internal::msgs::codec::Reader;
+    use rustls::internal::msgs::handshake::PresharedKeyOffer;
     use rustls::server::PresharedKeySelection;
+
+    fn make_client_config(
+        kt: KeyType,
+        f: impl FnOnce() -> Arc<dyn PresharedKeyStore>,
+    ) -> ClientConfig {
+        let mut cfg = super::make_client_config(kt);
+        cfg.preshared_keys = f();
+        cfg
+    }
+
+    fn make_server_config(kt: KeyType, f: impl FnOnce() -> PresharedKeySelection) -> ServerConfig {
+        let mut cfg = super::make_server_config(kt);
+        cfg.preshared_keys = f();
+        cfg
+    }
 
     /// Performs a handshake then checks that the client and
     /// server can send data to each other.
@@ -8496,25 +8514,14 @@ mod psk {
                 .unwrap()
                 .with_hash_alg(HashAlgorithm::SHA384)
                 .unwrap();
-            let server_cfg = {
-                let mut cfg = make_server_config(KeyType::Ed25519);
-                cfg.preshared_keys = PresharedKeySelection::Enabled(Arc::new({
-                    let mut keys = ServerPresharedKeys::new();
-                    keys.insert(psk.clone()).unwrap();
-                    keys
-                }));
-                cfg
-            };
-            let client_cfg = {
-                let mut cfg = make_client_config(KeyType::Ed25519);
-                cfg.preshared_keys = Arc::new({
-                    let mut keys = ClientPresharedKeys::new();
-                    keys.insert(server_name("localhost"), psk)
-                        .unwrap();
-                    keys
-                });
-                cfg
-            };
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                let keys = ServerPresharedKeys::from_iter([psk.clone()]);
+                PresharedKeySelection::Enabled(Arc::new(keys))
+            });
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), psk)]);
+                Arc::new(keys)
+            });
             make_pair_for_configs(client_cfg, server_cfg)
         };
         do_round_trip_psk(&mut client, &mut server, identity);
@@ -8531,27 +8538,17 @@ mod psk {
                 .with_hash_alg(HashAlgorithm::SHA384)
                 .unwrap();
 
-            let server_cfg = {
-                let mut cfg = make_server_config(KeyType::Ed25519);
-                cfg.preshared_keys = PresharedKeySelection::Enabled(Arc::new({
-                    let mut keys = ServerPresharedKeys::new();
-                    keys.insert_random(10);
-                    keys.insert(shared_psk.clone()).unwrap();
-                    keys
-                }));
-                cfg
-            };
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                let mut keys = ServerPresharedKeys::new();
+                keys.insert_random(10);
+                keys.insert(shared_psk.clone()).unwrap();
+                PresharedKeySelection::Enabled(Arc::new(keys))
+            });
 
-            let client_cfg = {
-                let mut cfg = make_client_config(KeyType::Ed25519);
-                cfg.preshared_keys = Arc::new({
-                    let mut keys = ClientPresharedKeys::new();
-                    keys.insert(server_name("localhost"), shared_psk)
-                        .unwrap();
-                    keys
-                });
-                cfg
-            };
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), shared_psk)]);
+                Arc::new(keys)
+            });
             make_pair_for_configs(client_cfg, server_cfg)
         };
         do_round_trip_psk(&mut client, &mut server, identity);
@@ -8568,27 +8565,19 @@ mod psk {
                 .with_hash_alg(HashAlgorithm::SHA384)
                 .unwrap();
 
-            let server_cfg = {
-                let mut cfg = make_server_config(KeyType::Ed25519);
-                cfg.preshared_keys = PresharedKeySelection::Enabled(Arc::new({
-                    let mut keys = ServerPresharedKeys::new();
-                    keys.insert(shared_psk.clone()).unwrap();
-                    keys
-                }));
-                cfg
-            };
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                PresharedKeySelection::Enabled(Arc::new({
+                    ServerPresharedKeys::from_iter([shared_psk.clone()])
+                }))
+            });
 
-            let client_cfg = {
-                let mut cfg = make_client_config(KeyType::Ed25519);
-                cfg.preshared_keys = Arc::new({
-                    let mut keys = ClientPresharedKeys::new();
-                    keys.insert_random(server_name("localhost"), 10);
-                    keys.insert(server_name("localhost"), shared_psk)
-                        .unwrap();
-                    keys
-                });
-                cfg
-            };
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let mut keys = ClientPresharedKeys::new();
+                keys.insert_random(server_name("localhost"), 10);
+                keys.insert(server_name("localhost"), shared_psk)
+                    .unwrap();
+                Arc::new(keys)
+            });
             make_pair_for_configs(client_cfg, server_cfg)
         };
         do_round_trip_psk(&mut client, &mut server, identity);
@@ -8599,22 +8588,14 @@ mod psk {
     #[test]
     fn no_shared_psks_fallback_to_ecdhe() {
         let (mut client, mut server) = {
-            let server_cfg = {
-                let mut cfg = make_server_config(KeyType::Ed25519);
-                cfg.preshared_keys =
-                    PresharedKeySelection::Enabled(Arc::new(ServerPresharedKeys::random(10)));
-                cfg
-            };
-
-            let client_cfg = {
-                let mut cfg = make_client_config(KeyType::Ed25519);
-                cfg.preshared_keys = Arc::new({
-                    let mut keys = ClientPresharedKeys::new();
-                    keys.insert_random(server_name("localhost"), 10);
-                    keys
-                });
-                cfg
-            };
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                PresharedKeySelection::Enabled(Arc::new(ServerPresharedKeys::random(10)))
+            });
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let mut keys = ClientPresharedKeys::new();
+                keys.insert_random(server_name("localhost"), 10);
+                Arc::new(keys)
+            });
             make_pair_for_configs(client_cfg, server_cfg)
         };
         do_round_trip_no_psk(&mut client, &mut server);
@@ -8625,22 +8606,15 @@ mod psk {
     #[test]
     fn no_shared_psks_and_psks_are_required() {
         let (mut client, mut server) = {
-            let server_cfg = {
-                let mut cfg = make_server_config(KeyType::Ed25519);
-                cfg.preshared_keys =
-                    PresharedKeySelection::Required(Arc::new(ServerPresharedKeys::random(10)));
-                cfg
-            };
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                PresharedKeySelection::Required(Arc::new(ServerPresharedKeys::random(10)))
+            });
 
-            let client_cfg = {
-                let mut cfg = make_client_config(KeyType::Ed25519);
-                cfg.preshared_keys = Arc::new({
-                    let mut keys = ClientPresharedKeys::new();
-                    keys.insert_random(server_name("localhost"), 10);
-                    keys
-                });
-                cfg
-            };
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let mut keys = ClientPresharedKeys::new();
+                keys.insert_random(server_name("localhost"), 10);
+                Arc::new(keys)
+            });
             make_pair_for_configs(client_cfg, server_cfg)
         };
 
@@ -8650,46 +8624,82 @@ mod psk {
     }
 
     /// The client and server have a TLS 1.3 PSK with the same
-    /// identity, but different hash function.
+    /// identity, but different hash algorithm.
     #[test]
-    fn same_identity_wrong_hash() {
-        let psk = PresharedKey::external(b"identity", b"secret").unwrap();
-
+    fn same_identity_wrong_hash_alg() {
         let (mut client, mut server) = {
+            let psk = PresharedKey::external(b"identity", b"secret").unwrap();
+
             // The server uses SHA-256.
-            let server_cfg = {
-                let mut cfg = make_server_config(KeyType::Ed25519);
-                cfg.preshared_keys = PresharedKeySelection::Required(Arc::new({
-                    let psk = psk
-                        .clone()
-                        .with_hash_alg(HashAlgorithm::SHA256)
-                        .unwrap();
-                    let mut keys = ServerPresharedKeys::new();
-                    keys.insert(psk).unwrap();
-                    keys
-                }));
-                cfg
-            };
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                let psk = psk
+                    .clone()
+                    .with_hash_alg(HashAlgorithm::SHA256)
+                    .unwrap();
+                let mut keys = ServerPresharedKeys::new();
+                keys.insert(psk).unwrap();
+                PresharedKeySelection::Required(Arc::new(keys))
+            });
 
             // The server uses SHA-384.
-            let client_cfg = {
-                let mut cfg = make_client_config(KeyType::Ed25519);
-                cfg.preshared_keys = Arc::new({
-                    let psk = psk
-                        .with_hash_alg(HashAlgorithm::SHA384)
-                        .unwrap();
-                    let mut keys = ClientPresharedKeys::new();
-                    keys.insert(server_name("localhost"), psk)
-                        .unwrap();
-                    keys
-                });
-                cfg
-            };
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let psk = psk
+                    .with_hash_alg(HashAlgorithm::SHA384)
+                    .unwrap();
+                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), psk)]);
+                Arc::new(keys)
+            });
             make_pair_for_configs(client_cfg, server_cfg)
         };
 
         let err =
             do_handshake_until_error(&mut client, &mut server).expect_err("connection should fail");
         assert_eq!(err, ErrorFromPeer::Server(Error::NoCompatiblePresharedKeys));
+    }
+
+    /// The client and server share a TLS 1.3 PSK, but the
+    /// client's PSK binders are corrupted. The server should
+    /// reject the corrupt binders and abort the handshake.
+    #[test]
+    fn client_corrupted_psk_binders() {
+        let (client, server) = {
+            let shared_psk = PresharedKey::external(b"identity", b"secret")
+                .unwrap()
+                .with_hash_alg(HashAlgorithm::SHA384)
+                .unwrap();
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                let keys = ServerPresharedKeys::from_iter([shared_psk.clone()]);
+                PresharedKeySelection::Required(Arc::new(keys))
+            });
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), shared_psk)]);
+                Arc::new(keys)
+            });
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+
+        fn modify_noop(_msg: &mut Message) -> Altered {
+            Altered::InPlace
+        }
+        fn modify_client_psk_binders(msg: &mut Message) -> Altered {
+            let MessagePayload::Handshake { encoded, .. } = &mut msg.payload else {
+                return Altered::InPlace;
+            };
+
+            // `check_binder` uses `encoded` to calculate the
+            // binder.
+            let mut tmp = encoded.clone().into_vec();
+            *tmp.last_mut().unwrap() ^= 1;
+            *encoded = Payload::new(tmp);
+
+            return Altered::InPlace;
+        }
+
+        let err = do_handshake_altered(client, modify_noop, modify_client_psk_binders, server)
+            .expect_err("connection should fail");
+        assert_eq!(
+            err,
+            ErrorFromPeer::Server(Error::PeerMisbehaved(PeerMisbehaved::IncorrectBinder))
+        );
     }
 } // mod psk

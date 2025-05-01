@@ -1722,6 +1722,19 @@ impl PresharedKeyStore for ClientPresharedKeys {
     }
 }
 
+impl<'a> FromIterator<(ServerName<'a>, PresharedKey)> for ClientPresharedKeys {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = (ServerName<'a>, PresharedKey)>,
+    {
+        let mut keys = Self::new();
+        for (server_name, psk) in iter {
+            keys.insert(server_name, psk).unwrap();
+        }
+        keys
+    }
+}
+
 /// A test implementation of [`SelectsPresharedKeys`].
 #[derive(Debug)]
 pub struct ServerPresharedKeys {
@@ -1771,6 +1784,19 @@ impl ServerPresharedKeys {
 impl SelectsPresharedKeys for ServerPresharedKeys {
     fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>> {
         self.keys.get(identity).cloned()
+    }
+}
+
+impl FromIterator<PresharedKey> for ServerPresharedKeys {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = PresharedKey>,
+    {
+        let mut keys = Self::new();
+        for psk in iter {
+            keys.insert(psk).unwrap();
+        }
+        keys
     }
 }
 
