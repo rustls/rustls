@@ -1027,31 +1027,6 @@ impl Codec<'_> for ClientHelloPayload {
     }
 }
 
-/// RFC8446: `CipherSuite cipher_suites<2..2^16-2>;`
-impl TlsListElement for CipherSuite {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
-        empty_error: InvalidMessage::IllegalEmptyList("CipherSuites"),
-    };
-}
-
-/// RFC5246: `CompressionMethod compression_methods<1..2^8-1>;`
-impl TlsListElement for Compression {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
-        empty_error: InvalidMessage::IllegalEmptyList("Compressions"),
-    };
-}
-
-impl TlsListElement for ClientExtension {
-    const SIZE_LEN: ListLength = ListLength::U16;
-}
-
-/// draft-ietf-tls-esni-17: `ExtensionType OuterExtensions<2..254>;`
-impl TlsListElement for ExtensionType {
-    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
-        empty_error: InvalidMessage::IllegalEmptyList("ExtensionTypes"),
-    };
-}
-
 impl ClientHelloPayload {
     pub(crate) fn ech_inner_encoding(&self, to_compress: Vec<ExtensionType>) -> Vec<u8> {
         let mut bytes = Vec::new();
@@ -1302,6 +1277,31 @@ impl ClientHelloPayload {
             _ => unreachable!("extension type checked"),
         }
     }
+}
+
+/// RFC8446: `CipherSuite cipher_suites<2..2^16-2>;`
+impl TlsListElement for CipherSuite {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
+        empty_error: InvalidMessage::IllegalEmptyList("CipherSuites"),
+    };
+}
+
+/// RFC5246: `CompressionMethod compression_methods<1..2^8-1>;`
+impl TlsListElement for Compression {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("Compressions"),
+    };
+}
+
+impl TlsListElement for ClientExtension {
+    const SIZE_LEN: ListLength = ListLength::U16;
+}
+
+/// draft-ietf-tls-esni-17: `ExtensionType OuterExtensions<2..254>;`
+impl TlsListElement for ExtensionType {
+    const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
+        empty_error: InvalidMessage::IllegalEmptyList("ExtensionTypes"),
+    };
 }
 
 #[derive(Clone, Debug)]
