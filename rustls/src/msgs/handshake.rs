@@ -1005,6 +1005,12 @@ impl ClientHelloPayload {
     where
         V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
     {
+        let mut bytes = Self {
+            extensions: vec![],
+            ..self.clone()
+        }
+        .get_encoding();
+
         let exts = visit_extensions_encode(
             self.extensions
                 .iter()
@@ -1013,13 +1019,8 @@ impl ClientHelloPayload {
             extras,
             visitor,
         )?;
-
-        let mut bytes = Self {
-            extensions: vec![],
-            ..self.clone()
-        }
-        .get_encoding();
         bytes.extend_from_slice(&exts);
+
         Ok(bytes)
     }
 
@@ -1423,6 +1424,13 @@ impl HelloRetryRequest {
     where
         V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
     {
+        let mut bytes = Self {
+            extensions: vec![],
+            ..self.clone()
+        }
+        .get_encoding();
+        bytes.drain(bytes.len() - 2..); // drop extensions length
+
         let extensions = visit_extensions_encode(
             self.extensions
                 .iter()
@@ -1431,14 +1439,8 @@ impl HelloRetryRequest {
             extras,
             visitor,
         )?;
-
-        let mut bytes = Self {
-            extensions: vec![],
-            ..self.clone()
-        }
-        .get_encoding();
-        bytes.drain(bytes.len() - 2..); // drop extensions length
         bytes.extend_from_slice(&extensions);
+
         Ok(bytes)
     }
 
@@ -2999,6 +3001,21 @@ impl<'a> HandshakeMessagePayload<'a> {
     where
         V: FnMut(ExtensionType, Vec<u8>) -> ControlFlow<E, Option<Vec<u8>>>,
     {
+        let mut bytes = Vec::new();
+        match self.typ {
+            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
+            _ => self.typ,
+        }
+        .encode(&mut bytes);
+
+        let nested = LengthPrefixedBuffer::new(
+            ListLength::U24 {
+                max: usize::MAX,
+                error: InvalidMessage::MessageTooLarge,
+            },
+            &mut bytes,
+        );
+
         let body = match &self.payload {
             HandshakePayload::ClientHello(ch) => ch.visit_encode(extras, visitor)?,
             HandshakePayload::HelloRetryRequest(hrr) => hrr.visit_encode(extras, visitor)?,
@@ -3015,22 +3032,8 @@ impl<'a> HandshakeMessagePayload<'a> {
                 return Ok(bytes);
             }
         };
-
-        let mut bytes = Vec::new();
-        match self.typ {
-            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
-            _ => self.typ,
-        }
-        .encode(&mut bytes);
-
-        let nested = LengthPrefixedBuffer::new(
-            ListLength::U24 {
-                max: usize::MAX,
-                error: InvalidMessage::MessageTooLarge,
-            },
-            &mut bytes,
-        );
         nested.buf.extend_from_slice(&body);
+
         drop(nested);
         Ok(bytes)
     }
