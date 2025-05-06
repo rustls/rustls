@@ -54,4 +54,71 @@ messages are never delimited by the close of the TCP connection), it can uncondi
 ignore `UnexpectedEof` errors from rustls.
 
 [^2]: <https://datatracker.ietf.org/doc/html/rfc8446#section-6.1>
+
+# Debugging
+
+If you encounter a bug with Rustls it can be helpful to collect up as much diagnostic
+information as possible.
+
+## Collecting logs
+
+If your bug reproduces with one of the [Rustls examples] you can use the
+[`RUST_LOG`] environment variable to increase the log verbosity. If you're using
+your own application, you may need to configure it with a logging backend
+like `env_logger`.
+
+Consider reproducing your bug with `RUST_LOG=rustls=trace` and sharing the result
+in a [GitHub gist].
+
+[Rustls examples]: https://github.com/rustls/rustls/tree/main/examples
+[`RUST_LOG`]: https://docs.rs/env_logger/latest/env_logger/#enabling-logging
+[`env_logger`]: https://docs.rs/env_logger/
+[GitHub gist]: https://docs.github.com/en/get-started/writing-on-github/editing-and-sharing-content-with-gists/creating-gists
+
+## Taking a packet capture
+
+When logs aren't enough taking a packet capture ("pcap") is another helpful tool.
+The details of how to accomplish this vary by operating system/context.
+
+### tcpdump
+
+As one example, on Linux using [`tcpdump`] is often easiest.
+
+If you know the IP address of the remote server your bug demonstrates with you
+could take a short packet capture with this command (after replacing
+`XX.XX.XX.XX` with the correct IP address):
+
+```bash
+sudo tcpdump -i any tcp and dst host XX.XX.XX.XX -C5 -w rustls.pcap
+```
+
+The `-i any` captures on any network interface. The `tcp and dst host XX.XX.XX.XX`
+portion target the capture to TCP traffic to the specified IP address. The `-C5`
+argument limits the capture to at most 5MB. Lastly the `-w` argument writes the
+capture to `rustls.pcap`.
+
+Another approach is to use `tcp and port XXXX` instead of `tcp and dst host XX.XX.XX.XX`
+to capture all traffic to a specific port instead of a specific host server.
+
+[`tcpdump`]: https://www.redhat.com/en/blog/introduction-using-tcpdump-linux-command-line
+
+### SSLKEYLOGFILE
+
+If the bug you are reporting happens after data is encrypted you may also wish to
+share the secret keys required to decrypt the post-handshake traffic.
+
+If you're using one of the [Rustls examples] you can set the `SSLKEYLOGFILE` environment
+variable to a path where secrets will be written. E.g. `SSLKEYLOGFILE=rustls.pcap.keys`.
+
+If you're using your own application you may need to customize the Rustls `ClientConfig`
+or `ServerConfig`'s `key_log` setting like the example applications do.
+
+With the file from `SSLKEYLOGFILE` it is possible to use [Wireshark] or another tool to
+decrypt the post-handshake messages, following [these instructions][curl-sslkeylogfile].
+
+Remember this allows plaintext decryption and should only be done in testing contexts
+where no sensitive data (API keys, etc) are being shared.
+
+[Wireshark]: https://www.wireshark.org/download.html
+[curl-sslkeylogfile]: https://everything.curl.dev/usingcurl/tls/sslkeylogfile.html
 */

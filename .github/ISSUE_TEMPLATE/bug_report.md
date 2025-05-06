@@ -27,3 +27,5 @@ A clear and concise description of what you expected to happen.
 
 **Additional context**
 Add any other context about the problem here.
+For example, consider including verbose logs or a packet capture. For help
+with this [see the manual](https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#debugging).
