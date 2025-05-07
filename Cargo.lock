@@ -2606,7 +2606,7 @@ dependencies = [
  "serde_json",
  "subtle",
  "time",
- "webpki-roots 0.26.11",
+ "webpki-roots 1.0.0",
  "x509-parser",
  "zeroize",
  "zlib-rs",
@@ -2678,7 +2678,7 @@ dependencies = [
  "rustls 0.23.27",
  "serde",
  "tokio",
- "webpki-roots 0.26.11",
+ "webpki-roots 1.0.0",
 ]
 
 [[package]]
@@ -2737,7 +2737,7 @@ dependencies = [
  "rustls 0.23.27",
  "sha2",
  "signature",
- "webpki-roots 0.26.11",
+ "webpki-roots 1.0.0",
  "x25519-dalek",
 ]
 
