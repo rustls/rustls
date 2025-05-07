@@ -459,9 +459,12 @@ mod client_hello {
                 }
             };
 
-            cx.common.chosen_psk_identity = input_secrets
-                .psk()
-                .map(|psk| psk.identity().to_vec());
+            if let Some(psk) = input_secrets.psk() {
+                cx.common.chosen_psk_identity = Some(psk.identity().to_vec());
+                self.config
+                    .preshared_keys
+                    .chosen(psk.identity());
+            }
 
             // A PSK obviates the need for a full handshake.
             let full_handshake = input_secrets.psk().is_none();

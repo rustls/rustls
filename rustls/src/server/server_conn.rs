@@ -114,10 +114,15 @@ pub trait ProducesTickets: Debug + Send + Sync {
 pub trait SelectsPresharedKeys: Debug + Send + Sync {
     /// Retrieves a preshared key.
     ///
+    /// To determine whether the PSK was used,
+    ///
     /// To help prevent adversaries from discovering identities
     /// supported by the server, identity comparisons should be
     /// performed in constant time.
     fn load_psk(&self, identity: &[u8]) -> Option<Arc<PresharedKey>>;
+
+    /// Records that the PSK was used for a handshake.
+    fn chosen(&self, _identity: &[u8]) {}
 }
 
 /// Determines how TLS 1.3 preshared keys are supported.
@@ -144,6 +149,13 @@ impl PresharedKeySelection {
         match self {
             Self::Enabled(v) | Self::Required(v) => v.load_psk(identity),
             Self::Disabled => None,
+        }
+    }
+
+    pub(crate) fn chosen(&self, identity: &[u8]) {
+        match self {
+            Self::Enabled(v) | Self::Required(v) => v.chosen(identity),
+            Self::Disabled => {}
         }
     }
 }

@@ -476,7 +476,7 @@ pub mod internal {
         pub mod enums {
             pub use crate::msgs::enums::{
                 AlertLevel, CertificateType, Compression, EchVersion, ExtensionType, HpkeAead,
-                HpkeKdf, HpkeKem, NamedGroup,
+                HpkeKdf, HpkeKem, NamedGroup, PskKeyExchangeMode,
             };
         }
         pub mod fragmenter {

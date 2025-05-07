@@ -8422,11 +8422,11 @@ const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
 mod psk {
     use super::*;
-    use rustls::client::PresharedKeyStore;
+    use rustls::Connection;
+    use rustls::client::{PresharedKeyStore, PskKexMode};
     use rustls::crypto::PresharedKey;
     use rustls::crypto::hash::HashAlgorithm;
-    use rustls::internal::msgs::codec::Reader;
-    use rustls::internal::msgs::handshake::PresharedKeyOffer;
+    use rustls::internal::msgs::enums::PskKeyExchangeMode;
     use rustls::server::PresharedKeySelection;
 
     fn make_client_config(
@@ -8450,11 +8450,11 @@ mod psk {
     /// It asserts that the handshake used a PSK with
     /// a particular identity.
     fn do_round_trip_psk(
-        client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-        server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
+        mut client: ClientConnection,
+        mut server: ServerConnection,
         identity: &[u8],
     ) {
-        do_handshake(client, server);
+        do_handshake(&mut client, &mut server);
 
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Psk));
         assert_eq!(client.chosen_psk_identity(), Some(identity));
@@ -8462,7 +8462,7 @@ mod psk {
         assert_eq!(server.handshake_kind(), Some(HandshakeKind::Psk));
         assert_eq!(server.chosen_psk_identity(), Some(identity));
 
-        do_round_trip(client, server);
+        round_trip_transfer(&mut client, &mut server);
     }
 
     /// Performs a handshake then checks that the client and
@@ -8470,11 +8470,8 @@ mod psk {
     ///
     /// It asserts that the client and server performed a full
     /// handshake *without* using a PSK.
-    fn do_round_trip_no_psk(
-        client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-        server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-    ) {
-        do_handshake(client, server);
+    fn do_round_trip_no_psk(mut client: ClientConnection, mut server: ServerConnection) {
+        do_handshake(&mut client, &mut server);
 
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
         assert_eq!(client.chosen_psk_identity(), None);
@@ -8482,15 +8479,113 @@ mod psk {
         assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
         assert_eq!(server.chosen_psk_identity(), None);
 
-        do_round_trip(client, server);
+        round_trip_transfer(&mut client, &mut server);
+    }
+
+    /// Performs a handshake then checks that the client and
+    /// server can send data to each other. The handshake is
+    /// altered with `alter_server_message` and
+    /// `alter_client_message`.
+    ///
+    /// It asserts that the client and server performed a full
+    /// handshake *without* using a PSK.
+    fn do_round_trip_altered_no_psk(
+        client: ClientConnection,
+        alter_server_message: impl Fn(&mut Message) -> Altered,
+        alter_client_message: impl Fn(&mut Message) -> Altered,
+        server: ServerConnection,
+    ) {
+        let mut client = client.into();
+        let mut server = server.into();
+        do_handshake_altered(
+            &mut client,
+            alter_server_message,
+            alter_client_message,
+            &mut server,
+        )
+        .unwrap();
+
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(client.chosen_psk_identity(), None);
+
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(server.chosen_psk_identity(), None);
+
+        let Connection::Client(mut client) = client else {
+            unreachable!();
+        };
+        let Connection::Server(mut server) = server else {
+            unreachable!();
+        };
+        round_trip_transfer(&mut client, &mut server);
+    }
+
+    /// Performs a handshake, but does not check that the client
+    /// and server can send data to each other. The handshake is
+    /// altered with `alter_server_message` and
+    /// `alter_client_message`.
+    ///
+    /// It asserts that the client and server performed a full
+    /// handshake *without* using a PSK.
+    fn do_handshake_altered_no_psk(
+        client: ClientConnection,
+        alter_server_message: impl Fn(&mut Message) -> Altered,
+        alter_client_message: impl Fn(&mut Message) -> Altered,
+        server: ServerConnection,
+    ) {
+        let mut client = client.into();
+        let mut server = server.into();
+        do_handshake_altered(
+            &mut client,
+            alter_server_message,
+            alter_client_message,
+            &mut server,
+        )
+        .unwrap();
+
+        assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(client.chosen_psk_identity(), None);
+
+        assert_eq!(server.handshake_kind(), Some(HandshakeKind::Full));
+        assert_eq!(server.chosen_psk_identity(), None);
+    }
+
+    // Copied from `super::do_handshake_altered` because we want
+    // to use the connections afterward.
+    fn do_handshake_altered(
+        client: &mut Connection,
+        alter_server_message: impl Fn(&mut Message) -> Altered,
+        alter_client_message: impl Fn(&mut Message) -> Altered,
+        server: &mut Connection,
+    ) -> Result<(), ErrorFromPeer> {
+        while server.is_handshaking() || client.is_handshaking() {
+            transfer_altered(client, &alter_client_message, server);
+
+            server
+                .process_new_packets()
+                .map_err(ErrorFromPeer::Server)?;
+
+            transfer_altered(server, &alter_server_message, client);
+
+            client
+                .process_new_packets()
+                .map_err(ErrorFromPeer::Client)?;
+        }
+
+        Ok(())
     }
 
     /// Ensures that the client and server can send data to each
     /// other.
-    fn do_round_trip(
+    ///
+    /// It does not perform a handshake.
+    fn round_trip_transfer(
         client: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
         server: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
     ) {
+        assert!(client.handshake_kind().is_some());
+        assert!(server.handshake_kind().is_some());
+
         let data = b"hello, server!";
         assert_eq!(data.len(), client.writer().write(data).unwrap());
         transfer(client, server);
@@ -8504,90 +8599,47 @@ mod psk {
         check_read(&mut client.reader(), data);
     }
 
-    /// The client and the server only support one TLS 1.3 PSK.
-    /// They have one PSK in common.
-    #[test]
-    fn server_one_client_one() {
-        let identity = b"identity";
-        let (mut client, mut server) = {
-            let psk = PresharedKey::external(identity, b"secret")
-                .unwrap()
-                .with_hash_alg(HashAlgorithm::SHA384)
-                .unwrap();
-            let server_cfg = make_server_config(KeyType::Ed25519, || {
-                let keys = ServerPresharedKeys::from_iter([psk.clone()]);
-                PresharedKeySelection::Enabled(Arc::new(keys))
-            });
-            let client_cfg = make_client_config(KeyType::Ed25519, || {
-                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), psk)]);
-                Arc::new(keys)
-            });
-            make_pair_for_configs(client_cfg, server_cfg)
-        };
-        do_round_trip_psk(&mut client, &mut server, identity);
+    fn modify_noop(_msg: &mut Message) -> Altered {
+        Altered::InPlace
     }
 
-    /// The server supports many TLS 1.3 PSKs, the client only
-    /// supports one. They have one PSK in common.
+    /// The client and the server have one TLS 1.3 PSK in common.
     #[test]
-    fn server_many_client_one() {
+    fn one_shared_psk() {
         let identity = b"identity";
-        let (mut client, mut server) = {
+        let (client, server) = {
             let shared_psk = PresharedKey::external(identity, b"secret")
                 .unwrap()
                 .with_hash_alg(HashAlgorithm::SHA384)
                 .unwrap();
-
             let server_cfg = make_server_config(KeyType::Ed25519, || {
-                let mut keys = ServerPresharedKeys::new();
-                keys.insert_random(10);
+                // Add some extra noise.
+                let mut keys = ServerPresharedKeys::random(10);
                 keys.insert(shared_psk.clone()).unwrap();
                 PresharedKeySelection::Enabled(Arc::new(keys))
             });
-
-            let client_cfg = make_client_config(KeyType::Ed25519, || {
-                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), shared_psk)]);
-                Arc::new(keys)
-            });
-            make_pair_for_configs(client_cfg, server_cfg)
-        };
-        do_round_trip_psk(&mut client, &mut server, identity);
-    }
-
-    /// The server supports one TLS 1.3 PSK, the client supports
-    /// many. They have one PSK in common.
-    #[test]
-    fn server_one_client_many() {
-        let identity = b"identity";
-        let (mut client, mut server) = {
-            let shared_psk = PresharedKey::external(identity, b"secret")
-                .unwrap()
-                .with_hash_alg(HashAlgorithm::SHA384)
-                .unwrap();
-
-            let server_cfg = make_server_config(KeyType::Ed25519, || {
-                PresharedKeySelection::Enabled(Arc::new({
-                    ServerPresharedKeys::from_iter([shared_psk.clone()])
-                }))
-            });
-
             let client_cfg = make_client_config(KeyType::Ed25519, || {
                 let mut keys = ClientPresharedKeys::new();
                 keys.insert_random(server_name("localhost"), 10);
+                // Sandwich the shared PSK between other junk
+                // PSKs so that the server has to test several
+                // candidate PSKs before it finds the "correct"
+                // one.
                 keys.insert(server_name("localhost"), shared_psk)
                     .unwrap();
+                keys.insert_random(server_name("localhost"), 10);
                 Arc::new(keys)
             });
             make_pair_for_configs(client_cfg, server_cfg)
         };
-        do_round_trip_psk(&mut client, &mut server, identity);
+        do_round_trip_psk(client, server, identity);
     }
 
     /// The client and server do not have any TLS 1.3 PSKs in
-    /// common. They fall back to ECDHE.
+    /// common, so they fall back to ECDHE.
     #[test]
     fn no_shared_psks_fallback_to_ecdhe() {
-        let (mut client, mut server) = {
+        let (client, server) = {
             let server_cfg = make_server_config(KeyType::Ed25519, || {
                 PresharedKeySelection::Enabled(Arc::new(ServerPresharedKeys::random(10)))
             });
@@ -8598,11 +8650,12 @@ mod psk {
             });
             make_pair_for_configs(client_cfg, server_cfg)
         };
-        do_round_trip_no_psk(&mut client, &mut server);
+        do_round_trip_no_psk(client, server);
     }
 
-    /// The client and server do not have any TLS 1.3 PSKs in common.
-    /// The server requires PSKs, so it aborts the connection.
+    /// The client and server do not have any TLS 1.3 PSKs in
+    /// common. The server requires PSKs, so it aborts the
+    /// handshake.
     #[test]
     fn no_shared_psks_and_psks_are_required() {
         let (mut client, mut server) = {
@@ -8624,7 +8677,8 @@ mod psk {
     }
 
     /// The client and server have a TLS 1.3 PSK with the same
-    /// identity, but different hash algorithm.
+    /// identity, but different hash algorithm and are therefore
+    /// incompatible.
     #[test]
     fn same_identity_wrong_hash_alg() {
         let (mut client, mut server) = {
@@ -8657,9 +8711,45 @@ mod psk {
         assert_eq!(err, ErrorFromPeer::Server(Error::NoCompatiblePresharedKeys));
     }
 
+    /// The client and server have a TLS 1.3 PSK with the same
+    /// identity, but different secret.
+    #[test]
+    fn same_identity_wrong_secret() {
+        let (mut client, mut server) = {
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                let psk = PresharedKey::external(b"identity", b"FOO")
+                    .unwrap()
+                    .with_hash_alg(HashAlgorithm::SHA384)
+                    .unwrap();
+                let mut keys = ServerPresharedKeys::new();
+                keys.insert(psk).unwrap();
+                PresharedKeySelection::Required(Arc::new(keys))
+            });
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let psk = PresharedKey::external(b"identity", b"BAR")
+                    .unwrap()
+                    .with_hash_alg(HashAlgorithm::SHA384)
+                    .unwrap();
+                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), psk)]);
+                Arc::new(keys)
+            });
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+
+        let err =
+            do_handshake_until_error(&mut client, &mut server).expect_err("connection should fail");
+        assert_eq!(
+            err,
+            ErrorFromPeer::Server(Error::PeerMisbehaved(PeerMisbehaved::IncorrectBinder))
+        );
+    }
+
     /// The client and server share a TLS 1.3 PSK, but the
     /// client's PSK binders are corrupted. The server should
     /// reject the corrupt binders and abort the handshake.
+    ///
+    /// This is similar to [`same_identity_wrong_secret`], but in
+    /// this case the secret is the same.
     #[test]
     fn client_corrupted_psk_binders() {
         let (client, server) = {
@@ -8678,16 +8768,13 @@ mod psk {
             make_pair_for_configs(client_cfg, server_cfg)
         };
 
-        fn modify_noop(_msg: &mut Message) -> Altered {
-            Altered::InPlace
-        }
         fn modify_client_psk_binders(msg: &mut Message) -> Altered {
             let MessagePayload::Handshake { encoded, .. } = &mut msg.payload else {
                 return Altered::InPlace;
             };
 
-            // `check_binder` uses `encoded` to calculate the
-            // binder.
+            // `MessagePayload::encode` simply returns `encoded`,
+            // so use that.
             let mut tmp = encoded.clone().into_vec();
             *tmp.last_mut().unwrap() ^= 1;
             *encoded = Payload::new(tmp);
@@ -8695,11 +8782,70 @@ mod psk {
             return Altered::InPlace;
         }
 
-        let err = do_handshake_altered(client, modify_noop, modify_client_psk_binders, server)
-            .expect_err("connection should fail");
+        let err = do_handshake_altered(
+            &mut client.into(),
+            modify_noop,
+            modify_client_psk_binders,
+            &mut server.into(),
+        )
+        .expect_err("connection should fail");
         assert_eq!(
             err,
             ErrorFromPeer::Server(Error::PeerMisbehaved(PeerMisbehaved::IncorrectBinder))
         );
+    }
+
+    /// The client sends unrecognized PSK KEX modes, so the
+    /// server rejects the PSK exension and falls back to ECDHE.
+    #[test]
+    fn unrecognized_psk_kex_mode() {
+        let (client, server) = {
+            let psk = PresharedKey::external(b"identity", b"secret")
+                .unwrap()
+                .with_hash_alg(HashAlgorithm::SHA384)
+                .unwrap();
+            let server_cfg = make_server_config(KeyType::Ed25519, || {
+                let mut keys = ServerPresharedKeys::new();
+                keys.insert(psk.clone()).unwrap();
+                PresharedKeySelection::Enabled(Arc::new(keys))
+            });
+            let client_cfg = make_client_config(KeyType::Ed25519, || {
+                let keys = ClientPresharedKeys::from_iter([(server_name("localhost"), psk)]);
+                Arc::new(keys)
+            });
+            make_pair_for_configs(client_cfg, server_cfg)
+        };
+
+        fn modify_client_psk_kex_modes(msg: &mut Message) -> Altered {
+            println!("modifying...");
+            let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload else {
+                return Altered::InPlace;
+            };
+            let HandshakePayload::ClientHello(hello) = &mut parsed.payload else {
+                return Altered::InPlace;
+            };
+            let modes = hello
+                .extensions
+                .iter_mut()
+                .find_map(|ext| match ext {
+                    ClientExtension::PresharedKeyModes(modes) => Some(modes),
+                    _ => None,
+                });
+            let Some(modes) = modes else {
+                return Altered::InPlace;
+            };
+            *modes = vec![
+                PskKeyExchangeMode::Unknown(42),
+                PskKeyExchangeMode::Unknown(43),
+                PskKeyExchangeMode::Unknown(44),
+            ];
+
+            let mut buf = Vec::new();
+            parsed.encode(&mut buf);
+            *encoded = Payload::Owned(buf.clone());
+
+            return Altered::InPlace;
+        }
+        do_handshake_altered_no_psk(client, modify_noop, modify_client_psk_kex_modes, server);
     }
 } // mod psk
