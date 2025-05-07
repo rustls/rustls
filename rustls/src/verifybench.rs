@@ -1,5 +1,21 @@
-// This program does benchmarking of the functions in verify.rs,
-// that do certificate chain validation and signature verification.
+//! This program does benchmarking of the functions in verify.rs,
+//! that do certificate chain validation and signature verification.
+//!
+//! This uses captured certificate chains for a selection of websites,
+//! saved in `testdata/cert-{SITE}.{I}.der`.
+//!
+//! To update that data:
+//!
+//! - delete all `testdata/cert-*.der`.
+//! - run the `admin/capture-certdata` script.
+//! - update the verification timestamp near the bottom of this file
+//!   to the current time.
+//! - where a website's chain length changed, reflect that in the list
+//!   of certificate files below.
+//!
+//! This does not need to be done regularly; because the verification
+//! time is fixed, it only needs doing if a root certificate is
+//! distrusted.
 
 #![cfg(bench)]
 
@@ -38,6 +54,7 @@ mod benchmarks {
             &[
                 include_bytes!("testdata/cert-github.0.der"),
                 include_bytes!("testdata/cert-github.1.der"),
+                include_bytes!("testdata/cert-github.2.der"),
             ],
         );
         b.iter(|| ctx.verify_once());
@@ -52,7 +69,6 @@ mod benchmarks {
                 include_bytes!("testdata/cert-arstechnica.0.der"),
                 include_bytes!("testdata/cert-arstechnica.1.der"),
                 include_bytes!("testdata/cert-arstechnica.2.der"),
-                include_bytes!("testdata/cert-arstechnica.3.der"),
             ],
         );
         b.iter(|| ctx.verify_once());
@@ -66,6 +82,7 @@ mod benchmarks {
             &[
                 include_bytes!("testdata/cert-servo.0.der"),
                 include_bytes!("testdata/cert-servo.1.der"),
+                include_bytes!("testdata/cert-servo.2.der"),
             ],
         );
         b.iter(|| ctx.verify_once());
@@ -105,6 +122,7 @@ mod benchmarks {
             &[
                 include_bytes!("testdata/cert-google.0.der"),
                 include_bytes!("testdata/cert-google.1.der"),
+                include_bytes!("testdata/cert-google.2.der"),
             ],
         );
         b.iter(|| ctx.verify_once());
@@ -144,6 +162,7 @@ mod benchmarks {
             &[
                 include_bytes!("testdata/cert-duckduckgo.0.der"),
                 include_bytes!("testdata/cert-duckduckgo.1.der"),
+                include_bytes!("testdata/cert-duckduckgo.2.der"),
             ],
         );
         b.iter(|| ctx.verify_once());
@@ -158,6 +177,7 @@ mod benchmarks {
                 include_bytes!("testdata/cert-rustlang.0.der"),
                 include_bytes!("testdata/cert-rustlang.1.der"),
                 include_bytes!("testdata/cert-rustlang.2.der"),
+                include_bytes!("testdata/cert-rustlang.3.der"),
             ],
         );
         b.iter(|| ctx.verify_once());
@@ -199,7 +219,7 @@ impl Context {
                 .copied()
                 .map(|bytes| CertificateDer::from(bytes.to_vec()))
                 .collect(),
-            now: UnixTime::since_unix_epoch(Duration::from_secs(1_640_870_720)),
+            now: UnixTime::since_unix_epoch(Duration::from_secs(1_746_605_469)),
             verifier: WebPkiServerVerifier::new_without_revocation(
                 roots,
                 provider.signature_verification_algorithms,
