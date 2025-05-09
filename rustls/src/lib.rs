@@ -484,10 +484,8 @@ pub mod internal {
         }
         pub mod handshake {
             pub use crate::msgs::handshake::{
-                CertificateChain, ClientExtension, ClientHelloPayload, DistinguishedName,
                 EchConfigContents, EchConfigPayload, HandshakeMessagePayload, HandshakePayload,
-                HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, ServerExtension,
-                SessionId,
+                HpkeKeyConfig, HpkeSymmetricCipherSuite, SessionId,
             };
         }
         pub mod message {
