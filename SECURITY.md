@@ -5,7 +5,7 @@
 Security fixes will be backported only to the rustls versions for which the
 original semver-compatible release was published less than 2 years ago.
 
-For example, as of 2024-04-18 the latest release is 0.23.4.
+For example, as of 2025-05-09 the latest release is 0.23.27.
 
 * 0.23.0 was released in February of 2024
 * 0.22.0 was released in December of 2023
@@ -13,7 +13,7 @@ For example, as of 2024-04-18 the latest release is 0.23.4.
 * 0.20.0 was released in September of 2021
 * 0.19.0 was released in November of 2020
 
-Therefore 0.23.x, 0.22.x and 0.21.x will be updated, while 0.20.x and 0.19.x
+Therefore 0.23.x and 0.22.x will be updated, while 0.21.x, 0.20.x and 0.19.x
 will not be.
 
 > [!NOTE]
@@ -29,8 +29,8 @@ in the course of normal development, subject to these constraints:
 - Our MSRV will be no more recent than 9 versions old, or approximately 12 months.
 
 > [!TIP]
-> At the time of writing, the most recent Rust release is 1.82.0.  That means
-> our MSRV could be as recent as 1.73.0. As it happens, it is 1.71.0.
+> At the time of writing, the most recent Rust release is 1.85.  That means
+> our MSRV could be as recent as 1.76. As it happens, it is 1.71.
 
 - Our MSRV policy only covers the core library crate: it does not cover tests
   or example code, and is not binding on our dependencies.
@@ -55,7 +55,7 @@ MSRV than this policy.
 
 > [!NOTE]
 > This is currently the case for our optional dependency on `zlib-rs`, which
-> has a current MSRV of 1.75.0.
+> has a current MSRV of 1.75.
 
 ## Reporting a Vulnerability
 
