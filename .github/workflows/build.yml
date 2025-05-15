@@ -476,12 +476,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      # We want to be free of any warnings, so deny them.
-      # - Allow `clippy::disallowed_types` as a workaround since `disallowed_types` configured in `.clippy.toml`
-      #   is only intended for the main `rustls` crate.
-      - run: ./admin/clippy -- --deny warnings --allow clippy::disallowed_types
-      # - Keep the main crate free of all warnings.
-      - run: cargo clippy -p rustls -- --deny warnings
+      - run: ./admin/clippy -- --deny warnings
 
   clippy-nightly:
     name: Clippy (Nightly)
