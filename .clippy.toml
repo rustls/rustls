@@ -1,7 +1,1 @@
 upper-case-acronyms-aggressive = true
-
-# only intended to affect main rustls crate - need to allow disallowed-types in all other crates in Clippy CI job
-disallowed-types = [
-  { path = "std::sync::Arc", reason = "must use Arc from sync module to support downstream forks targeting architectures without atomic ptrs" },
-  { path = "std::sync::Weak", reason = "must use Weak from sync module to support downstream forks targeting architectures without atomic ptrs" },
-]
