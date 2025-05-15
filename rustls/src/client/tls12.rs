@@ -733,7 +733,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
             HandshakePayload::CertificateRequest
         )?;
         self.transcript.add_message(&m);
-        debug!("Got CertificateRequest {:?}", certreq);
+        debug!("Got CertificateRequest {certreq:?}");
 
         // The RFC jovially describes the design here as 'somewhat complicated'
         // and 'somewhat underspecified'.  So thanks for that.

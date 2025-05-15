@@ -183,7 +183,7 @@ impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, Sta
             .unwrap_or((side_name, ""));
         let (_, name) = ty.rsplit_once("::").unwrap_or(("", ty));
 
-        f.debug_struct(&format!("ConfigBuilder<{}, _>", name,))
+        f.debug_struct(&format!("ConfigBuilder<{name}, _>",))
             .field("state", &self.state)
             .finish()
     }

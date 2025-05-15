@@ -591,7 +591,7 @@ impl fmt::Display for CertificateError {
                         f,
                         "is not valid for any names (according to its subjectAltName extension)"
                     ),
-                    [one] => write!(f, "is only valid for {}", one),
+                    [one] => write!(f, "is only valid for {one}"),
                     many => {
                         write!(f, "is only valid for ")?;
 
@@ -600,12 +600,12 @@ impl fmt::Display for CertificateError {
                         let last = &many[n - 1];
 
                         for (i, name) in all_but_last.iter().enumerate() {
-                            write!(f, "{}", name)?;
+                            write!(f, "{name}")?;
                             if i < n - 2 {
                                 write!(f, ", ")?;
                             }
                         }
-                        write!(f, " or {}", last)
+                        write!(f, " or {last}")
                     }
                 }
             }
@@ -662,7 +662,7 @@ impl fmt::Display for CertificateError {
                 Ok(())
             }
 
-            other => write!(f, "{:?}", other),
+            other => write!(f, "{other:?}"),
         }
     }
 }
@@ -812,7 +812,7 @@ impl From<EncryptedClientHelloError> for Error {
 fn join<T: fmt::Debug>(items: &[T]) -> String {
     items
         .iter()
-        .map(|x| format!("{:?}", x))
+        .map(|x| format!("{x:?}"))
         .collect::<Vec<String>>()
         .join(" or ")
 }
@@ -839,22 +839,22 @@ impl fmt::Display for Error {
                 join::<HandshakeType>(expect_types)
             ),
             Self::InvalidMessage(typ) => {
-                write!(f, "received corrupt message of type {:?}", typ)
+                write!(f, "received corrupt message of type {typ:?}")
             }
-            Self::PeerIncompatible(why) => write!(f, "peer is incompatible: {:?}", why),
-            Self::PeerMisbehaved(why) => write!(f, "peer misbehaved: {:?}", why),
-            Self::AlertReceived(alert) => write!(f, "received fatal alert: {:?}", alert),
+            Self::PeerIncompatible(why) => write!(f, "peer is incompatible: {why:?}"),
+            Self::PeerMisbehaved(why) => write!(f, "peer misbehaved: {why:?}"),
+            Self::AlertReceived(alert) => write!(f, "received fatal alert: {alert:?}"),
             Self::InvalidCertificate(err) => {
-                write!(f, "invalid peer certificate: {}", err)
+                write!(f, "invalid peer certificate: {err}")
             }
             Self::InvalidCertRevocationList(err) => {
-                write!(f, "invalid certificate revocation list: {:?}", err)
+                write!(f, "invalid certificate revocation list: {err:?}")
             }
             Self::NoCertificatesPresented => write!(f, "peer sent no certificates"),
             Self::UnsupportedNameType => write!(f, "presented server name type wasn't supported"),
             Self::DecryptError => write!(f, "cannot decrypt peer's message"),
             Self::InvalidEncryptedClientHello(err) => {
-                write!(f, "encrypted client hello failure: {:?}", err)
+                write!(f, "encrypted client hello failure: {err:?}")
             }
             Self::EncryptError => write!(f, "cannot encrypt message"),
             Self::PeerSentOversizedRecord => write!(f, "peer sent excess record size"),
@@ -866,10 +866,10 @@ impl fmt::Display for Error {
                 write!(f, "the supplied max_fragment_size was too small or large")
             }
             Self::InconsistentKeys(why) => {
-                write!(f, "keys may not be consistent: {:?}", why)
+                write!(f, "keys may not be consistent: {why:?}")
             }
-            Self::General(err) => write!(f, "unexpected error: {}", err),
-            Self::Other(err) => write!(f, "other error: {}", err),
+            Self::General(err) => write!(f, "unexpected error: {err}"),
+            Self::Other(err) => write!(f, "other error: {err}"),
         }
     }
 }
@@ -1174,8 +1174,8 @@ mod tests {
         ];
 
         for err in all {
-            println!("{:?}:", err);
-            println!("  fmt '{}'", err);
+            println!("{err:?}:");
+            println!("  fmt '{err}'");
         }
     }
 

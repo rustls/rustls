@@ -375,7 +375,7 @@ mod tests {
         // There should be the expected number of crls.
         assert_eq!(builder.crls.len(), initial_crls.len() + extra_crls.len());
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -399,7 +399,7 @@ mod tests {
         )
         .only_check_end_entity_revocation();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -413,7 +413,7 @@ mod tests {
         )
         .allow_unknown_revocation_status();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -428,7 +428,7 @@ mod tests {
         .allow_unknown_revocation_status()
         .only_check_end_entity_revocation();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -442,7 +442,7 @@ mod tests {
         )
         .enforce_revocation_expiration();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 }

@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
                     .unwrap();
 
                 if bytes_read != 0 {
-                    println!("Early data from client: {:?}", buf);
+                    println!("Early data from client: {buf:?}");
                 }
             }
         }

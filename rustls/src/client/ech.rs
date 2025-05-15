@@ -685,7 +685,7 @@ impl EchState {
             };
         }
 
-        trace!("ECH Inner Hello: {:#?}", inner_hello);
+        trace!("ECH Inner Hello: {inner_hello:#?}");
 
         // Encode the inner hello according to the rules required for ECH. This differs
         // from the standard encoding in several ways. Notably this is where we will

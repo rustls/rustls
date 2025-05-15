@@ -310,8 +310,7 @@ impl<'a> Codec<'a> for ServerNamePayload<'a> {
 
                 HostNamePayload::IpAddress(_invalid) => {
                     warn!(
-                        "Illegal SNI extension: ignoring IP address presented as hostname ({:?})",
-                        _invalid
+                        "Illegal SNI extension: ignoring IP address presented as hostname ({_invalid:?})"
                     );
                     Some(Self::IpAddress)
                 }

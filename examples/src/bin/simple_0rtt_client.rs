@@ -28,15 +28,14 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str, port:
         .expect("invalid DNS name")
         .to_owned();
     let mut conn = rustls::ClientConnection::new(Arc::clone(config), server_name).unwrap();
-    let mut sock = TcpStream::connect(format!("{}:{}", domain_name, port)).unwrap();
+    let mut sock = TcpStream::connect(format!("{domain_name}:{port}")).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(
         "GET / HTTP/1.1\r\n\
-         Host: {}\r\n\
+         Host: {domain_name}\r\n\
          Connection: close\r\n\
          Accept-Encoding: identity\r\n\
-         \r\n",
-        domain_name
+         \r\n"
     );
 
     // If early data is available with this server, then early_data()
@@ -69,7 +68,7 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str, port:
     BufReader::new(stream)
         .read_line(&mut first_response_line)
         .unwrap();
-    println!("  * Server response: {:?}", first_response_line);
+    println!("  * Server response: {first_response_line:?}");
 }
 
 fn main() {

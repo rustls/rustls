@@ -117,7 +117,7 @@ impl RsaSigningKey {
             }
         }
         .map_err(|key_rejected| {
-            Error::General(format!("failed to parse RSA private key: {}", key_rejected))
+            Error::General(format!("failed to parse RSA private key: {key_rejected}"))
         })?;
 
         Ok(Self {
@@ -428,7 +428,7 @@ mod tests {
         ));
 
         let k = any_supported_type(&key).unwrap();
-        assert_eq!(format!("{:?}", k), "EcdsaSigningKey { algorithm: ECDSA }");
+        assert_eq!(format!("{k:?}"), "EcdsaSigningKey { algorithm: ECDSA }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
         assert!(
@@ -443,7 +443,7 @@ mod tests {
             .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
             .unwrap();
         assert_eq!(
-            format!("{:?}", s),
+            format!("{s:?}"),
             "EcdsaSigner { scheme: ECDSA_NISTP256_SHA256 }"
         );
         assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP256_SHA256);
@@ -481,7 +481,7 @@ mod tests {
         ));
 
         let k = any_supported_type(&key).unwrap();
-        assert_eq!(format!("{:?}", k), "EcdsaSigningKey { algorithm: ECDSA }");
+        assert_eq!(format!("{k:?}"), "EcdsaSigningKey { algorithm: ECDSA }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
         assert!(
@@ -496,7 +496,7 @@ mod tests {
             .choose_scheme(&[SignatureScheme::ECDSA_NISTP384_SHA384])
             .unwrap();
         assert_eq!(
-            format!("{:?}", s),
+            format!("{s:?}"),
             "EcdsaSigner { scheme: ECDSA_NISTP384_SHA384 }"
         );
         assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP384_SHA384);
@@ -534,7 +534,7 @@ mod tests {
         ));
 
         let k = any_supported_type(&key).unwrap();
-        assert_eq!(format!("{:?}", k), "EcdsaSigningKey { algorithm: ECDSA }");
+        assert_eq!(format!("{k:?}"), "EcdsaSigningKey { algorithm: ECDSA }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::ECDSA);
 
         assert!(
@@ -553,7 +553,7 @@ mod tests {
             .choose_scheme(&[SignatureScheme::ECDSA_NISTP521_SHA512])
             .unwrap();
         assert_eq!(
-            format!("{:?}", s),
+            format!("{s:?}"),
             "EcdsaSigner { scheme: ECDSA_NISTP521_SHA512 }"
         );
         assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP521_SHA512);
@@ -579,10 +579,7 @@ mod tests {
         let key = PrivatePkcs8KeyDer::from(&include_bytes!("../../testdata/eddsakey.der")[..]);
 
         let k = any_eddsa_type(&key).unwrap();
-        assert_eq!(
-            format!("{:?}", k),
-            "Ed25519SigningKey { algorithm: ED25519 }"
-        );
+        assert_eq!(format!("{k:?}"), "Ed25519SigningKey { algorithm: ED25519 }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::ED25519);
 
         assert!(
@@ -596,7 +593,7 @@ mod tests {
         let s = k
             .choose_scheme(&[SignatureScheme::ED25519])
             .unwrap();
-        assert_eq!(format!("{:?}", s), "Ed25519Signer { scheme: ED25519 }");
+        assert_eq!(format!("{s:?}"), "Ed25519Signer { scheme: ED25519 }");
         assert_eq!(s.scheme(), SignatureScheme::ED25519);
         assert_eq!(s.sign(b"hello").unwrap().len(), 64);
     }
@@ -627,7 +624,7 @@ mod tests {
         ));
 
         let k = any_supported_type(&key).unwrap();
-        assert_eq!(format!("{:?}", k), "RsaSigningKey { algorithm: RSA }");
+        assert_eq!(format!("{k:?}"), "RsaSigningKey { algorithm: RSA }");
         assert_eq!(k.algorithm(), SignatureAlgorithm::RSA);
 
         assert!(
@@ -642,7 +639,7 @@ mod tests {
         let s = k
             .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
             .unwrap();
-        assert_eq!(format!("{:?}", s), "RsaSigner { scheme: RSA_PSS_SHA256 }");
+        assert_eq!(format!("{s:?}"), "RsaSigner { scheme: RSA_PSS_SHA256 }");
         assert_eq!(s.scheme(), SignatureScheme::RSA_PSS_SHA256);
         assert_eq!(s.sign(b"hello").unwrap().len(), 256);
 

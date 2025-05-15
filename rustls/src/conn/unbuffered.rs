@@ -564,8 +564,7 @@ impl fmt::Display for EncodeError {
         match self {
             Self::InsufficientSize(InsufficientSizeError { required_size }) => write!(
                 f,
-                "cannot encode due to insufficient size, {} bytes are required",
-                required_size
+                "cannot encode due to insufficient size, {required_size} bytes are required"
             ),
             Self::AlreadyEncoded => "cannot encode, data has already been encoded".fmt(f),
         }
