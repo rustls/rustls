@@ -483,7 +483,7 @@ fn report_timings(
     for t in thread_timings.iter() {
         let rate = work_per_thread / which(t);
         total_rate += rate;
-        print!("{:.2}\t", rate);
+        print!("{rate:.2}\t");
     }
 
     println!(
@@ -681,7 +681,7 @@ fn lookup_matching_benches(
         .collect();
 
     if r.is_empty() {
-        panic!("unknown suite {:?}", ciphersuite_name);
+        panic!("unknown suite {ciphersuite_name:?}");
     }
 
     r
@@ -1047,10 +1047,10 @@ enum KeyType {
 impl KeyType {
     fn path_for(&self, part: &str) -> String {
         match self {
-            Self::Rsa2048 => format!("test-ca/rsa-2048/{}", part),
-            Self::EcdsaP256 => format!("test-ca/ecdsa-p256/{}", part),
-            Self::EcdsaP384 => format!("test-ca/ecdsa-p384/{}", part),
-            Self::Ed25519 => format!("test-ca/eddsa/{}", part),
+            Self::Rsa2048 => format!("test-ca/rsa-2048/{part}"),
+            Self::EcdsaP256 => format!("test-ca/ecdsa-p256/{part}"),
+            Self::EcdsaP384 => format!("test-ca/ecdsa-p384/{part}"),
+            Self::Ed25519 => format!("test-ca/eddsa/{part}"),
         }
     }
 
@@ -1389,7 +1389,7 @@ where
                     offs += read;
                 }
                 Err(err) => {
-                    panic!("error on transfer {}..{}: {}", offs, sz, err);
+                    panic!("error on transfer {offs}..{sz}: {err}");
                 }
             }
 
@@ -1398,7 +1398,7 @@ where
                     let sz = match right.reader().read(&mut [0u8; 16_384]) {
                         Ok(sz) => sz,
                         Err(err) if err.kind() == io::ErrorKind::WouldBlock => break,
-                        Err(err) => panic!("failed to read data: {}", err),
+                        Err(err) => panic!("failed to read data: {err}"),
                     };
 
                     *left -= sz;

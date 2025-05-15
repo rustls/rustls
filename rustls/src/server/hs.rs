@@ -91,7 +91,7 @@ impl ExtensionProcessing {
                 })
                 .cloned();
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
-                debug!("Chosen ALPN protocol {:?}", selected_protocol);
+                debug!("Chosen ALPN protocol {selected_protocol:?}");
                 self.exts
                     .push(ServerExtension::Protocols(SingleProtocolName::new(
                         selected_protocol.clone(),
@@ -449,7 +449,7 @@ impl ExpectClientHello {
                     .send_fatal_alert(AlertDescription::HandshakeFailure, incompat)
             })?;
 
-        debug!("decided upon suite {:?}", suite);
+        debug!("decided upon suite {suite:?}");
         cx.common.suite = Some(suite);
         cx.common.kx_state = KxState::Start(skxg);
 
@@ -672,7 +672,7 @@ pub(super) fn process_client_hello<'m>(
 ) -> Result<(&'m ClientHelloPayload, Vec<SignatureScheme>), Error> {
     let client_hello =
         require_handshake_msg!(m, HandshakeType::ClientHello, HandshakePayload::ClientHello)?;
-    trace!("we got a clienthello {:?}", client_hello);
+    trace!("we got a clienthello {client_hello:?}");
 
     if !client_hello
         .compression_methods

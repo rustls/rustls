@@ -404,7 +404,7 @@ mod tests {
 
         let t = make_ticket_generator().unwrap();
 
-        assert_eq!(format!("{:?}", t), "Rfc5077Ticketer { lifetime: 43200 }");
+        assert_eq!(format!("{t:?}"), "Rfc5077Ticketer { lifetime: 43200 }");
         assert!(t.enabled());
         assert_eq!(t.lifetime(), 43200);
     }

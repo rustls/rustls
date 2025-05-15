@@ -32,7 +32,7 @@ fn test_read_fuzz_corpus() {
         let msg = OutboundOpaqueMessage::read(&mut rd)
             .unwrap()
             .into_plain_message();
-        println!("{:?}", msg);
+        println!("{msg:?}");
 
         let Ok(msg) = Message::try_from(msg) else {
             continue;
@@ -70,7 +70,7 @@ fn can_read_safari_client_hello_with_ip_address_in_sni_extension() {
         \x01\x00\x00\x0a\x00\x0a\x00\x08\x00\x1d\x00\x17\x00\x18\x00\x19";
     let mut rd = Reader::init(bytes);
     let m = OutboundOpaqueMessage::read(&mut rd).unwrap();
-    println!("m = {:?}", m);
+    println!("m = {m:?}");
     Message::try_from(m.into_plain_message()).unwrap();
 }
 
@@ -91,9 +91,9 @@ fn construct_all_types() {
     ];
     for &bytes in samples.iter() {
         let m = OutboundOpaqueMessage::read(&mut Reader::init(bytes)).unwrap();
-        println!("m = {:?}", m);
+        println!("m = {m:?}");
         let m = Message::try_from(m.into_plain_message());
-        println!("m' = {:?}", m);
+        println!("m' = {m:?}");
     }
 }
 

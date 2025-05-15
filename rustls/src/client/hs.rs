@@ -85,7 +85,7 @@ fn find_session(
             }
         })
         .or_else(|| {
-            debug!("No cached session for {:?}", server_name);
+            debug!("No cached session for {server_name:?}");
             None
         });
 
@@ -553,7 +553,7 @@ fn emit_client_hello_for_retry(
         tls13::emit_fake_ccs(&mut input.sent_tls13_fake_ccs, cx.common);
     }
 
-    trace!("Sending ClientHello {:#?}", ch);
+    trace!("Sending ClientHello {ch:#?}");
 
     transcript_buffer.add_message(&ch);
     cx.common.send_msg(ch, false);
@@ -752,7 +752,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
     {
         let server_hello =
             require_handshake_msg!(m, HandshakeType::ServerHello, HandshakePayload::ServerHello)?;
-        trace!("We got ServerHello {:#?}", server_hello);
+        trace!("We got ServerHello {server_hello:#?}");
 
         use crate::ProtocolVersion::{TLSv1_2, TLSv1_3};
         let config = &self.input.config;
@@ -878,7 +878,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 });
             }
             _ => {
-                debug!("Using ciphersuite {:?}", suite);
+                debug!("Using ciphersuite {suite:?}");
                 self.suite = Some(suite);
                 cx.common.suite = Some(suite);
             }
@@ -983,7 +983,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             HandshakeType::HelloRetryRequest,
             HandshakePayload::HelloRetryRequest
         )?;
-        trace!("Got HRR {:?}", hrr);
+        trace!("Got HRR {hrr:?}");
 
         cx.common.check_aligned_handshake()?;
 

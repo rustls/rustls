@@ -465,7 +465,7 @@ mod tests {
             UnixTime::now(),
             0x12345678,
         );
-        println!("{:?}", ssv);
+        println!("{ssv:?}");
     }
 
     #[test]

@@ -488,7 +488,7 @@ mod tests {
             provider::default_provider().into(),
         );
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -502,7 +502,7 @@ mod tests {
         )
         .allow_unauthenticated();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -516,7 +516,7 @@ mod tests {
             provider::default_provider().into(),
         );
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -530,7 +530,7 @@ mod tests {
         )
         .allow_unauthenticated();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -564,7 +564,7 @@ mod tests {
         // There should be the expected number of crls.
         assert_eq!(builder.crls.len(), initial_crls.len() + extra_crls.len());
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -578,7 +578,7 @@ mod tests {
         )
         .with_crls(test_crls());
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -593,7 +593,7 @@ mod tests {
         .with_crls(test_crls())
         .allow_unauthenticated();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -607,7 +607,7 @@ mod tests {
         .with_crls(test_crls())
         .only_check_end_entity_revocation();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -621,7 +621,7 @@ mod tests {
         .with_crls(test_crls())
         .allow_unknown_revocation_status();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -635,7 +635,7 @@ mod tests {
         .with_crls(test_crls())
         .enforce_revocation_expiration();
         // The builder should be Debug.
-        println!("{:?}", builder);
+        println!("{builder:?}");
         builder.build().unwrap();
     }
 
@@ -658,8 +658,8 @@ mod tests {
         ];
 
         for err in all {
-            let _ = format!("{:?}", err);
-            let _ = format!("{}", err);
+            let _ = format!("{err:?}");
+            let _ = format!("{err}");
         }
     }
 }

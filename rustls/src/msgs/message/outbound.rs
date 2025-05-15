@@ -318,7 +318,7 @@ mod tests {
         let borrowed_payload = OutboundChunks::Single(owner);
 
         let (before, after) = borrowed_payload.split_at(6);
-        println!("before:{:?}\nafter:{:?}", before, after);
+        println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3, 4, 5]);
         assert_eq!(after.to_vec(), &[6, 7]);
     }
@@ -329,17 +329,17 @@ mod tests {
         let borrowed_payload = OutboundChunks::new(&owner);
 
         let (before, after) = borrowed_payload.split_at(3);
-        println!("before:{:?}\nafter:{:?}", before, after);
+        println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2]);
         assert_eq!(after.to_vec(), &[3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 
         let (before, after) = borrowed_payload.split_at(8);
-        println!("before:{:?}\nafter:{:?}", before, after);
+        println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3, 4, 5, 6, 7]);
         assert_eq!(after.to_vec(), &[8, 9, 10, 11, 12]);
 
         let (before, after) = borrowed_payload.split_at(11);
-        println!("before:{:?}\nafter:{:?}", before, after);
+        println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
         assert_eq!(after.to_vec(), &[11, 12]);
     }
@@ -350,19 +350,19 @@ mod tests {
 
         let single_payload = OutboundChunks::Single(owner[0]);
         let (before, after) = single_payload.split_at(17);
-        println!("before:{:?}\nafter:{:?}", before, after);
+        println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3]);
         assert!(after.is_empty());
 
         let multiple_payload = OutboundChunks::new(&owner);
         let (before, after) = multiple_payload.split_at(17);
-        println!("before:{:?}\nafter:{:?}", before, after);
+        println!("before:{before:?}\nafter:{after:?}");
         assert_eq!(before.to_vec(), &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
         assert!(after.is_empty());
 
         let empty_payload = OutboundChunks::new_empty();
         let (before, after) = empty_payload.split_at(17);
-        println!("before:{:?}\nafter:{:?}", before, after);
+        println!("before:{before:?}\nafter:{after:?}");
         assert!(before.is_empty());
         assert!(after.is_empty());
     }
@@ -393,7 +393,7 @@ mod tests {
         let payload = OutboundChunks::new(&slices);
 
         assert_eq!(payload.to_vec(), owner);
-        println!("{:#?}", payload);
+        println!("{payload:#?}");
 
         for start in 0..128 {
             for end in start..128 {

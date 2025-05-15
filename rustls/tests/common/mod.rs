@@ -1084,8 +1084,7 @@ impl ServerCertVerifier for MockServerVerifier {
         now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
         println!(
-            "verify_server_cert({:?}, {:?}, {:?}, {:?}, {:?})",
-            end_entity, intermediates, server_name, ocsp_response, now
+            "verify_server_cert({end_entity:?}, {intermediates:?}, {server_name:?}, {ocsp_response:?}, {now:?})"
         );
         if let Some(expected_ocsp) = &self.expected_ocsp_response {
             assert_eq!(expected_ocsp, ocsp_response);
@@ -1103,8 +1102,7 @@ impl ServerCertVerifier for MockServerVerifier {
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         println!(
-            "verify_tls12_signature({:?}, {:?}, {:?})",
-            message, cert, dss
+            "verify_tls12_signature({message:?}, {cert:?}, {dss:?})"
         );
         match &self.tls12_signature_error {
             Some(error) => Err(error.clone()),
@@ -1119,8 +1117,7 @@ impl ServerCertVerifier for MockServerVerifier {
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
         println!(
-            "verify_tls13_signature({:?}, {:?}, {:?})",
-            message, cert, dss
+            "verify_tls13_signature({message:?}, {cert:?}, {dss:?})"
         );
         match &self.tls13_signature_error {
             Some(error) => Err(error.clone()),

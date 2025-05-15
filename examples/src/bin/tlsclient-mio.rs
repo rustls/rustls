@@ -93,7 +93,7 @@ impl TlsClient {
                 if error.kind() == io::ErrorKind::WouldBlock {
                     return;
                 }
-                println!("TLS read error: {:?}", error);
+                println!("TLS read error: {error:?}");
                 self.closing = true;
                 return;
             }
@@ -291,7 +291,7 @@ fn lookup_suites(suites: &[String]) -> Vec<rustls::SupportedCipherSuite> {
         let scs = find_suite(csname);
         match scs {
             Some(s) => out.push(s),
-            None => panic!("cannot look up ciphersuite '{}'", csname),
+            None => panic!("cannot look up ciphersuite '{csname}'"),
         }
     }
 
@@ -307,8 +307,7 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
             "1.2" => &rustls::version::TLS12,
             "1.3" => &rustls::version::TLS13,
             _ => panic!(
-                "cannot look up version '{}', valid are '1.2' and '1.3'",
-                vname
+                "cannot look up version '{vname}', valid are '1.2' and '1.3'"
             ),
         };
         out.push(version);
@@ -526,7 +525,7 @@ fn main() {
             // Polling can be interrupted (e.g. by a debugger) - retry if so.
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(e) => {
-                panic!("poll failed: {:?}", e)
+                panic!("poll failed: {e:?}")
             }
         }
 

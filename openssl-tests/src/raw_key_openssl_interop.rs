@@ -64,7 +64,7 @@ mod client {
     pub(super) fn run_client(config: ClientConfig, port: u16) -> Result<String, io::Error> {
         let server_name = "0.0.0.0".try_into().unwrap();
         let mut conn = ClientConnection::new(Arc::new(config), server_name).unwrap();
-        let mut sock = TcpStream::connect(format!("[::]:{}", port)).unwrap();
+        let mut sock = TcpStream::connect(format!("[::]:{port}")).unwrap();
         let mut tls = Stream::new(&mut conn, &mut sock);
 
         let mut buf = vec![0; 128];
@@ -368,7 +368,7 @@ mod tests {
                 assert_eq!(server_message, "Hello from the server");
             }
             Err(e) => {
-                panic!("Client failed to communicate with the server: {:?}", e);
+                panic!("Client failed to communicate with the server: {e:?}");
             }
         }
 
@@ -383,7 +383,7 @@ mod tests {
                 assert_eq!(client_message, "Hello from the client");
             }
             Err(e) => {
-                panic!("Server failed to communicate with the client: {:?}", e);
+                panic!("Server failed to communicate with the client: {e:?}");
             }
         }
     }
@@ -415,7 +415,7 @@ mod tests {
         let mut openssl_client = Command::new("openssl")
             .arg("s_client")
             .arg("-connect")
-            .arg(format!("[::]:{:?}", port))
+            .arg(format!("[::]:{port:?}"))
             .arg("-enable_client_rpk")
             .arg("-key")
             .arg(CLIENT_PRIV_KEY_FILE)
@@ -457,7 +457,7 @@ mod tests {
         let mut openssl_client = Command::new("openssl")
             .arg("s_client")
             .arg("-connect")
-            .arg(format!("[::]:{:?}", port))
+            .arg(format!("[::]:{port:?}"))
             .arg("-enable_server_rpk")
             .arg("-enable_client_rpk")
             .arg("-key")
@@ -552,7 +552,7 @@ mod tests {
                         }
                     }
                     Err(e) => {
-                        panic!("Error reading from OpenSSL stdout: {:?}", e);
+                        panic!("Error reading from OpenSSL stdout: {e:?}");
                     }
                 }
             }
