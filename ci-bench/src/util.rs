@@ -290,8 +290,7 @@ pub mod async_io {
 
         fn poll(mut self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<Self::Output> {
             if !self.writer.inner.open.get() {
-                return Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Poll::Ready(Err(io::Error::other(
                     "channel was closed",
                 )));
             }
