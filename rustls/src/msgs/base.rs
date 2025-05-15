@@ -232,7 +232,7 @@ pub(super) fn hex<'a>(
     payload: impl IntoIterator<Item = &'a u8>,
 ) -> fmt::Result {
     for b in payload {
-        write!(f, "{:02x}", b)?;
+        write!(f, "{b:02x}")?;
     }
     Ok(())
 }

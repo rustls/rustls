@@ -561,10 +561,7 @@ fn version_test(
     let client_config = make_client_config_with_versions(KeyType::Rsa2048, client_versions);
     let server_config = make_server_config_with_versions(KeyType::Rsa2048, server_versions);
 
-    println!(
-        "version {:?} {:?} -> {:?}",
-        client_versions, server_versions, result
-    );
+    println!("version {client_versions:?} {server_versions:?} -> {result:?}");
 
     let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
 
@@ -1090,11 +1087,11 @@ fn test_config_builders_debug() {
         }
         .into(),
     );
-    let _ = format!("{:?}", b);
+    let _ = format!("{b:?}");
     let b = server_config_builder_with_versions(&[&rustls::version::TLS13]);
-    let _ = format!("{:?}", b);
+    let _ = format!("{b:?}");
     let b = b.with_no_client_auth();
-    let _ = format!("{:?}", b);
+    let _ = format!("{b:?}");
 
     let b = ClientConfig::builder_with_provider(
         CryptoProvider {
@@ -1104,9 +1101,9 @@ fn test_config_builders_debug() {
         }
         .into(),
     );
-    let _ = format!("{:?}", b);
+    let _ = format!("{b:?}");
     let b = client_config_builder_with_versions(&[&rustls::version::TLS13]);
-    let _ = format!("{:?}", b);
+    let _ = format!("{b:?}");
 }
 
 /// Test that the server handles combination of `offer_client_auth()` returning true
@@ -2762,7 +2759,7 @@ fn client_fill_buf_returns_wouldblock_when_no_data() {
 fn new_server_returns_initial_io_state() {
     let (_, mut server) = make_pair(KeyType::Rsa2048);
     let io_state = server.process_new_packets().unwrap();
-    println!("IoState is Debug {:?}", io_state);
+    println!("IoState is Debug {io_state:?}");
     assert_eq!(io_state.plaintext_bytes_to_read(), 0);
     assert!(!io_state.peer_has_closed());
     assert_eq!(io_state.tls_bytes_to_write(), 0);
@@ -2772,7 +2769,7 @@ fn new_server_returns_initial_io_state() {
 fn new_client_returns_initial_io_state() {
     let (mut client, _) = make_pair(KeyType::Rsa2048);
     let io_state = client.process_new_packets().unwrap();
-    println!("IoState is Debug {:?}", io_state);
+    println!("IoState is Debug {io_state:?}");
     assert_eq!(io_state.plaintext_bytes_to_read(), 0);
     assert!(!io_state.peer_has_closed());
     assert!(io_state.tls_bytes_to_write() > 200);
@@ -3259,7 +3256,7 @@ fn stream_write_swallows_underlying_io_error_after_plaintext_processed() {
         .unwrap();
     let mut client_stream = Stream::new(&mut client, &mut pipe);
     let rc = client_stream.write(b"world");
-    assert_eq!(format!("{:?}", rc), "Ok(5)");
+    assert_eq!(format!("{rc:?}"), "Ok(5)");
 }
 
 fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
@@ -3300,13 +3297,13 @@ fn client_stream_handshake_error() {
         let rc = client_stream.write(b"hello");
         assert!(rc.is_err());
         assert_eq!(
-            format!("{:?}", rc),
+            format!("{rc:?}"),
             "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })"
         );
         let rc = client_stream.write(b"hello");
         assert!(rc.is_err());
         assert_eq!(
-            format!("{:?}", rc),
+            format!("{rc:?}"),
             "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })"
         );
     }
@@ -3322,13 +3319,13 @@ fn client_streamowned_handshake_error() {
     let rc = client_stream.write(b"hello");
     assert!(rc.is_err());
     assert_eq!(
-        format!("{:?}", rc),
+        format!("{rc:?}"),
         "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })"
     );
     let rc = client_stream.write(b"hello");
     assert!(rc.is_err());
     assert_eq!(
-        format!("{:?}", rc),
+        format!("{rc:?}"),
         "Err(Custom { kind: InvalidData, error: AlertReceived(HandshakeFailure) })"
     );
 
@@ -3352,7 +3349,7 @@ fn server_stream_handshake_error() {
         let rc = server_stream.read(&mut bytes);
         assert!(rc.is_err());
         assert_eq!(
-            format!("{:?}", rc),
+            format!("{rc:?}"),
             "Err(Custom { kind: InvalidData, error: PeerIncompatible(NoCipherSuitesInCommon) })"
         );
     }
@@ -3374,7 +3371,7 @@ fn server_streamowned_handshake_error() {
     let rc = server_stream.read(&mut bytes);
     assert!(rc.is_err());
     assert_eq!(
-        format!("{:?}", rc),
+        format!("{rc:?}"),
         "Err(Custom { kind: InvalidData, error: PeerIncompatible(NoCipherSuitesInCommon) })"
     );
 }
@@ -3392,13 +3389,13 @@ fn client_config_is_clone() {
 #[test]
 fn client_connection_is_debug() {
     let (client, _) = make_pair(KeyType::Rsa2048);
-    println!("{:?}", client);
+    println!("{client:?}");
 }
 
 #[test]
 fn server_connection_is_debug() {
     let (_, server) = make_pair(KeyType::Rsa2048);
-    println!("{:?}", server);
+    println!("{server:?}");
 }
 
 #[test]
@@ -5350,7 +5347,7 @@ mod test_quic {
         ];
 
         for &(size, ok) in cases.iter() {
-            println!("early data size case: {:?}", size);
+            println!("early data size case: {size:?}");
             if let Some(new) = size {
                 server_config.max_early_data_size = new;
             }
@@ -5929,7 +5926,7 @@ fn test_client_attempts_to_use_unsupported_kx_group() {
     do_handshake_until_error(&mut client_1, &mut server).unwrap();
 
     let ops = shared_storage.ops();
-    println!("storage {:#?}", ops);
+    println!("storage {ops:#?}");
     assert_eq!(ops.len(), 7);
     assert!(matches!(
         ops[3],
@@ -5985,7 +5982,7 @@ fn test_client_sends_share_for_less_preferred_group() {
     do_handshake_until_error(&mut client_1, &mut server).unwrap();
 
     let ops = shared_storage.ops();
-    println!("storage {:#?}", ops);
+    println!("storage {ops:#?}");
     assert_eq!(ops.len(), 7);
     assert!(matches!(
         ops[3],
@@ -6003,9 +6000,9 @@ fn test_client_sends_share_for_less_preferred_group() {
                     assert_eq!(keyshares.len(), 1);
                     assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
                 }
-                _ => panic!("unexpected handshake message {:?}", parsed),
+                _ => panic!("unexpected handshake message {parsed:?}"),
             },
-            _ => panic!("unexpected non-handshake message {:?}", msg),
+            _ => panic!("unexpected non-handshake message {msg:?}"),
         };
         Altered::InPlace
     };
@@ -6017,10 +6014,10 @@ fn test_client_sends_share_for_less_preferred_group() {
                     let group = hrr.requested_key_share_group();
                     assert_eq!(group, Some(rustls::NamedGroup::X25519));
                 }
-                _ => panic!("unexpected handshake message {:?}", parsed),
+                _ => panic!("unexpected handshake message {parsed:?}"),
             },
             MessagePayload::ChangeCipherSpec(_) => (),
-            _ => panic!("unexpected non-handshake message {:?}", msg),
+            _ => panic!("unexpected non-handshake message {msg:?}"),
         };
         Altered::InPlace
     };
@@ -6059,7 +6056,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     do_handshake_until_error(&mut client, &mut server).unwrap();
 
     let ops = shared_storage.ops_and_reset();
-    println!("storage {:#?}", ops);
+    println!("storage {ops:#?}");
     assert_eq!(ops.len(), 10);
     assert!(matches!(ops[5], ClientStorageOp::InsertTls13Ticket(_)));
     assert!(matches!(ops[6], ClientStorageOp::InsertTls13Ticket(_)));
@@ -6090,7 +6087,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     server.process_new_packets().unwrap();
 
     let ops = shared_storage.ops_and_reset();
-    println!("last {:?}", ops);
+    println!("last {ops:?}");
     assert!(matches!(ops[0], ClientStorageOp::TakeTls13Ticket(_, false)));
 }
 
@@ -6134,7 +6131,7 @@ fn test_client_mtu_reduction() {
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
         let writes = collect_write_lengths(&mut client);
-        println!("writes at mtu=64: {:?}", writes);
+        println!("writes at mtu=64: {writes:?}");
         assert!(writes.iter().all(|x| *x <= 64));
         assert!(writes.len() > 1);
     }
@@ -6250,7 +6247,7 @@ fn handshakes_complete_and_data_flows_with_gratuitious_max_fragment_sizes() {
 
 fn assert_lt(left: usize, right: usize) {
     if left >= right {
-        panic!("expected {} < {}", left, right);
+        panic!("expected {left} < {right}");
     }
 }
 
@@ -6395,7 +6392,7 @@ fn test_server_rejects_clients_without_any_kx_group_overlap() {
 fn test_client_rejects_illegal_tls13_ccs() {
     fn corrupt_ccs(msg: &mut Message) -> Altered {
         if let MessagePayload::ChangeCipherSpec(_) = &mut msg.payload {
-            println!("seen CCS {:?}", msg);
+            println!("seen CCS {msg:?}");
             return Altered::Raw(encoding::message_framing(
                 ContentType::ChangeCipherSpec,
                 ProtocolVersion::TLSv1_2,

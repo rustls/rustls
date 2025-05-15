@@ -33,7 +33,7 @@ impl KeyLogFileInner {
         {
             Ok(f) => Some(f),
             Err(e) => {
-                warn!("unable to create key log file {:?}: {}", path, e);
+                warn!("unable to create key log file {path:?}: {e}");
                 None
             }
         };
@@ -53,13 +53,13 @@ impl KeyLogFileInner {
         };
 
         self.buf.truncate(0);
-        write!(self.buf, "{} ", label)?;
+        write!(self.buf, "{label} ")?;
         for b in client_random.iter() {
-            write!(self.buf, "{:02x}", b)?;
+            write!(self.buf, "{b:02x}")?;
         }
         write!(self.buf, " ")?;
         for b in secret.iter() {
-            write!(self.buf, "{:02x}", b)?;
+            write!(self.buf, "{b:02x}")?;
         }
         writeln!(self.buf)?;
         file.write_all(&self.buf)
@@ -105,7 +105,7 @@ impl KeyLog for KeyLogFile {
         {
             Ok(()) => {}
             Err(e) => {
-                warn!("error writing to key log file: {}", e);
+                warn!("error writing to key log file: {e}");
             }
         }
     }
@@ -114,7 +114,7 @@ impl KeyLog for KeyLogFile {
 impl Debug for KeyLogFile {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self.0.try_lock() {
-            Ok(key_log_file) => write!(f, "{:?}", key_log_file),
+            Ok(key_log_file) => write!(f, "{key_log_file:?}"),
             Err(_) => write!(f, "KeyLogFile {{ <locked> }}"),
         }
     }

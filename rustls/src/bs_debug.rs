@@ -31,7 +31,7 @@ impl fmt::Debug for BsDebug<'_> {
             } else if (0x20..0x7f).contains(&c) {
                 write!(fmt, "{}", c as char)?;
             } else {
-                write!(fmt, "\\x{:02x}", c)?;
+                write!(fmt, "\\x{c:02x}")?;
             }
         }
         write!(fmt, "\"")?;

@@ -435,11 +435,7 @@ impl ServerSessionValue {
             .saturating_sub(self.creation_time_sec) as u32)
             .saturating_mul(1000);
 
-        let age_difference = if client_age_ms < server_age_ms {
-            server_age_ms - client_age_ms
-        } else {
-            client_age_ms - server_age_ms
-        };
+        let age_difference = server_age_ms.abs_diff(client_age_ms);
 
         self.freshness = Some(age_difference <= MAX_FRESHNESS_SKEW_MS);
         self
@@ -469,7 +465,7 @@ mod tests {
             UnixTime::now(),
             0x12345678,
         );
-        println!("{:?}", ssv);
+        println!("{ssv:?}");
     }
 
     #[test]

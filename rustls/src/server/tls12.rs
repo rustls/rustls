@@ -91,7 +91,7 @@ mod client_hello {
                 .ecpoints_extension()
                 .unwrap_or(&[ECPointFormat::Uncompressed]);
 
-            trace!("ecpoints {:?}", ecpoints_ext);
+            trace!("ecpoints {ecpoints_ext:?}");
 
             if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
@@ -358,7 +358,7 @@ mod client_hello {
                 extensions: ep.exts,
             }),
         };
-        trace!("sending server hello {:?}", sh);
+        trace!("sending server hello {sh:?}");
         flight.add(sh);
 
         Ok(ep.send_ticket)
@@ -445,7 +445,7 @@ mod client_hello {
             payload: HandshakePayload::CertificateRequest(cr),
         };
 
-        trace!("Sending CertificateRequest {:?}", creq);
+        trace!("Sending CertificateRequest {creq:?}");
         flight.add(creq);
         Ok(true)
     }
@@ -492,7 +492,7 @@ impl State<ServerConnectionData> for ExpectCertificate {
             .verifier
             .client_auth_mandatory();
 
-        trace!("certs {:?}", cert_chain);
+        trace!("certs {cert_chain:?}");
 
         let client_cert = match cert_chain.split_first() {
             None if mandatory => {

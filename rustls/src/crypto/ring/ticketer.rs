@@ -370,7 +370,7 @@ mod tests {
         let t = make_ticket_generator().unwrap();
 
         let expect = format!("AeadTicketer {{ alg: {TICKETER_AEAD:?}, lifetime: 43200 }}");
-        assert_eq!(format!("{:?}", t), expect);
+        assert_eq!(format!("{t:?}"), expect);
         assert!(t.enabled());
         assert_eq!(t.lifetime(), 43200);
     }

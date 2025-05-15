@@ -1107,7 +1107,7 @@ fn advance_client(
     let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
     let state = state.unwrap();
 
-    transcript.push(format!("{:?}", state));
+    transcript.push(format!("{state:?}"));
 
     let state = match state {
         ConnectionState::TransmitTlsData(mut state) => {
@@ -1152,7 +1152,7 @@ fn advance_server(
     let UnbufferedStatus { discard, state } = conn.process_tls_records(buffers.incoming.filled());
     let state = state.unwrap();
 
-    transcript.push(format!("{:?}", state));
+    transcript.push(format!("{state:?}"));
 
     let state = match state {
         ConnectionState::ReadEarlyData(mut state) => {
@@ -1424,7 +1424,7 @@ fn server_receives_handshake_byte_by_byte() {
         _ => panic!("unexpected first client event"),
     };
 
-    println!("client hello: {:?}", client_hello_buffer);
+    println!("client hello: {client_hello_buffer:?}");
 
     for prefix in 0..client_hello_buffer.len() - 1 {
         let UnbufferedStatus { discard, state } =

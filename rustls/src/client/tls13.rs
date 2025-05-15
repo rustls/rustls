@@ -470,7 +470,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             HandshakeType::EncryptedExtensions,
             HandshakePayload::EncryptedExtensions
         )?;
-        debug!("TLS1.3 encrypted extensions: {:?}", exts);
+        debug!("TLS1.3 encrypted extensions: {exts:?}");
         self.transcript.add_message(&m);
 
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
@@ -854,7 +854,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             HandshakePayload::CertificateRequestTls13
         )?;
         self.transcript.add_message(&m);
-        debug!("Got CertificateRequest {:?}", certreq);
+        debug!("Got CertificateRequest {certreq:?}");
 
         // Fortunately the problems here in TLS1.2 and prior are corrected in
         // TLS1.3.
