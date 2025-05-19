@@ -32,7 +32,7 @@ use rustls::unbuffered::{
     ConnectionState, EncodeError, UnbufferedConnectionCommon, UnbufferedStatus,
 };
 use rustls::{
-    ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
+    CipherSuite, ClientConfig, ClientConnection, Connection, ConnectionCommon, ContentType,
     DigitallySignedStruct, DistinguishedName, Error, InconsistentKeys, NamedGroup, ProtocolVersion,
     RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
@@ -1483,7 +1483,9 @@ impl RawTls {
     }
 }
 
-pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
+pub fn aes_128_gcm_with_1024_confidentiality_limit(
+    provider: CryptoProvider,
+) -> Arc<CryptoProvider> {
     const CONFIDENTIALITY_LIMIT: u64 = 1024;
 
     // needed to extend lifetime of Tls13CipherSuite to 'static
@@ -1491,7 +1493,11 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     static TLS12_LIMITED_SUITE: OnceLock<rustls::Tls12CipherSuite> = OnceLock::new();
 
     let tls13_limited = TLS13_LIMITED_SUITE.get_or_init(|| {
-        let tls13 = provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+        let tls13 = provider
+            .cipher_suites
+            .iter()
+            .find(|cs| cs.suite() == CipherSuite::TLS13_AES_128_GCM_SHA256)
+            .unwrap()
             .tls13()
             .unwrap();
 
@@ -1505,8 +1511,11 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
     });
 
     let tls12_limited = TLS12_LIMITED_SUITE.get_or_init(|| {
-        let SupportedCipherSuite::Tls12(tls12) =
-            provider::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        let SupportedCipherSuite::Tls12(tls12) = *provider
+            .cipher_suites
+            .iter()
+            .find(|cs| cs.suite() == CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256)
+            .unwrap()
         else {
             unreachable!();
         };
@@ -1525,7 +1534,7 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit() -> Arc<CryptoProvider> {
             SupportedCipherSuite::Tls13(tls13_limited),
             SupportedCipherSuite::Tls12(tls12_limited),
         ],
-        ..provider::default_provider()
+        ..provider
     }
     .into()
 }
