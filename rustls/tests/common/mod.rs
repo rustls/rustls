@@ -454,13 +454,15 @@ impl KeyType {
     }
 }
 
-pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
+pub fn server_config_builder(
+    provider: &CryptoProvider,
+) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     // ensure `ServerConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
     if exactly_one_provider() {
         rustls::ServerConfig::builder()
     } else {
-        rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
+        rustls::ServerConfig::builder_with_provider(provider.clone().into())
             .with_safe_default_protocol_versions()
             .unwrap()
     }
@@ -468,23 +470,26 @@ pub fn server_config_builder() -> rustls::ConfigBuilder<ServerConfig, rustls::Wa
 
 pub fn server_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
+    provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
     if exactly_one_provider() {
         rustls::ServerConfig::builder_with_protocol_versions(versions)
     } else {
-        rustls::ServerConfig::builder_with_provider(provider::default_provider().into())
+        rustls::ServerConfig::builder_with_provider(provider.clone().into())
             .with_protocol_versions(versions)
             .unwrap()
     }
 }
 
-pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
+pub fn client_config_builder(
+    provider: &CryptoProvider,
+) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     // ensure `ClientConfig::builder()` is covered, even though it is
     // equivalent to `builder_with_provider(provider::provider().into())`.
     if exactly_one_provider() {
         rustls::ClientConfig::builder()
     } else {
-        rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
+        rustls::ClientConfig::builder_with_provider(provider.clone().into())
             .with_safe_default_protocol_versions()
             .unwrap()
     }
@@ -492,11 +497,12 @@ pub fn client_config_builder() -> rustls::ConfigBuilder<ClientConfig, rustls::Wa
 
 pub fn client_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
+    provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
     if exactly_one_provider() {
         rustls::ClientConfig::builder_with_protocol_versions(versions)
     } else {
-        rustls::ClientConfig::builder_with_provider(provider::default_provider().into())
+        rustls::ClientConfig::builder_with_provider(provider.clone().into())
             .with_protocol_versions(versions)
             .unwrap()
     }
@@ -511,27 +517,29 @@ pub fn finish_server_config(
         .unwrap()
 }
 
-pub fn make_server_config(kt: KeyType) -> ServerConfig {
-    finish_server_config(kt, server_config_builder())
+pub fn make_server_config(kt: KeyType, provider: &CryptoProvider) -> ServerConfig {
+    finish_server_config(kt, server_config_builder(provider))
 }
 
 pub fn make_server_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
+    provider: &CryptoProvider,
 ) -> ServerConfig {
-    finish_server_config(kt, server_config_builder_with_versions(versions))
+    finish_server_config(kt, server_config_builder_with_versions(versions, provider))
 }
 
 pub fn make_server_config_with_kx_groups(
     kt: KeyType,
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
+    provider: &CryptoProvider,
 ) -> ServerConfig {
     finish_server_config(
         kt,
         ServerConfig::builder_with_provider(
             CryptoProvider {
                 kx_groups,
-                ..provider::default_provider()
+                ..provider.clone()
             }
             .into(),
         )
@@ -558,38 +566,47 @@ pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
 pub fn make_server_config_with_mandatory_client_auth_crls(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
+    provider: &CryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(get_client_root_store(kt)).with_crls(crls),
+        webpki_client_verifier_builder(get_client_root_store(kt), provider).with_crls(crls),
+        provider,
     )
 }
 
-pub fn make_server_config_with_mandatory_client_auth(kt: KeyType) -> ServerConfig {
+pub fn make_server_config_with_mandatory_client_auth(
+    kt: KeyType,
+    provider: &CryptoProvider,
+) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(get_client_root_store(kt)),
+        webpki_client_verifier_builder(get_client_root_store(kt), provider),
+        provider,
     )
 }
 
 pub fn make_server_config_with_optional_client_auth(
     kt: KeyType,
     crls: Vec<CertificateRevocationListDer<'static>>,
+    provider: &CryptoProvider,
 ) -> ServerConfig {
     make_server_config_with_client_verifier(
         kt,
-        webpki_client_verifier_builder(get_client_root_store(kt))
+        webpki_client_verifier_builder(get_client_root_store(kt), provider)
             .with_crls(crls)
             .allow_unknown_revocation_status()
             .allow_unauthenticated(),
+        provider,
     )
 }
 
 pub fn make_server_config_with_client_verifier(
     kt: KeyType,
     verifier_builder: ClientCertVerifierBuilder,
+    provider: &CryptoProvider,
 ) -> ServerConfig {
-    server_config_builder()
+    server_config_builder(provider)
         .with_client_cert_verifier(verifier_builder.build().unwrap())
         .with_single_cert(kt.get_chain(), kt.get_key())
         .unwrap()
@@ -607,7 +624,7 @@ pub fn make_server_config_with_raw_key_support(
     ));
     client_verifier.expect_raw_public_keys = true;
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    server_config_builder_with_versions(&[&rustls::version::TLS13])
+    server_config_builder_with_versions(&[&rustls::version::TLS13], provider)
         .with_client_cert_verifier(Arc::new(client_verifier))
         .with_cert_resolver(server_cert_resolver)
 }
@@ -622,7 +639,7 @@ pub fn make_client_config_with_raw_key_support(
             .unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
-    client_config_builder_with_versions(&[&rustls::version::TLS13])
+    client_config_builder_with_versions(&[&rustls::version::TLS13], provider)
         .dangerous()
         .with_custom_certificate_verifier(server_verifier)
         .with_client_cert_resolver(client_cert_resolver)
@@ -681,18 +698,19 @@ pub fn finish_client_config_with_creds(
         .unwrap()
 }
 
-pub fn make_client_config(kt: KeyType) -> ClientConfig {
-    finish_client_config(kt, client_config_builder())
+pub fn make_client_config(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
+    finish_client_config(kt, client_config_builder(provider))
 }
 
 pub fn make_client_config_with_kx_groups(
     kt: KeyType,
     kx_groups: Vec<&'static dyn rustls::crypto::SupportedKxGroup>,
+    provider: &CryptoProvider,
 ) -> ClientConfig {
     let builder = ClientConfig::builder_with_provider(
         CryptoProvider {
             kx_groups,
-            ..provider::default_provider()
+            ..provider.clone()
         }
         .into(),
     )
@@ -704,49 +722,61 @@ pub fn make_client_config_with_kx_groups(
 pub fn make_client_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
+    provider: &CryptoProvider,
 ) -> ClientConfig {
-    finish_client_config(kt, client_config_builder_with_versions(versions))
+    finish_client_config(kt, client_config_builder_with_versions(versions, provider))
 }
 
-pub fn make_client_config_with_auth(kt: KeyType) -> ClientConfig {
-    finish_client_config_with_creds(kt, client_config_builder())
+pub fn make_client_config_with_auth(kt: KeyType, provider: &CryptoProvider) -> ClientConfig {
+    finish_client_config_with_creds(kt, client_config_builder(provider))
 }
 
 pub fn make_client_config_with_versions_with_auth(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
+    provider: &CryptoProvider,
 ) -> ClientConfig {
-    finish_client_config_with_creds(kt, client_config_builder_with_versions(versions))
+    finish_client_config_with_creds(kt, client_config_builder_with_versions(versions, provider))
 }
 
 pub fn make_client_config_with_verifier(
     versions: &[&'static rustls::SupportedProtocolVersion],
     verifier_builder: ServerCertVerifierBuilder,
+    provider: &CryptoProvider,
 ) -> ClientConfig {
-    client_config_builder_with_versions(versions)
+    client_config_builder_with_versions(versions, provider)
         .dangerous()
         .with_custom_certificate_verifier(verifier_builder.build().unwrap())
         .with_no_client_auth()
 }
 
-pub fn webpki_client_verifier_builder(roots: Arc<RootCertStore>) -> ClientCertVerifierBuilder {
+pub fn webpki_client_verifier_builder(
+    roots: Arc<RootCertStore>,
+    provider: &CryptoProvider,
+) -> ClientCertVerifierBuilder {
     if exactly_one_provider() {
         WebPkiClientVerifier::builder(roots)
     } else {
-        WebPkiClientVerifier::builder_with_provider(roots, provider::default_provider().into())
+        WebPkiClientVerifier::builder_with_provider(roots, provider.clone().into())
     }
 }
 
-pub fn webpki_server_verifier_builder(roots: Arc<RootCertStore>) -> ServerCertVerifierBuilder {
+pub fn webpki_server_verifier_builder(
+    roots: Arc<RootCertStore>,
+    provider: &CryptoProvider,
+) -> ServerCertVerifierBuilder {
     if exactly_one_provider() {
         WebPkiServerVerifier::builder(roots)
     } else {
-        WebPkiServerVerifier::builder_with_provider(roots, provider::default_provider().into())
+        WebPkiServerVerifier::builder_with_provider(roots, provider.clone().into())
     }
 }
 
-pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection) {
-    make_pair_for_configs(make_client_config(kt), make_server_config(kt))
+pub fn make_pair(kt: KeyType, provider: &CryptoProvider) -> (ClientConnection, ServerConnection) {
+    make_pair_for_configs(
+        make_client_config(kt, provider),
+        make_server_config(kt, provider),
+    )
 }
 
 pub fn make_pair_for_configs(
@@ -1251,7 +1281,7 @@ impl MockClientVerifier {
         provider: &CryptoProvider,
     ) -> Self {
         Self {
-            parent: webpki_client_verifier_builder(get_client_root_store(kt))
+            parent: webpki_client_verifier_builder(get_client_root_store(kt), provider)
                 .build()
                 .unwrap(),
             verified,
