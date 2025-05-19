@@ -911,6 +911,7 @@ impl State<ServerConnectionData> for ExpectFinished {
                 .config
                 .session_storage
                 .put(self.session_id.as_ref().to_vec(), value.get_encoding());
+            #[cfg_attr(not(feature = "logging"), allow(clippy::if_same_then_else))]
             if worked {
                 debug!("Session saved");
             } else {
