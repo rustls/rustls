@@ -588,6 +588,8 @@ pub mod client {
     mod ech;
     pub(super) mod handy;
     mod hs;
+    #[cfg(test)]
+    mod test;
     #[cfg(feature = "tls12")]
     mod tls12;
     mod tls13;
