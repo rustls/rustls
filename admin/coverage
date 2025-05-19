@@ -17,4 +17,4 @@ cargo test --locked $(admin/all-features-except brotli rustls)
 ## bogo
 cargo test --locked --test bogo -- --ignored --test-threads 1
 
-cargo llvm-cov report --ignore-filename-regex bogo/ "$@"
+cargo llvm-cov report --ignore-filename-regex "(bogo|rustls-test)/" "$@"

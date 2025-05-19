@@ -5,7 +5,7 @@ use itertools::Itertools;
 
 use crate::Side;
 use crate::callgrind::InstructionCounts;
-use crate::util::KeyType;
+use rustls_test::KeyType;
 
 /// Validates a benchmark collection, returning an error if the provided benchmarks are invalid
 ///
