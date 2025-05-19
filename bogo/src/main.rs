@@ -316,7 +316,7 @@ fn decode_hex(hex: &str) -> Vec<u8> {
     (0..hex.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
-        .inspect(|x| println!("item {:?}", x))
+        .inspect(|x| println!("item {x:?}"))
         .collect()
 }
 
@@ -865,7 +865,7 @@ fn quit_err(why: &str) -> ! {
 }
 
 fn handle_err(opts: &Options, err: Error) -> ! {
-    println!("TLS error: {:?}", err);
+    println!("TLS error: {err:?}");
     thread::sleep(time::Duration::from_millis(100));
 
     match err {
@@ -990,7 +990,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":CANNOT_PARSE_LEAF_CERT:")
         }
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
-        Error::InvalidCertificate(e) => quit(&format!(":BAD_CERT: ({:?})", e)),
+        Error::InvalidCertificate(e) => quit(&format!(":BAD_CERT: ({e:?})")),
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
         _ => {
             println_err!("unhandled error: {:?}", err);
@@ -1002,7 +1002,7 @@ fn handle_err(opts: &Options, err: Error) -> ! {
 fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
     while sess.wants_write() {
         if let Err(err) = sess.write_tls(conn) {
-            println!("IO error: {:?}", err);
+            println!("IO error: {err:?}");
             process::exit(0);
         }
     }
@@ -1033,12 +1033,12 @@ fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream
     let mut bytes = [0u8; MAX_MESSAGE_SIZE];
     match conn.read(&mut bytes[..n]) {
         Ok(count) => {
-            println!("read {:?} bytes", count);
+            println!("read {count:?} bytes");
             sess.read_tls(&mut io::Cursor::new(&mut bytes[..count]))
                 .expect("read_tls not expected to fail reading from buffer");
         }
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
-        Err(err) => panic!("invalid read: {}", err),
+        Err(err) => panic!("invalid read: {err}"),
     };
 
     after_read(opts, sess, conn);
@@ -1048,7 +1048,7 @@ fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStre
     match sess.read_tls(conn) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::ConnectionReset => {}
-        Err(err) => panic!("invalid read: {}", err),
+        Err(err) => panic!("invalid read: {err}"),
     };
 
     after_read(opts, sess, conn);
@@ -1269,7 +1269,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
                 println!("EOF (tcp)");
                 return;
             }
-            Err(err) => panic!("unhandled read error {:?}", err),
+            Err(err) => panic!("unhandled read error {err:?}"),
         };
 
         if opts.shut_down_after_handshake && !sent_shutdown && !sess.is_handshaking() {
@@ -1278,7 +1278,7 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
         }
 
         if quench_writes && len > 0 {
-            println!("unquenching writes after {:?}", len);
+            println!("unquenching writes after {len:?}");
             quench_writes = false;
         }
 
@@ -1302,7 +1302,7 @@ pub fn main() {
         println!("No");
         process::exit(0);
     }
-    println!("options: {:?}", args);
+    println!("options: {args:?}");
 
     let mut opts = Options::new();
 
@@ -1355,7 +1355,7 @@ pub fn main() {
             "-tls13-variant" => {
                 let variant = args.remove(0).parse::<u16>().unwrap();
                 if variant != 1 {
-                    println!("NYI TLS1.3 variant selection: {:?} {:?}", arg, variant);
+                    println!("NYI TLS1.3 variant selection: {arg:?} {variant:?}");
                     process::exit(BOGO_NACK);
                 }
             }
@@ -1426,7 +1426,7 @@ pub fn main() {
             "-expect-tls13-downgrade" |
             "-enable-signed-cert-timestamps" |
             "-expect-session-id" => {
-                println!("not checking {}; NYI", arg);
+                println!("not checking {arg}; NYI");
             }
 
             "-key-update" => {
@@ -1541,7 +1541,7 @@ pub fn main() {
                         opts.expect_reject_early_data = true;
                     }
                     _ => {
-                        println!("NYI early data reason: {}", reason);
+                        println!("NYI early data reason: {reason}");
                         process::exit(1);
                     }
                 }
@@ -1706,7 +1706,7 @@ pub fn main() {
             "-expect-resumable-across-names" |
             "-expect-not-resumable-across-names" |
             "-use-custom-verify-callback" => {
-                println!("NYI option {:?}", arg);
+                println!("NYI option {arg:?}");
                 process::exit(BOGO_NACK);
             }
 
@@ -1718,13 +1718,13 @@ pub fn main() {
             }
 
             _ => {
-                println!("unhandled option {:?}", arg);
+                println!("unhandled option {arg:?}");
                 process::exit(1);
             }
         }
     }
 
-    println!("opts {:?}", opts);
+    println!("opts {opts:?}");
 
     #[cfg(unix)]
     if opts.wait_for_debugger {
