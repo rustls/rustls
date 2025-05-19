@@ -17,7 +17,9 @@ use rustls::client::{
     WebPkiServerVerifier,
 };
 use rustls::crypto::cipher::{InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
-use rustls::crypto::{CryptoProvider, verify_tls13_signature_with_raw_key};
+use rustls::crypto::{
+    CryptoProvider, WebPkiSupportedAlgorithms, verify_tls13_signature_with_raw_key,
+};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
@@ -388,8 +390,11 @@ impl KeyType {
         SubjectPublicKeyInfoDer::from_pem_slice(self.bytes_for("client.spki.pem")).unwrap()
     }
 
-    pub fn get_certified_client_key(&self) -> Result<Arc<CertifiedKey>, Error> {
-        let private_key = provider::default_provider()
+    pub fn get_certified_client_key(
+        &self,
+        provider: &CryptoProvider,
+    ) -> Result<Arc<CertifiedKey>, Error> {
+        let private_key = provider
             .key_provider
             .load_private_key(self.get_client_key())?;
         let public_key = private_key
@@ -402,8 +407,11 @@ impl KeyType {
         )))
     }
 
-    pub fn certified_key_with_raw_pub_key(&self) -> Result<Arc<CertifiedKey>, Error> {
-        let private_key = provider::default_provider()
+    pub fn certified_key_with_raw_pub_key(
+        &self,
+        provider: &CryptoProvider,
+    ) -> Result<Arc<CertifiedKey>, Error> {
+        let private_key = provider
             .key_provider
             .load_private_key(self.get_key())?;
         let public_key = private_key
@@ -416,8 +424,11 @@ impl KeyType {
         )))
     }
 
-    pub fn certified_key_with_cert_chain(&self) -> Result<Arc<CertifiedKey>, Error> {
-        let private_key = provider::default_provider()
+    pub fn certified_key_with_cert_chain(
+        &self,
+        provider: &CryptoProvider,
+    ) -> Result<Arc<CertifiedKey>, Error> {
+        let private_key = provider
             .key_provider
             .load_private_key(self.get_key())?;
         Ok(Arc::new(CertifiedKey::new(self.get_chain(), private_key)))
@@ -584,10 +595,14 @@ pub fn make_server_config_with_client_verifier(
         .unwrap()
 }
 
-pub fn make_server_config_with_raw_key_support(kt: KeyType) -> ServerConfig {
-    let mut client_verifier = MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt);
+pub fn make_server_config_with_raw_key_support(
+    kt: KeyType,
+    provider: &CryptoProvider,
+) -> ServerConfig {
+    let mut client_verifier =
+        MockClientVerifier::new(|| Ok(ClientCertVerified::assertion()), kt, provider);
     let server_cert_resolver = Arc::new(AlwaysResolvesServerRawPublicKeys::new(
-        kt.certified_key_with_raw_pub_key()
+        kt.certified_key_with_raw_pub_key(provider)
             .unwrap(),
     ));
     client_verifier.expect_raw_public_keys = true;
@@ -597,10 +612,14 @@ pub fn make_server_config_with_raw_key_support(kt: KeyType) -> ServerConfig {
         .with_cert_resolver(server_cert_resolver)
 }
 
-pub fn make_client_config_with_raw_key_support(kt: KeyType) -> ClientConfig {
-    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys());
+pub fn make_client_config_with_raw_key_support(
+    kt: KeyType,
+    provider: &CryptoProvider,
+) -> ClientConfig {
+    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
     let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-        kt.get_certified_client_key().unwrap(),
+        kt.get_certified_client_key(provider)
+            .unwrap(),
     ));
     // We don't support tls1.2 for Raw Public Keys, hence the version is hard-coded.
     client_config_builder_with_versions(&[&rustls::version::TLS13])
@@ -612,15 +631,17 @@ pub fn make_client_config_with_raw_key_support(kt: KeyType) -> ClientConfig {
 pub fn make_client_config_with_cipher_suite_and_raw_key_support(
     kt: KeyType,
     cipher_suite: SupportedCipherSuite,
+    provider: &CryptoProvider,
 ) -> ClientConfig {
-    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys());
+    let server_verifier = Arc::new(MockServerVerifier::expects_raw_public_keys(provider));
     let client_cert_resolver = Arc::new(AlwaysResolvesClientRawPublicKeys::new(
-        kt.get_certified_client_key().unwrap(),
+        kt.get_certified_client_key(provider)
+            .unwrap(),
     ));
     ClientConfig::builder_with_provider(
         CryptoProvider {
             cipher_suites: vec![cipher_suite],
-            ..provider::default_provider()
+            ..provider.clone()
         }
         .into(),
     )
@@ -1072,6 +1093,7 @@ pub struct MockServerVerifier {
     signature_schemes: Vec<SignatureScheme>,
     expected_ocsp_response: Option<Vec<u8>>,
     requires_raw_public_keys: bool,
+    raw_public_key_algorithms: Option<WebPkiSupportedAlgorithms>,
 }
 
 impl ServerCertVerifier for MockServerVerifier {
@@ -1121,7 +1143,9 @@ impl ServerCertVerifier for MockServerVerifier {
                 message,
                 &SubjectPublicKeyInfoDer::from(cert.as_ref()),
                 dss,
-                &provider::default_provider().signature_verification_algorithms,
+                self.raw_public_key_algorithms
+                    .as_ref()
+                    .unwrap(),
             ),
             _ => Ok(HandshakeSignatureValid::assertion()),
         }
@@ -1179,9 +1203,10 @@ impl MockServerVerifier {
         }
     }
 
-    pub fn expects_raw_public_keys() -> Self {
+    pub fn expects_raw_public_keys(provider: &CryptoProvider) -> Self {
         MockServerVerifier {
             requires_raw_public_keys: true,
+            raw_public_key_algorithms: Some(provider.signature_verification_algorithms),
             ..Default::default()
         }
     }
@@ -1203,6 +1228,7 @@ impl Default for MockServerVerifier {
             ],
             expected_ocsp_response: None,
             requires_raw_public_keys: false,
+            raw_public_key_algorithms: None,
         }
     }
 }
@@ -1213,12 +1239,17 @@ pub struct MockClientVerifier {
     pub subjects: Vec<DistinguishedName>,
     pub mandatory: bool,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
-    pub expect_raw_public_keys: bool,
+    expect_raw_public_keys: bool,
+    raw_public_key_algorithms: Option<WebPkiSupportedAlgorithms>,
     parent: Arc<dyn ClientCertVerifier>,
 }
 
 impl MockClientVerifier {
-    pub fn new(verified: fn() -> Result<ClientCertVerified, Error>, kt: KeyType) -> Self {
+    pub fn new(
+        verified: fn() -> Result<ClientCertVerified, Error>,
+        kt: KeyType,
+        provider: &CryptoProvider,
+    ) -> Self {
         Self {
             parent: webpki_client_verifier_builder(get_client_root_store(kt))
                 .build()
@@ -1228,6 +1259,7 @@ impl MockClientVerifier {
             mandatory: true,
             offered_schemes: None,
             expect_raw_public_keys: false,
+            raw_public_key_algorithms: Some(provider.signature_verification_algorithms),
         }
     }
 }
@@ -1275,7 +1307,9 @@ impl ClientCertVerifier for MockClientVerifier {
                 message,
                 &SubjectPublicKeyInfoDer::from(cert.as_ref()),
                 dss,
-                &provider::default_provider().signature_verification_algorithms,
+                self.raw_public_key_algorithms
+                    .as_ref()
+                    .unwrap(),
             )
         } else {
             self.parent
