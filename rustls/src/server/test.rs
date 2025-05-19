@@ -10,7 +10,9 @@ use crate::msgs::handshake::{
     SessionId,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::{CommonState, Error, HandshakeType, PeerIncompatible, ProtocolVersion, Side};
+use crate::{
+    CommonState, Error, HandshakeType, PeerIncompatible, PeerMisbehaved, ProtocolVersion, Side,
+};
 
 #[test]
 fn null_compression_required() {
@@ -30,6 +32,18 @@ fn server_ignores_sni_with_ip_address() {
         .push(ClientExtension::read_bytes(&sni_extension(&[b"1.1.1.1"])).unwrap());
     std::println!("{:?}", ch.extensions);
     assert_eq!(test_process_client_hello(ch), Ok(()));
+}
+
+#[test]
+fn server_rejects_sni_with_illegal_dns_name() {
+    let mut ch = minimal_client_hello();
+    ch.extensions
+        .push(ClientExtension::read_bytes(&sni_extension(&[b"ab@cd.com"])).unwrap());
+    std::println!("{:?}", ch.extensions);
+    assert_eq!(
+        test_process_client_hello(ch),
+        Err(PeerMisbehaved::ServerNameMustContainOneHostName.into())
+    );
 }
 
 fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {

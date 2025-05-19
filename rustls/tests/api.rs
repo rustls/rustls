@@ -1542,14 +1542,6 @@ fn client_trims_terminating_dot() {
     }
 }
 
-#[test]
-fn server_rejects_sni_with_illegal_dns_name() {
-    check_sni_error(
-        encoding::Extension::new_sni(b"ab@cd.com"),
-        Error::PeerMisbehaved(PeerMisbehaved::ServerNameMustContainOneHostName),
-    );
-}
-
 fn check_sni_error(sni_extension: encoding::Extension, expected_error: Error) {
     for kt in ALL_KEY_TYPES {
         let mut server_config = make_server_config(*kt);
