@@ -46,8 +46,9 @@ fn server_config_with_verifier(
 #[test]
 // Happy path, we resolve to a root, it is verified OK, should be able to connect
 fn client_verifier_works() {
+    let provider = provider::default_provider();
     for kt in ALL_KEY_TYPES.iter() {
-        let client_verifier = MockClientVerifier::new(ver_ok, *kt);
+        let client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
@@ -64,8 +65,9 @@ fn client_verifier_works() {
 // Server offers no verification schemes
 #[test]
 fn client_verifier_no_schemes() {
+    let provider = provider::default_provider();
     for kt in ALL_KEY_TYPES.iter() {
-        let mut client_verifier = MockClientVerifier::new(ver_ok, *kt);
+        let mut client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
         client_verifier.offered_schemes = Some(vec![]);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
@@ -88,8 +90,9 @@ fn client_verifier_no_schemes() {
 // If we do have a root, we must do auth
 #[test]
 fn client_verifier_no_auth_yes_root() {
+    let provider = provider::default_provider();
     for kt in ALL_KEY_TYPES.iter() {
-        let client_verifier = MockClientVerifier::new(ver_unreachable, *kt);
+        let client_verifier = MockClientVerifier::new(ver_unreachable, *kt, &provider);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
@@ -115,8 +118,9 @@ fn client_verifier_no_auth_yes_root() {
 #[test]
 // Triple checks we propagate the rustls::Error through
 fn client_verifier_fails_properly() {
+    let provider = provider::default_provider();
     for kt in ALL_KEY_TYPES.iter() {
-        let client_verifier = MockClientVerifier::new(ver_err, *kt);
+        let client_verifier = MockClientVerifier::new(ver_err, *kt, &provider);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 

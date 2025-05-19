@@ -60,9 +60,10 @@ mod test_raw_keys {
 
     #[test]
     fn successful_raw_key_connection_and_correct_peer_certificates() {
+        let provider = provider::default_provider();
         for kt in ALL_KEY_TYPES {
-            let client_config = make_client_config_with_raw_key_support(*kt);
-            let server_config = make_server_config_with_raw_key_support(*kt);
+            let client_config = make_client_config_with_raw_key_support(*kt, &provider);
+            let server_config = make_server_config_with_raw_key_support(*kt, &provider);
 
             let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
             do_handshake(&mut client, &mut server);
@@ -95,9 +96,10 @@ mod test_raw_keys {
 
     #[test]
     fn correct_certificate_type_extensions_from_client_hello() {
+        let provider = provider::default_provider();
         for kt in ALL_KEY_TYPES {
-            let client_config = make_client_config_with_raw_key_support(*kt);
-            let mut server_config = make_server_config_with_raw_key_support(*kt);
+            let client_config = make_client_config_with_raw_key_support(*kt, &provider);
+            let mut server_config = make_server_config_with_raw_key_support(*kt, &provider);
 
             server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
                 expected_client_cert_types: Some(vec![CertificateType::RawPublicKey]),
@@ -113,8 +115,9 @@ mod test_raw_keys {
 
     #[test]
     fn only_client_supports_raw_keys() {
+        let provider = provider::default_provider();
         for kt in ALL_KEY_TYPES {
-            let client_config_rpk = make_client_config_with_raw_key_support(*kt);
+            let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
             let server_config = make_server_config(*kt);
 
             let (mut client_rpk, mut server) =
@@ -139,9 +142,10 @@ mod test_raw_keys {
 
     #[test]
     fn only_server_supports_raw_keys() {
+        let provider = provider::default_provider();
         for kt in ALL_KEY_TYPES {
             let client_config = make_client_config_with_versions(*kt, &[&rustls::version::TLS13]);
-            let server_config_rpk = make_server_config_with_raw_key_support(*kt);
+            let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
 
             let (mut client, mut server_rpk) =
                 make_pair_for_configs(client_config, server_config_rpk);
@@ -188,10 +192,11 @@ mod test_raw_keys {
         client_cert_types: Option<&Vec<CertificateType>>,
         expected_result: Result<(), ErrorFromPeer>,
     ) {
+        let provider = provider::default_provider();
         for kt in ALL_KEY_TYPES {
             let client_config = Arc::new(make_client_config(*kt));
             let server_config_rpk = match server_requires_raw_keys {
-                true => Arc::new(make_server_config_with_raw_key_support(*kt)),
+                true => Arc::new(make_server_config_with_raw_key_support(*kt, &provider)),
                 false => Arc::new(make_server_config(*kt)),
             };
 
@@ -211,12 +216,13 @@ mod test_raw_keys {
 
     #[test]
     fn incorrectly_alter_server_hello() {
+        let provider = provider::default_provider();
         for kt in ALL_KEY_TYPES {
             let supported_suite = cipher_suite::TLS13_AES_256_GCM_SHA384;
 
             // Alter Server Hello server certificate extension and expect IncorrectCertificateTypeExtension error
-            let client_config_rpk = make_client_config_with_raw_key_support(*kt);
-            let server_config_rpk = make_server_config_with_raw_key_support(*kt);
+            let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
+            let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
             add_keylog_and_do_altered_handshake(
                 client_config_rpk,
                 server_config_rpk,
@@ -227,8 +233,8 @@ mod test_raw_keys {
             );
 
             // Alter Server Hello client certificate extension and expect IncorrectCertificateTypeExtension error
-            let client_config_rpk = make_client_config_with_raw_key_support(*kt);
-            let server_config_rpk = make_server_config_with_raw_key_support(*kt);
+            let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
+            let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
             add_keylog_and_do_altered_handshake(
                 client_config_rpk,
                 server_config_rpk,

@@ -238,7 +238,7 @@ fn client_can_request_certain_trusted_cas() {
                     kt.ca_distinguished_name()
                         .to_vec()
                         .into(),
-                    kt.certified_key_with_cert_chain()
+                    kt.certified_key_with_cert_chain(&provider::default_provider())
                         .unwrap(),
                 )
             })
