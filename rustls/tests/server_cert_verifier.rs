@@ -7,7 +7,7 @@ use super::*;
 mod common;
 
 use common::{
-    ALL_KEY_TYPES, Altered, Arc, ErrorFromPeer, KeyType, MockServerVerifier, client_config_builder,
+    Altered, Arc, ErrorFromPeer, KeyType, MockServerVerifier, client_config_builder,
     client_config_builder_with_versions, do_handshake, do_handshake_until_both_error,
     do_handshake_until_error, make_client_config_with_versions, make_pair_for_arc_configs,
     make_server_config, server_config_builder, transfer_altered,
@@ -33,7 +33,7 @@ use x509_parser::x509::X509Name;
 #[test]
 fn client_can_override_certificate_verification() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::accepts_anything());
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
@@ -54,7 +54,7 @@ fn client_can_override_certificate_verification() {
 #[test]
 fn client_can_override_certificate_verification_and_reject_certificate() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::rejects_certificate(
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
@@ -87,7 +87,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_config =
             make_client_config_with_versions(*kt, &[&rustls::version::TLS12], &provider);
         let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
@@ -118,7 +118,7 @@ fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_config = make_client_config_with_versions(
             *kt,
             &[&rustls::version::TLS13],
@@ -152,7 +152,7 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
 #[test]
 fn client_can_override_certificate_verification_and_offer_no_signature_schemes() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let verifier = Arc::new(MockServerVerifier::offers_no_signature_schemes());
 
         let server_config = Arc::new(make_server_config(*kt, &provider));
