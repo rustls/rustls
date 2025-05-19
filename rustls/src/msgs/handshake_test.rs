@@ -237,6 +237,15 @@ fn rejects_empty_sni_extension() {
 }
 
 #[test]
+fn rejects_duplicate_names_in_sni_extension() {
+    assert_eq!(
+        ClientExtension::read_bytes(&[0, 0, 0, 10, 0, 8, 0, 0, 1, b'a', 0, 0, 1, b'b',])
+            .unwrap_err(),
+        InvalidMessage::InvalidServerName
+    );
+}
+
+#[test]
 fn can_round_trip_psk_identity() {
     let bytes = [0, 1, 0x99, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();

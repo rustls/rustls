@@ -1542,28 +1542,6 @@ fn client_trims_terminating_dot() {
     }
 }
 
-fn check_sni_error(sni_extension: encoding::Extension, expected_error: Error) {
-    for kt in ALL_KEY_TYPES {
-        let mut server_config = make_server_config(*kt);
-        server_config.cert_resolver = Arc::new(ServerCheckNoSni {});
-
-        let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
-        server
-            .read_tls(
-                &mut encoding::message_framing(
-                    ContentType::Handshake,
-                    ProtocolVersion::TLSv1_2,
-                    encoding::basic_client_hello(vec![sni_extension.clone()]),
-                )
-                .as_slice(),
-            )
-            .unwrap();
-
-        assert_eq!(server.process_new_packets(), Err(expected_error.clone()),);
-        assert_eq!(None, server.server_name());
-    }
-}
-
 #[cfg(feature = "tls12")]
 fn check_sigalgs_reduced_by_ciphersuite(
     kt: KeyType,
@@ -6247,19 +6225,6 @@ fn connection_types_are_not_huge() {
     assert_lt(
         mem::size_of::<rustls::client::UnbufferedClientConnection>(),
         1600,
-    );
-}
-
-#[test]
-fn test_server_rejects_duplicate_sni_names() {
-    let mut body = encoding::Extension::sni_dns_hostname(b"example.com");
-    body.extend_from_slice(&encoding::Extension::sni_dns_hostname(b"example.com"));
-    check_sni_error(
-        encoding::Extension {
-            typ: ExtensionType::ServerName,
-            body: encoding::len_u16(body),
-        },
-        Error::InvalidMessage(InvalidMessage::InvalidServerName),
     );
 }
 

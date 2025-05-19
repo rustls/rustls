@@ -1642,23 +1642,6 @@ pub mod encoding {
     }
 
     impl Extension {
-        pub fn new_sni(name: &[u8]) -> Self {
-            let body = Self::sni_dns_hostname(name);
-            let body = len_u16(body);
-            Self {
-                typ: ExtensionType::ServerName,
-                body,
-            }
-        }
-
-        pub fn sni_dns_hostname(name: &[u8]) -> Vec<u8> {
-            const SNI_HOSTNAME_TYPE: u8 = 0;
-
-            let mut out = len_u16(name.to_vec());
-            out.insert(0, SNI_HOSTNAME_TYPE);
-            out
-        }
-
         pub fn new_sig_algs() -> Extension {
             Extension {
                 typ: ExtensionType::SignatureAlgorithms,
