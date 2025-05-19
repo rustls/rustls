@@ -14,8 +14,6 @@ use std::{mem, thread};
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
 use rustls::crypto::CryptoProvider;
-use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::{
     NoServerSessionStorage, ProducesTickets, ServerSessionMemoryCache, UnbufferedServerConnection,
     WebPkiClientVerifier,
@@ -25,6 +23,7 @@ use rustls::{
     CipherSuite, ClientConfig, ClientConnection, ConnectionCommon, Error, HandshakeKind,
     RootCertStore, ServerConfig, ServerConnection, SideData,
 };
+use rustls_test::KeyType;
 
 pub fn main() {
     let args = Args::parse();
@@ -111,7 +110,7 @@ struct Args {
         long,
         help = "Which key type to use for server and client authentication.  The default is to run tests once for each key type."
     )]
-    key_type: Option<KeyType>,
+    key_type: Option<RequestedKeyType>,
 
     #[arg(long, help = "Which provider to test")]
     provider: Option<Provider>,
@@ -669,13 +668,13 @@ fn bench_memory(
 
 fn lookup_matching_benches(
     ciphersuite_name: &str,
-    key_type: Option<KeyType>,
+    key_type: Option<RequestedKeyType>,
 ) -> Vec<BenchmarkParam> {
     let r: Vec<BenchmarkParam> = ALL_BENCHMARKS
         .iter()
         .filter(|params| {
             format!("{:?}", params.ciphersuite).to_lowercase() == ciphersuite_name.to_lowercase()
-                && (key_type.is_none() || Some(params.key_type) == key_type)
+                && (key_type.is_none() || Some(params.key_type) == key_type.map(KeyType::from))
         })
         .cloned()
         .collect();
@@ -808,11 +807,9 @@ impl Parameters {
 
     fn client_config(&self) -> Arc<ClientConfig> {
         let mut root_store = RootCertStore::empty();
-        root_store.add_parsable_certificates(
-            CertificateDer::pem_file_iter(self.proto.key_type.path_for("ca.cert"))
-                .unwrap()
-                .map(|result| result.unwrap()),
-        );
+        root_store
+            .add(self.proto.key_type.ca_cert())
+            .unwrap();
 
         let cfg = ClientConfig::builder_with_provider(
             CryptoProvider {
@@ -1035,49 +1032,22 @@ impl BenchmarkParam {
     }
 }
 
-// copied from tests/api.rs
 #[derive(PartialEq, Clone, Copy, Debug, ValueEnum)]
-enum KeyType {
+enum RequestedKeyType {
     Rsa2048,
     EcdsaP256,
     EcdsaP384,
     Ed25519,
 }
 
-impl KeyType {
-    fn path_for(&self, part: &str) -> String {
-        match self {
-            Self::Rsa2048 => format!("test-ca/rsa-2048/{part}"),
-            Self::EcdsaP256 => format!("test-ca/ecdsa-p256/{part}"),
-            Self::EcdsaP384 => format!("test-ca/ecdsa-p384/{part}"),
-            Self::Ed25519 => format!("test-ca/eddsa/{part}"),
+impl From<RequestedKeyType> for KeyType {
+    fn from(val: RequestedKeyType) -> Self {
+        match val {
+            RequestedKeyType::Rsa2048 => Self::Rsa2048,
+            RequestedKeyType::EcdsaP256 => Self::EcdsaP256,
+            RequestedKeyType::EcdsaP384 => Self::EcdsaP384,
+            RequestedKeyType::Ed25519 => Self::Ed25519,
         }
-    }
-
-    fn get_chain(&self) -> Vec<CertificateDer<'static>> {
-        CertificateDer::pem_file_iter(self.path_for("end.fullchain"))
-            .unwrap()
-            .map(|result| result.unwrap())
-            .collect()
-    }
-
-    fn get_key(&self) -> PrivateKeyDer<'static> {
-        PrivatePkcs8KeyDer::from_pem_file(self.path_for("end.key"))
-            .unwrap()
-            .into()
-    }
-
-    fn get_client_chain(&self) -> Vec<CertificateDer<'static>> {
-        CertificateDer::pem_file_iter(self.path_for("client.fullchain"))
-            .unwrap()
-            .map(|result| result.unwrap())
-            .collect()
-    }
-
-    fn get_client_key(&self) -> PrivateKeyDer<'static> {
-        PrivatePkcs8KeyDer::from_pem_file(self.path_for("client.key"))
-            .unwrap()
-            .into()
     }
 }
 
