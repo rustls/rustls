@@ -17,20 +17,18 @@ use rayon::iter::Either;
 use rayon::prelude::*;
 use rustls::client::Resumption;
 use rustls::crypto::{CryptoProvider, GetRandomFailed, SecureRandom, aws_lc_rs, ring};
-use rustls::pki_types::CertificateDer;
-use rustls::pki_types::pem::PemObject;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::{
     CipherSuite, ClientConfig, ClientConnection, HandshakeKind, ProtocolVersion, RootCertStore,
     ServerConfig, ServerConnection,
 };
+use rustls_test::KeyType;
 
 use crate::benchmark::{
     Benchmark, BenchmarkKind, BenchmarkParams, ResumptionKind, get_reported_instr_count,
     validate_benchmarks,
 };
 use crate::callgrind::{CallgrindRunner, CountInstructions};
-use crate::util::KeyType;
 use crate::util::async_io::{self, AsyncRead, AsyncWrite};
 use crate::util::transport::{
     read_handshake_message, read_plaintext_to_end_bounded, send_handshake_message,
@@ -504,11 +502,9 @@ impl ClientSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
         let mut root_store = RootCertStore::empty();
-        root_store.add_parsable_certificates(
-            CertificateDer::pem_file_iter(params.key_type.path_for("ca.cert"))
-                .unwrap()
-                .map(|result| result.unwrap()),
-        );
+        root_store
+            .add(params.key_type.ca_cert())
+            .unwrap();
 
         let mut cfg = ClientConfig::builder_with_provider(
             CryptoProvider {

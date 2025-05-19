@@ -4,13 +4,11 @@
 use bencher::{Bencher, benchmark_group, benchmark_main};
 use rustls::crypto::ring as provider;
 
-#[path = "../tests/common/mod.rs"]
-mod test_utils;
 use std::io;
 use std::sync::Arc;
 
 use rustls::ServerConnection;
-use test_utils::*;
+use rustls_test::{FailsReads, KeyType, make_server_config};
 
 fn bench_ewouldblock(c: &mut Bencher) {
     let server_config = make_server_config(KeyType::Rsa2048, &provider::default_provider());

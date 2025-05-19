@@ -1,34 +1,3 @@
-use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub enum KeyType {
-    Rsa2048,
-    EcdsaP256,
-    EcdsaP384,
-}
-
-impl KeyType {
-    pub(crate) fn path_for(&self, part: &str) -> String {
-        match self {
-            Self::Rsa2048 => format!("../test-ca/rsa-2048/{part}"),
-            Self::EcdsaP256 => format!("../test-ca/ecdsa-p256/{part}"),
-            Self::EcdsaP384 => format!("../test-ca/ecdsa-p384/{part}"),
-        }
-    }
-
-    pub(crate) fn get_chain(&self) -> Vec<CertificateDer<'static>> {
-        CertificateDer::pem_file_iter(self.path_for("end.fullchain"))
-            .unwrap()
-            .map(|result| result.unwrap())
-            .collect()
-    }
-
-    pub(crate) fn get_key(&self) -> PrivateKeyDer<'static> {
-        PrivateKeyDer::from_pem_file(self.path_for("end.key")).unwrap()
-    }
-}
-
 pub mod async_io {
     //! Async IO building blocks required for sharing code between the instruction count and
     //! wall-time benchmarks
