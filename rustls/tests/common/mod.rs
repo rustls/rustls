@@ -37,8 +37,6 @@ use rustls::{
     RootCertStore, ServerConfig, ServerConnection, SideData, SignatureScheme, SupportedCipherSuite,
 };
 
-use webpki::anchor_from_trusted_cert;
-
 // Import `Arc` here for tests - can be overwritten to test with another `Arc` such as `portable_atomic_util::Arc`
 pub use std::sync::Arc;
 
@@ -550,15 +548,11 @@ pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
     // The key type's chain file contains the DER encoding of the EE cert, the intermediate cert,
     // and the root trust anchor. We want only the trust anchor to build the root cert store.
     let chain = kt.get_chain();
-    let trust_anchor = chain.last().unwrap();
-    RootCertStore {
-        roots: vec![
-            anchor_from_trusted_cert(trust_anchor)
-                .unwrap()
-                .to_owned(),
-        ],
-    }
-    .into()
+    let mut roots = RootCertStore::empty();
+    roots
+        .add(chain.last().unwrap().clone())
+        .unwrap();
+    roots.into()
 }
 
 pub fn make_server_config_with_mandatory_client_auth_crls(
