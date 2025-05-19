@@ -2589,6 +2589,7 @@ dependencies = [
  "rcgen",
  "ring",
  "rustls-pki-types",
+ "rustls-test",
  "rustls-webpki",
  "rustversion",
  "serde",
@@ -2639,6 +2640,7 @@ dependencies = [
  "itertools 0.14.0",
  "rayon",
  "rustls 0.23.27",
+ "rustls-test",
  "tikv-jemallocator",
 ]
 
@@ -2739,6 +2741,13 @@ dependencies = [
  "rustls-provider-example",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rustls-test"
+version = "0.1.0"
+dependencies = [
+ "rustls 0.23.27",
 ]
 
 [[package]]
