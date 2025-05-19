@@ -115,8 +115,10 @@ fn handshake_config(
     version: &'static rustls::SupportedProtocolVersion,
     editor: impl Fn(&mut ClientConfig, &mut ServerConfig),
 ) -> Outcome {
-    let mut server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
-    let mut client_config = make_client_config(KeyType::Rsa2048);
+    let provider = provider::default_provider();
+    let mut server_config =
+        make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     editor(&mut client_config, &mut server_config);
 
     run(
@@ -129,11 +131,13 @@ fn handshake_config(
 
 #[test]
 fn app_data_client_to_server() {
+    let provider = provider::default_provider();
     let expected: &[_] = b"hello";
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
-        let client_config = make_client_config(KeyType::Rsa2048);
+        let server_config =
+            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &provider);
 
         let mut client_actions = Actions {
             app_data_to_send: Some(expected),
@@ -163,11 +167,13 @@ fn app_data_client_to_server() {
 
 #[test]
 fn app_data_server_to_client() {
+    let provider = provider::default_provider();
     let expected: &[_] = b"hello";
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
-        let client_config = make_client_config(KeyType::Rsa2048);
+        let server_config =
+            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &provider);
 
         let mut server_actions = Actions {
             app_data_to_send: Some(expected),
@@ -197,13 +203,15 @@ fn app_data_server_to_client() {
 
 #[test]
 fn early_data() {
+    let provider = provider::default_provider();
     let expected: &[_] = b"hello";
 
-    let mut server_config = make_server_config(KeyType::Rsa2048);
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.max_early_data_size = 128;
     let server_config = Arc::new(server_config);
 
-    let mut client_config = make_client_config_with_versions(KeyType::Rsa2048, &[&TLS13]);
+    let mut client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&TLS13], &provider);
     client_config.enable_early_data = true;
     let client_config = Arc::new(client_config);
 
@@ -426,10 +434,12 @@ fn run(
 
 #[test]
 fn close_notify_client_to_server() {
+    let provider = provider::default_provider();
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
-        let client_config = make_client_config(KeyType::Rsa2048);
+        let server_config =
+            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &provider);
 
         let mut client_actions = Actions {
             send_close_notify: true,
@@ -450,10 +460,12 @@ fn close_notify_client_to_server() {
 
 #[test]
 fn close_notify_server_to_client() {
+    let provider = provider::default_provider();
     for version in rustls::ALL_VERSIONS {
         eprintln!("{version:?}");
-        let server_config = make_server_config_with_versions(KeyType::Rsa2048, &[version]);
-        let client_config = make_client_config(KeyType::Rsa2048);
+        let server_config =
+            make_server_config_with_versions(KeyType::Rsa2048, &[version], &provider);
+        let client_config = make_client_config(KeyType::Rsa2048, &provider);
 
         let mut server_actions = Actions {
             send_close_notify: true,
@@ -725,7 +737,7 @@ fn refresh_traffic_keys_automatically() {
             .unwrap(),
     );
 
-    let server_config = make_server_config(KeyType::Rsa2048);
+    let server_config = make_server_config(KeyType::Rsa2048, &provider::default_provider());
     let mut outcome = run(
         Arc::new(client_config),
         &mut NO_ACTIONS.clone(),
@@ -794,7 +806,7 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
             .unwrap(),
     );
 
-    let server_config = make_server_config(KeyType::Ed25519);
+    let server_config = make_server_config(KeyType::Ed25519, &provider::default_provider());
     let mut outcome = run(
         Arc::new(client_config),
         &mut NO_ACTIONS.clone(),
@@ -891,8 +903,11 @@ fn tls13_packed_handshake() {
 
 #[test]
 fn rejects_junk() {
-    let mut server =
-        UnbufferedServerConnection::new(Arc::new(make_server_config(KeyType::Rsa2048))).unwrap();
+    let mut server = UnbufferedServerConnection::new(Arc::new(make_server_config(
+        KeyType::Rsa2048,
+        &provider::default_provider(),
+    )))
+    .unwrap();
 
     let mut buf = [0xff; 5];
     let UnbufferedStatus { discard, state } = server.process_tls_records(&mut buf);
@@ -1397,8 +1412,9 @@ impl Buffer {
 fn make_connection_pair(
     version: &'static rustls::SupportedProtocolVersion,
 ) -> (UnbufferedClientConnection, UnbufferedServerConnection) {
-    let server_config = make_server_config(KeyType::Rsa2048);
-    let client_config = make_client_config_with_versions(KeyType::Rsa2048, &[version]);
+    let provider = provider::default_provider();
+    let server_config = make_server_config(KeyType::Rsa2048, &provider);
+    let client_config = make_client_config_with_versions(KeyType::Rsa2048, &[version], &provider);
 
     let client =
         UnbufferedClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
@@ -1481,6 +1497,7 @@ fn test_secret_extraction_enabled() {
     // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
     // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
     let kt = KeyType::Rsa2048;
+    let provider = provider::default_provider();
     for suite in [
         cipher_suite::TLS13_AES_128_GCM_SHA256,
         cipher_suite::TLS13_AES_256_GCM_SHA384,
@@ -1498,7 +1515,7 @@ fn test_secret_extraction_enabled() {
         let mut server_config = ServerConfig::builder_with_provider(
             CryptoProvider {
                 cipher_suites: vec![suite],
-                ..provider::default_provider()
+                ..provider.clone()
             }
             .into(),
         )
@@ -1511,7 +1528,7 @@ fn test_secret_extraction_enabled() {
         server_config.enable_secret_extraction = true;
         let server_config = Arc::new(server_config);
 
-        let mut client_config = make_client_config(kt);
+        let mut client_config = make_client_config(kt, &provider);
         client_config.enable_secret_extraction = true;
 
         let mut outcome = run(
@@ -1570,10 +1587,11 @@ fn test_secret_extraction_enabled() {
 
 #[test]
 fn kernel_err_on_secret_extraction_not_enabled() {
-    let server_config = make_server_config(KeyType::Rsa2048);
+    let provider = provider::default_provider();
+    let server_config = make_server_config(KeyType::Rsa2048, &provider);
     let server_config = Arc::new(server_config);
 
-    let client_config = make_client_config(KeyType::Rsa2048);
+    let client_config = make_client_config(KeyType::Rsa2048, &provider);
     let client_config = Arc::new(client_config);
 
     let mut server = UnbufferedServerConnection::new(server_config).unwrap();
@@ -1596,11 +1614,12 @@ fn kernel_err_on_secret_extraction_not_enabled() {
 
 #[test]
 fn kernel_err_on_handshake_not_complete() {
-    let mut server_config = make_server_config(KeyType::Rsa2048);
+    let provider = provider::default_provider();
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);
 
-    let mut client_config = make_client_config(KeyType::Rsa2048);
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.enable_secret_extraction = true;
     let client_config = Arc::new(client_config);
 
@@ -1620,11 +1639,12 @@ fn kernel_err_on_handshake_not_complete() {
 
 #[test]
 fn kernel_initial_traffic_secrets_match() {
-    let mut server_config = make_server_config(KeyType::Rsa2048);
+    let provider = provider::default_provider();
+    let mut server_config = make_server_config(KeyType::Rsa2048, &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);
 
-    let mut client_config = make_client_config(KeyType::Rsa2048);
+    let mut client_config = make_client_config(KeyType::Rsa2048, &provider);
     client_config.enable_secret_extraction = true;
     let client_config = Arc::new(client_config);
 
@@ -1647,11 +1667,14 @@ fn kernel_initial_traffic_secrets_match() {
 
 #[test]
 fn kernel_key_updates_tls13() {
-    let mut server_config = make_server_config_with_versions(KeyType::Rsa2048, &[&TLS13]);
+    let provider = provider::default_provider();
+    let mut server_config =
+        make_server_config_with_versions(KeyType::Rsa2048, &[&TLS13], &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);
 
-    let mut client_config = make_client_config_with_versions(KeyType::Rsa2048, &[&TLS13]);
+    let mut client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&TLS13], &provider);
     client_config.enable_secret_extraction = true;
     let client_config = Arc::new(client_config);
 
@@ -1685,11 +1708,14 @@ fn kernel_key_updates_tls12() {
 
     let _ = env_logger::try_init();
 
-    let mut server_config = make_server_config_with_versions(KeyType::Rsa2048, &[&TLS12]);
+    let provider = provider::default_provider();
+    let mut server_config =
+        make_server_config_with_versions(KeyType::Rsa2048, &[&TLS12], &provider);
     server_config.enable_secret_extraction = true;
     let server_config = Arc::new(server_config);
 
-    let mut client_config = make_client_config_with_versions(KeyType::Rsa2048, &[&TLS12]);
+    let mut client_config =
+        make_client_config_with_versions(KeyType::Rsa2048, &[&TLS12], &provider);
     client_config.enable_secret_extraction = true;
     let client_config = Arc::new(client_config);
 
