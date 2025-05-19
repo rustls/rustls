@@ -39,8 +39,6 @@ use rustls::{
 
 use webpki::anchor_from_trusted_cert;
 
-use super::provider;
-
 // Import `Arc` here for tests - can be overwritten to test with another `Arc` such as `portable_atomic_util::Arc`
 pub use std::sync::Arc;
 
@@ -1539,11 +1537,15 @@ pub fn aes_128_gcm_with_1024_confidentiality_limit(
     .into()
 }
 
-pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
+pub fn unsafe_plaintext_crypto_provider(provider: CryptoProvider) -> Arc<CryptoProvider> {
     static TLS13_PLAIN_SUITE: OnceLock<rustls::Tls13CipherSuite> = OnceLock::new();
 
     let tls13 = TLS13_PLAIN_SUITE.get_or_init(|| {
-        let tls13 = provider::cipher_suite::TLS13_AES_256_GCM_SHA384
+        let tls13 = provider
+            .cipher_suites
+            .iter()
+            .find(|cs| cs.suite() == CipherSuite::TLS13_AES_256_GCM_SHA384)
+            .unwrap()
             .tls13()
             .unwrap();
 
@@ -1556,7 +1558,7 @@ pub fn unsafe_plaintext_crypto_provider() -> Arc<CryptoProvider> {
 
     CryptoProvider {
         cipher_suites: vec![SupportedCipherSuite::Tls13(tls13)],
-        ..provider::default_provider()
+        ..provider
     }
     .into()
 }
