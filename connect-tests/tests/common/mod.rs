@@ -153,7 +153,7 @@ impl TlsClient {
             .args(&args)
             .env("SSLKEYLOGFILE", "./sslkeylogfile.txt")
             .output()
-            .unwrap_or_else(|e| panic!("failed to execute: {}", e));
+            .unwrap_or_else(|e| panic!("failed to execute: {e}"));
 
         let stdout_str = String::from_utf8_lossy(&output.stdout);
         let stderr_str = String::from_utf8_lossy(&output.stderr);
@@ -161,8 +161,8 @@ impl TlsClient {
         for expect in &self.expect_output {
             let re = Regex::new(expect).unwrap();
             if re.find(&stdout_str).is_none() {
-                println!("We expected to find '{}' in the following output:", expect);
-                println!("{:?}", output);
+                println!("We expected to find '{expect}' in the following output:");
+                println!("{output:?}");
                 panic!("Test failed");
             }
         }
@@ -170,8 +170,8 @@ impl TlsClient {
         for expect in &self.expect_log {
             let re = Regex::new(expect).unwrap();
             if re.find(&stderr_str).is_none() {
-                println!("We expected to find '{}' in the following output:", expect);
-                println!("{:?}", output);
+                println!("We expected to find '{expect}' in the following output:");
+                println!("{output:?}");
                 panic!("Test failed");
             }
         }
