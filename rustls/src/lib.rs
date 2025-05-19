@@ -629,6 +629,8 @@ pub mod server {
     pub(crate) mod handy;
     mod hs;
     mod server_conn;
+    #[cfg(test)]
+    mod test;
     #[cfg(feature = "tls12")]
     mod tls12;
     mod tls13;
