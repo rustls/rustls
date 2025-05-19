@@ -229,6 +229,14 @@ fn rejects_truncated_sni() {
 }
 
 #[test]
+fn rejects_empty_sni_extension() {
+    assert_eq!(
+        ClientExtension::read_bytes(&[0, 0, 0, 2, 0, 0]).unwrap_err(),
+        InvalidMessage::IllegalEmptyList("ServerNames")
+    );
+}
+
+#[test]
 fn can_round_trip_psk_identity() {
     let bytes = [0, 1, 0x99, 0x11, 0x22, 0x33, 0x44];
     let psk_id = PresharedKeyIdentity::read(&mut Reader::init(&bytes)).unwrap();
