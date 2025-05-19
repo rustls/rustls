@@ -11,9 +11,9 @@ pub enum KeyType {
 impl KeyType {
     pub(crate) fn path_for(&self, part: &str) -> String {
         match self {
-            Self::Rsa2048 => format!("../test-ca/rsa-2048/{}", part),
-            Self::EcdsaP256 => format!("../test-ca/ecdsa-p256/{}", part),
-            Self::EcdsaP384 => format!("../test-ca/ecdsa-p384/{}", part),
+            Self::Rsa2048 => format!("../test-ca/rsa-2048/{part}"),
+            Self::EcdsaP256 => format!("../test-ca/ecdsa-p256/{part}"),
+            Self::EcdsaP384 => format!("../test-ca/ecdsa-p384/{part}"),
         }
     }
 
