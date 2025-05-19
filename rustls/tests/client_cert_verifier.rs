@@ -7,7 +7,7 @@ use super::*;
 mod common;
 
 use common::{
-    ALL_KEY_TYPES, Arc, ErrorFromPeer, KeyType, MockClientVerifier, do_handshake_until_both_error,
+    Arc, ErrorFromPeer, KeyType, MockClientVerifier, do_handshake_until_both_error,
     do_handshake_until_error, make_client_config_with_versions,
     make_client_config_with_versions_with_auth, make_pair_for_arc_configs, server_config_builder,
     server_name,
@@ -47,7 +47,7 @@ fn server_config_with_verifier(
 // Happy path, we resolve to a root, it is verified OK, should be able to connect
 fn client_verifier_works() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
@@ -67,7 +67,7 @@ fn client_verifier_works() {
 #[test]
 fn client_verifier_no_schemes() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let mut client_verifier = MockClientVerifier::new(ver_ok, *kt, &provider);
         client_verifier.offered_schemes = Some(vec![]);
         let server_config = server_config_with_verifier(*kt, client_verifier);
@@ -93,8 +93,9 @@ fn client_verifier_no_schemes() {
 #[test]
 fn client_verifier_no_auth_yes_root() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let client_verifier = MockClientVerifier::new(ver_unreachable, *kt, &provider);
+
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);
 
@@ -121,7 +122,7 @@ fn client_verifier_no_auth_yes_root() {
 // Triple checks we propagate the rustls::Error through
 fn client_verifier_fails_properly() {
     let provider = provider::default_provider();
-    for kt in ALL_KEY_TYPES.iter() {
+    for kt in KeyType::all_for_provider(&provider).iter() {
         let client_verifier = MockClientVerifier::new(ver_err, *kt, &provider);
         let server_config = server_config_with_verifier(*kt, client_verifier);
         let server_config = Arc::new(server_config);

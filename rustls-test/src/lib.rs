@@ -302,7 +302,7 @@ pub enum KeyType {
     Ed25519,
 }
 
-pub static ALL_KEY_TYPES: &[KeyType] = &[
+static ALL_KEY_TYPES: &[KeyType] = &[
     KeyType::Rsa2048,
     KeyType::Rsa3072,
     KeyType::Rsa4096,
@@ -312,7 +312,27 @@ pub static ALL_KEY_TYPES: &[KeyType] = &[
     KeyType::Ed25519,
 ];
 
+static ALL_KEY_TYPES_EXCEPT_P521: &[KeyType] = &[
+    KeyType::Rsa2048,
+    KeyType::Rsa3072,
+    KeyType::Rsa4096,
+    KeyType::EcdsaP256,
+    KeyType::EcdsaP384,
+    KeyType::Ed25519,
+];
+
 impl KeyType {
+    pub fn all_for_provider(provider: &CryptoProvider) -> &'static [KeyType] {
+        match provider
+            .key_provider
+            .load_private_key(Self::EcdsaP521.get_key())
+            .is_ok()
+        {
+            true => ALL_KEY_TYPES,
+            false => ALL_KEY_TYPES_EXCEPT_P521,
+        }
+    }
+
     fn bytes_for(&self, part: &str) -> &'static [u8] {
         match self {
             Self::Rsa2048 => bytes_for("rsa-2048", part),
