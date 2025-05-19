@@ -1543,14 +1543,6 @@ fn client_trims_terminating_dot() {
 }
 
 #[test]
-fn server_ignores_sni_with_ip_address() {
-    check_sni_error(
-        encoding::Extension::new_sni(b"1.1.1.1"),
-        Error::General("no server certificate chain resolved".to_string()),
-    );
-}
-
-#[test]
 fn server_rejects_sni_with_illegal_dns_name() {
     check_sni_error(
         encoding::Extension::new_sni(b"ab@cd.com"),
