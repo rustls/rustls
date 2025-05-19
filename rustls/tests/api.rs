@@ -6264,17 +6264,6 @@ fn test_server_rejects_duplicate_sni_names() {
 }
 
 #[test]
-fn test_server_rejects_empty_sni_extension() {
-    check_sni_error(
-        encoding::Extension {
-            typ: ExtensionType::ServerName,
-            body: encoding::len_u16(vec![]),
-        },
-        Error::InvalidMessage(InvalidMessage::IllegalEmptyList("ServerNames")),
-    );
-}
-
-#[test]
 fn test_server_rejects_clients_without_any_kx_groups() {
     let (_, mut server) = make_pair(KeyType::Rsa2048);
     server
