@@ -732,9 +732,11 @@ fn refresh_traffic_keys_automatically() {
 
     let client_config = finish_client_config(
         KeyType::Rsa2048,
-        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit())
-            .with_safe_default_protocol_versions()
-            .unwrap(),
+        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit(
+            provider::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap(),
     );
 
     let server_config = make_server_config(KeyType::Rsa2048, &provider::default_provider());
@@ -801,9 +803,11 @@ fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
 
     let client_config = finish_client_config(
         KeyType::Ed25519,
-        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit())
-            .with_protocol_versions(&[&rustls::version::TLS12])
-            .unwrap(),
+        ClientConfig::builder_with_provider(aes_128_gcm_with_1024_confidentiality_limit(
+            provider::default_provider(),
+        ))
+        .with_protocol_versions(&[&rustls::version::TLS12])
+        .unwrap(),
     );
 
     let server_config = make_server_config(KeyType::Ed25519, &provider::default_provider());

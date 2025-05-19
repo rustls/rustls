@@ -8278,7 +8278,7 @@ fn test_automatic_refresh_traffic_keys() {
     }
 
     const KEY_UPDATE_SIZE: usize = encrypted_size(5);
-    let provider = aes_128_gcm_with_1024_confidentiality_limit();
+    let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());
 
     let client_config = finish_client_config(
         KeyType::Ed25519,
@@ -8343,7 +8343,7 @@ fn test_automatic_refresh_traffic_keys() {
 #[cfg(feature = "tls12")]
 #[test]
 fn tls12_connection_fails_after_key_reaches_confidentiality_limit() {
-    let provider = aes_128_gcm_with_1024_confidentiality_limit();
+    let provider = aes_128_gcm_with_1024_confidentiality_limit(provider::default_provider());
 
     let client_config = finish_client_config(
         KeyType::Ed25519,
