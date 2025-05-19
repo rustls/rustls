@@ -8,6 +8,7 @@ publish = false
 clap = { workspace = true }
 rustls = { path = "../rustls" }
 rustls-post-quantum = { path = "../rustls-post-quantum", optional = true }
+rustls-test = { workspace = true }
 
 [features]
 default = []

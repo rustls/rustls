@@ -2624,6 +2624,7 @@ dependencies = [
  "clap",
  "rustls 0.23.27",
  "rustls-post-quantum",
+ "rustls-test",
  "tikv-jemallocator",
 ]
 
