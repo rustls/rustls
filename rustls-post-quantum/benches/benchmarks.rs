@@ -1,6 +1,7 @@
+use std::hint::black_box;
 use std::sync::Arc;
 
-use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use rustls::crypto::aws_lc_rs::kx_group::X25519;
 use rustls::crypto::{
     ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup, aws_lc_rs,
