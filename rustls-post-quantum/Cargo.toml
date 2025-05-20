@@ -17,7 +17,7 @@ rustls = { version = "0.23.22", features = ["aws_lc_rs", "prefer-post-quantum"],
 [dev-dependencies]
 criterion = "0.5"
 env_logger = "0.11"
-webpki-roots = "0.26"
+webpki-roots = "1"
 
 [[bench]]
 name = "benchmarks"
