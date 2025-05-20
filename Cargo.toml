@@ -51,6 +51,7 @@ byteorder = "1.4.3"
 chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
 clap = { version = "4.3.21", features = ["derive", "env"] }
 crabgrind = "=0.1.9" # compatible with valgrind package on GHA ubuntu-latest
+criterion = "0.5"
 der = "0.7"
 ecdsa = "0.16.8"
 env_logger = "0.11"
