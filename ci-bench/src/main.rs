@@ -1,8 +1,24 @@
+#![warn(
+    clippy::alloc_instead_of_core,
+    clippy::clone_on_ref_ptr,
+    clippy::manual_let_else,
+    clippy::std_instead_of_core,
+    clippy::use_self,
+    clippy::upper_case_acronyms,
+    elided_lifetimes_in_paths,
+    trivial_casts,
+    trivial_numeric_casts,
+    unreachable_pub,
+    unused_import_braces,
+    unused_extern_crates,
+    unused_qualifications
+)]
+
+use core::hint::black_box;
+use core::mem;
 use std::collections::HashMap;
 use std::fs::File;
-use std::hint::black_box;
 use std::io::{self, BufRead, BufReader, Write};
-use std::mem;
 use std::os::fd::{AsRawFd, FromRawFd};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -102,8 +118,8 @@ impl Side {
     /// Returns the string representation of the side
     pub fn as_str(self) -> &'static str {
         match self {
-            Side::Client => "client",
-            Side::Server => "server",
+            Self::Client => "client",
+            Self::Server => "server",
         }
     }
 }
@@ -299,12 +315,14 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
         (
             derandomize(ring::default_provider()),
             ring::ALL_CIPHER_SUITES,
+            #[allow(trivial_casts)]
             &(ring_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "ring",
         ),
         (
             derandomize(aws_lc_rs::default_provider()),
             aws_lc_rs::ALL_CIPHER_SUITES,
+            #[allow(trivial_casts)]
             &(aws_lc_rs_ticketer as fn() -> Arc<dyn rustls::server::ProducesTickets>),
             "aws_lc_rs",
         ),
@@ -534,7 +552,7 @@ impl BenchStepper for ClientSideStepper<'_> {
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let server_name = "localhost".try_into().unwrap();
-        let mut client = ClientConnection::new(self.config.clone(), server_name).unwrap();
+        let mut client = ClientConnection::new(Arc::clone(&self.config), server_name).unwrap();
         client.set_buffer_limit(None);
 
         loop {
@@ -610,7 +628,7 @@ impl BenchStepper for ServerSideStepper<'_> {
     type Endpoint = ServerConnection;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
-        let mut server = ServerConnection::new(self.config.clone()).unwrap();
+        let mut server = ServerConnection::new(Arc::clone(&self.config)).unwrap();
         server.set_buffer_limit(None);
 
         while server.is_handshaking() {

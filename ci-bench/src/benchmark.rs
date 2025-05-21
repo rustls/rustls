@@ -12,7 +12,7 @@ use rustls_test::KeyType;
 /// Benchmarks can be invalid because of the following reasons:
 ///
 /// - Re-using an already defined benchmark name.
-pub fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
+pub(crate) fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
     // Detect duplicate definitions
     let duplicate_names: Vec<_> = benchmarks
         .iter()
@@ -30,7 +30,7 @@ pub fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
 }
 
 /// Get the reported instruction counts for the provided benchmark
-pub fn get_reported_instr_count(
+pub(crate) fn get_reported_instr_count(
     bench: &Benchmark,
     results: &FxHashMap<&str, InstructionCounts>,
 ) -> InstructionCounts {
@@ -50,8 +50,8 @@ impl BenchmarkKind {
     /// Returns the [`ResumptionKind`] used in the handshake part of the benchmark
     pub fn resumption_kind(self) -> ResumptionKind {
         match self {
-            BenchmarkKind::Handshake(kind) => kind,
-            BenchmarkKind::Transfer => ResumptionKind::No,
+            Self::Handshake(kind) => kind,
+            Self::Transfer => ResumptionKind::No,
         }
     }
 }
@@ -68,7 +68,7 @@ pub enum ResumptionKind {
 }
 
 impl ResumptionKind {
-    pub const ALL: &'static [ResumptionKind] = &[Self::No, Self::SessionId, Self::Tickets];
+    pub const ALL: &'static [Self] = &[Self::No, Self::SessionId, Self::Tickets];
 
     /// Returns a user-facing label that identifies the resumption kind
     pub fn label(&self) -> &'static str {
