@@ -2,14 +2,31 @@
 //
 // Note: we don't use any of the standard 'cargo bench', 'test::Bencher',
 // etc. because it's unstable at the time of writing.
+#![warn(
+    clippy::alloc_instead_of_core,
+    clippy::clone_on_ref_ptr,
+    clippy::manual_let_else,
+    clippy::std_instead_of_core,
+    clippy::use_self,
+    clippy::upper_case_acronyms,
+    elided_lifetimes_in_paths,
+    trivial_casts,
+    trivial_numeric_casts,
+    unreachable_pub,
+    unused_import_braces,
+    unused_extern_crates,
+    unused_qualifications
+)]
 
+use core::mem;
+use core::num::NonZeroUsize;
+use core::ops::{Deref, DerefMut};
+use core::time::Duration;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::num::NonZeroUsize;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{mem, thread};
+use std::thread;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{Parser, ValueEnum};
 use rustls::client::{Resumption, UnbufferedClientConnection};
@@ -198,11 +215,11 @@ enum Api {
 
 impl Api {
     fn use_buffered(&self) -> bool {
-        matches!(*self, Api::Both | Api::Buffered)
+        matches!(*self, Self::Both | Self::Buffered)
     }
 
     fn use_unbuffered(&self) -> bool {
-        matches!(*self, Api::Both | Api::Unbuffered)
+        matches!(*self, Self::Both | Self::Unbuffered)
     }
 }
 
@@ -249,8 +266,8 @@ fn bench_handshake(params: &Parameters) {
     bench_handshake_buffered(
         1,
         ResumptionParam::No,
-        client_config.clone(),
-        server_config.clone(),
+        Arc::clone(&client_config),
+        Arc::clone(&server_config),
         &params.without_latency_measurement(),
     );
 
@@ -427,8 +444,8 @@ fn multithreaded(
     thread::scope(|s| {
         let threads = (0..count.into())
             .map(|_| {
-                let client_config = client_config.clone();
-                let server_config = server_config.clone();
+                let client_config = Arc::clone(client_config);
+                let server_config = Arc::clone(server_config);
                 s.spawn(|| f(client_config, server_config))
             })
             .collect::<Vec<_>>();
@@ -771,7 +788,7 @@ impl Parameters {
                 }
                 WebPkiClientVerifier::builder_with_provider(
                     client_auth_roots.into(),
-                    provider.clone(),
+                    Arc::clone(&provider),
                 )
                 .build()
                 .unwrap()
@@ -1014,14 +1031,14 @@ impl Provider {
 #[derive(Clone)]
 struct BenchmarkParam {
     key_type: KeyType,
-    ciphersuite: rustls::CipherSuite,
+    ciphersuite: CipherSuite,
     version: &'static rustls::SupportedProtocolVersion,
 }
 
 impl BenchmarkParam {
     const fn new(
         key_type: KeyType,
-        ciphersuite: rustls::CipherSuite,
+        ciphersuite: CipherSuite,
         version: &'static rustls::SupportedProtocolVersion,
     ) -> Self {
         Self {
@@ -1080,7 +1097,7 @@ impl Unbuffered {
         }
     }
 
-    fn handshake(&mut self, peer: &mut Unbuffered) {
+    fn handshake(&mut self, peer: &mut Self) {
         loop {
             let mut progress = false;
 
@@ -1100,7 +1117,7 @@ impl Unbuffered {
         }
     }
 
-    fn swap_buffers(&mut self, peer: &mut Unbuffered) {
+    fn swap_buffers(&mut self, peer: &mut Self) {
         // our output becomes peer's input, and peer's input
         // becomes our output.
         mem::swap(&mut self.input, &mut peer.output);
