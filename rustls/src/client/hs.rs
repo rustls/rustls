@@ -6,10 +6,9 @@ use core::ops::Deref;
 
 use pki_types::ServerName;
 
-use super::ResolvesClientCert;
-use super::Tls12Resumption;
 #[cfg(feature = "tls12")]
 use super::tls12;
+use super::{ResolvesClientCert, Tls12Resumption};
 use crate::SupportedCipherSuite;
 #[cfg(feature = "logging")]
 use crate::bs_debug;
@@ -29,12 +28,10 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{
     CertificateType, Compression, ECPointFormat, ExtensionType, PskKeyExchangeMode,
 };
-use crate::msgs::handshake::ProtocolName;
-use crate::msgs::handshake::SupportedProtocolVersions;
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtension, ClientHelloPayload, ClientSessionTicket,
     HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryRequest,
-    KeyShareEntry, Random, SessionId,
+    KeyShareEntry, ProtocolName, Random, SessionId, SupportedProtocolVersions,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;

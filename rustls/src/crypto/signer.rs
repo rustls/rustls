@@ -4,14 +4,13 @@ use core::fmt::Debug;
 
 use pki_types::{AlgorithmIdentifier, CertificateDer, PrivateKeyDer, SubjectPublicKeyInfoDer};
 
+use super::CryptoProvider;
 use crate::client::ResolvesClientCert;
 use crate::enums::{SignatureAlgorithm, SignatureScheme};
 use crate::error::{Error, InconsistentKeys};
 use crate::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use crate::sync::Arc;
 use crate::x509;
-
-use super::CryptoProvider;
 
 /// An abstract signing key.
 ///

@@ -53,9 +53,8 @@
 //! [`CipherSuiteCommon::confidentiality_limit`]: crate::CipherSuiteCommon::confidentiality_limit
 //! [`KernelConnection`]: crate::kernel::KernelConnection
 
-use core::marker::PhantomData;
-
 use alloc::boxed::Box;
+use core::marker::PhantomData;
 
 use crate::client::ClientConnectionData;
 use crate::common_state::Protocol;

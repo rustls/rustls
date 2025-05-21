@@ -950,12 +950,13 @@ mod tests {
     use std::prelude::v1::*;
     use std::{println, vec};
 
+    use pki_types::ServerName;
+
     use super::{
         CertRevocationListError, Error, InconsistentKeys, InvalidMessage, OtherError, UnixTime,
     };
     #[cfg(feature = "std")]
     use crate::sync::Arc;
-    use pki_types::ServerName;
 
     #[test]
     fn certificate_error_equality() {

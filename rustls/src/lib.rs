@@ -545,10 +545,9 @@ pub mod unbuffered {
 // The public interface is:
 pub use crate::builder::{ConfigBuilder, ConfigSide, WantsVerifier, WantsVersions};
 pub use crate::common_state::{CommonState, HandshakeKind, IoState, Side};
-pub use crate::conn::kernel;
 #[cfg(feature = "std")]
 pub use crate::conn::{Connection, Reader, Writer};
-pub use crate::conn::{ConnectionCommon, SideData};
+pub use crate::conn::{ConnectionCommon, SideData, kernel};
 pub use crate::enums::{
     AlertDescription, CertificateCompressionAlgorithm, CipherSuite, ContentType, HandshakeType,
     ProtocolVersion, SignatureAlgorithm, SignatureScheme,

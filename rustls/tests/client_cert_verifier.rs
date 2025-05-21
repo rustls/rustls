@@ -12,7 +12,6 @@ use common::{
     make_client_config_with_versions_with_auth, make_pair_for_arc_configs, server_config_builder,
     server_name,
 };
-
 use rustls::server::danger::ClientCertVerified;
 use rustls::{
     AlertDescription, ClientConnection, Error, InvalidMessage, ServerConfig, ServerConnection,

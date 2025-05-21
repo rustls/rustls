@@ -12,9 +12,7 @@ use common::{
     do_handshake_until_error, make_client_config_with_versions, make_pair_for_arc_configs,
     make_server_config, server_config_builder, transfer_altered,
 };
-
 use pki_types::{CertificateDer, ServerName};
-
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
@@ -26,7 +24,6 @@ use rustls::{
     AlertDescription, CertificateError, DigitallySignedStruct, DistinguishedName, Error,
     InvalidMessage, RootCertStore,
 };
-
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::X509Name;
 
