@@ -4,16 +4,13 @@ use crypto::SupportedKxGroup;
 use rustls::crypto;
 use rustls::ffdhe_groups::FfdheGroup;
 
-pub struct KeyExchange {
+pub(crate) struct KeyExchange {
     priv_key: x25519_dalek::EphemeralSecret,
     pub_key: x25519_dalek::PublicKey,
 }
 
 impl crypto::ActiveKeyExchange for KeyExchange {
-    fn complete(
-        self: Box<KeyExchange>,
-        peer: &[u8],
-    ) -> Result<crypto::SharedSecret, rustls::Error> {
+    fn complete(self: Box<Self>, peer: &[u8]) -> Result<crypto::SharedSecret, rustls::Error> {
         let peer_array: [u8; 32] = peer
             .try_into()
             .map_err(|_| rustls::Error::from(rustls::PeerMisbehaved::InvalidKeyShare))?;
@@ -35,12 +32,12 @@ impl crypto::ActiveKeyExchange for KeyExchange {
     }
 }
 
-pub const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&X25519 as &dyn SupportedKxGroup];
+pub(crate) const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&X25519];
 
 #[derive(Debug)]
-pub struct X25519;
+pub(crate) struct X25519;
 
-impl crypto::SupportedKxGroup for X25519 {
+impl SupportedKxGroup for X25519 {
     fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
         let priv_key = x25519_dalek::EphemeralSecret::random_from_rng(rand_core::OsRng);
         Ok(Box::new(KeyExchange {

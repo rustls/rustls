@@ -9,7 +9,7 @@ use rustls::{SignatureAlgorithm, SignatureScheme};
 use signature::{RandomizedSigner, SignatureEncoding};
 
 #[derive(Clone, Debug)]
-pub struct EcdsaSigningKeyP256 {
+pub(crate) struct EcdsaSigningKeyP256 {
     key: Arc<p256::ecdsa::SigningKey>,
     scheme: SignatureScheme,
 }

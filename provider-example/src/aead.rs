@@ -10,7 +10,7 @@ use rustls::crypto::cipher::{
 };
 use rustls::{ConnectionTrafficSecrets, ContentType, ProtocolVersion};
 
-pub struct Chacha20Poly1305;
+pub(crate) struct Chacha20Poly1305;
 
 impl Tls13AeadAlgorithm for Chacha20Poly1305 {
     fn encrypter(&self, key: AeadKey, iv: Iv) -> Box<dyn MessageEncrypter> {
@@ -83,7 +83,7 @@ struct Tls13Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 impl MessageEncrypter for Tls13Cipher {
     fn encrypt(
         &mut self,
-        m: OutboundPlainMessage,
+        m: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
@@ -134,7 +134,7 @@ struct Tls12Cipher(chacha20poly1305::ChaCha20Poly1305, Iv);
 impl MessageEncrypter for Tls12Cipher {
     fn encrypt(
         &mut self,
-        m: OutboundPlainMessage,
+        m: OutboundPlainMessage<'_>,
         seq: u64,
     ) -> Result<OutboundOpaqueMessage, rustls::Error> {
         let total_len = self.encrypted_payload_len(m.payload.len());
