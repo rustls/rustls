@@ -1,5 +1,6 @@
 # keep in sync with .rustfmt.toml
 chain_width = 40
+style_edition = "2024"
 
 # format imports
 group_imports = "StdExternalCrate"
