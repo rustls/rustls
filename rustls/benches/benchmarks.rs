@@ -1,13 +1,12 @@
 #![cfg(feature = "ring")]
 #![allow(clippy::disallowed_types)]
 
-use bencher::{Bencher, benchmark_group, benchmark_main};
-use rustls::crypto::ring as provider;
-
 use std::io;
 use std::sync::Arc;
 
+use bencher::{Bencher, benchmark_group, benchmark_main};
 use rustls::ServerConnection;
+use rustls::crypto::ring as provider;
 use rustls_test::{FailsReads, KeyType, make_server_config};
 
 fn bench_ewouldblock(c: &mut Bencher) {

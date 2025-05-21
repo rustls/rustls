@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use fxhash::FxHashMap;
 use itertools::Itertools;
+use rustls_test::KeyType;
 
 use crate::Side;
 use crate::callgrind::InstructionCounts;
-use rustls_test::KeyType;
 
 /// Validates a benchmark collection, returning an error if the provided benchmarks are invalid
 ///
