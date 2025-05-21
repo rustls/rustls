@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 use rustls::crypto::hash;
 use sha2::Digest;
 
-pub struct Sha256;
+pub(crate) struct Sha256;
 
 impl hash::Hash for Sha256 {
     fn start(&self) -> Box<dyn hash::Context> {
@@ -31,7 +31,7 @@ impl hash::Context for Sha256Context {
     }
 
     fn fork(&self) -> Box<dyn hash::Context> {
-        Box::new(Sha256Context(self.0.clone()))
+        Box::new(Self(self.0.clone()))
     }
 
     fn finish(self: Box<Self>) -> hash::Output {
