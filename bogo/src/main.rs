@@ -4,9 +4,23 @@
 // https://boringssl.googlesource.com/boringssl/+/master/ssl/test
 //
 
-#![allow(clippy::disallowed_types)]
+#![warn(
+    clippy::alloc_instead_of_core,
+    clippy::clone_on_ref_ptr,
+    clippy::manual_let_else,
+    clippy::std_instead_of_core,
+    clippy::use_self,
+    clippy::upper_case_acronyms,
+    elided_lifetimes_in_paths,
+    trivial_casts,
+    trivial_numeric_casts,
+    unreachable_pub,
+    unused_import_braces,
+    unused_extern_crates,
+    unused_qualifications
+)]
 
-use std::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Formatter};
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 use std::{env, net, process, thread, time};
@@ -119,7 +133,7 @@ struct Options {
 impl Options {
     fn new() -> Self {
         let selected_provider = SelectedProvider::from_env();
-        Options {
+        Self {
             port: 0,
             shim_id: 0,
             side: Side::Client,
@@ -402,7 +416,7 @@ struct DummyServerAuth {
 
 impl DummyServerAuth {
     fn new(trusted_cert_file: &str) -> Self {
-        DummyServerAuth {
+        Self {
             parent: WebPkiServerVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
                 SelectedProvider::from_env()
@@ -478,10 +492,10 @@ struct FixedSignatureSchemeServerCertResolver {
 }
 
 impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
         let mut certkey = self.resolver.resolve(client_hello)?;
         Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
-            key: certkey.key.clone(),
+            key: Arc::clone(&certkey.key),
             scheme: self.scheme,
         });
         Some(certkey)
@@ -507,7 +521,7 @@ impl client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
             .resolver
             .resolve(root_hint_subjects, sigschemes)?;
         Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
-            key: certkey.key.clone(),
+            key: Arc::clone(&certkey.key),
             scheme: self.scheme,
         });
         Some(certkey)
@@ -607,7 +621,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
                 opts.root_hint_subjects.clone(),
             ))
         } else {
-            server::WebPkiClientVerifier::no_client_auth()
+            WebPkiClientVerifier::no_client_auth()
         };
 
     let cert = CertificateDer::pem_file_iter(&opts.cert_file)
@@ -640,7 +654,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
         cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
-            resolver: cfg.cert_resolver.clone(),
+            resolver: Arc::clone(&cfg.cert_resolver),
             scheme,
         });
     }
@@ -692,8 +706,8 @@ struct ClientCacheWithoutKxHints {
 }
 
 impl ClientCacheWithoutKxHints {
-    fn new(delay: u32) -> Arc<ClientCacheWithoutKxHints> {
-        Arc::new(ClientCacheWithoutKxHints {
+    fn new(delay: u32) -> Arc<Self> {
+        Arc::new(Self {
             delay,
             storage: Arc::new(client::ClientSessionMemoryCache::new(32)),
         })
@@ -748,7 +762,7 @@ impl client::ClientSessionStore for ClientCacheWithoutKxHints {
 }
 
 impl Debug for ClientCacheWithoutKxHints {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         // Note: we omit self.storage here as it may contain sensitive data.
         f.debug_struct("ClientCacheWithoutKxHints")
             .field("delay", &self.delay)
@@ -811,7 +825,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     if !opts.cert_file.is_empty() && opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
         cfg.client_auth_cert_resolver = Arc::new(FixedSignatureSchemeClientCertResolver {
-            resolver: cfg.client_auth_cert_resolver.clone(),
+            resolver: Arc::clone(&cfg.client_auth_cert_resolver),
             scheme,
         });
     }
