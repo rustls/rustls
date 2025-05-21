@@ -445,10 +445,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Install rust nightly toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
-          toolchain: nightly-2024-02-21
       - name: Check formatting (unstable)
         run: cargo fmt --all -- --check --config-path .rustfmt.unstable.toml
         continue-on-error: true
