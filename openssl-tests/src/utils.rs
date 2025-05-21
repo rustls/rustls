@@ -1,6 +1,6 @@
 use once_cell::sync::Lazy;
 
-pub fn verify_openssl3_available() {
+pub(crate) fn verify_openssl3_available() {
     static VERIFIED: Lazy<()> = Lazy::new(verify_openssl3_available_internal);
     *VERIFIED
 }
@@ -15,11 +15,11 @@ fn verify_openssl3_available_internal() {
             panic!(
                 "OpenSSL exited with an error status: {}\n{}",
                 output.status,
-                std::str::from_utf8(&output.stderr).unwrap_or_default()
+                str::from_utf8(&output.stderr).unwrap_or_default()
             );
         }
         Ok(output) => {
-            let version_str = std::str::from_utf8(&output.stdout).unwrap();
+            let version_str = str::from_utf8(&output.stdout).unwrap();
             let parts = version_str
                 .split(' ')
                 .collect::<Vec<_>>();
