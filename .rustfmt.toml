@@ -1,2 +1,3 @@
+# keep in sync with .rustfmt.unstable.toml
 chain_width = 40
 style_edition = "2024"
