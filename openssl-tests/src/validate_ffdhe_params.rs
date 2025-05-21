@@ -64,7 +64,7 @@ fn get_ffdhe_params_from_openssl(ffdhe_group: NamedGroup) -> (Vec<u8>, Vec<u8>) 
 
 /// Parse PEM-encoded DH parameters, returning `(p, g)`
 fn parse_dh_params_pem(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let output_str = std::str::from_utf8(data).unwrap();
+    let output_str = str::from_utf8(data).unwrap();
     let output_str_lines = output_str.lines().collect::<Vec<_>>();
     assert_eq!(output_str_lines[0], "-----BEGIN DH PARAMETERS-----");
 
@@ -86,10 +86,10 @@ fn parse_dh_params_pem(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
         .unwrap();
 
     let res: asn1::ParseResult<_> = asn1::parse(&base64_decoded, |d| {
-        d.read_element::<asn1::Sequence>()?
+        d.read_element::<asn1::Sequence<'_>>()?
             .parse(|d| {
-                let p = d.read_element::<asn1::BigUint>()?;
-                let g = d.read_element::<asn1::BigUint>()?;
+                let p = d.read_element::<asn1::BigUint<'_>>()?;
+                let g = d.read_element::<asn1::BigUint<'_>>()?;
                 Ok((p, g))
             })
     });

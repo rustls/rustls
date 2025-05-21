@@ -7,11 +7,11 @@ use rustls::ffdhe_groups::FfdheGroup;
 use rustls::{CipherSuite, NamedGroup, SupportedCipherSuite, Tls12CipherSuite};
 
 /// The (test-only) TLS1.2 ciphersuite TLS_DHE_RSA_WITH_AES_128_GCM_SHA256
-pub static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+pub(crate) static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256);
 
 #[derive(Debug)]
-pub struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
+pub(crate) struct FfdheKxGroup(pub NamedGroup, pub FfdheGroup<'static>);
 
 impl SupportedKxGroup for FfdheKxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, rustls::Error> {
