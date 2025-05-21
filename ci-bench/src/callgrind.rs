@@ -1,6 +1,6 @@
+use core::ops::Sub;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::ops::Sub;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
@@ -13,7 +13,7 @@ use crate::benchmark::Benchmark;
 const CALLGRIND_OUTPUT_SUBDIR: &str = "callgrind";
 
 /// A callgrind-based benchmark runner
-pub struct CallgrindRunner {
+pub(crate) struct CallgrindRunner {
     /// The path to the ci-bench executable
     ///
     /// This is necessary because the callgrind runner works by spawning child processes
@@ -24,21 +24,21 @@ pub struct CallgrindRunner {
 
 impl CallgrindRunner {
     /// Returns a new callgrind-based benchmark runner
-    pub fn new(executable: String, output_dir: PathBuf) -> anyhow::Result<Self> {
+    pub(crate) fn new(executable: String, output_dir: PathBuf) -> anyhow::Result<Self> {
         Self::ensure_callgrind_available()?;
 
         let callgrind_output_dir = output_dir.join(CALLGRIND_OUTPUT_SUBDIR);
         std::fs::create_dir_all(&callgrind_output_dir)
             .context("Failed to create callgrind output directory")?;
 
-        Ok(CallgrindRunner {
+        Ok(Self {
             executable,
             output_dir: callgrind_output_dir,
         })
     }
 
     /// Runs the benchmark at the specified index and returns the instruction counts for each side
-    pub fn run_bench(
+    pub(crate) fn run_bench(
         &self,
         benchmark_index: u32,
         bench: &Benchmark,
@@ -194,16 +194,16 @@ fn parse_callgrind_output(file: &Path) -> anyhow::Result<u64> {
 
 /// The instruction counts, for each side, after running a benchmark
 #[derive(Copy, Clone)]
-pub struct InstructionCounts {
+pub(crate) struct InstructionCounts {
     pub client: u64,
     pub server: u64,
 }
 
 impl Sub for InstructionCounts {
-    type Output = InstructionCounts;
+    type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        InstructionCounts {
+        Self {
             client: self.client - rhs.client,
             server: self.server - rhs.server,
         }
@@ -211,7 +211,7 @@ impl Sub for InstructionCounts {
 }
 
 /// Returns the detailed instruction diff between the baseline and the candidate
-pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result<String> {
+pub(crate) fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result<String> {
     // callgrind_annotate formats the callgrind output file, suitable for comparison with
     // callgrind_differ
     let callgrind_annotate_base = Command::new("callgrind_annotate")
@@ -279,7 +279,7 @@ impl CountInstructions {
     pub(crate) fn start() -> Self {
         #[cfg(target_os = "linux")]
         crabgrind::callgrind::toggle_collect();
-        CountInstructions
+        Self
     }
 }
 
