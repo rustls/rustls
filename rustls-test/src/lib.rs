@@ -1,5 +1,21 @@
+#![warn(
+    clippy::alloc_instead_of_core,
+    clippy::clone_on_ref_ptr,
+    clippy::manual_let_else,
+    clippy::std_instead_of_core,
+    clippy::use_self,
+    clippy::upper_case_acronyms,
+    elided_lifetimes_in_paths,
+    trivial_casts,
+    trivial_numeric_casts,
+    unreachable_pub,
+    unused_import_braces,
+    unused_extern_crates,
+    unused_qualifications
+)]
+
+use core::ops::DerefMut;
 use std::io;
-use std::ops::DerefMut;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
@@ -245,7 +261,7 @@ pub enum Altered {
 
 pub fn transfer_altered<F>(left: &mut Connection, filter: F, right: &mut Connection) -> usize
 where
-    F: Fn(&mut Message) -> Altered,
+    F: Fn(&mut Message<'_>) -> Altered,
 {
     let mut buf = [0u8; 262144];
     let mut total = 0;
@@ -322,7 +338,7 @@ static ALL_KEY_TYPES_EXCEPT_P521: &[KeyType] = &[
 ];
 
 impl KeyType {
-    pub fn all_for_provider(provider: &CryptoProvider) -> &'static [KeyType] {
+    pub fn all_for_provider(provider: &CryptoProvider) -> &'static [Self] {
         match provider
             .key_provider
             .load_private_key(Self::EcdsaP521.get_key())
@@ -453,13 +469,13 @@ impl KeyType {
 
     pub fn ca_distinguished_name(&self) -> &'static [u8] {
         match self {
-            KeyType::Rsa2048 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 2048 CA",
-            KeyType::Rsa3072 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 3072 CA",
-            KeyType::Rsa4096 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 4096 CA",
-            KeyType::EcdsaP256 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA",
-            KeyType::EcdsaP384 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p384 CA",
-            KeyType::EcdsaP521 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA",
-            KeyType::Ed25519 => b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA",
+            Self::Rsa2048 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 2048 CA",
+            Self::Rsa3072 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 3072 CA",
+            Self::Rsa4096 => b"0\x1f1\x1d0\x1b\x06\x03U\x04\x03\x0c\x14ponytown RSA 4096 CA",
+            Self::EcdsaP256 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p256 CA",
+            Self::EcdsaP384 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p384 CA",
+            Self::EcdsaP521 => b"0\x211\x1f0\x1d\x06\x03U\x04\x03\x0c\x16ponytown ECDSA p521 CA",
+            Self::Ed25519 => b"0\x1c1\x1a0\x18\x06\x03U\x04\x03\x0c\x11ponytown EdDSA CA",
         }
     }
 }
@@ -467,7 +483,7 @@ impl KeyType {
 pub fn server_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    rustls::ServerConfig::builder_with_provider(provider.clone().into())
+    ServerConfig::builder_with_provider(provider.clone().into())
         .with_safe_default_protocol_versions()
         .unwrap()
 }
@@ -476,7 +492,7 @@ pub fn server_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ServerConfig, rustls::WantsVerifier> {
-    rustls::ServerConfig::builder_with_provider(provider.clone().into())
+    ServerConfig::builder_with_provider(provider.clone().into())
         .with_protocol_versions(versions)
         .unwrap()
 }
@@ -484,7 +500,7 @@ pub fn server_config_builder_with_versions(
 pub fn client_config_builder(
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    rustls::ClientConfig::builder_with_provider(provider.clone().into())
+    ClientConfig::builder_with_provider(provider.clone().into())
         .with_safe_default_protocol_versions()
         .unwrap()
 }
@@ -493,7 +509,7 @@ pub fn client_config_builder_with_versions(
     versions: &[&'static rustls::SupportedProtocolVersion],
     provider: &CryptoProvider,
 ) -> rustls::ConfigBuilder<ClientConfig, rustls::WantsVerifier> {
-    rustls::ClientConfig::builder_with_provider(provider.clone().into())
+    ClientConfig::builder_with_provider(provider.clone().into())
         .with_protocol_versions(versions)
         .unwrap()
 }
@@ -895,8 +911,8 @@ pub fn do_handshake_until_error(
 
 pub fn do_handshake_altered(
     client: ClientConnection,
-    alter_server_message: impl Fn(&mut Message) -> Altered,
-    alter_client_message: impl Fn(&mut Message) -> Altered,
+    alter_server_message: impl Fn(&mut Message<'_>) -> Altered,
+    alter_client_message: impl Fn(&mut Message<'_>) -> Altered,
     server: ServerConnection,
 ) -> Result<(), ErrorFromPeer> {
     let mut client: Connection = Connection::Client(client);
@@ -1163,49 +1179,49 @@ impl ServerCertVerifier for MockServerVerifier {
 
 impl MockServerVerifier {
     pub fn accepts_anything() -> Self {
-        MockServerVerifier {
+        Self {
             cert_rejection_error: None,
             ..Default::default()
         }
     }
 
     pub fn expects_ocsp_response(response: &[u8]) -> Self {
-        MockServerVerifier {
+        Self {
             expected_ocsp_response: Some(response.to_vec()),
             ..Default::default()
         }
     }
 
     pub fn rejects_certificate(err: Error) -> Self {
-        MockServerVerifier {
+        Self {
             cert_rejection_error: Some(err),
             ..Default::default()
         }
     }
 
     pub fn rejects_tls12_signatures(err: Error) -> Self {
-        MockServerVerifier {
+        Self {
             tls12_signature_error: Some(err),
             ..Default::default()
         }
     }
 
     pub fn rejects_tls13_signatures(err: Error) -> Self {
-        MockServerVerifier {
+        Self {
             tls13_signature_error: Some(err),
             ..Default::default()
         }
     }
 
     pub fn offers_no_signature_schemes() -> Self {
-        MockServerVerifier {
+        Self {
             signature_schemes: vec![],
             ..Default::default()
         }
     }
 
     pub fn expects_raw_public_keys(provider: &CryptoProvider) -> Self {
-        MockServerVerifier {
+        Self {
             requires_raw_public_keys: true,
             raw_public_key_algorithms: Some(provider.signature_verification_algorithms),
             ..Default::default()
@@ -1215,7 +1231,7 @@ impl MockServerVerifier {
 
 impl Default for MockServerVerifier {
     fn default() -> Self {
-        MockServerVerifier {
+        Self {
             cert_rejection_error: None,
             tls12_signature_error: None,
             tls13_signature_error: None,
@@ -1427,7 +1443,7 @@ impl RawTls {
     pub fn receive_and_decrypt(
         &mut self,
         peer: &mut impl DerefMut<Target = ConnectionCommon<impl SideData>>,
-        f: impl Fn(Message),
+        f: impl Fn(Message<'_>),
     ) {
         let mut data = vec![];
         peer.write_tls(&mut io::Cursor::new(&mut data))
@@ -1690,8 +1706,8 @@ pub mod encoding {
     }
 
     impl Extension {
-        pub fn new_sig_algs() -> Extension {
-            Extension {
+        pub fn new_sig_algs() -> Self {
+            Self {
                 typ: ExtensionType::SignatureAlgorithms,
                 body: len_u16(
                     SignatureScheme::RSA_PKCS1_SHA256
@@ -1701,15 +1717,15 @@ pub mod encoding {
             }
         }
 
-        pub fn new_kx_groups() -> Extension {
-            Extension {
+        pub fn new_kx_groups() -> Self {
+            Self {
                 typ: ExtensionType::EllipticCurves,
                 body: len_u16(vector_of([NamedGroup::secp256r1].into_iter())),
             }
         }
 
-        pub fn new_versions() -> Extension {
-            Extension {
+        pub fn new_versions() -> Self {
+            Self {
                 typ: ExtensionType::SupportedVersions,
                 body: len_u8(vector_of(
                     [ProtocolVersion::TLSv1_3, ProtocolVersion::TLSv1_2].into_iter(),
@@ -1717,7 +1733,7 @@ pub mod encoding {
             }
         }
 
-        pub fn new_dummy_key_share() -> Extension {
+        pub fn new_dummy_key_share() -> Self {
             const SOME_POINT_ON_P256: &[u8] = &[
                 4, 41, 39, 177, 5, 18, 186, 227, 237, 220, 254, 70, 120, 40, 18, 139, 173, 41, 3,
                 38, 153, 25, 247, 8, 96, 105, 200, 196, 223, 108, 115, 40, 56, 199, 120, 121, 100,
@@ -1728,7 +1744,7 @@ pub mod encoding {
             let mut share = len_u16(SOME_POINT_ON_P256.to_vec());
             share.splice(0..0, NamedGroup::secp256r1.to_array());
 
-            Extension {
+            Self {
                 typ: ExtensionType::KeyShare,
                 body: len_u16(share),
             }
