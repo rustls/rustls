@@ -71,7 +71,8 @@ jobs:
           # lockfile causes deployment step to go wrong, due to permissions
           rm -f target/doc/.lock
           # move the result into website root
-          mv target/doc/rustls target/website/docs
+          mv target/doc/* target/website/
+          mv target/website/rustls target/website/docs
 
       - name: Package and upload artifact
         uses: actions/upload-pages-artifact@v3
