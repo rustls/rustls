@@ -113,3 +113,12 @@ fn debug_payload() {
         format!("{:?}", PayloadU24(Payload::new(vec![1, 2, 3, 4])))
     );
 }
+
+#[test]
+fn into_wire_format() {
+    // Message::into_wire_bytes() include both message-level and handshake-level headers
+    assert_eq!(
+        Message::build_key_update_request().into_wire_bytes(),
+        &[0x16, 0x3, 0x4, 0x0, 0x5, 0x18, 0x0, 0x0, 0x1, 0x1]
+    );
+}

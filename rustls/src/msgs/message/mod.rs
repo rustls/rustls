@@ -206,6 +206,13 @@ impl Message<'_> {
             payload: payload.into_owned(),
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn into_wire_bytes(self) -> Vec<u8> {
+        PlainMessage::from(self)
+            .into_unencrypted_opaque()
+            .encode()
+    }
 }
 
 impl TryFrom<PlainMessage> for Message<'static> {

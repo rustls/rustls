@@ -1,14 +1,19 @@
 #![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
 use std::prelude::v1::*;
+use std::vec;
 
 use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
-use crate::enums::SignatureScheme;
+use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
-use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
-use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
-use crate::{Error, RootCertStore};
+use crate::msgs::handshake::{
+    ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, HelloRetryExtension,
+    HelloRetryRequest, SessionId,
+};
+use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage, PlainMessage};
+use crate::{Error, PeerMisbehaved, RootCertStore};
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
@@ -47,6 +52,44 @@ mod tests {
                 "sha1 unexpectedly offered"
             );
         }
+    }
+
+    #[test]
+    fn test_client_rejects_hrr_with_varied_session_id() {
+        let config =
+            ClientConfig::builder_with_provider(super::provider::default_provider().into())
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_root_certificates(roots())
+                .with_no_client_auth();
+        let mut conn =
+            ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
+                .unwrap();
+        let mut sent = Vec::new();
+        conn.write_tls(&mut sent).unwrap();
+
+        // server replies with HRR, but does not echo `session_id` as required.
+        let hrr = Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::HelloRetryRequest,
+                payload: HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+                    cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+                    legacy_version: ProtocolVersion::TLSv1_2,
+                    session_id: SessionId::empty(),
+                    extensions: vec![HelloRetryExtension::Cookie(PayloadU16::new(vec![
+                        1, 2, 3, 4,
+                    ]))],
+                }),
+            }),
+        };
+
+        conn.read_tls(&mut hrr.into_wire_bytes().as_slice())
+            .unwrap();
+        assert_eq!(
+            conn.process_new_packets().unwrap_err(),
+            PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
+        );
     }
 }
 
