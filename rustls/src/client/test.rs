@@ -5,6 +5,7 @@ use std::vec;
 use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
+use crate::crypto::CryptoProvider;
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
@@ -160,6 +161,27 @@ fn hybrid_kx_component_share_offered_if_supported_seperately() {
     assert_eq!(key_shares[1].group, NamedGroup::X25519);
 }
 
+#[cfg(feature = "aws-lc-rs")]
+#[test]
+fn hybrid_kx_component_share_not_offered_unless_supported_seperately() {
+    use crate::crypto::aws_lc_rs;
+    let provider = CryptoProvider {
+        kx_groups: vec![aws_lc_rs::kx_group::X25519MLKEM768],
+        ..aws_lc_rs::default_provider()
+    };
+    let ch = client_hello_sent_for_config(
+        ClientConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(roots())
+            .with_no_client_auth(),
+    )
+    .unwrap();
+
+    let key_shares = ch.keyshare_extension().unwrap();
+    assert_eq!(key_shares.len(), 1);
+    assert_eq!(key_shares[0].group, NamedGroup::X25519MLKEM768);
+}
 fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPayload, Error> {
     let mut conn =
         ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())?;
