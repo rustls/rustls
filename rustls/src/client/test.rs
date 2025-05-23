@@ -4,6 +4,7 @@ use std::prelude::v1::*;
 use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
+use crate::enums::SignatureScheme;
 use crate::msgs::codec::Reader;
 use crate::msgs::handshake::{ClientHelloPayload, HandshakeMessagePayload, HandshakePayload};
 use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
@@ -28,6 +29,24 @@ mod tests {
             .tls12_resumption(Tls12Resumption::SessionIdOrTickets);
         let ch = client_hello_sent_for_config(config).unwrap();
         assert!(ch.ticket_extension().is_none());
+    }
+
+    #[test]
+    fn test_client_does_not_offer_sha1() {
+        for version in crate::ALL_VERSIONS {
+            let config =
+                ClientConfig::builder_with_provider(super::provider::default_provider().into())
+                    .with_protocol_versions(&[version])
+                    .unwrap()
+                    .with_root_certificates(roots())
+                    .with_no_client_auth();
+            let ch = client_hello_sent_for_config(config).unwrap();
+            let sigalgs = ch.sigalgs_extension().unwrap();
+            assert!(
+                !sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1),
+                "sha1 unexpectedly offered"
+            );
+        }
     }
 }
 
