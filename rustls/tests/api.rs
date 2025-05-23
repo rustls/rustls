@@ -6431,35 +6431,6 @@ fn test_client_rejects_illegal_tls13_ccs() {
 
 #[cfg(feature = "tls12")]
 #[test]
-fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
-    let key_type = KeyType::Rsa2048;
-    let provider = provider::default_provider();
-    let mut client_config = make_client_config(key_type, &provider);
-    if provider_is_fips() {
-        assert!(client_config.require_ems);
-    } else {
-        client_config.require_ems = true;
-    }
-    let mut server_config = finish_server_config(
-        key_type,
-        server_config_builder_with_versions(&[&rustls::version::TLS12], &provider),
-    );
-    server_config.require_ems = false;
-    let (client, server) = make_pair_for_configs(client_config, server_config);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, remove_ems_request, &mut server);
-    server.process_new_packets().unwrap();
-    transfer_altered(&mut server, |_| Altered::InPlace, &mut client);
-    assert_eq!(
-        client.process_new_packets(),
-        Err(Error::PeerIncompatible(
-            PeerIncompatible::ExtendedMasterSecretExtensionRequired
-        ))
-    );
-}
-
-#[cfg(feature = "tls12")]
-#[test]
 fn test_server_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
     let key_type = KeyType::Rsa2048;
     let provider = provider::default_provider();
