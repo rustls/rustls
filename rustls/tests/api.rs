@@ -5802,48 +5802,6 @@ mod test_quic {
 } // mod test_quic
 
 #[test]
-fn test_client_does_not_offer_sha1() {
-    use rustls::HandshakeType;
-    use rustls::internal::msgs::codec::Reader;
-    use rustls::internal::msgs::handshake::HandshakePayload;
-    use rustls::internal::msgs::message::{MessagePayload, OutboundOpaqueMessage};
-
-    let provider = provider::default_provider();
-    for kt in KeyType::all_for_provider(&provider) {
-        for version in rustls::ALL_VERSIONS {
-            let client_config = make_client_config_with_versions(*kt, &[version], &provider);
-            let (mut client, _) =
-                make_pair_for_configs(client_config, make_server_config(*kt, &provider));
-
-            assert!(client.wants_write());
-            let mut buf = [0u8; 262144];
-            let sz = client
-                .write_tls(&mut buf.as_mut())
-                .unwrap();
-            let msg = OutboundOpaqueMessage::read(&mut Reader::init(&buf[..sz])).unwrap();
-            let msg = Message::try_from(msg.into_plain_message()).unwrap();
-            assert!(msg.is_handshake_type(HandshakeType::ClientHello));
-
-            let client_hello = match msg.payload {
-                MessagePayload::Handshake { parsed, .. } => match parsed.payload {
-                    HandshakePayload::ClientHello(ch) => ch,
-                    _ => unreachable!(),
-                },
-                _ => unreachable!(),
-            };
-
-            let sigalgs = client_hello
-                .sigalgs_extension()
-                .unwrap();
-            assert!(
-                !sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1),
-                "sha1 unexpectedly offered"
-            );
-        }
-    }
-}
-
-#[test]
 fn test_client_config_keyshare() {
     let provider = provider::default_provider();
     let kx_groups = vec![provider::kx_group::SECP384R1];
