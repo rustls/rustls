@@ -6065,6 +6065,13 @@ fn test_client_sends_share_for_less_preferred_group() {
     // first handshake
     let (mut client_1, mut server) = make_pair_for_configs(client_config_1, server_config.clone());
     do_handshake_until_error(&mut client_1, &mut server).unwrap();
+    assert_eq!(
+        client_1
+            .negotiated_key_exchange_group()
+            .map(|kxg| kxg.name()),
+        Some(NamedGroup::secp384r1)
+    );
+    assert_eq!(client_1.handshake_kind(), Some(HandshakeKind::Full));
 
     let ops = shared_storage.ops();
     println!("storage {ops:#?}");
@@ -6074,53 +6081,19 @@ fn test_client_sends_share_for_less_preferred_group() {
         ClientStorageOp::SetKxHint(_, rustls::NamedGroup::secp384r1)
     ));
 
-    // second handshake (this must HRR to the most-preferred group)
-    let assert_client_sends_secp384_share = |msg: &mut Message| -> Altered {
-        match &msg.payload {
-            MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
-                HandshakePayload::ClientHello(ch) => {
-                    let keyshares = ch
-                        .keyshare_extension()
-                        .expect("missing key share extension");
-                    assert_eq!(keyshares.len(), 1);
-                    assert_eq!(keyshares[0].group(), rustls::NamedGroup::secp384r1);
-                }
-                _ => panic!("unexpected handshake message {parsed:?}"),
-            },
-            _ => panic!("unexpected non-handshake message {msg:?}"),
-        };
-        Altered::InPlace
-    };
-
-    let assert_server_requests_retry_to_x25519 = |msg: &mut Message| -> Altered {
-        match &msg.payload {
-            MessagePayload::Handshake { parsed, .. } => match &parsed.payload {
-                HandshakePayload::HelloRetryRequest(hrr) => {
-                    let group = hrr.requested_key_share_group();
-                    assert_eq!(group, Some(rustls::NamedGroup::X25519));
-                }
-                _ => panic!("unexpected handshake message {parsed:?}"),
-            },
-            MessagePayload::ChangeCipherSpec(_) => (),
-            _ => panic!("unexpected non-handshake message {msg:?}"),
-        };
-        Altered::InPlace
-    };
-
-    let (client_2, server) = make_pair_for_configs(client_config_2, server_config);
-    let (mut client_2, mut server) = (client_2.into(), server.into());
-    transfer_altered(
-        &mut client_2,
-        assert_client_sends_secp384_share,
-        &mut server,
+    // second handshake; HRR'd from secp384r1 to X25519
+    let (mut client_2, mut server) = make_pair_for_configs(client_config_2, server_config);
+    do_handshake(&mut client_2, &mut server);
+    assert_eq!(
+        client_2
+            .negotiated_key_exchange_group()
+            .map(|kxg| kxg.name()),
+        Some(NamedGroup::X25519)
     );
-    server.process_new_packets().unwrap();
-    transfer_altered(
-        &mut server,
-        assert_server_requests_retry_to_x25519,
-        &mut client_2,
+    assert_eq!(
+        client_2.handshake_kind(),
+        Some(HandshakeKind::FullWithHelloRetryRequest)
     );
-    client_2.process_new_packets().unwrap();
 }
 
 #[cfg(feature = "tls12")]
