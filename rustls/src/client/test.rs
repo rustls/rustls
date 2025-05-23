@@ -8,12 +8,14 @@ use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption}
 use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
+use crate::msgs::enums::Compression;
 use crate::msgs::handshake::{
     ClientHelloPayload, HandshakeMessagePayload, HandshakePayload, HelloRetryExtension,
-    HelloRetryRequest, SessionId,
+    HelloRetryRequest, Random, ServerHelloPayload, SessionId,
 };
-use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage, PlainMessage};
-use crate::{Error, PeerMisbehaved, RootCertStore};
+use crate::msgs::message::{Message, MessagePayload, OutboundOpaqueMessage};
+use crate::sync::Arc;
+use crate::{Error, PeerIncompatible, PeerMisbehaved, RootCertStore};
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
@@ -89,6 +91,53 @@ mod tests {
         assert_eq!(
             conn.process_new_packets().unwrap_err(),
             PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId.into()
+        );
+    }
+
+    #[cfg(feature = "tls12")]
+    #[test]
+    fn test_client_rejects_no_extended_master_secret_extension_when_require_ems_or_fips() {
+        let mut config =
+            ClientConfig::builder_with_provider(super::provider::default_provider().into())
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_root_certificates(roots())
+                .with_no_client_auth();
+        if config.provider.fips() {
+            assert!(config.require_ems);
+        } else {
+            config.require_ems = true;
+        }
+
+        let config = Arc::new(config);
+        let mut conn = ClientConnection::new(
+            Arc::clone(&config),
+            ServerName::try_from("localhost").unwrap(),
+        )
+        .unwrap();
+        let mut sent = Vec::new();
+        conn.write_tls(&mut sent).unwrap();
+
+        let sh = Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::ServerHello,
+                payload: HandshakePayload::ServerHello(ServerHelloPayload {
+                    random: Random::new(config.provider.secure_random).unwrap(),
+                    compression_method: Compression::Null,
+                    cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                    legacy_version: ProtocolVersion::TLSv1_2,
+                    session_id: SessionId::empty(),
+                    extensions: vec![],
+                }),
+            }),
+        };
+        conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+            .unwrap();
+
+        assert_eq!(
+            conn.process_new_packets(),
+            Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into())
         );
     }
 }
