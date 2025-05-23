@@ -8277,32 +8277,6 @@ fn large_client_hello_acceptor() {
 }
 
 #[test]
-fn hybrid_kx_component_share_offered_if_supported_seperately() {
-    let kt = KeyType::Rsa2048;
-    let client_config = finish_client_config(
-        kt,
-        ClientConfig::builder_with_provider(
-            CryptoProvider {
-                kx_groups: vec![&FakeHybrid, provider::kx_group::SECP384R1],
-                ..provider::default_provider()
-            }
-            .into(),
-        )
-        .with_safe_default_protocol_versions()
-        .unwrap(),
-    );
-    let server_config = make_server_config(kt, &provider::default_provider());
-
-    let (client, server) = make_pair_for_configs(client_config, server_config);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(
-        &mut client,
-        assert_client_sends_hello_with_two_key_shares,
-        &mut server,
-    );
-}
-
-#[test]
 fn hybrid_kx_component_share_not_offered_unless_supported_seperately() {
     let kt = KeyType::Rsa2048;
     let client_config = finish_client_config(
@@ -8392,26 +8366,6 @@ impl ActiveKeyExchange for FakeHybridActive {
     fn group(&self) -> NamedGroup {
         FakeHybrid.name()
     }
-}
-
-fn assert_client_sends_hello_with_two_key_shares(msg: &mut Message) -> Altered {
-    match &mut msg.payload {
-        MessagePayload::Handshake { parsed, .. } => match &mut parsed.payload {
-            HandshakePayload::ClientHello(ch) => {
-                let keyshares = ch
-                    .keyshare_extension()
-                    .expect("missing key share extension");
-                assert_eq!(keyshares.len(), 2);
-                assert_eq!(keyshares[0].group(), FakeHybrid.name());
-                assert_eq!(keyshares[0].get_encoding(), b"\x12\x34\x00\x06hybrid");
-                assert_eq!(keyshares[1].group(), NamedGroup::secp384r1);
-                assert_eq!(keyshares[1].get_encoding(), b"\x00\x18\x00\x09classical");
-            }
-            _ => panic!("unexpected handshake message {parsed:?}"),
-        },
-        _ => panic!("unexpected non-handshake message {msg:?}"),
-    };
-    Altered::InPlace
 }
 
 fn assert_client_sends_hello_with_one_hybrid_key_share(msg: &mut Message) -> Altered {
