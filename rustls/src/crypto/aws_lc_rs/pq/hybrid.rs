@@ -174,6 +174,7 @@ impl Layout {
         self.split(share, self.post_quantum_server_share_len)
     }
 
+    /// Return the PQ and classical component of a key share.
     fn split<'a>(
         &self,
         share: &'a [u8],
@@ -184,8 +185,14 @@ impl Layout {
         }
 
         Some(match self.post_quantum_first {
-            true => share.split_at(post_quantum_share_len),
-            false => share.split_at(self.classical_share_len),
+            true => {
+                let (first_share, second_share) = share.split_at(post_quantum_share_len);
+                (first_share, second_share)
+            }
+            false => {
+                let (first_share, second_share) = share.split_at(self.classical_share_len);
+                (second_share, first_share)
+            }
         })
     }
 
