@@ -5871,6 +5871,26 @@ fn test_client_config_keyshare_mismatch() {
     assert!(do_handshake_until_error(&mut client, &mut server).is_err());
 }
 
+#[test]
+fn exercise_all_key_exchange_methods() {
+    for version in rustls::ALL_VERSIONS {
+        for kx_group in provider::ALL_KX_GROUPS {
+            if !kx_group.usable_for_version(version.version) {
+                continue;
+            }
+
+            let provider = provider::default_provider();
+            let client_config =
+                make_client_config_with_kx_groups(KeyType::Rsa2048, vec![*kx_group], &provider);
+            let server_config =
+                make_server_config_with_kx_groups(KeyType::Rsa2048, vec![*kx_group], &provider);
+            let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
+            assert!(do_handshake_until_error(&mut client, &mut server).is_ok());
+            println!("kx_group {:?} is self-consistent", kx_group.name());
+        }
+    }
+}
+
 #[cfg(feature = "tls12")]
 #[test]
 fn test_client_sends_helloretryrequest() {
