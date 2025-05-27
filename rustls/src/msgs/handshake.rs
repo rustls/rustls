@@ -422,10 +422,6 @@ impl KeyShareEntry {
             payload: PayloadU16::new(payload.into()),
         }
     }
-
-    pub fn group(&self) -> NamedGroup {
-        self.group
-    }
 }
 
 impl Codec<'_> for KeyShareEntry {
