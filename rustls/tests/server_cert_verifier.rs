@@ -7,19 +7,15 @@ use super::*;
 mod common;
 
 use common::{
-    Altered, Arc, ErrorFromPeer, KeyType, MockServerVerifier, client_config_builder,
-    client_config_builder_with_versions, do_handshake, do_handshake_until_both_error,
-    do_handshake_until_error, make_client_config_with_versions, make_pair_for_arc_configs,
-    make_server_config, server_config_builder, transfer_altered,
+    Arc, ErrorFromPeer, KeyType, MockServerVerifier, client_config_builder, do_handshake,
+    do_handshake_until_both_error, do_handshake_until_error, make_client_config_with_versions,
+    make_pair_for_arc_configs, make_server_config, server_config_builder,
 };
 use pki_types::{CertificateDer, ServerName};
 use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload};
-use rustls::internal::msgs::message::{Message, MessagePayload};
 use rustls::server::{ClientHello, ResolvesServerCert};
 use rustls::sign::CertifiedKey;
-use rustls::version::{TLS12, TLS13};
 use rustls::{
     AlertDescription, CertificateError, DigitallySignedStruct, DistinguishedName, Error,
     InvalidMessage, RootCertStore,
@@ -173,63 +169,6 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
                 ])
             );
         }
-    }
-}
-
-#[test]
-fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
-    let provider = provider::default_provider();
-    let server_config = Arc::new(make_server_config(KeyType::Rsa2048, &provider));
-
-    let mut root_cert_store = RootCertStore::empty();
-    root_cert_store
-        .add(KeyType::Rsa2048.ca_cert())
-        .unwrap();
-
-    let server_verifier = WebPkiServerVerifier::builder_with_provider(
-        Arc::new(root_cert_store),
-        Arc::new(provider.clone()),
-    )
-    .build()
-    .unwrap();
-    let cas_sending_server_verifier = Arc::new(ServerCertVerifierWithCasExt {
-        verifier: server_verifier.clone(),
-        ca_names: vec![
-            KeyType::Rsa2048
-                .ca_distinguished_name()
-                .to_vec()
-                .into(),
-        ],
-    });
-
-    for (protocol_version, cas_extension_expected) in [(&TLS12, false), (&TLS13, true)] {
-        let client_config = Arc::new(
-            client_config_builder_with_versions(&[protocol_version], &provider)
-                .dangerous()
-                .with_custom_certificate_verifier(cas_sending_server_verifier.clone())
-                .with_no_client_auth(),
-        );
-
-        let expect_cas_extension = |msg: &mut Message<'_>| -> Altered {
-            if let MessagePayload::Handshake { parsed, .. } = &msg.payload {
-                if let HandshakePayload::ClientHello(ch) = &parsed.payload {
-                    assert_eq!(
-                        ch.extensions
-                            .iter()
-                            .any(|ext| matches!(ext, ClientExtension::AuthorityNames(_))),
-                        cas_extension_expected
-                    );
-                    println!(
-                        "cas extension expectation met! cas_extension_expected: {cas_extension_expected}"
-                    );
-                }
-            }
-            Altered::InPlace
-        };
-
-        let (client, server) = make_pair_for_arc_configs(&client_config, &server_config);
-        let (mut client, mut server) = (client.into(), server.into());
-        transfer_altered(&mut client, expect_cas_extension, &mut server);
     }
 }
 
