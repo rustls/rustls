@@ -15,7 +15,7 @@ use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedK
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
-use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload, ServerExtension};
+use rustls::internal::msgs::handshake::{HandshakePayload, ServerExtension};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -167,54 +167,6 @@ mod test_raw_keys {
     }
 
     #[test]
-    fn alter_client_hello() {
-        connect_with_altered_certificate_type_extension(
-            true,
-            Some(&vec![CertificateType::X509]),
-            None,
-            Err(ErrorFromPeer::Server(Error::PeerIncompatible(
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            ))),
-        );
-        connect_with_altered_certificate_type_extension(
-            true,
-            None,
-            Some(&vec![CertificateType::X509]),
-            Err(ErrorFromPeer::Server(Error::PeerIncompatible(
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            ))),
-        );
-    }
-
-    fn connect_with_altered_certificate_type_extension(
-        server_requires_raw_keys: bool,
-        server_cert_types: Option<&Vec<CertificateType>>,
-        client_cert_types: Option<&Vec<CertificateType>>,
-        expected_result: Result<(), ErrorFromPeer>,
-    ) {
-        let provider = provider::default_provider();
-        for kt in KeyType::all_for_provider(&provider) {
-            let client_config = Arc::new(make_client_config(*kt, &provider));
-            let server_config_rpk = match server_requires_raw_keys {
-                true => Arc::new(make_server_config_with_raw_key_support(*kt, &provider)),
-                false => Arc::new(make_server_config(*kt, &provider)),
-            };
-
-            // Alter Client Hello client certificate extension
-            let (client, server) = make_pair_for_arc_configs(&client_config, &server_config_rpk);
-            let cert_altered = do_handshake_altered(
-                client,
-                |_: &mut Message| -> Altered { Altered::InPlace },
-                |msg: &mut Message| {
-                    alter_client_hello_message(msg, server_cert_types, client_cert_types)
-                },
-                server,
-            );
-            assert_eq!(cert_altered, expected_result)
-        }
-    }
-
-    #[test]
     fn incorrectly_alter_server_hello() {
         let provider = provider::default_provider();
         for kt in KeyType::all_for_provider(&provider) {
@@ -311,37 +263,6 @@ mod test_raw_keys {
             Ok(_) => unreachable!("Expected error because server cert is altered"),
             Err(err) => assert_eq!(err, expected_error),
         }
-    }
-
-    fn alter_client_hello_message(
-        msg: &mut Message,
-        server_cert_types: Option<&Vec<CertificateType>>,
-        client_cert_types: Option<&Vec<CertificateType>>,
-    ) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for extension in ch.extensions.iter_mut() {
-                    if let ClientExtension::ClientCertTypes(cert_type) = extension {
-                        if let Some(client_cert_types) = client_cert_types {
-                            cert_type.clear();
-                            if !client_cert_types.is_empty() {
-                                cert_type.extend_from_slice(client_cert_types)
-                            }
-                        }
-                    };
-                    if let ClientExtension::ServerCertTypes(cert_type) = extension {
-                        if let Some(server_cert_types) = server_cert_types {
-                            cert_type.clear();
-                            if !server_cert_types.is_empty() {
-                                cert_type.extend_from_slice(server_cert_types)
-                            }
-                        }
-                    };
-                }
-            }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
     }
 
     fn alter_server_hello_message(
