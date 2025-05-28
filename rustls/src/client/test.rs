@@ -21,7 +21,10 @@ use crate::{Error, PeerIncompatible, PeerMisbehaved, RootCertStore};
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
     use super::super::*;
-    use crate::version;
+    use crate::msgs::handshake::ClientExtension;
+    use crate::pki_types::UnixTime;
+    use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use crate::{DigitallySignedStruct, DistinguishedName, version};
 
     /// Tests that session_ticket(35) extension
     /// is not sent if the client does not support TLS 1.2.
@@ -138,6 +141,78 @@ mod tests {
             conn.process_new_packets(),
             Err(PeerIncompatible::ExtendedMasterSecretExtensionRequired.into())
         );
+    }
+
+    #[test]
+    fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
+        let cas_sending_server_verifier =
+            ServerVerifierWithAuthorityNames(vec![DistinguishedName::from(b"hello".to_vec())]);
+
+        for (protocol_version, cas_extension_expected) in
+            [(&version::TLS12, false), (&version::TLS13, true)]
+        {
+            let client_hello = client_hello_sent_for_config(
+                ClientConfig::builder_with_provider(super::provider::default_provider().into())
+                    .with_protocol_versions(&[protocol_version])
+                    .unwrap()
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(cas_sending_server_verifier.clone()))
+                    .with_no_client_auth(),
+            )
+            .unwrap();
+            assert_eq!(
+                client_hello
+                    .extensions
+                    .iter()
+                    .any(|ext| matches!(ext, ClientExtension::AuthorityNames(_))),
+                cas_extension_expected
+            );
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct ServerVerifierWithAuthorityNames(Vec<DistinguishedName>);
+
+    impl ServerCertVerifier for ServerVerifierWithAuthorityNames {
+        fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+            Some(self.0.as_slice())
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, Error> {
+            unreachable!()
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            unreachable!()
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            unreachable!()
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            vec![SignatureScheme::RSA_PKCS1_SHA1]
+        }
     }
 }
 
