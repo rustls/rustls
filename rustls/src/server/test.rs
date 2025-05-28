@@ -70,10 +70,15 @@ fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
     use super::super::*;
+    use crate::common_state::KxState;
+    use crate::crypto::{
+        ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, SupportedKxGroup,
+    };
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{ServerConfig, ServerConnection};
-    use crate::version;
+    use crate::sync::Arc;
+    use crate::{CipherSuiteCommon, SupportedCipherSuite, Tls12CipherSuite, version};
 
     #[cfg(feature = "tls12")]
     #[test]
@@ -111,6 +116,43 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "tls12")]
+    #[test]
+    fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
+        let provider = CryptoProvider {
+            kx_groups: vec![FAKE_FFDHE_GROUP],
+            cipher_suites: vec![TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
+            ..super::provider::default_provider()
+        };
+        let config = ServerConfig::builder_with_provider(provider.into())
+            .with_protocol_versions(&[&version::TLS12])
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(server_cert(), server_key())
+            .unwrap();
+
+        let mut conn = ServerConnection::new(config.into()).unwrap();
+
+        let mut ch = minimal_client_hello();
+        ch.cipher_suites
+            .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
+        let ch = Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::ClientHello,
+                payload: HandshakePayload::ClientHello(ch),
+            }),
+        };
+        conn.read_tls(&mut ch.into_wire_bytes().as_slice())
+            .unwrap();
+        conn.process_new_packets().unwrap();
+
+        let KxState::Start(skxg) = &conn.kx_state else {
+            panic!("unexpected kx_state");
+        };
+        assert_eq!(skxg.name(), FAKE_FFDHE_GROUP.name());
+    }
+
     fn server_key() -> PrivateKeyDer<'static> {
         PrivateKeyDer::from_pem_reader(
             &mut include_bytes!("../../../test-ca/rsa-2048/end.key").as_slice(),
@@ -124,6 +166,58 @@ mod tests {
             CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/inter.der")[..]),
         ]
     }
+
+    static FAKE_FFDHE_GROUP: &'static dyn SupportedKxGroup = &FakeFfdheGroup;
+
+    #[derive(Debug)]
+    struct FakeFfdheGroup;
+
+    impl SupportedKxGroup for FakeFfdheGroup {
+        fn name(&self) -> NamedGroup {
+            NamedGroup::FFDHE2048
+        }
+
+        fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, Error> {
+            Ok(Box::new(ActiveFakeFfdhe))
+        }
+    }
+
+    #[derive(Debug)]
+    struct ActiveFakeFfdhe;
+
+    impl ActiveKeyExchange for ActiveFakeFfdhe {
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn complete(
+            self: Box<Self>,
+            _peer_pub_key: &[u8],
+        ) -> Result<crate::crypto::SharedSecret, Error> {
+            todo!()
+        }
+
+        fn pub_key(&self) -> &[u8] {
+            b"ActiveFakeFfdhe pub key"
+        }
+
+        fn group(&self) -> NamedGroup {
+            NamedGroup::FFDHE2048
+        }
+    }
+
+    static TLS_DHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+        SupportedCipherSuite::Tls12(&TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256);
+
+    static TLS12_DHE_RSA_WITH_AES_128_GCM_SHA256: Tls12CipherSuite =
+        match &super::provider::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 {
+            SupportedCipherSuite::Tls12(provider) => Tls12CipherSuite {
+                common: CipherSuiteCommon {
+                    suite: CipherSuite::TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+                    ..provider.common
+                },
+                kx: KeyExchangeAlgorithm::DHE,
+                ..**provider
+            },
+            _ => unreachable!(),
+        };
 }
 
 fn minimal_client_hello() -> ClientHelloPayload {
