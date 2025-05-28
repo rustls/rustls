@@ -119,28 +119,54 @@ mod tests {
     #[cfg(feature = "tls12")]
     #[test]
     fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
-        let provider = CryptoProvider {
-            kx_groups: vec![FAKE_FFDHE_GROUP],
-            cipher_suites: vec![TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
-            ..super::provider::default_provider()
-        };
-        let config = ServerConfig::builder_with_provider(provider.into())
+        let config = ServerConfig::builder_with_provider(ffdhe_provider().into())
             .with_protocol_versions(&[&version::TLS12])
             .unwrap()
             .with_no_client_auth()
             .with_single_cert(server_cert(), server_key())
             .unwrap();
 
-        let mut conn = ServerConnection::new(config.into()).unwrap();
+        let mut ch = minimal_client_hello();
+        ch.cipher_suites
+            .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
+
+        server_chooses_ffdhe_group_for_client_hello(
+            ServerConnection::new(config.into()).unwrap(),
+            ch,
+        );
+    }
+
+    #[cfg(feature = "tls12")]
+    #[test]
+    fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
+        let config = ServerConfig::builder_with_provider(ffdhe_provider().into())
+            .with_protocol_versions(&[&version::TLS12])
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(server_cert(), server_key())
+            .unwrap();
 
         let mut ch = minimal_client_hello();
         ch.cipher_suites
             .push(TLS_DHE_RSA_WITH_AES_128_GCM_SHA256.suite());
+        ch.extensions
+            .retain(|ext| ext.ext_type() != ExtensionType::EllipticCurves);
+
+        server_chooses_ffdhe_group_for_client_hello(
+            ServerConnection::new(config.into()).unwrap(),
+            ch,
+        );
+    }
+
+    fn server_chooses_ffdhe_group_for_client_hello(
+        mut conn: ServerConnection,
+        client_hello: ClientHelloPayload,
+    ) {
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
             payload: MessagePayload::handshake(HandshakeMessagePayload {
                 typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ch),
+                payload: HandshakePayload::ClientHello(client_hello),
             }),
         };
         conn.read_tls(&mut ch.into_wire_bytes().as_slice())
@@ -165,6 +191,14 @@ mod tests {
             CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/end.der")[..]),
             CertificateDer::from(&include_bytes!("../../../test-ca/rsa-2048/inter.der")[..]),
         ]
+    }
+
+    fn ffdhe_provider() -> CryptoProvider {
+        CryptoProvider {
+            kx_groups: vec![FAKE_FFDHE_GROUP],
+            cipher_suites: vec![TLS_DHE_RSA_WITH_AES_128_GCM_SHA256],
+            ..super::provider::default_provider()
+        }
     }
 
     static FAKE_FFDHE_GROUP: &'static dyn SupportedKxGroup = &FakeFfdheGroup;
