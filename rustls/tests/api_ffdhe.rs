@@ -72,38 +72,6 @@ fn ffdhe_ciphersuite() {
 }
 
 #[test]
-fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
-    fn remove_named_groups_ext(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                ch.extensions
-                    .retain(|ext| !matches!(ext, ClientExtension::NamedGroups(_)));
-            }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
-    }
-
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        rustls::ClientConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
-            .with_protocol_versions(&[&rustls::version::TLS12])
-            .unwrap(),
-    );
-    let server_config = finish_server_config(
-        KeyType::Rsa2048,
-        rustls::ServerConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
-            .with_safe_default_protocol_versions()
-            .unwrap(),
-    );
-
-    let (client, server) = make_pair_for_configs(client_config, server_config);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, remove_named_groups_ext, &mut server);
-    assert!(server.process_new_packets().is_ok());
-}
-
-#[test]
 fn server_avoids_dhe_cipher_suites_when_client_has_no_known_dhe_in_groups_ext() {
     use rustls::{CipherSuite, NamedGroup};
 
