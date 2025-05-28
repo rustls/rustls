@@ -72,42 +72,6 @@ fn ffdhe_ciphersuite() {
 }
 
 #[test]
-fn server_picks_ffdhe_group_when_clienthello_has_no_ffdhe_group_in_groups_ext() {
-    fn clear_named_groups_ext(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for mut ext in ch.extensions.iter_mut() {
-                    if let ClientExtension::NamedGroups(ngs) = &mut ext {
-                        ngs.clear();
-                        ngs.push(NamedGroup::X448);
-                    }
-                }
-            }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
-    }
-
-    let client_config = finish_client_config(
-        KeyType::Rsa2048,
-        rustls::ClientConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
-            .with_protocol_versions(&[&rustls::version::TLS12])
-            .unwrap(),
-    );
-    let server_config = finish_server_config(
-        KeyType::Rsa2048,
-        rustls::ServerConfig::builder_with_provider(ffdhe::ffdhe_provider().into())
-            .with_protocol_versions(&[&rustls::version::TLS12])
-            .unwrap(),
-    );
-
-    let (client, server) = make_pair_for_configs(client_config, server_config);
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(&mut client, clear_named_groups_ext, &mut server);
-    assert!(server.process_new_packets().is_ok());
-}
-
-#[test]
 fn server_picks_ffdhe_group_when_clienthello_has_no_groups_ext() {
     fn remove_named_groups_ext(msg: &mut Message) -> Altered {
         if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
