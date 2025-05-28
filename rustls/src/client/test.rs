@@ -20,11 +20,21 @@ use crate::{Error, PeerIncompatible, PeerMisbehaved, RootCertStore};
 
 #[macro_rules_attribute::apply(test_for_each_provider)]
 mod tests {
+    use std::sync::OnceLock;
+
     use super::super::*;
-    use crate::msgs::handshake::ClientExtension;
-    use crate::pki_types::UnixTime;
+    use crate::client::AlwaysResolvesClientRawPublicKeys;
+    use crate::crypto::cipher::MessageEncrypter;
+    use crate::crypto::tls13::OkmBlock;
+    use crate::msgs::enums::CertificateType;
+    use crate::msgs::handshake::{ClientExtension, KeyShareEntry, ServerExtension};
+    use crate::msgs::message::PlainMessage;
+    use crate::pki_types::pem::PemObject;
+    use crate::pki_types::{PrivateKeyDer, UnixTime};
+    use crate::sign::CertifiedKey;
+    use crate::tls13::key_schedule::{derive_traffic_iv, derive_traffic_key};
     use crate::verify::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-    use crate::{DigitallySignedStruct, DistinguishedName, version};
+    use crate::{DigitallySignedStruct, DistinguishedName, KeyLog, version};
 
     /// Tests that session_ticket(35) extension
     /// is not sent if the client does not support TLS 1.2.
@@ -170,6 +180,149 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id_by_omission() {
+        assert_eq!(
+            client_requiring_rpk_receives_server_ee(vec![]),
+            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
+        );
+    }
+
+    #[test]
+    fn test_client_requiring_rpk_rejects_server_that_only_offers_x509_id() {
+        assert_eq!(
+            client_requiring_rpk_receives_server_ee(vec![ServerExtension::ServerCertType(
+                CertificateType::X509
+            )]),
+            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
+        );
+    }
+
+    #[test]
+    fn test_client_requiring_rpk_rejects_server_that_only_demands_x509_by_omission() {
+        assert_eq!(
+            client_requiring_rpk_receives_server_ee(vec![ServerExtension::ServerCertType(
+                CertificateType::RawPublicKey
+            )]),
+            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
+        );
+    }
+
+    #[test]
+    fn test_client_requiring_rpk_rejects_server_that_only_demands_x509() {
+        assert_eq!(
+            client_requiring_rpk_receives_server_ee(vec![
+                ServerExtension::ClientCertType(CertificateType::X509),
+                ServerExtension::ServerCertType(CertificateType::RawPublicKey)
+            ]),
+            Err(PeerIncompatible::IncorrectCertificateTypeExtension.into())
+        );
+    }
+
+    #[test]
+    fn test_client_requiring_rpk_accepts_rpk_server() {
+        assert_eq!(
+            client_requiring_rpk_receives_server_ee(vec![
+                ServerExtension::ClientCertType(CertificateType::RawPublicKey),
+                ServerExtension::ServerCertType(CertificateType::RawPublicKey)
+            ]),
+            Ok(())
+        );
+    }
+
+    fn client_requiring_rpk_receives_server_ee(
+        encrypted_extensions: Vec<ServerExtension>,
+    ) -> Result<(), Error> {
+        let fake_server_crypto = Arc::new(FakeServerCrypto::new());
+        let mut conn = ClientConnection::new(
+            client_config_for_rpk(fake_server_crypto.clone()).into(),
+            ServerName::try_from("localhost").unwrap(),
+        )
+        .unwrap();
+        let mut sent = Vec::new();
+        conn.write_tls(&mut sent).unwrap();
+
+        let sh = Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::ServerHello,
+                payload: HandshakePayload::ServerHello(ServerHelloPayload {
+                    random: Random([0; 32]),
+                    compression_method: Compression::Null,
+                    cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
+                    legacy_version: ProtocolVersion::TLSv1_3,
+                    session_id: SessionId::empty(),
+                    extensions: vec![ServerExtension::KeyShare(KeyShareEntry {
+                        group: NamedGroup::X25519,
+                        payload: PayloadU16::new(vec![0xaa; 32]),
+                    })],
+                }),
+            }),
+        };
+        conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+            .unwrap();
+        conn.process_new_packets().unwrap();
+
+        let ee = Message {
+            version: ProtocolVersion::TLSv1_3,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::EncryptedExtensions,
+                payload: HandshakePayload::EncryptedExtensions(encrypted_extensions),
+            }),
+        };
+
+        let mut encrypter = fake_server_crypto.server_handshake_encrypter();
+        let enc_ee = encrypter
+            .encrypt(PlainMessage::from(ee).borrow_outbound(), 0)
+            .unwrap();
+        conn.read_tls(&mut enc_ee.encode().as_slice())
+            .unwrap();
+        conn.process_new_packets().map(|_| ())
+    }
+
+    fn client_config_for_rpk(key_log: Arc<dyn KeyLog>) -> ClientConfig {
+        let mut config = ClientConfig::builder_with_provider(x25519_provider().into())
+            .with_protocol_versions(&[&version::TLS13])
+            .unwrap()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(ServerVerifierRequiringRpk))
+            .with_client_cert_resolver(Arc::new(AlwaysResolvesClientRawPublicKeys::new(Arc::new(
+                client_certified_key(),
+            ))));
+        config.key_log = key_log;
+        config
+    }
+
+    fn client_certified_key() -> CertifiedKey {
+        let key = super::provider::default_provider()
+            .key_provider
+            .load_private_key(client_key())
+            .unwrap();
+        let public_key_as_cert = vec![CertificateDer::from(
+            key.public_key()
+                .unwrap()
+                .as_ref()
+                .to_vec(),
+        )];
+        CertifiedKey::new(public_key_as_cert, key)
+    }
+
+    fn client_key() -> PrivateKeyDer<'static> {
+        PrivateKeyDer::from_pem_reader(
+            &mut include_bytes!("../../../test-ca/rsa-2048/client.key").as_slice(),
+        )
+        .unwrap()
+    }
+
+    fn x25519_provider() -> CryptoProvider {
+        // ensures X25519 is offered irrespective of cfg(feature = "fips"), which eases
+        // creation of fake server messages.
+        CryptoProvider {
+            kx_groups: vec![super::provider::kx_group::X25519],
+            ..super::provider::default_provider()
+        }
+    }
+
     #[derive(Clone, Debug)]
     struct ServerVerifierWithAuthorityNames(Vec<DistinguishedName>);
 
@@ -212,6 +365,98 @@ mod tests {
 
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             vec![SignatureScheme::RSA_PKCS1_SHA1]
+        }
+    }
+
+    #[derive(Debug)]
+    struct ServerVerifierRequiringRpk;
+
+    impl ServerCertVerifier for ServerVerifierRequiringRpk {
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, Error> {
+            todo!()
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            todo!()
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            todo!()
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            vec![SignatureScheme::RSA_PKCS1_SHA1]
+        }
+
+        fn requires_raw_public_keys(&self) -> bool {
+            true
+        }
+    }
+
+    #[derive(Debug)]
+    struct FakeServerCrypto {
+        server_handshake_secret: OnceLock<Vec<u8>>,
+    }
+
+    impl FakeServerCrypto {
+        fn new() -> Self {
+            Self {
+                server_handshake_secret: OnceLock::new(),
+            }
+        }
+
+        fn server_handshake_encrypter(&self) -> Box<dyn MessageEncrypter> {
+            let cipher_suite = super::provider::cipher_suite::TLS13_AES_128_GCM_SHA256
+                .tls13()
+                .unwrap();
+
+            let secret = self
+                .server_handshake_secret
+                .get()
+                .unwrap();
+
+            let expander = cipher_suite
+                .hkdf_provider
+                .expander_for_okm(&OkmBlock::new(secret));
+
+            // Derive Encrypter
+            let key = derive_traffic_key(expander.as_ref(), cipher_suite.aead_alg);
+            let iv = derive_traffic_iv(expander.as_ref());
+            cipher_suite.aead_alg.encrypter(key, iv)
+        }
+    }
+
+    impl KeyLog for FakeServerCrypto {
+        fn will_log(&self, _label: &str) -> bool {
+            true
+        }
+
+        fn log(&self, label: &str, _client_random: &[u8], secret: &[u8]) {
+            if label == "SERVER_HANDSHAKE_TRAFFIC_SECRET" {
+                self.server_handshake_secret
+                    .set(secret.to_vec())
+                    .unwrap();
+            }
         }
     }
 }
