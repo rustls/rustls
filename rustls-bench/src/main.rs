@@ -4,7 +4,6 @@
 // etc. because it's unstable at the time of writing.
 #![warn(
     clippy::alloc_instead_of_core,
-    clippy::clone_on_ref_ptr,
     clippy::manual_let_else,
     clippy::std_instead_of_core,
     clippy::use_self,
