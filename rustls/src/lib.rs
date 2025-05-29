@@ -333,7 +333,6 @@
 #![cfg_attr(not(any(read_buf, bench, coverage_nightly)), forbid(unstable_features))]
 #![warn(
     clippy::alloc_instead_of_core,
-    clippy::clone_on_ref_ptr,
     clippy::manual_let_else,
     clippy::std_instead_of_core,
     clippy::use_self,
