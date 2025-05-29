@@ -1,4 +1,5 @@
 #![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+use core::sync::atomic::{AtomicBool, Ordering};
 use std::prelude::v1::*;
 use std::vec;
 
@@ -26,8 +27,12 @@ mod tests {
     use crate::client::AlwaysResolvesClientRawPublicKeys;
     use crate::crypto::cipher::MessageEncrypter;
     use crate::crypto::tls13::OkmBlock;
-    use crate::msgs::enums::CertificateType;
-    use crate::msgs::handshake::{ClientExtension, KeyShareEntry, ServerExtension};
+    use crate::msgs::base::PayloadU8;
+    use crate::msgs::enums::{CertificateType, ECCurveType};
+    use crate::msgs::handshake::{
+        CertificateChain, ClientExtension, EcParameters, KeyShareEntry, ServerEcdhParams,
+        ServerExtension, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    };
     use crate::msgs::message::PlainMessage;
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{PrivateKeyDer, UnixTime};
@@ -177,6 +182,142 @@ mod tests {
                     .any(|ext| matches!(ext, ClientExtension::AuthorityNames(_))),
                 cas_extension_expected
             );
+        }
+    }
+
+    /// Regression test for <https://github.com/seanmonstar/reqwest/issues/2191>
+    #[cfg(feature = "tls12")]
+    #[test]
+    fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
+        let verifier = Arc::new(ExpectSha1EcdsaVerifier::default());
+        let config = ClientConfig::builder_with_provider(x25519_provider().into())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .dangerous()
+            .with_custom_certificate_verifier(verifier.clone())
+            .with_no_client_auth();
+
+        let mut conn =
+            ClientConnection::new(config.into(), ServerName::try_from("localhost").unwrap())
+                .unwrap();
+        let mut sent = Vec::new();
+        conn.write_tls(&mut sent).unwrap();
+
+        let sh = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::ServerHello,
+                payload: HandshakePayload::ServerHello(ServerHelloPayload {
+                    random: Random([0u8; 32]),
+                    compression_method: Compression::Null,
+                    cipher_suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                    legacy_version: ProtocolVersion::TLSv1_2,
+                    session_id: SessionId::empty(),
+                    extensions: vec![ServerExtension::ExtendedMasterSecretAck],
+                }),
+            }),
+        };
+        conn.read_tls(&mut sh.into_wire_bytes().as_slice())
+            .unwrap();
+        conn.process_new_packets().unwrap();
+
+        let cert = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::Certificate,
+                payload: HandshakePayload::Certificate(CertificateChain(vec![
+                    CertificateDer::from(&b"does not matter"[..]),
+                ])),
+            }),
+        };
+        conn.read_tls(&mut cert.into_wire_bytes().as_slice())
+            .unwrap();
+        conn.process_new_packets().unwrap();
+
+        let server_kx = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::ServerKeyExchange,
+                payload: HandshakePayload::ServerKeyExchange(ServerKeyExchangePayload::Known(
+                    ServerKeyExchange {
+                        dss: DigitallySignedStruct::new(
+                            SignatureScheme::ECDSA_SHA1_Legacy,
+                            b"also does not matter".to_vec(),
+                        ),
+                        params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
+                            curve_params: EcParameters {
+                                curve_type: ECCurveType::NamedCurve,
+                                named_group: NamedGroup::X25519,
+                            },
+                            public: PayloadU8::new(vec![0xab; 32]),
+                        }),
+                    },
+                )),
+            }),
+        };
+        conn.read_tls(&mut server_kx.into_wire_bytes().as_slice())
+            .unwrap();
+        conn.process_new_packets().unwrap();
+
+        let server_done = Message {
+            version: ProtocolVersion::TLSv1_2,
+            payload: MessagePayload::handshake(HandshakeMessagePayload {
+                typ: HandshakeType::ServerHelloDone,
+                payload: HandshakePayload::ServerHelloDone,
+            }),
+        };
+        conn.read_tls(&mut server_done.into_wire_bytes().as_slice())
+            .unwrap();
+        conn.process_new_packets().unwrap();
+
+        assert!(
+            verifier
+                .seen_sha1_signature
+                .load(Ordering::SeqCst)
+        );
+    }
+
+    #[derive(Debug, Default)]
+    struct ExpectSha1EcdsaVerifier {
+        seen_sha1_signature: AtomicBool,
+    }
+
+    impl ServerCertVerifier for ExpectSha1EcdsaVerifier {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            assert_eq!(dss.scheme, SignatureScheme::ECDSA_SHA1_Legacy);
+            self.seen_sha1_signature
+                .store(true, Ordering::SeqCst);
+            Ok(HandshakeSignatureValid::assertion())
+        }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer<'_>,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, Error> {
+            todo!()
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            vec![SignatureScheme::ECDSA_SHA1_Legacy]
         }
     }
 

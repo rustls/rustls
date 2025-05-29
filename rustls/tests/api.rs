@@ -15,7 +15,6 @@ use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedK
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
 use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
-use rustls::internal::msgs::handshake::HandshakePayload;
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
@@ -6202,60 +6201,6 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         client_2.protocol_version(),
         Some(rustls::ProtocolVersion::TLSv1_2)
     );
-}
-
-#[cfg(feature = "tls12")]
-#[test]
-fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
-    fn alter_server_signature_to_ecdsa_sha1(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ServerKeyExchange(_) = &mut parsed.payload {
-                // nb. we don't care that this corrupts the signature, key exchange, etc.
-                let original = encoded.bytes();
-                let offset = 40; // of signature scheme
-                assert_eq!(
-                    &original[offset..offset + 2],
-                    &SignatureScheme::ECDSA_NISTP256_SHA256.to_array(),
-                    "expected ecdsa-sha256"
-                );
-                let mut altered = original.to_vec();
-                altered[offset..offset + 2]
-                    .copy_from_slice(&SignatureScheme::ECDSA_SHA1_Legacy.to_array());
-
-                *encoded = Payload::new(altered);
-            }
-        }
-        Altered::InPlace
-    }
-
-    let kx_groups = provider::ALL_KX_GROUPS;
-    let client_config = ClientConfig::builder_with_provider(
-        CryptoProvider {
-            kx_groups: kx_groups.to_vec(),
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&[&rustls::version::TLS12])
-    .unwrap()
-    .dangerous()
-    .with_custom_certificate_verifier(Arc::new(MockServerVerifier::accepts_anything()))
-    .with_no_client_auth();
-    let server_config = make_server_config_with_kx_groups(
-        KeyType::EcdsaP256,
-        kx_groups.to_vec(),
-        &provider::default_provider(),
-    );
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(
-        &mut server,
-        alter_server_signature_to_ecdsa_sha1,
-        &mut client,
-    );
-    client.process_new_packets().unwrap();
 }
 
 #[test]
