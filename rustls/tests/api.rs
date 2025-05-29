@@ -43,7 +43,6 @@ mod common;
 use common::*;
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
-use rustls::ProtocolVersion::TLSv1_2;
 
 mod test_raw_keys {
     use super::*;
@@ -783,7 +782,7 @@ fn resumption_combinations() {
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
-            if version.version == TLSv1_2 {
+            if version.version == ProtocolVersion::TLSv1_2 {
                 assert!(
                     client
                         .negotiated_key_exchange_group()
