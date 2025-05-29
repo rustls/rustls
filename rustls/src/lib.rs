@@ -477,8 +477,7 @@ pub mod internal {
         }
         pub mod enums {
             pub use crate::msgs::enums::{
-                AlertLevel, CertificateType, Compression, EchVersion, ExtensionType, HpkeAead,
-                HpkeKdf, HpkeKem, NamedGroup,
+                AlertLevel, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem,
             };
         }
         pub mod fragmenter {
@@ -486,10 +485,7 @@ pub mod internal {
         }
         pub mod handshake {
             pub use crate::msgs::handshake::{
-                CertificateChain, ClientExtension, ClientHelloPayload, DistinguishedName,
-                EchConfigContents, EchConfigPayload, HandshakeMessagePayload, HandshakePayload,
-                HpkeKeyConfig, HpkeSymmetricCipherSuite, KeyShareEntry, Random, ServerExtension,
-                SessionId,
+                EchConfigContents, EchConfigPayload, HpkeKeyConfig, HpkeSymmetricCipherSuite,
             };
         }
         pub mod message {
@@ -651,6 +647,7 @@ pub mod server {
     #[cfg(feature = "std")]
     pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
+    pub use crate::msgs::enums::CertificateType;
     pub use crate::verify::NoClientAuth;
     pub use crate::webpki::{
         ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,

@@ -14,10 +14,9 @@ use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_b
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
-use rustls::internal::msgs::handshake::{ClientExtension, HandshakePayload, ServerExtension};
+use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
-use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
     AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,
@@ -44,17 +43,8 @@ mod common;
 use common::*;
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
-use rustls::ProtocolVersion::TLSv1_2;
 
 mod test_raw_keys {
-    use rustls::crypto::cipher::{
-        InboundOpaqueMessage, MessageDecrypter, MessageEncrypter, OutboundChunks,
-        OutboundPlainMessage,
-    };
-    use rustls::crypto::tls13::OkmBlock;
-    use rustls::internal::{derive_traffic_iv, derive_traffic_key};
-    use rustls::{Connection, Tls13CipherSuite};
-
     use super::*;
 
     #[test]
@@ -164,289 +154,6 @@ mod test_raw_keys {
                 }
             }
         }
-    }
-
-    #[test]
-    fn alter_client_hello() {
-        connect_with_altered_certificate_type_extension(
-            true,
-            Some(&vec![CertificateType::X509]),
-            None,
-            Err(ErrorFromPeer::Server(Error::PeerIncompatible(
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            ))),
-        );
-        connect_with_altered_certificate_type_extension(
-            true,
-            None,
-            Some(&vec![CertificateType::X509]),
-            Err(ErrorFromPeer::Server(Error::PeerIncompatible(
-                PeerIncompatible::IncorrectCertificateTypeExtension,
-            ))),
-        );
-    }
-
-    fn connect_with_altered_certificate_type_extension(
-        server_requires_raw_keys: bool,
-        server_cert_types: Option<&Vec<CertificateType>>,
-        client_cert_types: Option<&Vec<CertificateType>>,
-        expected_result: Result<(), ErrorFromPeer>,
-    ) {
-        let provider = provider::default_provider();
-        for kt in KeyType::all_for_provider(&provider) {
-            let client_config = Arc::new(make_client_config(*kt, &provider));
-            let server_config_rpk = match server_requires_raw_keys {
-                true => Arc::new(make_server_config_with_raw_key_support(*kt, &provider)),
-                false => Arc::new(make_server_config(*kt, &provider)),
-            };
-
-            // Alter Client Hello client certificate extension
-            let (client, server) = make_pair_for_arc_configs(&client_config, &server_config_rpk);
-            let cert_altered = do_handshake_altered(
-                client,
-                |_: &mut Message| -> Altered { Altered::InPlace },
-                |msg: &mut Message| {
-                    alter_client_hello_message(msg, server_cert_types, client_cert_types)
-                },
-                server,
-            );
-            assert_eq!(cert_altered, expected_result)
-        }
-    }
-
-    #[test]
-    fn incorrectly_alter_server_hello() {
-        let provider = provider::default_provider();
-        for kt in KeyType::all_for_provider(&provider) {
-            let supported_suite = cipher_suite::TLS13_AES_256_GCM_SHA384;
-
-            // Alter Server Hello server certificate extension and expect IncorrectCertificateTypeExtension error
-            let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
-            let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
-            add_keylog_and_do_altered_handshake(
-                client_config_rpk,
-                server_config_rpk,
-                supported_suite,
-                Some(&CertificateType::X509),
-                None,
-                Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
-            );
-
-            // Alter Server Hello client certificate extension and expect IncorrectCertificateTypeExtension error
-            let client_config_rpk = make_client_config_with_raw_key_support(*kt, &provider);
-            let server_config_rpk = make_server_config_with_raw_key_support(*kt, &provider);
-            add_keylog_and_do_altered_handshake(
-                client_config_rpk,
-                server_config_rpk,
-                supported_suite,
-                None,
-                Some(&CertificateType::X509),
-                Error::PeerIncompatible(PeerIncompatible::IncorrectCertificateTypeExtension),
-            );
-
-            // Alter Server Hello server certificate extension and expect UnexpectedCertificateTypeExtension error
-            let client_config = make_client_config(*kt, &provider);
-            let server_config_rpk = make_server_config(*kt, &provider);
-            add_keylog_and_do_altered_handshake(
-                client_config,
-                server_config_rpk,
-                supported_suite,
-                Some(&CertificateType::X509),
-                None,
-                Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension),
-            );
-
-            // Alter Server Hello client certificate extension and expect UnexpectedCertificateTypeExtension error
-            let client_config = make_client_config(*kt, &provider);
-            let server_config_rpk = make_server_config(*kt, &provider);
-            add_keylog_and_do_altered_handshake(
-                client_config,
-                server_config_rpk,
-                supported_suite,
-                None,
-                Some(&CertificateType::X509),
-                Error::PeerMisbehaved(PeerMisbehaved::UnsolicitedEncryptedExtension),
-            );
-        }
-    }
-
-    fn add_keylog_and_do_altered_handshake(
-        client_config: ClientConfig,
-        mut server_config: ServerConfig,
-        supported_suite: SupportedCipherSuite,
-        server_cert_type: Option<&CertificateType>,
-        client_cert_type: Option<&CertificateType>,
-        expected_error: Error,
-    ) {
-        let keylog_to_vec = Arc::new(KeyLogToVec::new("server"));
-        server_config.key_log = keylog_to_vec.clone();
-
-        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-
-        // Client -> Server (Client Hello)
-        transfer(&mut client, &mut server);
-        server
-            .process_new_packets()
-            .map_err(ErrorFromPeer::Server)
-            .unwrap();
-
-        // Server -> Client (Server Hello, Server Change Cipher Spec, Server Encrypted Extensions, etc)
-        let mut server = Connection::Server(server);
-        let mut client = Connection::Client(client);
-        transfer_altered(
-            &mut server,
-            |msg| {
-                alter_server_hello_message(
-                    msg,
-                    server_cert_type,
-                    client_cert_type,
-                    supported_suite,
-                    &keylog_to_vec,
-                )
-            },
-            &mut client,
-        );
-
-        match client.process_new_packets() {
-            Ok(_) => unreachable!("Expected error because server cert is altered"),
-            Err(err) => assert_eq!(err, expected_error),
-        }
-    }
-
-    fn alter_client_hello_message(
-        msg: &mut Message,
-        server_cert_types: Option<&Vec<CertificateType>>,
-        client_cert_types: Option<&Vec<CertificateType>>,
-    ) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
-                for extension in ch.extensions.iter_mut() {
-                    if let ClientExtension::ClientCertTypes(cert_type) = extension {
-                        if let Some(client_cert_types) = client_cert_types {
-                            cert_type.clear();
-                            if !client_cert_types.is_empty() {
-                                cert_type.extend_from_slice(client_cert_types)
-                            }
-                        }
-                    };
-                    if let ClientExtension::ServerCertTypes(cert_type) = extension {
-                        if let Some(server_cert_types) = server_cert_types {
-                            cert_type.clear();
-                            if !server_cert_types.is_empty() {
-                                cert_type.extend_from_slice(server_cert_types)
-                            }
-                        }
-                    };
-                }
-            }
-            *encoded = Payload::new(parsed.get_encoding());
-        }
-        Altered::InPlace
-    }
-
-    fn alter_server_hello_message(
-        msg: &mut Message,
-        server_cert_type: Option<&CertificateType>,
-        client_cert_type: Option<&CertificateType>,
-        cipher_suite: SupportedCipherSuite,
-        keylog_to_vec: &Arc<KeyLogToVec>,
-    ) -> Altered {
-        if msg.payload.content_type() != ContentType::ApplicationData {
-            // transfer_altered will forward multiple messages, but we are only interested in
-            // application data, which contains the server's encrypted extensions
-            return Altered::InPlace;
-        }
-
-        // Derive Encrypter and Decrypter from the keylog and cipher suite
-        let (mut encrypter, mut decrypter) =
-            derive_message_encrypter_and_decrypter(cipher_suite.tls13().unwrap(), keylog_to_vec);
-
-        // Decrypt raw payload
-        let mut raw_payload = Vec::new();
-        msg.payload.encode(&mut raw_payload);
-        let mut bytes = raw_payload.clone();
-        let incoming = InboundOpaqueMessage::new(
-            ContentType::ApplicationData,
-            ProtocolVersion::TLSv1_3,
-            &mut bytes,
-        );
-        let decrypted_msg = decrypter.decrypt(incoming, 0).unwrap();
-
-        // Manipulate Message
-        let mut msg = Message::try_from(decrypted_msg).unwrap();
-
-        let encoded = if let MessagePayload::Handshake { parsed, .. } = &mut msg.payload {
-            if let HandshakePayload::EncryptedExtensions(enc_ext) = &mut parsed.payload {
-                let mut sct_present = false;
-                let mut cct_present = false;
-                for extension in enc_ext.iter_mut() {
-                    if let ServerExtension::ClientCertType(cert_type) = extension {
-                        if let Some(cct) = client_cert_type {
-                            *cert_type = *cct;
-                        }
-                        cct_present = true;
-                    };
-                    if let ServerExtension::ServerCertType(cert_type) = extension {
-                        if let Some(sct) = server_cert_type {
-                            *cert_type = *sct;
-                        }
-                        sct_present = true;
-                    };
-                }
-                if !sct_present {
-                    if let Some(sct) = server_cert_type {
-                        enc_ext.push(ServerExtension::ServerCertType(*sct));
-                    }
-                }
-                if !cct_present {
-                    if let Some(cct) = client_cert_type {
-                        enc_ext.push(ServerExtension::ClientCertType(*cct));
-                    }
-                }
-            }
-            Payload::new(parsed.get_encoding())
-        } else {
-            panic!("Expected to successfully encode handshake message");
-        };
-
-        // // Re-encrypt
-        let outgoing = OutboundPlainMessage {
-            typ: ContentType::Handshake,
-            version: ProtocolVersion::TLSv1_3,
-            payload: OutboundChunks::Single(encoded.bytes()),
-        };
-        Altered::Raw(
-            encrypter
-                .encrypt(outgoing, 0)
-                .unwrap()
-                .encode(),
-        )
-    }
-
-    fn derive_message_encrypter_and_decrypter(
-        cipher_suite: &Tls13CipherSuite,
-        keylog_to_vec: &Arc<KeyLogToVec>,
-    ) -> (Box<dyn MessageEncrypter>, Box<dyn MessageDecrypter>) {
-        let keylog_vec = keylog_to_vec.take();
-        let keylog_item = keylog_vec
-            .iter()
-            .find(|item| item.label == "SERVER_HANDSHAKE_TRAFFIC_SECRET")
-            .unwrap();
-        let expander = cipher_suite
-            .hkdf_provider
-            .expander_for_okm(&OkmBlock::new(&keylog_item.secret));
-
-        // Derive Encrypter
-        let key = derive_traffic_key(expander.as_ref(), cipher_suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
-        let encrypter = cipher_suite.aead_alg.encrypter(key, iv);
-
-        // Derive Decrypter
-        let key = derive_traffic_key(expander.as_ref(), cipher_suite.aead_alg);
-        let iv = derive_traffic_iv(expander.as_ref());
-        let decrypter = cipher_suite.aead_alg.decrypter(key, iv);
-
-        (encrypter, decrypter)
     }
 }
 
@@ -1074,7 +781,7 @@ fn resumption_combinations() {
 
             assert_eq!(client.handshake_kind(), Some(HandshakeKind::Resumed));
             assert_eq!(server.handshake_kind(), Some(HandshakeKind::Resumed));
-            if version.version == TLSv1_2 {
+            if version.version == ProtocolVersion::TLSv1_2 {
                 assert!(
                     client
                         .negotiated_key_exchange_group()
@@ -6490,60 +6197,6 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
         client_2.protocol_version(),
         Some(rustls::ProtocolVersion::TLSv1_2)
     );
-}
-
-#[cfg(feature = "tls12")]
-#[test]
-fn test_client_with_custom_verifier_can_accept_ecdsa_sha1_signatures() {
-    fn alter_server_signature_to_ecdsa_sha1(msg: &mut Message) -> Altered {
-        if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
-            if let HandshakePayload::ServerKeyExchange(_) = &mut parsed.payload {
-                // nb. we don't care that this corrupts the signature, key exchange, etc.
-                let original = encoded.bytes();
-                let offset = 40; // of signature scheme
-                assert_eq!(
-                    &original[offset..offset + 2],
-                    &SignatureScheme::ECDSA_NISTP256_SHA256.to_array(),
-                    "expected ecdsa-sha256"
-                );
-                let mut altered = original.to_vec();
-                altered[offset..offset + 2]
-                    .copy_from_slice(&SignatureScheme::ECDSA_SHA1_Legacy.to_array());
-
-                *encoded = Payload::new(altered);
-            }
-        }
-        Altered::InPlace
-    }
-
-    let kx_groups = provider::ALL_KX_GROUPS;
-    let client_config = ClientConfig::builder_with_provider(
-        CryptoProvider {
-            kx_groups: kx_groups.to_vec(),
-            ..provider::default_provider()
-        }
-        .into(),
-    )
-    .with_protocol_versions(&[&rustls::version::TLS12])
-    .unwrap()
-    .dangerous()
-    .with_custom_certificate_verifier(Arc::new(MockServerVerifier::accepts_anything()))
-    .with_no_client_auth();
-    let server_config = make_server_config_with_kx_groups(
-        KeyType::EcdsaP256,
-        kx_groups.to_vec(),
-        &provider::default_provider(),
-    );
-    let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
-    transfer(&mut client, &mut server);
-    server.process_new_packets().unwrap();
-    let (mut client, mut server) = (client.into(), server.into());
-    transfer_altered(
-        &mut server,
-        alter_server_signature_to_ecdsa_sha1,
-        &mut client,
-    );
-    client.process_new_packets().unwrap();
 }
 
 #[test]
