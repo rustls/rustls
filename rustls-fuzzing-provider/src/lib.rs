@@ -71,7 +71,7 @@ struct DummyCert(Arc<sign::CertifiedKey>);
 
 impl server::ResolvesServerCert for DummyCert {
     fn resolve(&self, _client_hello: server::ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
-        Some(Arc::clone(&self.0))
+        Some(self.0.clone())
     }
 }
 

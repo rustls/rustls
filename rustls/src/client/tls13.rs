@@ -1423,8 +1423,8 @@ impl State<ClientConnectionData> for ExpectFinished {
         }
 
         let st = ExpectTraffic {
-            config: Arc::clone(&st.config),
-            session_storage: Arc::clone(&st.config.resumption.store),
+            config: st.config.clone(),
+            session_storage: st.config.resumption.store.clone(),
             server_name: st.server_name,
             suite: st.suite,
             transcript: st.transcript,
@@ -1479,7 +1479,7 @@ impl ExpectTraffic {
         #[allow(unused_mut)]
         let mut value = persist::Tls13ClientSessionValue::new(
             self.suite,
-            Arc::clone(&nst.ticket),
+            nst.ticket.clone(),
             secret.as_ref(),
             cx.peer_certificates
                 .cloned()

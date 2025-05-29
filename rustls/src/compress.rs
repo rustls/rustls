@@ -358,7 +358,7 @@ impl CompressionCache {
             if item.algorithm == algorithm && item.original == encoding {
                 // this item is now MRU
                 let item = cache.remove(i).unwrap();
-                cache.push_back(Arc::clone(&item));
+                cache.push_back(item.clone());
                 return Ok(item);
             }
         }
@@ -384,7 +384,7 @@ impl CompressionCache {
         if cache.len() == max_size {
             cache.pop_front();
         }
-        cache.push_back(Arc::clone(&new_entry));
+        cache.push_back(new_entry.clone());
         Ok(new_entry)
     }
 

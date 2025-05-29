@@ -100,7 +100,7 @@ fn client_verifier_no_auth_yes_root() {
 
         for version in rustls::ALL_VERSIONS {
             let client_config = make_client_config_with_versions(*kt, &[version], &provider);
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
             let errs = do_handshake_until_both_error(&mut client, &mut server);
@@ -129,7 +129,7 @@ fn client_verifier_fails_properly() {
         for version in rustls::ALL_VERSIONS {
             let client_config =
                 make_client_config_with_versions_with_auth(*kt, &[version], &provider);
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
             let err = do_handshake_until_error(&mut client, &mut server);

@@ -165,7 +165,7 @@ mod connection {
             params: Vec<u8>,
         ) -> Result<Self, Error> {
             Self::new_with_alpn(
-                Arc::clone(&config),
+                config.clone(),
                 quic_version,
                 name,
                 params,

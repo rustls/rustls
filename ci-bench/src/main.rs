@@ -551,7 +551,7 @@ impl BenchStepper for ClientSideStepper<'_> {
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
         let server_name = "localhost".try_into().unwrap();
-        let mut client = ClientConnection::new(Arc::clone(&self.config), server_name).unwrap();
+        let mut client = ClientConnection::new(self.config.clone(), server_name).unwrap();
         client.set_buffer_limit(None);
 
         loop {
@@ -627,7 +627,7 @@ impl BenchStepper for ServerSideStepper<'_> {
     type Endpoint = ServerConnection;
 
     async fn handshake(&mut self) -> anyhow::Result<Self::Endpoint> {
-        let mut server = ServerConnection::new(Arc::clone(&self.config)).unwrap();
+        let mut server = ServerConnection::new(self.config.clone()).unwrap();
         server.set_buffer_limit(None);
 
         while server.is_handshaking() {

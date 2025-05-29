@@ -37,7 +37,7 @@ fn test_rustls_server_with_ffdhe_kx(
     let server_thread = thread::spawn(move || {
         let config = Arc::new(server_config_with_ffdhe_kx(protocol_version));
         for _ in 0..iters {
-            let mut server = rustls::ServerConnection::new(Arc::clone(&config)).unwrap();
+            let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
             server
                 .writer()
@@ -106,7 +106,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
         for stream in listener.incoming().take(iters) {
             match stream {
                 Ok(stream) => {
-                    let acceptor = Arc::clone(&acceptor);
+                    let acceptor = acceptor.clone();
                     thread::spawn(move || {
                         let mut stream = acceptor.accept(stream).unwrap();
                         let mut buf = String::new();

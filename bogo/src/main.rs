@@ -494,7 +494,7 @@ impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
         let mut certkey = self.resolver.resolve(client_hello)?;
         Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
-            key: Arc::clone(&certkey.key),
+            key: certkey.key.clone(),
             scheme: self.scheme,
         });
         Some(certkey)
@@ -520,7 +520,7 @@ impl client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
             .resolver
             .resolve(root_hint_subjects, sigschemes)?;
         Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
-            key: Arc::clone(&certkey.key),
+            key: certkey.key.clone(),
             scheme: self.scheme,
         });
         Some(certkey)
@@ -653,7 +653,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     if opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
         cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
-            resolver: Arc::clone(&cfg.cert_resolver),
+            resolver: cfg.cert_resolver.clone(),
             scheme,
         });
     }
@@ -824,7 +824,7 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     if !opts.cert_file.is_empty() && opts.use_signing_scheme > 0 {
         let scheme = lookup_scheme(opts.use_signing_scheme);
         cfg.client_auth_cert_resolver = Arc::new(FixedSignatureSchemeClientCertResolver {
-            resolver: Arc::clone(&cfg.client_auth_cert_resolver),
+            resolver: cfg.client_auth_cert_resolver.clone(),
             scheme,
         });
     }
@@ -1764,7 +1764,7 @@ pub fn main() {
         );
 
         if opts.side == Side::Server {
-            let scfg = Arc::clone(scfg.as_ref().unwrap());
+            let scfg = scfg.as_ref().cloned().unwrap();
             ServerConnection::new(scfg)
                 .unwrap()
                 .into()
@@ -1772,7 +1772,7 @@ pub fn main() {
             let server_name = ServerName::try_from(opts.host_name.as_str())
                 .unwrap()
                 .to_owned();
-            let ccfg = Arc::clone(ccfg.as_ref().unwrap());
+            let ccfg = ccfg.as_ref().cloned().unwrap();
 
             ClientConnection::new(ccfg, server_name)
                 .unwrap()

@@ -124,7 +124,7 @@ impl SigningKey for RsaSigningKey {
         ALL_RSA_SCHEMES
             .iter()
             .find(|scheme| offered.contains(scheme))
-            .map(|scheme| RsaSigner::new(Arc::clone(&self.key), *scheme))
+            .map(|scheme| RsaSigner::new(self.key.clone(), *scheme))
     }
 
     fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
@@ -285,7 +285,7 @@ impl SigningKey for EcdsaSigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(EcdsaSigner {
-                key: Arc::clone(&self.key),
+                key: self.key.clone(),
                 scheme: self.scheme,
             }))
         } else {
@@ -379,7 +379,7 @@ impl SigningKey for Ed25519SigningKey {
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>> {
         if offered.contains(&self.scheme) {
             Some(Box::new(Ed25519Signer {
-                key: Arc::clone(&self.key),
+                key: self.key.clone(),
                 scheme: self.scheme,
             }))
         } else {

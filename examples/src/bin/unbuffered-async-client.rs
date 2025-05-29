@@ -47,7 +47,7 @@ async fn converse(
     incoming_tls: &mut [u8],
     outgoing_tls: &mut Vec<u8>,
 ) -> Result<(), Box<dyn Error>> {
-    let mut conn = UnbufferedClientConnection::new(Arc::clone(config), SERVER_NAME.try_into()?)?;
+    let mut conn = UnbufferedClientConnection::new(config.clone(), SERVER_NAME.try_into()?)?;
     let mut sock = TcpStream::connect(format!("{SERVER_NAME}:{PORT}")).await?;
 
     let mut incoming_used = 0;

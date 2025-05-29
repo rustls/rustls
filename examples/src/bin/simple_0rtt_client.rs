@@ -27,7 +27,7 @@ fn start_connection(config: &Arc<rustls::ClientConfig>, domain_name: &str, port:
     let server_name = ServerName::try_from(domain_name)
         .expect("invalid DNS name")
         .to_owned();
-    let mut conn = rustls::ClientConnection::new(Arc::clone(config), server_name).unwrap();
+    let mut conn = rustls::ClientConnection::new(config.clone(), server_name).unwrap();
     let mut sock = TcpStream::connect(format!("{domain_name}:{port}")).unwrap();
     sock.set_nodelay(true).unwrap();
     let request = format!(

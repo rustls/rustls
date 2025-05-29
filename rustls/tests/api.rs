@@ -973,8 +973,9 @@ fn client_only_attempts_resumption_with_compatible_security() {
         let mut client_config =
             make_client_config_with_versions_with_auth(kt, &[version], &provider);
         client_config.resumption = base_client_config.resumption.clone();
-        client_config.client_auth_cert_resolver =
-            Arc::clone(&base_client_config.client_auth_cert_resolver);
+        client_config.client_auth_cert_resolver = base_client_config
+            .client_auth_cert_resolver
+            .clone();
 
         CountingLogger::reset();
         let (mut client, mut server) =
@@ -1689,7 +1690,7 @@ fn client_with_sni_disabled_does_not_send_sni() {
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("value-not-sent"))
                     .unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             let err = do_handshake_until_error(&mut client, &mut server);
             assert!(err.is_err());
@@ -1710,7 +1711,7 @@ fn client_checks_server_certificate_with_given_name() {
                 server_name("not-the-right-hostname.com"),
             )
             .unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             let err = do_handshake_until_error(&mut client, &mut server);
             assert_eq!(
@@ -1791,7 +1792,7 @@ fn client_check_server_certificate_ee_revoked() {
                 make_client_config_with_verifier(&[version], builder.clone(), &provider);
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to fail since the server's EE certificate is revoked.
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -1835,7 +1836,7 @@ fn client_check_server_certificate_ee_unknown_revocation() {
             );
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect if we use the forbid_unknown_verifier that the handshake will fail since the
             // server's EE certificate's revocation status is unknown given the CRLs we've provided.
@@ -1855,7 +1856,7 @@ fn client_check_server_certificate_ee_unknown_revocation() {
             );
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
             let res = do_handshake_until_error(&mut client, &mut server);
             assert!(res.is_ok());
         }
@@ -1893,7 +1894,7 @@ fn client_check_server_certificate_intermediate_revoked() {
             );
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to fail when using the full chain verifier since the intermediate's
             // EE certificate is revoked.
@@ -1912,7 +1913,7 @@ fn client_check_server_certificate_intermediate_revoked() {
             );
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
             // We expect the handshake to succeed when we use the verifier that only checks the EE certificate
             // revocation status. The revoked intermediate status should not be checked.
             let res = do_handshake_until_error(&mut client, &mut server);
@@ -1950,7 +1951,7 @@ fn client_check_server_certificate_ee_crl_expired() {
             );
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to fail since the CRL is expired.
             let err = do_handshake_until_error(&mut client, &mut server);
@@ -1968,7 +1969,7 @@ fn client_check_server_certificate_ee_crl_expired() {
             );
             let mut client =
                 ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-            let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+            let mut server = ServerConnection::new(server_config.clone()).unwrap();
 
             // We expect the handshake to succeed when CRL expiration is ignored.
             let res = do_handshake_until_error(&mut client, &mut server);
@@ -3550,7 +3551,7 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
 
     for version in rustls::ALL_VERSIONS {
         let client_config = make_client_config_with_versions(kt, &[version], &provider);
-        let mut server = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+        let mut server = ServerConnection::new(server_config.clone()).unwrap();
         let mut client =
             ClientConnection::new(Arc::new(client_config), server_name("thisdoesNOTexist.com"))
                 .unwrap();
@@ -3585,7 +3586,7 @@ fn sni_resolver_works() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+    let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
     let mut client1 = ClientConnection::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("localhost"),
@@ -3594,7 +3595,7 @@ fn sni_resolver_works() {
     let err = do_handshake_until_error(&mut client1, &mut server1);
     assert_eq!(err, Ok(()));
 
-    let mut server2 = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+    let mut server2 = ServerConnection::new(server_config.clone()).unwrap();
     let mut client2 = ClientConnection::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("notlocalhost"),
@@ -3677,7 +3678,7 @@ fn sni_resolver_lower_cases_configured_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+    let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
     let mut client1 = ClientConnection::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("localhost"),
@@ -3708,7 +3709,7 @@ fn sni_resolver_lower_cases_queried_names() {
     server_config.cert_resolver = Arc::new(resolver);
     let server_config = Arc::new(server_config);
 
-    let mut server1 = ServerConnection::new(Arc::clone(&server_config)).unwrap();
+    let mut server1 = ServerConnection::new(server_config.clone()).unwrap();
     let mut client1 = ClientConnection::new(
         Arc::new(make_client_config(kt, &provider)),
         server_name("LOCALHOST"),
@@ -5194,7 +5195,7 @@ mod test_quic {
 
         // full handshake
         let mut client = quic::ClientConnection::new(
-            Arc::clone(&client_config),
+            client_config.clone(),
             quic::Version::V1,
             server_name("localhost"),
             client_params.into(),
@@ -5202,7 +5203,7 @@ mod test_quic {
         .unwrap();
 
         let mut server = quic::ServerConnection::new(
-            Arc::clone(&server_config),
+            server_config.clone(),
             quic::Version::V1,
             server_params.into(),
         )
@@ -5246,7 +5247,7 @@ mod test_quic {
 
         // 0-RTT handshake
         let mut client = quic::ClientConnection::new(
-            Arc::clone(&client_config),
+            client_config.clone(),
             quic::Version::V1,
             server_name("localhost"),
             client_params.into(),
@@ -5259,7 +5260,7 @@ mod test_quic {
         );
 
         let mut server = quic::ServerConnection::new(
-            Arc::clone(&server_config),
+            server_config.clone(),
             quic::Version::V1,
             server_params.into(),
         )
@@ -5298,7 +5299,7 @@ mod test_quic {
             .unwrap();
 
             let mut server = quic::ServerConnection::new(
-                Arc::clone(&server_config),
+                server_config.clone(),
                 quic::Version::V1,
                 server_params.into(),
             )
@@ -5773,7 +5774,7 @@ mod test_quic {
         );
         let client_config = Arc::new(client_config);
         let mut client = quic::ClientConnection::new(
-            Arc::clone(&client_config),
+            client_config.clone(),
             quic::Version::V1,
             server_name("localhost"),
             b"client params"[..].into(),

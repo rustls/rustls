@@ -73,7 +73,6 @@ mod tests {
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{ServerConfig, ServerConnection};
-    use crate::sync::Arc;
     use crate::version;
 
     #[cfg(feature = "tls12")]
@@ -92,8 +91,7 @@ mod tests {
         } else {
             config.require_ems = true;
         }
-        let config = config.into();
-        let mut conn = ServerConnection::new(Arc::clone(&config)).unwrap();
+        let mut conn = ServerConnection::new(config.into()).unwrap();
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_3,
