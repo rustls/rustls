@@ -6,7 +6,7 @@ use pki_types::{CertificateDer, DnsName};
 use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
-    CertificateType, ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
+    ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
     KeyUpdateRequest, NamedGroup, PskKeyExchangeMode,
 };
 use super::handshake::{
@@ -22,7 +22,8 @@ use super::handshake::{
     SingleProtocolName, SupportedProtocolVersions, UnknownExtension,
 };
 use crate::enums::{
-    CertificateCompressionAlgorithm, CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme,
+    CertificateCompressionAlgorithm, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
+    SignatureScheme,
 };
 use crate::error::InvalidMessage;
 use crate::msgs::handshake::ServerNamePayload;

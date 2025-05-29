@@ -75,7 +75,7 @@ mod tests {
     use crate::crypto::{
         ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, SupportedKxGroup,
     };
-    use crate::msgs::enums::CertificateType;
+    use crate::enums::CertificateType;
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{AlwaysResolvesServerRawPublicKeys, ServerConfig, ServerConnection};
