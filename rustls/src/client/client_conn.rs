@@ -313,9 +313,9 @@ impl ClientConfig {
         // Safety assumptions:
         // 1. that the provider has been installed (explicitly or implicitly)
         // 2. that the process-level default provider is usable with the supplied protocol versions.
-        Self::builder_with_provider(Arc::clone(
-            CryptoProvider::get_default_or_install_from_crate_features(),
-        ))
+        Self::builder_with_provider(
+            CryptoProvider::get_default_or_install_from_crate_features().clone(),
+        )
         .with_protocol_versions(versions)
         .unwrap()
     }
@@ -703,7 +703,7 @@ mod connection {
         /// we behave in the TLS protocol, `name` is the
         /// name of the server we want to talk to.
         pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-            Self::new_with_alpn(Arc::clone(&config), name, config.alpn_protocols.clone())
+            Self::new_with_alpn(config.clone(), name, config.alpn_protocols.clone())
         }
 
         /// Make a new ClientConnection with custom ALPN protocols.
@@ -875,7 +875,7 @@ impl UnbufferedClientConnection {
     /// Make a new ClientConnection. `config` controls how we behave in the TLS protocol, `name` is
     /// the name of the server we want to talk to.
     pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-        Self::new_with_alpn(Arc::clone(&config), name, config.alpn_protocols.clone())
+        Self::new_with_alpn(config.clone(), name, config.alpn_protocols.clone())
     }
 
     /// Make a new UnbufferedClientConnection with custom ALPN protocols.

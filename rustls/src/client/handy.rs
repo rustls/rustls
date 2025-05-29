@@ -228,7 +228,7 @@ impl client::ResolvesClientCert for AlwaysResolvesClientRawPublicKeys {
         _root_hint_subjects: &[&[u8]],
         _sigschemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
-        Some(Arc::clone(&self.0))
+        Some(self.0.clone())
     }
 
     fn only_raw_public_keys(&self) -> bool {

@@ -111,11 +111,9 @@ mod tests {
         }
 
         let config = Arc::new(config);
-        let mut conn = ClientConnection::new(
-            Arc::clone(&config),
-            ServerName::try_from("localhost").unwrap(),
-        )
-        .unwrap();
+        let mut conn =
+            ClientConnection::new(config.clone(), ServerName::try_from("localhost").unwrap())
+                .unwrap();
         let mut sent = Vec::new();
         conn.write_tls(&mut sent).unwrap();
 

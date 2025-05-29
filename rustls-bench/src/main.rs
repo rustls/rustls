@@ -273,8 +273,8 @@ fn bench_handshake(params: &Parameters) {
     bench_handshake_buffered(
         1,
         ResumptionParam::No,
-        Arc::clone(&client_config),
-        Arc::clone(&server_config),
+        client_config.clone(),
+        server_config.clone(),
         &params.without_latency_measurement(),
     );
 
@@ -329,10 +329,10 @@ fn bench_handshake_buffered(
 
         let mut client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
-            ClientConnection::new(Arc::clone(&client_config), server_name).unwrap()
+            ClientConnection::new(client_config.clone(), server_name).unwrap()
         });
         let mut server = time(&mut server_time, || {
-            ServerConnection::new(Arc::clone(&server_config)).unwrap()
+            ServerConnection::new(server_config.clone()).unwrap()
         });
 
         time(&mut server_time, || {
@@ -386,10 +386,10 @@ fn bench_handshake_unbuffered(
 
         let client = time(&mut client_time, || {
             let server_name = "localhost".try_into().unwrap();
-            UnbufferedClientConnection::new(Arc::clone(&client_config), server_name).unwrap()
+            UnbufferedClientConnection::new(client_config.clone(), server_name).unwrap()
         });
         let server = time(&mut server_time, || {
-            UnbufferedServerConnection::new(Arc::clone(&server_config)).unwrap()
+            UnbufferedServerConnection::new(server_config.clone()).unwrap()
         });
 
         // nb. buffer allocation is outside the library, so is outside the benchmark scope
@@ -451,8 +451,8 @@ fn multithreaded(
     thread::scope(|s| {
         let threads = (0..count.into())
             .map(|_| {
-                let client_config = Arc::clone(client_config);
-                let server_config = Arc::clone(server_config);
+                let client_config = client_config.clone();
+                let server_config = server_config.clone();
                 s.spawn(|| f(client_config, server_config))
             })
             .collect::<Vec<_>>();
@@ -661,9 +661,9 @@ fn bench_memory(
     let mut buffers = TempBuffers::new();
 
     for _i in 0..conn_count {
-        servers.push(ServerConnection::new(Arc::clone(&server_config)).unwrap());
+        servers.push(ServerConnection::new(server_config.clone()).unwrap());
         let server_name = "localhost".try_into().unwrap();
-        clients.push(ClientConnection::new(Arc::clone(&client_config), server_name).unwrap());
+        clients.push(ClientConnection::new(client_config.clone(), server_name).unwrap());
     }
 
     for _step in 0..5 {
@@ -797,7 +797,7 @@ impl Parameters {
                 }
                 WebPkiClientVerifier::builder_with_provider(
                     client_auth_roots.into(),
-                    Arc::clone(&provider),
+                    provider.clone(),
                 )
                 .build()
                 .unwrap()

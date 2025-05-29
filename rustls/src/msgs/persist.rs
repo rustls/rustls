@@ -189,7 +189,7 @@ impl Tls12ClientSessionValue {
     }
 
     pub(crate) fn ticket(&mut self) -> Arc<PayloadU16> {
-        Arc::clone(&self.common.ticket)
+        self.common.ticket.clone()
     }
 
     pub(crate) fn extended_ms(&self) -> bool {
