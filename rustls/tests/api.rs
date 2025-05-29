@@ -14,9 +14,9 @@ use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_b
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
 use rustls::internal::msgs::codec::Codec;
-use rustls::internal::msgs::enums::{AlertLevel, CertificateType, ExtensionType};
+use rustls::internal::msgs::enums::{AlertLevel, ExtensionType};
 use rustls::internal::msgs::message::{Message, MessagePayload, PlainMessage};
-use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
+use rustls::server::{CertificateType, ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{
     AlertDescription, CertificateError, CipherSuite, ClientConfig, ClientConnection,
     ConnectionCommon, ConnectionTrafficSecrets, ContentType, DistinguishedName, Error,

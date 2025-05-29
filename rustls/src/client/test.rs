@@ -27,8 +27,9 @@ mod tests {
     use crate::client::AlwaysResolvesClientRawPublicKeys;
     use crate::crypto::cipher::MessageEncrypter;
     use crate::crypto::tls13::OkmBlock;
+    use crate::enums::CertificateType;
     use crate::msgs::base::PayloadU8;
-    use crate::msgs::enums::{CertificateType, ECCurveType};
+    use crate::msgs::enums::ECCurveType;
     use crate::msgs::handshake::{
         CertificateChain, ClientExtension, EcParameters, KeyShareEntry, ServerEcdhParams,
         ServerExtension, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,

@@ -477,7 +477,7 @@ pub mod internal {
         }
         pub mod enums {
             pub use crate::msgs::enums::{
-                AlertLevel, CertificateType, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem,
+                AlertLevel, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem,
             };
         }
         pub mod fragmenter {
@@ -647,6 +647,7 @@ pub mod server {
     #[cfg(feature = "std")]
     pub use server_conn::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
 
+    pub use crate::enums::CertificateType;
     pub use crate::verify::NoClientAuth;
     pub use crate::webpki::{
         ClientCertVerifierBuilder, ParsedCertificate, VerifierBuilderError, WebPkiClientVerifier,

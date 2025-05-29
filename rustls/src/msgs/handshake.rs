@@ -12,8 +12,8 @@ use pki_types::{CertificateDer, DnsName};
 use crate::crypto::ActiveKeyExchange;
 use crate::crypto::SecureRandom;
 use crate::enums::{
-    CertificateCompressionAlgorithm, CipherSuite, EchClientHelloType, HandshakeType,
-    ProtocolVersion, SignatureScheme,
+    CertificateCompressionAlgorithm, CertificateType, CipherSuite, EchClientHelloType,
+    HandshakeType, ProtocolVersion, SignatureScheme,
 };
 use crate::error::InvalidMessage;
 #[cfg(feature = "tls12")]
@@ -22,9 +22,9 @@ use crate::log::warn;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
 use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
 use crate::msgs::enums::{
-    CertificateStatusType, CertificateType, ClientCertificateType, Compression, ECCurveType,
-    ECPointFormat, EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest,
-    NamedGroup, PskKeyExchangeMode, ServerNameType,
+    CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
+    EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest, NamedGroup,
+    PskKeyExchangeMode, ServerNameType,
 };
 use crate::rand;
 use crate::sync::Arc;
