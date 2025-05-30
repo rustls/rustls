@@ -774,6 +774,11 @@ mod connection {
             self.inner.core.data.ech_status
         }
 
+        /// Returns the number of TLS1.3 tickets that have been received.
+        pub fn tls13_tickets_received(&self) -> u32 {
+            self.inner.tls13_tickets_received
+        }
+
         /// Return true if the connection was made with a `ClientConfig` that is FIPS compatible.
         ///
         /// This is different from [`crate::crypto::CryptoProvider::fips()`]:
@@ -918,6 +923,11 @@ impl UnbufferedClientConnection {
         self.inner
             .core
             .dangerous_into_kernel_connection()
+    }
+
+    /// Returns the number of TLS1.3 tickets that have been received.
+    pub fn tls13_tickets_received(&self) -> u32 {
+        self.inner.tls13_tickets_received
     }
 }
 
