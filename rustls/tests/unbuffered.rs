@@ -216,11 +216,19 @@ fn early_data() {
     let client_config = Arc::new(client_config);
 
     // first handshake allows the second to be a resumption and use 0-RTT
-    run(
+    let outcome = run(
         client_config.clone(),
         &mut NO_ACTIONS.clone(),
         server_config.clone(),
         &mut NO_ACTIONS.clone(),
+    );
+
+    assert_eq!(
+        outcome
+            .client
+            .unwrap()
+            .tls13_tickets_received(),
+        2
     );
 
     let mut client_actions = Actions {
