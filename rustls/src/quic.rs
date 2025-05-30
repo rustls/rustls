@@ -219,6 +219,11 @@ mod connection {
         pub fn is_early_data_accepted(&self) -> bool {
             self.inner.core.is_early_data_accepted()
         }
+
+        /// Returns the number of TLS1.3 tickets that have been received.
+        pub fn tls13_tickets_received(&self) -> u32 {
+            self.inner.tls13_tickets_received
+        }
     }
 
     impl Deref for ClientConnection {

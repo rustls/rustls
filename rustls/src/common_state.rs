@@ -60,6 +60,7 @@ pub struct CommonState {
     temper_counters: TemperCounters,
     pub(crate) refresh_traffic_keys_pending: bool,
     pub(crate) fips: bool,
+    pub(crate) tls13_tickets_received: u32,
 }
 
 impl CommonState {
@@ -92,6 +93,7 @@ impl CommonState {
             temper_counters: TemperCounters::default(),
             refresh_traffic_keys_pending: false,
             fips: false,
+            tls13_tickets_received: 0,
         }
     }
 

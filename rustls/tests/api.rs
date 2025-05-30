@@ -4753,6 +4753,7 @@ fn tls13_stateful_resumption() {
     // full handshake
     let (mut client, mut server) = make_pair_for_arc_configs(&client_config, &server_config);
     let (full_c2s, full_s2c) = do_handshake(&mut client, &mut server);
+    assert_eq!(client.tls13_tickets_received(), 2);
     assert_eq!(storage.puts(), 2);
     assert_eq!(storage.gets(), 0);
     assert_eq!(storage.takes(), 0);
@@ -5234,6 +5235,7 @@ mod test_quic {
         assert!(!server.is_handshaking());
         assert!(compatible_keys(&server_1rtt, &client_1rtt));
         assert!(!compatible_keys(&server_hs, &server_1rtt));
+
         assert!(
             step(&mut client, &mut server)
                 .unwrap()
@@ -5244,6 +5246,7 @@ mod test_quic {
                 .unwrap()
                 .is_none()
         );
+        assert_eq!(client.tls13_tickets_received(), 2);
 
         // 0-RTT handshake
         let mut client = quic::ClientConnection::new(
@@ -5286,7 +5289,6 @@ mod test_quic {
             .unwrap()
             .unwrap();
         assert!(client.is_early_data_accepted());
-
         // 0-RTT rejection
         {
             let client_config = (*client_config).clone();
