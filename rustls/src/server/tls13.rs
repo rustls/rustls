@@ -515,9 +515,8 @@ mod client_hello {
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHello(ServerHelloPayload {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(randoms.server),
                     session_id: *session_id,
@@ -525,7 +524,7 @@ mod client_hello {
                     compression_method: Compression::Null,
                     extensions,
                 }),
-            }),
+            )),
         };
 
         cx.common.check_aligned_handshake()?;
@@ -599,10 +598,9 @@ mod client_hello {
 
         let m = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::HelloRetryRequest,
-                payload: HandshakePayload::HelloRetryRequest(req),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::HelloRetryRequest(req),
+            )),
         };
 
         trace!("Requesting retry {m:?}");
@@ -686,10 +684,7 @@ mod client_hello {
             ep.exts.push(ServerExtension::EarlyData);
         }
 
-        let ee = HandshakeMessagePayload {
-            typ: HandshakeType::EncryptedExtensions,
-            payload: HandshakePayload::EncryptedExtensions(ep.exts),
-        };
+        let ee = HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(ep.exts));
 
         trace!("sending encrypted extensions {ee:?}");
         flight.add(ee);
@@ -732,10 +727,7 @@ mod client_hello {
                 .push(CertReqExtension::AuthorityNames(authorities.to_vec()));
         }
 
-        let creq = HandshakeMessagePayload {
-            typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequestTls13(cr),
-        };
+        let creq = HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(cr));
 
         trace!("Sending CertificateRequest {creq:?}");
         flight.add(creq);
@@ -747,13 +739,9 @@ mod client_hello {
         cert_chain: &[CertificateDer<'static>],
         ocsp_response: Option<&[u8]>,
     ) {
-        let cert = HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTls13(CertificatePayloadTls13::new(
-                cert_chain.iter(),
-                ocsp_response,
-            )),
-        };
+        let cert = HandshakeMessagePayload(HandshakePayload::CertificateTls13(
+            CertificatePayloadTls13::new(cert_chain.iter(), ocsp_response),
+        ));
 
         trace!("sending certificate {cert:?}");
         flight.add(cert);
@@ -775,10 +763,9 @@ mod client_hello {
             return emit_certificate_tls13(flight, cert_chain, ocsp_response);
         };
 
-        let c = HandshakeMessagePayload {
-            typ: HandshakeType::CompressedCertificate,
-            payload: HandshakePayload::CompressedCertificate(entry.compressed_cert_payload()),
-        };
+        let c = HandshakeMessagePayload(HandshakePayload::CompressedCertificate(
+            entry.compressed_cert_payload(),
+        ));
 
         trace!("sending compressed certificate {c:?}");
         flight.add(c);
@@ -806,10 +793,7 @@ mod client_hello {
 
         let cv = DigitallySignedStruct::new(scheme, sig);
 
-        let cv = HandshakeMessagePayload {
-            typ: HandshakeType::CertificateVerify,
-            payload: HandshakePayload::CertificateVerify(cv),
-        };
+        let cv = HandshakeMessagePayload(HandshakePayload::CertificateVerify(cv));
 
         trace!("sending certificate-verify {cv:?}");
         flight.add(cv);
@@ -827,10 +811,7 @@ mod client_hello {
         let verify_data = key_schedule.sign_server_finish(&handshake_hash);
         let verify_data_payload = Payload::new(verify_data.as_ref());
 
-        let fin = HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        };
+        let fin = HandshakeMessagePayload(HandshakePayload::Finished(verify_data_payload));
 
         trace!("sending finished {fin:?}");
         flight.add(fin);
@@ -900,11 +881,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
     {
         match m.payload {
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::CertificateTls13(..),
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::CertificateTls13(..)),
                 ..
             } => Box::new(ExpectCertificate {
                 config: self.config,
@@ -917,11 +894,7 @@ impl State<ServerConnectionData> for ExpectCertificateOrCompressedCertificate {
             .handle(cx, m),
 
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::CompressedCertificate(..),
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::CompressedCertificate(..)),
                 ..
             } => Box::new(ExpectCompressedCertificate {
                 config: self.config,
@@ -1024,10 +997,9 @@ impl State<ServerConnectionData> for ExpectCompressedCertificate {
 
         let m = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::CertificateTls13(cert_payload.into_owned()),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::CertificateTls13(cert_payload.into_owned()),
+            )),
         };
 
         Box::new(ExpectCertificate {
@@ -1223,11 +1195,7 @@ impl State<ServerConnectionData> for ExpectEarlyData {
                 }
             }
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        typ: HandshakeType::EndOfEarlyData,
-                        payload: HandshakePayload::EndOfEarlyData,
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::EndOfEarlyData),
                 ..
             } => {
                 self.key_schedule
@@ -1340,10 +1308,7 @@ impl ExpectFinished {
             }
         }
 
-        let t = HandshakeMessagePayload {
-            typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicketTls13(payload),
-        };
+        let t = HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(payload));
         trace!("sending new ticket {t:?} (stateless: {stateless})");
         flight.add(t);
 
@@ -1461,11 +1426,7 @@ impl State<ServerConnectionData> for ExpectTraffic {
                 .common
                 .take_received_plaintext(payload),
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::KeyUpdate(key_update),
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::KeyUpdate(key_update)),
                 ..
             } => self.handle_key_update(cx.common, &key_update)?,
             payload => {

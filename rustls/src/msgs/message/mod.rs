@@ -162,7 +162,7 @@ impl Message<'_> {
     pub fn is_handshake_type(&self, hstyp: HandshakeType) -> bool {
         // Bit of a layering violation, but OK.
         if let MessagePayload::Handshake { parsed, .. } = &self.payload {
-            parsed.typ == hstyp
+            parsed.0.handshake_type() == hstyp
         } else {
             false
         }
@@ -181,20 +181,18 @@ impl Message<'_> {
     pub fn build_key_update_notify() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::KeyUpdate,
-                payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
+            )),
         }
     }
 
     pub fn build_key_update_request() -> Self {
         Self {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::KeyUpdate,
-                payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
+            )),
         }
     }
 

@@ -189,7 +189,7 @@ mod tests {
     use super::provider::hash::SHA256;
     use super::*;
     use crate::crypto::hash::Hash;
-    use crate::enums::{HandshakeType, ProtocolVersion};
+    use crate::enums::ProtocolVersion;
     use crate::msgs::base::Payload;
     use crate::msgs::handshake::{HandshakeMessagePayload, HandshakePayload};
 
@@ -214,10 +214,9 @@ mod tests {
         // handshake protocol encoding of 0x0e 00 00 00
         let server_hello_done_message = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHelloDone,
-                payload: HandshakePayload::ServerHelloDone,
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHelloDone,
+            )),
         };
 
         let app_data_ignored = Message {

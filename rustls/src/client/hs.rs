@@ -504,10 +504,7 @@ fn emit_client_hello_for_retry(
         .map(ClientExtension::ext_type)
         .collect();
 
-    let mut chp = HandshakeMessagePayload {
-        typ: HandshakeType::ClientHello,
-        payload: HandshakePayload::ClientHello(chp_payload),
-    };
+    let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(chp_payload));
 
     let tls13_early_data_key_schedule = match (ech_state.as_mut(), tls13_session) {
         // If we're performing ECH and resuming, then the PSK binder will have been dealt with
@@ -1187,21 +1184,13 @@ impl State<ClientConnectionData> for ExpectServerHelloOrHelloRetryRequest {
     {
         match m.payload {
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::ServerHello(..),
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::ServerHello(..)),
                 ..
             } => self
                 .into_expect_server_hello()
                 .handle(cx, m),
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::HelloRetryRequest(..),
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(..)),
                 ..
             } => self.handle_hello_retry_request(cx, m),
             payload => Err(inappropriate_handshake_message(

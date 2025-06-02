@@ -2739,7 +2739,7 @@ pub enum HandshakePayload<'a> {
     Finished(Payload<'a>),
     CertificateStatus(CertificateStatus<'a>),
     MessageHash(Payload<'a>),
-    Unknown(Payload<'a>),
+    Unknown((HandshakeType, Payload<'a>)),
 }
 
 impl HandshakePayload<'_> {
@@ -2765,7 +2765,40 @@ impl HandshakePayload<'_> {
             Finished(x) => x.encode(bytes),
             CertificateStatus(x) => x.encode(bytes),
             MessageHash(x) => x.encode(bytes),
-            Unknown(x) => x.encode(bytes),
+            Unknown((_, x)) => x.encode(bytes),
+        }
+    }
+
+    pub(crate) fn handshake_type(&self) -> HandshakeType {
+        use self::HandshakePayload::*;
+        match self {
+            HelloRequest => HandshakeType::HelloRequest,
+            ClientHello(_) => HandshakeType::ClientHello,
+            ServerHello(_) => HandshakeType::ServerHello,
+            HelloRetryRequest(_) => HandshakeType::HelloRetryRequest,
+            Certificate(_) | CertificateTls13(_) => HandshakeType::Certificate,
+            CompressedCertificate(_) => HandshakeType::CompressedCertificate,
+            ServerKeyExchange(_) => HandshakeType::ServerKeyExchange,
+            CertificateRequest(_) | CertificateRequestTls13(_) => HandshakeType::CertificateRequest,
+            CertificateVerify(_) => HandshakeType::CertificateVerify,
+            ServerHelloDone => HandshakeType::ServerHelloDone,
+            EndOfEarlyData => HandshakeType::EndOfEarlyData,
+            ClientKeyExchange(_) => HandshakeType::ClientKeyExchange,
+            NewSessionTicket(_) | NewSessionTicketTls13(_) => HandshakeType::NewSessionTicket,
+            EncryptedExtensions(_) => HandshakeType::EncryptedExtensions,
+            KeyUpdate(_) => HandshakeType::KeyUpdate,
+            Finished(_) => HandshakeType::Finished,
+            CertificateStatus(_) => HandshakeType::CertificateStatus,
+            MessageHash(_) => HandshakeType::MessageHash,
+            Unknown((t, _)) => *t,
+        }
+    }
+
+    fn wire_handshake_type(&self) -> HandshakeType {
+        match self.handshake_type() {
+            // A `HelloRetryRequest` appears on the wire as a `ServerHello` with a magic `random` value.
+            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
+            other => other,
         }
     }
 
@@ -2794,16 +2827,13 @@ impl HandshakePayload<'_> {
             Finished(x) => Finished(x.into_owned()),
             CertificateStatus(x) => CertificateStatus(x.into_owned()),
             MessageHash(x) => MessageHash(x.into_owned()),
-            Unknown(x) => Unknown(x.into_owned()),
+            Unknown((t, x)) => Unknown((t, x.into_owned())),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct HandshakeMessagePayload<'a> {
-    pub typ: HandshakeType,
-    pub payload: HandshakePayload<'a>,
-}
+pub struct HandshakeMessagePayload<'a>(pub HandshakePayload<'a>);
 
 impl<'a> Codec<'a> for HandshakeMessagePayload<'a> {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -2820,7 +2850,7 @@ impl<'a> HandshakeMessagePayload<'a> {
         r: &mut Reader<'a>,
         vers: ProtocolVersion,
     ) -> Result<Self, InvalidMessage> {
-        let mut typ = HandshakeType::read(r)?;
+        let typ = HandshakeType::read(r)?;
         let len = codec::u24::read(r)?.0 as usize;
         let mut sub = r.sub(len)?;
 
@@ -2836,7 +2866,6 @@ impl<'a> HandshakeMessagePayload<'a> {
                 if random == HELLO_RETRY_REQUEST_RANDOM {
                     let mut hrr = HelloRetryRequest::read(&mut sub)?;
                     hrr.legacy_version = version;
-                    typ = HandshakeType::HelloRetryRequest;
                     HandshakePayload::HelloRetryRequest(hrr)
                 } else {
                     let mut shp = ServerHelloPayload::read(&mut sub)?;
@@ -2907,11 +2936,11 @@ impl<'a> HandshakeMessagePayload<'a> {
                 // not legal on wire
                 return Err(InvalidMessage::UnexpectedMessage("HelloRetryRequest"));
             }
-            _ => HandshakePayload::Unknown(Payload::read(&mut sub)),
+            _ => HandshakePayload::Unknown((typ, Payload::read(&mut sub))),
         };
 
         sub.expect_empty("HandshakeMessagePayload")
-            .map(|_| Self { typ, payload })
+            .map(|_| Self(payload))
     }
 
     pub(crate) fn encoding_for_binder_signing(&self) -> Vec<u8> {
@@ -2922,7 +2951,7 @@ impl<'a> HandshakeMessagePayload<'a> {
     }
 
     pub(crate) fn total_binder_length(&self) -> usize {
-        match &self.payload {
+        match &self.0 {
             HandshakePayload::ClientHello(ch) => match ch.extensions.last() {
                 Some(ClientExtension::PresharedKey(offer)) => {
                     let mut binders_encoding = Vec::new();
@@ -2939,11 +2968,9 @@ impl<'a> HandshakeMessagePayload<'a> {
 
     pub(crate) fn payload_encode(&self, bytes: &mut Vec<u8>, encoding: Encoding) {
         // output type, length, and encoded payload
-        match self.typ {
-            HandshakeType::HelloRetryRequest => HandshakeType::ServerHello,
-            _ => self.typ,
-        }
-        .encode(bytes);
+        self.0
+            .wire_handshake_type()
+            .encode(bytes);
 
         let nested = LengthPrefixedBuffer::new(
             ListLength::U24 {
@@ -2953,7 +2980,7 @@ impl<'a> HandshakeMessagePayload<'a> {
             bytes,
         );
 
-        match &self.payload {
+        match &self.0 {
             // for Server Hello and HelloRetryRequest payloads we need to encode the payload
             // differently based on the purpose of the encoding.
             HandshakePayload::ServerHello(payload) => payload.payload_encode(nested.buf, encoding),
@@ -2962,23 +2989,16 @@ impl<'a> HandshakeMessagePayload<'a> {
             }
 
             // All other payload types are encoded the same regardless of purpose.
-            _ => self.payload.encode(nested.buf),
+            _ => self.0.encode(nested.buf),
         }
     }
 
     pub(crate) fn build_handshake_hash(hash: &[u8]) -> Self {
-        Self {
-            typ: HandshakeType::MessageHash,
-            payload: HandshakePayload::MessageHash(Payload::new(hash.to_vec())),
-        }
+        Self(HandshakePayload::MessageHash(Payload::new(hash.to_vec())))
     }
 
     pub(crate) fn into_owned(self) -> HandshakeMessagePayload<'static> {
-        let Self { typ, payload } = self;
-        HandshakeMessagePayload {
-            typ,
-            payload: payload.into_owned(),
-        }
+        HandshakeMessagePayload(self.0.into_owned())
     }
 }
 
