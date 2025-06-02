@@ -413,6 +413,9 @@ pub enum CertificateError {
     /// issuer.
     BadSignature,
 
+    /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
+    UnsupportedSignatureAlgorithm,
+
     /// The subject names in an end-entity certificate do not include
     /// the expected name.
     NotValidForName,
@@ -496,6 +499,7 @@ impl PartialEq<Self> for CertificateError {
             (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
             (UnknownIssuer, UnknownIssuer) => true,
             (BadSignature, BadSignature) => true,
+            (UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm) => true,
             (NotValidForName, NotValidForName) => true,
             (
                 NotValidForNameContext {
@@ -560,7 +564,7 @@ impl From<CertificateError> for AlertDescription {
             | UnknownRevocationStatus
             | ExpiredRevocationList
             | ExpiredRevocationListContext { .. } => Self::UnknownCA,
-            BadSignature => Self::DecryptError,
+            BadSignature | UnsupportedSignatureAlgorithm => Self::DecryptError,
             InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
             // RFC 5246/RFC 8446
@@ -723,8 +727,11 @@ impl fmt::Display for ExtendedKeyPurpose {
 #[derive(Debug, Clone)]
 /// The ways in which a certificate revocation list (CRL) can be invalid.
 pub enum CertRevocationListError {
-    /// The CRL had a bad, or unsupported signature from its issuer.
+    /// The CRL had a bad signature from its issuer.
     BadSignature,
+
+    /// The CRL had an unsupported signature from its issuer.
+    UnsupportedSignatureAlgorithm,
 
     /// The CRL contained an invalid CRL number.
     InvalidCrlNumber,
@@ -769,6 +776,7 @@ impl PartialEq<Self> for CertRevocationListError {
         #[allow(clippy::match_like_matches_macro)]
         match (self, other) {
             (BadSignature, BadSignature) => true,
+            (UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm) => true,
             (InvalidCrlNumber, InvalidCrlNumber) => true,
             (InvalidRevokedCertSerialNumber, InvalidRevokedCertSerialNumber) => true,
             (IssuerInvalidForCrl, IssuerInvalidForCrl) => true,
@@ -1027,6 +1035,7 @@ mod tests {
             }
         );
         assert_eq!(BadSignature, BadSignature);
+        assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
         assert_eq!(NotValidForName, NotValidForName);
         let context = NotValidForNameContext {
             expected: ServerName::try_from("example.com")
@@ -1070,6 +1079,7 @@ mod tests {
     fn crl_error_equality() {
         use super::CertRevocationListError::*;
         assert_eq!(BadSignature, BadSignature);
+        assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
         assert_eq!(InvalidCrlNumber, InvalidCrlNumber);
         assert_eq!(
             InvalidRevokedCertSerialNumber,

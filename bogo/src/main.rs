@@ -1003,6 +1003,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":CANNOT_PARSE_LEAF_CERT:")
         }
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
+        Error::InvalidCertificate(CertificateError::UnsupportedSignatureAlgorithm) => {
+            quit(":WRONG_SIGNATURE_TYPE:")
+        }
         Error::InvalidCertificate(e) => quit(&format!(":BAD_CERT: ({e:?})")),
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
         _ => {
