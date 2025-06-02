@@ -7,7 +7,7 @@ use pki_types::{CertificateDer, ServerName};
 
 use crate::client::{ClientConfig, ClientConnection, Resumption, Tls12Resumption};
 use crate::crypto::CryptoProvider;
-use crate::enums::{CipherSuite, HandshakeType, ProtocolVersion, SignatureScheme};
+use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::msgs::base::PayloadU16;
 use crate::msgs::codec::Reader;
 use crate::msgs::enums::{Compression, NamedGroup};
@@ -93,9 +93,8 @@ mod tests {
         // server replies with HRR, but does not echo `session_id` as required.
         let hrr = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::HelloRetryRequest,
-                payload: HandshakePayload::HelloRetryRequest(HelloRetryRequest {
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::HelloRetryRequest(HelloRetryRequest {
                     cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
                     legacy_version: ProtocolVersion::TLSv1_2,
                     session_id: SessionId::empty(),
@@ -103,7 +102,7 @@ mod tests {
                         1, 2, 3, 4,
                     ]))],
                 }),
-            }),
+            )),
         };
 
         conn.read_tls(&mut hrr.into_wire_bytes().as_slice())
@@ -138,9 +137,8 @@ mod tests {
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHello(ServerHelloPayload {
                     random: Random::new(config.provider.secure_random).unwrap(),
                     compression_method: Compression::Null,
                     cipher_suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -148,7 +146,7 @@ mod tests {
                     session_id: SessionId::empty(),
                     extensions: vec![],
                 }),
-            }),
+            )),
         };
         conn.read_tls(&mut sh.into_wire_bytes().as_slice())
             .unwrap();
@@ -206,9 +204,8 @@ mod tests {
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHello(ServerHelloPayload {
                     random: Random([0u8; 32]),
                     compression_method: Compression::Null,
                     cipher_suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
@@ -216,7 +213,7 @@ mod tests {
                     session_id: SessionId::empty(),
                     extensions: vec![ServerExtension::ExtendedMasterSecretAck],
                 }),
-            }),
+            )),
         };
         conn.read_tls(&mut sh.into_wire_bytes().as_slice())
             .unwrap();
@@ -224,12 +221,11 @@ mod tests {
 
         let cert = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::Certificate,
-                payload: HandshakePayload::Certificate(CertificateChain(vec![
-                    CertificateDer::from(&b"does not matter"[..]),
-                ])),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::Certificate(CertificateChain(vec![CertificateDer::from(
+                    &b"does not matter"[..],
+                )])),
+            )),
         };
         conn.read_tls(&mut cert.into_wire_bytes().as_slice())
             .unwrap();
@@ -237,9 +233,8 @@ mod tests {
 
         let server_kx = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerKeyExchange,
-                payload: HandshakePayload::ServerKeyExchange(ServerKeyExchangePayload::Known(
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerKeyExchange(ServerKeyExchangePayload::Known(
                     ServerKeyExchange {
                         dss: DigitallySignedStruct::new(
                             SignatureScheme::ECDSA_SHA1_Legacy,
@@ -254,7 +249,7 @@ mod tests {
                         }),
                     },
                 )),
-            }),
+            )),
         };
         conn.read_tls(&mut server_kx.into_wire_bytes().as_slice())
             .unwrap();
@@ -262,10 +257,9 @@ mod tests {
 
         let server_done = Message {
             version: ProtocolVersion::TLSv1_2,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHelloDone,
-                payload: HandshakePayload::ServerHelloDone,
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHelloDone,
+            )),
         };
         conn.read_tls(&mut server_done.into_wire_bytes().as_slice())
             .unwrap();
@@ -386,9 +380,8 @@ mod tests {
 
         let sh = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ServerHello,
-                payload: HandshakePayload::ServerHello(ServerHelloPayload {
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ServerHello(ServerHelloPayload {
                     random: Random([0; 32]),
                     compression_method: Compression::Null,
                     cipher_suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
@@ -399,7 +392,7 @@ mod tests {
                         payload: PayloadU16::new(vec![0xaa; 32]),
                     })],
                 }),
-            }),
+            )),
         };
         conn.read_tls(&mut sh.into_wire_bytes().as_slice())
             .unwrap();
@@ -407,10 +400,9 @@ mod tests {
 
         let ee = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::EncryptedExtensions,
-                payload: HandshakePayload::EncryptedExtensions(encrypted_extensions),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::EncryptedExtensions(encrypted_extensions),
+            )),
         };
 
         let mut encrypter = fake_server_crypto.server_handshake_encrypter();
@@ -662,11 +654,7 @@ fn client_hello_sent_for_config(config: ClientConfig) -> Result<ClientHelloPaylo
         Message {
             payload:
                 MessagePayload::Handshake {
-                    parsed:
-                        HandshakeMessagePayload {
-                            payload: HandshakePayload::ClientHello(ch),
-                            ..
-                        },
+                    parsed: HandshakeMessagePayload(HandshakePayload::ClientHello(ch)),
                     ..
                 },
             ..

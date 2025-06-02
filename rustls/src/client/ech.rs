@@ -28,8 +28,8 @@ use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
 use crate::{
-    AlertDescription, CommonState, EncryptedClientHelloError, Error, HandshakeType,
-    PeerIncompatible, PeerMisbehaved, ProtocolVersion, Tls13CipherSuite,
+    AlertDescription, CommonState, EncryptedClientHelloError, Error, PeerIncompatible,
+    PeerMisbehaved, ProtocolVersion, Tls13CipherSuite,
 };
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
@@ -664,10 +664,7 @@ impl EchState {
 
         // If we're resuming, we need to update the PSK binder in the inner hello.
         if let Some(resuming) = resuming.as_ref() {
-            let mut chp = HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(inner_hello),
-            };
+            let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello));
 
             // Retain the early key schedule we get from processing the binder.
             self.early_data_key_schedule = Some(tls13::fill_in_psk_binder(
@@ -678,7 +675,7 @@ impl EchState {
 
             // fill_in_psk_binder works on an owned HandshakeMessagePayload, so we need to
             // extract our inner hello back out of it to retain ownership.
-            inner_hello = match chp.payload {
+            inner_hello = match chp.0 {
                 HandshakePayload::ClientHello(chp) => chp,
                 // Safety: we construct the HMP above and know its type unconditionally.
                 _ => unreachable!(),
@@ -733,10 +730,9 @@ impl EchState {
                 // (retryreq == None means we're in the "initial ClientHello" case)
                 None => ProtocolVersion::TLSv1_0,
             },
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(inner_hello),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(inner_hello),
+            )),
         };
 
         // Update the inner transcript buffer with the inner hello message.
@@ -779,17 +775,15 @@ impl EchState {
     }
 
     fn server_hello_conf(server_hello: &ServerHelloPayload) -> Message<'_> {
-        Self::ech_conf_message(HandshakeMessagePayload {
-            typ: HandshakeType::ServerHello,
-            payload: HandshakePayload::ServerHello(server_hello.clone()),
-        })
+        Self::ech_conf_message(HandshakeMessagePayload(HandshakePayload::ServerHello(
+            server_hello.clone(),
+        )))
     }
 
     fn hello_retry_request_conf(retry_req: &HelloRetryRequest) -> Message<'_> {
-        Self::ech_conf_message(HandshakeMessagePayload {
-            typ: HandshakeType::HelloRetryRequest,
-            payload: HandshakePayload::HelloRetryRequest(retry_req.clone()),
-        })
+        Self::ech_conf_message(HandshakeMessagePayload(
+            HandshakePayload::HelloRetryRequest(retry_req.clone()),
+        ))
     }
 
     fn ech_conf_message(hmp: HandshakeMessagePayload<'_>) -> Message<'_> {

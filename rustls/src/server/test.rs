@@ -12,9 +12,7 @@ use crate::msgs::handshake::{
     Random, SessionId, SupportedProtocolVersions,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::{
-    CommonState, Error, HandshakeType, PeerIncompatible, PeerMisbehaved, ProtocolVersion, Side,
-};
+use crate::{CommonState, Error, PeerIncompatible, PeerMisbehaved, ProtocolVersion, Side};
 
 #[test]
 fn null_compression_required() {
@@ -51,10 +49,9 @@ fn server_rejects_sni_with_illegal_dns_name() {
 fn test_process_client_hello(hello: ClientHelloPayload) -> Result<(), Error> {
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(hello),
-        }),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::ClientHello(
+            hello,
+        ))),
     };
     super::hs::process_client_hello(
         &m,
@@ -106,10 +103,9 @@ mod tests {
             .retain(|ext| ext.ext_type() != ExtensionType::ExtendedMasterSecret);
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ch),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(ch),
+            )),
         };
         conn.read_tls(&mut ch.into_wire_bytes().as_slice())
             .unwrap();
@@ -192,10 +188,9 @@ mod tests {
     ) {
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(client_hello),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(client_hello),
+            )),
         };
         conn.read_tls(&mut ch.into_wire_bytes().as_slice())
             .unwrap();
@@ -216,10 +211,9 @@ mod tests {
             ]));
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ch),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(ch),
+            )),
         };
 
         let mut conn = ServerConnection::new(server_config_for_rpk().into()).unwrap();
@@ -240,10 +234,9 @@ mod tests {
             ]));
         let ch = Message {
             version: ProtocolVersion::TLSv1_3,
-            payload: MessagePayload::handshake(HandshakeMessagePayload {
-                typ: HandshakeType::ClientHello,
-                payload: HandshakePayload::ClientHello(ch),
-            }),
+            payload: MessagePayload::handshake(HandshakeMessagePayload(
+                HandshakePayload::ClientHello(ch),
+            )),
         };
 
         let mut conn = ServerConnection::new(server_config_for_rpk().into()).unwrap();

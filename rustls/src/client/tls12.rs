@@ -280,11 +280,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
     {
         match m.payload {
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::ServerKeyExchange(..),
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(..)),
                 ..
             } => Box::new(ExpectServerKx {
                 config: self.config,
@@ -300,11 +296,7 @@ impl State<ClientConnectionData> for ExpectCertificateStatusOrServerKx<'_> {
             })
             .handle(cx, m),
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::CertificateStatus(..),
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::CertificateStatus(..)),
                 ..
             } => Box::new(ExpectCertificateStatus {
                 config: self.config,
@@ -506,10 +498,9 @@ fn emit_certificate(
 ) {
     let cert = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(cert_chain),
-        }),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Certificate(
+            cert_chain,
+        ))),
     };
 
     transcript.add_message(&cert);
@@ -536,10 +527,9 @@ fn emit_client_kx(
 
     let ckx = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::ClientKeyExchange,
-            payload: HandshakePayload::ClientKeyExchange(pubkey),
-        }),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::ClientKeyExchange(pubkey),
+        )),
     };
 
     transcript.add_message(&ckx);
@@ -561,10 +551,9 @@ fn emit_certverify(
 
     let m = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::CertificateVerify,
-            payload: HandshakePayload::CertificateVerify(body),
-        }),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(
+            HandshakePayload::CertificateVerify(body),
+        )),
     };
 
     transcript.add_message(&m);
@@ -592,10 +581,9 @@ fn emit_finished(
 
     let f = Message {
         version: ProtocolVersion::TLSv1_2,
-        payload: MessagePayload::handshake(HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(verify_data_payload),
-        }),
+        payload: MessagePayload::handshake(HandshakeMessagePayload(HandshakePayload::Finished(
+            verify_data_payload,
+        ))),
     };
 
     transcript.add_message(&f);
@@ -645,10 +633,7 @@ impl State<ClientConnectionData> for ExpectServerDoneOrCertReq<'_> {
         if matches!(
             m.payload,
             MessagePayload::Handshake {
-                parsed: HandshakeMessagePayload {
-                    payload: HandshakePayload::CertificateRequest(_),
-                    ..
-                },
+                parsed: HandshakeMessagePayload(HandshakePayload::CertificateRequest(_)),
                 ..
             }
         ) {
@@ -812,11 +797,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
     {
         match m.payload {
             MessagePayload::Handshake {
-                parsed:
-                    HandshakeMessagePayload {
-                        payload: HandshakePayload::ServerHelloDone,
-                        ..
-                    },
+                parsed: HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
                 ..
             } => {}
             payload => {

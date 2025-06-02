@@ -739,7 +739,7 @@ fn can_clone_all_server_extensions() {
 #[test]
 fn can_round_trip_all_tls12_handshake_payloads() {
     for hm in all_tls12_handshake_payloads().iter() {
-        println!("{:?}", hm.typ);
+        println!("{:?}", hm.0.handshake_type());
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);
         let other = HandshakeMessagePayload::read(&mut rd).unwrap();
@@ -778,7 +778,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
             put_u24(l as u32, &mut enc[1..]);
             println!("  check len {l:?} enc {enc:?}");
 
-            match (hm.typ, l) {
+            match (hm.0.handshake_type(), l) {
                 (HandshakeType::ClientHello, 41)
                 | (HandshakeType::ServerHello, 38)
                 | (HandshakeType::ServerKeyExchange, _)
@@ -803,7 +803,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
 #[test]
 fn can_round_trip_all_tls13_handshake_payloads() {
     for hm in all_tls13_handshake_payloads().iter() {
-        println!("{:?}", hm.typ);
+        println!("{:?}", hm.0.handshake_type());
         let bytes = hm.get_encoding();
         let mut rd = Reader::init(&bytes);
 
@@ -844,7 +844,7 @@ fn can_detect_truncation_of_all_tls13_handshake_payloads() {
             put_u24(l as u32, &mut enc[1..]);
             println!("  check len {l:?} enc {enc:?}");
 
-            match (hm.typ, l) {
+            match (hm.0.handshake_type(), l) {
                 (HandshakeType::ClientHello, 41)
                 | (HandshakeType::ServerHello, 38)
                 | (HandshakeType::ServerKeyExchange, _)
@@ -873,10 +873,7 @@ fn put_u24(u: u32, b: &mut [u8]) {
 
 #[test]
 fn cannot_read_message_hash_from_network() {
-    let mh = HandshakeMessagePayload {
-        typ: HandshakeType::MessageHash,
-        payload: HandshakePayload::MessageHash(Payload::new(vec![1, 2, 3])),
-    };
+    let mh = HandshakeMessagePayload(HandshakePayload::MessageHash(Payload::new(vec![1, 2, 3])));
     println!("mh {mh:?}");
     let enc = mh.get_encoding();
     assert!(HandshakeMessagePayload::read_bytes(&enc).is_err());
@@ -1028,176 +1025,107 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
 
 fn all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
     vec![
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRequest,
-            payload: HandshakePayload::HelloRequest,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(sample_client_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHello,
-            payload: HandshakePayload::ServerHello(sample_server_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRetryRequest,
-            payload: HandshakePayload::HelloRetryRequest(sample_hello_retry_request()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::Certificate(CertificateChain(vec![CertificateDer::from(
-                vec![1, 2, 3],
-            )])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_ecdhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_dhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(
-                sample_unknown_server_key_exchange_payload(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequest(sample_certificate_request_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHelloDone,
-            payload: HandshakePayload::ServerHelloDone,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientKeyExchange,
-            payload: HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicket(sample_new_session_ticket_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::EncryptedExtensions,
-            payload: HandshakePayload::EncryptedExtensions(sample_encrypted_extensions()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateStatus,
-            payload: HandshakePayload::CertificateStatus(sample_certificate_status()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Unknown(99),
-            payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
-        },
+        HandshakeMessagePayload(HandshakePayload::HelloRequest),
+        HandshakeMessagePayload(HandshakePayload::ClientHello(sample_client_hello_payload())),
+        HandshakeMessagePayload(HandshakePayload::ServerHello(sample_server_hello_payload())),
+        HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(
+            sample_hello_retry_request(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::Certificate(CertificateChain(vec![
+            CertificateDer::from(vec![1, 2, 3]),
+        ]))),
+        HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(
+            sample_ecdhe_server_key_exchange_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(
+            sample_dhe_server_key_exchange_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(
+            sample_unknown_server_key_exchange_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::CertificateRequest(
+            sample_certificate_request_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
+        HandshakeMessagePayload(HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[
+            1, 2, 3,
+        ]))),
+        HandshakeMessagePayload(HandshakePayload::NewSessionTicket(
+            sample_new_session_ticket_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(
+            sample_encrypted_extensions(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::KeyUpdate(
+            KeyUpdateRequest::UpdateRequested,
+        )),
+        HandshakeMessagePayload(HandshakePayload::KeyUpdate(
+            KeyUpdateRequest::UpdateNotRequested,
+        )),
+        HandshakeMessagePayload(HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3]))),
+        HandshakeMessagePayload(HandshakePayload::CertificateStatus(
+            sample_certificate_status(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::Unknown((
+            HandshakeType::Unknown(99),
+            Payload::Borrowed(&[1, 2, 3]),
+        ))),
     ]
 }
 
 fn all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
     vec![
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRequest,
-            payload: HandshakePayload::HelloRequest,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientHello,
-            payload: HandshakePayload::ClientHello(sample_client_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHello,
-            payload: HandshakePayload::ServerHello(sample_server_hello_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::HelloRetryRequest,
-            payload: HandshakePayload::HelloRetryRequest(sample_hello_retry_request()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Certificate,
-            payload: HandshakePayload::CertificateTls13(sample_certificate_payload_tls13()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CompressedCertificate,
-            payload: HandshakePayload::CompressedCertificate(sample_compressed_certificate()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_ecdhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(sample_dhe_server_key_exchange_payload()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerKeyExchange,
-            payload: HandshakePayload::ServerKeyExchange(
-                sample_unknown_server_key_exchange_payload(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateRequest,
-            payload: HandshakePayload::CertificateRequestTls13(
-                sample_certificate_request_payload_tls13(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateVerify,
-            payload: HandshakePayload::CertificateVerify(DigitallySignedStruct::new(
-                SignatureScheme::ECDSA_NISTP256_SHA256,
-                vec![1, 2, 3],
-            )),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ServerHelloDone,
-            payload: HandshakePayload::ServerHelloDone,
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::ClientKeyExchange,
-            payload: HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::NewSessionTicket,
-            payload: HandshakePayload::NewSessionTicketTls13(
-                sample_new_session_ticket_payload_tls13(),
-            ),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::EncryptedExtensions,
-            payload: HandshakePayload::EncryptedExtensions(sample_encrypted_extensions()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::KeyUpdate,
-            payload: HandshakePayload::KeyUpdate(KeyUpdateRequest::UpdateNotRequested),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Finished,
-            payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::CertificateStatus,
-            payload: HandshakePayload::CertificateStatus(sample_certificate_status()),
-        },
-        HandshakeMessagePayload {
-            typ: HandshakeType::Unknown(99),
-            payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
-        },
+        HandshakeMessagePayload(HandshakePayload::HelloRequest),
+        HandshakeMessagePayload(HandshakePayload::ClientHello(sample_client_hello_payload())),
+        HandshakeMessagePayload(HandshakePayload::ServerHello(sample_server_hello_payload())),
+        HandshakeMessagePayload(HandshakePayload::HelloRetryRequest(
+            sample_hello_retry_request(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::CertificateTls13(
+            sample_certificate_payload_tls13(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::CompressedCertificate(
+            sample_compressed_certificate(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(
+            sample_ecdhe_server_key_exchange_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(
+            sample_dhe_server_key_exchange_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::ServerKeyExchange(
+            sample_unknown_server_key_exchange_payload(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::CertificateRequestTls13(
+            sample_certificate_request_payload_tls13(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::CertificateVerify(
+            DigitallySignedStruct::new(SignatureScheme::ECDSA_NISTP256_SHA256, vec![1, 2, 3]),
+        )),
+        HandshakeMessagePayload(HandshakePayload::ServerHelloDone),
+        HandshakeMessagePayload(HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[
+            1, 2, 3,
+        ]))),
+        HandshakeMessagePayload(HandshakePayload::NewSessionTicketTls13(
+            sample_new_session_ticket_payload_tls13(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::EncryptedExtensions(
+            sample_encrypted_extensions(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::KeyUpdate(
+            KeyUpdateRequest::UpdateRequested,
+        )),
+        HandshakeMessagePayload(HandshakePayload::KeyUpdate(
+            KeyUpdateRequest::UpdateNotRequested,
+        )),
+        HandshakeMessagePayload(HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3]))),
+        HandshakeMessagePayload(HandshakePayload::CertificateStatus(
+            sample_certificate_status(),
+        )),
+        HandshakeMessagePayload(HandshakePayload::Unknown((
+            HandshakeType::Unknown(99),
+            Payload::Borrowed(&[1, 2, 3]),
+        ))),
     ]
 }
 

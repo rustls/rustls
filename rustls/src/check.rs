@@ -10,10 +10,9 @@ use crate::msgs::message::MessagePayload;
 macro_rules! require_handshake_msg(
   ( $m:expr, $handshake_type:path, $payload_type:path ) => (
     match &$m.payload {
-        MessagePayload::Handshake { parsed: $crate::msgs::handshake::HandshakeMessagePayload {
-            payload: $payload_type(hm),
-            ..
-        }, .. } => Ok(hm),
+        MessagePayload::Handshake { parsed: $crate::msgs::handshake::HandshakeMessagePayload(
+            $payload_type(hm),
+        ), .. } => Ok(hm),
         payload => Err($crate::check::inappropriate_handshake_message(
             payload,
             &[$crate::ContentType::Handshake],
@@ -26,10 +25,9 @@ macro_rules! require_handshake_msg(
 macro_rules! require_handshake_msg_move(
   ( $m:expr, $handshake_type:path, $payload_type:path ) => (
     match $m.payload {
-        MessagePayload::Handshake { parsed: $crate::msgs::handshake::HandshakeMessagePayload {
-            payload: $payload_type(hm),
-            ..
-        }, .. } => Ok(hm),
+        MessagePayload::Handshake { parsed: $crate::msgs::handshake::HandshakeMessagePayload(
+            $payload_type(hm),
+        ), .. } => Ok(hm),
         payload =>
             Err($crate::check::inappropriate_handshake_message(
                 &payload,
@@ -61,13 +59,14 @@ pub(crate) fn inappropriate_handshake_message(
 ) -> Error {
     match payload {
         MessagePayload::Handshake { parsed, .. } => {
+            let got_type = parsed.0.handshake_type();
             warn!(
                 "Received a {:?} handshake message while expecting {:?}",
-                parsed.typ, handshake_types
+                got_type, handshake_types
             );
             Error::InappropriateHandshakeMessage {
                 expect_types: handshake_types.to_vec(),
-                got_type: parsed.typ,
+                got_type,
             }
         }
         payload => inappropriate_message(payload, content_types),
