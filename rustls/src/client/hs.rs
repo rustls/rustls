@@ -100,7 +100,6 @@ fn find_session(
 
 pub(super) fn start_handshake(
     server_name: ServerName<'static>,
-    alpn_protocols: Vec<ProtocolName>,
     extra_exts: ClientExtensionsInput<'_>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -172,6 +171,11 @@ pub(super) fn start_handshake(
         )?),
         _ => None,
     };
+
+    let alpn_protocols = extra_exts
+        .protocols
+        .clone()
+        .unwrap_or_default();
 
     emit_client_hello_for_retry(
         transcript_buffer,
@@ -260,6 +264,7 @@ fn emit_client_hello_for_retry(
 
     let ClientExtensionsInput {
         transport_parameters,
+        protocols,
     } = extra_exts.clone().into_owned();
 
     let mut exts = Box::new(ClientExtensions {
@@ -281,6 +286,7 @@ fn emit_client_hello_for_retry(
         ),
         extended_master_secret_request: Some(()),
         certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
+        protocols,
         ..Default::default()
     });
 
@@ -361,11 +367,6 @@ fn emit_client_hello_for_retry(
         // have forward secrecy, and are similar to TLS1.2 resumption.
         let psk_modes = vec![PskKeyExchangeMode::PSK_DHE_KE];
         exts.preshared_key_modes = Some(psk_modes);
-    }
-
-    // Add ALPN extension if we have any protocols
-    if !input.hello.alpn_protocols.is_empty() {
-        exts.protocols = Some(input.hello.alpn_protocols.clone());
     }
 
     input.hello.offered_cert_compression =
@@ -676,7 +677,7 @@ pub(super) fn process_alpn_protocol(
         common
             .alpn_protocol
             .as_ref()
-            .map(|v| bs_debug::BsDebug(v))
+            .map(|v| bs_debug::BsDebug(v.as_ref()))
     );
     Ok(())
 }

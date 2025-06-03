@@ -709,15 +709,37 @@ impl TlsListElement for CertificateCompressionAlgorithm {
 pub(crate) struct ClientExtensionsInput<'a> {
     /// QUIC transport parameters
     pub(crate) transport_parameters: Option<TransportParameters<'a>>,
+
+    /// ALPN protocols
+    pub(crate) protocols: Option<Vec<ProtocolName>>,
 }
 
 impl ClientExtensionsInput<'_> {
+    pub(crate) fn from_alpn(alpn_protocols: Vec<Vec<u8>>) -> ClientExtensionsInput<'static> {
+        let protocols = match alpn_protocols.is_empty() {
+            true => None,
+            false => Some(
+                alpn_protocols
+                    .into_iter()
+                    .map(ProtocolName::from)
+                    .collect::<Vec<_>>(),
+            ),
+        };
+
+        ClientExtensionsInput {
+            transport_parameters: None,
+            protocols,
+        }
+    }
+
     pub(crate) fn into_owned(self) -> ClientExtensionsInput<'static> {
         let Self {
             transport_parameters,
+            protocols,
         } = self;
         ClientExtensionsInput {
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
+            protocols,
         }
     }
 }
