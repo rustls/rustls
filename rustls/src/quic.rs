@@ -199,10 +199,11 @@ mod connection {
                     Version::V1Draft => TransportParameters::QuicDraft(Payload::new(params)),
                     Version::V1 | Version::V2 => TransportParameters::Quic(Payload::new(params)),
                 }),
+
+                ..ClientExtensionsInput::from_alpn(alpn_protocols)
             };
 
-            let mut inner =
-                ConnectionCore::for_client(config, name, alpn_protocols, exts, Protocol::Quic)?;
+            let mut inner = ConnectionCore::for_client(config, name, exts, Protocol::Quic)?;
             inner.common_state.quic.version = quic_version;
             Ok(Self {
                 inner: inner.into(),
