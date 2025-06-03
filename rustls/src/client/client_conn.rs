@@ -19,7 +19,7 @@ use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::ClientExtensionsInput;
 use crate::msgs::persist;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::sync::Arc;
@@ -634,7 +634,7 @@ mod connection {
 
     use pki_types::ServerName;
 
-    use super::ClientConnectionData;
+    use super::{ClientConnectionData, ClientExtensionsInput};
     use crate::ClientConfig;
     use crate::client::EchStatus;
     use crate::common_state::Protocol;
@@ -716,8 +716,7 @@ mod connection {
                 inner: ConnectionCommon::from(ConnectionCore::for_client(
                     config,
                     name,
-                    alpn_protocols,
-                    Vec::new(),
+                    ClientExtensionsInput::from_alpn_protocols(alpn_protocols),
                     Protocol::Tcp,
                 )?),
             })
@@ -841,8 +840,7 @@ impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        alpn_protocols: Vec<Vec<u8>>,
-        extra_exts: Vec<ClientExtension>,
+        extra_exts: ClientExtensionsInput<'_>,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
@@ -859,7 +857,7 @@ impl ConnectionCore<ClientConnectionData> {
             sendable_plaintext: None,
         };
 
-        let state = hs::start_handshake(name, alpn_protocols, extra_exts, config, &mut cx)?;
+        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
         Ok(Self::new(state, data, common_state))
     }
 
@@ -880,7 +878,11 @@ impl UnbufferedClientConnection {
     /// Make a new ClientConnection. `config` controls how we behave in the TLS protocol, `name` is
     /// the name of the server we want to talk to.
     pub fn new(config: Arc<ClientConfig>, name: ServerName<'static>) -> Result<Self, Error> {
-        Self::new_with_alpn(config.clone(), name, config.alpn_protocols.clone())
+        Self::new_with_extensions(
+            config.clone(),
+            name,
+            ClientExtensionsInput::from_alpn_protocols(config.alpn_protocols.clone()),
+        )
     }
 
     /// Make a new UnbufferedClientConnection with custom ALPN protocols.
@@ -889,12 +891,23 @@ impl UnbufferedClientConnection {
         name: ServerName<'static>,
         alpn_protocols: Vec<Vec<u8>>,
     ) -> Result<Self, Error> {
+        Self::new_with_extensions(
+            config,
+            name,
+            ClientExtensionsInput::from_alpn_protocols(alpn_protocols),
+        )
+    }
+
+    fn new_with_extensions(
+        config: Arc<ClientConfig>,
+        name: ServerName<'static>,
+        extensions: ClientExtensionsInput<'static>,
+    ) -> Result<Self, Error> {
         Ok(Self {
             inner: UnbufferedConnectionCommon::from(ConnectionCore::for_client(
                 config,
                 name,
-                alpn_protocols,
-                Vec::new(),
+                extensions,
                 Protocol::Tcp,
             )?),
         })
