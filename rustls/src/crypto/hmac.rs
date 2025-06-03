@@ -21,22 +21,21 @@ pub trait Hmac: Send + Sync {
 
 /// A HMAC tag, stored as a value.
 #[derive(Clone)]
-pub struct Tag {
-    buf: [u8; Self::MAX_LEN],
-    used: usize,
-}
+pub struct Tag(PublicTag);
 
 impl Tag {
     /// Build a tag by copying a byte slice.
     ///
     /// The slice can be up to [`Tag::MAX_LEN`] bytes in length.
     pub fn new(bytes: &[u8]) -> Self {
-        let mut tag = Self {
-            buf: [0u8; Self::MAX_LEN],
-            used: bytes.len(),
-        };
-        tag.buf[..bytes.len()].copy_from_slice(bytes);
-        tag
+        Self(PublicTag::new(bytes))
+    }
+
+    /// Declare this tag is public.
+    pub(crate) fn into_public(self) -> PublicTag {
+        let pt = self.0.clone();
+        core::mem::forget(self);
+        pt
     }
 
     /// Maximum supported HMAC tag size: supports up to SHA512.
@@ -45,11 +44,38 @@ impl Tag {
 
 impl Drop for Tag {
     fn drop(&mut self) {
-        self.buf.zeroize();
+        self.0.buf.zeroize();
     }
 }
 
 impl AsRef<[u8]> for Tag {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+/// A HMAC tag, stored as a value, that is non-secret.
+#[derive(Clone)]
+pub(crate) struct PublicTag {
+    buf: [u8; Tag::MAX_LEN],
+    used: usize,
+}
+
+impl PublicTag {
+    /// Build a tag by copying a byte slice.
+    ///
+    /// The slice can be up to [`Tag::MAX_LEN`] bytes in length.
+    pub(crate) fn new(bytes: &[u8]) -> Self {
+        let mut tag = Self {
+            buf: [0u8; Tag::MAX_LEN],
+            used: bytes.len(),
+        };
+        tag.buf[..bytes.len()].copy_from_slice(bytes);
+        tag
+    }
+}
+
+impl AsRef<[u8]> for PublicTag {
     fn as_ref(&self) -> &[u8] {
         &self.buf[..self.used]
     }

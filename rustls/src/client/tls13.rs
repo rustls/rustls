@@ -1237,7 +1237,10 @@ fn emit_certverify_tls13(
     Ok(())
 }
 
-fn emit_finished_tls13(flight: &mut HandshakeFlightTls13<'_>, verify_data: &crypto::hmac::Tag) {
+fn emit_finished_tls13(
+    flight: &mut HandshakeFlightTls13<'_>,
+    verify_data: &crypto::hmac::PublicTag,
+) {
     let verify_data_payload = Payload::new(verify_data.as_ref());
 
     flight.add(HandshakeMessagePayload(HandshakePayload::Finished(

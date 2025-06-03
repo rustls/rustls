@@ -138,7 +138,7 @@ impl KeyScheduleEarly {
     pub(crate) fn resumption_psk_binder_key_and_sign_verify_data(
         &self,
         hs_hash: &hash::Output,
-    ) -> hmac::Tag {
+    ) -> hmac::PublicTag {
         let resumption_psk_binder_key = self
             .ks
             .derive_for_empty_hash(SecretKind::ResumptionPskBinderKey);
@@ -330,7 +330,7 @@ pub(crate) struct KeyScheduleHandshake {
 }
 
 impl KeyScheduleHandshake {
-    pub(crate) fn sign_server_finish(&self, hs_hash: &hash::Output) -> hmac::Tag {
+    pub(crate) fn sign_server_finish(&self, hs_hash: &hash::Output) -> hmac::PublicTag {
         self.ks
             .sign_finish(&self.server_handshake_traffic_secret, hs_hash)
     }
@@ -402,7 +402,7 @@ impl KeyScheduleHandshake {
         handshake_hash: hash::Output,
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-    ) -> (KeyScheduleClientBeforeFinished, hmac::Tag) {
+    ) -> (KeyScheduleClientBeforeFinished, hmac::PublicTag) {
         let traffic = KeyScheduleTraffic::new(self.ks, pre_finished_hash, key_log, client_random);
         let tag = traffic
             .ks
@@ -469,7 +469,7 @@ impl KeyScheduleTrafficWithClientFinishedPending {
         self,
         hs_hash: &hash::Output,
         common: &mut CommonState,
-    ) -> (KeyScheduleTraffic, hmac::Tag) {
+    ) -> (KeyScheduleTraffic, hmac::PublicTag) {
         debug_assert_eq!(common.side, Side::Server);
         let tag = self
             .traffic
@@ -786,7 +786,7 @@ impl KeySchedule {
     /// traffic secret.
     ///
     /// See RFC 8446 section 4.4.4.
-    fn sign_finish(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
+    fn sign_finish(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::PublicTag {
         self.sign_verify_data(base_key, hs_hash)
     }
 
@@ -794,7 +794,7 @@ impl KeySchedule {
     /// `base_key`.
     ///
     /// See RFC 8446 section 4.4.4.
-    fn sign_verify_data(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
+    fn sign_verify_data(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::PublicTag {
         let expander = self
             .suite
             .hkdf_provider
@@ -804,6 +804,7 @@ impl KeySchedule {
         self.suite
             .hkdf_provider
             .hmac_sign(&hmac_key, hs_hash.as_ref())
+            .into_public()
     }
 
     /// Derive the next application traffic secret, returning it.
