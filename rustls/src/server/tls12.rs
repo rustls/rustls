@@ -782,7 +782,10 @@ fn get_server_connection_value_tls12(
         secrets.suite().common.suite,
         secrets.master_secret(),
         cx.common.peer_certificates.clone(),
-        cx.common.alpn_protocol.clone(),
+        cx.common
+            .alpn_protocol
+            .as_ref()
+            .map(|p| p.as_ref().to_vec()),
         cx.data.resumption_data.clone(),
         time_now,
         0,

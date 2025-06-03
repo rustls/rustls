@@ -668,7 +668,15 @@ mod client_hello {
             && resume.is_fresh()
             && Some(resume.version) == cx.common.negotiated_version
             && resume.cipher_suite == suite.common.suite
-            && resume.alpn.as_ref().map(|x| &x.0) == cx.common.alpn_protocol.as_ref();
+            && resume
+                .alpn
+                .as_ref()
+                .map(|x| x.0.as_ref())
+                == cx
+                    .common
+                    .alpn_protocol
+                    .as_ref()
+                    .map(|p| p.as_ref());
 
         if early_data_configured && early_data_possible && !cx.data.early_data.was_rejected() {
             EarlyDataDecision::Accepted
@@ -1257,7 +1265,10 @@ fn get_server_session_value(
         suite.common.suite,
         secret.as_ref(),
         cx.common.peer_certificates.clone(),
-        cx.common.alpn_protocol.clone(),
+        cx.common
+            .alpn_protocol
+            .as_ref()
+            .map(|p| p.as_ref().to_vec()),
         cx.data.resumption_data.clone(),
         time_now,
         age_obfuscation_offset,

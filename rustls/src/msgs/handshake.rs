@@ -361,6 +361,12 @@ wrapped_payload!(
     pub(crate) struct ProtocolName, PayloadU8<NonEmpty>,
 );
 
+impl PartialEq for ProtocolName {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
 /// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
 impl TlsListElement for ProtocolName {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
@@ -373,8 +379,8 @@ impl TlsListElement for ProtocolName {
 pub(crate) struct SingleProtocolName(ProtocolName);
 
 impl SingleProtocolName {
-    pub(crate) fn new(bytes: Vec<u8>) -> Self {
-        Self(ProtocolName::from(bytes))
+    pub(crate) fn new(single: ProtocolName) -> Self {
+        Self(single)
     }
 
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
@@ -695,15 +701,39 @@ impl TlsListElement for CertificateCompressionAlgorithm {
 pub(crate) struct ClientExtensionsInput<'a> {
     /// QUIC transport parameters
     pub(crate) transport_parameters: Option<TransportParameters<'a>>,
+
+    /// ALPN protocols
+    pub(crate) protocols: Option<Vec<ProtocolName>>,
 }
 
 impl ClientExtensionsInput<'_> {
     pub(crate) fn into_owned(self) -> ClientExtensionsInput<'static> {
         let Self {
             transport_parameters,
+            protocols,
         } = self;
         ClientExtensionsInput {
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
+            protocols,
+        }
+    }
+
+    pub(crate) fn from_alpn_protocols(
+        alpn_protocols: Vec<Vec<u8>>,
+    ) -> ClientExtensionsInput<'static> {
+        let protocols = match alpn_protocols.is_empty() {
+            true => None,
+            false => Some(
+                alpn_protocols
+                    .into_iter()
+                    .map(ProtocolName::from)
+                    .collect::<Vec<_>>(),
+            ),
+        };
+
+        ClientExtensionsInput {
+            transport_parameters: None,
+            protocols,
         }
     }
 }
@@ -2193,10 +2223,10 @@ pub(crate) trait HasServerExtensions {
             .find(|x| x.ext_type() == ext)
     }
 
-    fn alpn_protocol(&self) -> Option<&[u8]> {
+    fn alpn_protocol(&self) -> Option<&ProtocolName> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match ext {
-            ServerExtension::Protocols(protos) => Some(protos.as_ref()),
+            ServerExtension::Protocols(protos) => Some(&protos.0),
             _ => None,
         }
     }
