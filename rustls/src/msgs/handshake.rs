@@ -360,6 +360,20 @@ wrapped_payload!(
     pub(crate) struct ProtocolName, PayloadU8<NonEmpty>,
 );
 
+impl PartialEq for ProtocolName {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Deref for ProtocolName {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
 /// RFC7301: `ProtocolName protocol_name_list<2..2^16-1>`
 impl TlsListElement for ProtocolName {
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
@@ -372,8 +386,8 @@ impl TlsListElement for ProtocolName {
 pub(crate) struct SingleProtocolName(ProtocolName);
 
 impl SingleProtocolName {
-    pub(crate) fn new(bytes: Vec<u8>) -> Self {
-        Self(ProtocolName::from(bytes))
+    pub(crate) fn new(single: ProtocolName) -> Self {
+        Self(single)
     }
 
     const SIZE_LEN: ListLength = ListLength::NonZeroU16 {
@@ -2224,10 +2238,10 @@ pub(crate) trait HasServerExtensions {
             .find(|x| x.ext_type() == ext)
     }
 
-    fn alpn_protocol(&self) -> Option<&[u8]> {
+    fn alpn_protocol(&self) -> Option<&ProtocolName> {
         let ext = self.find_extension(ExtensionType::ALProtocolNegotiation)?;
         match ext {
-            ServerExtension::Protocols(protos) => Some(protos.as_ref()),
+            ServerExtension::Protocols(protos) => Some(&protos.0),
             _ => None,
         }
     }

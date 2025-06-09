@@ -9,9 +9,9 @@ use crate::enums::{CipherSuite, ProtocolVersion};
 use crate::error::InvalidMessage;
 use crate::msgs::base::{MaybeEmpty, PayloadU8, PayloadU16};
 use crate::msgs::codec::{Codec, Reader};
-use crate::msgs::handshake::CertificateChain;
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
+use crate::msgs::handshake::{CertificateChain, ProtocolName};
 use crate::sync::{Arc, Weak};
 #[cfg(feature = "tls12")]
 use crate::tls12::Tls12CipherSuite;
@@ -399,7 +399,7 @@ impl ServerSessionValue {
         cs: CipherSuite,
         ms: &[u8],
         client_cert_chain: Option<CertificateChain<'static>>,
-        alpn: Option<Vec<u8>>,
+        alpn: Option<ProtocolName>,
         application_data: Vec<u8>,
         creation_time: UnixTime,
         age_obfuscation_offset: u32,
@@ -411,7 +411,7 @@ impl ServerSessionValue {
             master_secret: Zeroizing::new(PayloadU8::new(ms.to_vec())),
             extended_ms: false,
             client_cert_chain,
-            alpn: alpn.map(PayloadU8::new),
+            alpn: alpn.map(|p| PayloadU8::new(p.as_ref().to_vec())),
             application_data: PayloadU16::new(application_data),
             creation_time_sec: creation_time.as_secs(),
             age_obfuscation_offset,

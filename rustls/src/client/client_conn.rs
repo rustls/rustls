@@ -19,7 +19,7 @@ use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
 use crate::msgs::enums::NamedGroup;
-use crate::msgs::handshake::ClientExtension;
+use crate::msgs::handshake::{ClientExtension, ProtocolName};
 use crate::msgs::persist;
 use crate::suites::{ExtractedSecrets, SupportedCipherSuite};
 use crate::sync::Arc;
@@ -851,6 +851,10 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.enable_secret_extraction = config.enable_secret_extraction;
         common_state.fips = config.fips();
         let mut data = ClientConnectionData::new();
+        let alpn_protocols = alpn_protocols
+            .into_iter()
+            .map(ProtocolName::from)
+            .collect();
 
         let mut cx = hs::ClientContext {
             common: &mut common_state,

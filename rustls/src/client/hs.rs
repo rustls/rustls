@@ -99,7 +99,7 @@ fn find_session(
 
 pub(super) fn start_handshake(
     server_name: ServerName<'static>,
-    alpn_protocols: Vec<Vec<u8>>,
+    alpn_protocols: Vec<ProtocolName>,
     extra_exts: Vec<ClientExtension>,
     config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
@@ -359,12 +359,7 @@ fn emit_client_hello_for_retry(
     // Add ALPN extension if we have any protocols
     if !input.hello.alpn_protocols.is_empty() {
         exts.push(ClientExtension::Protocols(
-            input
-                .hello
-                .alpn_protocols
-                .iter()
-                .map(|proto| ProtocolName::from(proto.clone()))
-                .collect::<Vec<_>>(),
+            input.hello.alpn_protocols.clone(),
         ));
     }
 
@@ -668,10 +663,10 @@ fn prepare_resumption<'a>(
 
 pub(super) fn process_alpn_protocol(
     common: &mut CommonState,
-    offered_protocols: &[Vec<u8>],
-    proto: Option<&[u8]>,
+    offered_protocols: &[ProtocolName],
+    selected: Option<&ProtocolName>,
 ) -> Result<(), Error> {
-    common.alpn_protocol = proto.map(ToOwned::to_owned);
+    common.alpn_protocol = selected.map(ToOwned::to_owned);
 
     if let Some(alpn_protocol) = &common.alpn_protocol {
         if !offered_protocols.contains(alpn_protocol) {

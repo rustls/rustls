@@ -21,8 +21,8 @@ use crate::msgs::enums::{Compression, ExtensionType, NamedGroup};
 #[cfg(feature = "tls12")]
 use crate::msgs::handshake::SessionId;
 use crate::msgs::handshake::{
-    ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, Random, ServerExtension,
-    ServerNamePayload, SingleProtocolName,
+    ClientHelloPayload, HandshakePayload, KeyExchangeAlgorithm, ProtocolName, Random,
+    ServerExtension, ServerNamePayload, SingleProtocolName,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -89,7 +89,7 @@ impl ExtensionProcessing {
                         .iter()
                         .any(|theirs| theirs.as_ref() == ours.as_slice())
                 })
-                .cloned();
+                .map(|bytes| ProtocolName::from(bytes.clone()));
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
                 debug!("Chosen ALPN protocol {selected_protocol:?}");
                 self.exts
