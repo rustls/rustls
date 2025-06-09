@@ -755,10 +755,8 @@ impl Codec<'_> for ClientExtension {
             Self::NamedGroups(r) => r.encode(nested.buf),
             Self::SignatureAlgorithms(r) => r.encode(nested.buf),
             Self::ServerName(r) => r.encode(nested.buf),
-            Self::SessionTicket(ClientSessionTicket::Request)
-            | Self::ExtendedMasterSecretRequest
-            | Self::EarlyData => {}
-            Self::SessionTicket(ClientSessionTicket::Offer(r)) => r.encode(nested.buf),
+            Self::SessionTicket(r) => r.encode(nested.buf),
+            Self::ExtendedMasterSecretRequest | Self::EarlyData => {}
             Self::Protocols(r) => r.encode(nested.buf),
             Self::SupportedVersions(r) => r.encode(nested.buf),
             Self::KeyShare(r) => r.encode(nested.buf),
@@ -792,12 +790,7 @@ impl Codec<'_> for ClientExtension {
                 Self::ServerName(ServerNamePayload::read(&mut sub)?.into_owned())
             }
             ExtensionType::SessionTicket => {
-                if sub.any_left() {
-                    let contents = Payload::read(&mut sub).into_owned();
-                    Self::SessionTicket(ClientSessionTicket::Offer(contents))
-                } else {
-                    Self::SessionTicket(ClientSessionTicket::Request)
-                }
+                Self::SessionTicket(ClientSessionTicket::read(&mut sub)?)
             }
             ExtensionType::ALProtocolNegotiation => Self::Protocols(Vec::read(&mut sub)?),
             ExtensionType::SupportedVersions => {
@@ -861,6 +854,22 @@ fn trim_hostname_trailing_dot_for_sni(dns_name: &DnsName<'_>) -> DnsName<'static
 pub(crate) enum ClientSessionTicket {
     Request,
     Offer(Payload<'static>),
+}
+
+impl<'a> Codec<'a> for ClientSessionTicket {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::Request => (),
+            Self::Offer(p) => p.encode(bytes),
+        }
+    }
+
+    fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        Ok(match r.left() {
+            0 => Self::Request,
+            _ => Self::Offer(Payload::read(r).into_owned()),
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
