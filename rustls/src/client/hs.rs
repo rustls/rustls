@@ -484,7 +484,7 @@ fn emit_client_hello_for_retry(
         (EchStatus::NotOffered, None) => {
             if let Some(grease_ext) = ech_grease_ext {
                 // Add the GREASE ECH extension.
-                let grease_ext = grease_ext?;
+                let grease_ext = ClientExtension::EncryptedClientHello(grease_ext?);
                 chp_payload
                     .extensions
                     .push(grease_ext.clone());
