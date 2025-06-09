@@ -396,15 +396,13 @@ impl EchState {
             false => self.enc.0.clone(),
         };
 
-        fn outer_hello_ext(ctx: &EchState, enc: Vec<u8>, payload: Vec<u8>) -> ClientExtension {
-            ClientExtension::EncryptedClientHello(EncryptedClientHello::Outer(
-                EncryptedClientHelloOuter {
-                    cipher_suite: ctx.cipher_suite,
-                    config_id: ctx.config_id,
-                    enc: PayloadU16::new(enc),
-                    payload: PayloadU16::new(payload),
-                },
-            ))
+        fn outer_hello_ext(ctx: &EchState, enc: Vec<u8>, payload: Vec<u8>) -> EncryptedClientHello {
+            EncryptedClientHello::Outer(EncryptedClientHelloOuter {
+                cipher_suite: ctx.cipher_suite,
+                config_id: ctx.config_id,
+                enc: PayloadU16::new(enc),
+                payload: PayloadU16::new(payload),
+            })
         }
 
         // The outer handshake is not permitted to resume a session. If we're resuming in the
@@ -418,7 +416,11 @@ impl EchState {
         // To compute the encoded AAD we add a placeholder extension with an empty payload.
         outer_hello
             .extensions
-            .push(outer_hello_ext(self, enc.clone(), vec![0; payload_len]));
+            .push(ClientExtension::EncryptedClientHello(outer_hello_ext(
+                self,
+                enc.clone(),
+                vec![0; payload_len],
+            )));
 
         // Next we compute the proper extension payload.
         let payload = self
@@ -429,7 +431,9 @@ impl EchState {
         outer_hello.extensions.pop();
         outer_hello
             .extensions
-            .push(outer_hello_ext(self, enc, payload));
+            .push(ClientExtension::EncryptedClientHello(outer_hello_ext(
+                self, enc, payload,
+            )));
 
         Ok(outer_hello)
     }
