@@ -1006,7 +1006,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
             ServerExtension::RenegotiationInfo(PayloadU8::new(vec![0])),
-            ServerExtension::Protocols(SingleProtocolName::new(vec![0])),
+            ServerExtension::Protocols(SingleProtocolName::new(ProtocolName::from(vec![0]))),
             ServerExtension::KeyShare(KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])),
             ServerExtension::PresharedKey(3),
             ServerExtension::ExtendedMasterSecretAck,
