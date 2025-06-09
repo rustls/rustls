@@ -202,7 +202,7 @@ impl EchGreaseConfig {
         secure_random: &'static dyn SecureRandom,
         inner_name: ServerName<'static>,
         outer_hello: &ClientHelloPayload,
-    ) -> Result<ClientExtension, Error> {
+    ) -> Result<EncryptedClientHello, Error> {
         trace!("Preparing GREASE ECH extension");
 
         // Pick a random config id.
@@ -251,14 +251,12 @@ impl EchGreaseConfig {
         secure_random.fill(&mut payload)?;
 
         // Return the GREASE extension.
-        Ok(ClientExtension::EncryptedClientHello(
-            EncryptedClientHello::Outer(EncryptedClientHelloOuter {
-                cipher_suite: suite.sym,
-                config_id: config_id[0],
-                enc: PayloadU16::new(grease_state.enc.0),
-                payload: PayloadU16::new(payload),
-            }),
-        ))
+        Ok(EncryptedClientHello::Outer(EncryptedClientHelloOuter {
+            cipher_suite: suite.sym,
+            config_id: config_id[0],
+            enc: PayloadU16::new(grease_state.enc.0),
+            payload: PayloadU16::new(payload),
+        }))
     }
 }
 
