@@ -2640,6 +2640,7 @@ dependencies = [
  "itertools 0.14.0",
  "rayon",
  "rustls",
+ "rustls-fuzzing-provider",
  "rustls-test",
  "tikv-jemallocator",
 ]
