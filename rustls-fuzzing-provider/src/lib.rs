@@ -31,6 +31,7 @@ use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
     SignatureVerificationAlgorithm, alg_id,
 };
+use rustls::server::ProducesTickets;
 use rustls::{
     CipherSuite, ConnectionTrafficSecrets, ContentType, Error, NamedGroup, PeerMisbehaved,
     ProtocolVersion, RootCertStore, SignatureAlgorithm, SignatureScheme, SupportedCipherSuite,
@@ -125,6 +126,27 @@ pub static TLS_FUZZING_SUITE: SupportedCipherSuite =
         prf_provider: &tls12::PrfUsingHmac(&Hmac),
         aead_alg: &Aead,
     });
+
+#[derive(Debug, Default)]
+pub struct Ticketer;
+
+impl ProducesTickets for Ticketer {
+    fn enabled(&self) -> bool {
+        true
+    }
+
+    fn lifetime(&self) -> u32 {
+        60 * 60 * 6
+    }
+
+    fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>> {
+        Some(plain.to_vec())
+    }
+
+    fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>> {
+        Some(cipher.to_vec())
+    }
+}
 
 struct Hash;
 
