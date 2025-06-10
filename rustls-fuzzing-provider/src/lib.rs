@@ -101,28 +101,30 @@ impl crypto::KeyProvider for Provider {
     }
 }
 
-static TLS13_FUZZING_SUITE: SupportedCipherSuite = SupportedCipherSuite::Tls13(&Tls13CipherSuite {
-    common: CipherSuiteCommon {
-        suite: CipherSuite::Unknown(0xff13),
-        hash_provider: &Hash,
-        confidentiality_limit: u64::MAX,
-    },
-    hkdf_provider: &tls13::HkdfUsingHmac(&Hmac),
-    aead_alg: &Aead,
-    quic: None,
-});
+pub static TLS13_FUZZING_SUITE: SupportedCipherSuite =
+    SupportedCipherSuite::Tls13(&Tls13CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::Unknown(0xff13),
+            hash_provider: &Hash,
+            confidentiality_limit: u64::MAX,
+        },
+        hkdf_provider: &tls13::HkdfUsingHmac(&Hmac),
+        aead_alg: &Aead,
+        quic: None,
+    });
 
-static TLS_FUZZING_SUITE: SupportedCipherSuite = SupportedCipherSuite::Tls12(&Tls12CipherSuite {
-    common: CipherSuiteCommon {
-        suite: CipherSuite::Unknown(0xff12),
-        hash_provider: &Hash,
-        confidentiality_limit: u64::MAX,
-    },
-    kx: KeyExchangeAlgorithm::ECDHE,
-    sign: &[SIGNATURE_SCHEME],
-    prf_provider: &tls12::PrfUsingHmac(&Hmac),
-    aead_alg: &Aead,
-});
+pub static TLS_FUZZING_SUITE: SupportedCipherSuite =
+    SupportedCipherSuite::Tls12(&Tls12CipherSuite {
+        common: CipherSuiteCommon {
+            suite: CipherSuite::Unknown(0xff12),
+            hash_provider: &Hash,
+            confidentiality_limit: u64::MAX,
+        },
+        kx: KeyExchangeAlgorithm::ECDHE,
+        sign: &[SIGNATURE_SCHEME],
+        prf_provider: &tls12::PrfUsingHmac(&Hmac),
+        aead_alg: &Aead,
+    });
 
 struct Hash;
 
