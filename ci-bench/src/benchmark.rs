@@ -87,8 +87,8 @@ pub struct BenchmarkParams {
     pub provider: rustls::crypto::CryptoProvider,
     /// How to make a suitable [`rustls::server::ProducesTickets`].
     pub ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
-    /// The type of key used to sign the TLS certificate
-    pub key_type: KeyType,
+    /// Where to get keys for server auth
+    pub auth_key: AuthKeySource,
     /// Cipher suite
     pub ciphersuite: rustls::SupportedCipherSuite,
     /// TLS version
@@ -102,7 +102,7 @@ impl BenchmarkParams {
     pub const fn new(
         provider: rustls::crypto::CryptoProvider,
         ticketer: &'static fn() -> Arc<dyn rustls::server::ProducesTickets>,
-        key_type: KeyType,
+        auth_key: AuthKeySource,
         ciphersuite: rustls::SupportedCipherSuite,
         version: &'static rustls::SupportedProtocolVersion,
         label: String,
@@ -110,12 +110,18 @@ impl BenchmarkParams {
         Self {
             provider,
             ticketer,
-            key_type,
+            auth_key,
             ciphersuite,
             version,
             label,
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum AuthKeySource {
+    KeyType(KeyType),
+    FuzzingProvider,
 }
 
 /// A benchmark specification

@@ -40,8 +40,8 @@ use rustls::{
 use rustls_test::KeyType;
 
 use crate::benchmark::{
-    Benchmark, BenchmarkKind, BenchmarkParams, ResumptionKind, get_reported_instr_count,
-    validate_benchmarks,
+    AuthKeySource, Benchmark, BenchmarkKind, BenchmarkParams, ResumptionKind,
+    get_reported_instr_count, validate_benchmarks,
 };
 use crate::callgrind::{CallgrindRunner, CountInstructions};
 use crate::util::async_io::{self, AsyncRead, AsyncWrite};
@@ -373,13 +373,35 @@ fn all_benchmarks_params() -> Vec<BenchmarkParams> {
             all.push(BenchmarkParams::new(
                 provider.clone(),
                 ticketer,
-                key_type,
+                AuthKeySource::KeyType(key_type),
                 find_suite(suites, suite_name),
                 version,
                 format!("{provider_name}_{name}"),
             ));
         }
     }
+
+    #[allow(trivial_casts)] // false positive
+    let make_ticketer = &((|| Arc::new(rustls_fuzzing_provider::Ticketer))
+        as fn() -> Arc<dyn rustls::server::ProducesTickets>);
+
+    all.push(BenchmarkParams::new(
+        rustls_fuzzing_provider::provider(),
+        make_ticketer,
+        AuthKeySource::FuzzingProvider,
+        rustls_fuzzing_provider::TLS13_FUZZING_SUITE,
+        &rustls::version::TLS13,
+        "1.3_no_crypto".to_string(),
+    ));
+
+    all.push(BenchmarkParams::new(
+        rustls_fuzzing_provider::provider(),
+        make_ticketer,
+        AuthKeySource::FuzzingProvider,
+        rustls_fuzzing_provider::TLS_FUZZING_SUITE,
+        &rustls::version::TLS12,
+        "1.2_no_crypto".to_string(),
+    ));
 
     all
 }
@@ -518,12 +540,8 @@ struct ClientSideStepper<'a> {
 impl ClientSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ClientConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
-        let mut root_store = RootCertStore::empty();
-        root_store
-            .add(params.key_type.ca_cert())
-            .unwrap();
 
-        let mut cfg = ClientConfig::builder_with_provider(
+        let cfg = ClientConfig::builder_with_provider(
             CryptoProvider {
                 cipher_suites: vec![params.ciphersuite],
                 ..params.provider.clone()
@@ -531,9 +549,24 @@ impl ClientSideStepper<'_> {
             .into(),
         )
         .with_protocol_versions(&[params.version])
-        .unwrap()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
+        .unwrap();
+
+        let mut cfg = match params.auth_key {
+            AuthKeySource::KeyType(key_type) => {
+                let mut root_store = RootCertStore::empty();
+                root_store
+                    .add(key_type.ca_cert())
+                    .unwrap();
+
+                cfg.with_root_certificates(root_store)
+                    .with_no_client_auth()
+            }
+
+            AuthKeySource::FuzzingProvider => cfg
+                .dangerous()
+                .with_custom_certificate_verifier(rustls_fuzzing_provider::server_verifier())
+                .with_no_client_auth(),
+        };
 
         if resume != ResumptionKind::No {
             cfg.resumption = Resumption::in_memory_sessions(128);
@@ -603,12 +636,20 @@ impl ServerSideStepper<'_> {
     fn make_config(params: &BenchmarkParams, resume: ResumptionKind) -> Arc<ServerConfig> {
         assert_eq!(params.ciphersuite.version(), params.version);
 
-        let mut cfg = ServerConfig::builder_with_provider(params.provider.clone().into())
+        let cfg = ServerConfig::builder_with_provider(params.provider.clone().into())
             .with_protocol_versions(&[params.version])
-            .unwrap()
-            .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
-            .with_single_cert(params.key_type.get_chain(), params.key_type.get_key())
-            .expect("bad certs/private key?");
+            .unwrap();
+
+        let mut cfg = match params.auth_key {
+            AuthKeySource::KeyType(key_type) => cfg
+                .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
+                .with_single_cert(key_type.get_chain(), key_type.get_key())
+                .expect("bad certs/private key?"),
+
+            AuthKeySource::FuzzingProvider => cfg
+                .with_client_cert_verifier(WebPkiClientVerifier::no_client_auth())
+                .with_cert_resolver(rustls_fuzzing_provider::server_cert_resolver()),
+        };
 
         if resume == ResumptionKind::SessionId {
             cfg.session_storage = ServerSessionMemoryCache::new(128);
