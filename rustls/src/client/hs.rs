@@ -440,8 +440,11 @@ fn emit_client_hello_for_retry(
             false => None,
         })
         .collect();
-    // We don't do renegotiation at all, in fact.
-    cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+
+    if supported_versions.tls12 {
+        // We don't do renegotiation at all, in fact.
+        cipher_suites.push(CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
+    }
 
     let mut chp_payload = ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
