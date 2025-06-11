@@ -1300,7 +1300,7 @@ impl ExpectFinished {
         config: &ServerConfig,
     ) -> Result<(), Error> {
         let secure_random = config.provider.secure_random;
-        let nonce = rand::random_vec(secure_random, 32)?;
+        let nonce = rand::random_array(secure_random)?;
         let age_add = rand::random_u32(secure_random)?;
 
         let now = config.current_time()?;
@@ -1315,7 +1315,7 @@ impl ExpectFinished {
             };
             (ticket, config.ticketer.lifetime())
         } else {
-            let id = rand::random_vec(secure_random, 32)?;
+            let id = rand::random_array::<32>(secure_random)?.to_vec();
             let stored = config
                 .session_storage
                 .put(id.clone(), plain);
