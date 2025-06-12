@@ -718,7 +718,6 @@ pub(crate) enum ClientExtension {
     ServerCertTypes(Vec<CertificateType>),
     ClientCertTypes(Vec<CertificateType>),
     TransportParameters(Vec<u8>),
-    TransportParametersDraft(Vec<u8>),
     EarlyData,
     CertificateCompressionAlgorithms(Vec<CertificateCompressionAlgorithm>),
     EncryptedClientHello(EncryptedClientHello),
@@ -746,7 +745,6 @@ impl ClientExtension {
             Self::ClientCertTypes(_) => ExtensionType::ClientCertificateType,
             Self::ServerCertTypes(_) => ExtensionType::ServerCertificateType,
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
-            Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
             Self::CertificateCompressionAlgorithms(_) => ExtensionType::CompressCertificate,
             Self::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
@@ -780,7 +778,7 @@ impl Codec<'_> for ClientExtension {
             Self::CertificateStatusRequest(r) => r.encode(nested.buf),
             Self::ClientCertTypes(r) => r.encode(nested.buf),
             Self::ServerCertTypes(r) => r.encode(nested.buf),
-            Self::TransportParameters(r) | Self::TransportParametersDraft(r) => {
+            Self::TransportParameters(r) => {
                 nested.buf.extend_from_slice(r);
             }
             Self::CertificateCompressionAlgorithms(r) => r.encode(nested.buf),
@@ -824,9 +822,6 @@ impl Codec<'_> for ClientExtension {
                 Self::CertificateStatusRequest(csr)
             }
             ExtensionType::TransportParameters => Self::TransportParameters(sub.rest().to_vec()),
-            ExtensionType::TransportParametersDraft => {
-                Self::TransportParametersDraft(sub.rest().to_vec())
-            }
             ExtensionType::EarlyData if !sub.any_left() => Self::EarlyData,
             ExtensionType::CompressCertificate => {
                 Self::CertificateCompressionAlgorithms(Vec::read(&mut sub)?)
@@ -901,7 +896,6 @@ pub(crate) enum ServerExtension {
     ClientCertType(CertificateType),
     SupportedVersions(ProtocolVersion),
     TransportParameters(Vec<u8>),
-    TransportParametersDraft(Vec<u8>),
     EarlyData,
     EncryptedClientHello(ServerEncryptedClientHello),
     Unknown(UnknownExtension),
@@ -923,7 +917,6 @@ impl ServerExtension {
             Self::CertificateStatusAck => ExtensionType::StatusRequest,
             Self::SupportedVersions(_) => ExtensionType::SupportedVersions,
             Self::TransportParameters(_) => ExtensionType::TransportParameters,
-            Self::TransportParametersDraft(_) => ExtensionType::TransportParametersDraft,
             Self::EarlyData => ExtensionType::EarlyData,
             Self::EncryptedClientHello(_) => ExtensionType::EncryptedClientHello,
             Self::Unknown(r) => r.typ,
@@ -950,7 +943,7 @@ impl Codec<'_> for ServerExtension {
             Self::ClientCertType(r) => r.encode(nested.buf),
             Self::ServerCertType(r) => r.encode(nested.buf),
             Self::SupportedVersions(r) => r.encode(nested.buf),
-            Self::TransportParameters(r) | Self::TransportParametersDraft(r) => {
+            Self::TransportParameters(r) => {
                 nested.buf.extend_from_slice(r);
             }
             Self::EncryptedClientHello(r) => r.encode(nested.buf),
@@ -985,9 +978,6 @@ impl Codec<'_> for ServerExtension {
                 Self::SupportedVersions(ProtocolVersion::read(&mut sub)?)
             }
             ExtensionType::TransportParameters => Self::TransportParameters(sub.rest().to_vec()),
-            ExtensionType::TransportParametersDraft => {
-                Self::TransportParametersDraft(sub.rest().to_vec())
-            }
             ExtensionType::EarlyData => Self::EarlyData,
             ExtensionType::EncryptedClientHello => {
                 Self::EncryptedClientHello(ServerEncryptedClientHello::read(&mut sub)?)
@@ -1155,12 +1145,9 @@ impl ClientHelloPayload {
     }
 
     pub(crate) fn quic_params_extension(&self) -> Option<Vec<u8>> {
-        let ext = self
-            .find_extension(ExtensionType::TransportParameters)
-            .or_else(|| self.find_extension(ExtensionType::TransportParametersDraft))?;
+        let ext = self.find_extension(ExtensionType::TransportParameters)?;
         match ext {
-            ClientExtension::TransportParameters(bytes)
-            | ClientExtension::TransportParametersDraft(bytes) => Some(bytes.to_vec()),
+            ClientExtension::TransportParameters(bytes) => Some(bytes.to_vec()),
             _ => None,
         }
     }
@@ -2263,12 +2250,9 @@ pub(crate) trait HasServerExtensions {
     }
 
     fn quic_params_extension(&self) -> Option<Vec<u8>> {
-        let ext = self
-            .find_extension(ExtensionType::TransportParameters)
-            .or_else(|| self.find_extension(ExtensionType::TransportParametersDraft))?;
+        let ext = self.find_extension(ExtensionType::TransportParameters)?;
         match ext {
-            ServerExtension::TransportParameters(bytes)
-            | ServerExtension::TransportParametersDraft(bytes) => Some(bytes.to_vec()),
+            ServerExtension::TransportParameters(bytes) => Some(bytes.to_vec()),
             _ => None,
         }
     }
