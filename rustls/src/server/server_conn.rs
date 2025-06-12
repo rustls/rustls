@@ -811,8 +811,7 @@ mod connection {
         pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
             match &mut self.inner {
                 Some(conn) => conn.read_tls(rd),
-                None => Err(io::Error::new(
-                    io::ErrorKind::Other,
+                None => Err(io::Error::other(
                     "acceptor cannot read after successful acceptance",
                 )),
             }

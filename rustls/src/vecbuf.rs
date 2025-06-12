@@ -210,10 +210,9 @@ impl ChunkVecBuffer {
             // case the caller ignores the error.
             // See <https://github.com/rustls/rustls/issues/2316> for background.
             self.consume(available_bytes);
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                std::format!("illegal write_vectored return value ({used} > {available_bytes})"),
-            ));
+            return Err(io::Error::other(std::format!(
+                "illegal write_vectored return value ({used} > {available_bytes})"
+            )));
         }
         self.consume(used);
         Ok(used)
