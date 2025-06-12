@@ -1485,6 +1485,19 @@ impl HelloRetryRequest {
     }
 }
 
+impl Deref for HelloRetryRequest {
+    type Target = HelloRetryRequestExtensions<'static>;
+    fn deref(&self) -> &Self::Target {
+        &self.extensions
+    }
+}
+
+impl DerefMut for HelloRetryRequest {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.extensions
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ServerHelloPayload {
     pub(crate) legacy_version: ProtocolVersion,

@@ -480,11 +480,7 @@ impl EchState {
         common: &mut CommonState,
     ) -> Result<bool, Error> {
         // The client checks for the "encrypted_client_hello" extension.
-        let ech_conf = match hrr
-            .extensions
-            .encrypted_client_hello
-            .as_ref()
-        {
+        let ech_conf = match &hrr.encrypted_client_hello {
             // If none is found, the server has implicitly rejected ECH.
             None => return Ok(false),
             // Otherwise, if it has a length other than 8, the client aborts the
