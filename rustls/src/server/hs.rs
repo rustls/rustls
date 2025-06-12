@@ -97,7 +97,7 @@ impl ExtensionProcessing {
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
-        if let Some(their_protocols) = &hello.extensions.protocols {
+        if let Some(their_protocols) = &hello.protocols {
             cx.common.alpn_protocol = our_protocols
                 .iter()
                 .find(|ours| {
@@ -128,7 +128,7 @@ impl ExtensionProcessing {
             // successful establishment of connections between peers that can't understand
             // each other.
             if cx.common.alpn_protocol.is_none()
-                && (!our_protocols.is_empty() || hello.extensions.protocols.is_some())
+                && (!our_protocols.is_empty() || hello.protocols.is_some())
             {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::NoApplicationProtocol,
@@ -137,11 +137,9 @@ impl ExtensionProcessing {
             }
 
             let transport_params = hello
-                .extensions
                 .transport_parameters
                 .as_ref()
                 .or(hello
-                    .extensions
                     .transport_parameters_draft
                     .as_ref());
             match transport_params {
@@ -156,8 +154,7 @@ impl ExtensionProcessing {
 
         let for_resume = resumedata.is_some();
         // SNI
-        if let (false, Some(ServerNamePayload::SingleDnsName(_))) =
-            (for_resume, &hello.extensions.server_name)
+        if let (false, Some(ServerNamePayload::SingleDnsName(_))) = (for_resume, &hello.server_name)
         {
             self.extensions.server_name_ack = Some(());
         }
@@ -167,7 +164,6 @@ impl ExtensionProcessing {
         // to send.
         if !for_resume
             && hello
-                .extensions
                 .certificate_status_request
                 .is_some()
         {
@@ -198,10 +194,7 @@ impl ExtensionProcessing {
         // (We don't do reneg at all, but would support the secure version if we did.)
 
         use crate::msgs::base::PayloadU8;
-        let secure_reneg_offered = hello
-            .extensions
-            .renegotiation_info
-            .is_some()
+        let secure_reneg_offered = hello.renegotiation_info.is_some()
             || hello
                 .cipher_suites
                 .contains(&CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV);
@@ -213,12 +206,7 @@ impl ExtensionProcessing {
         // Tickets:
         // If we get any SessionTicket extension and have tickets enabled,
         // we send an ack.
-        if hello
-            .extensions
-            .session_ticket
-            .is_some()
-            && config.ticketer.enabled()
-        {
+        if hello.session_ticket.is_some() && config.ticketer.enabled() {
             self.send_ticket = true;
             self.extensions.session_ticket_ack = Some(());
         }
@@ -237,7 +225,6 @@ impl ExtensionProcessing {
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         let client_supports = hello
-            .extensions
             .server_certificate_types
             .as_deref()
             .unwrap_or_default();
@@ -259,7 +246,6 @@ impl ExtensionProcessing {
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         let client_supports = hello
-            .extensions
             .client_certificate_types
             .as_deref()
             .unwrap_or_default();
@@ -371,10 +357,7 @@ impl ExpectClientHello {
             .supports_version(ProtocolVersion::TLSv1_2);
 
         // Are we doing TLS1.3?
-        let version = if let Some(versions) = &client_hello
-            .extensions
-            .supported_versions
-        {
+        let version = if let Some(versions) = &client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.tls12 || !tls12_enabled {
@@ -436,7 +419,6 @@ impl ExpectClientHello {
         let certificate_authorities = match version {
             ProtocolVersion::TLSv1_2 => None,
             _ => client_hello
-                .extensions
                 .certificate_authority_names
                 .as_deref(),
         };
@@ -445,16 +427,11 @@ impl ExpectClientHello {
             let client_hello = ClientHello {
                 server_name: &cx.data.sni,
                 signature_schemes: &sig_schemes,
-                alpn: client_hello
-                    .extensions
-                    .protocols
-                    .as_ref(),
+                alpn: client_hello.protocols.as_ref(),
                 client_cert_types: client_hello
-                    .extensions
                     .client_certificate_types
                     .as_deref(),
                 server_cert_types: client_hello
-                    .extensions
                     .server_certificate_types
                     .as_deref(),
                 cipher_suites: &client_hello.cipher_suites,
@@ -482,7 +459,6 @@ impl ExpectClientHello {
                 certkey.get_key().algorithm(),
                 cx.common.protocol,
                 client_hello
-                    .extensions
                     .named_groups
                     .as_deref()
                     .unwrap_or_default(),
@@ -745,7 +721,7 @@ pub(super) fn process_client_hello<'m>(
     // but then act like the client sent no `server_name` extension.
     //
     // [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
-    let sni = match &client_hello.extensions.server_name {
+    let sni = match &client_hello.server_name {
         Some(ServerNamePayload::SingleDnsName(dns_name)) => Some(dns_name.to_lowercase_owned()),
         Some(ServerNamePayload::IpAddress) => None,
         Some(ServerNamePayload::Invalid) => {
@@ -768,7 +744,6 @@ pub(super) fn process_client_hello<'m>(
     }
 
     let sig_schemes = client_hello
-        .extensions
         .signature_schemes
         .as_ref()
         .ok_or_else(|| {

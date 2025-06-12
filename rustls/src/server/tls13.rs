@@ -151,7 +151,6 @@ mod client_hello {
             sigschemes_ext.retain(SignatureScheme::supported_in_tls13);
 
             let shares_ext = client_hello
-                .extensions
                 .key_shares
                 .as_ref()
                 .ok_or_else(|| {
@@ -176,7 +175,6 @@ mod client_hello {
             }
 
             let cert_compressor = client_hello
-                .extensions
                 .certificate_compression_algorithms
                 .as_ref()
                 .and_then(|offered|
@@ -189,7 +187,6 @@ mod client_hello {
                         .cloned());
 
             let early_data_requested = client_hello
-                .extensions
                 .early_data_request
                 .is_some();
 
@@ -256,16 +253,12 @@ mod client_hello {
             let mut chosen_psk_index = None;
             let mut resumedata = None;
 
-            if let Some(psk_offer) = &client_hello
-                .extensions
-                .preshared_key_offer
-            {
+            if let Some(psk_offer) = &client_hello.preshared_key_offer {
                 // "A client MUST provide a "psk_key_exchange_modes" extension if it
                 //  offers a "pre_shared_key" extension. If clients offer
                 //  "pre_shared_key" without a "psk_key_exchange_modes" extension,
                 //  servers MUST abort the handshake." - RFC8446 4.2.9
                 if client_hello
-                    .extensions
                     .preshared_key_modes
                     .is_none()
                 {
@@ -324,7 +317,6 @@ mod client_hello {
             }
 
             if !client_hello
-                .extensions
                 .preshared_key_modes
                 .as_ref()
                 .map(|offer| offer.contains(&PskKeyExchangeMode::PSK_DHE_KE))
@@ -623,7 +615,6 @@ mod client_hello {
         config: &ServerConfig,
     ) -> EarlyDataDecision {
         let early_data_requested = client_hello
-            .extensions
             .early_data_request
             .is_some();
         let rejected_or_disabled = match early_data_requested {

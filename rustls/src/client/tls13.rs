@@ -339,7 +339,7 @@ pub(super) fn fill_in_psk_binder(
         if let Some(PresharedKeyOffer {
             binders,
             identities,
-        }) = &mut ch.extensions.preshared_key_offer
+        }) = &mut ch.preshared_key_offer
         {
             // the caller of this function must have set up the desired identity, and a
             // matching (dummy) binder; or else the binder we compute here will be incorrect.

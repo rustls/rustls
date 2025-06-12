@@ -4,7 +4,7 @@ use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 use core::{fmt, iter};
 
 use pki_types::{CertificateDer, DnsName};
@@ -1270,8 +1270,7 @@ impl ClientHelloPayload {
     }
 
     pub(crate) fn has_keyshare_extension_with_duplicates(&self) -> bool {
-        self.extensions
-            .key_shares
+        self.key_shares
             .as_ref()
             .map(|entries| {
                 has_duplicates::<_, _, u16>(
@@ -1284,10 +1283,7 @@ impl ClientHelloPayload {
     }
 
     pub(crate) fn has_certificate_compression_extension_with_duplicates(&self) -> bool {
-        if let Some(algs) = &self
-            .extensions
-            .certificate_compression_algorithms
-        {
+        if let Some(algs) = &self.certificate_compression_algorithms {
             has_duplicates::<_, _, u16>(algs.iter().cloned())
         } else {
             false
@@ -1314,6 +1310,19 @@ impl Codec<'_> for ClientHelloPayload {
             true => Err(InvalidMessage::TrailingData("ClientHelloPayload")),
             false => Ok(ret),
         }
+    }
+}
+
+impl Deref for ClientHelloPayload {
+    type Target = ClientExtensions<'static>;
+    fn deref(&self) -> &Self::Target {
+        &self.extensions
+    }
+}
+
+impl DerefMut for ClientHelloPayload {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.extensions
     }
 }
 
@@ -2680,7 +2689,7 @@ impl<'a> HandshakeMessagePayload<'a> {
 
     pub(crate) fn total_binder_length(&self) -> usize {
         match &self.0 {
-            HandshakePayload::ClientHello(ch) => match &ch.extensions.preshared_key_offer {
+            HandshakePayload::ClientHello(ch) => match &ch.preshared_key_offer {
                 Some(offer) => {
                     let mut binders_encoding = Vec::new();
                     offer

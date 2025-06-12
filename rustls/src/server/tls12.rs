@@ -75,7 +75,6 @@ mod client_hello {
             self.transcript.add_message(chm);
 
             if client_hello
-                .extensions
                 .extended_master_secret_request
                 .is_some()
             {
@@ -92,7 +91,6 @@ mod client_hello {
             // supported"
             // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
             let ecpoints_ext = client_hello
-                .extensions
                 .ec_point_formats
                 .as_deref()
                 .unwrap_or(&[ECPointFormat::Uncompressed]);
@@ -125,7 +123,6 @@ mod client_hello {
             //
             let mut ticket_received = false;
             let resume_data = client_hello
-                .extensions
                 .session_ticket
                 .as_ref()
                 .and_then(|ticket_ext| match ticket_ext {

@@ -995,18 +995,15 @@ impl Accepted {
         let ch = ClientHello {
             server_name: &self.connection.core.data.sni,
             signature_schemes: &self.sig_schemes,
-            alpn: payload.extensions.protocols.as_ref(),
+            alpn: payload.protocols.as_ref(),
             server_cert_types: payload
-                .extensions
                 .server_certificate_types
                 .as_deref(),
             client_cert_types: payload
-                .extensions
                 .client_certificate_types
                 .as_deref(),
             cipher_suites: &payload.cipher_suites,
             certificate_authorities: payload
-                .extensions
                 .certificate_authority_names
                 .as_deref(),
         };

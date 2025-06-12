@@ -409,18 +409,12 @@ impl EchState {
         // inner handshake we remove the PSK extension from the outer hello, replacing it
         // with a GREASE PSK to implement the "ClientHello Malleability Mitigation" mentioned
         // in 10.12.3.
-        if let Some(psk_offer) = outer_hello
-            .extensions
-            .preshared_key_offer
-            .as_mut()
-        {
+        if let Some(psk_offer) = outer_hello.preshared_key_offer.as_mut() {
             self.grease_psk(psk_offer)?;
         }
 
         // To compute the encoded AAD we add a placeholder extension with an empty payload.
-        outer_hello
-            .extensions
-            .encrypted_client_hello =
+        outer_hello.encrypted_client_hello =
             Some(outer_hello_ext(self, enc.clone(), vec![0; payload_len]));
 
         // Next we compute the proper extension payload.
@@ -429,9 +423,7 @@ impl EchState {
             .seal(&outer_hello.get_encoding(), &encoded_inner_hello)?;
 
         // And then we replace the placeholder extension with the real one.
-        outer_hello
-            .extensions
-            .encrypted_client_hello = Some(outer_hello_ext(self, enc, payload));
+        outer_hello.encrypted_client_hello = Some(outer_hello_ext(self, enc, payload));
 
         Ok(outer_hello)
     }
@@ -584,13 +576,11 @@ impl EchState {
                 .collect(),
         };
 
-        inner_hello.extensions.order_seed = outer_hello.extensions.order_seed;
+        inner_hello.order_seed = outer_hello.order_seed;
 
         // The inner hello will always have an inner variant of the ECH extension added.
         // See Section 6.1 rule 4.
-        inner_hello
-            .extensions
-            .encrypted_client_hello = Some(EncryptedClientHello::Inner);
+        inner_hello.encrypted_client_hello = Some(EncryptedClientHello::Inner);
 
         let inner_sni = match &self.inner_name {
             // The inner hello only gets a SNI value if enable_sni is true and the inner name
@@ -604,9 +594,7 @@ impl EchState {
         // 2. Add the extension to the inner hello as-is.
         // 3. Compress the extension, by collecting it into a list of to-be-compressed
         //    extensions we'll handle separately.
-        let outer_extensions = outer_hello
-            .extensions
-            .used_extensions_in_encoding_order();
+        let outer_extensions = outer_hello.used_extensions_in_encoding_order();
         let mut compressed_exts = Vec::with_capacity(outer_extensions.len());
         for ext in outer_extensions {
             // Some outer hello extensions are only useful in the context where a TLS 1.3
@@ -624,7 +612,7 @@ impl EchState {
             if ext == ExtensionType::ServerName {
                 // We may want to replace the outer hello SNI with our own inner hello specific SNI.
                 if let Some(sni_value) = inner_sni {
-                    inner_hello.extensions.server_name = Some(ServerNamePayload::from(sni_value));
+                    inner_hello.server_name = Some(ServerNamePayload::from(sni_value));
                 }
                 // We don't want to add, or compress, the SNI from the outer hello.
                 continue;
@@ -636,21 +624,17 @@ impl EchState {
                 compressed_exts.push(ext);
             }
 
-            inner_hello
-                .extensions
-                .clone_one(&outer_hello.extensions, ext);
+            inner_hello.clone_one(outer_hello, ext);
         }
 
         // We've added all the uncompressed extensions. Now we need to add the contiguous
         // block of to-be-compressed extensions.
-        inner_hello
-            .extensions
-            .contiguous_extensions = compressed_exts.clone();
+        inner_hello.contiguous_extensions = compressed_exts.clone();
 
         // Note which extensions we're sending in the inner hello. This may differ from
         // the outer hello (e.g. the inner hello may omit SNI while the outer hello will
         // always have the ECH cover name in SNI).
-        self.sent_extensions = inner_hello.extensions.collect_used();
+        self.sent_extensions = inner_hello.collect_used();
 
         // If we're resuming, we need to update the PSK binder in the inner hello.
         if let Some(resuming) = resuming.as_ref() {

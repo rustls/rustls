@@ -461,7 +461,6 @@ fn emit_client_hello_for_retry(
             cx.data.ech_status = EchStatus::Offered;
             // Store the ECH extension in case we need to carry it forward in a subsequent hello.
             input.prev_ech_ext = chp_payload
-                .extensions
                 .encrypted_client_hello
                 .clone();
         }
@@ -471,9 +470,7 @@ fn emit_client_hello_for_retry(
             if let Some(grease_ext) = ech_grease_ext {
                 // Add the GREASE ECH extension.
                 let grease_ext = grease_ext?;
-                chp_payload
-                    .extensions
-                    .encrypted_client_hello = Some(grease_ext.clone());
+                chp_payload.encrypted_client_hello = Some(grease_ext.clone());
                 cx.data.ech_status = EchStatus::Grease;
                 // Store the GREASE ECH extension in case we need to carry it forward in a
                 // subsequent hello.
@@ -484,7 +481,7 @@ fn emit_client_hello_for_retry(
     }
 
     // Note what extensions we sent.
-    input.hello.sent_extensions = chp_payload.extensions.collect_used();
+    input.hello.sent_extensions = chp_payload.collect_used();
 
     let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(chp_payload));
 
