@@ -538,11 +538,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
 
         // QUIC transport parameters
         if cx.common.is_quic() {
-            match exts
-                .transport_parameters
-                .as_ref()
-                .or(exts.transport_parameters_draft.as_ref())
-            {
+            match exts.transport_parameters.as_ref() {
                 Some(params) => cx.common.quic.params = Some(params.clone().into_vec()),
                 None => {
                     return Err(cx

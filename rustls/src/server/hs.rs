@@ -72,12 +72,8 @@ impl ExtensionProcessing {
         } = extra_exts;
 
         let mut extensions = Box::new(ServerExtensions::default());
-        match transport_parameters {
-            Some(TransportParameters::Quic(v)) => extensions.transport_parameters = Some(v),
-            Some(TransportParameters::QuicDraft(v)) => {
-                extensions.transport_parameters_draft = Some(v)
-            }
-            None => {}
+        if let Some(TransportParameters::Quic(v)) = transport_parameters {
+            extensions.transport_parameters = Some(v);
         }
 
         Self {
@@ -136,13 +132,7 @@ impl ExtensionProcessing {
                 ));
             }
 
-            let transport_params = hello
-                .transport_parameters
-                .as_ref()
-                .or(hello
-                    .transport_parameters_draft
-                    .as_ref());
-            match transport_params {
+            match hello.transport_parameters.as_ref() {
                 Some(params) => cx.common.quic.params = Some(params.to_owned().into_vec()),
                 None => {
                     return Err(cx

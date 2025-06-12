@@ -811,9 +811,6 @@ impl ClientExtensionsInput<'_> {
 
 #[derive(Clone)]
 pub(crate) enum TransportParameters<'a> {
-    /// QUIC transport parameters (RFC9001 prior to draft 33)
-    QuicDraft(Payload<'a>),
-
     /// QUIC transport parameters (RFC9001)
     Quic(Payload<'a>),
 }
@@ -821,7 +818,6 @@ pub(crate) enum TransportParameters<'a> {
 impl TransportParameters<'_> {
     pub(crate) fn into_owned(self) -> TransportParameters<'static> {
         match self {
-            Self::QuicDraft(v) => TransportParameters::QuicDraft(v.into_owned()),
             Self::Quic(v) => TransportParameters::Quic(v.into_owned()),
         }
     }
@@ -916,10 +912,6 @@ extension_struct! {
         ExtensionType::RenegotiationInfo =>
             pub(crate) renegotiation_info: Option<PayloadU8>,
 
-        /// QUIC transport parameters (RFC9001 prior to draft 33)
-        ExtensionType::TransportParametersDraft =>
-            pub(crate) transport_parameters_draft: Option<Payload<'a>>,
-
         /// Encrypted inner client hello (draft-ietf-tls-esni)
         ExtensionType::EncryptedClientHello =>
             pub(crate) encrypted_client_hello: Option<EncryptedClientHello>,
@@ -959,7 +951,6 @@ impl ClientExtensions<'_> {
             key_shares,
             transport_parameters,
             renegotiation_info,
-            transport_parameters_draft,
             encrypted_client_hello,
             encrypted_client_hello_outer,
             order_seed,
@@ -986,7 +977,6 @@ impl ClientExtensions<'_> {
             key_shares,
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
             renegotiation_info,
-            transport_parameters_draft: transport_parameters_draft.map(|x| x.into_owned()),
             encrypted_client_hello,
             encrypted_client_hello_outer,
             order_seed,
@@ -1184,10 +1174,6 @@ extension_struct! {
         ExtensionType::TransportParameters =>
             pub(crate) transport_parameters: Option<Payload<'a>>,
 
-        /// QUIC transport parameters (RFC9001 prior to draft 33)
-        ExtensionType::TransportParametersDraft =>
-            pub(crate) transport_parameters_draft: Option<Payload<'a>>,
-
         /// Early data is accepted (RFC8446)
         ExtensionType::EarlyData =>
             pub(crate) early_data_ack: Option<()>,
@@ -1216,7 +1202,6 @@ impl ServerExtensions<'_> {
             certificate_status_request_ack,
             selected_version,
             transport_parameters,
-            transport_parameters_draft,
             early_data_ack,
             encrypted_client_hello_ack,
             unknown_extensions,
@@ -1235,7 +1220,6 @@ impl ServerExtensions<'_> {
             certificate_status_request_ack,
             selected_version,
             transport_parameters: transport_parameters.map(|x| x.into_owned()),
-            transport_parameters_draft: transport_parameters_draft.map(|x| x.into_owned()),
             early_data_ack,
             encrypted_client_hello_ack,
             unknown_extensions,
