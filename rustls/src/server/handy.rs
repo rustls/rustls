@@ -282,6 +282,7 @@ mod sni_resolver {
                         client_cert_types: None,
                         cipher_suites: &[],
                         certificate_authorities: None,
+                        named_groups: None,
                     })
                     .is_none()
             );
@@ -303,6 +304,7 @@ mod sni_resolver {
                         client_cert_types: None,
                         cipher_suites: &[],
                         certificate_authorities: None,
+                        named_groups: None,
                     })
                     .is_none()
             );

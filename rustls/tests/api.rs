@@ -1157,6 +1157,7 @@ struct ServerCheckCertResolve {
     expected_cipher_suites: Option<Vec<CipherSuite>>,
     expected_server_cert_types: Option<Vec<CertificateType>>,
     expected_client_cert_types: Option<Vec<CertificateType>>,
+    expected_named_groups: Option<Vec<NamedGroup>>,
 }
 
 impl ResolvesServerCert for ServerCheckCertResolve {
@@ -1227,6 +1228,15 @@ impl ResolvesServerCert for ServerCheckCertResolve {
             );
         }
 
+        if let Some(expected_named_groups) = &self.expected_named_groups {
+            assert_eq!(
+                expected_named_groups,
+                client_hello
+                    .named_groups()
+                    .expect("Named groups not present"),
+            )
+        }
+
         None
     }
 }
@@ -1270,6 +1280,30 @@ fn server_cert_resolve_with_alpn() {
             ClientConnection::new(Arc::new(client_config), server_name("sni-value")).unwrap();
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
+        let err = do_handshake_until_error(&mut client, &mut server);
+        assert!(err.is_err());
+    }
+}
+
+#[test]
+fn server_cert_resolve_with_named_groups() {
+    let provider = provider::default_provider();
+    for kt in KeyType::all_for_provider(&provider) {
+        let client_config = make_client_config(*kt, &provider);
+
+        let mut server_config = make_server_config(*kt, &provider);
+        server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
+            expected_named_groups: Some(
+                provider
+                    .kx_groups
+                    .iter()
+                    .map(|kx| kx.name())
+                    .collect(),
+            ),
+            ..Default::default()
+        });
+
+        let (mut client, mut server) = make_pair_for_configs(client_config, server_config);
         let err = do_handshake_until_error(&mut client, &mut server);
         assert!(err.is_err());
     }
@@ -6220,6 +6254,14 @@ fn test_acceptor() {
     let accepted = acceptor.accept().unwrap().unwrap();
     let ch = accepted.client_hello();
     assert_eq!(ch.server_name(), Some("localhost"));
+    assert_eq!(
+        ch.named_groups().unwrap(),
+        provider::default_provider()
+            .kx_groups
+            .iter()
+            .map(|kx| kx.name())
+            .collect::<Vec<NamedGroup>>()
+    );
 
     let server = accepted
         .into_connection(server_config)
