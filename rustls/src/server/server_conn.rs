@@ -33,7 +33,9 @@ use crate::sync::Arc;
 use crate::time_provider::DefaultTimeProvider;
 use crate::time_provider::TimeProvider;
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{DistinguishedName, KeyLog, WantsVersions, compress, sign, verify, versions};
+use crate::{
+    DistinguishedName, KeyLog, NamedGroup, WantsVersions, compress, sign, verify, versions,
+};
 
 /// A trait for the ability to store server session data.
 ///
@@ -145,6 +147,7 @@ pub struct ClientHello<'a> {
     ///
     /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     pub(super) certificate_authorities: Option<&'a [DistinguishedName]>,
+    pub(super) named_groups: Option<&'a [NamedGroup]>,
 }
 
 impl<'a> ClientHello<'a> {
@@ -215,6 +218,27 @@ impl<'a> ClientHello<'a> {
     /// [certificate_authorities]: https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.4
     pub fn certificate_authorities(&self) -> Option<&'a [DistinguishedName]> {
         self.certificate_authorities
+    }
+
+    /// Get the [`named_groups`] extension sent by the client.
+    ///
+    /// This means different things in different versions of TLS:
+    ///
+    /// Originally it was introduced as the "[`elliptic_curves`]" extension for TLS1.2.
+    /// It described the elliptic curves supported by a client for all purposes: key
+    /// exchange, signature verification (for server authentication), and signing (for
+    /// client auth).  Later [RFC7919] extended this to include FFDHE "named groups",
+    /// but FFDHE groups in this context only relate to key exchange.
+    ///
+    /// In TLS1.3 it was renamed to "[`named_groups`]" and now describes all types
+    /// of key exchange mechanisms, and does not relate at all to elliptic curves
+    /// used for signatures.
+    ///
+    /// [`elliptic_curves`]: https://datatracker.ietf.org/doc/html/rfc4492#section-5.1.1
+    /// [RFC7919]: https://datatracker.ietf.org/doc/html/rfc7919#section-2
+    /// [`named_groups`]:https://datatracker.ietf.org/doc/html/rfc8446#section-4.2.7
+    pub fn named_groups(&self) -> Option<&'a [NamedGroup]> {
+        self.named_groups
     }
 }
 
@@ -995,6 +1019,7 @@ impl Accepted {
             client_cert_types: payload.client_certificate_extension(),
             cipher_suites: &payload.cipher_suites,
             certificate_authorities: payload.certificate_authorities_extension(),
+            named_groups: payload.namedgroups_extension(),
         };
 
         trace!("Accepted::client_hello(): {ch:#?}");
