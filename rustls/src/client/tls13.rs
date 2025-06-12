@@ -57,7 +57,10 @@ static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
 
 // Only the intersection of things we offer, and those disallowed
 // in TLS1.3
-static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
+static DISALLOWED_IN_ENCRYPTED_EXTENSIONS: &[ExtensionType] = &[
+    ExtensionType::KeyShare,
+    ExtensionType::PreSharedKey,
+    ExtensionType::SupportedVersions,
     ExtensionType::ECPointFormats,
     ExtensionType::SessionTicket,
     ExtensionType::RenegotiationInfo,
@@ -274,13 +277,14 @@ fn validate_server_hello(
     common: &mut CommonState,
     server_hello: &ServerHelloPayload,
 ) -> Result<(), Error> {
-    for ext_type in server_hello.extensions.collect_used() {
-        if !ALLOWED_PLAINTEXT_EXTS.contains(&ext_type) {
-            return Err(common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerMisbehaved::UnexpectedCleartextExtension,
-            ));
-        }
+    if !server_hello
+        .extensions
+        .only_contains(ALLOWED_PLAINTEXT_EXTS)
+    {
+        return Err(common.send_fatal_alert(
+            AlertDescription::UnsupportedExtension,
+            PeerMisbehaved::UnexpectedCleartextExtension,
+        ));
     }
 
     Ok(())
@@ -441,13 +445,11 @@ fn validate_encrypted_extensions(
         ));
     }
 
-    for ext_type in exts.collect_used() {
-        if ALLOWED_PLAINTEXT_EXTS.contains(&ext_type) || DISALLOWED_TLS13_EXTS.contains(&ext_type) {
-            return Err(common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerMisbehaved::DisallowedEncryptedExtension,
-            ));
-        }
+    if exts.contains_any(DISALLOWED_IN_ENCRYPTED_EXTENSIONS) {
+        return Err(common.send_fatal_alert(
+            AlertDescription::UnsupportedExtension,
+            PeerMisbehaved::DisallowedEncryptedExtension,
+        ));
     }
 
     Ok(())

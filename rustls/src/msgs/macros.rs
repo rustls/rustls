@@ -254,6 +254,41 @@ macro_rules! extension_struct {
                 }
             }
 
+            /// Return true if all present extensions are named in `allowed`
+            #[allow(dead_code)]
+            pub(crate) fn only_contains(&self, allowed: &[ExtensionType]) -> bool {
+                $(
+                    if let Some(_) = &self.$item_slot {
+                        if !allowed.contains(&$item_id) {
+                            return false;
+                        }
+                    }
+                )*
+
+                true
+            }
+
+            /// Return true if any extension named in `exts` is present.
+            #[allow(dead_code)]
+            pub(crate) fn contains_any(&self, exts: &[ExtensionType]) -> bool {
+                for e in exts {
+                    if self.contains(*e) {
+                        return true;
+                    }
+                }
+                false
+            }
+
+            fn contains(&self, e: ExtensionType) -> bool {
+                match e {
+                    $(
+
+                        $item_id => self.$item_slot.is_some(),
+                    )*
+                    _ => false,
+                }
+            }
+
             /// Every `ExtensionType` this structure may encode/decode.
             const ALL_EXTENSIONS: &'static [ExtensionType] = &[
                 $($item_id,)*
