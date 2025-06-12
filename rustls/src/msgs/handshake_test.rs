@@ -838,7 +838,6 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
             certificate_status_request_ack: Some(()),
             selected_version: Some(ProtocolVersion::TLSv1_2),
             transport_parameters: Some(Payload::new(vec![1, 2, 3])),
-            transport_parameters_draft: None,
             client_certificate_type: Some(CertificateType::RawPublicKey),
             server_certificate_type: Some(CertificateType::RawPublicKey),
             unknown_extensions: Default::default(),

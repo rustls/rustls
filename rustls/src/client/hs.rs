@@ -231,11 +231,9 @@ fn emit_client_hello_for_retry(
         ..Default::default()
     });
 
-    match extra_exts.transport_parameters.clone() {
-        Some(TransportParameters::Quic(v)) => exts.transport_parameters = Some(v),
-        Some(TransportParameters::QuicDraft(v)) => exts.transport_parameters_draft = Some(v),
-        None => {}
-    };
+    if let Some(TransportParameters::Quic(v)) = &extra_exts.transport_parameters {
+        exts.transport_parameters = Some(v.clone());
+    }
 
     if supported_versions.tls13 {
         if let Some(cas_extension) = config.verifier.root_hint_subjects() {
