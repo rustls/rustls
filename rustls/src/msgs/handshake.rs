@@ -1556,6 +1556,19 @@ impl ServerHelloPayload {
     }
 }
 
+impl Deref for ServerHelloPayload {
+    type Target = ServerExtensions<'static>;
+    fn deref(&self) -> &Self::Target {
+        &self.extensions
+    }
+}
+
+impl DerefMut for ServerHelloPayload {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.extensions
+    }
+}
+
 #[derive(Clone, Default, Debug)]
 pub(crate) struct CertificateChain<'a>(pub(crate) Vec<CertificateDer<'a>>);
 

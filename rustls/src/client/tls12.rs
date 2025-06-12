@@ -76,7 +76,6 @@ mod server_hello {
 
             // Doing EMS?
             self.using_ems = server_hello
-                .extensions
                 .extended_master_secret_ack
                 .is_some();
             if self.config.require_ems && !self.using_ems {
@@ -90,7 +89,6 @@ mod server_hello {
 
             // Might the server send a ticket?
             let must_issue_new_ticket = if server_hello
-                .extensions
                 .session_ticket_ack
                 .is_some()
             {
@@ -103,7 +101,6 @@ mod server_hello {
             // Might the server send a CertificateStatus between Certificate and
             // ServerKeyExchange?
             let may_send_cert_status = server_hello
-                .extensions
                 .certificate_status_request_ack
                 .is_some();
             if may_send_cert_status {

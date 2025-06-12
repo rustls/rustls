@@ -734,7 +734,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello
-                .extensions
                 .selected_version
                 .unwrap_or(server_hello.legacy_version)
         } else {
@@ -750,11 +749,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
                 }
 
-                if server_hello
-                    .extensions
-                    .selected_version
-                    .is_some()
-                {
+                if server_hello.selected_version.is_some() {
                     return Err({
                         cx.common.send_fatal_alert(
                             AlertDescription::IllegalParameter,
@@ -789,7 +784,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         if self
             .input
             .hello
-            .server_sent_unsolicited_extensions(&server_hello.extensions, &allowed_unsolicited)
+            .server_sent_unsolicited_extensions(server_hello, &allowed_unsolicited)
         {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
@@ -805,7 +800,6 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 cx.common,
                 &self.input.hello.alpn_protocols,
                 server_hello
-                    .extensions
                     .selected_protocol
                     .as_ref()
                     .map(|s| s.as_ref()),
@@ -814,7 +808,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
-        if let Some(point_fmts) = &server_hello.extensions.ec_point_formats {
+        if let Some(point_fmts) = &server_hello.ec_point_formats {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,

@@ -88,7 +88,6 @@ pub(super) fn handle_server_hello(
     validate_server_hello(cx.common, server_hello)?;
 
     let their_key_share = server_hello
-        .extensions
         .key_share
         .as_ref()
         .ok_or_else(|| {
@@ -106,10 +105,7 @@ pub(super) fn handle_server_hello(
             )
         })?;
 
-    let key_schedule_pre_handshake = match (
-        server_hello.extensions.preshared_key,
-        early_data_key_schedule,
-    ) {
+    let key_schedule_pre_handshake = match (server_hello.preshared_key, early_data_key_schedule) {
         (Some(selected_psk), Some(early_key_schedule)) => {
             match &resuming_session {
                 Some(resuming) => {
@@ -277,10 +273,7 @@ fn validate_server_hello(
     common: &mut CommonState,
     server_hello: &ServerHelloPayload,
 ) -> Result<(), Error> {
-    if !server_hello
-        .extensions
-        .only_contains(ALLOWED_PLAINTEXT_EXTS)
-    {
+    if !server_hello.only_contains(ALLOWED_PLAINTEXT_EXTS) {
         return Err(common.send_fatal_alert(
             AlertDescription::UnsupportedExtension,
             PeerMisbehaved::UnexpectedCleartextExtension,
