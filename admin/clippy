@@ -23,6 +23,9 @@ run_clippy --package rustls --no-default-features --all-targets
 # run all workspace members (individually, because we don't want feature unification)
 for p in $(admin/all-workspace-members) ; do
   case "$p" in
+    rustls-bench)
+      ALL_FEATURES=$(admin/all-features-except graviola rustls-bench)
+      ;;
     *)
       ALL_FEATURES="--all-features"
       ;;
