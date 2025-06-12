@@ -481,7 +481,7 @@ dependencies = [
  "base64",
  "env_logger",
  "nix",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "rustls-post-quantum",
  "rustls-webpki",
 ]
@@ -1358,7 +1358,7 @@ dependencies = [
  "once_cell",
  "rand 0.9.1",
  "ring",
- "rustls",
+ "rustls 0.23.28",
  "thiserror 2.0.12",
  "tinyvec",
  "tokio",
@@ -1383,7 +1383,7 @@ dependencies = [
  "parking_lot",
  "rand 0.9.1",
  "resolv-conf",
- "rustls",
+ "rustls 0.23.28",
  "smallvec",
  "thiserror 2.0.12",
  "tokio",
@@ -1732,7 +1732,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -2578,6 +2578,21 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.23.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7160e3e10bf4535308537f3c4e1641468cd0e485175d6163087c0393c7d46643"
+dependencies = [
+ "aws-lc-rs",
+ "log",
+ "once_cell",
+ "rustls-pki-types",
+ "rustls-webpki",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "rustls"
+version = "0.24.0-dev.0"
 dependencies = [
  "aws-lc-rs",
  "base64",
@@ -2612,7 +2627,7 @@ name = "rustls-bench"
 version = "0.1.0"
 dependencies = [
  "clap",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "rustls-graviola",
  "rustls-post-quantum",
  "rustls-test",
@@ -2631,7 +2646,7 @@ dependencies = [
  "fxhash",
  "itertools 0.14.0",
  "rayon",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "rustls-fuzzing-provider",
  "rustls-test",
  "tikv-jemallocator",
@@ -2644,7 +2659,7 @@ dependencies = [
  "hickory-resolver",
  "regex",
  "ring",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "tokio",
 ]
 
@@ -2659,7 +2674,7 @@ dependencies = [
  "log",
  "mio",
  "rcgen",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "serde",
  "tokio",
  "webpki-roots 1.0.0",
@@ -2670,7 +2685,7 @@ name = "rustls-fuzzing-provider"
 version = "0.1.0"
 dependencies = [
  "env_logger",
- "rustls",
+ "rustls 0.24.0-dev.0",
 ]
 
 [[package]]
@@ -2680,7 +2695,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51c72f95752eab205ea6e623eb35e14e6767640be83f0d210ba64c76f7105525"
 dependencies = [
  "graviola",
- "rustls",
+ "rustls 0.23.28",
 ]
 
 [[package]]
@@ -2692,7 +2707,7 @@ dependencies = [
  "num-bigint",
  "once_cell",
  "openssl",
- "rustls",
+ "rustls 0.24.0-dev.0",
 ]
 
 [[package]]
@@ -2710,7 +2725,7 @@ version = "0.2.2"
 dependencies = [
  "criterion",
  "env_logger",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "webpki-roots 1.0.0",
 ]
 
@@ -2731,7 +2746,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rcgen",
  "rsa",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "sha2",
  "signature",
  "webpki-roots 1.0.0",
@@ -2743,7 +2758,7 @@ name = "rustls-provider-test"
 version = "0.1.0"
 dependencies = [
  "hex",
- "rustls",
+ "rustls 0.24.0-dev.0",
  "rustls-provider-example",
  "serde",
  "serde_json",
@@ -2753,7 +2768,7 @@ dependencies = [
 name = "rustls-test"
 version = "0.1.0"
 dependencies = [
- "rustls",
+ "rustls 0.24.0-dev.0",
 ]
 
 [[package]]
@@ -3156,7 +3171,7 @@ version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e727b36a1a0e8b74c376ac2211e40c2c8af09fb4013c60d910495810f008e9b"
 dependencies = [
- "rustls",
+ "rustls 0.23.28",
  "tokio",
 ]
 
@@ -3472,7 +3487,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
