@@ -734,10 +734,7 @@ impl<Data> ConnectionCommon<Data> {
     /// [`reader()`]: ConnectionCommon::reader
     pub fn read_tls(&mut self, rd: &mut dyn io::Read) -> Result<usize, io::Error> {
         if self.received_plaintext.is_full() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "received plaintext buffer full",
-            ));
+            return Err(io::Error::other("received plaintext buffer full"));
         }
 
         if self.has_received_close_notify {
