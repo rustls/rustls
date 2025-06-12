@@ -193,16 +193,11 @@ mod connection {
                 ));
             }
 
-            let ext = match quic_version {
-                Version::V1Draft => ClientExtension::TransportParametersDraft(params),
-                Version::V1 | Version::V2 => ClientExtension::TransportParameters(params),
-            };
-
             let mut inner = ConnectionCore::for_client(
                 config,
                 name,
                 alpn_protocols,
-                vec![ext],
+                vec![ClientExtension::TransportParameters(params)],
                 Protocol::Quic,
             )?;
             inner.common_state.quic.version = quic_version;
@@ -286,10 +281,7 @@ mod connection {
                 ));
             }
 
-            let ext = match quic_version {
-                Version::V1Draft => ServerExtension::TransportParametersDraft(params),
-                Version::V1 | Version::V2 => ServerExtension::TransportParameters(params),
-            };
+            let ext = ServerExtension::TransportParameters(params);
 
             let mut core = ConnectionCore::for_server(config, vec![ext])?;
             core.common_state.protocol = Protocol::Quic;
@@ -937,8 +929,6 @@ pub enum KeyChange {
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug)]
 pub enum Version {
-    /// Draft versions 29, 30, 31 and 32
-    V1Draft,
     /// First stable RFC
     V1,
     /// Anti-ossification variant of V1
@@ -948,11 +938,6 @@ pub enum Version {
 impl Version {
     fn initial_salt(self) -> &'static [u8; 20] {
         match self {
-            Self::V1Draft => &[
-                // https://datatracker.ietf.org/doc/html/draft-ietf-quic-tls-32#section-5.2
-                0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61,
-                0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99,
-            ],
             Self::V1 => &[
                 // https://www.rfc-editor.org/rfc/rfc9001.html#name-initial-secrets
                 0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8,
@@ -969,7 +954,7 @@ impl Version {
     /// Key derivation label for packet keys.
     pub(crate) fn packet_key_label(&self) -> &'static [u8] {
         match self {
-            Self::V1Draft | Self::V1 => b"quic key",
+            Self::V1 => b"quic key",
             Self::V2 => b"quicv2 key",
         }
     }
@@ -977,7 +962,7 @@ impl Version {
     /// Key derivation label for packet "IV"s.
     pub(crate) fn packet_iv_label(&self) -> &'static [u8] {
         match self {
-            Self::V1Draft | Self::V1 => b"quic iv",
+            Self::V1 => b"quic iv",
             Self::V2 => b"quicv2 iv",
         }
     }
@@ -985,14 +970,14 @@ impl Version {
     /// Key derivation for header keys.
     pub(crate) fn header_key_label(&self) -> &'static [u8] {
         match self {
-            Self::V1Draft | Self::V1 => b"quic hp",
+            Self::V1 => b"quic hp",
             Self::V2 => b"quicv2 hp",
         }
     }
 
     fn key_update_label(&self) -> &'static [u8] {
         match self {
-            Self::V1Draft | Self::V1 => b"quic ku",
+            Self::V1 => b"quic ku",
             Self::V2 => b"quicv2 ku",
         }
     }
