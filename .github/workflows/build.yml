@@ -130,14 +130,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.71"
-
-      # zlib-rs is optional and requires a later MSRV
-      - run: cargo check --locked --lib $(admin/all-features-except zlib rustls) -p rustls
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.75"
+          toolchain: "1.79"
 
       - run: cargo check --locked --lib --all-features -p rustls
 
