@@ -5,9 +5,18 @@ macro_rules! enum_builder {
         #[repr($uint:ty)]
         $enum_vis:vis enum $enum_name:ident
         {
-          $( $enum_var:ident => $enum_val:literal),* $(,)?
-          $( !Debug:
-            $( $enum_var_nd:ident => $enum_val_nd:literal),* $(,)?
+          $(
+              $(#[doc = $enum_comment:literal])*
+              $enum_var:ident => $enum_val:literal
+          ),*
+          $(,)?
+          $(
+              !Debug:
+              $(
+                  $(#[doc = $enum_comment_nd:literal])*
+                  $enum_var_nd:ident => $enum_val_nd:literal
+              ),*
+              $(,)?
           )?
         }
     ) => {
@@ -15,8 +24,17 @@ macro_rules! enum_builder {
         #[non_exhaustive]
         #[derive(PartialEq, Eq, Clone, Copy)]
         $enum_vis enum $enum_name {
-            $( $enum_var),*
-            $(, $($enum_var_nd),* )?
+            $(
+                $(#[doc = $enum_comment])*
+                $enum_var
+            ),*
+            $(
+                ,
+                $(
+                    $(#[doc = $enum_comment_nd])*
+                    $enum_var_nd
+                ),*
+            )?
             ,Unknown($uint)
         }
 
