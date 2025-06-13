@@ -107,7 +107,7 @@ impl EchConfig {
 
         // Note: we name the index var _i because if the log feature is disabled
         //       it is unused.
-        #[cfg_attr(not(feature = "logging"), allow(clippy::unused_enumerate_index))]
+        #[cfg_attr(not(feature = "log"), allow(clippy::unused_enumerate_index))]
         for (_i, config) in ech_configs.iter().enumerate() {
             let contents = match config {
                 EchConfigPayload::V18(contents) => contents,
