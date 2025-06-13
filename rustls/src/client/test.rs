@@ -1,4 +1,4 @@
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+#![cfg(any(feature = "ring", feature = "aws-lc-rs"))]
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::prelude::v1::*;
 use std::vec;
