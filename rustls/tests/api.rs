@@ -25,7 +25,7 @@ use rustls::{
     ServerConnection, SideData, SignatureScheme, Stream, StreamOwned, SupportedCipherSuite,
     SupportedProtocolVersion, sign,
 };
-#[cfg(feature = "aws_lc_rs")]
+#[cfg(feature = "aws-lc-rs")]
 use rustls::{
     client::{EchConfig, EchGreaseConfig, EchMode},
     crypto::aws_lc_rs::hpke::ALL_SUPPORTED_SUITES,
@@ -6741,7 +6741,7 @@ fn test_debug_server_name_from_string() {
     )
 }
 
-#[cfg(all(feature = "ring", feature = "aws_lc_rs"))]
+#[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
 #[test]
 fn test_explicit_provider_selection() {
     let client_config = finish_client_config(
@@ -6986,7 +6986,7 @@ fn test_server_fips_service_indicator_includes_require_ems() {
     assert!(!server_config.fips());
 }
 
-#[cfg(feature = "aws_lc_rs")]
+#[cfg(feature = "aws-lc-rs")]
 #[test]
 fn test_client_fips_service_indicator_includes_ech_hpke_suite() {
     if !provider_is_fips() {

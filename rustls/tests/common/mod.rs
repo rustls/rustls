@@ -87,7 +87,7 @@ pub fn webpki_server_verifier_builder(
 
 fn exactly_one_provider() -> bool {
     cfg!(any(
-        all(feature = "ring", not(feature = "aws_lc_rs")),
-        all(feature = "aws_lc_rs", not(feature = "ring"))
+        all(feature = "ring", not(feature = "aws-lc-rs")),
+        all(feature = "aws-lc-rs", not(feature = "ring"))
     ))
 }

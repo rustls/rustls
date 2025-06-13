@@ -779,7 +779,7 @@ mod connection {
     /// # Example
     ///
     /// ```no_run
-    /// # #[cfg(feature = "aws_lc_rs")] {
+    /// # #[cfg(feature = "aws-lc-rs")] {
     /// # fn choose_server_config(
     /// #     _: rustls::server::ClientHello,
     /// # ) -> std::sync::Arc<rustls::ServerConfig> {
