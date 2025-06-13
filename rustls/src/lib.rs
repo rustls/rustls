@@ -46,7 +46,7 @@
 //!
 //! Rustls ships with two built-in providers controlled by associated crate features:
 //!
-//!   * [`aws-lc-rs`] - enabled by default, available with the `aws_lc_rs` crate feature enabled.
+//!   * [`aws-lc-rs`] - enabled by default, available with the `aws-lc-rs` crate feature enabled.
 //!   * [`ring`] - available with the `ring` crate feature enabled.
 //!
 //! See the documentation for [`crypto::CryptoProvider`] for details on how providers are
@@ -159,7 +159,7 @@
 //! and use it for all connections made by that process.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "aws_lc_rs")] {
+//! # #[cfg(feature = "aws-lc-rs")] {
 //! # let root_store: rustls::RootCertStore = panic!();
 //! let config = rustls::ClientConfig::builder()
 //!     .with_root_certificates(root_store)
@@ -171,7 +171,7 @@
 //! know what to expect to find in the server's certificate.
 //!
 //! ```rust
-//! # #[cfg(feature = "aws_lc_rs")] {
+//! # #[cfg(feature = "aws-lc-rs")] {
 //! # use rustls;
 //! # use webpki;
 //! # use std::sync::Arc;
@@ -214,7 +214,7 @@
 //! errors.
 //!
 //! ```rust,no_run
-//! # #[cfg(feature = "aws_lc_rs")] {
+//! # #[cfg(feature = "aws-lc-rs")] {
 //! # let mut client = rustls::ClientConnection::new(panic!(), panic!()).unwrap();
 //! # struct Socket { }
 //! # impl Socket {
@@ -279,7 +279,7 @@
 //! - `std` (enabled by default): enable the high-level (buffered) Connection API and other functionality
 //!   which relies on the `std` library.
 //!
-//! - `aws_lc_rs` (enabled by default): makes the rustls crate depend on the [`aws-lc-rs`] crate.
+//! - `aws-lc-rs` (enabled by default): makes the rustls crate depend on the [`aws-lc-rs`] crate.
 //!   Use `rustls::crypto::aws_lc_rs::default_provider().install_default()` to
 //!   use it as the default `CryptoProvider`, or provide it explicitly
 //!   when making a `ClientConfig` or `ServerConfig`.
@@ -293,7 +293,7 @@
 //!   when making a `ClientConfig` or `ServerConfig`.
 //!
 //! - `fips`: enable support for FIPS140-3-approved cryptography, via the [`aws-lc-rs`] crate.
-//!   This feature enables the `aws_lc_rs` crate feature, which makes the rustls crate depend
+//!   This feature enables the `aws-lc-rs` crate feature, which makes the rustls crate depend
 //!   on [aws-lc-rs](https://github.com/aws/aws-lc-rs).  It also changes the default
 //!   for [`ServerConfig::require_ems`] and [`ClientConfig::require_ems`].
 //!
