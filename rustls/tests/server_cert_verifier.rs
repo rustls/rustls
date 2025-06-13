@@ -262,7 +262,7 @@ fn client_can_request_certain_trusted_cas() {
 pub struct ResolvesCertChainByCaName(Vec<(DistinguishedName, Arc<CertifiedKey>)>);
 
 impl ResolvesServerCert for ResolvesCertChainByCaName {
-    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+    fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let Some(cas_extension) = client_hello.certificate_authorities() else {
             println!(
                 "ResolvesCertChainByCaName: no CAs extension in ClientHello, returning default cert"

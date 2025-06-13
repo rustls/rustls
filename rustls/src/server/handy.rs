@@ -181,7 +181,7 @@ impl AlwaysResolvesServerRawPublicKeys {
 }
 
 impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
-    fn resolve(&self, _client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
+    fn resolve(&self, _client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
         Some(self.0.clone())
     }
 
@@ -254,7 +254,7 @@ mod sni_resolver {
     }
 
     impl server::ResolvesServerCert for ResolvesServerCertUsingSni {
-        fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
+        fn resolve(&self, client_hello: &ClientHello<'_>) -> Option<Arc<sign::CertifiedKey>> {
             if let Some(name) = client_hello.server_name() {
                 self.by_name.get(name).cloned()
             } else {
@@ -274,7 +274,7 @@ mod sni_resolver {
             let rscsni = ResolvesServerCertUsingSni::new();
             assert!(
                 rscsni
-                    .resolve(ClientHello {
+                    .resolve(&ClientHello {
                         server_name: &None,
                         signature_schemes: &[],
                         alpn: None,
@@ -295,7 +295,7 @@ mod sni_resolver {
                 .to_owned();
             assert!(
                 rscsni
-                    .resolve(ClientHello {
+                    .resolve(&ClientHello {
                         server_name: &Some(name),
                         signature_schemes: &[],
                         alpn: None,
