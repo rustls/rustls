@@ -187,55 +187,14 @@ enum_builder! {
 }
 
 enum_builder! {
-    /// The `NamedCurve` TLS protocol enum.  Values in this enum are taken
-    /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
-    ///
-    /// This enum is used for recognizing elliptic curve parameters advertised
-    /// by a peer during a TLS handshake. It is **not** a list of curves that
-    /// Rustls supports. See [`crate::crypto::ring::kx_group`] for the list of supported
-    /// elliptic curve groups.
-    #[repr(u16)]
-    pub(crate) enum NamedCurve {
-        sect163k1 => 0x0001,
-        sect163r1 => 0x0002,
-        sect163r2 => 0x0003,
-        sect193r1 => 0x0004,
-        sect193r2 => 0x0005,
-        sect233k1 => 0x0006,
-        sect233r1 => 0x0007,
-        sect239k1 => 0x0008,
-        sect283k1 => 0x0009,
-        sect283r1 => 0x000a,
-        sect409k1 => 0x000b,
-        sect409r1 => 0x000c,
-        sect571k1 => 0x000d,
-        sect571r1 => 0x000e,
-        secp160k1 => 0x000f,
-        secp160r1 => 0x0010,
-        secp160r2 => 0x0011,
-        secp192k1 => 0x0012,
-        secp192r1 => 0x0013,
-        secp224k1 => 0x0014,
-        secp224r1 => 0x0015,
-        secp256k1 => 0x0016,
-        secp256r1 => 0x0017,
-        secp384r1 => 0x0018,
-        secp521r1 => 0x0019,
-        brainpoolp256r1 => 0x001a,
-        brainpoolp384r1 => 0x001b,
-        brainpoolp512r1 => 0x001c,
-        X25519 => 0x001d,
-        X448 => 0x001e,
-        arbitrary_explicit_prime_curves => 0xff01,
-        arbitrary_explicit_char2_curves => 0xff02,
-    }
-}
-
-enum_builder! {
     /// The `NamedGroup` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
+    ///
+    /// This enum is used for recognizing key exchange groups advertised
+    /// by a peer during a TLS handshake. It is **not** a list of groups that
+    /// Rustls supports. See [`crate::crypto::ring::kx_group`] for the list of supported
+    /// key exchange groups.
     #[repr(u16)]
     pub enum NamedGroup {
         secp256r1 => 0x0017,
@@ -439,10 +398,6 @@ pub(crate) mod tests {
         );
         test_enum16::<ExtensionType>(ExtensionType::ServerName, ExtensionType::RenegotiationInfo);
         test_enum8::<ServerNameType>(ServerNameType::HostName, ServerNameType::HostName);
-        test_enum16::<NamedCurve>(
-            NamedCurve::sect163k1,
-            NamedCurve::arbitrary_explicit_char2_curves,
-        );
         test_enum16::<NamedGroup>(NamedGroup::secp256r1, NamedGroup::FFDHE8192);
         test_enum8::<ECPointFormat>(
             ECPointFormat::Uncompressed,
