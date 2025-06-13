@@ -10,7 +10,7 @@ use pki_types::ServerName;
 use super::tls12;
 use super::{ResolvesClientCert, Tls12Resumption};
 use crate::SupportedCipherSuite;
-#[cfg(feature = "logging")]
+#[cfg(feature = "log")]
 use crate::bs_debug;
 use crate::check::inappropriate_handshake_message;
 use crate::client::client_conn::ClientConnectionData;

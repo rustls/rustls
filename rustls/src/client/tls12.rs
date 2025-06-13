@@ -448,7 +448,7 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
         kx.params.encode(&mut kx_params);
         let server_kx = ServerKxDetails::new(kx_params, kx.dss);
 
-        #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
+        #[cfg_attr(not(feature = "log"), allow(unused_variables))]
         {
             match &kx.params {
                 ServerKeyExchangeParams::Ecdh(ecdhe) => {

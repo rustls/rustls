@@ -17,7 +17,7 @@ hpke-rs-rust-crypto = { workspace = true }
 p256 = { workspace = true }
 pkcs8 = { workspace = true }
 rand_core = { workspace = true }
-rustls = { path = "../rustls", default-features = false, features = ["logging", "tls12"] }
+rustls = { path = "../rustls", default-features = false, features = ["log", "tls12"] }
 rsa = { workspace = true }
 sha2 = { workspace = true }
 signature = { workspace = true }
