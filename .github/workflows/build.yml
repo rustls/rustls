@@ -89,12 +89,12 @@ jobs:
           RUST_BACKTRACE: 1
 
       - name: cargo test (debug; aws-lc-rs)
-        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,logging,std --all-targets
+        run: cargo test --no-default-features --features aws_lc_rs,tls12,read_buf,log,std --all-targets
         env:
           RUST_BACKTRACE: 1
 
       - name: cargo test (release; fips)
-        run: cargo test --release --no-default-features --features fips,tls12,read_buf,logging,std --all-targets
+        run: cargo test --release --no-default-features --features fips,tls12,read_buf,log,std --all-targets
         env:
           RUST_BACKTRACE: 1
 

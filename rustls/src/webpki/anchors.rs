@@ -37,7 +37,7 @@ impl RootCertStore {
         let mut invalid_count = 0;
 
         for der_cert in der_certs {
-            #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
+            #[cfg_attr(not(feature = "log"), allow(unused_variables))]
             match anchor_from_trusted_cert(&der_cert) {
                 Ok(anchor) => {
                     self.roots.push(anchor.to_owned());
