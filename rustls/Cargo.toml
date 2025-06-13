@@ -15,15 +15,14 @@ exclude = ["src/testdata", "tests/**"]
 build = "build.rs"
 
 [features]
-default = ["aws_lc_rs", "log", "prefer-post-quantum", "std", "tls12"]
+default = ["aws-lc-rs", "log", "prefer-post-quantum", "std", "tls12"]
 
-aws-lc-rs = ["aws_lc_rs"] # Alias because Cargo features commonly use `-`
-aws_lc_rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
+aws-lc-rs = ["dep:aws-lc-rs", "webpki/aws-lc-rs", "aws-lc-rs/aws-lc-sys", "aws-lc-rs/prebuilt-nasm"]
 brotli = ["dep:brotli", "dep:brotli-decompressor", "std"]
 custom-provider = []
-fips = ["aws_lc_rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
+fips = ["aws-lc-rs", "aws-lc-rs?/fips", "webpki/aws-lc-rs-fips"]
 log = ["dep:log"]
-prefer-post-quantum = ["aws_lc_rs"]
+prefer-post-quantum = ["aws-lc-rs"]
 read_buf = ["rustversion", "std"]
 ring = ["dep:ring", "webpki/ring"]
 std = ["webpki/std", "pki-types/std", "once_cell/std"]

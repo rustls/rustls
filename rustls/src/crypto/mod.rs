@@ -26,7 +26,7 @@ use crate::{Error, NamedGroup, ProtocolVersion, SupportedProtocolVersion, suites
 pub mod ring;
 
 /// aws-lc-rs-based CryptoProvider.
-#[cfg(feature = "aws_lc_rs")]
+#[cfg(feature = "aws-lc-rs")]
 pub mod aws_lc_rs;
 
 /// TLS message encryption/decryption interfaces.
@@ -123,7 +123,7 @@ pub use crate::suites::CipherSuiteCommon;
 /// API (with [`ConfigBuilder::with_single_cert`], etc.), it might look like this:
 ///
 /// ```
-/// # #[cfg(feature = "aws_lc_rs")] {
+/// # #[cfg(feature = "aws-lc-rs")] {
 /// # use std::sync::Arc;
 /// # mod fictious_hsm_api { pub fn load_private_key(key_der: pki_types::PrivateKeyDer<'static>) -> ! { unreachable!(); } }
 /// use rustls::crypto::aws_lc_rs;
@@ -261,7 +261,7 @@ impl CryptoProvider {
     fn from_crate_features() -> Option<Self> {
         #[cfg(all(
             feature = "ring",
-            not(feature = "aws_lc_rs"),
+            not(feature = "aws-lc-rs"),
             not(feature = "custom-provider")
         ))]
         {
@@ -269,7 +269,7 @@ impl CryptoProvider {
         }
 
         #[cfg(all(
-            feature = "aws_lc_rs",
+            feature = "aws-lc-rs",
             not(feature = "ring"),
             not(feature = "custom-provider")
         ))]
@@ -686,7 +686,7 @@ impl From<Vec<u8>> for SharedSecret {
 ///     .with_no_client_auth();
 /// # }
 /// ```
-#[cfg(all(feature = "aws_lc_rs", any(feature = "fips", docsrs)))]
+#[cfg(all(feature = "aws-lc-rs", any(feature = "fips", docsrs)))]
 #[cfg_attr(docsrs, doc(cfg(feature = "fips")))]
 pub fn default_fips_provider() -> CryptoProvider {
     aws_lc_rs::default_provider()
