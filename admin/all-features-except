@@ -9,7 +9,7 @@ a, b and c.
 The output is decorated with `--no-default-features --features` meaning
 it can be used directly with cargo, for example:
 
-$ cargo build $(admin/all-features-except std,logging rustls)
+$ cargo build $(admin/all-features-except std,log rustls)
 
 It is assumed but not verified that the remaining features do not
 have dependencies on the disabled features (otherwise, cargo will

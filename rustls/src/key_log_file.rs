@@ -25,7 +25,7 @@ impl KeyLogFileInner {
             };
         };
 
-        #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
+        #[cfg_attr(not(feature = "log"), allow(unused_variables))]
         let file = match OpenOptions::new()
             .append(true)
             .create(true)
@@ -93,7 +93,7 @@ impl KeyLogFile {
 
 impl KeyLog for KeyLogFile {
     fn log(&self, label: &str, client_random: &[u8], secret: &[u8]) {
-        #[cfg_attr(not(feature = "logging"), allow(unused_variables))]
+        #[cfg_attr(not(feature = "log"), allow(unused_variables))]
         match self
             .0
             .lock()

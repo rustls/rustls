@@ -1,5 +1,5 @@
 use alloc::collections::BTreeSet;
-#[cfg(feature = "logging")]
+#[cfg(feature = "log")]
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;

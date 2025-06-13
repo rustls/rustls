@@ -669,7 +669,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
             make_pair_for_configs(client_config.clone(), server_config.clone());
         do_handshake(&mut client, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-        #[cfg(feature = "logging")]
+        #[cfg(feature = "log")]
         assert!(COUNTS.with(|c| {
             c.borrow().trace.iter().any(|item| {
                 item == "resumption not allowed between different ResolvesClientCert values"
@@ -689,7 +689,7 @@ fn client_only_attempts_resumption_with_compatible_security() {
             make_pair_for_configs(client_config.clone(), server_config.clone());
         do_handshake(&mut client, &mut server);
         assert_eq!(client.handshake_kind(), Some(HandshakeKind::Full));
-        #[cfg(feature = "logging")]
+        #[cfg(feature = "log")]
         assert!(COUNTS.with(|c| {
             c.borrow()
                 .trace
@@ -6355,7 +6355,7 @@ fn test_no_warning_logging_during_successful_sessions() {
         }
     }
 
-    if cfg!(feature = "logging") {
+    if cfg!(feature = "log") {
         COUNTS.with(|c| {
             println!("After tests: {:?}", c.borrow());
             assert!(c.borrow().warn.is_empty());

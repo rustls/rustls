@@ -313,7 +313,7 @@
 //!   TLS 1.2 for security reasons, consider explicitly enabling TLS 1.3 only in the config
 //!   builder API.
 //!
-//! - `logging` (enabled by default): make the rustls crate depend on the `log` crate.
+//! - `log` (enabled by default): make the rustls crate depend on the `log` crate.
 //!   rustls outputs interesting protocol-level messages at `trace!` and `debug!` level,
 //!   and protocol-level errors at `warn!` and `error!` level.  The log messages do not
 //!   contain secret key data, and so are safe to archive without affecting session security.
@@ -400,10 +400,10 @@ use crate::crypto::CryptoProvider;
 extern crate test;
 
 // log for logging (optional).
-#[cfg(feature = "logging")]
+#[cfg(feature = "log")]
 use log;
 
-#[cfg(not(feature = "logging"))]
+#[cfg(not(feature = "log"))]
 mod log {
     macro_rules! trace    ( ($($tt:tt)*) => {{}} );
     macro_rules! debug    ( ($($tt:tt)*) => {{}} );
@@ -451,7 +451,7 @@ mod verifybench;
 mod x509;
 #[macro_use]
 mod check;
-#[cfg(feature = "logging")]
+#[cfg(feature = "log")]
 mod bs_debug;
 mod builder;
 mod enums;
