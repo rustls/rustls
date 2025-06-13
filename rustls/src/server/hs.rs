@@ -433,7 +433,7 @@ impl ExpectClientHello {
             let certkey = self
                 .config
                 .cert_resolver
-                .resolve(client_hello);
+                .resolve(&client_hello);
 
             certkey.ok_or_else(|| {
                 cx.common.send_fatal_alert(
