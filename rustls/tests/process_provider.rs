@@ -1,4 +1,4 @@
-#![cfg(any(feature = "ring", feature = "aws_lc_rs"))]
+#![cfg(any(feature = "ring", feature = "aws-lc-rs"))]
 
 //! Note that the default test runner builds each test file into a separate
 //! executable, and runs tests in an indeterminate order.  That restricts us
@@ -6,11 +6,11 @@
 
 use rustls::ClientConfig;
 use rustls::crypto::CryptoProvider;
-#[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+#[cfg(all(feature = "aws-lc-rs", not(feature = "ring")))]
 use rustls::crypto::aws_lc_rs as provider;
-#[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
+#[cfg(all(feature = "ring", not(feature = "aws-lc-rs")))]
 use rustls::crypto::ring as provider;
-#[cfg(all(feature = "ring", feature = "aws_lc_rs"))]
+#[cfg(all(feature = "ring", feature = "aws-lc-rs"))]
 use rustls::crypto::ring as provider;
 
 mod common;
@@ -18,11 +18,11 @@ use crate::common::*;
 
 #[test]
 fn test_process_provider() {
-    if dbg!(cfg!(all(feature = "ring", feature = "aws_lc_rs"))) {
+    if dbg!(cfg!(all(feature = "ring", feature = "aws-lc-rs"))) {
         test_explicit_choice_required();
-    } else if dbg!(cfg!(all(feature = "ring", not(feature = "aws_lc_rs")))) {
+    } else if dbg!(cfg!(all(feature = "ring", not(feature = "aws-lc-rs")))) {
         test_ring_used_as_implicit_provider();
-    } else if dbg!(cfg!(all(feature = "aws_lc_rs", not(feature = "ring")))) {
+    } else if dbg!(cfg!(all(feature = "aws-lc-rs", not(feature = "ring")))) {
         test_aws_lc_rs_used_as_implicit_provider();
     } else {
         panic!("fix feature combinations");
