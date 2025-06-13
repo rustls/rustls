@@ -754,7 +754,7 @@ fn sample_hello_retry_request() -> HelloRetryRequest {
     HelloRetryRequest {
         legacy_version: ProtocolVersion::TLSv1_2,
         session_id: SessionId::empty(),
-        cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
+        cipher_suite: CipherSuite::TLS_PSK_DHE_WITH_AES_128_CCM_8,
         extensions: HelloRetryRequestExtensions {
             key_share: Some(NamedGroup::X25519),
             cookie: Some(PayloadU16::new(vec![0])),
@@ -770,7 +770,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
         client_version: ProtocolVersion::TLSv1_2,
         random: Random::from([0; 32]),
         session_id: SessionId::empty(),
-        cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
+        cipher_suites: vec![CipherSuite::TLS_PSK_WITH_AES_128_CCM],
         compression_methods: vec![Compression::Null],
         extensions: Box::new(ClientExtensions {
             server_name: Some(ServerNamePayload::from(
@@ -820,7 +820,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
         legacy_version: ProtocolVersion::TLSv1_2,
         random: Random::from([0; 32]),
         session_id: SessionId::empty(),
-        cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
+        cipher_suite: CipherSuite::TLS_PSK_WITH_AES_128_CCM,
         compression_method: Compression::Null,
         extensions: Box::new(ServerExtensions {
             ec_point_formats: Some(SupportedEcPointFormats::default()),
