@@ -40,7 +40,7 @@ impl Ticketer {
     pub fn new<M: crate::lock::MakeMutex>(
         time_provider: &'static dyn TimeProvider,
     ) -> Result<Arc<dyn ProducesTickets>, Error> {
-        Ok(Arc::new(crate::ticketer::TicketSwitcher::new::<M>(
+        Ok(Arc::new(crate::ticketer::TicketRotator::new::<M>(
             6 * 60 * 60,
             make_ticket_generator,
             time_provider,
@@ -164,7 +164,7 @@ impl ProducesTickets for AeadTicketer {
 
         // checking the key_name is the expected one, *and* then putting it into the
         // additionally authenticated data is duplicative.  this check quickly rejects
-        // tickets for a different ticketer (see `TicketSwitcher`), while including it
+        // tickets for a different ticketer (see `TicketRotator`), while including it
         // in the AAD ensures it is authenticated independent of that check and that
         // any attempted attack on the integrity such as [^1] must happen for each
         // `key_label`, not over a population of potential keys.  this approach
@@ -299,64 +299,6 @@ mod tests {
         }
         let cipher3 = t.encrypt(b"ticket 3").unwrap();
         assert!(t.decrypt(&cipher1).is_some());
-        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-        assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
-    }
-
-    #[test]
-    fn ticketswitcher_switching_test() {
-        #[expect(deprecated)]
-        let t = Arc::new(crate::ticketer::TicketSwitcher::new(1, make_ticket_generator).unwrap());
-        let now = UnixTime::now();
-        let cipher1 = t.encrypt(b"ticket 1").unwrap();
-        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-        {
-            // Trigger new ticketer
-            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
-                now.as_secs() + 10,
-            )));
-        }
-        let cipher2 = t.encrypt(b"ticket 2").unwrap();
-        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-        {
-            // Trigger new ticketer
-            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
-                now.as_secs() + 20,
-            )));
-        }
-        let cipher3 = t.encrypt(b"ticket 3").unwrap();
-        assert!(t.decrypt(&cipher1).is_none());
-        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-        assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
-    }
-
-    #[test]
-    fn ticketswitcher_recover_test() {
-        #[expect(deprecated)]
-        let mut t = crate::ticketer::TicketSwitcher::new(1, make_ticket_generator).unwrap();
-        let now = UnixTime::now();
-        let cipher1 = t.encrypt(b"ticket 1").unwrap();
-        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-        t.generator = fail_generator;
-        {
-            // Failed new ticketer
-            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
-                now.as_secs() + 10,
-            )));
-        }
-        t.generator = make_ticket_generator;
-        let cipher2 = t.encrypt(b"ticket 2").unwrap();
-        assert_eq!(t.decrypt(&cipher1).unwrap(), b"ticket 1");
-        assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
-        {
-            // recover
-            t.maybe_roll(UnixTime::since_unix_epoch(Duration::from_secs(
-                now.as_secs() + 20,
-            )));
-        }
-        let cipher3 = t.encrypt(b"ticket 3").unwrap();
-        assert!(t.decrypt(&cipher1).is_none());
         assert_eq!(t.decrypt(&cipher2).unwrap(), b"ticket 2");
         assert_eq!(t.decrypt(&cipher3).unwrap(), b"ticket 3");
     }
