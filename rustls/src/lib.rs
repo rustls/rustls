@@ -568,8 +568,6 @@ pub use crate::suites::{
 };
 #[cfg(feature = "std")]
 pub use crate::ticketer::TicketRotator;
-#[cfg(any(feature = "std", feature = "hashbrown"))] // < XXX: incorrect feature gate
-pub use crate::ticketer::TicketSwitcher;
 #[cfg(feature = "tls12")]
 pub use crate::tls12::Tls12CipherSuite;
 pub use crate::tls13::Tls13CipherSuite;
