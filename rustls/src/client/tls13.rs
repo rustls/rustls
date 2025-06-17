@@ -57,7 +57,12 @@ static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
 
 // Only the intersection of things we offer, and those disallowed
 // in TLS1.3
-static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
+static DISALLOWED_TLS13_ENCRYPTED_EXTENSIONS: &[ExtensionType] = &[
+    // The follow are ALLOWED_PLAINTEXT_EXTS
+    ExtensionType::KeyShare,
+    ExtensionType::PreSharedKey,
+    ExtensionType::SupportedVersions,
+    // and those no longer allowed in TLS1.3
     ExtensionType::ECPointFormats,
     ExtensionType::SessionTicket,
     ExtensionType::RenegotiationInfo,
@@ -432,9 +437,7 @@ fn validate_encrypted_extensions(
     }
 
     for ext in exts {
-        if ALLOWED_PLAINTEXT_EXTS.contains(&ext.ext_type())
-            || DISALLOWED_TLS13_EXTS.contains(&ext.ext_type())
-        {
+        if DISALLOWED_TLS13_ENCRYPTED_EXTENSIONS.contains(&ext.ext_type()) {
             return Err(common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
                 PeerMisbehaved::DisallowedEncryptedExtension,
