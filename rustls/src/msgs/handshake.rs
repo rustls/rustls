@@ -209,6 +209,39 @@ impl UnknownExtension {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SupportedEcPointFormats {
+    pub(crate) uncompressed: bool,
+}
+
+impl Codec<'_> for SupportedEcPointFormats {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let inner = LengthPrefixedBuffer::new(ECPointFormat::SIZE_LEN, bytes);
+
+        if self.uncompressed {
+            ECPointFormat::Uncompressed.encode(inner.buf);
+        }
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let mut uncompressed = false;
+
+        for pf in TlsListIter::<ECPointFormat>::new(r)? {
+            if let ECPointFormat::Uncompressed = pf? {
+                uncompressed = true;
+            }
+        }
+
+        Ok(Self { uncompressed })
+    }
+}
+
+impl Default for SupportedEcPointFormats {
+    fn default() -> Self {
+        Self { uncompressed: true }
+    }
+}
+
 /// RFC8422: `ECPointFormat ec_point_format_list<1..2^8-1>`
 impl TlsListElement for ECPointFormat {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
@@ -784,7 +817,7 @@ extension_struct! {
 
         /// Supported EC point formats (RFC4492)
         ExtensionType::ECPointFormats =>
-            pub(crate) ec_point_formats: Option<Vec<ECPointFormat>>,
+            pub(crate) ec_point_formats: Option<SupportedEcPointFormats>,
 
         /// Supported signature schemes (RFC5246/RFC8446)
         ExtensionType::SignatureAlgorithms =>
@@ -1069,7 +1102,7 @@ extension_struct! {
     pub(crate) struct ServerExtensions<'a> {
         /// Supported EC point formats (RFC4492)
         ExtensionType::ECPointFormats =>
-            pub(crate) ec_point_formats: Option<Vec<ECPointFormat>>,
+            pub(crate) ec_point_formats: Option<SupportedEcPointFormats>,
 
         /// Server name indication acknowledgement (RFC6066)
         ExtensionType::ServerName =>
