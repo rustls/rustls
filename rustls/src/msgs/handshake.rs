@@ -643,6 +643,39 @@ impl CertificateStatusRequest {
 // ---
 
 /// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PskKeyExchangeModes {
+    pub(crate) psk_dhe: bool,
+    pub(crate) psk: bool,
+}
+
+impl Codec<'_> for PskKeyExchangeModes {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let inner = LengthPrefixedBuffer::new(PskKeyExchangeMode::SIZE_LEN, bytes);
+        if self.psk_dhe {
+            PskKeyExchangeMode::PSK_DHE_KE.encode(inner.buf);
+        }
+        if self.psk {
+            PskKeyExchangeMode::PSK_KE.encode(inner.buf);
+        }
+    }
+
+    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let mut psk_dhe = false;
+        let mut psk = false;
+
+        for ke in TlsListIter::<PskKeyExchangeMode>::new(reader)? {
+            match ke? {
+                PskKeyExchangeMode::PSK_DHE_KE => psk_dhe = true,
+                PskKeyExchangeMode::PSK_KE => psk = true,
+                _ => continue,
+            };
+        }
+
+        Ok(Self { psk_dhe, psk })
+    }
+}
+
 impl TlsListElement for PskKeyExchangeMode {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("PskKeyExchangeModes"),
@@ -865,7 +898,7 @@ extension_struct! {
 
         /// Offered preshared key modes (RFC8446)
         ExtensionType::PSKKeyExchangeModes =>
-            pub(crate) preshared_key_modes: Option<Vec<PskKeyExchangeMode>>,
+            pub(crate) preshared_key_modes: Option<PskKeyExchangeModes>,
 
         /// Certificate authority names (RFC8446)
         ExtensionType::CertificateAuthorities =>

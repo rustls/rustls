@@ -27,12 +27,12 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-use crate::msgs::enums::{Compression, ExtensionType, PskKeyExchangeMode};
+use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, KeyShareEntry, ProtocolName, Random, ServerNamePayload, SessionId,
-    SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random, ServerNamePayload,
+    SessionId, SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -365,8 +365,10 @@ fn emit_client_hello_for_retry(
     if supported_versions.tls13 {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
-        let psk_modes = vec![PskKeyExchangeMode::PSK_DHE_KE];
-        exts.preshared_key_modes = Some(psk_modes);
+        exts.preshared_key_modes = Some(PskKeyExchangeModes {
+            psk: false,
+            psk_dhe: true,
+        });
     }
 
     input.hello.offered_cert_compression =
