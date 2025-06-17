@@ -98,6 +98,9 @@ jobs:
         env:
           RUST_BACKTRACE: 1
 
+      - name: cargo build (debug; no-std)
+        run: cargo build --locked --lib -p rustls $(admin/all-features-except std,brotli,read_buf rustls)
+
       - name: cargo build (debug; rustls-provider-example)
         run: cargo build --locked -p rustls-provider-example
 

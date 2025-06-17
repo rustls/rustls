@@ -417,6 +417,7 @@ impl ExpectClientHello {
                 server_cert_types: client_hello.client_certificate_extension(),
                 cipher_suites: &client_hello.cipher_suites,
                 certificate_authorities,
+                named_groups: client_hello.namedgroups_extension(),
             };
             trace!("Resolving server certificate: {client_hello:#?}");
 
