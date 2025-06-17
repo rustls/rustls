@@ -7,7 +7,6 @@ use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
     ClientCertificateType, Compression, ECCurveType, ExtensionType, KeyUpdateRequest, NamedGroup,
-    PskKeyExchangeMode,
 };
 use super::handshake::{
     CertificateChain, CertificateEntry, CertificateExtensions, CertificatePayloadTls13,
@@ -17,10 +16,11 @@ use super::handshake::{
     EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
     HelloRetryRequestExtensions, KeyShareEntry, NewSessionTicketExtensions,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
-    ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions, ServerHelloPayload,
-    ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, ServerNamePayload,
-    SessionId, SingleProtocolName, SupportedEcPointFormats, SupportedProtocolVersions,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, PskKeyExchangeModes, Random,
+    ServerDhParams, ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions,
+    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    ServerNamePayload, SessionId, SingleProtocolName, SupportedEcPointFormats,
+    SupportedProtocolVersions,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
@@ -787,7 +787,10 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
                 ..Default::default()
             }),
             key_shares: Some(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
-            preshared_key_modes: Some(vec![PskKeyExchangeMode::PSK_DHE_KE]),
+            preshared_key_modes: Some(PskKeyExchangeModes {
+                psk_dhe: true,
+                psk: false,
+            }),
             preshared_key_offer: Some(PresharedKeyOffer {
                 identities: vec![
                     PresharedKeyIdentity::new(vec![3, 4, 5], 123456),
