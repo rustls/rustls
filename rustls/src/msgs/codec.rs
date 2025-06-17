@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use core::marker::PhantomData;
 
 use crate::error::InvalidMessage;
 
@@ -225,14 +226,43 @@ impl<'a, T: Codec<'a> + TlsListElement + Debug> Codec<'a> for Vec<T> {
     }
 
     fn read(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
-        let len = T::SIZE_LEN.read(r)?;
-        let mut sub = r.sub(len)?;
         let mut ret = Self::new();
-        while sub.any_left() {
-            ret.push(T::read(&mut sub)?);
+        for item in TlsListIter::<T>::new(r)? {
+            ret.push(item?);
         }
 
         Ok(ret)
+    }
+}
+
+/// An iterator over a vector of `TlsListElements`.
+///
+/// All uses _MUST_ exhaust the iterator, as errors may be delayed
+/// until the last element.
+pub(crate) struct TlsListIter<'a, T: Codec<'a> + TlsListElement + Debug> {
+    sub: Reader<'a>,
+    _t: PhantomData<T>,
+}
+
+impl<'a, T: Codec<'a> + TlsListElement + Debug> TlsListIter<'a, T> {
+    pub(crate) fn new(r: &mut Reader<'a>) -> Result<Self, InvalidMessage> {
+        let len = T::SIZE_LEN.read(r)?;
+        let sub = r.sub(len)?;
+        Ok(Self {
+            sub,
+            _t: PhantomData,
+        })
+    }
+}
+
+impl<'a, T: Codec<'a> + TlsListElement + Debug> Iterator for TlsListIter<'a, T> {
+    type Item = Result<T, InvalidMessage>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.sub.any_left() {
+            true => Some(T::read(&mut self.sub)),
+            false => None,
+        }
     }
 }
 
