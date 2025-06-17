@@ -21,7 +21,9 @@ use crate::error::InvalidMessage;
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
-use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
+use crate::msgs::codec::{
+    self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement, TlsListIter,
+};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
     EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest, NamedGroup,
@@ -661,14 +663,11 @@ impl Codec<'_> for SupportedProtocolVersions {
     }
 
     fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let len = Self::LIST_LENGTH.read(reader)?;
-        let mut sub = reader.sub(len)?;
-
         let mut tls12 = false;
         let mut tls13 = false;
 
-        while sub.any_left() {
-            match ProtocolVersion::read(&mut sub)? {
+        for pv in TlsListIter::<ProtocolVersion>::new(reader)? {
+            match pv? {
                 ProtocolVersion::TLSv1_3 => tls13 = true,
                 ProtocolVersion::TLSv1_2 => tls12 = true,
                 _ => continue,
