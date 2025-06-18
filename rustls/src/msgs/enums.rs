@@ -1,6 +1,7 @@
 #![allow(clippy::upper_case_acronyms)]
 #![allow(non_camel_case_types)]
 use crate::crypto::KeyExchangeAlgorithm;
+use crate::enums::ProtocolVersion;
 use crate::msgs::codec::{Codec, Reader};
 
 enum_builder! {
@@ -195,6 +196,20 @@ impl NamedGroup {
         match u16::from(self) {
             x if (0x100..0x200).contains(&x) => KeyExchangeAlgorithm::DHE,
             _ => KeyExchangeAlgorithm::ECDHE,
+        }
+    }
+
+    pub fn usable_for_version(&self, version: ProtocolVersion) -> bool {
+        match version {
+            ProtocolVersion::TLSv1_3 => true,
+            _ => !matches!(
+                self,
+                Self::MLKEM512
+                    | Self::MLKEM768
+                    | Self::MLKEM1024
+                    | Self::X25519MLKEM768
+                    | Self::secp256r1MLKEM768
+            ),
         }
     }
 }

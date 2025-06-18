@@ -5577,7 +5577,10 @@ fn test_client_config_keyshare_mismatch() {
 fn exercise_all_key_exchange_methods() {
     for version in rustls::ALL_VERSIONS {
         for kx_group in provider::ALL_KX_GROUPS {
-            if !kx_group.usable_for_version(version.version) {
+            if !kx_group
+                .name()
+                .usable_for_version(version.version)
+            {
                 continue;
             }
 
