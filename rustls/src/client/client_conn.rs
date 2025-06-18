@@ -434,11 +434,15 @@ impl ClientConfig {
         group: NamedGroup,
         version: ProtocolVersion,
     ) -> Option<&'static dyn SupportedKxGroup> {
+        if !group.usable_for_version(version) {
+            return None;
+        }
+
         self.provider
             .kx_groups
             .iter()
+            .find(|skxg| skxg.name() == group)
             .copied()
-            .find(|skxg| skxg.usable_for_version(version) && skxg.name() == group)
     }
 
     pub(super) fn current_time(&self) -> Result<UnixTime, Error> {

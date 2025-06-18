@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use super::INVALID_KEY_SHARE;
 use crate::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
 use crate::ffdhe_groups::FfdheGroup;
-use crate::{Error, NamedGroup, ProtocolVersion};
+use crate::{Error, NamedGroup};
 
 /// A generalization of hybrid key exchange.
 #[derive(Debug)]
@@ -87,10 +87,6 @@ impl SupportedKxGroup for Hybrid {
             true => self.post_quantum.fips(),
             false => self.classical.fips(),
         }
-    }
-
-    fn usable_for_version(&self, version: ProtocolVersion) -> bool {
-        version == ProtocolVersion::TLSv1_3
     }
 }
 

@@ -215,8 +215,12 @@ fn emit_client_hello_for_retry(
                 .provider
                 .kx_groups
                 .iter()
-                .filter(|skxg| supported_versions.any(|v| skxg.usable_for_version(v)))
-                .map(|skxg| skxg.name())
+                .filter_map(|skxg| {
+                    let named_group = skxg.name();
+                    supported_versions
+                        .any(|v| named_group.usable_for_version(v))
+                        .then_some(named_group)
+                })
                 .collect(),
         ),
         supported_versions: Some(supported_versions),
