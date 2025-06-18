@@ -25,13 +25,7 @@ fn ffdhe_params_correct() {
 fn test_ffdhe_params_correct(name: NamedGroup, group: FfdheGroup<'static>) {
     let (p, g) = get_ffdhe_params_from_openssl(name);
     let openssl_params = FfdheGroup::from_params_trimming_leading_zeros(&p, &g);
-    #[allow(deprecated)]
-    let rustls_params_from_name = FfdheGroup::from_named_group(name).unwrap();
-    #[allow(deprecated)]
-    let round_trip_name = rustls_params_from_name.named_group();
-    assert_eq!(round_trip_name, Some(name));
 
-    assert_eq!(rustls_params_from_name, openssl_params);
     assert_eq!(group, openssl_params);
 }
 
