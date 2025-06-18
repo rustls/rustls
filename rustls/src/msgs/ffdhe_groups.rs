@@ -1,8 +1,6 @@
 //! This module contains parameters for FFDHE named groups as defined
 //! in [RFC 7919 Appendix A](https://datatracker.ietf.org/doc/html/rfc7919#appendix-A).
 
-use crate::NamedGroup;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Parameters of an FFDHE group, with Big-endian byte order
 pub struct FfdheGroup<'a> {
@@ -10,42 +8,7 @@ pub struct FfdheGroup<'a> {
     pub g: &'a [u8],
 }
 
-impl FfdheGroup<'static> {
-    /// Return the `FfdheGroup` corresponding to the provided `NamedGroup`
-    /// if it is indeed an FFDHE group
-    #[deprecated(
-        since = "0.23.13",
-        note = "This function is linker-unfriendly.  Use `SupportedKxGroup::ffdhe_group()` instead"
-    )]
-    pub fn from_named_group(named_group: NamedGroup) -> Option<Self> {
-        match named_group {
-            NamedGroup::FFDHE2048 => Some(FFDHE2048),
-            NamedGroup::FFDHE3072 => Some(FFDHE3072),
-            NamedGroup::FFDHE4096 => Some(FFDHE4096),
-            NamedGroup::FFDHE6144 => Some(FFDHE6144),
-            NamedGroup::FFDHE8192 => Some(FFDHE8192),
-            _ => None,
-        }
-    }
-}
-
 impl<'a> FfdheGroup<'a> {
-    /// Return the `NamedGroup` for the `FfdheGroup` if it represents one.
-    #[deprecated(
-        since = "0.23.13",
-        note = "This function is linker-unfriendly.  Use `SupportedKxGroup::name()` instead"
-    )]
-    pub fn named_group(&self) -> Option<NamedGroup> {
-        match *self {
-            FFDHE2048 => Some(NamedGroup::FFDHE2048),
-            FFDHE3072 => Some(NamedGroup::FFDHE3072),
-            FFDHE4096 => Some(NamedGroup::FFDHE4096),
-            FFDHE6144 => Some(NamedGroup::FFDHE6144),
-            FFDHE8192 => Some(NamedGroup::FFDHE8192),
-            _ => None,
-        }
-    }
-
     /// Construct an `FfdheGroup` from the given `p` and `g`, trimming any potential leading zeros.
     pub fn from_params_trimming_leading_zeros(p: &'a [u8], g: &'a [u8]) -> Self {
         fn trim_leading_zeros(buf: &[u8]) -> &[u8] {
@@ -308,16 +271,3 @@ pub const FFDHE8192: FfdheGroup<'static> = FfdheGroup {
     ],
     g: &[2],
 };
-
-#[test]
-fn named_group_ffdhe_group_roundtrip() {
-    use NamedGroup::*;
-    let ffdhe_groups = [FFDHE2048, FFDHE3072, FFDHE4096, FFDHE6144, FFDHE8192];
-    for g in ffdhe_groups {
-        #[allow(deprecated)]
-        let roundtrip = FfdheGroup::from_named_group(g)
-            .unwrap()
-            .named_group();
-        assert_eq!(roundtrip, Some(g));
-    }
-}
