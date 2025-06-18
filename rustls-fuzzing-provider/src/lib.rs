@@ -26,7 +26,6 @@ use rustls::crypto::{
     CipherSuiteCommon, GetRandomFailed, KeyExchangeAlgorithm, WebPkiSupportedAlgorithms, hash,
     tls12, tls13,
 };
-use rustls::ffdhe_groups::FfdheGroup;
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
     SignatureVerificationAlgorithm, alg_id,
@@ -228,10 +227,6 @@ impl crypto::ActiveKeyExchange for ActiveKeyExchange {
         KX_PEER_SHARE
     }
 
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
-    }
-
     fn group(&self) -> NamedGroup {
         NamedGroup::from(0xfe00)
     }
@@ -243,10 +238,6 @@ struct KeyExchangeGroup;
 impl crypto::SupportedKxGroup for KeyExchangeGroup {
     fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, Error> {
         Ok(Box::new(ActiveKeyExchange))
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
     }
 
     fn name(&self) -> NamedGroup {

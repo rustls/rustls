@@ -73,6 +73,7 @@ mod tests {
         ActiveKeyExchange, CryptoProvider, KeyExchangeAlgorithm, SupportedKxGroup,
     };
     use crate::enums::CertificateType;
+    use crate::ffdhe_groups::FfdheGroup;
     use crate::pki_types::pem::PemObject;
     use crate::pki_types::{CertificateDer, PrivateKeyDer};
     use crate::server::{AlwaysResolvesServerRawPublicKeys, ServerConfig, ServerConnection};
@@ -304,6 +305,10 @@ mod tests {
     struct FakeFfdheGroup;
 
     impl SupportedKxGroup for FakeFfdheGroup {
+        fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+            Some(crate::ffdhe_groups::FFDHE2048)
+        }
+
         fn name(&self) -> NamedGroup {
             NamedGroup::FFDHE2048
         }
@@ -327,6 +332,10 @@ mod tests {
 
         fn pub_key(&self) -> &[u8] {
             b"ActiveFakeFfdhe pub key"
+        }
+
+        fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
+            Some(crate::ffdhe_groups::FFDHE2048)
         }
 
         fn group(&self) -> NamedGroup {
