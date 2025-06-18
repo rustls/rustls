@@ -532,7 +532,9 @@ impl ExpectClientHello {
                 .kx_groups
                 .iter()
                 .find(|skxg| {
-                    skxg.usable_for_version(selected_version) && skxg.name() == *offered_group
+                    let named_group = skxg.name();
+                    named_group == *offered_group
+                        && named_group.usable_for_version(selected_version)
                 });
 
             match offered_group.key_exchange_algorithm() {

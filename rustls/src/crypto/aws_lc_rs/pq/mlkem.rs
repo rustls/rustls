@@ -6,7 +6,7 @@ use aws_lc_rs::kem;
 use super::INVALID_KEY_SHARE;
 use crate::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
 use crate::ffdhe_groups::FfdheGroup;
-use crate::{Error, NamedGroup, ProtocolVersion};
+use crate::{Error, NamedGroup};
 
 #[derive(Debug)]
 pub(crate) struct MlKem768;
@@ -64,10 +64,6 @@ impl SupportedKxGroup for MlKem768 {
         // <https://github.com/golang/go/issues/70200#issuecomment-2490017956> --
         // see <https://github.com/rustls/rustls/issues/2309>
         super::super::fips()
-    }
-
-    fn usable_for_version(&self, version: ProtocolVersion) -> bool {
-        version == ProtocolVersion::TLSv1_3
     }
 }
 

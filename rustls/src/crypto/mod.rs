@@ -416,13 +416,6 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
     fn fips(&self) -> bool {
         false
     }
-
-    /// Return `true` if this should be offered/selected with the given version.
-    ///
-    /// The default implementation returns true for all versions.
-    fn usable_for_version(&self, _version: ProtocolVersion) -> bool {
-        true
-    }
 }
 
 /// An in-progress key exchange originating from a [`SupportedKxGroup`].
