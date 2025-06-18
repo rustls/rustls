@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 
 use super::INVALID_KEY_SHARE;
 use crate::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
-use crate::ffdhe_groups::FfdheGroup;
 use crate::{Error, NamedGroup};
 
 /// A generalization of hybrid key exchange.
@@ -58,10 +57,6 @@ impl SupportedKxGroup for Hybrid {
             pub_key: combined_pub_key,
             secret: SharedSecret::from(secret),
         })
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
     }
 
     fn name(&self) -> NamedGroup {
@@ -132,10 +127,6 @@ impl ActiveKeyExchange for ActiveHybrid {
 
     fn pub_key(&self) -> &[u8] {
         &self.combined_pub_key
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
     }
 
     fn group(&self) -> NamedGroup {
