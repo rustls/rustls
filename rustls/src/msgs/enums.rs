@@ -203,16 +203,31 @@ enum_builder! {
         secp521r1 => 0x0019,
         X25519 => 0x001d,
         X448 => 0x001e,
+        /// <https://www.iana.org/go/rfc8734>
+        brainpoolP256r1tls13 => 0x001f,
+        /// <https://www.iana.org/go/rfc8734>
+        brainpoolP384r1tls13 => 0x0020,
+        /// <https://www.iana.org/go/rfc8734>
+        brainpoolP512r1tls13 => 0x0021,
+        /// <https://www.iana.org/go/rfc8998>
+        curveSM2 => 0x0029,
         FFDHE2048 => 0x0100,
         FFDHE3072 => 0x0101,
         FFDHE4096 => 0x0102,
         FFDHE6144 => 0x0103,
         FFDHE8192 => 0x0104,
+        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem/>
         MLKEM512 => 0x0200,
+        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem/>
         MLKEM768 => 0x0201,
+        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-mlkem/>
         MLKEM1024 => 0x0202,
+        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
         secp256r1MLKEM768 => 0x11eb,
+        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
         X25519MLKEM768 => 0x11ec,
+        /// <https://datatracker.ietf.org/doc/draft-ietf-tls-ecdhe-mlkem/>
+        secp384r1MLKEM1024 => 0x11ed,
     }
 }
 
@@ -235,6 +250,11 @@ impl NamedGroup {
                     | Self::MLKEM1024
                     | Self::X25519MLKEM768
                     | Self::secp256r1MLKEM768
+                    | Self::secp384r1MLKEM1024
+                    | Self::brainpoolP256r1tls13
+                    | Self::brainpoolP384r1tls13
+                    | Self::brainpoolP512r1tls13
+                    | Self::curveSM2
             ),
         }
     }
