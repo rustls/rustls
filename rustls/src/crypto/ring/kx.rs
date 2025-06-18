@@ -5,7 +5,7 @@ use core::fmt;
 
 use super::ring_like::agreement;
 use super::ring_like::rand::SystemRandom;
-use crate::crypto::{ActiveKeyExchange, FfdheGroup, SharedSecret, SupportedKxGroup};
+use crate::crypto::{ActiveKeyExchange, SharedSecret, SupportedKxGroup};
 use crate::error::{Error, PeerMisbehaved};
 use crate::msgs::enums::NamedGroup;
 use crate::rand::GetRandomFailed;
@@ -56,10 +56,6 @@ impl SupportedKxGroup for KxGroup {
             pub_key,
             pub_key_validator: self.pub_key_validator,
         }))
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
     }
 
     fn name(&self) -> NamedGroup {
@@ -134,10 +130,6 @@ impl ActiveKeyExchange for KeyExchange {
         let peer_key = agreement::UnparsedPublicKey::new(self.agreement_algorithm, peer);
         super::ring_shim::agree_ephemeral(self.priv_key, &peer_key)
             .map_err(|_| PeerMisbehaved::InvalidKeyShare.into())
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
     }
 
     /// Return the group being used.
