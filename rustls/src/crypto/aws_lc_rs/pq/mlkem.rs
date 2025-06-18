@@ -5,7 +5,6 @@ use aws_lc_rs::kem;
 
 use super::INVALID_KEY_SHARE;
 use crate::crypto::{ActiveKeyExchange, CompletedKeyExchange, SharedSecret, SupportedKxGroup};
-use crate::ffdhe_groups::FfdheGroup;
 use crate::{Error, NamedGroup};
 
 #[derive(Debug)]
@@ -40,10 +39,6 @@ impl SupportedKxGroup for MlKem768 {
             pub_key: Vec::from(ciphertext.as_ref()),
             secret: SharedSecret::from(shared_secret.as_ref()),
         })
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
     }
 
     fn name(&self) -> NamedGroup {
@@ -87,10 +82,6 @@ impl ActiveKeyExchange for Active {
 
     fn pub_key(&self) -> &[u8] {
         &self.encaps_key_bytes
-    }
-
-    fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        None
     }
 
     fn group(&self) -> NamedGroup {

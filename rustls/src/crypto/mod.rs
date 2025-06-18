@@ -391,19 +391,16 @@ pub trait SupportedKxGroup: Send + Sync + Debug {
         })
     }
 
-    /// FFDHE group the `SupportedKxGroup` operates in.
+    /// FFDHE group the `SupportedKxGroup` operates in, if any.
     ///
-    /// Return `None` if this group is not a FFDHE one.
+    /// The default implementation returns `None`, so non-FFDHE groups (the
+    /// most common) do not need to do anything.
     ///
-    /// The default implementation calls `FfdheGroup::from_named_group`: this function
-    /// is extremely linker-unfriendly so it is recommended all key exchange implementers
-    /// provide this function.
-    ///
-    /// `rustls::ffdhe_groups` contains suitable values to return from this,
-    /// for example [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
+    /// FFDHE groups must implement this. `rustls::ffdhe_groups` contains
+    /// suitable values to return, for example
+    /// [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        #[allow(deprecated)]
-        FfdheGroup::from_named_group(self.name())
+        None
     }
 
     /// Named group the SupportedKxGroup operates in.
@@ -569,17 +566,14 @@ pub trait ActiveKeyExchange: Send + Sync {
 
     /// FFDHE group the `ActiveKeyExchange` is operating in.
     ///
-    /// Return `None` if this group is not a FFDHE one.
+    /// The default implementation returns `None`, so non-FFDHE groups (the
+    /// most common) do not need to do anything.
     ///
-    /// The default implementation calls `FfdheGroup::from_named_group`: this function
-    /// is extremely linker-unfriendly so it is recommended all key exchange implementers
-    /// provide this function.
-    ///
-    /// `rustls::ffdhe_groups` contains suitable values to return from this,
-    /// for example [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
+    /// FFDHE groups must implement this. `rustls::ffdhe_groups` contains
+    /// suitable values to return, for example
+    /// [`rustls::ffdhe_groups::FFDHE2048`][crate::ffdhe_groups::FFDHE2048].
     fn ffdhe_group(&self) -> Option<FfdheGroup<'static>> {
-        #[allow(deprecated)]
-        FfdheGroup::from_named_group(self.group())
+        None
     }
 
     /// Return the group being used.
