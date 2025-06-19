@@ -28,7 +28,7 @@ use rustls::crypto::{
 };
 use rustls::pki_types::{
     AlgorithmIdentifier, CertificateDer, InvalidSignature, PrivateKeyDer,
-    SignatureVerificationAlgorithm, alg_id,
+    SignatureVerificationAlgorithm, SubjectPublicKeyInfoDer, alg_id,
 };
 use rustls::server::ProducesTickets;
 use rustls::{
@@ -476,6 +476,10 @@ impl sign::SigningKey for SigningKey {
             true => Some(Box::new(Self)),
             false => None,
         }
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        None
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {

@@ -63,11 +63,11 @@ pub trait SigningKey: Debug + Send + Sync {
     /// using the chosen scheme.
     fn choose_scheme(&self, offered: &[SignatureScheme]) -> Option<Box<dyn Signer>>;
 
-    /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`] if available.
-    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
-        // Opt-out by default
-        None
-    }
+    /// Get the RFC 5280-compliant SubjectPublicKeyInfo (SPKI) of this [`SigningKey`].
+    ///
+    /// If an implementation does not have the ability to derive this,
+    /// it can return `None`.
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>>;
 
     /// What kind of key we have.
     fn algorithm(&self) -> SignatureAlgorithm;
