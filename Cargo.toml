@@ -55,7 +55,7 @@ clap = { version = "4.3.21", features = ["derive", "env"] }
 crabgrind = "=0.1.9" # compatible with valgrind package on GHA ubuntu-latest
 criterion = "0.6"
 der = "0.7"
-ecdsa = "0.16.8"
+ecdsa = { version = "0.16.8", features = ["pem"] }
 env_logger = "0.11"
 fxhash = "0.2.1"
 hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }

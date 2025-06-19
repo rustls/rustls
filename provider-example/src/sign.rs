@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use pkcs8::DecodePrivateKey;
-use rustls::pki_types::PrivateKeyDer;
+use pkcs8::{DecodePrivateKey, EncodePublicKey};
+use rustls::pki_types::{PrivateKeyDer, SubjectPublicKeyInfoDer};
 use rustls::sign::{Signer, SigningKey};
 use rustls::{SignatureAlgorithm, SignatureScheme};
 use signature::{RandomizedSigner, SignatureEncoding};
@@ -37,6 +37,16 @@ impl SigningKey for EcdsaSigningKeyP256 {
         } else {
             None
         }
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        Some(SubjectPublicKeyInfoDer::from(
+            self.key
+                .verifying_key()
+                .to_public_key_der()
+                .ok()?
+                .into_vec(),
+        ))
     }
 
     fn algorithm(&self) -> SignatureAlgorithm {
