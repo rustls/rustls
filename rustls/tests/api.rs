@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{fmt, mem};
 
-use pki_types::{CertificateDer, IpAddr, ServerName, UnixTime};
+use pki_types::{CertificateDer, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
@@ -3516,6 +3516,10 @@ struct SigningKeyNoneSpki;
 impl sign::SigningKey for SigningKeyNoneSpki {
     fn choose_scheme(&self, _offered: &[SignatureScheme]) -> Option<Box<dyn sign::Signer>> {
         unimplemented!("Not meant to be called during tests")
+    }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        None
     }
 
     fn algorithm(&self) -> rustls::SignatureAlgorithm {

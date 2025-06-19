@@ -41,7 +41,10 @@ use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
 use rustls::pki_types::pem::PemObject;
-use rustls::pki_types::{CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, UnixTime};
+use rustls::pki_types::{
+    CertificateDer, EchConfigListBytes, PrivateKeyDer, ServerName, SubjectPublicKeyInfoDer,
+    UnixTime,
+};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::server::{
     ClientHello, ProducesTickets, ServerConfig, ServerConnection, WebPkiClientVerifier,
@@ -479,6 +482,11 @@ impl sign::SigningKey for FixedSignatureSchemeSigningKey {
             self.key.choose_scheme(&[])
         }
     }
+
+    fn public_key(&self) -> Option<SubjectPublicKeyInfoDer<'_>> {
+        self.key.public_key()
+    }
+
     fn algorithm(&self) -> SignatureAlgorithm {
         self.key.algorithm()
     }
