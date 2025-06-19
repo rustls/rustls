@@ -25,7 +25,7 @@ use crate::error::Error;
 use crate::kernel::KernelConnection;
 use crate::log::trace;
 use crate::msgs::base::Payload;
-use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtension};
+use crate::msgs::handshake::{ClientHelloPayload, ProtocolName, ServerExtensionsInput};
 use crate::msgs::message::Message;
 use crate::suites::ExtractedSecrets;
 use crate::sync::Arc;
@@ -584,13 +584,15 @@ impl ServerConfig {
 #[cfg(feature = "std")]
 mod connection {
     use alloc::boxed::Box;
-    use alloc::vec::Vec;
     use core::fmt;
     use core::fmt::{Debug, Formatter};
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
+    use super::{
+        Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData,
+        ServerExtensionsInput,
+    };
     use crate::common_state::{CommonState, Context, Side};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
@@ -638,7 +640,10 @@ mod connection {
         /// we behave in the TLS protocol.
         pub fn new(config: Arc<ServerConfig>) -> Result<Self, Error> {
             Ok(Self {
-                inner: ConnectionCommon::from(ConnectionCore::for_server(config, Vec::new())?),
+                inner: ConnectionCommon::from(ConnectionCore::for_server(
+                    config,
+                    ServerExtensionsInput::default(),
+                )?),
             })
         }
 
@@ -943,7 +948,7 @@ impl UnbufferedServerConnection {
         Ok(Self {
             inner: UnbufferedConnectionCommon::from(ConnectionCore::for_server(
                 config,
-                Vec::new(),
+                ServerExtensionsInput::default(),
             )?),
         })
     }
@@ -1014,12 +1019,18 @@ impl Accepted {
         let ch = ClientHello {
             server_name: &self.connection.core.data.sni,
             signature_schemes: &self.sig_schemes,
-            alpn: payload.alpn_extension(),
-            server_cert_types: payload.server_certificate_extension(),
-            client_cert_types: payload.client_certificate_extension(),
+            alpn: payload.protocols.as_ref(),
+            server_cert_types: payload
+                .server_certificate_types
+                .as_deref(),
+            client_cert_types: payload
+                .client_certificate_types
+                .as_deref(),
             cipher_suites: &payload.cipher_suites,
-            certificate_authorities: payload.certificate_authorities_extension(),
-            named_groups: payload.namedgroups_extension(),
+            certificate_authorities: payload
+                .certificate_authority_names
+                .as_deref(),
+            named_groups: payload.named_groups.as_deref(),
         };
 
         trace!("Accepted::client_hello(): {ch:#?}");
@@ -1047,7 +1058,7 @@ impl Accepted {
 
         self.connection.enable_secret_extraction = config.enable_secret_extraction;
 
-        let state = hs::ExpectClientHello::new(config, Vec::new());
+        let state = hs::ExpectClientHello::new(config, ServerExtensionsInput::default());
         let mut cx = hs::ServerContext::from(&mut self.connection);
 
         let ch = Self::client_hello_payload(&self.message);
@@ -1200,7 +1211,7 @@ impl Debug for EarlyDataState {
 impl ConnectionCore<ServerConnectionData> {
     pub(crate) fn for_server(
         config: Arc<ServerConfig>,
-        extra_exts: Vec<ServerExtension>,
+        extra_exts: ServerExtensionsInput<'static>,
     ) -> Result<Self, Error> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;

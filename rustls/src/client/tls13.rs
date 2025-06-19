@@ -28,9 +28,9 @@ use crate::msgs::ccs::ChangeCipherSpecPayload;
 use crate::msgs::codec::{Codec, Reader};
 use crate::msgs::enums::{ExtensionType, KeyUpdateRequest};
 use crate::msgs::handshake::{
-    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtension, EchConfigPayload,
-    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, KeyShareEntry,
-    NewSessionTicketPayloadTls13, PresharedKeyIdentity, PresharedKeyOffer, ServerExtension,
+    CERTIFICATE_MAX_SIZE_LIMIT, CertificatePayloadTls13, ClientExtensions, EchConfigPayload,
+    HandshakeMessagePayload, HandshakePayload, KeyShareEntry, NewSessionTicketPayloadTls13,
+    PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer, ServerExtensions,
     ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
@@ -57,7 +57,12 @@ static ALLOWED_PLAINTEXT_EXTS: &[ExtensionType] = &[
 
 // Only the intersection of things we offer, and those disallowed
 // in TLS1.3
-static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
+static DISALLOWED_TLS13_ENCRYPTED_EXTENSIONS: &[ExtensionType] = &[
+    // The follow are ALLOWED_PLAINTEXT_EXTS
+    ExtensionType::KeyShare,
+    ExtensionType::PreSharedKey,
+    ExtensionType::SupportedVersions,
+    // and those no longer allowed in TLS1.3
     ExtensionType::ECPointFormats,
     ExtensionType::SessionTicket,
     ExtensionType::RenegotiationInfo,
@@ -85,7 +90,8 @@ pub(super) fn handle_server_hello(
     validate_server_hello(cx.common, server_hello)?;
 
     let their_key_share = server_hello
-        .key_share()
+        .key_share
+        .as_ref()
         .ok_or_else(|| {
             cx.common.send_fatal_alert(
                 AlertDescription::MissingExtension,
@@ -101,7 +107,7 @@ pub(super) fn handle_server_hello(
             )
         })?;
 
-    let key_schedule_pre_handshake = match (server_hello.psk_index(), early_data_key_schedule) {
+    let key_schedule_pre_handshake = match (server_hello.preshared_key, early_data_key_schedule) {
         (Some(selected_psk), Some(early_key_schedule)) => {
             match &resuming_session {
                 Some(resuming) => {
@@ -269,13 +275,11 @@ fn validate_server_hello(
     common: &mut CommonState,
     server_hello: &ServerHelloPayload,
 ) -> Result<(), Error> {
-    for ext in &server_hello.extensions {
-        if !ALLOWED_PLAINTEXT_EXTS.contains(&ext.ext_type()) {
-            return Err(common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerMisbehaved::UnexpectedCleartextExtension,
-            ));
-        }
+    if !server_hello.only_contains(ALLOWED_PLAINTEXT_EXTS) {
+        return Err(common.send_fatal_alert(
+            AlertDescription::UnsupportedExtension,
+            PeerMisbehaved::UnexpectedCleartextExtension,
+        ));
     }
 
     Ok(())
@@ -327,7 +331,19 @@ pub(super) fn fill_in_psk_binder(
     let real_binder = key_schedule.resumption_psk_binder_key_and_sign_verify_data(&handshake_hash);
 
     if let HandshakePayload::ClientHello(ch) = &mut hmp.0 {
-        ch.set_psk_binder(real_binder.as_ref());
+        if let Some(PresharedKeyOffer {
+            binders,
+            identities,
+        }) = &mut ch.preshared_key_offer
+        {
+            // the caller of this function must have set up the desired identity, and a
+            // matching (dummy) binder; or else the binder we compute here will be incorrect.
+            // See `prepare_resumption()`.
+            debug_assert_eq!(identities.len(), 1);
+            debug_assert_eq!(binders.len(), 1);
+            debug_assert_eq!(binders[0].as_ref().len(), real_binder.as_ref().len());
+            binders[0] = PresharedKeyBinder::from(real_binder.as_ref().to_vec());
+        }
     };
 
     key_schedule
@@ -337,7 +353,7 @@ pub(super) fn prepare_resumption(
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
     resuming_session: &persist::Retrieved<&persist::Tls13ClientSessionValue>,
-    exts: &mut Vec<ClientExtension>,
+    exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
 ) {
     let resuming_suite = resuming_session.suite();
@@ -349,7 +365,7 @@ pub(super) fn prepare_resumption(
         cx.data
             .early_data
             .enable(max_early_data_size as usize);
-        exts.push(ClientExtension::EarlyData);
+        exts.early_data_request = Some(());
     }
 
     // Finally, and only for TLS1.3 with a ticket resumption, include a binder
@@ -367,8 +383,8 @@ pub(super) fn prepare_resumption(
 
     let psk_identity =
         PresharedKeyIdentity::new(resuming_session.ticket().to_vec(), obfuscated_ticket_age);
-    let psk_ext = PresharedKeyOffer::new(psk_identity, binder);
-    exts.push(ClientExtension::PresharedKey(psk_ext));
+    let psk_offer = PresharedKeyOffer::new(psk_identity, binder);
+    exts.preshared_key_offer = Some(psk_offer);
 }
 
 pub(super) fn derive_early_traffic_secret(
@@ -415,15 +431,8 @@ pub(super) fn emit_fake_ccs(sent_tls13_fake_ccs: &mut bool, common: &mut CommonS
 fn validate_encrypted_extensions(
     common: &mut CommonState,
     hello: &ClientHelloDetails,
-    exts: &Vec<ServerExtension>,
+    exts: &ServerExtensions<'_>,
 ) -> Result<(), Error> {
-    if exts.has_duplicate_extension() {
-        return Err(common.send_fatal_alert(
-            AlertDescription::DecodeError,
-            PeerMisbehaved::DuplicateEncryptedExtensions,
-        ));
-    }
-
     if hello.server_sent_unsolicited_extensions(exts, &[]) {
         return Err(common.send_fatal_alert(
             AlertDescription::UnsupportedExtension,
@@ -431,15 +440,11 @@ fn validate_encrypted_extensions(
         ));
     }
 
-    for ext in exts {
-        if ALLOWED_PLAINTEXT_EXTS.contains(&ext.ext_type())
-            || DISALLOWED_TLS13_EXTS.contains(&ext.ext_type())
-        {
-            return Err(common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerMisbehaved::DisallowedEncryptedExtension,
-            ));
-        }
+    if exts.contains_any(DISALLOWED_TLS13_ENCRYPTED_EXTENSIONS) {
+        return Err(common.send_fatal_alert(
+            AlertDescription::UnsupportedExtension,
+            PeerMisbehaved::DisallowedEncryptedExtension,
+        ));
     }
 
     Ok(())
@@ -474,11 +479,25 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
         self.transcript.add_message(&m);
 
         validate_encrypted_extensions(cx.common, &self.hello, exts)?;
-        hs::process_alpn_protocol(cx.common, &self.hello.alpn_protocols, exts.alpn_protocol())?;
-        hs::process_client_cert_type_extension(cx.common, &self.config, exts.client_cert_type())?;
-        hs::process_server_cert_type_extension(cx.common, &self.config, exts.server_cert_type())?;
+        hs::process_alpn_protocol(
+            cx.common,
+            &self.hello.alpn_protocols,
+            exts.selected_protocol
+                .as_ref()
+                .map(|protocol| protocol.as_ref()),
+        )?;
+        hs::process_client_cert_type_extension(
+            cx.common,
+            &self.config,
+            exts.client_certificate_type.as_ref(),
+        )?;
+        hs::process_server_cert_type_extension(
+            cx.common,
+            &self.config,
+            exts.server_certificate_type.as_ref(),
+        )?;
 
-        let ech_retry_configs = match (cx.data.ech_status, exts.server_ech_extension()) {
+        let ech_retry_configs = match (cx.data.ech_status, &exts.encrypted_client_hello_ack) {
             // If we didn't offer ECH, or ECH was accepted, but the server sent an ECH encrypted
             // extension with retry configs, we must error.
             (EchStatus::NotOffered | EchStatus::Accepted, Some(_)) => {
@@ -490,14 +509,20 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             // If we offered ECH, and it was rejected, store the retry configs (if any) from
             // the server's ECH extension. We will return them in an error produced at the end
             // of the handshake.
-            (EchStatus::Rejected, ext) => ext.map(|ext| ext.retry_configs.to_vec()),
+            (EchStatus::Rejected, ext) => ext
+                .as_ref()
+                .map(|ext| ext.retry_configs.to_vec()),
             _ => None,
         };
 
         // QUIC transport parameters
         if cx.common.is_quic() {
-            match exts.quic_params_extension() {
-                Some(params) => cx.common.quic.params = Some(params),
+            match exts
+                .transport_parameters
+                .as_ref()
+                .or(exts.transport_parameters_draft.as_ref())
+            {
+                Some(params) => cx.common.quic.params = Some(params.clone().into_vec()),
                 None => {
                     return Err(cx
                         .common
@@ -510,11 +535,12 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
             Some(resuming_session) => {
                 let was_early_traffic = cx.common.early_traffic;
                 if was_early_traffic {
-                    if exts.early_data_extension_offered() {
-                        cx.data.early_data.accepted();
-                    } else {
-                        cx.data.early_data.rejected();
-                        cx.common.early_traffic = false;
+                    match exts.early_data_ack {
+                        Some(()) => cx.data.early_data.accepted(),
+                        None => {
+                            cx.data.early_data.rejected();
+                            cx.common.early_traffic = false;
+                        }
                     }
                 }
 
@@ -549,7 +575,7 @@ impl State<ClientConnectionData> for ExpectEncryptedExtensions {
                 }))
             }
             _ => {
-                if exts.early_data_extension_offered() {
+                if exts.early_data_ack.is_some() {
                     return Err(PeerMisbehaved::EarlyDataExtensionWithoutResumption.into());
                 }
                 cx.common
@@ -840,10 +866,11 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             ));
         }
 
-        let no_sigschemes = Vec::new();
         let compat_sigschemes = certreq
-            .sigalgs_extension()
-            .unwrap_or(&no_sigschemes)
+            .extensions
+            .signature_algorithms
+            .as_deref()
+            .unwrap_or_default()
             .iter()
             .cloned()
             .filter(SignatureScheme::supported_in_tls13)
@@ -857,7 +884,9 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
         }
 
         let compat_compressor = certreq
-            .certificate_compression_extension()
+            .extensions
+            .certificate_compression_algorithms
+            .as_deref()
             .and_then(|offered| {
                 self.config
                     .cert_compressors
@@ -870,7 +899,10 @@ impl State<ClientConnectionData> for ExpectCertificateRequest {
             self.config
                 .client_auth_cert_resolver
                 .as_ref(),
-            certreq.authorities_extension(),
+            certreq
+                .extensions
+                .authority_names
+                .as_deref(),
             &compat_sigschemes,
             Some(certreq.context.0.clone()),
             compat_compressor,
@@ -1048,14 +1080,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
             ));
         }
 
-        if cert_chain.any_entry_has_duplicate_extension()
-            || cert_chain.any_entry_has_unknown_extension()
-        {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerMisbehaved::BadCertChainExtensions,
-            ));
-        }
         let end_entity_ocsp = cert_chain.end_entity_ocsp().to_vec();
         let server_cert = ServerCertDetails::new(
             cert_chain
@@ -1432,10 +1456,6 @@ impl ExpectTraffic {
         cx: &mut KernelContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        if nst.has_duplicate_extension() {
-            return Err(PeerMisbehaved::DuplicateNewSessionTicketExtensions.into());
-        }
-
         let handshake_hash = self.transcript.current_hash();
         let secret = ResumptionSecret::new(&self.key_schedule, &handshake_hash)
             .derive_ticket_psk(&nst.nonce.0);
@@ -1455,12 +1475,13 @@ impl ExpectTraffic {
             now,
             nst.lifetime,
             nst.age_add,
-            nst.max_early_data_size()
+            nst.extensions
+                .max_early_data_size
                 .unwrap_or_default(),
         );
 
         if cx.is_quic() {
-            if let Some(sz) = nst.max_early_data_size() {
+            if let Some(sz) = nst.extensions.max_early_data_size {
                 if sz != 0 && sz != 0xffff_ffff {
                     return Err(PeerMisbehaved::InvalidMaxEarlyDataSize.into());
                 }
@@ -1481,13 +1502,6 @@ impl ExpectTraffic {
         cx: &mut ClientContext<'_>,
         nst: &NewSessionTicketPayloadTls13,
     ) -> Result<(), Error> {
-        if nst.has_duplicate_extension() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::IllegalParameter,
-                PeerMisbehaved::DuplicateNewSessionTicketExtensions,
-            ));
-        }
-
         let mut kcx = KernelContext {
             peer_certificates: cx.common.peer_certificates.as_ref(),
             protocol: cx.common.protocol,
