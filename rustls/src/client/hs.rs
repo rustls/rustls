@@ -241,7 +241,7 @@ fn emit_client_hello_for_retry(
 
     if supported_versions.tls13 {
         if let Some(cas_extension) = config.verifier.root_hint_subjects() {
-            exts.certificate_authority_names = Some(cas_extension.to_owned());
+            exts.certificate_authority_names = Some(cas_extension.to_vec());
         }
     }
 

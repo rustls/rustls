@@ -215,11 +215,11 @@ fn client_can_request_certain_trusted_cas() {
 
         let cas_sending_server_verifier = Arc::new(ServerCertVerifierWithCasExt {
             verifier: server_verifier.clone(),
-            ca_names: vec![DistinguishedName::from(
+            ca_names: Arc::new(vec![DistinguishedName::from(
                 key_type
                     .ca_distinguished_name()
                     .to_vec(),
-            )],
+            )]),
         });
 
         let cas_sending_client_config = client_config_builder(&provider)
@@ -288,7 +288,7 @@ impl ResolvesServerCert for ResolvesCertChainByCaName {
 #[derive(Debug)]
 struct ServerCertVerifierWithCasExt {
     verifier: Arc<dyn ServerCertVerifier>,
-    ca_names: Vec<DistinguishedName>,
+    ca_names: Arc<Vec<DistinguishedName>>,
 }
 
 impl ServerCertVerifier for ServerCertVerifierWithCasExt {
@@ -332,8 +332,8 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
         self.verifier.requires_raw_public_keys()
     }
 
-    fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
+    fn root_hint_subjects(&self) -> Option<Arc<Vec<DistinguishedName>>> {
         println!("ServerCertVerifierWithCasExt::root_hint_subjects() called!");
-        Some(&self.ca_names)
+        Some(self.ca_names.clone())
     }
 }

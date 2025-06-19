@@ -181,7 +181,9 @@ mod tests {
     #[test]
     fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
         let cas_sending_server_verifier =
-            ServerVerifierWithAuthorityNames(vec![DistinguishedName::from(b"hello".to_vec())]);
+            ServerVerifierWithAuthorityNames(Arc::new(vec![DistinguishedName::from(
+                b"hello".to_vec(),
+            )]));
 
         for (protocol_version, cas_extension_expected) in
             [(&version::TLS12, false), (&version::TLS13, true)]
@@ -489,11 +491,11 @@ mod tests {
     }
 
     #[derive(Clone, Debug)]
-    struct ServerVerifierWithAuthorityNames(Vec<DistinguishedName>);
+    struct ServerVerifierWithAuthorityNames(Arc<Vec<DistinguishedName>>);
 
     impl ServerCertVerifier for ServerVerifierWithAuthorityNames {
-        fn root_hint_subjects(&self) -> Option<&[DistinguishedName]> {
-            Some(self.0.as_slice())
+        fn root_hint_subjects(&self) -> Option<Arc<Vec<DistinguishedName>>> {
+            Some(self.0.clone())
         }
 
         #[cfg_attr(coverage_nightly, coverage(off))]

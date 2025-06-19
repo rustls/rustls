@@ -715,7 +715,11 @@ mod client_hello {
                             .collect(),
                     ),
                 },
-                authority_names: match config.verifier.root_hint_subjects() {
+                authority_names: match config
+                    .verifier
+                    .root_hint_subjects()
+                    .as_slice()
+                {
                     &[] => None,
                     authorities => Some(authorities.to_vec()),
                 },

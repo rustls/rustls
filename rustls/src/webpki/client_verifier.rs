@@ -176,7 +176,7 @@ impl ClientCertVerifierBuilder {
 
         Ok(Arc::new(WebPkiClientVerifier::new(
             self.roots,
-            self.root_hint_subjects,
+            Arc::new(self.root_hint_subjects),
             parse_crls(self.crls)?,
             self.revocation_check_depth,
             self.unknown_revocation_policy,
@@ -251,7 +251,7 @@ impl ClientCertVerifierBuilder {
 #[derive(Debug)]
 pub struct WebPkiClientVerifier {
     roots: Arc<RootCertStore>,
-    root_hint_subjects: Vec<DistinguishedName>,
+    root_hint_subjects: Arc<Vec<DistinguishedName>>,
     crls: Vec<CertRevocationList<'static>>,
     revocation_check_depth: RevocationCheckDepth,
     unknown_revocation_policy: UnknownStatusPolicy,
@@ -320,7 +320,7 @@ impl WebPkiClientVerifier {
     /// * `supported_algs` specifies which signature verification algorithms should be used.
     pub(crate) fn new(
         roots: Arc<RootCertStore>,
-        root_hint_subjects: Vec<DistinguishedName>,
+        root_hint_subjects: Arc<Vec<DistinguishedName>>,
         crls: Vec<CertRevocationList<'static>>,
         revocation_check_depth: RevocationCheckDepth,
         unknown_revocation_policy: UnknownStatusPolicy,
@@ -353,8 +353,8 @@ impl ClientCertVerifier for WebPkiClientVerifier {
         }
     }
 
-    fn root_hint_subjects(&self) -> &[DistinguishedName] {
-        &self.root_hint_subjects
+    fn root_hint_subjects(&self) -> Arc<Vec<DistinguishedName>> {
+        self.root_hint_subjects.clone()
     }
 
     fn verify_client_cert(
