@@ -12,13 +12,14 @@ use super::enums::{
 use super::handshake::{
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
-    CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
+    CertificateStatus, CertificateStatusRequest, ClientExtensions, ClientHelloPayload,
     ClientSessionTicket, CompressedCertificatePayload, DistinguishedName, EcParameters,
-    HandshakeMessagePayload, HandshakePayload, HasServerExtensions, HelloRetryExtension,
-    HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension, NewSessionTicketPayload,
-    NewSessionTicketPayloadTls13, PresharedKeyBinder, PresharedKeyIdentity, PresharedKeyOffer,
-    ProtocolName, Random, ServerDhParams, ServerEcdhParams, ServerExtension, ServerHelloPayload,
-    ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, SessionId,
+    EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HasServerExtensions,
+    HelloRetryExtension, HelloRetryRequest, KeyShareEntry, NewSessionTicketExtension,
+    NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
+    ServerEcdhParams, ServerExtension, ServerHelloPayload, ServerKeyExchange,
+    ServerKeyExchangeParams, ServerKeyExchangePayload, ServerNamePayload, SessionId,
     SingleProtocolName, SupportedProtocolVersions, UnknownExtension,
 };
 use crate::enums::{
@@ -26,7 +27,6 @@ use crate::enums::{
     SignatureScheme,
 };
 use crate::error::InvalidMessage;
-use crate::msgs::handshake::ServerNamePayload;
 use crate::sync::Arc;
 use crate::verify::DigitallySignedStruct;
 
@@ -117,21 +117,12 @@ fn debug_session_id() {
 }
 
 #[test]
-fn can_round_trip_unknown_client_ext() {
-    let bytes = [0x12u8, 0x34u8, 0, 3, 1, 2, 3];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-
-    println!("{ext:?}");
-    assert_eq!(ext.ext_type(), ExtensionType::Unknown(0x1234));
-    assert_eq!(bytes.to_vec(), ext.get_encoding());
-}
-
-#[test]
-fn refuses_client_ext_with_unparsed_bytes() {
-    let bytes = [0x00u8, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
-    let mut rd = Reader::init(&bytes);
-    assert!(ClientExtension::read(&mut rd).is_err());
+fn refuses_client_exts_with_unparsed_bytes() {
+    let bytes = [0x00u8, 0x08, 0x00, 0x0b, 0x00, 0x04, 0x02, 0xf8, 0x01, 0x02];
+    assert_eq!(
+        ClientExtensions::read_bytes(&bytes).unwrap_err(),
+        InvalidMessage::TrailingData("ClientExtensions")
+    );
 }
 
 #[test]
@@ -170,69 +161,33 @@ fn refuses_new_session_ticket_ext_with_unparsed_bytes() {
 }
 
 #[test]
-fn can_round_trip_single_sni() {
-    let bytes = [0, 0, 0, 7, 0, 5, 0, 0, 2, 0x6c, 0x6f];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-    println!("{ext:?}");
-
-    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
-    assert_eq!(bytes.to_vec(), ext.get_encoding());
-}
-
-#[test]
-fn can_round_trip_mixed_case_sni() {
-    let bytes = [0, 0, 0, 7, 0, 5, 0, 0, 2, 0x4c, 0x6f];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-    println!("{ext:?}");
-
-    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
-    assert_eq!(bytes.to_vec(), ext.get_encoding());
-}
-
-#[test]
-fn single_hostname_returns_none_for_other_sni_name_types() {
-    let bytes = [0, 0, 0, 7, 0, 5, 1, 0, 2, 0x6c, 0x6f];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-    println!("{ext:?}");
-
-    assert_eq!(ext.ext_type(), ExtensionType::ServerName);
-    assert!(matches!(
-        ext,
-        ClientExtension::ServerName(ServerNamePayload::Invalid)
-    ));
-}
-
-#[test]
 fn rejects_truncated_sni() {
-    let bytes = [0, 0, 0, 1, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
+    let bytes = [0, 1, 0];
+    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
 
-    let bytes = [0, 0, 0, 2, 0, 1];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
+    let bytes = [0, 2, 0, 1];
+    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
 
-    let bytes = [0, 0, 0, 3, 0, 1, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
+    let bytes = [0, 3, 0, 1, 0];
+    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
 
-    let bytes = [0, 0, 0, 4, 0, 2, 0, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
+    let bytes = [0, 4, 0, 2, 0, 0];
+    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
 
-    let bytes = [0, 0, 0, 5, 0, 3, 0, 0, 0];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
+    let bytes = [0, 5, 0, 3, 0, 0, 0];
+    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
 
-    let bytes = [0, 0, 0, 5, 0, 3, 0, 0, 1];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
+    let bytes = [0, 5, 0, 3, 0, 0, 1];
+    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
 
-    let bytes = [0, 0, 0, 6, 0, 4, 0, 0, 2, 0x68];
-    assert!(ClientExtension::read(&mut Reader::init(&bytes)).is_err());
+    let bytes = [0, 6, 0, 4, 0, 0, 2, 0x68];
+    assert!(ServerNamePayload::read(&mut Reader::init(&bytes)).is_err());
 }
 
 #[test]
 fn rejects_empty_sni_extension() {
     assert_eq!(
-        ClientExtension::read_bytes(&[0, 0, 0, 2, 0, 0]).unwrap_err(),
+        ClientExtensions::read_bytes(&[0, 6, 0, 0, 0, 2, 0, 0]).unwrap_err(),
         InvalidMessage::IllegalEmptyList("ServerNames")
     );
 }
@@ -240,7 +195,7 @@ fn rejects_empty_sni_extension() {
 #[test]
 fn rejects_duplicate_names_in_sni_extension() {
     assert_eq!(
-        ClientExtension::read_bytes(&[0, 0, 0, 10, 0, 8, 0, 0, 1, b'a', 0, 0, 1, b'b',])
+        ClientExtensions::read_bytes(&[0, 14, 0, 0, 0, 10, 0, 8, 0, 0, 1, b'a', 0, 0, 1, b'b',])
             .unwrap_err(),
         InvalidMessage::InvalidServerName
     );
@@ -280,77 +235,29 @@ fn can_round_trip_psk_offer() {
 
 #[test]
 fn can_round_trip_cert_status_req_for_ocsp() {
-    let ext = ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp());
-    println!("{ext:?}");
+    let ext = CertificateStatusRequest::build_ocsp();
+    println!("{:?}", ext);
 
     let bytes = [
-        0, 5, // CertificateStatusRequest
         0, 11, 1, // OCSP
         0, 5, 0, 3, 0, 1, 1, 0, 1, 2,
     ];
 
-    let csr = ClientExtension::read(&mut Reader::init(&bytes)).unwrap();
-    println!("{csr:?}");
+    let csr = CertificateStatusRequest::read(&mut Reader::init(&bytes)).unwrap();
+    println!("{:?}", csr);
     assert_eq!(csr.get_encoding(), bytes.to_vec());
 }
 
 #[test]
 fn can_round_trip_cert_status_req_for_other() {
     let bytes = [
-        0, 5, // CertificateStatusRequest
         0, 5, 2, // !OCSP
         1, 2, 3, 4,
     ];
 
-    let csr = ClientExtension::read(&mut Reader::init(&bytes)).unwrap();
-    println!("{csr:?}");
+    let csr = CertificateStatusRequest::read(&mut Reader::init(&bytes)).unwrap();
+    println!("{:?}", csr);
     assert_eq!(csr.get_encoding(), bytes.to_vec());
-}
-
-#[test]
-fn can_round_trip_multi_proto() {
-    let bytes = [0, 16, 0, 8, 0, 6, 2, 0x68, 0x69, 2, 0x6c, 0x6f];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-    println!("{ext:?}");
-
-    assert_eq!(ext.ext_type(), ExtensionType::ALProtocolNegotiation);
-    assert_eq!(ext.get_encoding(), bytes.to_vec());
-    match ext {
-        ClientExtension::Protocols(prot) => {
-            assert_eq!(2, prot.len());
-            assert_eq!(
-                vec![b"hi", b"lo"],
-                prot.iter()
-                    .map(|p| p.as_ref())
-                    .collect::<Vec<_>>()
-            );
-        }
-        _ => unreachable!(),
-    }
-}
-
-#[test]
-fn can_round_trip_single_proto() {
-    let bytes = [0, 16, 0, 5, 0, 3, 2, 0x68, 0x69];
-    let mut rd = Reader::init(&bytes);
-    let ext = ClientExtension::read(&mut rd).unwrap();
-    println!("{ext:?}");
-
-    assert_eq!(ext.ext_type(), ExtensionType::ALProtocolNegotiation);
-    assert_eq!(bytes.to_vec(), ext.get_encoding());
-    match ext {
-        ClientExtension::Protocols(prot) => {
-            assert_eq!(1, prot.len());
-            assert_eq!(
-                vec![b"hi"],
-                prot.iter()
-                    .map(|p| p.as_ref())
-                    .collect::<Vec<_>>()
-            );
-        }
-        _ => unreachable!(),
-    }
 }
 
 #[test]
@@ -366,23 +273,162 @@ fn can_clone_all_client_extensions() {
 }
 
 #[test]
-fn client_has_duplicate_extensions_works() {
-    let mut chp = sample_client_hello_payload();
-    assert!(chp.has_duplicate_extension()); // due to SessionTicketRequest/SessionTicketOffer
+fn client_extensions_basics() {
+    let src = ClientExtensions {
+        early_data_request: Some(()),
+        ..Default::default()
+    };
+    let mut target = ClientExtensions::default();
 
-    chp.extensions.drain(1..);
-    assert!(!chp.has_duplicate_extension());
+    assert_eq!(src.collect_used(), vec![ExtensionType::EarlyData]);
+    assert_eq!(target.collect_used(), vec![]);
 
-    chp.extensions = vec![];
-    assert!(!chp.has_duplicate_extension());
+    target.clone_one(&src, ExtensionType::EarlyData);
+    assert_eq!(target.collect_used(), vec![ExtensionType::EarlyData]);
+}
+
+#[test]
+fn client_extensions_empty() {
+    // both sides of empty-encoding branch
+    assert_eq!(ClientExtensions::default().get_encoding(), Vec::<u8>::new());
+    assert_eq!(
+        ClientExtensions::read_bytes(&[])
+            .unwrap()
+            .collect_used(),
+        vec![]
+    );
+
+    let early_data = b"\x00\x04\x00\x2a\x00\x00";
+    assert_eq!(
+        ClientExtensions {
+            early_data_request: Some(()),
+            ..Default::default()
+        }
+        .get_encoding(),
+        early_data
+    );
+    assert_eq!(
+        ClientExtensions::read_bytes(early_data)
+            .unwrap()
+            .collect_used(),
+        vec![ExtensionType::EarlyData]
+    );
+}
+
+#[test]
+fn client_extensions_decode_checks_duplicates() {
+    // base
+    ClientExtensions::read_bytes(b"\x00\x04\x00\x2a\x00\x00").unwrap();
+
+    // duplicate known
+    assert_eq!(
+        ClientExtensions::read_bytes(b"\x00\x08\x00\x2a\x00\x00\x00\x2a\x00\x00").unwrap_err(),
+        InvalidMessage::DuplicateExtension(0x002a)
+    );
+
+    // duplicate unknown
+    assert_eq!(
+        ClientExtensions::read_bytes(b"\x00\x08\xff\xff\x00\x00\xff\xff\x00\x00").unwrap_err(),
+        InvalidMessage::DuplicateExtension(0xffff)
+    );
+}
+
+#[test]
+fn client_extensions_ordering() {
+    // the important thing here is that PSK requests come last,
+    // ECH requests come second to last, and order of other extensions
+    // do vary.
+
+    let psk_offer = PresharedKeyOffer {
+        identities: vec![],
+        binders: vec![],
+    };
+
+    let psk_and_ech = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        preshared_key_offer: Some(psk_offer.clone()),
+        encrypted_client_hello: Some(EncryptedClientHello::Inner),
+        ..Default::default()
+    };
+
+    let psk_and_ech_with_contiguous = ClientExtensions {
+        contiguous_extensions: vec![ExtensionType::ExtendedMasterSecret],
+        ..psk_and_ech.clone()
+    };
+
+    let ech = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        encrypted_client_hello: Some(EncryptedClientHello::Inner),
+        ..Default::default()
+    };
+
+    let psk = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        preshared_key_offer: Some(psk_offer),
+        ..Default::default()
+    };
+
+    let neither = ClientExtensions {
+        early_data_request: Some(()),
+        extended_master_secret_request: Some(()),
+        ..Default::default()
+    };
+
+    fn encoding_with_order(order_seed: u16, exts: &ClientExtensions<'_>) -> Vec<u8> {
+        let mut e = exts.clone();
+        e.order_seed = order_seed;
+        e.get_encoding()
+    }
+
+    assert_ne!(
+        encoding_with_order(0, &psk_and_ech),
+        encoding_with_order(1, &psk_and_ech)
+    );
+    assert_eq!(
+        encoding_with_order(0, &psk_and_ech_with_contiguous),
+        encoding_with_order(1, &psk_and_ech_with_contiguous)
+    );
+    assert_ne!(encoding_with_order(0, &ech), encoding_with_order(1, &ech));
+    assert_ne!(encoding_with_order(0, &psk), encoding_with_order(1, &psk));
+    assert_ne!(
+        encoding_with_order(0, &neither),
+        encoding_with_order(1, &neither)
+    );
+
+    // check order invariants hold for all seeds
+    for seed in 0..=0xffff {
+        // must end with ECH and then PSK
+        assert!(encoding_with_order(seed, &psk_and_ech).ends_with(
+            b"\xfe\x0d\x00\x01\x01\
+              \x00\x29\x00\x04\x00\x00\x00\x00"
+        ));
+
+        // must end with EMS, then ECH and then PSK
+        assert!(
+            encoding_with_order(seed, &psk_and_ech_with_contiguous).ends_with(
+                b"\x00\x17\x00\x00\
+                  \xfe\x0d\x00\x01\x01\
+                  \x00\x29\x00\x04\x00\x00\x00\x00"
+            )
+        );
+
+        // just PSK
+        assert!(encoding_with_order(seed, &psk).ends_with(b"\x00\x29\x00\x04\x00\x00\x00\x00"));
+
+        // just ECH
+        assert!(encoding_with_order(seed, &ech).ends_with(b"\xfe\x0d\x00\x01\x01"));
+    }
 }
 
 #[test]
 fn test_truncated_psk_offer() {
-    let ext = ClientExtension::PresharedKey(PresharedKeyOffer {
+    let ext = PresharedKeyOffer {
         identities: vec![PresharedKeyIdentity::new(vec![3, 4, 5], 123456)],
         binders: vec![PresharedKeyBinder::from(vec![1, 2, 3])],
-    });
+    };
 
     let mut enc = ext.get_encoding();
     println!("testing {ext:?} enc {enc:?}");
@@ -390,8 +436,8 @@ fn test_truncated_psk_offer() {
         if l == 9 {
             continue;
         }
-        put_u16(l as u16, &mut enc[4..]);
-        let rc = ClientExtension::read_bytes(&enc);
+        put_u16(l as u16, &mut enc);
+        let rc = PresharedKeyOffer::read_bytes(&enc);
         assert!(rc.is_err());
     }
 }
@@ -415,134 +461,14 @@ fn test_truncated_client_hello_is_detected() {
 fn test_truncated_client_extension_is_detected() {
     let chp = sample_client_hello_payload();
 
-    for ext in &chp.extensions {
-        let mut enc = ext.get_encoding();
-        println!("testing {ext:?} enc {enc:?}");
+    let enc = chp.extensions.get_encoding();
+    println!("testing enc {:?}", enc);
 
-        // "outer" truncation, i.e., where the extension-level length is longer than
-        // the input
-        for l in 0..enc.len() {
-            assert!(ClientExtension::read_bytes(&enc[..l]).is_err());
-        }
-
-        // these extension types don't have any internal encoding that rustls validates:
-        match ext.ext_type() {
-            ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
-                continue;
-            }
-            _ => {}
-        };
-
-        // "inner" truncation, where the extension-level length agrees with the input
-        // length, but isn't long enough for the type of extension
-        for l in 0..(enc.len() - 4) {
-            put_u16(l as u16, &mut enc[2..]);
-            println!("  encoding {enc:?} len {l:?}");
-            assert!(ClientExtension::read_bytes(&enc).is_err());
-        }
+    // "outer" truncation, i.e., where the extension-level length is longer than
+    // the input
+    for l in 1..enc.len() {
+        assert!(ClientExtensions::read_bytes(&enc[..l]).is_err());
     }
-}
-
-#[test]
-fn client_sni_extension() {
-    test_client_extension_getter(ExtensionType::ServerName, |chp| {
-        chp.sni_extension().is_some()
-    });
-}
-
-#[test]
-fn client_sigalgs_extension() {
-    test_client_extension_getter(ExtensionType::SignatureAlgorithms, |chp| {
-        chp.sigalgs_extension().is_some()
-    });
-}
-
-#[test]
-fn client_namedgroups_extension() {
-    test_client_extension_getter(ExtensionType::EllipticCurves, |chp| {
-        chp.namedgroups_extension().is_some()
-    });
-}
-
-#[cfg(feature = "tls12")]
-#[test]
-fn client_ecpoints_extension() {
-    test_client_extension_getter(ExtensionType::ECPointFormats, |chp| {
-        chp.ecpoints_extension().is_some()
-    });
-}
-
-#[test]
-fn client_alpn_extension() {
-    test_client_extension_getter(ExtensionType::ALProtocolNegotiation, |chp| {
-        chp.alpn_extension().is_some()
-    });
-}
-
-#[test]
-fn client_client_certificate_extension() {
-    test_client_extension_getter(ExtensionType::ClientCertificateType, |chp| {
-        chp.client_certificate_extension()
-            .is_some()
-    });
-}
-
-#[test]
-fn client_server_certificate_extension() {
-    test_client_extension_getter(ExtensionType::ServerCertificateType, |chp| {
-        chp.server_certificate_extension()
-            .is_some()
-    });
-}
-
-#[test]
-fn client_quic_params_extension() {
-    test_client_extension_getter(ExtensionType::TransportParameters, |chp| {
-        chp.quic_params_extension().is_some()
-    });
-}
-
-#[test]
-fn client_versions_extension() {
-    test_client_extension_getter(ExtensionType::SupportedVersions, |chp| {
-        chp.versions_extension().is_some()
-    });
-}
-
-#[test]
-fn client_keyshare_extension() {
-    test_client_extension_getter(ExtensionType::KeyShare, |chp| {
-        chp.keyshare_extension().is_some()
-    });
-}
-
-#[test]
-fn client_psk() {
-    test_client_extension_getter(ExtensionType::PreSharedKey, |chp| chp.psk().is_some());
-}
-
-#[test]
-fn client_psk_modes() {
-    test_client_extension_getter(ExtensionType::PSKKeyExchangeModes, |chp| {
-        chp.psk_modes().is_some()
-    });
-}
-
-fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPayload) -> bool) {
-    let mut chp = sample_client_hello_payload();
-    let ext = chp.find_extension(typ).unwrap().clone();
-
-    chp.extensions = vec![];
-    assert!(!getter(&chp));
-
-    chp.extensions = vec![ext];
-    assert!(getter(&chp));
-
-    chp.extensions = vec![ClientExtension::Unknown(UnknownExtension {
-        typ,
-        payload: Payload::Borrowed(&[]),
-    })];
-    assert!(!getter(&chp));
 }
 
 #[test]
@@ -949,23 +875,23 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
         session_id: SessionId::empty(),
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
-        extensions: vec![
-            ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
-            ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
-            ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
-            ClientExtension::ServerName(ServerNamePayload::from(
+        extensions: Box::new(ClientExtensions {
+            server_name: Some(ServerNamePayload::from(
                 &DnsName::try_from("hello").unwrap(),
             )),
-            ClientExtension::SessionTicket(ClientSessionTicket::Request),
-            ClientExtension::SessionTicket(ClientSessionTicket::Offer(Payload::Borrowed(&[]))),
-            ClientExtension::Protocols(vec![ProtocolName::from(vec![0])]),
-            ClientExtension::SupportedVersions(SupportedProtocolVersions {
+            cookie: Some(PayloadU16::new(vec![1, 2, 3])),
+            signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
+            session_ticket: Some(ClientSessionTicket::Request),
+            ec_point_formats: Some(ECPointFormat::SUPPORTED.to_vec()),
+            named_groups: Some(vec![NamedGroup::X25519]),
+            protocols: Some(vec![ProtocolName::from(vec![0])]),
+            supported_versions: Some(SupportedProtocolVersions {
                 tls13: true,
                 ..Default::default()
             }),
-            ClientExtension::KeyShare(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
-            ClientExtension::PresharedKeyModes(vec![PskKeyExchangeMode::PSK_DHE_KE]),
-            ClientExtension::PresharedKey(PresharedKeyOffer {
+            key_shares: Some(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
+            preshared_key_modes: Some(vec![PskKeyExchangeMode::PSK_DHE_KE]),
+            preshared_key_offer: Some(PresharedKeyOffer {
                 identities: vec![
                     PresharedKeyIdentity::new(vec![3, 4, 5], 123456),
                     PresharedKeyIdentity::new(vec![6, 7, 8], 7891011),
@@ -975,22 +901,17 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
                     PresharedKeyBinder::from(vec![3, 4, 5]),
                 ],
             }),
-            ClientExtension::Cookie(PayloadU16::new(vec![1, 2, 3])),
-            ClientExtension::ExtendedMasterSecretRequest,
-            ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
-            ClientExtension::ServerCertTypes(vec![CertificateType::RawPublicKey]),
-            ClientExtension::ClientCertTypes(vec![CertificateType::RawPublicKey]),
-            ClientExtension::TransportParameters(vec![1, 2, 3]),
-            ClientExtension::EarlyData,
-            ClientExtension::CertificateCompressionAlgorithms(vec![
-                CertificateCompressionAlgorithm::Brotli,
-                CertificateCompressionAlgorithm::Zlib,
-            ]),
-            ClientExtension::Unknown(UnknownExtension {
-                typ: ExtensionType::Unknown(12345),
-                payload: Payload::Borrowed(&[1, 2, 3]),
-            }),
-        ],
+            extended_master_secret_request: Some(()),
+            certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
+            server_certificate_types: Some(vec![CertificateType::RawPublicKey]),
+            client_certificate_types: Some(vec![CertificateType::RawPublicKey]),
+            transport_parameters: Some(Payload::new(vec![1, 2, 3])),
+            early_data_request: Some(()),
+            certificate_compression_algorithms: Some(vec![CertificateCompressionAlgorithm::Brotli]),
+            encrypted_client_hello: Some(EncryptedClientHello::Inner),
+            encrypted_client_hello_outer: Some(vec![ExtensionType::SCT]),
+            ..Default::default()
+        }),
     }
 }
 

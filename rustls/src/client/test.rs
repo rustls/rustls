@@ -31,8 +31,8 @@ mod tests {
     use crate::msgs::base::PayloadU8;
     use crate::msgs::enums::ECCurveType;
     use crate::msgs::handshake::{
-        CertificateChain, ClientExtension, EcParameters, KeyShareEntry, ServerEcdhParams,
-        ServerExtension, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+        CertificateChain, EcParameters, KeyShareEntry, ServerEcdhParams, ServerExtension,
+        ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
     };
     use crate::msgs::message::PlainMessage;
     use crate::pki_types::pem::PemObject;
@@ -55,7 +55,7 @@ mod tests {
         config.resumption = Resumption::in_memory_sessions(128)
             .tls12_resumption(Tls12Resumption::SessionIdOrTickets);
         let ch = client_hello_sent_for_config(config).unwrap();
-        assert!(ch.ticket_extension().is_none());
+        assert!(ch.extensions.session_ticket.is_none());
     }
 
     #[test]
@@ -84,9 +84,12 @@ mod tests {
                     .with_root_certificates(roots())
                     .with_no_client_auth();
             let ch = client_hello_sent_for_config(config).unwrap();
-            let sigalgs = ch.sigalgs_extension().unwrap();
             assert!(
-                !sigalgs.contains(&SignatureScheme::RSA_PKCS1_SHA1),
+                !ch.extensions
+                    .signature_schemes
+                    .as_ref()
+                    .unwrap()
+                    .contains(&SignatureScheme::RSA_PKCS1_SHA1),
                 "sha1 unexpectedly offered"
             );
         }
@@ -193,8 +196,8 @@ mod tests {
             assert_eq!(
                 client_hello
                     .extensions
-                    .iter()
-                    .any(|ext| matches!(ext, ClientExtension::AuthorityNames(_))),
+                    .certificate_authority_names
+                    .is_some(),
                 cas_extension_expected
             );
         }
@@ -628,7 +631,11 @@ fn hybrid_kx_component_share_offered_if_supported_separately() {
     )
     .unwrap();
 
-    let key_shares = ch.keyshare_extension().unwrap();
+    let key_shares = ch
+        .extensions
+        .key_shares
+        .as_ref()
+        .unwrap();
     assert_eq!(key_shares.len(), 2);
     assert_eq!(key_shares[0].group, NamedGroup::X25519MLKEM768);
     assert_eq!(key_shares[1].group, NamedGroup::X25519);
@@ -651,7 +658,11 @@ fn hybrid_kx_component_share_not_offered_unless_supported_separately() {
     )
     .unwrap();
 
-    let key_shares = ch.keyshare_extension().unwrap();
+    let key_shares = ch
+        .extensions
+        .key_shares
+        .as_ref()
+        .unwrap();
     assert_eq!(key_shares.len(), 1);
     assert_eq!(key_shares[0].group, NamedGroup::X25519MLKEM768);
 }

@@ -1014,12 +1014,18 @@ impl Accepted {
         let ch = ClientHello {
             server_name: &self.connection.core.data.sni,
             signature_schemes: &self.sig_schemes,
-            alpn: payload.alpn_extension(),
-            server_cert_types: payload.server_certificate_extension(),
-            client_cert_types: payload.client_certificate_extension(),
+            alpn: payload.protocols.as_ref(),
+            server_cert_types: payload
+                .server_certificate_types
+                .as_deref(),
+            client_cert_types: payload
+                .client_certificate_types
+                .as_deref(),
             cipher_suites: &payload.cipher_suites,
-            certificate_authorities: payload.certificate_authorities_extension(),
-            named_groups: payload.namedgroups_extension(),
+            certificate_authorities: payload
+                .certificate_authority_names
+                .as_deref(),
+            named_groups: payload.named_groups.as_deref(),
         };
 
         trace!("Accepted::client_hello(): {ch:#?}");

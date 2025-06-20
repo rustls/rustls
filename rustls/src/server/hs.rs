@@ -80,8 +80,7 @@ impl ExtensionProcessing {
     ) -> Result<(), Error> {
         // ALPN
         let our_protocols = &config.alpn_protocols;
-        let maybe_their_protocols = hello.alpn_extension();
-        if let Some(their_protocols) = maybe_their_protocols {
+        if let Some(their_protocols) = &hello.protocols {
             cx.common.alpn_protocol = our_protocols
                 .iter()
                 .find(|ours| {
@@ -113,7 +112,7 @@ impl ExtensionProcessing {
             // successful establishment of connections between peers that can't understand
             // each other.
             if cx.common.alpn_protocol.is_none()
-                && (!our_protocols.is_empty() || maybe_their_protocols.is_some())
+                && (!our_protocols.is_empty() || hello.protocols.is_some())
             {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::NoApplicationProtocol,
@@ -121,8 +120,14 @@ impl ExtensionProcessing {
                 ));
             }
 
-            match hello.quic_params_extension() {
-                Some(params) => cx.common.quic.params = Some(params),
+            let transport_params = hello
+                .transport_parameters
+                .as_ref()
+                .or(hello
+                    .transport_parameters_draft
+                    .as_ref());
+            match transport_params {
+                Some(params) => cx.common.quic.params = Some(params.to_owned().into_vec()),
                 None => {
                     return Err(cx
                         .common
@@ -133,7 +138,8 @@ impl ExtensionProcessing {
 
         let for_resume = resumedata.is_some();
         // SNI
-        if !for_resume && hello.sni_extension().is_some() {
+        if let (false, Some(ServerNamePayload::SingleDnsName(_))) = (for_resume, &hello.server_name)
+        {
             self.exts
                 .push(ServerExtension::ServerNameAck);
         }
@@ -143,7 +149,7 @@ impl ExtensionProcessing {
         // to send.
         if !for_resume
             && hello
-                .find_extension(ExtensionType::StatusRequest)
+                .certificate_status_request
                 .is_some()
         {
             if ocsp_response.is_some() && !cx.common.is_tls13() {
@@ -174,7 +180,8 @@ impl ExtensionProcessing {
         // Renegotiation.
         // (We don't do reneg at all, but would support the secure version if we did.)
         let secure_reneg_offered = hello
-            .find_extension(ExtensionType::RenegotiationInfo)
+            .extensions
+            .renegotiation_info
             .is_some()
             || hello
                 .cipher_suites
@@ -188,11 +195,7 @@ impl ExtensionProcessing {
         // Tickets:
         // If we get any SessionTicket extension and have tickets enabled,
         // we send an ack.
-        if hello
-            .find_extension(ExtensionType::SessionTicket)
-            .is_some()
-            && config.ticketer.enabled()
-        {
+        if hello.session_ticket.is_some() && config.ticketer.enabled() {
             self.send_ticket = true;
             self.exts
                 .push(ServerExtension::SessionTicketAck);
@@ -212,8 +215,8 @@ impl ExtensionProcessing {
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         let client_supports = hello
-            .server_certificate_extension()
-            .map(|certificate_types| certificate_types.to_vec())
+            .server_certificate_types
+            .as_deref()
             .unwrap_or_default();
 
         self.process_cert_type_extension(
@@ -233,8 +236,8 @@ impl ExtensionProcessing {
         cx: &mut ServerContext<'_>,
     ) -> Result<(), Error> {
         let client_supports = hello
-            .client_certificate_extension()
-            .map(|certificate_types| certificate_types.to_vec())
+            .client_certificate_types
+            .as_deref()
             .unwrap_or_default();
 
         self.process_cert_type_extension(
@@ -249,7 +252,7 @@ impl ExtensionProcessing {
 
     fn process_cert_type_extension(
         &mut self,
-        client_supports: Vec<CertificateType>,
+        client_supports: &[CertificateType],
         requires_raw_keys: bool,
         extension_type: ExtensionType,
         cx: &mut ServerContext<'_>,
@@ -343,8 +346,7 @@ impl ExpectClientHello {
             .supports_version(ProtocolVersion::TLSv1_2);
 
         // Are we doing TLS1.3?
-        let maybe_versions_ext = client_hello.versions_extension();
-        let version = if let Some(versions) = maybe_versions_ext {
+        let version = if let Some(versions) = &client_hello.supported_versions {
             if versions.tls13 && tls13_enabled {
                 ProtocolVersion::TLSv1_3
             } else if !versions.tls12 || !tls12_enabled {
@@ -405,19 +407,25 @@ impl ExpectClientHello {
         // We adhere to the TLS 1.2 RFC by not exposing this to the cert resolver if TLS version is 1.2
         let certificate_authorities = match version {
             ProtocolVersion::TLSv1_2 => None,
-            _ => client_hello.certificate_authorities_extension(),
+            _ => client_hello
+                .certificate_authority_names
+                .as_deref(),
         };
         // Choose a certificate.
         let certkey = {
             let client_hello = ClientHello {
                 server_name: &cx.data.sni,
                 signature_schemes: &sig_schemes,
-                alpn: client_hello.alpn_extension(),
-                client_cert_types: client_hello.server_certificate_extension(),
-                server_cert_types: client_hello.client_certificate_extension(),
+                alpn: client_hello.protocols.as_ref(),
+                client_cert_types: client_hello
+                    .client_certificate_types
+                    .as_deref(),
+                server_cert_types: client_hello
+                    .server_certificate_types
+                    .as_deref(),
                 cipher_suites: &client_hello.cipher_suites,
                 certificate_authorities,
-                named_groups: client_hello.namedgroups_extension(),
+                named_groups: client_hello.named_groups.as_deref(),
             };
             trace!("Resolving server certificate: {client_hello:#?}");
 
@@ -441,8 +449,9 @@ impl ExpectClientHello {
                 certkey.get_key().algorithm(),
                 cx.common.protocol,
                 client_hello
-                    .namedgroups_extension()
-                    .unwrap_or(&[]),
+                    .named_groups
+                    .as_deref()
+                    .unwrap_or_default(),
                 &client_hello.cipher_suites,
             )
             .map_err(|incompat| {
@@ -685,13 +694,6 @@ pub(super) fn process_client_hello<'m>(
         ));
     }
 
-    if client_hello.has_duplicate_extension() {
-        return Err(cx.common.send_fatal_alert(
-            AlertDescription::DecodeError,
-            PeerMisbehaved::DuplicateClientHelloExtensions,
-        ));
-    }
-
     // No handshake messages should follow this one in this flight.
     cx.common.check_aligned_handshake()?;
 
@@ -709,7 +711,7 @@ pub(super) fn process_client_hello<'m>(
     // but then act like the client sent no `server_name` extension.
     //
     // [RFC6066]: https://datatracker.ietf.org/doc/html/rfc6066#section-3
-    let sni: Option<DnsName<'_>> = match client_hello.sni_extension() {
+    let sni = match &client_hello.server_name {
         Some(ServerNamePayload::SingleDnsName(dns_name)) => Some(dns_name.to_lowercase_owned()),
         Some(ServerNamePayload::IpAddress) => None,
         Some(ServerNamePayload::Invalid) => {
@@ -732,7 +734,8 @@ pub(super) fn process_client_hello<'m>(
     }
 
     let sig_schemes = client_hello
-        .sigalgs_extension()
+        .signature_schemes
+        .as_ref()
         .ok_or_else(|| {
             cx.common.send_fatal_alert(
                 AlertDescription::HandshakeFailure,
