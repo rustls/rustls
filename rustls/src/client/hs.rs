@@ -31,8 +31,8 @@ use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType, PskKeyExchan
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HasServerExtensions, HelloRetryRequest, KeyShareEntry, ProtocolName, Random, ServerNamePayload,
-    SessionId, SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequest, KeyShareEntry, ProtocolName, Random, ServerNamePayload, SessionId,
+    SupportedProtocolVersions, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -338,7 +338,7 @@ fn emit_client_hello_for_retry(
         let mut shares = vec![KeyShareEntry::new(key_share.group(), key_share.pub_key())];
 
         if !retryreq
-            .map(|rr| rr.requested_key_share_group().is_some())
+            .map(|rr| rr.key_share.is_some())
             .unwrap_or_default()
         {
             // Only for the initial client hello, or a HRR that does not specify a kx group,
@@ -361,7 +361,7 @@ fn emit_client_hello_for_retry(
         exts.key_shares = Some(shares);
     }
 
-    if let Some(cookie) = retryreq.and_then(HelloRetryRequest::cookie) {
+    if let Some(cookie) = retryreq.and_then(|hrr| hrr.cookie.as_ref()) {
         exts.cookie = Some(cookie.clone());
     }
 
@@ -734,7 +734,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
 
         let server_version = if server_hello.legacy_version == TLSv1_2 {
             server_hello
-                .supported_versions()
+                .selected_version
                 .unwrap_or(server_hello.legacy_version)
         } else {
             server_hello.legacy_version
@@ -749,10 +749,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
                     return Err(PeerMisbehaved::OfferedEarlyDataWithOldProtocolVersion.into());
                 }
 
-                if server_hello
-                    .supported_versions()
-                    .is_some()
-                {
+                if server_hello.selected_version.is_some() {
                     return Err({
                         cx.common.send_fatal_alert(
                             AlertDescription::IllegalParameter,
@@ -783,18 +780,11 @@ impl State<ClientConnectionData> for ExpectServerHello {
             });
         }
 
-        if server_hello.has_duplicate_extension() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::DecodeError,
-                PeerMisbehaved::DuplicateServerHelloExtensions,
-            ));
-        }
-
         let allowed_unsolicited = [ExtensionType::RenegotiationInfo];
         if self
             .input
             .hello
-            .server_sent_unsolicited_extensions(&server_hello.extensions, &allowed_unsolicited)
+            .server_sent_unsolicited_extensions(server_hello, &allowed_unsolicited)
         {
             return Err(cx.common.send_fatal_alert(
                 AlertDescription::UnsupportedExtension,
@@ -809,13 +799,16 @@ impl State<ClientConnectionData> for ExpectServerHello {
             process_alpn_protocol(
                 cx.common,
                 &self.input.hello.alpn_protocols,
-                server_hello.alpn_protocol(),
+                server_hello
+                    .selected_protocol
+                    .as_ref()
+                    .map(|s| s.as_ref()),
             )?;
         }
 
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
-        if let Some(point_fmts) = server_hello.ecpoints_extension() {
+        if let Some(point_fmts) = &server_hello.ec_point_formats {
             if !point_fmts.contains(&ECPointFormat::Uncompressed) {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
@@ -961,9 +954,6 @@ impl ExpectServerHelloOrHelloRetryRequest {
 
         cx.common.check_aligned_handshake()?;
 
-        let cookie = hrr.cookie();
-        let req_group = hrr.requested_key_share_group();
-
         // We always send a key share when TLS 1.3 is enabled.
         let offered_key_share = self.next.offered_key_share.unwrap();
 
@@ -971,7 +961,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         // retry of a group we already sent.
         let config = &self.next.input.config;
 
-        if let (None, Some(req_group)) = (cookie, req_group) {
+        if let (None, Some(req_group)) = (&hrr.cookie, hrr.key_share) {
             let offered_hybrid = offered_key_share
                 .hybrid_component()
                 .and_then(|(group_name, _)| {
@@ -990,7 +980,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or has an empty cookie.
-        if let Some(cookie) = cookie {
+        if let Some(cookie) = &hrr.cookie {
             if cookie.0.is_empty() {
                 return Err({
                     cx.common.send_fatal_alert(
@@ -1001,26 +991,8 @@ impl ExpectServerHelloOrHelloRetryRequest {
             }
         }
 
-        // Or has something unrecognised
-        if hrr.has_unknown_extension() {
-            return Err(cx.common.send_fatal_alert(
-                AlertDescription::UnsupportedExtension,
-                PeerIncompatible::ServerSentHelloRetryRequestWithUnknownExtension,
-            ));
-        }
-
-        // Or has the same extensions more than once
-        if hrr.has_duplicate_extension() {
-            return Err({
-                cx.common.send_fatal_alert(
-                    AlertDescription::IllegalParameter,
-                    PeerMisbehaved::DuplicateHelloRetryRequestExtensions,
-                )
-            });
-        }
-
         // Or asks us to change nothing.
-        if cookie.is_none() && req_group.is_none() {
+        if hrr.cookie.is_none() && hrr.key_share.is_none() {
             return Err({
                 cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
@@ -1052,7 +1024,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         }
 
         // Or asks us to talk a protocol we didn't offer, or doesn't support HRR at all.
-        match hrr.supported_versions() {
+        match hrr.supported_versions {
             Some(ProtocolVersion::TLSv1_3) => {
                 cx.common.negotiated_version = Some(ProtocolVersion::TLSv1_3);
             }
@@ -1077,7 +1049,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
         };
 
         // Or offers ECH related extensions when we didn't offer ECH.
-        if cx.data.ech_status == EchStatus::NotOffered && hrr.ech().is_some() {
+        if cx.data.ech_status == EchStatus::NotOffered && hrr.encrypted_client_hello.is_some() {
             return Err({
                 cx.common.send_fatal_alert(
                     AlertDescription::UnsupportedExtension,
@@ -1125,7 +1097,7 @@ impl ExpectServerHelloOrHelloRetryRequest {
             cx.data.early_data.rejected();
         }
 
-        let key_share = match req_group {
+        let key_share = match hrr.key_share {
             Some(group) if group != offered_key_share.group() => {
                 let Some(skxg) = config.find_kx_group(group, ProtocolVersion::TLSv1_3) else {
                     return Err(cx.common.send_fatal_alert(

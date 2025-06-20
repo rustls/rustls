@@ -213,6 +213,7 @@ macro_rules! extension_struct {
             }
 
             /// Return a list of extensions whose items are `Some`
+            #[allow(dead_code)]
             pub(crate) fn collect_used(&self) -> Vec<ExtensionType> {
                 let mut r = Vec::with_capacity(Self::ALL_EXTENSIONS.len());
 
@@ -228,6 +229,7 @@ macro_rules! extension_struct {
             /// Clone the value of the extension identified by `typ` from `source` to `self`.
             ///
             /// Does nothing if `typ` is not an extension handled by this object.
+            #[allow(dead_code)]
             pub(crate) fn clone_one(
                 &mut self,
                 source: &Self,
@@ -242,12 +244,48 @@ macro_rules! extension_struct {
             }
 
             /// Remove the extension identified by `typ` from `self`.
+            #[allow(dead_code)]
             pub(crate) fn clear(&mut self, typ: ExtensionType) {
                 match typ {
                     $(
                         $item_id => self.$item_slot = None,
                     )*
                     _ => {},
+                }
+            }
+
+            /// Return true if all present extensions are named in `allowed`
+            #[allow(dead_code)]
+            pub(crate) fn only_contains(&self, allowed: &[ExtensionType]) -> bool {
+                $(
+                    if let Some(_) = &self.$item_slot {
+                        if !allowed.contains(&$item_id) {
+                            return false;
+                        }
+                    }
+                )*
+
+                true
+            }
+
+            /// Return true if any extension named in `exts` is present.
+            #[allow(dead_code)]
+            pub(crate) fn contains_any(&self, exts: &[ExtensionType]) -> bool {
+                for e in exts {
+                    if self.contains(*e) {
+                        return true;
+                    }
+                }
+                false
+            }
+
+            fn contains(&self, e: ExtensionType) -> bool {
+                match e {
+                    $(
+
+                        $item_id => self.$item_slot.is_some(),
+                    )*
+                    _ => false,
                 }
             }
 

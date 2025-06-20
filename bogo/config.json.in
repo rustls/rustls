@@ -270,8 +270,6 @@
     "TrailingKeyShareData-TLS13": ":BAD_HANDSHAKE_MSG:",
     "HelloRetryRequestCurveMismatch-TLS13": ":PEER_MISBEHAVIOUR:",
     "HelloRetryRequestVersionMismatch-TLS13": ":INCOMPATIBLE:",
-    "HelloRetryRequest-DuplicateCookie-TLS13": ":PEER_MISBEHAVIOUR:",
-    "HelloRetryRequest-DuplicateCurve-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnknownUnencryptedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnexpectedUnencryptedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
     "UnofferedExtension-Client-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -327,8 +325,6 @@
     "Server-TooLongSessionID-TLS13": ":BAD_HANDSHAKE_MSG:",
     "Server-TooLongSessionID-TLS12": ":BAD_HANDSHAKE_MSG:",
     "Client-TooLongSessionID": ":BAD_HANDSHAKE_MSG:",
-    "SendUnknownExtensionOnCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
-    "SendDuplicateExtensionsOnCerts-TLS13": ":PEER_MISBEHAVIOUR:",
     "EMS-Forbidden-TLS13": ":PEER_MISBEHAVIOUR:",
     "Unclean-Shutdown": ":CLOSE_WITHOUT_CLOSE_NOTIFY:",
     "SendExtensionOnClientCertificate-TLS13": ":PEER_MISBEHAVIOUR:",
@@ -342,7 +338,6 @@
     "ServerCipherFilter-Ed25519": ":INCOMPATIBLE:",
     "TLS13-OnlyPadding-TLS": ":PEER_MISBEHAVIOUR:",
     "TLS13-EmptyRecords-TLS": ":PEER_MISBEHAVIOUR:",
-    "TLS13-DuplicateTicketEarlyDataSupport": ":PEER_MISBEHAVIOUR:",
     "SupportedVersionSelection-TLS12": ":PEER_MISBEHAVIOUR:",
     "HelloRetryRequest-CipherChange-TLS13": ":PEER_MISBEHAVIOUR:",
     "CurveTest-Client-Compressed-P-256-TLS12": ":PEER_MISBEHAVIOUR:",
@@ -386,7 +381,11 @@
     "Downgrade-TLS10-Server": "remote error: protocol version not supported",
     "TrailingDataWithFinished-Client-TLS13": "local error: bad record MAC",
     "TrailingDataWithFinished-Resume-Client-TLS13": "local error: bad record MAC",
-    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter"
+    "SkipEarlyData-SecondClientHelloEarlyData-TLS13": "remote error: illegal parameter",
+    "DuplicateExtensionClient-TLS-TLS12": "remote error: illegal parameter",
+    "DuplicateExtensionClient-TLS-TLS13": "remote error: illegal parameter",
+    "DuplicateExtensionServer-TLS-TLS12": "remote error: illegal parameter",
+    "DuplicateExtensionServer-TLS-TLS13": "remote error: illegal parameter"
   },
   "HalfRTTTickets": 0
 }
