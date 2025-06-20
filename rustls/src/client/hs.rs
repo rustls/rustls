@@ -27,12 +27,12 @@ use crate::error::{Error, PeerIncompatible, PeerMisbehaved};
 use crate::hash_hs::HandshakeHashBuffer;
 use crate::log::{debug, trace};
 use crate::msgs::base::Payload;
-use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType, PskKeyExchangeMode};
+use crate::msgs::enums::{Compression, ExtensionType};
 use crate::msgs::handshake::{
     CertificateStatusRequest, ClientExtensions, ClientExtensionsInput, ClientHelloPayload,
     ClientSessionTicket, EncryptedClientHello, HandshakeMessagePayload, HandshakePayload,
-    HelloRetryRequest, KeyShareEntry, ProtocolName, Random, ServerNamePayload, SessionId,
-    SupportedProtocolVersions, TransportParameters,
+    HelloRetryRequest, KeyShareEntry, ProtocolName, PskKeyExchangeModes, Random, ServerNamePayload,
+    SessionId, SupportedEcPointFormats, SupportedProtocolVersions, TransportParameters,
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -309,7 +309,7 @@ fn emit_client_hello_for_retry(
         .iter()
         .any(|skxg| skxg.name().key_exchange_algorithm() == KeyExchangeAlgorithm::ECDHE)
     {
-        exts.ec_point_formats = Some(ECPointFormat::SUPPORTED.to_vec());
+        exts.ec_point_formats = Some(SupportedEcPointFormats::default());
     }
 
     exts.server_name = match (ech_state.as_ref(), config.enable_sni) {
@@ -368,8 +368,10 @@ fn emit_client_hello_for_retry(
     if supported_versions.tls13 {
         // We could support PSK_KE here too. Such connections don't
         // have forward secrecy, and are similar to TLS1.2 resumption.
-        let psk_modes = vec![PskKeyExchangeMode::PSK_DHE_KE];
-        exts.preshared_key_modes = Some(psk_modes);
+        exts.preshared_key_modes = Some(PskKeyExchangeModes {
+            psk: false,
+            psk_dhe: true,
+        });
     }
 
     input.hello.offered_cert_compression =
@@ -809,7 +811,7 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // If ECPointFormats extension is supplied by the server, it must contain
         // Uncompressed.  But it's allowed to be omitted.
         if let Some(point_fmts) = &server_hello.ec_point_formats {
-            if !point_fmts.contains(&ECPointFormat::Uncompressed) {
+            if !point_fmts.uncompressed {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::HandshakeFailure,
                     PeerMisbehaved::ServerHelloMustOfferUncompressedEcPoints,

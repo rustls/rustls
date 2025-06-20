@@ -21,7 +21,9 @@ use crate::error::InvalidMessage;
 use crate::ffdhe_groups::FfdheGroup;
 use crate::log::warn;
 use crate::msgs::base::{MaybeEmpty, NonEmpty, Payload, PayloadU8, PayloadU16, PayloadU24};
-use crate::msgs::codec::{self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement};
+use crate::msgs::codec::{
+    self, Codec, LengthPrefixedBuffer, ListLength, Reader, TlsListElement, TlsListIter,
+};
 use crate::msgs::enums::{
     CertificateStatusType, ClientCertificateType, Compression, ECCurveType, ECPointFormat,
     EchVersion, ExtensionType, HpkeAead, HpkeKdf, HpkeKem, KeyUpdateRequest, NamedGroup,
@@ -204,6 +206,39 @@ impl UnknownExtension {
     fn read(typ: ExtensionType, r: &mut Reader<'_>) -> Self {
         let payload = Payload::read(r).into_owned();
         Self { typ, payload }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SupportedEcPointFormats {
+    pub(crate) uncompressed: bool,
+}
+
+impl Codec<'_> for SupportedEcPointFormats {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let inner = LengthPrefixedBuffer::new(ECPointFormat::SIZE_LEN, bytes);
+
+        if self.uncompressed {
+            ECPointFormat::Uncompressed.encode(inner.buf);
+        }
+    }
+
+    fn read(r: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let mut uncompressed = false;
+
+        for pf in TlsListIter::<ECPointFormat>::new(r)? {
+            if let ECPointFormat::Uncompressed = pf? {
+                uncompressed = true;
+            }
+        }
+
+        Ok(Self { uncompressed })
+    }
+}
+
+impl Default for SupportedEcPointFormats {
+    fn default() -> Self {
+        Self { uncompressed: true }
     }
 }
 
@@ -608,6 +643,39 @@ impl CertificateStatusRequest {
 // ---
 
 /// RFC8446: `PskKeyExchangeMode ke_modes<1..255>;`
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PskKeyExchangeModes {
+    pub(crate) psk_dhe: bool,
+    pub(crate) psk: bool,
+}
+
+impl Codec<'_> for PskKeyExchangeModes {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let inner = LengthPrefixedBuffer::new(PskKeyExchangeMode::SIZE_LEN, bytes);
+        if self.psk_dhe {
+            PskKeyExchangeMode::PSK_DHE_KE.encode(inner.buf);
+        }
+        if self.psk {
+            PskKeyExchangeMode::PSK_KE.encode(inner.buf);
+        }
+    }
+
+    fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
+        let mut psk_dhe = false;
+        let mut psk = false;
+
+        for ke in TlsListIter::<PskKeyExchangeMode>::new(reader)? {
+            match ke? {
+                PskKeyExchangeMode::PSK_DHE_KE => psk_dhe = true,
+                PskKeyExchangeMode::PSK_KE => psk = true,
+                _ => continue,
+            };
+        }
+
+        Ok(Self { psk_dhe, psk })
+    }
+}
+
 impl TlsListElement for PskKeyExchangeMode {
     const SIZE_LEN: ListLength = ListLength::NonZeroU8 {
         empty_error: InvalidMessage::IllegalEmptyList("PskKeyExchangeModes"),
@@ -661,14 +729,11 @@ impl Codec<'_> for SupportedProtocolVersions {
     }
 
     fn read(reader: &mut Reader<'_>) -> Result<Self, InvalidMessage> {
-        let len = Self::LIST_LENGTH.read(reader)?;
-        let mut sub = reader.sub(len)?;
-
         let mut tls12 = false;
         let mut tls13 = false;
 
-        while sub.any_left() {
-            match ProtocolVersion::read(&mut sub)? {
+        for pv in TlsListIter::<ProtocolVersion>::new(reader)? {
+            match pv? {
                 ProtocolVersion::TLSv1_3 => tls13 = true,
                 ProtocolVersion::TLSv1_2 => tls12 = true,
                 _ => continue,
@@ -787,7 +852,7 @@ extension_struct! {
 
         /// Supported EC point formats (RFC4492)
         ExtensionType::ECPointFormats =>
-            pub(crate) ec_point_formats: Option<Vec<ECPointFormat>>,
+            pub(crate) ec_point_formats: Option<SupportedEcPointFormats>,
 
         /// Supported signature schemes (RFC5246/RFC8446)
         ExtensionType::SignatureAlgorithms =>
@@ -835,7 +900,7 @@ extension_struct! {
 
         /// Offered preshared key modes (RFC8446)
         ExtensionType::PSKKeyExchangeModes =>
-            pub(crate) preshared_key_modes: Option<Vec<PskKeyExchangeMode>>,
+            pub(crate) preshared_key_modes: Option<PskKeyExchangeModes>,
 
         /// Certificate authority names (RFC8446)
         ExtensionType::CertificateAuthorities =>
@@ -1078,7 +1143,7 @@ extension_struct! {
     pub(crate) struct ServerExtensions<'a> {
         /// Supported EC point formats (RFC4492)
         ExtensionType::ECPointFormats =>
-            pub(crate) ec_point_formats: Option<Vec<ECPointFormat>>,
+            pub(crate) ec_point_formats: Option<SupportedEcPointFormats>,
 
         /// Server name indication acknowledgement (RFC6066)
         ExtensionType::ServerName =>

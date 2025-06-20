@@ -6,8 +6,7 @@ use pki_types::{CertificateDer, DnsName};
 use super::base::{Payload, PayloadU8, PayloadU16, PayloadU24};
 use super::codec::{Codec, Reader, put_u16};
 use super::enums::{
-    ClientCertificateType, Compression, ECCurveType, ECPointFormat, ExtensionType,
-    KeyUpdateRequest, NamedGroup, PskKeyExchangeMode,
+    ClientCertificateType, Compression, ECCurveType, ExtensionType, KeyUpdateRequest, NamedGroup,
 };
 use super::handshake::{
     CertificateChain, CertificateEntry, CertificateExtensions, CertificatePayloadTls13,
@@ -17,10 +16,11 @@ use super::handshake::{
     EncryptedClientHello, HandshakeMessagePayload, HandshakePayload, HelloRetryRequest,
     HelloRetryRequestExtensions, KeyShareEntry, NewSessionTicketExtensions,
     NewSessionTicketPayload, NewSessionTicketPayloadTls13, PresharedKeyBinder,
-    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, Random, ServerDhParams,
-    ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions, ServerHelloPayload,
-    ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload, ServerNamePayload,
-    SessionId, SingleProtocolName, SupportedProtocolVersions,
+    PresharedKeyIdentity, PresharedKeyOffer, ProtocolName, PskKeyExchangeModes, Random,
+    ServerDhParams, ServerEcdhParams, ServerEncryptedClientHello, ServerExtensions,
+    ServerHelloPayload, ServerKeyExchange, ServerKeyExchangeParams, ServerKeyExchangePayload,
+    ServerNamePayload, SessionId, SingleProtocolName, SupportedEcPointFormats,
+    SupportedProtocolVersions,
 };
 use crate::enums::{
     CertificateCompressionAlgorithm, CertificateType, CipherSuite, HandshakeType, ProtocolVersion,
@@ -779,7 +779,7 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
             cookie: Some(PayloadU16::new(vec![1, 2, 3])),
             signature_schemes: Some(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
             session_ticket: Some(ClientSessionTicket::Request),
-            ec_point_formats: Some(ECPointFormat::SUPPORTED.to_vec()),
+            ec_point_formats: Some(SupportedEcPointFormats::default()),
             named_groups: Some(vec![NamedGroup::X25519]),
             protocols: Some(vec![ProtocolName::from(vec![0])]),
             supported_versions: Some(SupportedProtocolVersions {
@@ -787,7 +787,10 @@ fn sample_client_hello_payload() -> ClientHelloPayload {
                 ..Default::default()
             }),
             key_shares: Some(vec![KeyShareEntry::new(NamedGroup::X25519, &[1, 2, 3][..])]),
-            preshared_key_modes: Some(vec![PskKeyExchangeMode::PSK_DHE_KE]),
+            preshared_key_modes: Some(PskKeyExchangeModes {
+                psk_dhe: true,
+                psk: false,
+            }),
             preshared_key_offer: Some(PresharedKeyOffer {
                 identities: vec![
                     PresharedKeyIdentity::new(vec![3, 4, 5], 123456),
@@ -820,7 +823,7 @@ fn sample_server_hello_payload() -> ServerHelloPayload {
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: Box::new(ServerExtensions {
-            ec_point_formats: Some(ECPointFormat::SUPPORTED.to_vec()),
+            ec_point_formats: Some(SupportedEcPointFormats::default()),
             server_name_ack: Some(()),
             session_ticket_ack: Some(()),
             renegotiation_info: Some(PayloadU8::new(vec![0])),

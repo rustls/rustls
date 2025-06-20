@@ -40,7 +40,7 @@ mod client_hello {
     use crate::common_state::KxState;
     use crate::crypto::SupportedKxGroup;
     use crate::enums::SignatureScheme;
-    use crate::msgs::enums::{ClientCertificateType, Compression, ECPointFormat};
+    use crate::msgs::enums::{ClientCertificateType, Compression};
     use crate::msgs::handshake::{
         CertificateRequestPayload, CertificateStatus, ClientHelloPayload, ClientSessionTicket,
         Random, ServerExtensionsInput, ServerHelloPayload, ServerKeyExchange,
@@ -90,14 +90,13 @@ mod client_hello {
             // it means that only the uncompressed point format is
             // supported"
             // - <https://datatracker.ietf.org/doc/html/rfc8422#section-5.1.2>
-            let ecpoints_ext = client_hello
+            let supported_ec_point_formats = client_hello
                 .ec_point_formats
-                .as_deref()
-                .unwrap_or(&[ECPointFormat::Uncompressed]);
+                .unwrap_or_default();
 
-            trace!("ecpoints {ecpoints_ext:?}");
+            trace!("ecpoints {supported_ec_point_formats:?}");
 
-            if !ecpoints_ext.contains(&ECPointFormat::Uncompressed) {
+            if !supported_ec_point_formats.uncompressed {
                 return Err(cx.common.send_fatal_alert(
                     AlertDescription::IllegalParameter,
                     PeerIncompatible::UncompressedEcPointsRequired,
@@ -172,19 +171,6 @@ mod client_hello {
                     PeerIncompatible::NoSignatureSchemesInCommon,
                 ));
             }
-
-            let ecpoint = ECPointFormat::SUPPORTED
-                .iter()
-                .find(|format| ecpoints_ext.contains(format))
-                .cloned()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NoEcPointFormatsInCommon,
-                    )
-                })?;
-
-            debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
 
             let mut ocsp_response = server_key.get_ocsp();
 
