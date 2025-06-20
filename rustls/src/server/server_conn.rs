@@ -154,10 +154,8 @@ impl<'a> ClientHello<'a> {
     /// Get the server name indicator.
     ///
     /// Returns `None` if the client did not supply a SNI.
-    pub fn server_name(&self) -> Option<&str> {
-        self.server_name
-            .as_ref()
-            .map(<DnsName<'_> as AsRef<str>>::as_ref)
+    pub fn server_name(&self) -> Option<&DnsName<'_>> {
+        self.server_name.as_ref()
     }
 
     /// Get the compatible signature schemes.

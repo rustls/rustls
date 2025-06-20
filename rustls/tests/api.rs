@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{fmt, mem};
 
-use pki_types::{CertificateDer, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
+use pki_types::{CertificateDer, DnsName, IpAddr, ServerName, SubjectPublicKeyInfoDer, UnixTime};
 use rustls::client::{ResolvesClientCert, Resumption, verify_server_cert_signed_by_trust_anchor};
 use rustls::crypto::{ActiveKeyExchange, CryptoProvider, SharedSecret, SupportedKxGroup};
 use rustls::internal::msgs::base::Payload;
@@ -33,7 +33,7 @@ use rustls::{
     internal::msgs::handshake::{
         EchConfigContents, EchConfigPayload, HpkeKeyConfig, HpkeSymmetricCipherSuite,
     },
-    pki_types::{DnsName, EchConfigListBytes},
+    pki_types::EchConfigListBytes,
 };
 use webpki::anchor_from_trusted_cert;
 
@@ -1151,7 +1151,7 @@ fn build_alert(level: AlertLevel, desc: AlertDescription, suffix: &[u8]) -> Vec<
 
 #[derive(Default, Debug)]
 struct ServerCheckCertResolve {
-    expected_sni: Option<String>,
+    expected_sni: Option<DnsName<'static>>,
     expected_sigalgs: Option<Vec<SignatureScheme>>,
     expected_alpn: Option<Vec<Vec<u8>>>,
     expected_cipher_suites: Option<Vec<CipherSuite>>,
@@ -1174,7 +1174,7 @@ impl ResolvesServerCert for ServerCheckCertResolve {
         }
 
         if let Some(expected_sni) = &self.expected_sni {
-            let sni: &str = client_hello
+            let sni = client_hello
                 .server_name()
                 .expect("sni unexpectedly absent");
             assert_eq!(expected_sni, sni);
@@ -1249,12 +1249,12 @@ fn server_cert_resolve_with_sni() {
         let mut server_config = make_server_config(*kt, &provider);
 
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
-            expected_sni: Some("the-value-from-sni".into()),
+            expected_sni: Some(DnsName::try_from("the.value.from.sni").unwrap()),
             ..Default::default()
         });
 
         let mut client =
-            ClientConnection::new(Arc::new(client_config), server_name("the-value-from-sni"))
+            ClientConnection::new(Arc::new(client_config), server_name("the.value.from.sni"))
                 .unwrap();
         let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
 
@@ -1317,7 +1317,7 @@ fn client_trims_terminating_dot() {
         let mut server_config = make_server_config(*kt, &provider);
 
         server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
-            expected_sni: Some("some-host.com".into()),
+            expected_sni: Some(DnsName::try_from("some-host.com").unwrap()),
             ..Default::default()
         });
 
@@ -3318,7 +3318,7 @@ fn sni_resolver_works() {
     let signing_key: Arc<dyn sign::SigningKey> = Arc::new(signing_key);
     resolver
         .add(
-            "localhost",
+            DnsName::try_from("localhost").unwrap(),
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone()),
         )
         .unwrap();
@@ -3361,7 +3361,7 @@ fn sni_resolver_rejects_wrong_names() {
     assert_eq!(
         Ok(()),
         resolver.add(
-            "localhost",
+            DnsName::try_from("localhost").unwrap(),
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
@@ -3370,14 +3370,7 @@ fn sni_resolver_rejects_wrong_names() {
             "not-localhost"
         ))),
         resolver.add(
-            "not-localhost",
-            sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
-        )
-    );
-    assert_eq!(
-        Err(Error::General("Bad DNS name".into())),
-        resolver.add(
-            "not ascii 🦀",
+            DnsName::try_from("not-localhost").unwrap(),
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
@@ -3410,7 +3403,7 @@ fn sni_resolver_lower_cases_configured_names() {
     assert_eq!(
         Ok(()),
         resolver.add(
-            "LOCALHOST",
+            DnsName::try_from("LOCALHOST").unwrap(),
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
@@ -3441,7 +3434,7 @@ fn sni_resolver_lower_cases_queried_names() {
     assert_eq!(
         Ok(()),
         resolver.add(
-            "localhost",
+            DnsName::try_from("localhost").unwrap(),
             sign::CertifiedKey::new(kt.get_chain(), signing_key.clone())
         )
     );
@@ -3470,7 +3463,7 @@ fn sni_resolver_rejects_bad_certs() {
     assert_eq!(
         Err(Error::NoCertificatesPresented),
         resolver.add(
-            "localhost",
+            DnsName::try_from("localhost").unwrap(),
             sign::CertifiedKey::new(vec![], signing_key.clone())
         )
     );
@@ -3479,7 +3472,7 @@ fn sni_resolver_rejects_bad_certs() {
     assert_eq!(
         Err(Error::InvalidCertificate(CertificateError::BadEncoding)),
         resolver.add(
-            "localhost",
+            DnsName::try_from("localhost").unwrap(),
             sign::CertifiedKey::new(bad_chain, signing_key.clone())
         )
     );
@@ -6260,7 +6253,10 @@ fn test_acceptor() {
         .unwrap();
     let accepted = acceptor.accept().unwrap().unwrap();
     let ch = accepted.client_hello();
-    assert_eq!(ch.server_name(), Some("localhost"));
+    assert_eq!(
+        ch.server_name(),
+        Some(&DnsName::try_from("localhost").unwrap())
+    );
     assert_eq!(
         ch.named_groups().unwrap(),
         provider::default_provider()
@@ -6373,7 +6369,10 @@ fn test_acceptor_rejected_handshake() {
         .unwrap();
     let accepted = acceptor.accept().unwrap().unwrap();
     let ch = accepted.client_hello();
-    assert_eq!(ch.server_name(), Some("localhost"));
+    assert_eq!(
+        ch.server_name(),
+        Some(&DnsName::try_from("localhost").unwrap())
+    );
 
     let (err, mut alert) = accepted
         .into_connection(server_config.into())
