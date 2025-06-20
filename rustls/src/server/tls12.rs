@@ -173,19 +173,6 @@ mod client_hello {
                 ));
             }
 
-            let ecpoint = ECPointFormat::SUPPORTED
-                .iter()
-                .find(|format| ecpoints_ext.contains(format))
-                .cloned()
-                .ok_or_else(|| {
-                    cx.common.send_fatal_alert(
-                        AlertDescription::HandshakeFailure,
-                        PeerIncompatible::NoEcPointFormatsInCommon,
-                    )
-                })?;
-
-            debug_assert_eq!(ecpoint, ECPointFormat::Uncompressed);
-
             let mut ocsp_response = server_key.get_ocsp();
 
             // If we're not offered a ticket or a potential session ID, allocate a session ID.
