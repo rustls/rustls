@@ -192,7 +192,6 @@ impl server::ResolvesServerCert for AlwaysResolvesServerRawPublicKeys {
 
 #[cfg(any(feature = "std", feature = "hashbrown"))]
 mod sni_resolver {
-    use alloc::string::{String, ToString};
     use core::fmt::Debug;
 
     use pki_types::{DnsName, ServerName};
@@ -208,7 +207,7 @@ mod sni_resolver {
     /// on client-supplied server name (via SNI).
     #[derive(Debug)]
     pub struct ResolvesServerCertUsingSni {
-        by_name: HashMap<String, Arc<sign::CertifiedKey>>,
+        by_name: HashMap<DnsName<'static>, Arc<sign::CertifiedKey>>,
     }
 
     impl ResolvesServerCertUsingSni {
@@ -221,17 +220,9 @@ mod sni_resolver {
 
         /// Add a new `sign::CertifiedKey` to be used for the given SNI `name`.
         ///
-        /// This function fails if `name` is not a valid DNS name, or if
-        /// it's not valid for the supplied certificate, or if the certificate
-        /// chain is syntactically faulty.
-        pub fn add(&mut self, name: &str, ck: sign::CertifiedKey) -> Result<(), Error> {
-            let server_name = {
-                let checked_name = DnsName::try_from(name)
-                    .map_err(|_| Error::General("Bad DNS name".into()))
-                    .map(|name| name.to_lowercase_owned())?;
-                ServerName::DnsName(checked_name)
-            };
-
+        /// This function fails if the `name` is not valid for the supplied certificate, or if
+        /// the certificate chain is syntactically faulty.
+        pub fn add(&mut self, name: DnsName<'static>, ck: sign::CertifiedKey) -> Result<(), Error> {
             // Check the certificate chain for validity:
             // - it should be non-empty list
             // - the first certificate should be parsable as a x509v3,
@@ -241,14 +232,16 @@ mod sni_resolver {
             // These checks are not security-sensitive.  They are the
             // *server* attempting to detect accidental misconfiguration.
 
+            let wrapped = ServerName::DnsName(name);
             ck.end_entity_cert()
                 .and_then(ParsedCertificate::try_from)
-                .and_then(|cert| verify_server_name(&cert, &server_name))?;
+                .and_then(|cert| verify_server_name(&cert, &wrapped))?;
 
-            if let ServerName::DnsName(name) = server_name {
-                self.by_name
-                    .insert(name.as_ref().to_string(), Arc::new(ck));
-            }
+            let ServerName::DnsName(name) = wrapped else {
+                unreachable!()
+            };
+
+            self.by_name.insert(name, Arc::new(ck));
             Ok(())
         }
     }
