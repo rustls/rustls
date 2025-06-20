@@ -587,6 +587,8 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
+    use pki_types::DnsName;
+
     use super::{
         Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData,
         ServerExtensionsInput,
@@ -660,8 +662,8 @@ mod connection {
         /// when the client provides the SNI extension.
         ///
         /// The server name is also used to match sessions during session resumption.
-        pub fn server_name(&self) -> Option<&str> {
-            self.inner.core.get_sni_str()
+        pub fn server_name(&self) -> Option<&DnsName<'_>> {
+            self.inner.core.data.sni.as_ref()
         }
 
         /// Application-controlled portion of the resumption ticket supplied by the client, if any.
@@ -1229,27 +1231,15 @@ impl ConnectionCore<ServerConnectionData> {
         );
         self.data.early_data.reject();
     }
-
-    #[cfg(feature = "std")]
-    pub(crate) fn get_sni_str(&self) -> Option<&str> {
-        self.data.get_sni_str()
-    }
 }
 
 /// State associated with a server connection.
 #[derive(Default, Debug)]
 pub struct ServerConnectionData {
-    pub(super) sni: Option<DnsName<'static>>,
+    pub(crate) sni: Option<DnsName<'static>>,
     pub(super) received_resumption_data: Option<Vec<u8>>,
     pub(super) resumption_data: Vec<u8>,
     pub(super) early_data: EarlyDataState,
-}
-
-impl ServerConnectionData {
-    #[cfg(feature = "std")]
-    pub(super) fn get_sni_str(&self) -> Option<&str> {
-        self.sni.as_ref().map(AsRef::as_ref)
-    }
 }
 
 impl crate::conn::SideData for ServerConnectionData {}

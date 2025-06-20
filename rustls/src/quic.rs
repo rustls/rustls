@@ -21,7 +21,7 @@ mod connection {
     use core::fmt::{self, Debug};
     use core::ops::{Deref, DerefMut};
 
-    use pki_types::ServerName;
+    use pki_types::{DnsName, ServerName};
 
     use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
@@ -321,8 +321,8 @@ mod connection {
         /// when the client provides the SNI extension.
         ///
         /// The server name is also used to match sessions during session resumption.
-        pub fn server_name(&self) -> Option<&str> {
-            self.inner.core.get_sni_str()
+        pub fn server_name(&self) -> Option<&DnsName<'_>> {
+            self.inner.core.data.sni.as_ref()
         }
     }
 
