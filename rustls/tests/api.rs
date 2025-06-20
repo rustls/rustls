@@ -3255,7 +3255,10 @@ fn server_exposes_offered_sni() {
 
         assert_eq!(None, server.server_name());
         do_handshake(&mut client, &mut server);
-        assert_eq!(Some("second.testserver.com"), server.server_name());
+        assert_eq!(
+            Some(&DnsName::try_from("second.testserver.com").unwrap()),
+            server.server_name()
+        );
     }
 }
 
@@ -3276,7 +3279,10 @@ fn server_exposes_offered_sni_smashed_to_lowercase() {
 
         assert_eq!(None, server.server_name());
         do_handshake(&mut client, &mut server);
-        assert_eq!(Some("second.testserver.com"), server.server_name());
+        assert_eq!(
+            Some(&DnsName::try_from("second.testserver.com").unwrap()),
+            server.server_name()
+        );
     }
 }
 
@@ -3305,7 +3311,10 @@ fn server_exposes_offered_sni_even_if_resolver_fails() {
                 "no server certificate chain resolved".to_string()
             ))
         );
-        assert_eq!(Some("thisdoesnotexist.com"), server.server_name());
+        assert_eq!(
+            Some(&DnsName::try_from("thisdoesnotexist.com").unwrap()),
+            server.server_name()
+        );
     }
 }
 
