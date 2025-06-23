@@ -337,6 +337,10 @@ mod tests {
             todo!()
         }
 
+        fn request_ocsp_response(&self) -> bool {
+            false
+        }
+
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             vec![SignatureScheme::ECDSA_SHA1_Legacy]
         }
@@ -533,6 +537,10 @@ mod tests {
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             vec![SignatureScheme::RSA_PKCS1_SHA1]
         }
+
+        fn request_ocsp_response(&self) -> bool {
+            false
+        }
     }
 
     #[derive(Debug)]
@@ -573,6 +581,10 @@ mod tests {
 
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             vec![SignatureScheme::RSA_PKCS1_SHA1]
+        }
+
+        fn request_ocsp_response(&self) -> bool {
+            false
         }
 
         fn requires_raw_public_keys(&self) -> bool {

@@ -402,6 +402,10 @@ mod danger {
                 .signature_verification_algorithms
                 .supported_schemes()
         }
+
+        fn request_ocsp_response(&self) -> bool {
+            false
+        }
     }
 }
 

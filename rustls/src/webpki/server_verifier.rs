@@ -4,7 +4,6 @@ use pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTi
 use webpki::{CertRevocationList, ExpirationPolicy, RevocationCheckDepth, UnknownStatusPolicy};
 
 use crate::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
-use crate::log::trace;
 use crate::sync::Arc;
 use crate::verify::{
     DigitallySignedStruct, HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
@@ -234,7 +233,7 @@ impl ServerCertVerifier for WebPkiServerVerifier {
         end_entity: &CertificateDer<'_>,
         intermediates: &[CertificateDer<'_>],
         server_name: &ServerName<'_>,
-        ocsp_response: &[u8],
+        _ocsp_response: &[u8],
         now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
         let cert = ParsedCertificate::try_from(end_entity)?;
@@ -269,10 +268,6 @@ impl ServerCertVerifier for WebPkiServerVerifier {
             self.supported.all,
         )?;
 
-        if !ocsp_response.is_empty() {
-            trace!("Unvalidated OCSP response: {:?}", ocsp_response.to_vec());
-        }
-
         verify_server_name(&cert, server_name)?;
         Ok(ServerCertVerified::assertion())
     }
@@ -297,6 +292,10 @@ impl ServerCertVerifier for WebPkiServerVerifier {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.supported.supported_schemes()
+    }
+
+    fn request_ocsp_response(&self) -> bool {
+        false
     }
 }
 
