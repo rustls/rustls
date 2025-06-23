@@ -279,8 +279,13 @@ fn emit_client_hello_for_retry(
                 .supported_verify_schemes(),
         ),
         ClientExtension::ExtendedMasterSecretRequest,
-        ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
     ];
+
+    if config.verifier.request_ocsp_response() {
+        exts.push(ClientExtension::CertificateStatusRequest(
+            CertificateStatusRequest::build_ocsp(),
+        ));
+    }
 
     if supported_versions.tls13 {
         if let Some(cas_extension) = config.verifier.root_hint_subjects() {

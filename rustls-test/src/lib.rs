@@ -1169,6 +1169,10 @@ impl ServerCertVerifier for MockServerVerifier {
         self.signature_schemes.clone()
     }
 
+    fn request_ocsp_response(&self) -> bool {
+        self.expected_ocsp_response.is_some()
+    }
+
     fn requires_raw_public_keys(&self) -> bool {
         self.requires_raw_public_keys
     }
