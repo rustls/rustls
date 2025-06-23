@@ -548,7 +548,7 @@ fn emit_client_hello_for_retry(
             tls13::derive_early_traffic_secret(
                 &*config.key_log,
                 cx,
-                resuming_suite,
+                resuming_suite.common.hash_provider,
                 &schedule,
                 &mut input.sent_tls13_fake_ccs,
                 transcript_buffer,
