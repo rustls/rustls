@@ -6,7 +6,7 @@ use pki_types::ServerName;
 use subtle::ConstantTimeEq;
 
 use super::client_conn::ClientConnectionData;
-use super::hs::ClientContext;
+use super::hs::{ClientContext, ClientHelloInput, ClientSessionValue};
 use crate::check::inappropriate_handshake_message;
 use crate::client::common::{ClientAuthDetails, ClientHelloDetails, ServerCertDetails};
 use crate::client::ech::{self, EchState, EchStatus};
@@ -35,7 +35,7 @@ use crate::msgs::handshake::{
     ServerHelloPayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
+use crate::msgs::persist::{self, Retrieved};
 use crate::sign::{CertifiedKey, Signer};
 use crate::suites::PartiallyExtractedSecrets;
 use crate::sync::Arc;
@@ -68,20 +68,16 @@ static DISALLOWED_TLS13_EXTS: &[ExtensionType] = &[
 /// `early_data_key_schedule` is `Some` if we sent the
 /// "early_data" extension to the server.
 pub(super) fn handle_server_hello(
-    config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
     server_hello: &ServerHelloPayload,
-    mut resuming_session: Option<persist::Tls13ClientSessionValue>,
-    server_name: ServerName<'static>,
     mut randoms: ConnectionRandoms,
     suite: &'static Tls13CipherSuite,
     mut transcript: HandshakeHash,
     early_data_key_schedule: Option<KeyScheduleEarly>,
-    mut hello: ClientHelloDetails,
     our_key_share: Box<dyn ActiveKeyExchange>,
-    mut sent_tls13_fake_ccs: bool,
     server_hello_msg: &Message<'_>,
     ech_state: Option<EchState>,
+    input: ClientHelloInput,
 ) -> hs::NextStateOrError<'static> {
     validate_server_hello(cx.common, server_hello)?;
 
@@ -94,6 +90,23 @@ pub(super) fn handle_server_hello(
                 PeerMisbehaved::MissingKeyShare,
             )
         })?;
+
+    let ClientHelloInput {
+        config,
+        resuming,
+        mut sent_tls13_fake_ccs,
+        mut hello,
+        server_name,
+        ..
+    } = input;
+
+    let mut resuming_session = match resuming {
+        Some(Retrieved {
+            value: ClientSessionValue::Tls13(value),
+            ..
+        }) => Some(value),
+        _ => None,
+    };
 
     let our_key_share = KeyExchangeChoice::new(&config, cx, our_key_share, their_key_share)
         .map_err(|_| {
@@ -348,7 +361,7 @@ pub(super) fn fill_in_psk_binder(
 pub(super) fn prepare_resumption(
     config: &ClientConfig,
     cx: &mut ClientContext<'_>,
-    resuming_session: &persist::Retrieved<&persist::Tls13ClientSessionValue>,
+    resuming_session: &Retrieved<&persist::Tls13ClientSessionValue>,
     exts: &mut ClientExtensions<'_>,
     doing_retry: bool,
 ) {
