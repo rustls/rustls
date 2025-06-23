@@ -143,6 +143,10 @@ mod client {
             self.supported_algs.supported_schemes()
         }
 
+        fn request_ocsp_response(&self) -> bool {
+            false
+        }
+
         fn requires_raw_public_keys(&self) -> bool {
             true
         }

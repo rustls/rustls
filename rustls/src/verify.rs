@@ -75,6 +75,9 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     /// were sent as part of the server's [Certificate] message. It is in the
     /// same order that the server sent them and may be empty.
     ///
+    /// `ocsp_response` is empty if no OCSP response was received, and that also
+    /// covers the case where `request_ocsp_response()` returns false.
+    ///
     /// Note that none of the certificates have been parsed yet, so it is the responsibility of
     /// the implementer to handle invalid data. It is recommended that the implementer returns
     /// [`Error::InvalidCertificate(CertificateError::BadEncoding)`] when these cases are encountered.
@@ -137,6 +140,12 @@ pub trait ServerCertVerifier: Debug + Send + Sync {
     ///
     /// This should be in priority order, with the most preferred first.
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme>;
+
+    /// Return true if this verifier will process stapled OCSP responses.
+    ///
+    /// This controls whether a client will ask the server for a stapled OCSP response.
+    /// There is no guarantee the server will provide one.
+    fn request_ocsp_response(&self) -> bool;
 
     /// Returns whether this verifier requires raw public keys as defined
     /// in [RFC 7250](https://tools.ietf.org/html/rfc7250).

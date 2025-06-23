@@ -230,7 +230,10 @@ fn emit_client_hello_for_retry(
                 .supported_verify_schemes(),
         ),
         extended_master_secret_request: Some(()),
-        certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
+        certificate_status_request: match config.verifier.request_ocsp_response() {
+            true => Some(CertificateStatusRequest::build_ocsp()),
+            false => None,
+        },
         protocols: extra_exts.protocols.clone(),
         ..Default::default()
     });
