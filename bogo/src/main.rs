@@ -466,6 +466,10 @@ impl ServerCertVerifier for DummyServerAuth {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.parent.supported_verify_schemes()
     }
+
+    fn request_ocsp_response(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug)]

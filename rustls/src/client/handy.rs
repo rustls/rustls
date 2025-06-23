@@ -367,6 +367,11 @@ mod tests {
         fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
             unreachable!()
         }
+
+        #[cfg_attr(coverage_nightly, coverage(off))]
+        fn request_ocsp_response(&self) -> bool {
+            unreachable!()
+        }
     }
 
     #[derive(Debug)]
