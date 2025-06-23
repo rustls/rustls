@@ -397,6 +397,10 @@ impl ClientConfig {
         danger::DangerousClientConfig { cfg: self }
     }
 
+    pub(super) fn needs_key_share(&self) -> bool {
+        self.supports_version(ProtocolVersion::TLSv1_3)
+    }
+
     /// We support a given TLS version if it's quoted in the configured
     /// versions *and* at least one ciphersuite for this version is
     /// also configured.

@@ -114,7 +114,7 @@ pub(super) fn start_handshake(
 
     let mut resuming = find_session(&server_name, &config, cx);
 
-    let key_share = if config.supports_version(ProtocolVersion::TLSv1_3) {
+    let key_share = if config.needs_key_share() {
         Some(tls13::initial_key_share(
             &config,
             &server_name,
