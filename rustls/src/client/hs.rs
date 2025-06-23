@@ -221,17 +221,17 @@ struct ExpectServerHelloOrHelloRetryRequest {
     extra_exts: ClientExtensionsInput<'static>,
 }
 
-struct ClientHelloInput {
-    config: Arc<ClientConfig>,
-    resuming: Option<persist::Retrieved<ClientSessionValue>>,
-    random: Random,
+pub(super) struct ClientHelloInput {
+    pub(super) config: Arc<ClientConfig>,
+    pub(super) resuming: Option<persist::Retrieved<ClientSessionValue>>,
+    pub(super) random: Random,
     #[cfg(feature = "tls12")]
-    using_ems: bool,
-    sent_tls13_fake_ccs: bool,
-    hello: ClientHelloDetails,
-    session_id: SessionId,
-    server_name: ServerName<'static>,
-    prev_ech_ext: Option<EncryptedClientHello>,
+    pub(super) using_ems: bool,
+    pub(super) sent_tls13_fake_ccs: bool,
+    pub(super) hello: ClientHelloDetails,
+    pub(super) session_id: SessionId,
+    pub(super) server_name: ServerName<'static>,
+    pub(super) prev_ech_ext: Option<EncryptedClientHello>,
 }
 
 /// Emits the initial ClientHello or a ClientHello in response to
@@ -861,32 +861,18 @@ impl State<ClientConnectionData> for ExpectServerHello {
         // handshake_traffic_secret.
         match suite {
             SupportedCipherSuite::Tls13(suite) => {
-                #[allow(clippy::bind_instead_of_map)]
-                let resuming_session = self
-                    .input
-                    .resuming
-                    .and_then(|resuming| match resuming.value {
-                        ClientSessionValue::Tls13(inner) => Some(inner),
-                        #[cfg(feature = "tls12")]
-                        ClientSessionValue::Tls12(_) => None,
-                    });
-
                 tls13::handle_server_hello(
-                    self.input.config,
                     cx,
                     server_hello,
-                    resuming_session,
-                    self.input.server_name,
                     randoms,
                     suite,
                     transcript,
                     self.early_data_key_schedule,
-                    self.input.hello,
                     // We always send a key share when TLS 1.3 is enabled.
                     self.offered_key_share.unwrap(),
-                    self.input.sent_tls13_fake_ccs,
                     &m,
                     self.ech_state,
+                    self.input,
                 )
             }
             #[cfg(feature = "tls12")]
@@ -1178,7 +1164,7 @@ fn process_cert_type_extension(
     }
 }
 
-enum ClientSessionValue {
+pub(super) enum ClientSessionValue {
     Tls13(persist::Tls13ClientSessionValue),
     #[cfg(feature = "tls12")]
     Tls12(persist::Tls12ClientSessionValue),
