@@ -328,6 +328,10 @@ impl ServerCertVerifier for ServerCertVerifierWithCasExt {
         self.verifier.supported_verify_schemes()
     }
 
+    fn request_ocsp_response(&self) -> bool {
+        self.verifier.request_ocsp_response()
+    }
+
     fn requires_raw_public_keys(&self) -> bool {
         self.verifier.requires_raw_public_keys()
     }
