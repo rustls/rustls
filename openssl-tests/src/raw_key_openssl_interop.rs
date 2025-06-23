@@ -257,8 +257,8 @@ mod server {
     }
 
     impl ClientCertVerifier for SimpleRpkClientCertVerifier {
-        fn root_hint_subjects(&self) -> Arc<Vec<DistinguishedName>> {
-            Arc::new(Vec::new())
+        fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
+            Arc::from(Vec::new())
         }
 
         fn verify_client_cert(

@@ -1250,7 +1250,7 @@ impl Default for MockServerVerifier {
 #[derive(Debug)]
 pub struct MockClientVerifier {
     pub verified: fn() -> Result<ClientCertVerified, Error>,
-    pub subjects: Arc<Vec<DistinguishedName>>,
+    pub subjects: Arc<[DistinguishedName]>,
     pub mandatory: bool,
     pub offered_schemes: Option<Vec<SignatureScheme>>,
     expect_raw_public_keys: bool,
@@ -1269,7 +1269,7 @@ impl MockClientVerifier {
                 .build()
                 .unwrap(),
             verified,
-            subjects: Arc::new(get_client_root_store(kt).subjects()),
+            subjects: Arc::from(get_client_root_store(kt).subjects()),
             mandatory: true,
             offered_schemes: None,
             expect_raw_public_keys: false,
@@ -1283,7 +1283,7 @@ impl ClientCertVerifier for MockClientVerifier {
         self.mandatory
     }
 
-    fn root_hint_subjects(&self) -> Arc<Vec<DistinguishedName>> {
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
         self.subjects.clone()
     }
 

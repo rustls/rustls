@@ -386,7 +386,7 @@ fn decode_hex(hex: &str) -> Vec<u8> {
 #[derive(Debug)]
 struct DummyClientAuth {
     mandatory: bool,
-    root_hint_subjects: Arc<Vec<DistinguishedName>>,
+    root_hint_subjects: Arc<[DistinguishedName]>,
     parent: Arc<dyn ClientCertVerifier>,
 }
 
@@ -394,7 +394,7 @@ impl DummyClientAuth {
     fn new(
         trusted_cert_file: &str,
         mandatory: bool,
-        root_hint_subjects: Arc<Vec<DistinguishedName>>,
+        root_hint_subjects: Arc<[DistinguishedName]>,
     ) -> Self {
         Self {
             mandatory,
@@ -420,7 +420,7 @@ impl ClientCertVerifier for DummyClientAuth {
         self.mandatory
     }
 
-    fn root_hint_subjects(&self) -> Arc<Vec<DistinguishedName>> {
+    fn root_hint_subjects(&self) -> Arc<[DistinguishedName]> {
         self.root_hint_subjects.clone()
     }
 
@@ -765,7 +765,7 @@ fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfi
             Arc::new(DummyClientAuth::new(
                 &opts.trusted_cert_file,
                 opts.require_any_client_cert,
-                Arc::new(opts.root_hint_subjects.clone()),
+                Arc::from(opts.root_hint_subjects.clone()),
             ))
         } else {
             WebPkiClientVerifier::no_client_auth()
