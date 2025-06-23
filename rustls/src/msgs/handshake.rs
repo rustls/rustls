@@ -1005,19 +1005,13 @@ impl<'a> Codec<'a> for ClientExtensions<'a> {
             return Ok(out);
         }
 
-        let mut unknown_extensions = BTreeSet::new();
+        let mut checker = DuplicateExtensionChecker::new();
 
         let len = usize::from(u16::read(r)?);
         let mut sub = r.sub(len)?;
 
         while sub.any_left() {
-            let typ = out.read_one(&mut sub, |unknown| {
-                let u = u16::from(unknown);
-                match unknown_extensions.insert(u) {
-                    true => Ok(()),
-                    false => Err(InvalidMessage::DuplicateExtension(u)),
-                }
-            })?;
+            let typ = out.read_one(&mut sub, |unknown| checker.check(unknown))?;
 
             // PreSharedKey offer must come last
             if typ == ExtensionType::PreSharedKey && sub.any_left() {
@@ -3246,6 +3240,22 @@ fn has_duplicates<I: IntoIterator<Item = E>, E: Into<T>, T: Eq + Ord>(iter: I) -
     }
 
     false
+}
+
+struct DuplicateExtensionChecker(BTreeSet<u16>);
+
+impl DuplicateExtensionChecker {
+    fn new() -> Self {
+        Self(BTreeSet::new())
+    }
+
+    fn check(&mut self, typ: ExtensionType) -> Result<(), InvalidMessage> {
+        let u = u16::from(typ);
+        match self.0.insert(u) {
+            true => Ok(()),
+            false => Err(InvalidMessage::DuplicateExtension(u)),
+        }
+    }
 }
 
 fn low_quality_integer_hash(mut x: u32) -> u32 {
