@@ -718,9 +718,9 @@ mod client_hello {
                 authority_names: match config
                     .verifier
                     .root_hint_subjects()
-                    .as_slice()
+                    .as_ref()
                 {
-                    &[] => None,
+                    [] => None,
                     authorities => Some(authorities.to_vec()),
                 },
             },
