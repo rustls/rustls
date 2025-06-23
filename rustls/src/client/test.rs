@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn cas_extension_in_client_hello_if_server_verifier_requests_it() {
         let cas_sending_server_verifier =
-            ServerVerifierWithAuthorityNames(Arc::new(vec![DistinguishedName::from(
+            ServerVerifierWithAuthorityNames(Arc::from(vec![DistinguishedName::from(
                 b"hello".to_vec(),
             )]));
 
@@ -476,10 +476,10 @@ mod tests {
     }
 
     #[derive(Clone, Debug)]
-    struct ServerVerifierWithAuthorityNames(Arc<Vec<DistinguishedName>>);
+    struct ServerVerifierWithAuthorityNames(Arc<[DistinguishedName]>);
 
     impl ServerCertVerifier for ServerVerifierWithAuthorityNames {
-        fn root_hint_subjects(&self) -> Option<Arc<Vec<DistinguishedName>>> {
+        fn root_hint_subjects(&self) -> Option<Arc<[DistinguishedName]>> {
             Some(self.0.clone())
         }
 
