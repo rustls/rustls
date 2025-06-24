@@ -618,6 +618,19 @@ enum_builder! {
 }
 
 enum_builder! {
+    /// The `PskKeyExchangeMode` TLS protocol enum.  Values in this enum are taken
+    /// from the various RFCs covering TLS, and are listed by IANA.
+    /// The `Unknown` item is used when processing unrecognised ordinals.
+    ///
+    /// <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-pskkeyexchangemode>
+    #[repr(u8)]
+    pub enum PskKeyExchangeMode {
+        PSK_KE => 0x00,
+        PSK_DHE_KE => 0x01,
+    }
+}
+
+enum_builder! {
     /// The type of Encrypted Client Hello (`EchClientHelloType`).
     ///
     /// Specified in [draft-ietf-tls-esni Section 5].

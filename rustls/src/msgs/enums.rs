@@ -277,17 +277,6 @@ enum_builder! {
 }
 
 enum_builder! {
-    /// The `PskKeyExchangeMode` TLS protocol enum.  Values in this enum are taken
-    /// from the various RFCs covering TLS, and are listed by IANA.
-    /// The `Unknown` item is used when processing unrecognised ordinals.
-    #[repr(u8)]
-    pub enum PskKeyExchangeMode {
-        PSK_KE => 0x00,
-        PSK_DHE_KE => 0x01,
-    }
-}
-
-enum_builder! {
     /// The `KeyUpdateRequest` TLS protocol enum.  Values in this enum are taken
     /// from the various RFCs covering TLS, and are listed by IANA.
     /// The `Unknown` item is used when processing unrecognised ordinals.
@@ -396,6 +385,8 @@ pub(crate) mod tests {
     // check panic-safety of relatively unused values.
 
     use std::prelude::v1::*;
+
+    use crate::enums::PskKeyExchangeMode;
 
     use super::*;
 
