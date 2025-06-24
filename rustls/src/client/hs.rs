@@ -187,8 +187,6 @@ pub(super) fn start_handshake(
             config,
             resuming,
             random,
-            #[cfg(feature = "tls12")]
-            using_ems: false,
             sent_tls13_fake_ccs: false,
             hello: ClientHelloDetails::new(alpn_protocols, extension_order_seed),
             session_id,
@@ -225,8 +223,6 @@ pub(super) struct ClientHelloInput {
     pub(super) config: Arc<ClientConfig>,
     pub(super) resuming: Option<persist::Retrieved<ClientSessionValue>>,
     pub(super) random: Random,
-    #[cfg(feature = "tls12")]
-    pub(super) using_ems: bool,
     pub(super) sent_tls13_fake_ccs: bool,
     pub(super) hello: ClientHelloDetails,
     pub(super) session_id: SessionId,
@@ -876,42 +872,12 @@ impl State<ClientConnectionData> for ExpectServerHello {
                 )
             }
             #[cfg(feature = "tls12")]
-            SupportedCipherSuite::Tls12(suite) => {
-                // If we didn't have an input session to resume, and we sent a session ID,
-                // that implies we sent a TLS 1.3 legacy_session_id for compatibility purposes.
-                // In this instance since we're now continuing a TLS 1.2 handshake the server
-                // should not have echoed it back: it's a randomly generated session ID it couldn't
-                // have known.
-                if self.input.resuming.is_none()
-                    && !self.input.session_id.is_empty()
-                    && self.input.session_id == server_hello.session_id
-                {
-                    return Err({
-                        cx.common.send_fatal_alert(
-                            AlertDescription::IllegalParameter,
-                            PeerMisbehaved::ServerEchoedCompatibilitySessionId,
-                        )
-                    });
-                }
-
-                let resuming_session = self
-                    .input
-                    .resuming
-                    .and_then(|resuming| match resuming.value {
-                        ClientSessionValue::Tls12(inner) => Some(inner),
-                        ClientSessionValue::Tls13(_) => None,
-                    });
-
-                tls12::CompleteServerHelloHandling {
-                    config: self.input.config,
-                    resuming_session,
-                    server_name: self.input.server_name,
-                    randoms,
-                    using_ems: self.input.using_ems,
-                    transcript,
-                }
-                .handle_server_hello(cx, suite, server_hello, tls13_supported)
+            SupportedCipherSuite::Tls12(suite) => tls12::CompleteServerHelloHandling {
+                randoms,
+                transcript,
+                input: self.input,
             }
+            .handle_server_hello(cx, suite, server_hello, tls13_supported),
         }
     }
 
