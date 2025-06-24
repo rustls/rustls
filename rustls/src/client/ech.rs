@@ -22,8 +22,6 @@ use crate::msgs::handshake::{
     PresharedKeyOffer, Random, ServerHelloPayload, ServerNamePayload,
 };
 use crate::msgs::message::{Message, MessagePayload};
-use crate::msgs::persist;
-use crate::msgs::persist::Retrieved;
 use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
@@ -252,7 +250,7 @@ impl EchGreaseConfig {
 
         // Construct an inner hello using the outer hello - this allows us to know the size of
         // dummy payload we should use for the GREASE extension.
-        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, &None);
+        let encoded_inner_hello = grease_state.encode_inner_hello(outer_hello, None, None)?;
 
         // Generate a payload of random data equivalent in length to a real inner hello.
         let payload_len = encoded_inner_hello.len()
@@ -380,11 +378,11 @@ impl EchState {
     /// If `retry_req` is `Some`, then the outer hello will be constructed for a hello retry request.
     ///
     /// If `resuming` is `Some`, then the inner hello will be constructed for a resumption handshake.
-    pub(crate) fn ech_hello(
+    pub(super) fn ech_hello(
         &mut self,
         mut outer_hello: ClientHelloPayload,
         retry_req: Option<&HelloRetryRequest>,
-        resuming: &Option<Retrieved<&persist::Tls13ClientSessionValue>>,
+        preshared: Option<&tls13::Preshared<'_>>,
     ) -> Result<ClientHelloPayload, Error> {
         trace!(
             "Preparing ECH offer {}",
@@ -392,7 +390,7 @@ impl EchState {
         );
 
         // Construct the encoded inner hello and update the transcript.
-        let encoded_inner_hello = self.encode_inner_hello(&outer_hello, retry_req, resuming);
+        let encoded_inner_hello = self.encode_inner_hello(&outer_hello, retry_req, preshared)?;
 
         // Complete the ClientHelloOuterAAD with an ech extension, the payload should be a placeholder
         // of size L, all zeroes. L == length of encrypting encoded client hello inner w/ the selected
@@ -560,9 +558,9 @@ impl EchState {
         &mut self,
         outer_hello: &ClientHelloPayload,
         retryreq: Option<&HelloRetryRequest>,
-        resuming: &Option<Retrieved<&persist::Tls13ClientSessionValue>>,
-    ) -> Vec<u8> {
-        // Start building an inner hello using the outer_hello as a template.
+        preshared: Option<&tls13::Preshared<'_>>,
+    ) -> Result<Vec<u8>, Error> {
+        // Start building an inner hello using the outer_hello as a template.x
         let mut inner_hello = ClientHelloPayload {
             // Some information is copied over as-is.
             client_version: outer_hello.client_version,
@@ -649,15 +647,15 @@ impl EchState {
         self.sent_extensions = inner_hello.collect_used();
 
         // If we're resuming, we need to update the PSK binder in the inner hello.
-        if let Some(resuming) = resuming.as_ref() {
+        if let Some(preshared) = preshared.as_ref() {
             let mut chp = HandshakeMessagePayload(HandshakePayload::ClientHello(inner_hello));
 
             // Retain the early key schedule we get from processing the binder.
             self.early_data_key_schedule = Some(tls13::fill_in_psk_binder(
-                resuming,
+                preshared,
                 &self.inner_hello_transcript,
                 &mut chp,
-            ));
+            )?);
 
             // fill_in_psk_binder works on an owned HandshakeMessagePayload, so we need to
             // extract our inner hello back out of it to retain ownership.
@@ -725,7 +723,7 @@ impl EchState {
         self.inner_hello_transcript
             .add_message(&inner_hello_msg);
 
-        encoded_hello
+        Ok(encoded_hello)
     }
 
     // See https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-18#name-grease-psk

@@ -13,7 +13,7 @@ use crate::builder::ConfigBuilder;
 use crate::client::{EchMode, EchStatus};
 use crate::common_state::{CommonState, Protocol, Side};
 use crate::conn::{ConnectionCore, UnbufferedConnectionCommon};
-use crate::crypto::{CryptoProvider, SupportedKxGroup};
+use crate::crypto::{CryptoProvider, PresharedKey, SupportedKxGroup};
 use crate::enums::{CipherSuite, ProtocolVersion, SignatureScheme};
 use crate::error::Error;
 use crate::kernel::KernelConnection;
@@ -184,6 +184,9 @@ pub struct ClientConfig {
     /// store, and then resumed by `A`.  This would give a false impression to the user
     /// of `A` that the server certificate is fully validated.
     pub resumption: Resumption,
+
+    /// Externally derived TLS 1.3 preshared keys.
+    pub preshared_keys: Arc<dyn PresharedKeyStore>,
 
     /// The maximum size of plaintext input to be emitted in a single TLS record.
     /// A value of None is equivalent to the [TLS maximum] of 16 kB.
@@ -1060,3 +1063,9 @@ impl ClientConnectionData {
 }
 
 impl crate::conn::SideData for ClientConnectionData {}
+
+/// Stores externally derived TLS 1.3 preshared keys.
+pub trait PresharedKeyStore: fmt::Debug + Send + Sync {
+    /// Retrieves the preshared keys for `server_name`.
+    fn keys(&self, server_name: &ServerName<'_>) -> Option<Arc<[PresharedKey]>>;
+}

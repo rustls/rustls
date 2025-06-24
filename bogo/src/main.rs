@@ -31,12 +31,13 @@ use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::{
-    ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus, Resumption,
-    Tls12Resumption, WebPkiServerVerifier,
+    ClientConfig, ClientConnection, EchConfig, EchGreaseConfig, EchMode, EchStatus,
+    PresharedKeySet, Resumption, Tls12Resumption, WebPkiServerVerifier,
 };
 use rustls::crypto::aws_lc_rs::hpke;
+use rustls::crypto::hash::HashAlgorithm;
 use rustls::crypto::hpke::{Hpke, HpkePublicKey};
-use rustls::crypto::{CryptoProvider, aws_lc_rs, ring};
+use rustls::crypto::{CryptoProvider, PresharedKey, aws_lc_rs, ring};
 use rustls::internal::msgs::codec::{Codec, Reader};
 use rustls::internal::msgs::handshake::EchConfigPayload;
 use rustls::internal::msgs::persist::ServerSessionValue;
@@ -50,7 +51,8 @@ use rustls::{
     AlertDescription, CertificateCompressionAlgorithm, CertificateError, Connection,
     DigitallySignedStruct, DistinguishedName, Error, HandshakeKind, InvalidMessage, NamedGroup,
     PeerIncompatible, PeerMisbehaved, ProtocolVersion, RootCertStore, Side, SignatureAlgorithm,
-    SignatureScheme, SupportedProtocolVersion, client, compress, server, sign, version,
+    SignatureScheme, SupportedCipherSuite, SupportedProtocolVersion, client, compress, server,
+    sign, version,
 };
 
 static BOGO_NACK: i32 = 89;
@@ -128,6 +130,8 @@ struct Options {
     on_resume_expect_curve_id: Option<NamedGroup>,
     wait_for_debugger: bool,
     ocsp: OcspValidation,
+    psk_identity: Option<Vec<u8>>,
+    psk: Option<Vec<u8>>,
 }
 
 impl Options {
@@ -199,6 +203,8 @@ impl Options {
             on_resume_expect_curve_id: None,
             wait_for_debugger: false,
             ocsp: OcspValidation::default(),
+            psk_identity: None,
+            psk: None,
         }
     }
 
@@ -868,6 +874,39 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     if opts.enable_early_data {
         cfg.enable_early_data = true;
+    }
+
+    if let (Some(psk_key), Some(psk_identity)) = (opts.psk.as_ref(), opts.psk_identity.as_ref()) {
+        let server_name = ServerName::try_from(opts.host_name.as_str())
+            .unwrap()
+            .to_owned();
+
+        let hash = opts
+            .provider
+            .cipher_suites
+            .iter()
+            .find_map(|cs| {
+                let hash_alg = match cs {
+                    SupportedCipherSuite::Tls13(cs) => cs.common.hash_provider,
+                    SupportedCipherSuite::Tls12(cs) => cs.common.hash_provider,
+                };
+
+                match hash_alg.algorithm() {
+                    HashAlgorithm::SHA256 => Some(hash_alg),
+                    _ => None,
+                }
+            })
+            .unwrap();
+
+        let mut keys = PresharedKeySet::default();
+        keys.update(
+            server_name,
+            Arc::from([PresharedKey::external(psk_identity, psk_key, hash).unwrap()]),
+        );
+
+        cfg.preshared_keys = Arc::new(keys);
+    } else if opts.psk.is_some() || opts.psk_identity.is_some() {
+        quit_err("psk and psk_identity must both be set");
     }
 
     match opts.install_cert_compression_algs {

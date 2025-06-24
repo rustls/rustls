@@ -593,15 +593,15 @@ pub mod client {
 
     pub use builder::WantsClientCert;
     pub use client_conn::{
-        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, ResolvesClientCert,
-        Resumption, Tls12Resumption, UnbufferedClientConnection,
+        ClientConfig, ClientConnectionData, ClientSessionStore, EarlyDataError, PresharedKeyStore,
+        ResolvesClientCert, Resumption, Tls12Resumption, UnbufferedClientConnection,
     };
     #[cfg(feature = "std")]
     pub use client_conn::{ClientConnection, WriteEarlyData};
     pub use ech::{EchConfig, EchGreaseConfig, EchMode, EchStatus};
     pub use handy::AlwaysResolvesClientRawPublicKeys;
     #[cfg(any(feature = "std", feature = "hashbrown"))]
-    pub use handy::ClientSessionMemoryCache;
+    pub use handy::{ClientSessionMemoryCache, PresharedKeySet};
 
     /// Dangerous configuration that should be audited and used with extreme care.
     pub mod danger {
