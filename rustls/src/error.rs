@@ -468,6 +468,16 @@ pub enum CertificateError {
         presented: Vec<ExtendedKeyPurpose>,
     },
 
+    /// The OCSP response provided to the verifier was invalid.
+    ///
+    /// This should be returned from [`ServerCertVerifier::verify_server_cert()`]
+    /// when a verifier checks its `ocsp_response` parameter and finds it invalid.
+    ///
+    /// This maps to [`AlertDescription::BadCertificateStatusResponse`].
+    ///
+    /// [`ServerCertVerifier::verify_server_cert()`]: crate::client::danger::ServerCertVerifier::verify_server_cert
+    InvalidOcspResponse,
+
     /// The certificate is valid, but the handshake is rejected for other
     /// reasons.
     ApplicationVerificationFailure,
@@ -540,6 +550,7 @@ impl PartialEq<Self> for CertificateError {
                     presented: right_presented,
                 },
             ) => (left_required, left_presented) == (right_required, right_presented),
+            (InvalidOcspResponse, InvalidOcspResponse) => true,
             (ApplicationVerificationFailure, ApplicationVerificationFailure) => true,
             (UnknownRevocationStatus, UnknownRevocationStatus) => true,
             (ExpiredRevocationList, ExpiredRevocationList) => true,
@@ -582,6 +593,7 @@ impl From<CertificateError> for AlertDescription {
             | UnknownRevocationStatus
             | ExpiredRevocationList
             | ExpiredRevocationListContext { .. } => Self::UnknownCA,
+            InvalidOcspResponse => Self::BadCertificateStatusResponse,
             BadSignature | UnsupportedSignatureAlgorithm => Self::DecryptError,
             InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
@@ -1085,6 +1097,7 @@ mod tests {
             ApplicationVerificationFailure,
             ApplicationVerificationFailure
         );
+        assert_eq!(InvalidOcspResponse, InvalidOcspResponse);
         let other = Other(OtherError(
             #[cfg(feature = "std")]
             Arc::from(Box::from("")),
@@ -1186,6 +1199,7 @@ mod tests {
                 next_update: UnixTime::since_unix_epoch(Duration::from_secs(300)),
             }
             .into(),
+            super::CertificateError::InvalidOcspResponse.into(),
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
             Error::FailedToGetRandomBytes,
