@@ -555,8 +555,8 @@ fn prepare_resumption<'a>(
         }
     };
 
-    match resuming.map(|csv| csv.tls13()) {
-        Some(tls13) => {
+    match &resuming.value {
+        ClientSessionValue::Tls13(tls13) => {
             if !config.supports_version(ProtocolVersion::TLSv1_3) {
                 return None;
             }
@@ -574,16 +574,19 @@ fn prepare_resumption<'a>(
                 suite.can_resume_from(tls13.suite())?;
             }
 
-            tls13::prepare_resumption(config, cx, &tls13, exts, suite.is_some());
-            Some(tls13)
+            let retrieved = resuming.map(tls13);
+            tls13::prepare_resumption(config, cx, &retrieved, exts, suite.is_some());
+            Some(retrieved)
         }
-        None => {
+        #[cfg(feature = "tls12")]
+        ClientSessionValue::Tls12(tls12) => {
             // TLS 1.2; send the ticket if we have support this protocol version
             if config.supports_version(ProtocolVersion::TLSv1_2)
                 && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
             {
-                exts.session_ticket =
-                    Some(ClientSessionTicket::Offer(Payload::new(resuming.ticket())));
+                exts.session_ticket = Some(ClientSessionTicket::Offer(Payload::new(
+                    tls12.ticket().0.clone(),
+                )));
             }
             return None; // TLS 1.2, so nothing to return here
         }
