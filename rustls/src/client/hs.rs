@@ -138,7 +138,7 @@ impl ClientHelloInput {
 
     pub(super) fn start_handshake(
         self,
-        extra_exts: ClientExtensionsInput<'_>,
+        extra_exts: ClientExtensionsInput<'static>,
         cx: &mut ClientContext<'_>,
     ) -> NextStateOrError<'static> {
         let mut transcript_buffer = HandshakeHashBuffer::new();
@@ -189,7 +189,7 @@ fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,
     retryreq: Option<&HelloRetryRequest>,
     key_share: Option<Box<dyn ActiveKeyExchange>>,
-    extra_exts: ClientExtensionsInput<'_>,
+    extra_exts: ClientExtensionsInput<'static>,
     suite: Option<SupportedCipherSuite>,
     mut input: ClientHelloInput,
     cx: &mut ClientContext<'_>,
@@ -207,11 +207,6 @@ fn emit_client_hello_for_retry(
 
     // should be unreachable thanks to config builder
     assert!(supported_versions.any(|_| true));
-
-    let ClientExtensionsInput {
-        transport_parameters,
-        protocols,
-    } = extra_exts.clone().into_owned();
 
     let mut exts = Box::new(ClientExtensions {
         // offer groups which are usable for any offered version
@@ -232,11 +227,11 @@ fn emit_client_hello_for_retry(
         ),
         extended_master_secret_request: Some(()),
         certificate_status_request: Some(CertificateStatusRequest::build_ocsp()),
-        protocols,
+        protocols: extra_exts.protocols.clone(),
         ..Default::default()
     });
 
-    match transport_parameters {
+    match extra_exts.transport_parameters.clone() {
         Some(TransportParameters::Quic(v)) => exts.transport_parameters = Some(v),
         Some(TransportParameters::QuicDraft(v)) => exts.transport_parameters_draft = Some(v),
         None => {}

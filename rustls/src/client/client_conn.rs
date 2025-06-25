@@ -844,7 +844,7 @@ impl ConnectionCore<ClientConnectionData> {
     pub(crate) fn for_client(
         config: Arc<ClientConfig>,
         name: ServerName<'static>,
-        extra_exts: ClientExtensionsInput<'_>,
+        extra_exts: ClientExtensionsInput<'static>,
         proto: Protocol,
     ) -> Result<Self, Error> {
         let mut common_state = CommonState::new(Side::Client);
