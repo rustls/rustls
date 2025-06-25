@@ -542,8 +542,43 @@ fn prepare_resumption<'a>(
     config: &ClientConfig,
 ) -> Option<persist::Retrieved<&'a persist::Tls13ClientSessionValue>> {
     // Check whether we're resuming with a non-empty ticket.
-    let resuming = match resuming {
-        Some(resuming) if !resuming.ticket().is_empty() => resuming,
+    match resuming {
+        Some(resuming) if !resuming.ticket().is_empty() => match &resuming.value {
+            ClientSessionValue::Tls13(tls13) => {
+                if !config.supports_version(ProtocolVersion::TLSv1_3) {
+                    return None;
+                }
+
+                // If the server selected TLS 1.2, we can't resume.
+                let suite = match suite {
+                    Some(SupportedCipherSuite::Tls13(suite)) => Some(suite),
+                    #[cfg(feature = "tls12")]
+                    Some(SupportedCipherSuite::Tls12(_)) => return None,
+                    None => None,
+                };
+
+                // If the selected cipher suite can't select from the session's, we can't resume.
+                if let Some(suite) = suite {
+                    suite.can_resume_from(tls13.suite())?;
+                }
+
+                let retrieved = resuming.map(tls13);
+                tls13::prepare_resumption(config, cx, &retrieved, exts, suite.is_some());
+                Some(retrieved)
+            }
+            #[cfg(feature = "tls12")]
+            ClientSessionValue::Tls12(tls12) => {
+                // TLS 1.2; send the ticket if we have support this protocol version
+                if config.supports_version(ProtocolVersion::TLSv1_2)
+                    && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
+                {
+                    exts.session_ticket = Some(ClientSessionTicket::Offer(Payload::new(
+                        tls12.ticket().0.clone(),
+                    )));
+                }
+                None // TLS 1.2, so nothing to return here
+            }
+        },
         _ => {
             if config.supports_version(ProtocolVersion::TLSv1_2)
                 && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
@@ -551,44 +586,7 @@ fn prepare_resumption<'a>(
                 // If we don't have a ticket, request one.
                 exts.session_ticket = Some(ClientSessionTicket::Request);
             }
-            return None;
-        }
-    };
-
-    match &resuming.value {
-        ClientSessionValue::Tls13(tls13) => {
-            if !config.supports_version(ProtocolVersion::TLSv1_3) {
-                return None;
-            }
-
-            // If the server selected TLS 1.2, we can't resume.
-            let suite = match suite {
-                Some(SupportedCipherSuite::Tls13(suite)) => Some(suite),
-                #[cfg(feature = "tls12")]
-                Some(SupportedCipherSuite::Tls12(_)) => return None,
-                None => None,
-            };
-
-            // If the selected cipher suite can't select from the session's, we can't resume.
-            if let Some(suite) = suite {
-                suite.can_resume_from(tls13.suite())?;
-            }
-
-            let retrieved = resuming.map(tls13);
-            tls13::prepare_resumption(config, cx, &retrieved, exts, suite.is_some());
-            Some(retrieved)
-        }
-        #[cfg(feature = "tls12")]
-        ClientSessionValue::Tls12(tls12) => {
-            // TLS 1.2; send the ticket if we have support this protocol version
-            if config.supports_version(ProtocolVersion::TLSv1_2)
-                && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
-            {
-                exts.session_ticket = Some(ClientSessionTicket::Offer(Payload::new(
-                    tls12.ticket().0.clone(),
-                )));
-            }
-            return None; // TLS 1.2, so nothing to return here
+            None
         }
     }
 }
