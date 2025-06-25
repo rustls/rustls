@@ -44,60 +44,6 @@ pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
-fn find_session(
-    server_name: &ServerName<'static>,
-    config: &ClientConfig,
-    cx: &mut ClientContext<'_>,
-) -> Option<persist::Retrieved<ClientSessionValue>> {
-    let found = config
-        .resumption
-        .store
-        .take_tls13_ticket(server_name)
-        .map(ClientSessionValue::Tls13)
-        .or_else(|| {
-            #[cfg(feature = "tls12")]
-            {
-                config
-                    .resumption
-                    .store
-                    .tls12_session(server_name)
-                    .map(ClientSessionValue::Tls12)
-            }
-
-            #[cfg(not(feature = "tls12"))]
-            None
-        })
-        .and_then(|resuming| {
-            resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
-        })
-        .and_then(|resuming| {
-            let now = config
-                .current_time()
-                .map_err(|_err| debug!("Could not get current time: {_err}"))
-                .ok()?;
-
-            let retrieved = persist::Retrieved::new(resuming, now);
-            match retrieved.has_expired() {
-                false => Some(retrieved),
-                true => None,
-            }
-        })
-        .or_else(|| {
-            debug!("No cached session for {server_name:?}");
-            None
-        });
-
-    if let Some(resuming) = &found {
-        if cx.common.is_quic() {
-            cx.common.quic.params = resuming
-                .tls13()
-                .map(|v| v.quic_params());
-        }
-    }
-
-    found
-}
-
 pub(super) fn start_handshake(
     server_name: ServerName<'static>,
     extra_exts: ClientExtensionsInput<'_>,
@@ -112,8 +58,6 @@ pub(super) fn start_handshake(
         transcript_buffer.set_client_auth_enabled();
     }
 
-    let mut resuming = find_session(&server_name, &config, cx);
-
     let key_share = if config.needs_key_share() {
         Some(tls13::initial_key_share(
             &config,
@@ -124,6 +68,7 @@ pub(super) fn start_handshake(
         None
     };
 
+    let mut resuming = ClientSessionValue::retrieve(&server_name, &config, cx);
     let session_id = match &mut resuming {
         Some(_resuming) => {
             debug!("Resuming session");
@@ -1137,6 +1082,60 @@ pub(super) enum ClientSessionValue {
 }
 
 impl ClientSessionValue {
+    fn retrieve(
+        server_name: &ServerName<'static>,
+        config: &ClientConfig,
+        cx: &mut ClientContext<'_>,
+    ) -> Option<persist::Retrieved<Self>> {
+        let found = config
+            .resumption
+            .store
+            .take_tls13_ticket(server_name)
+            .map(ClientSessionValue::Tls13)
+            .or_else(|| {
+                #[cfg(feature = "tls12")]
+                {
+                    config
+                        .resumption
+                        .store
+                        .tls12_session(server_name)
+                        .map(ClientSessionValue::Tls12)
+                }
+
+                #[cfg(not(feature = "tls12"))]
+                None
+            })
+            .and_then(|resuming| {
+                resuming.compatible_config(&config.verifier, &config.client_auth_cert_resolver)
+            })
+            .and_then(|resuming| {
+                let now = config
+                    .current_time()
+                    .map_err(|_err| debug!("Could not get current time: {_err}"))
+                    .ok()?;
+
+                let retrieved = persist::Retrieved::new(resuming, now);
+                match retrieved.has_expired() {
+                    false => Some(retrieved),
+                    true => None,
+                }
+            })
+            .or_else(|| {
+                debug!("No cached session for {server_name:?}");
+                None
+            });
+
+        if let Some(resuming) = &found {
+            if cx.common.is_quic() {
+                cx.common.quic.params = resuming
+                    .tls13()
+                    .map(|v| v.quic_params());
+            }
+        }
+
+        found
+    }
+
     fn common(&self) -> &persist::ClientSessionCommon {
         match self {
             Self::Tls13(inner) => &inner.common,
