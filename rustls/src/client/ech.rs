@@ -28,8 +28,8 @@ use crate::tls13::key_schedule::{
     KeyScheduleEarly, KeyScheduleHandshakeStart, server_ech_hrr_confirmation_secret,
 };
 use crate::{
-    AlertDescription, CommonState, EncryptedClientHelloError, Error, PeerIncompatible,
-    PeerMisbehaved, ProtocolVersion, Tls13CipherSuite,
+    AlertDescription, ClientConfig, CommonState, EncryptedClientHelloError, Error,
+    PeerIncompatible, PeerMisbehaved, ProtocolVersion, Tls13CipherSuite,
 };
 
 /// Controls how Encrypted Client Hello (ECH) is used in a client handshake.
@@ -155,6 +155,22 @@ impl EchConfig {
         }
 
         Err(EncryptedClientHelloError::NoCompatibleConfig.into())
+    }
+
+    pub(super) fn state(
+        &self,
+        server_name: ServerName<'static>,
+        config: &ClientConfig,
+    ) -> Result<EchState, Error> {
+        EchState::new(
+            self,
+            server_name.clone(),
+            config
+                .client_auth_cert_resolver
+                .has_certs(),
+            config.provider.secure_random,
+            config.enable_sni,
+        )
     }
 
     /// Compute the HPKE `SetupBaseS` `info` parameter for this ECH configuration.

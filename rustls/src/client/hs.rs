@@ -45,82 +45,35 @@ pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
 pub(super) fn start_handshake(
-    server_name: ServerName<'static>,
+    input: ClientHelloInput,
     extra_exts: ClientExtensionsInput<'_>,
-    config: Arc<ClientConfig>,
     cx: &mut ClientContext<'_>,
 ) -> NextStateOrError<'static> {
     let mut transcript_buffer = HandshakeHashBuffer::new();
-    if config
+    if input
+        .config
         .client_auth_cert_resolver
         .has_certs()
     {
         transcript_buffer.set_client_auth_enabled();
     }
 
-    let key_share = if config.needs_key_share() {
+    let key_share = if input.config.needs_key_share() {
         Some(tls13::initial_key_share(
-            &config,
-            &server_name,
+            &input.config,
+            &input.server_name,
             &mut cx.common.kx_state,
         )?)
     } else {
         None
     };
 
-    let mut resuming = ClientSessionValue::retrieve(&server_name, &config, cx);
-    let session_id = match &mut resuming {
-        Some(_resuming) => {
-            debug!("Resuming session");
-            match &mut _resuming.value {
-                #[cfg(feature = "tls12")]
-                ClientSessionValue::Tls12(inner) => {
-                    // If we have a ticket, we use the sessionid as a signal that
-                    // we're  doing an abbreviated handshake.  See section 3.4 in
-                    // RFC5077.
-                    if !inner.ticket().0.is_empty() {
-                        inner.session_id = SessionId::random(config.provider.secure_random)?;
-                    }
-                    Some(inner.session_id)
-                }
-                _ => None,
-            }
+    let ech_state = match input.config.ech_mode.as_ref() {
+        Some(EchMode::Enable(ech_config)) => {
+            Some(ech_config.state(input.server_name.clone(), &input.config)?)
         }
-        _ => {
-            debug!("Not resuming any session");
-            None
-        }
-    };
-
-    // https://tools.ietf.org/html/rfc8446#appendix-D.4
-    // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
-    let session_id = match session_id {
-        Some(session_id) => session_id,
-        None if cx.common.is_quic() => SessionId::empty(),
-        None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
-        None => SessionId::random(config.provider.secure_random)?,
-    };
-
-    let random = Random::new(config.provider.secure_random)?;
-    let extension_order_seed = crate::rand::random_u16(config.provider.secure_random)?;
-
-    let ech_state = match config.ech_mode.as_ref() {
-        Some(EchMode::Enable(ech_config)) => Some(EchState::new(
-            ech_config,
-            server_name.clone(),
-            config
-                .client_auth_cert_resolver
-                .has_certs(),
-            config.provider.secure_random,
-            config.enable_sni,
-        )?),
         _ => None,
     };
-
-    let alpn_protocols = extra_exts
-        .protocols
-        .clone()
-        .unwrap_or_default();
 
     emit_client_hello_for_retry(
         transcript_buffer,
@@ -128,16 +81,7 @@ pub(super) fn start_handshake(
         key_share,
         extra_exts,
         None,
-        ClientHelloInput {
-            config,
-            resuming,
-            random,
-            sent_tls13_fake_ccs: false,
-            hello: ClientHelloDetails::new(alpn_protocols, extension_order_seed),
-            session_id,
-            server_name,
-            prev_ech_ext: None,
-        },
+        input,
         cx,
         ech_state,
     )
@@ -173,6 +117,67 @@ pub(super) struct ClientHelloInput {
     pub(super) session_id: SessionId,
     pub(super) server_name: ServerName<'static>,
     pub(super) prev_ech_ext: Option<EncryptedClientHello>,
+}
+
+impl ClientHelloInput {
+    pub(super) fn new(
+        server_name: ServerName<'static>,
+        extra_exts: &ClientExtensionsInput<'_>,
+        cx: &mut ClientContext<'_>,
+        config: Arc<ClientConfig>,
+    ) -> Result<Self, Error> {
+        let mut resuming = ClientSessionValue::retrieve(&server_name, &config, cx);
+        let session_id = match &mut resuming {
+            Some(_resuming) => {
+                debug!("Resuming session");
+                match &mut _resuming.value {
+                    #[cfg(feature = "tls12")]
+                    ClientSessionValue::Tls12(inner) => {
+                        // If we have a ticket, we use the sessionid as a signal that
+                        // we're  doing an abbreviated handshake.  See section 3.4 in
+                        // RFC5077.
+                        if !inner.ticket().0.is_empty() {
+                            inner.session_id = SessionId::random(config.provider.secure_random)?;
+                        }
+                        Some(inner.session_id)
+                    }
+                    _ => None,
+                }
+            }
+            _ => {
+                debug!("Not resuming any session");
+                None
+            }
+        };
+
+        // https://tools.ietf.org/html/rfc8446#appendix-D.4
+        // https://tools.ietf.org/html/draft-ietf-quic-tls-34#section-8.4
+        let session_id = match session_id {
+            Some(session_id) => session_id,
+            None if cx.common.is_quic() => SessionId::empty(),
+            None if !config.supports_version(ProtocolVersion::TLSv1_3) => SessionId::empty(),
+            None => SessionId::random(config.provider.secure_random)?,
+        };
+
+        let hello = ClientHelloDetails::new(
+            extra_exts
+                .protocols
+                .clone()
+                .unwrap_or_default(),
+            crate::rand::random_u16(config.provider.secure_random)?,
+        );
+
+        Ok(Self {
+            resuming,
+            random: Random::new(config.provider.secure_random)?,
+            sent_tls13_fake_ccs: false,
+            hello,
+            session_id,
+            server_name,
+            prev_ech_ext: None,
+            config,
+        })
+    }
 }
 
 /// Emits the initial ClientHello or a ClientHello in response to

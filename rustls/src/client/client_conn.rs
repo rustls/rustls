@@ -6,7 +6,7 @@ use core::{fmt, mem};
 use pki_types::{ServerName, UnixTime};
 
 use super::handy::NoClientSessionStorage;
-use super::hs;
+use super::hs::{self, ClientHelloInput};
 #[cfg(feature = "std")]
 use crate::WantsVerifier;
 use crate::builder::ConfigBuilder;
@@ -861,7 +861,8 @@ impl ConnectionCore<ClientConnectionData> {
             sendable_plaintext: None,
         };
 
-        let state = hs::start_handshake(name, extra_exts, config, &mut cx)?;
+        let input = ClientHelloInput::new(name, &extra_exts, &mut cx, config)?;
+        let state = hs::start_handshake(input, extra_exts, &mut cx)?;
         Ok(Self::new(state, data, common_state))
     }
 
