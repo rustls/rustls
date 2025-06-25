@@ -44,49 +44,6 @@ pub(super) type NextState<'a> = Box<dyn State<ClientConnectionData> + 'a>;
 pub(super) type NextStateOrError<'a> = Result<NextState<'a>, Error>;
 pub(super) type ClientContext<'a> = crate::common_state::Context<'a, ClientConnectionData>;
 
-pub(super) fn start_handshake(
-    input: ClientHelloInput,
-    extra_exts: ClientExtensionsInput<'_>,
-    cx: &mut ClientContext<'_>,
-) -> NextStateOrError<'static> {
-    let mut transcript_buffer = HandshakeHashBuffer::new();
-    if input
-        .config
-        .client_auth_cert_resolver
-        .has_certs()
-    {
-        transcript_buffer.set_client_auth_enabled();
-    }
-
-    let key_share = if input.config.needs_key_share() {
-        Some(tls13::initial_key_share(
-            &input.config,
-            &input.server_name,
-            &mut cx.common.kx_state,
-        )?)
-    } else {
-        None
-    };
-
-    let ech_state = match input.config.ech_mode.as_ref() {
-        Some(EchMode::Enable(ech_config)) => {
-            Some(ech_config.state(input.server_name.clone(), &input.config)?)
-        }
-        _ => None,
-    };
-
-    emit_client_hello_for_retry(
-        transcript_buffer,
-        None,
-        key_share,
-        extra_exts,
-        None,
-        input,
-        cx,
-        ech_state,
-    )
-}
-
 struct ExpectServerHello {
     input: ClientHelloInput,
     transcript_buffer: HandshakeHashBuffer,
@@ -177,6 +134,49 @@ impl ClientHelloInput {
             prev_ech_ext: None,
             config,
         })
+    }
+
+    pub(super) fn start_handshake(
+        self,
+        extra_exts: ClientExtensionsInput<'_>,
+        cx: &mut ClientContext<'_>,
+    ) -> NextStateOrError<'static> {
+        let mut transcript_buffer = HandshakeHashBuffer::new();
+        if self
+            .config
+            .client_auth_cert_resolver
+            .has_certs()
+        {
+            transcript_buffer.set_client_auth_enabled();
+        }
+
+        let key_share = if self.config.needs_key_share() {
+            Some(tls13::initial_key_share(
+                &self.config,
+                &self.server_name,
+                &mut cx.common.kx_state,
+            )?)
+        } else {
+            None
+        };
+
+        let ech_state = match self.config.ech_mode.as_ref() {
+            Some(EchMode::Enable(ech_config)) => {
+                Some(ech_config.state(self.server_name.clone(), &self.config)?)
+            }
+            _ => None,
+        };
+
+        emit_client_hello_for_retry(
+            transcript_buffer,
+            None,
+            key_share,
+            extra_exts,
+            None,
+            self,
+            cx,
+            ech_state,
+        )
     }
 }
 

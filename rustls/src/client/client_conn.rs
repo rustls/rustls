@@ -862,7 +862,7 @@ impl ConnectionCore<ClientConnectionData> {
         };
 
         let input = ClientHelloInput::new(name, &extra_exts, &mut cx, config)?;
-        let state = hs::start_handshake(input, extra_exts, &mut cx)?;
+        let state = input.start_handshake(extra_exts, &mut cx)?;
         Ok(Self::new(state, data, common_state))
     }
 
