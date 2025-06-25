@@ -17,8 +17,7 @@
     "CheckLeafCurve": "",
     "SendWarningAlerts-*": "",
     "Peek-*": "",
-    "ClientOCSPCallback*": "ocsp not supported yet",
-    "ServerOCSPCallback*": "",
+    "ServerOCSPCallback*": "ocsp not supported for servers",
     "SendUnsolicitedOCSPOnCertificate-TLS13": "we unconditionally request a stapled OCSP response",
     "DuplicateCertCompressionExt*-TLS12": "RFC8879: if TLS 1.2 or earlier is negotiated, the peers MUST ignore this extension",
 #if defined(RING)

@@ -127,6 +127,7 @@ struct Options {
     on_initial_expect_curve_id: Option<NamedGroup>,
     on_resume_expect_curve_id: Option<NamedGroup>,
     wait_for_debugger: bool,
+    ocsp: OcspValidation,
 }
 
 impl Options {
@@ -197,6 +198,7 @@ impl Options {
             on_initial_expect_curve_id: None,
             on_resume_expect_curve_id: None,
             wait_for_debugger: false,
+            ocsp: OcspValidation::default(),
         }
     }
 
@@ -411,10 +413,11 @@ impl ClientCertVerifier for DummyClientAuth {
 #[derive(Debug)]
 struct DummyServerAuth {
     parent: Arc<dyn ServerCertVerifier>,
+    ocsp: OcspValidation,
 }
 
 impl DummyServerAuth {
-    fn new(trusted_cert_file: &str) -> Self {
+    fn new(trusted_cert_file: &str, ocsp: OcspValidation) -> Self {
         Self {
             parent: WebPkiServerVerifier::builder_with_provider(
                 load_root_certs(trusted_cert_file),
@@ -424,6 +427,7 @@ impl DummyServerAuth {
             )
             .build()
             .unwrap(),
+            ocsp,
         }
     }
 }
@@ -437,6 +441,9 @@ impl ServerCertVerifier for DummyServerAuth {
         _ocsp: &[u8],
         _now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
+        if let OcspValidation::Reject = self.ocsp {
+            return Err(CertificateError::InvalidOcspResponse.into());
+        }
         Ok(ServerCertVerified::assertion())
     }
 
@@ -463,6 +470,16 @@ impl ServerCertVerifier for DummyServerAuth {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.parent.supported_verify_schemes()
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+enum OcspValidation {
+    /// Totally ignore `ocsp_response` value
+    #[default]
+    None,
+
+    /// Return an error (irrespective of `ocsp_response` value)
+    Reject,
 }
 
 #[derive(Debug)]
@@ -807,7 +824,10 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     let cfg = cfg
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(&opts.trusted_cert_file)));
+        .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new(
+            &opts.trusted_cert_file,
+            opts.ocsp,
+        )));
 
     let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
         let cert = CertificateDer::pem_file_iter(&opts.cert_file)
@@ -1015,6 +1035,10 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
         Error::InvalidCertificate(CertificateError::UnsupportedSignatureAlgorithm) => {
             quit(":WRONG_SIGNATURE_TYPE:")
+        }
+        Error::InvalidCertificate(CertificateError::InvalidOcspResponse) => {
+            // note: only use is in this file.
+            quit(":OCSP_CB_ERROR:")
         }
         Error::InvalidCertificate(e) => quit(&format!(":BAD_CERT: ({e:?})")),
         Error::PeerSentOversizedRecord => quit(":DATA_LENGTH_TOO_LONG:"),
@@ -1645,6 +1669,9 @@ pub fn main() {
             "-server-preference" => {
                 opts.server_preference = true;
             }
+            "-fail-ocsp-callback" => {
+                opts.ocsp = OcspValidation::Reject;
+            }
             "-wait-for-debugger" => {
                 #[cfg(windows)]
                 {
@@ -1669,6 +1696,7 @@ pub fn main() {
             "-expect-no-session" |
             "-expect-ticket-renewal" |
             "-enable-ocsp-stapling" |
+            "-use-ocsp-callback" |
             "-forbid-renegotiation-after-handshake" |
             // internal openssl details:
             "-async" |
