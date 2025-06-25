@@ -36,16 +36,14 @@ fn main() -> Result<(), Box<dyn StdError>> {
         .with_single_cert(certs, private_key)?;
 
     let listener = TcpListener::bind(format!("[::]:{}", 4443)).unwrap();
-    let (mut stream, _) = listener.accept()?;
-
+    let (mut tcp_stream, _) = listener.accept()?;
     let mut conn = rustls::ServerConnection::new(Arc::new(config))?;
-    conn.complete_io(&mut stream)?;
+    let mut tls_stream = rustls::Stream::new(&mut conn, &mut tcp_stream);
 
-    conn.writer()
-        .write_all(b"Hello from the server")?;
-    conn.complete_io(&mut stream)?;
+    tls_stream.write_all(b"Hello from the server")?;
+    tls_stream.flush()?;
     let mut buf = [0; 64];
-    let len = conn.reader().read(&mut buf)?;
+    let len = tls_stream.read(&mut buf)?;
     println!("Received message from client: {:?}", &buf[..len]);
 
     Ok(())
