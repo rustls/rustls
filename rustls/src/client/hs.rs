@@ -555,35 +555,39 @@ fn prepare_resumption<'a>(
         }
     };
 
-    let Some(tls13) = resuming.map(|csv| csv.tls13()) else {
-        // TLS 1.2; send the ticket if we have support this protocol version
-        if config.supports_version(ProtocolVersion::TLSv1_2)
-            && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
-        {
-            exts.session_ticket = Some(ClientSessionTicket::Offer(Payload::new(resuming.ticket())));
+    match resuming.map(|csv| csv.tls13()) {
+        Some(tls13) => {
+            if !config.supports_version(ProtocolVersion::TLSv1_3) {
+                return None;
+            }
+
+            // If the server selected TLS 1.2, we can't resume.
+            let suite = match suite {
+                Some(SupportedCipherSuite::Tls13(suite)) => Some(suite),
+                #[cfg(feature = "tls12")]
+                Some(SupportedCipherSuite::Tls12(_)) => return None,
+                None => None,
+            };
+
+            // If the selected cipher suite can't select from the session's, we can't resume.
+            if let Some(suite) = suite {
+                suite.can_resume_from(tls13.suite())?;
+            }
+
+            tls13::prepare_resumption(config, cx, &tls13, exts, suite.is_some());
+            Some(tls13)
         }
-        return None; // TLS 1.2, so nothing to return here
-    };
-
-    if !config.supports_version(ProtocolVersion::TLSv1_3) {
-        return None;
+        None => {
+            // TLS 1.2; send the ticket if we have support this protocol version
+            if config.supports_version(ProtocolVersion::TLSv1_2)
+                && config.resumption.tls12_resumption == Tls12Resumption::SessionIdOrTickets
+            {
+                exts.session_ticket =
+                    Some(ClientSessionTicket::Offer(Payload::new(resuming.ticket())));
+            }
+            return None; // TLS 1.2, so nothing to return here
+        }
     }
-
-    // If the server selected TLS 1.2, we can't resume.
-    let suite = match suite {
-        Some(SupportedCipherSuite::Tls13(suite)) => Some(suite),
-        #[cfg(feature = "tls12")]
-        Some(SupportedCipherSuite::Tls12(_)) => return None,
-        None => None,
-    };
-
-    // If the selected cipher suite can't select from the session's, we can't resume.
-    if let Some(suite) = suite {
-        suite.can_resume_from(tls13.suite())?;
-    }
-
-    tls13::prepare_resumption(config, cx, &tls13, exts, suite.is_some());
-    Some(tls13)
 }
 
 pub(super) fn process_alpn_protocol(
