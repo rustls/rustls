@@ -84,8 +84,7 @@ struct Options {
     host_name: String,
     use_sni: bool,
     trusted_cert_file: String,
-    key_file: String,
-    cert_file: String,
+    credentials: Credentials,
     protocols: Vec<String>,
     reject_alpn: bool,
     support_tls13: bool,
@@ -93,7 +92,6 @@ struct Options {
     min_version: Option<ProtocolVersion>,
     max_version: Option<ProtocolVersion>,
     server_ocsp_response: Vec<u8>,
-    use_signing_scheme: u16,
     groups: Option<Vec<NamedGroup>>,
     export_keying_material: usize,
     export_keying_material_label: String,
@@ -155,8 +153,7 @@ impl Options {
             root_hint_subjects: vec![],
             offer_no_client_cas: false,
             trusted_cert_file: "".to_string(),
-            key_file: "".to_string(),
-            cert_file: "".to_string(),
+            credentials: Credentials::default(),
             protocols: vec![],
             reject_alpn: false,
             support_tls13: true,
@@ -164,7 +161,6 @@ impl Options {
             min_version: None,
             max_version: None,
             server_ocsp_response: vec![],
-            use_signing_scheme: 0,
             groups: None,
             export_keying_material: 0,
             export_keying_material_label: "".to_string(),
@@ -227,6 +223,50 @@ impl Options {
             versions.push(&version::TLS13);
         }
         versions
+    }
+}
+
+#[derive(Debug, Default)]
+struct Credentials {
+    default: Credential,
+    additional: Vec<Credential>,
+}
+
+impl Credentials {
+    fn last_mut(&mut self) -> &mut Credential {
+        self.additional
+            .last_mut()
+            .unwrap_or(&mut self.default)
+    }
+
+    fn configured(&self) -> bool {
+        self.default.configured()
+            || self
+                .additional
+                .iter()
+                .any(|cred| cred.configured())
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct Credential {
+    key_file: String,
+    cert_file: String,
+    use_signing_scheme: Option<u16>,
+}
+
+impl Credential {
+    fn load_from_file(&self) -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {
+        let certs = CertificateDer::pem_file_iter(&self.cert_file)
+            .unwrap()
+            .map(|cert| cert.unwrap())
+            .collect::<Vec<_>>();
+        let key = PrivateKeyDer::from_pem_file(&self.key_file).unwrap();
+        (certs, key)
+    }
+
+    fn configured(&self) -> bool {
+        !self.cert_file.is_empty() && !self.key_file.is_empty()
     }
 }
 
@@ -640,11 +680,12 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
             WebPkiClientVerifier::no_client_auth()
         };
 
-    let cert = CertificateDer::pem_file_iter(&opts.cert_file)
-        .unwrap()
-        .map(|cert| cert.unwrap())
-        .collect::<Vec<_>>();
-    let key = PrivateKeyDer::from_pem_file(&opts.key_file).unwrap();
+    assert!(
+        opts.credentials.additional.is_empty(),
+        "TODO: server certificate switching not implemented yet"
+    );
+    let cred = &opts.credentials.default;
+    let (certs, key) = cred.load_from_file();
 
     let mut provider = opts.provider.clone();
 
@@ -658,7 +699,7 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
         .with_protocol_versions(&opts.supported_versions())
         .unwrap()
         .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(cert.clone(), key, opts.server_ocsp_response.clone())
+        .with_single_cert_with_ocsp(certs, key, opts.server_ocsp_response.clone())
         .unwrap();
 
     cfg.session_storage = ServerCacheWithResumptionDelay::new(opts.resumption_delay);
@@ -667,8 +708,8 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     cfg.require_ems = opts.require_ems;
     cfg.ignore_client_order = opts.server_preference;
 
-    if opts.use_signing_scheme > 0 {
-        let scheme = lookup_scheme(opts.use_signing_scheme);
+    if let Some(scheme) = cred.use_signing_scheme {
+        let scheme = lookup_scheme(scheme);
         cfg.cert_resolver = Arc::new(FixedSignatureSchemeServerCertResolver {
             resolver: cfg.cert_resolver.clone(),
             scheme,
@@ -829,25 +870,27 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
             opts.ocsp,
         )));
 
-    let mut cfg = if !opts.cert_file.is_empty() && !opts.key_file.is_empty() {
-        let cert = CertificateDer::pem_file_iter(&opts.cert_file)
-            .unwrap()
-            .map(|item| item.unwrap())
-            .collect();
-        let key = PrivateKeyDer::from_pem_file(&opts.key_file).unwrap();
-        cfg.with_client_auth_cert(cert, key)
-            .unwrap()
-    } else {
-        cfg.with_no_client_auth()
-    };
+    let mut cfg = match opts.credentials.configured() {
+        true => {
+            assert!(opts.credentials.additional.is_empty());
 
-    if !opts.cert_file.is_empty() && opts.use_signing_scheme > 0 {
-        let scheme = lookup_scheme(opts.use_signing_scheme);
-        cfg.client_auth_cert_resolver = Arc::new(FixedSignatureSchemeClientCertResolver {
-            resolver: cfg.client_auth_cert_resolver.clone(),
-            scheme,
-        });
-    }
+            let cred = &opts.credentials.default;
+            let (certs, key) = cred.load_from_file();
+            let mut cfg = cfg
+                .with_client_auth_cert(certs, key)
+                .unwrap();
+
+            if let Some(scheme) = cred.use_signing_scheme {
+                let scheme = lookup_scheme(scheme);
+                cfg.client_auth_cert_resolver = Arc::new(FixedSignatureSchemeClientCertResolver {
+                    resolver: cfg.client_auth_cert_resolver.clone(),
+                    scheme,
+                });
+            }
+            cfg
+        }
+        false => cfg.with_no_client_auth(),
+    };
 
     cfg.resumption = Resumption::store(ClientCacheWithoutKxHints::new(opts.resumption_delay))
         .tls12_resumption(match opts.tickets {
@@ -1369,10 +1412,10 @@ pub fn main() {
                 opts.side = Side::Server;
             }
             "-key-file" => {
-                opts.key_file = args.remove(0);
+                opts.credentials.last_mut().key_file = args.remove(0);
             }
             "-cert-file" => {
-                opts.cert_file = args.remove(0);
+                opts.credentials.last_mut().cert_file = args.remove(0);
             }
             "-trust-cert" => {
                 opts.trusted_cert_file = args.remove(0);
@@ -1417,7 +1460,7 @@ pub fn main() {
             }
             "-signing-prefs" => {
                 let alg = args.remove(0).parse::<u16>().unwrap();
-                opts.use_signing_scheme = alg;
+                opts.credentials.last_mut().use_signing_scheme = Some(alg);
             }
             "-use-client-ca-list" => {
                 match args.remove(0).as_ref() {
