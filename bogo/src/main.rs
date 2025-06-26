@@ -230,6 +230,8 @@ impl Options {
 struct Credentials {
     default: Credential,
     additional: Vec<Credential>,
+    /// Some(-1) means `default`, otherwise index into `additional`
+    expect_selected: Option<isize>,
 }
 
 impl Credentials {
@@ -253,6 +255,7 @@ struct Credential {
     key_file: String,
     cert_file: String,
     use_signing_scheme: Option<u16>,
+    must_match_issuer: bool,
 }
 
 impl Credential {
@@ -558,33 +561,111 @@ impl server::ResolvesServerCert for FixedSignatureSchemeServerCertResolver {
     }
 }
 
-#[derive(Debug)]
-struct FixedSignatureSchemeClientCertResolver {
-    resolver: Arc<dyn client::ResolvesClientCert>,
-    scheme: SignatureScheme,
+#[derive(Debug, Default)]
+struct MultipleClientCredentialResolver {
+    additional: Vec<ClientCert>,
+    default: Option<ClientCert>,
+    expect_selected: Option<isize>,
 }
 
-impl client::ResolvesClientCert for FixedSignatureSchemeClientCertResolver {
+impl MultipleClientCredentialResolver {
+    fn add(&mut self, key: sign::CertifiedKey, meta: &Credential) {
+        self.additional
+            .push(ClientCert::new(key, meta));
+    }
+
+    fn set_default(&mut self, key: sign::CertifiedKey, meta: &Credential) {
+        self.default = Some(ClientCert::new(key, meta));
+    }
+}
+
+impl client::ResolvesClientCert for MultipleClientCredentialResolver {
     fn resolve(
         &self,
         root_hint_subjects: &[&[u8]],
-        sigschemes: &[SignatureScheme],
+        sig_schemes: &[SignatureScheme],
     ) -> Option<Arc<sign::CertifiedKey>> {
-        if !sigschemes.contains(&self.scheme) {
-            quit(":NO_COMMON_SIGNATURE_ALGORITHMS:");
+        // `sig_schemes` is in server preference order, so respect that.
+        for sig_scheme in sig_schemes.iter().copied() {
+            for (i, cert) in self.additional.iter().enumerate() {
+                // if the server sends any issuer hints, respect them
+                if cert.must_match_issuer
+                    && !root_hint_subjects
+                        .iter()
+                        .any(|dn| *dn == cert.issuer_dn.as_ref())
+                {
+                    continue;
+                }
+
+                if cert
+                    .certkey
+                    .key
+                    .choose_scheme(&[sig_scheme])
+                    .is_some()
+                {
+                    assert!(
+                        Some(i as isize) == self.expect_selected || self.expect_selected.is_none()
+                    );
+                    return Some(cert.certkey.clone());
+                }
+            }
         }
-        let mut certkey = self
-            .resolver
-            .resolve(root_hint_subjects, sigschemes)?;
-        Arc::make_mut(&mut certkey).key = Arc::new(FixedSignatureSchemeSigningKey {
-            key: certkey.key.clone(),
-            scheme: self.scheme,
-        });
-        Some(certkey)
+
+        if let Some(cert) = &self.default {
+            if cert
+                .certkey
+                .key
+                .choose_scheme(sig_schemes)
+                .is_some()
+            {
+                assert!(matches!(self.expect_selected, Some(-1) | None));
+                return Some(cert.certkey.clone());
+            }
+        }
+
+        assert_eq!(self.expect_selected, None);
+
+        let all_must_match_issuer = self
+            .additional
+            .iter()
+            .chain(self.default.iter())
+            .all(|item| item.must_match_issuer);
+
+        quit(match all_must_match_issuer {
+            true => ":NO_MATCHING_ISSUER:",
+            false => ":NO_COMMON_SIGNATURE_ALGORITHMS:",
+        })
     }
 
     fn has_certs(&self) -> bool {
-        self.resolver.has_certs()
+        self.default.is_some() || !self.additional.is_empty()
+    }
+}
+
+#[derive(Debug)]
+struct ClientCert {
+    certkey: Arc<sign::CertifiedKey>,
+    issuer_dn: DistinguishedName,
+    must_match_issuer: bool,
+}
+
+impl ClientCert {
+    fn new(mut certkey: sign::CertifiedKey, meta: &Credential) -> Self {
+        let parsed_cert = webpki::EndEntityCert::try_from(certkey.cert.last().unwrap()).unwrap();
+        let issuer_dn = DistinguishedName::in_sequence(parsed_cert.issuer());
+
+        if let Some(scheme) = meta.use_signing_scheme {
+            certkey.key = Arc::new(FixedSignatureSchemeSigningKey {
+                key: certkey.key,
+                scheme: lookup_scheme(scheme),
+            });
+        }
+
+        Self {
+            certkey: Arc::new(certkey),
+            issuer_dn,
+            must_match_issuer: meta.must_match_issuer,
+        }
     }
 }
 
@@ -836,7 +917,8 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
             .retain(|kxg| groups.contains(&kxg.name()));
     }
 
-    let cfg = ClientConfig::builder_with_provider(provider.into());
+    let provider = Arc::new(provider);
+    let cfg = ClientConfig::builder_with_provider(provider.clone());
 
     let cfg = if opts.selected_provider.supports_ech() {
         if let Some(ech_config_list) = &opts.ech_config_list {
@@ -872,22 +954,33 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
 
     let mut cfg = match opts.credentials.configured() {
         true => {
-            assert!(opts.credentials.additional.is_empty());
+            let mut resolver = MultipleClientCredentialResolver {
+                expect_selected: opts.credentials.expect_selected,
+                ..Default::default()
+            };
 
-            let cred = &opts.credentials.default;
-            let (certs, key) = cred.load_from_file();
-            let mut cfg = cfg
-                .with_client_auth_cert(certs, key)
-                .unwrap();
+            if opts.credentials.default.configured() {
+                let cred = &opts.credentials.default;
+                let (certs, key) = cred.load_from_file();
+                let key = provider
+                    .key_provider
+                    .load_private_key(key)
+                    .expect("cannot load private key");
 
-            if let Some(scheme) = cred.use_signing_scheme {
-                let scheme = lookup_scheme(scheme);
-                cfg.client_auth_cert_resolver = Arc::new(FixedSignatureSchemeClientCertResolver {
-                    resolver: cfg.client_auth_cert_resolver.clone(),
-                    scheme,
-                });
+                resolver.set_default(sign::CertifiedKey::new(certs, key), cred)
             }
-            cfg
+
+            for cred in opts.credentials.additional.iter() {
+                let (certs, key) = cred.load_from_file();
+                let key = provider
+                    .key_provider
+                    .load_private_key(key)
+                    .expect("cannot load private key");
+
+                resolver.add(sign::CertifiedKey::new(certs, key), cred);
+            }
+
+            cfg.with_client_cert_resolver(Arc::new(resolver))
         }
         false => cfg.with_no_client_auth(),
     };
@@ -1414,6 +1507,12 @@ pub fn main() {
             "-key-file" => {
                 opts.credentials.last_mut().key_file = args.remove(0);
             }
+            "-new-x509-credential" => {
+                opts.credentials.additional.push(Credential::default());
+            }
+            "-expect-selected-credential" => {
+                opts.credentials.expect_selected = args.remove(0).parse::<isize>().ok();
+            }
             "-cert-file" => {
                 opts.credentials.last_mut().cert_file = args.remove(0);
             }
@@ -1461,6 +1560,9 @@ pub fn main() {
             "-signing-prefs" => {
                 let alg = args.remove(0).parse::<u16>().unwrap();
                 opts.credentials.last_mut().use_signing_scheme = Some(alg);
+            }
+            "-must-match-issuer" => {
+                opts.credentials.last_mut().must_match_issuer = true;
             }
             "-use-client-ca-list" => {
                 match args.remove(0).as_ref() {
