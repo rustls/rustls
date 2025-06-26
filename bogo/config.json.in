@@ -6,8 +6,11 @@
     "*-TLS1": "we only support >=TLS1.2",
     "*TLS11-*": "we only support >=TLS1.2",
     "*-TLS11": "we only support >=TLS1.2",
+    "CertificateSelection-*TrustAnchorIDs-*": "no support for trust anchor IDs draft",
+    "CertificateSelection-*ClientCertificateTypes-*": "no support for CertificateRequest::certificate_types",
+    "CertificateSelection-Client-SignatureAlgorithmECDSACurve-TLS-TLS12": "ResolvesClientCert does not receive protocol version",
+    "CertificateSelection-Server-*": "TODO certificate selection for servers",
     "ConflictingVersionNegotiation": "expects to negotiate TLS1.1",
-    "CertificateSelection-*": "TODO",
     "SendFallbackSCSV": "fallback scsv not implemented",
     "ECDSAKeyUsage-*": "TODO: we don't do anything with key usages",
     "CheckRecordVersion-*": "we don't look at record version",
@@ -384,7 +387,17 @@
     "DuplicateExtensionClient-TLS-TLS12": "remote error: illegal parameter",
     "DuplicateExtensionClient-TLS-TLS13": "remote error: illegal parameter",
     "DuplicateExtensionServer-TLS-TLS12": "remote error: illegal parameter",
-    "DuplicateExtensionServer-TLS-TLS13": "remote error: illegal parameter"
+    "DuplicateExtensionServer-TLS-TLS13": "remote error: illegal parameter",
+    "_": "no alerts sent for the following tests... (artificial error created in the shim)",
+    "CertificateSelection-Client-CheckIssuer-MatchNone-TLS-TLS12": "",
+    "CertificateSelection-Client-CheckIssuer-MatchNone-TLS-TLS13": "",
+    "CertificateSelection-Client-CheckIssuerFallback-MatchNone-TLS-TLS12": "",
+    "CertificateSelection-Client-CheckIssuerFallback-MatchNone-TLS-TLS13": "",
+    "CertificateSelection-Client-SignatureAlgorithm-MatchNone-TLS-TLS12": "",
+    "CertificateSelection-Client-SignatureAlgorithm-MatchNone-TLS-TLS13": "",
+    "CertificateSelection-Client-SignatureAlgorithmECDSACurve-MatchNone-TLS-TLS13": "",
+    "CertificateSelection-Client-SignatureAlgorithmKeyPrefs-MatchNone-TLS-TLS12": "",
+    "CertificateSelection-Client-SignatureAlgorithmKeyPrefs-MatchNone-TLS-TLS13": ""
   },
   "HalfRTTTickets": 0
 }
