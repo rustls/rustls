@@ -6,7 +6,7 @@
     "*-TLS1": "",
     "*TLS11-*": "",
     "*-TLS11": "",
-    "ConflictingVersionNegotiation": "",
+    "ConflictingVersionNegotiation": "expects to negotiate TLS1.1",
     "CertificateSelection-*": "TODO",
     "SendFallbackSCSV": "fallback scsv not implemented",
     "ECDSAKeyUsage-*": "TODO: we don't do anything with key usages",
