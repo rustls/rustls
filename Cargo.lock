@@ -483,6 +483,7 @@ dependencies = [
  "nix",
  "rustls",
  "rustls-post-quantum",
+ "rustls-webpki",
 ]
 
 [[package]]
