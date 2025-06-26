@@ -1,11 +1,11 @@
 {
   "DisabledTests": {
-    "SendV2ClientHello-*": "only support TLS1.2",
-    "*SSL3*": "",
-    "*TLS1-*": "",
-    "*-TLS1": "",
-    "*TLS11-*": "",
-    "*-TLS11": "",
+    "SendV2ClientHello-*": "we only support >=TLS1.2",
+    "*SSL3*": "we only support >=TLS1.2",
+    "*TLS1-*": "we only support >=TLS1.2",
+    "*-TLS1": "we only support >=TLS1.2",
+    "*TLS11-*": "we only support >=TLS1.2",
+    "*-TLS11": "we only support >=TLS1.2",
     "ConflictingVersionNegotiation": "expects to negotiate TLS1.1",
     "CertificateSelection-*": "TODO",
     "SendFallbackSCSV": "fallback scsv not implemented",
