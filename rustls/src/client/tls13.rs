@@ -324,7 +324,7 @@ pub(super) fn fill_in_psk_binder(
     resuming: &persist::Tls13ClientSessionValue,
     transcript: &HandshakeHashBuffer,
     hmp: &mut HandshakeMessagePayload<'_>,
-) -> KeyScheduleEarly {
+) -> (&'static Tls13CipherSuite, KeyScheduleEarly) {
     // We need to know the hash function of the suite we're trying to resume into.
     let suite = resuming.suite();
     let suite_hash = suite.common.hash_provider;
@@ -355,7 +355,7 @@ pub(super) fn fill_in_psk_binder(
         }
     };
 
-    key_schedule
+    (suite, key_schedule)
 }
 
 pub(super) fn prepare_resumption(

@@ -428,16 +428,13 @@ fn emit_client_hello_for_retry(
     let tls13_early_data_key_schedule = match (ech_state.as_mut(), tls13_session) {
         // If we're performing ECH and resuming, then the PSK binder will have been dealt with
         // separately, and we need to take the early_data_key_schedule computed for the inner hello.
-        (Some(ech_state), Some(tls13_session)) => ech_state
-            .early_data_key_schedule
-            .take()
-            .map(|schedule| (tls13_session.suite(), schedule)),
-
+        (Some(ech_state), Some(_)) => ech_state.early_data_key_schedule.take(),
         // When we're not doing ECH and resuming, then the PSK binder need to be filled in as
         // normal.
-        (_, Some(tls13_session)) => Some((
-            tls13_session.suite(),
-            tls13::fill_in_psk_binder(&tls13_session, &transcript_buffer, &mut chp),
+        (_, Some(tls13_session)) => Some(tls13::fill_in_psk_binder(
+            &tls13_session,
+            &transcript_buffer,
+            &mut chp,
         )),
 
         // No early key schedule in other cases.

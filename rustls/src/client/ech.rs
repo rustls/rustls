@@ -298,7 +298,7 @@ pub(crate) struct EchState {
     pub(crate) outer_name: DnsName<'static>,
     // If we're resuming in the inner hello, this is the early key schedule to use for encrypting
     // early data if the ECH offer is accepted.
-    pub(crate) early_data_key_schedule: Option<KeyScheduleEarly>,
+    pub(crate) early_data_key_schedule: Option<(&'static Tls13CipherSuite, KeyScheduleEarly)>,
     // A random value we use for the inner hello.
     pub(crate) inner_hello_random: Random,
     // A transcript buffer maintained for the inner hello. Once ECH is confirmed we switch to
