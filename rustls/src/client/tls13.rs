@@ -121,40 +121,32 @@ pub(super) fn handle_server_hello(
             match &resuming_session {
                 Some(resuming) => {
                     let Some(resuming_suite) = suite.can_resume_from(resuming.suite()) else {
-                        return Err({
-                            cx.common.send_fatal_alert(
-                                AlertDescription::IllegalParameter,
-                                PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
-                            )
-                        });
+                        return Err(cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::ResumptionOfferedWithIncompatibleCipherSuite,
+                        ));
                     };
 
                     // If the server varies the suite here, we will have encrypted early data with
                     // the wrong suite.
                     if cx.data.early_data.is_enabled() && resuming_suite != suite {
-                        return Err({
-                            cx.common.send_fatal_alert(
-                                AlertDescription::IllegalParameter,
-                                PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite,
-                            )
-                        });
+                        return Err(cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::EarlyDataOfferedWithVariedCipherSuite,
+                        ));
                     }
 
                     if selected_psk != 0 {
-                        return Err({
-                            cx.common.send_fatal_alert(
-                                AlertDescription::IllegalParameter,
-                                PeerMisbehaved::SelectedInvalidPsk,
-                            )
-                        });
+                        return Err(cx.common.send_fatal_alert(
+                            AlertDescription::IllegalParameter,
+                            PeerMisbehaved::SelectedInvalidPsk,
+                        ));
                     }
 
                     debug!("Resuming using PSK");
                     // The key schedule has been initialized and set in fill_in_psk_binder()
                 }
-                _ => {
-                    return Err(PeerMisbehaved::SelectedUnofferedPsk.into());
-                }
+                _ => return Err(PeerMisbehaved::SelectedUnofferedPsk.into()),
             }
             KeySchedulePreHandshake::from(early_key_schedule)
         }
