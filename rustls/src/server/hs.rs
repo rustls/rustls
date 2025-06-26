@@ -107,7 +107,7 @@ impl ExtensionProcessing {
                 })
                 .map(|bytes| ProtocolName::from(bytes.clone()));
             if let Some(selected_protocol) = &cx.common.alpn_protocol {
-                debug!("Chosen ALPN protocol {:?}", selected_protocol);
+                debug!("Chosen ALPN protocol {selected_protocol:?}");
 
                 self.extensions.selected_protocol =
                     Some(SingleProtocolName::new(selected_protocol.clone()));
