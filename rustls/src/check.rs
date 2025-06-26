@@ -42,9 +42,8 @@ pub(crate) fn inappropriate_message(
     content_types: &[ContentType],
 ) -> Error {
     warn!(
-        "Received a {:?} message while expecting {:?}",
+        "Received a {:?} message while expecting {content_types:?}",
         payload.content_type(),
-        content_types
     );
     Error::InappropriateMessage {
         expect_types: content_types.to_vec(),
@@ -60,10 +59,7 @@ pub(crate) fn inappropriate_handshake_message(
     match payload {
         MessagePayload::Handshake { parsed, .. } => {
             let got_type = parsed.0.handshake_type();
-            warn!(
-                "Received a {:?} handshake message while expecting {:?}",
-                got_type, handshake_types
-            );
+            warn!("Received a {got_type:?} handshake message while expecting {handshake_types:?}",);
             Error::InappropriateHandshakeMessage {
                 expect_types: handshake_types.to_vec(),
                 got_type,

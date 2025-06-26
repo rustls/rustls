@@ -270,7 +270,7 @@ fn can_round_trip_psk_offer() {
 #[test]
 fn can_round_trip_cert_status_req_for_ocsp() {
     let ext = CertificateStatusRequest::build_ocsp();
-    println!("{:?}", ext);
+    println!("{ext:?}");
 
     let bytes = [
         0, 11, 1, // OCSP
@@ -278,7 +278,7 @@ fn can_round_trip_cert_status_req_for_ocsp() {
     ];
 
     let csr = CertificateStatusRequest::read(&mut Reader::init(&bytes)).unwrap();
-    println!("{:?}", csr);
+    println!("{csr:?}");
     assert_eq!(csr.get_encoding(), bytes.to_vec());
 }
 
@@ -290,7 +290,7 @@ fn can_round_trip_cert_status_req_for_other() {
     ];
 
     let csr = CertificateStatusRequest::read(&mut Reader::init(&bytes)).unwrap();
-    println!("{:?}", csr);
+    println!("{csr:?}");
     assert_eq!(csr.get_encoding(), bytes.to_vec());
 }
 
@@ -496,7 +496,7 @@ fn test_truncated_client_extension_is_detected() {
     let chp = sample_client_hello_payload();
 
     let enc = chp.extensions.get_encoding();
-    println!("testing enc {:?}", enc);
+    println!("testing enc {enc:?}");
 
     // "outer" truncation, i.e., where the extension-level length is longer than
     // the input
@@ -510,7 +510,7 @@ fn test_truncated_hello_retry_extension_is_detected() {
     let hrr = sample_hello_retry_request();
 
     let mut enc = hrr.extensions.get_encoding();
-    println!("testing enc {:?}", enc);
+    println!("testing enc {enc:?}");
 
     // "outer" truncation, i.e., where the extension-level length is longer than
     // the input
@@ -522,7 +522,7 @@ fn test_truncated_hello_retry_extension_is_detected() {
     // length, but isn't long enough for the type of extension
     for l in 0..(enc.len() - 4) {
         put_u16(l as u16, &mut enc);
-        println!("  encoding {:?} len {:?}", enc, l);
+        println!("  encoding {enc:?} len {l:?}");
         assert!(HelloRetryRequestExtensions::read_bytes(&enc).is_err());
     }
 }
@@ -532,7 +532,7 @@ fn test_truncated_server_extension_is_detected() {
     let shp = sample_server_hello_payload();
 
     let mut enc = shp.extensions.get_encoding();
-    println!("testing enc {:?}", enc);
+    println!("testing enc {enc:?}");
 
     // "outer" truncation, i.e., where the extension-level length is longer than
     // the input
@@ -544,7 +544,7 @@ fn test_truncated_server_extension_is_detected() {
     // length, but isn't long enough for the type of extension
     for l in 0..(enc.len() - 4) {
         put_u16(l as u16, &mut enc[..2]);
-        println!("  encoding {:?} len {:?}", enc, l);
+        println!("  encoding {enc:?} len {l:?}");
         assert!(ServerExtensions::read_bytes(&enc).is_err());
     }
 }
