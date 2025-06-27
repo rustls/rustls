@@ -1161,6 +1161,9 @@ fn handle_err(opts: &Options, err: Error) -> ! {
         Error::PeerMisbehaved(PeerMisbehaved::MessageInterleavedWithHandshakeMessage) => {
             quit(":UNEXPECTED_MESSAGE:")
         }
+        Error::PeerMisbehaved(PeerMisbehaved::KeyEpochWithPendingFragment) => {
+            quit(":EXCESS_HANDSHAKE_DATA:")
+        }
         Error::PeerMisbehaved(_) => quit(":PEER_MISBEHAVIOUR:"),
         Error::NoCertificatesPresented => quit(":NO_CERTS:"),
         Error::AlertReceived(AlertDescription::UnexpectedMessage) => quit(":BAD_ALERT:"),
