@@ -40,15 +40,8 @@ impl Ticketer {
     }
 }
 
-fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
-    // NOTE(XXX): Unconditionally mapping errors to `GetRandomFailed` here is slightly
-    //   misleading in some cases (e.g. failure to construct a padded block cipher encrypting key).
-    //   However, we can't change the return type expected from a `TicketRotator` `generator`
-    //   without breaking semver.
-    //   Tracking in https://github.com/rustls/rustls/issues/2074
-    Ok(Box::new(
-        Rfc5077Ticketer::new().map_err(|_| GetRandomFailed)?,
-    ))
+fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, Error> {
+    Ok(Box::new(Rfc5077Ticketer::new()?))
 }
 
 /// An RFC 5077 "Recommended Ticket Construction" implementation of a [`Ticketer`].
@@ -333,7 +326,7 @@ mod tests {
         assert_eq!(t.lifetime(), 43200);
     }
 
-    fn fail_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
-        Err(GetRandomFailed)
+    fn fail_generator() -> Result<Box<dyn ProducesTickets>, Error> {
+        Err(Error::FailedToGetRandomBytes)
     }
 }
