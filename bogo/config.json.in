@@ -94,7 +94,6 @@
     "GREASE-*": "not implemented",
     "LargeMessage-Reject": "",
     "DelegatedCredentials-*": "not implemented",
-    "ExportTrafficSecrets-*": "",
     "NoCommonCurves": "nothing to fall back to",
     "ClientHelloPadding": "hello padding extension not implemented",
     "Resume-Client-CipherMismatch": "tries to vary to unimplemented CBC-mode cs",
