@@ -6,10 +6,10 @@ use std::sync::{RwLock, RwLockReadGuard};
 
 use pki_types::UnixTime;
 
+use crate::Error;
 use crate::server::ProducesTickets;
 #[cfg(not(feature = "std"))]
 use crate::time_provider::TimeProvider;
-use crate::{Error, rand};
 
 #[cfg(feature = "std")]
 #[derive(Debug)]
@@ -24,7 +24,7 @@ pub(crate) struct TicketRotatorState {
 /// often, demoting the current ticketer.
 #[cfg(feature = "std")]
 pub struct TicketRotator {
-    pub(crate) generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
+    pub(crate) generator: fn() -> Result<Box<dyn ProducesTickets>, Error>,
     lifetime: u32,
     state: RwLock<TicketRotatorState>,
 }
@@ -40,7 +40,7 @@ impl TicketRotator {
     /// `ProducesTickets` implementation.
     pub fn new(
         lifetime: u32,
-        generator: fn() -> Result<Box<dyn ProducesTickets>, rand::GetRandomFailed>,
+        generator: fn() -> Result<Box<dyn ProducesTickets>, Error>,
     ) -> Result<Self, Error> {
         Ok(Self {
             generator,
