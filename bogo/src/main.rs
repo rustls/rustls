@@ -21,7 +21,7 @@
 
 use core::fmt::{Debug, Formatter};
 use std::io::{self, Read, Write};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::{env, net, process, thread, time};
 
 use base64::prelude::{BASE64_STANDARD, Engine};
@@ -97,6 +97,7 @@ struct Options {
     export_keying_material_label: String,
     export_keying_material_context: String,
     export_keying_material_context_used: bool,
+    export_traffic_secrets: bool,
     read_size: usize,
     quic_transport_params: Vec<u8>,
     expect_quic_transport_params: Vec<u8>,
@@ -166,6 +167,7 @@ impl Options {
             export_keying_material_label: "".to_string(),
             export_keying_material_context: "".to_string(),
             export_keying_material_context_used: false,
+            export_traffic_secrets: false,
             read_size: 512,
             quic_transport_params: vec![],
             expect_quic_transport_params: vec![],
@@ -749,7 +751,7 @@ impl server::StoresServerSessions for ServerCacheWithResumptionDelay {
     }
 }
 
-fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
+fn make_server_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ServerConfig> {
     let client_auth =
         if opts.verify_peer || opts.offer_no_client_cas || opts.require_any_client_cert {
             Arc::new(DummyClientAuth::new(
@@ -788,6 +790,9 @@ fn make_server_cfg(opts: &Options) -> Arc<ServerConfig> {
     cfg.send_tls13_tickets = 1;
     cfg.require_ems = opts.require_ems;
     cfg.ignore_client_order = opts.server_preference;
+    if opts.export_traffic_secrets {
+        cfg.key_log = key_log.clone();
+    }
 
     if let Some(scheme) = cred.use_signing_scheme {
         let scheme = lookup_scheme(scheme);
@@ -908,7 +913,7 @@ impl Debug for ClientCacheWithoutKxHints {
     }
 }
 
-fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
+fn make_client_cfg(opts: &Options, key_log: &Arc<KeyLogMemo>) -> Arc<ClientConfig> {
     let mut provider = opts.provider.clone();
 
     if let Some(groups) = &opts.groups {
@@ -993,6 +998,9 @@ fn make_client_cfg(opts: &Options) -> Arc<ClientConfig> {
     cfg.enable_sni = opts.use_sni;
     cfg.max_fragment_size = opts.max_fragment;
     cfg.require_ems = opts.require_ems;
+    if opts.export_traffic_secrets {
+        cfg.key_log = key_log.clone();
+    }
 
     if !opts.protocols.is_empty() {
         cfg.alpn_protocols = opts
@@ -1260,7 +1268,7 @@ fn read_all_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStre
     after_read(opts, sess, conn);
 }
 
-fn exec(opts: &Options, mut sess: Connection, count: usize) {
+fn exec(opts: &Options, mut sess: Connection, key_log: &KeyLogMemo, count: usize) {
     let mut sent_message = false;
 
     let addrs = [
@@ -1348,6 +1356,24 @@ fn exec(opts: &Options, mut sess: Connection, count: usize) {
             .unwrap();
             sess.writer()
                 .write_all(&export)
+                .unwrap();
+            sent_exporter = true;
+        }
+
+        if !sess.is_handshaking() && opts.export_traffic_secrets && !sent_exporter {
+            let secrets = key_log.clone_inner();
+            assert_eq!(
+                secrets.client_traffic_secret.len(),
+                secrets.server_traffic_secret.len()
+            );
+            sess.writer()
+                .write_all(&(secrets.client_traffic_secret.len() as u16).to_le_bytes())
+                .unwrap();
+            sess.writer()
+                .write_all(&secrets.server_traffic_secret)
+                .unwrap();
+            sess.writer()
+                .write_all(&secrets.client_traffic_secret)
                 .unwrap();
             sent_exporter = true;
         }
@@ -1671,6 +1697,9 @@ pub fn main() {
             "-use-export-context" => {
                 opts.export_keying_material_context_used = true;
             }
+            "-export-traffic-secrets" => {
+                opts.export_traffic_secrets = true;
+            }
             "-quic-transport-params" => {
                 opts.quic_transport_params = BASE64_STANDARD.decode(args.remove(0).as_bytes())
                     .expect("invalid base64");
@@ -1953,9 +1982,11 @@ pub fn main() {
         signal::kill(Pid::from_raw(process::id() as i32), Signal::SIGSTOP).unwrap();
     }
 
+    let key_log = Arc::new(KeyLogMemo::default());
+
     let (mut client_cfg, mut server_cfg) = match opts.side {
-        Side::Client => (Some(make_client_cfg(&opts)), None),
-        Side::Server => (None, Some(make_server_cfg(&opts))),
+        Side::Client => (Some(make_client_cfg(&opts, &key_log)), None),
+        Side::Server => (None, Some(make_server_cfg(&opts, &key_log))),
     };
 
     fn make_session(
@@ -1988,24 +2019,63 @@ pub fn main() {
 
     for i in 0..opts.resumes + 1 {
         let sess = make_session(&opts, &server_cfg, &client_cfg);
-        exec(&opts, sess, i);
+        exec(&opts, sess, &key_log, i);
         if opts.resume_with_tickets_disabled {
             opts.tickets = false;
 
             match opts.side {
-                Side::Server => server_cfg = Some(make_server_cfg(&opts)),
-                Side::Client => client_cfg = Some(make_client_cfg(&opts)),
+                Side::Server => server_cfg = Some(make_server_cfg(&opts, &key_log)),
+                Side::Client => client_cfg = Some(make_client_cfg(&opts, &key_log)),
             };
         }
         if opts.on_resume_ech_config_list.is_some() {
             opts.ech_config_list
                 .clone_from(&opts.on_resume_ech_config_list);
             opts.expect_ech_accept = opts.on_resume_expect_ech_accept;
-            client_cfg = Some(make_client_cfg(&opts));
+            client_cfg = Some(make_client_cfg(&opts, &key_log));
         }
         opts.expect_handshake_kind
             .clone_from(&opts.expect_handshake_kind_resumed);
     }
+}
+
+#[derive(Debug, Default)]
+struct KeyLogMemo(Mutex<KeyLogMemoInner>);
+
+impl KeyLogMemo {
+    fn clone_inner(&self) -> KeyLogMemoInner {
+        self.0.lock().unwrap().clone()
+    }
+}
+
+impl rustls::KeyLog for KeyLogMemo {
+    fn log(&self, label: &str, _client_random: &[u8], secret: &[u8]) {
+        match label {
+            "CLIENT_TRAFFIC_SECRET_0" => {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .client_traffic_secret = secret.to_vec()
+            }
+            "SERVER_TRAFFIC_SECRET_0" => {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .server_traffic_secret = secret.to_vec()
+            }
+            _ => {}
+        }
+    }
+
+    fn will_log(&self, _label: &str) -> bool {
+        true
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct KeyLogMemoInner {
+    client_traffic_secret: Vec<u8>,
+    server_traffic_secret: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq)]
