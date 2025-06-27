@@ -116,7 +116,6 @@
     "Shutdown-Shim-ApplicationData*": "tests boringssl/openssl-specific behaviour, we don't let application data overtake connection shutdown",
     "Renegotiate-Server-*": "",
     "Renegotiate-ForbidAfterHandshake": "",
-    "SendHalfHelloRequest-*": "",
     "RetainOnlySHA256-*": "",
     "ExtendedMasterSecret-Renego-*": "",
     "ALPN*SelectEmpty-*": "",
