@@ -12,7 +12,6 @@ use crate::error::Error;
 #[cfg(debug_assertions)]
 use crate::log::debug;
 use crate::polyfill::try_split_at;
-use crate::rand::GetRandomFailed;
 use crate::server::ProducesTickets;
 use crate::sync::Arc;
 
@@ -33,7 +32,7 @@ impl Ticketer {
     }
 }
 
-fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
+fn make_ticket_generator() -> Result<Box<dyn ProducesTickets>, Error> {
     Ok(Box::new(AeadTicketer::new()?))
 }
 
@@ -59,18 +58,18 @@ struct AeadTicketer {
 }
 
 impl AeadTicketer {
-    fn new() -> Result<Self, GetRandomFailed> {
+    fn new() -> Result<Self, Error> {
         let mut key = [0u8; 32];
         SystemRandom::new()
             .fill(&mut key)
-            .map_err(|_| GetRandomFailed)?;
+            .map_err(|_| Error::FailedToGetRandomBytes)?;
 
         let key = aead::UnboundKey::new(TICKETER_AEAD, &key).unwrap();
 
         let mut key_name = [0u8; 16];
         SystemRandom::new()
             .fill(&mut key_name)
-            .map_err(|_| GetRandomFailed)?;
+            .map_err(|_| Error::FailedToGetRandomBytes)?;
 
         Ok(Self {
             alg: TICKETER_AEAD,
@@ -302,7 +301,7 @@ mod tests {
         assert_eq!(t.lifetime(), 43200);
     }
 
-    fn fail_generator() -> Result<Box<dyn ProducesTickets>, GetRandomFailed> {
-        Err(GetRandomFailed)
+    fn fail_generator() -> Result<Box<dyn ProducesTickets>, Error> {
+        Err(Error::FailedToGetRandomBytes)
     }
 }
