@@ -18,7 +18,6 @@
     "MTU*": "dtls only",
     "DisableEverything": "not useful",
     "CheckLeafCurve": "",
-    "SendWarningAlerts-*": "",
     "Peek-*": "",
     "ServerOCSPCallback*": "ocsp not supported for servers",
     "SendUnsolicitedOCSPOnCertificate-TLS13": "we unconditionally request a stapled OCSP response",
