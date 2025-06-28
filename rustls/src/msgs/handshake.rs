@@ -497,6 +497,12 @@ pub(crate) struct PresharedKeyIdentity {
 }
 
 impl PresharedKeyIdentity {
+    pub(crate) fn external(id: Vec<u8>) -> Self {
+        // See 4.2.11 of RFC 8446: "For identities established externally, an obfuscated_ticket_age
+        // of 0 SHOULD be used..."
+        Self::new(id, 0)
+    }
+
     pub(crate) fn new(id: Vec<u8>, age: u32) -> Self {
         Self {
             identity: PayloadU16::new(id),
@@ -565,6 +571,23 @@ impl Codec<'_> for PresharedKeyOffer {
             identities: Vec::read(r)?,
             binders: Vec::read(r)?,
         })
+    }
+}
+
+impl FromIterator<(PresharedKeyIdentity, Vec<u8>)> for PresharedKeyOffer {
+    fn from_iter<T: IntoIterator<Item = (PresharedKeyIdentity, Vec<u8>)>>(iter: T) -> Self {
+        let mut identities = Vec::new();
+        let mut binders = Vec::new();
+
+        for (id, binder) in iter {
+            identities.push(id);
+            binders.push(PresharedKeyBinder::from(binder));
+        }
+
+        Self {
+            identities,
+            binders,
+        }
     }
 }
 

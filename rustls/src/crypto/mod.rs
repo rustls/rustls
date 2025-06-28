@@ -1,9 +1,9 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::fmt::Debug;
+use core::fmt::{self, Debug};
 
 use pki_types::PrivateKeyDer;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 #[cfg(all(doc, feature = "tls12"))]
 use crate::Tls12CipherSuite;
@@ -650,6 +650,64 @@ impl From<&[u8]> for SharedSecret {
 impl From<Vec<u8>> for SharedSecret {
     fn from(buf: Vec<u8>) -> Self {
         Self { buf, offset: 0 }
+    }
+}
+
+/// A TLS 1.3 preshared key.
+pub struct PresharedKey {
+    pub(crate) identity: Zeroizing<Box<[u8]>>,
+    pub(crate) secret: Zeroizing<Box<[u8]>>,
+    pub(crate) hash_alg: &'static dyn hash::Hash,
+}
+
+impl PresharedKey {
+    /// Creates an external preshared key.
+    ///
+    /// It returns `None` if either `identity` or `secret` are
+    /// longer than (2^16)-1 bytes or if `secret` is all zeros.
+    ///
+    /// `identity` is a non-secret value sent as plaintext over
+    /// the network.
+    ///
+    /// # Warning
+    ///
+    /// `secret` must be cryptographically secure. It is also
+    /// generally unsafe for multiple clients or servers to share
+    /// preshared keys.
+    ///
+    /// See [RFC 8446] section 2.2 and [RFC 9257] for more
+    /// information.
+    ///
+    /// [RFC 8446]: https://www.rfc-editor.org/rfc/rfc8446.html
+    /// [RFC 9257]: https://www.rfc-editor.org/rfc/rfc9257.html
+    pub fn external(
+        identity: &[u8],
+        secret: &[u8],
+        hash_alg: &'static dyn hash::Hash,
+    ) -> Option<Self> {
+        // `identity` is `opaque<1..2^16-1>`.
+        if identity.is_empty()
+            || identity.len() > u16::MAX as usize
+            || secret.len() > u16::MAX as usize
+        {
+            return None;
+        }
+
+        Some(Self {
+            identity: Zeroizing::new(identity.to_vec().into_boxed_slice()),
+            secret: Zeroizing::new(secret.to_vec().into_boxed_slice()),
+            hash_alg,
+        })
+    }
+}
+
+impl Debug for PresharedKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Manually implemented to avoid displaying the secret.
+        f.debug_struct("PresharedKey")
+            .field("identity", &self.identity)
+            .field("hash_alg", &self.hash_alg.algorithm())
+            .finish_non_exhaustive()
     }
 }
 

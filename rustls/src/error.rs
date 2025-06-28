@@ -310,6 +310,10 @@ pub enum PeerMisbehaved {
     UnsolicitedServerHelloExtension,
     WrongGroupForKeyShare,
     UnsolicitedEchExtension,
+    UnsupportedPskKeyExchangeMode,
+    SelectedPskWithIncompatibleHashAlgorithm,
+    EarlyDataExtensionWithoutPresharedKey,
+    SelectedNonZeroPresharedKeyForEarlyData,
 }
 
 impl From<PeerMisbehaved> for Error {
