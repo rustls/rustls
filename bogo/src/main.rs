@@ -1035,7 +1035,6 @@ fn quit_err(why: &str) -> ! {
 
 fn handle_err(opts: &Options, err: Error) -> ! {
     println!("TLS error: {err:?}");
-    thread::sleep(time::Duration::from_millis(100));
 
     match err {
         Error::InappropriateHandshakeMessage { .. } | Error::InappropriateMessage { .. } => {
@@ -1211,8 +1210,23 @@ const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 fn after_read(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream) {
     if let Err(err) = sess.process_new_packets() {
         flush(sess, conn); /* send any alerts before exiting */
+        orderly_close(conn);
         handle_err(opts, err);
     }
+}
+
+fn orderly_close(conn: &mut net::TcpStream) {
+    // assuming we just flush()'d, we will write no more.
+    conn.shutdown(net::Shutdown::Write)
+        .unwrap();
+
+    // wait for EOF
+    let mut buf = [0u8; 32];
+    while let Ok(p @ 1..) = conn.peek(&mut buf) {
+        let _ = conn.read(&mut buf[..p]).unwrap();
+    }
+
+    let _ = conn.shutdown(net::Shutdown::Read);
 }
 
 fn read_n_bytes(opts: &Options, sess: &mut Connection, conn: &mut net::TcpStream, n: usize) {
