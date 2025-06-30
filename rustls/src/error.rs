@@ -5,7 +5,7 @@ use core::fmt;
 #[cfg(feature = "std")]
 use std::time::SystemTimeError;
 
-use pki_types::{ServerName, UnixTime};
+use pki_types::{AlgorithmIdentifier, ServerName, UnixTime};
 use webpki::KeyUsage;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType};
@@ -432,7 +432,27 @@ pub enum CertificateError {
     BadSignature,
 
     /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
+    #[deprecated(
+        since = "0.23.29",
+        note = "use `UnsupportedSignatureAlgorithmContext` instead"
+    )]
     UnsupportedSignatureAlgorithm,
+
+    /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
+    UnsupportedSignatureAlgorithmContext {
+        /// The signature algorithm OID that was unsupported.
+        signature_algorithm_id: Vec<u8>,
+        /// Supported algorithms that were available for signature verification.
+        supported_algorithms: Vec<AlgorithmIdentifier>,
+    },
+
+    /// A signature was made with an algorithm that doesn't match the relevant public key.
+    UnsupportedSignatureAlgorithmForPublicKeyContext {
+        /// The signature algorithm OID.
+        signature_algorithm_id: Vec<u8>,
+        /// The public key algorithm OID.
+        public_key_algorithm_id: Vec<u8>,
+    },
 
     /// The subject names in an end-entity certificate do not include
     /// the expected name.
@@ -527,7 +547,34 @@ impl PartialEq<Self> for CertificateError {
             (UnhandledCriticalExtension, UnhandledCriticalExtension) => true,
             (UnknownIssuer, UnknownIssuer) => true,
             (BadSignature, BadSignature) => true,
+            #[allow(deprecated)]
             (UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm) => true,
+            (
+                UnsupportedSignatureAlgorithmContext {
+                    signature_algorithm_id: left_signature_algorithm_id,
+                    supported_algorithms: left_supported_algorithms,
+                },
+                UnsupportedSignatureAlgorithmContext {
+                    signature_algorithm_id: right_signature_algorithm_id,
+                    supported_algorithms: right_supported_algorithms,
+                },
+            ) => {
+                (left_signature_algorithm_id, left_supported_algorithms)
+                    == (right_signature_algorithm_id, right_supported_algorithms)
+            }
+            (
+                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                    signature_algorithm_id: left_signature_algorithm_id,
+                    public_key_algorithm_id: left_public_key_algorithm_id,
+                },
+                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                    signature_algorithm_id: right_signature_algorithm_id,
+                    public_key_algorithm_id: right_public_key_algorithm_id,
+                },
+            ) => {
+                (left_signature_algorithm_id, left_public_key_algorithm_id)
+                    == (right_signature_algorithm_id, right_public_key_algorithm_id)
+            }
             (NotValidForName, NotValidForName) => true,
             (
                 NotValidForNameContext {
@@ -594,7 +641,11 @@ impl From<CertificateError> for AlertDescription {
             | ExpiredRevocationList
             | ExpiredRevocationListContext { .. } => Self::UnknownCA,
             InvalidOcspResponse => Self::BadCertificateStatusResponse,
-            BadSignature | UnsupportedSignatureAlgorithm => Self::DecryptError,
+            #[allow(deprecated)]
+            BadSignature
+            | UnsupportedSignatureAlgorithm
+            | UnsupportedSignatureAlgorithmContext { .. }
+            | UnsupportedSignatureAlgorithmForPublicKeyContext { .. } => Self::DecryptError,
             InvalidPurpose | InvalidPurposeContext { .. } => Self::UnsupportedCertificate,
             ApplicationVerificationFailure => Self::AccessDenied,
             // RFC 5246/RFC 8446
@@ -761,7 +812,27 @@ pub enum CertRevocationListError {
     BadSignature,
 
     /// The CRL had an unsupported signature from its issuer.
+    #[deprecated(
+        since = "0.23.29",
+        note = "use `UnsupportedSignatureAlgorithmContext` instead"
+    )]
     UnsupportedSignatureAlgorithm,
+
+    /// A signature inside a certificate or on a handshake was made with an unsupported algorithm.
+    UnsupportedSignatureAlgorithmContext {
+        /// The signature algorithm OID that was unsupported.
+        signature_algorithm_id: Vec<u8>,
+        /// Supported algorithms that were available for signature verification.
+        supported_algorithms: Vec<AlgorithmIdentifier>,
+    },
+
+    /// A signature was made with an algorithm that doesn't match the relevant public key.
+    UnsupportedSignatureAlgorithmForPublicKeyContext {
+        /// The signature algorithm OID.
+        signature_algorithm_id: Vec<u8>,
+        /// The public key algorithm OID.
+        public_key_algorithm_id: Vec<u8>,
+    },
 
     /// The CRL contained an invalid CRL number.
     InvalidCrlNumber,
@@ -806,7 +877,34 @@ impl PartialEq<Self> for CertRevocationListError {
         #[allow(clippy::match_like_matches_macro)]
         match (self, other) {
             (BadSignature, BadSignature) => true,
+            #[allow(deprecated)]
             (UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm) => true,
+            (
+                UnsupportedSignatureAlgorithmContext {
+                    signature_algorithm_id: left_signature_algorithm_id,
+                    supported_algorithms: left_supported_algorithms,
+                },
+                UnsupportedSignatureAlgorithmContext {
+                    signature_algorithm_id: right_signature_algorithm_id,
+                    supported_algorithms: right_supported_algorithms,
+                },
+            ) => {
+                (left_signature_algorithm_id, left_supported_algorithms)
+                    == (right_signature_algorithm_id, right_supported_algorithms)
+            }
+            (
+                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                    signature_algorithm_id: left_signature_algorithm_id,
+                    public_key_algorithm_id: left_public_key_algorithm_id,
+                },
+                UnsupportedSignatureAlgorithmForPublicKeyContext {
+                    signature_algorithm_id: right_signature_algorithm_id,
+                    public_key_algorithm_id: right_public_key_algorithm_id,
+                },
+            ) => {
+                (left_signature_algorithm_id, left_public_key_algorithm_id)
+                    == (right_signature_algorithm_id, right_public_key_algorithm_id)
+            }
             (InvalidCrlNumber, InvalidCrlNumber) => true,
             (InvalidRevokedCertSerialNumber, InvalidRevokedCertSerialNumber) => true,
             (IssuerInvalidForCrl, IssuerInvalidForCrl) => true,
@@ -1065,7 +1163,30 @@ mod tests {
             }
         );
         assert_eq!(BadSignature, BadSignature);
-        assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
+        #[allow(deprecated)]
+        {
+            assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
+        }
+        assert_eq!(
+            UnsupportedSignatureAlgorithmContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                supported_algorithms: vec![]
+            },
+            UnsupportedSignatureAlgorithmContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                supported_algorithms: vec![]
+            }
+        );
+        assert_eq!(
+            UnsupportedSignatureAlgorithmForPublicKeyContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                public_key_algorithm_id: vec![4, 5, 6]
+            },
+            UnsupportedSignatureAlgorithmForPublicKeyContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                public_key_algorithm_id: vec![4, 5, 6]
+            }
+        );
         assert_eq!(NotValidForName, NotValidForName);
         let context = NotValidForNameContext {
             expected: ServerName::try_from("example.com")
@@ -1110,7 +1231,30 @@ mod tests {
     fn crl_error_equality() {
         use super::CertRevocationListError::*;
         assert_eq!(BadSignature, BadSignature);
-        assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
+        #[allow(deprecated)]
+        {
+            assert_eq!(UnsupportedSignatureAlgorithm, UnsupportedSignatureAlgorithm);
+        }
+        assert_eq!(
+            UnsupportedSignatureAlgorithmContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                supported_algorithms: vec![]
+            },
+            UnsupportedSignatureAlgorithmContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                supported_algorithms: vec![]
+            }
+        );
+        assert_eq!(
+            UnsupportedSignatureAlgorithmForPublicKeyContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                public_key_algorithm_id: vec![4, 5, 6]
+            },
+            UnsupportedSignatureAlgorithmForPublicKeyContext {
+                signature_algorithm_id: vec![1, 2, 3],
+                public_key_algorithm_id: vec![4, 5, 6]
+            }
+        );
         assert_eq!(InvalidCrlNumber, InvalidCrlNumber);
         assert_eq!(
             InvalidRevokedCertSerialNumber,
