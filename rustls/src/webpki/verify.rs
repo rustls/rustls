@@ -161,17 +161,22 @@ pub fn verify_tls12_signature(
     let possible_algs = supported_schemes.convert_scheme(dss.scheme)?;
     let cert = webpki::EndEntityCert::try_from(cert).map_err(pki_error)?;
 
+    let mut error = None;
     for alg in possible_algs {
         match cert.verify_signature(*alg, message, dss.signature()) {
-            Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey) => continue,
+            Err(err @ webpki::Error::UnsupportedSignatureAlgorithmForPublicKeyContext(_)) => {
+                error = Some(err);
+                continue;
+            }
             Err(e) => return Err(pki_error(e)),
             Ok(()) => return Ok(HandshakeSignatureValid::assertion()),
         }
     }
 
-    Err(pki_error(
+    #[allow(deprecated)] // The `unwrap_or()` should be statically unreachable
+    Err(pki_error(error.unwrap_or(
         webpki::Error::UnsupportedSignatureAlgorithmForPublicKey,
-    ))
+    )))
 }
 
 /// Verify a message signature using the `cert` public key and the first TLS 1.3 compatible
