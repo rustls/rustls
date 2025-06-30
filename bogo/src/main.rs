@@ -1182,9 +1182,12 @@ fn handle_err(opts: &Options, err: Error) -> ! {
             quit(":CANNOT_PARSE_LEAF_CERT:")
         }
         Error::InvalidCertificate(CertificateError::BadSignature) => quit(":BAD_SIGNATURE:"),
-        Error::InvalidCertificate(CertificateError::UnsupportedSignatureAlgorithm) => {
-            quit(":WRONG_SIGNATURE_TYPE:")
-        }
+        #[allow(deprecated)]
+        Error::InvalidCertificate(
+            CertificateError::UnsupportedSignatureAlgorithm
+            | CertificateError::UnsupportedSignatureAlgorithmContext { .. }
+            | CertificateError::UnsupportedSignatureAlgorithmForPublicKeyContext { .. },
+        ) => quit(":WRONG_SIGNATURE_TYPE:"),
         Error::InvalidCertificate(CertificateError::InvalidOcspResponse) => {
             // note: only use is in this file.
             quit(":OCSP_CB_ERROR:")
